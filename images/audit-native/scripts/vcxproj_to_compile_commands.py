@@ -48,6 +48,44 @@ SECURITY_RELEVANT_MACROS = {
     "_HAS_ITERATOR_DEBUGGING", "_SECURE_SCL", "_ALLOW_RTCc_IN_STL", "NDEBUG", "_DEBUG",
     "_WIN32_WINNT", "WINVER", "_USING_V110_SDK71_", "_ITERATOR_DEBUG_LEVEL",
 }
+# Defines added to every TU for analysis only. Each is recorded in the audit
+# seed as ANALYSIS_ONLY_MACRO_DIFFERENCE (design §23.4) because the analyzed
+# program differs from the shipped one by exactly these.
+ANALYSIS_ONLY_DEFINES = [
+    # UCRT secure-overload templates (_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES)
+    # re-declare printf-family functions at block scope with __inline; MSVC
+    # accepts that, clang rejects it ("inline declaration ... not allowed in
+    # block scope", corecrt_wstdio.h:1109, 74 Notepad++ TUs on 2026-09-11).
+    # _NO_CRT_STDIO_INLINE makes those declarations plain extern. Effect on
+    # semantics: printf family is not inlined; we never link, so none.
+    "_NO_CRT_STDIO_INLINE",
+]
+
+
+def write_vfs_overlay(root: Path, out: Path) -> int:
+    """Clang VFS overlay with case-sensitive:false over `root`, so #include
+    directives and /I paths resolve the way they do on Windows. Needs the full
+    tree enumerated (directory-remap delegates to the real FS and stays
+    case-sensitive). Skips .git. Returns file count. JSON is valid YAML."""
+    n = 0
+    def tree(d: Path):
+        nonlocal n
+        ents = []
+        for c in sorted(d.iterdir(), key=lambda x: x.name):
+            if c.name == ".git":
+                continue
+            if c.is_dir():
+                ents.append({"name": c.name, "type": "directory", "contents": tree(c)})
+            elif c.is_file():
+                n += 1
+                ents.append({"name": c.name, "type": "file", "external-contents": str(c)})
+        return ents
+    doc = {"version": 0, "case-sensitive": "false",
+           "roots": [{"name": str(root), "type": "directory", "contents": tree(root)}]}
+    out.write_text(json.dumps(doc))
+    return n
+
+
 PLUGIN_FLAG_RE = re.compile(r"(/|-)(fplugin|Xclang|clang:|analyze|d1|d2|Brepro|experimental:)", re.I)
 
 
@@ -264,6 +302,17 @@ class Project:
                 yield inc, meta, excluded
 
 
+def project_id(vcxproj: Path, root: Path) -> str:
+    """Stable, unique id: vcxproj path relative to root, extension dropped,
+    '/' -> '__'. Stem alone collides (scintilla and lexilla both have
+    test/unit/UnitTester.vcxproj)."""
+    try:
+        rel = vcxproj.relative_to(root)
+    except ValueError:
+        rel = vcxproj
+    return str(rel.with_suffix("")).replace("/", "__")
+
+
 def split_list(v: str, inherit_from: str = "") -> list[str]:
     out = []
     for part in v.split(";"):
@@ -283,6 +332,10 @@ def build_command(proj: Project, src: Path, settings: dict, args) -> tuple[list[
     cmd += [f"--target={target}", f"-fms-compatibility-version={args.toolset_compat}"]
     cmd += msvc_flags(args.msvc_root, proj.platform)
     notes: dict = {"defines": [], "undefines": [], "includes": [], "forced_includes": [], "flags": []}
+    for d in ANALYSIS_ONLY_DEFINES:
+        cmd.append(f"/D{d}")
+    if args.vfs_overlay:
+        cmd += ["/clang:-ivfsoverlay", f"/clang:{args.vfs_overlay}", "-Wno-nonportable-include-path"]
 
     defs = split_list(proj.expand(settings.get("PreprocessorDefinitions", "")))
     for d in defs:
@@ -295,6 +348,22 @@ def build_command(proj: Project, src: Path, settings: dict, args) -> tuple[list[
         p = win_to_posix(proj.root, proj.dir, inc)
         cmd.append(f"/I{p}")
         notes["includes"].append(str(p))
+    # MSBuild property-level include paths (VS2019+): <IncludePath> behaves like
+    # /I, <ExternalIncludePath> like /external:I (warnings suppressed; we map it
+    # to -imsvc which is clang-cl's system-include form). Notepad++ declares
+    # scintilla/lexilla/tinyxml/json this way in notepadPlus.Cpp.props — the 71
+    # "file not found" TUs on 2026-09-11. Entries that still contain $(...)
+    # (typically the trailing self-reference) are dropped.
+    for prop, flag in (("IncludePath", "/I"), ("ExternalIncludePath", "-imsvc")):
+        for inc in split_list(proj.macros.get(prop, "")):
+            if "$(" in inc:
+                continue
+            p_ = win_to_posix(proj.root, proj.dir, inc)
+            if flag == "/I":
+                cmd.append(f"/I{p_}")
+            else:
+                cmd += ["-imsvc", str(p_)]
+            notes["includes"].append(str(p_))
     for fi in split_list(proj.expand(settings.get("ForcedIncludeFiles", ""))):
         cmd.append(f"/FI{fi}")
         notes["forced_includes"].append(fi)
@@ -316,13 +385,18 @@ def build_command(proj: Project, src: Path, settings: dict, args) -> tuple[list[
     rt_map = {"MultiThreaded": "/MT", "MultiThreadedDebug": "/MTd", "MultiThreadedDLL": "/MD", "MultiThreadedDebugDLL": "/MDd"}
     if rt in rt_map:
         cmd.append(rt_map[rt])
-    eh = settings.get("ExceptionHandling", "")
+    # MSBuild's default for an unset <ExceptionHandling> is Sync (/EHsc); only an
+    # explicit "false" disables it. Scintilla/Lexilla rely on the default —
+    # 34 TUs failed "cannot use 'try' with exceptions disabled" on 2026-09-11.
+    eh = settings.get("ExceptionHandling", "Sync") or "Sync"
     if eh == "Sync":
         cmd.append("/EHsc")
     elif eh == "Async":
         cmd.append("/EHa")
     elif eh == "SyncCThrow":
         cmd.append("/EHs")
+    elif eh.lower() == "false":
+        notes["flags"].append("EXCEPTIONS_DISABLED")
     ca = settings.get("CompileAs", "")
     if ca == "CompileAsC":
         cmd.append("/TC")
@@ -339,7 +413,10 @@ def build_command(proj: Project, src: Path, settings: dict, args) -> tuple[list[
             cmd.append(tok)
             notes["flags"].append(tok)
 
-    cmd.append(str(src))
+    # "--" terminates option parsing. Without it an absolute source path such as
+    # /workspace/... is parsed by clang-cl as the /wo<n> option and the TU is
+    # silently dropped ("no input files") — 320/320 failures on 2026-09-11.
+    cmd += ["--", str(src)]
     return cmd, notes
 
 
@@ -353,13 +430,23 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--audit", required=True)
     ap.add_argument("--include", action="append", default=[], help="only .vcxproj paths containing this substring")
+    ap.add_argument("--vfs-overlay", default=None,
+                    help="path for the case-insensitive VFS overlay (default: next to --out); 'none' to disable")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
+    if args.vfs_overlay == "none":
+        args.vfs_overlay = None
+    else:
+        ov = Path(args.vfs_overlay) if args.vfs_overlay else Path(args.out).with_name("vfs-overlay.yaml")
+        nfiles = write_vfs_overlay(root, ov)
+        args.vfs_overlay = str(ov)
+        print(f"vfs overlay ({nfiles} files, case-insensitive) -> {ov}")
     audit = {
         "generator": "vcxproj_to_compile_commands.py",
         "config": args.config, "platform": args.platform,
         "msvc_root": args.msvc_root, "toolset_compat": args.toolset_compat,
+        "vfs_overlay": args.vfs_overlay, "analysis_only_defines": ANALYSIS_ONLY_DEFINES,
         "projects": [], "unresolved_macros": {}, "conditions_not_evaluated": [],
         "targets_not_evaluated": [], "props_missing": [], "directory_build_props_present": [],
         "excluded_from_build": [], "missing_sources": [], "wildcard_includes": [],
@@ -406,7 +493,12 @@ def main():
             elif charset == "MultiByte":
                 settings["PreprocessorDefinitions"] = "_MBCS;" + settings.get("PreprocessorDefinitions", "")
             cmd, notes = build_command(proj, src, settings, args)
-            entries.append({"directory": str(proj.dir), "file": str(src), "arguments": cmd, "output": str(src.with_suffix(".obj"))})
+            # "project" is an extra key (clang tooling ignores unknown keys). The
+            # gate uses it to place bitcode per project so the same source compiled
+            # by two projects (Scintilla src in Scintilla + UnitTester) doesn't collide,
+            # and link_ir.py links per project = per deployable.
+            entries.append({"directory": str(proj.dir), "file": str(src), "arguments": cmd,
+                            "output": str(src.with_suffix(".obj")), "project": project_id(vp, root)})
             n += 1
             # --- audit flags (§23.4) ---
             for d in notes["defines"]:
@@ -425,6 +517,9 @@ def main():
         audit["projects"].append({"path": str(vp), "translation_units": n, "solution_dir": proj.macros["SolutionDir"],
                                   "props_notes": proj.props_notes})
 
+    for d in ANALYSIS_ONLY_DEFINES:
+        audit["flags"].append({"flag": "ANALYSIS_ONLY_MACRO_DIFFERENCE", "value": d,
+                               "note": "added to every TU by the converter; see ANALYSIS_ONLY_DEFINES"})
     if audit["unresolved_macros"]:
         audit["flags"].append({"flag": "SOURCE_PATH_MISMATCH", "value": sorted(audit["unresolved_macros"]),
                                "note": "unresolved MSBuild macros; paths containing them are wrong"})

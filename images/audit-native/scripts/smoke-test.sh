@@ -37,24 +37,33 @@ else
   MSVC_FLAGS=()
 fi
 if [ ${#MSVC_FLAGS[@]} -gt 0 ]; then
-  clang-cl /c /nologo --target=$TARGET -fms-compatibility-version=$COMPAT "${MSVC_FLAGS[@]}" -fsyntax-only hello.cpp
+  clang-cl /c /nologo --target=$TARGET -fms-compatibility-version=$COMPAT "${MSVC_FLAGS[@]}" /Zs hello.cpp
   echo "   ok"
   echo "== 2. emit LLVM bitcode"
+  # /clang:-emit-llvm — NOT -emit-llvm. In cl mode clang-cl ignores the bare form
+  # and emits a COFF .obj (2026-09-11 smoke run produced a COFF file named .bc).
   clang-cl /c /nologo --target=$TARGET -fms-compatibility-version=$COMPAT "${MSVC_FLAGS[@]}" \
-      -emit-llvm -g -O0 -Xclang -disable-O0-optnone /Fohello.bc hello.cpp
-  llvm-dis hello.bc -o hello.ll && grep -q 'define' hello.ll && echo "   ok ($(wc -l < hello.ll) lines IR)"
+      /clang:-emit-llvm /clang:-g /clang:-O0 -Xclang -disable-O0-optnone /Fohello.bc hello.cpp
+  head -c 4 hello.bc | grep -q 'BC' || { echo "   FAIL: hello.bc is not LLVM bitcode"; exit 1; }
+  llvm-dis hello.bc -o hello.ll
+  grep -q 'define' hello.ll || { echo "   FAIL: no function definitions in IR"; exit 1; }
+  echo "   ok ($(wc -l < hello.ll) lines IR)"
   echo "== 3. SVF Andersen points-to on the bitcode"
-  wpa -ander -stat=false hello.bc > wpa.log 2>&1 && echo "   ok" || { echo "   wpa failed:"; tail -5 wpa.log; }
+  wpa -ander -stat=false hello.bc > wpa.log 2>&1 || { echo "   FAIL: wpa"; tail -5 wpa.log; exit 1; }
+  echo "   ok"
   echo "== 4. Clang Static Analyzer"
   clang-cl /c /nologo --target=$TARGET -fms-compatibility-version=$COMPAT "${MSVC_FLAGS[@]}" \
       --analyze -Xclang -analyzer-output=text hello.cpp > csa.log 2>&1 || true
-  grep -c "warning:" csa.log | xargs echo "   CSA warnings:"
+  n=$(grep -c "warning:" csa.log || true); echo "   CSA warnings: $n"
+  [ "$n" -ge 1 ] || { echo "   FAIL: CSA did not flag the planted unchecked memcpy"; exit 1; }
 else
   echo "   /msvc not populated (no crt/include or VC/): skipping clang-cl steps. Run scripts/fetch-msvc-xwin.sh on a networked host."
 fi
 
 echo "== 5. Joern parse (no build needed)"
-joern-parse hello.cpp --output hello.cpg.bin > joern.log 2>&1 && [ -s hello.cpg.bin ] && echo "   ok ($(stat -c%s hello.cpg.bin) bytes)"
+joern-parse hello.cpp --output hello.cpg.bin > joern.log 2>&1 || { echo "   FAIL: joern-parse"; tail -5 joern.log; exit 1; }
+[ -s hello.cpg.bin ] || { echo "   FAIL: empty CPG"; exit 1; }
+echo "   ok ($(stat -c%s hello.cpg.bin) bytes)"
 echo "== 6. cppcheck"
 cppcheck --quiet --error-exitcode=0 --enable=warning hello.cpp 2>&1 | head -3 || true
 echo "== 7. tool versions"

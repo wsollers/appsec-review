@@ -37,7 +37,7 @@ from pathlib import Path
 # ordered: first match wins
 ERROR_CLASSES = [
     ("MISSING_HEADER",        re.compile(r"fatal error: '([^']+)' file not found")),
-    ("MSVC_HEADER_REJECTED",  re.compile(r"(/msvc/|\\msvc\\|Windows Kits|VC\\Tools|VC/Tools)[^:]*:\d+:\d+: error")),
+    ("MSVC_HEADER_REJECTED",  re.compile(r"(/msvc/|\\msvc\\|Windows Kits|VC\\Tools|VC/Tools)[^:(]*(:\d+:\d+|\(\d+,\d+\)): error")),
     ("MS_EXTENSION",          re.compile(r"(__declspec|__forceinline|__uuidof|__try|__except|__leave|__asm|__int64|__based|__interface|__super)")),
     ("SAL_ANNOTATION",        re.compile(r"\b_(In|Out|Inout|Ret|Check_return|Success|Printf_format_string|Deref)\w*_\b")),
     ("TEMPLATE_TWO_PHASE",    re.compile(r"(use of undeclared identifier|must be qualified|is not a template|dependent)")),
@@ -46,9 +46,10 @@ ERROR_CLASSES = [
     ("DEPRECATED_CRT",        re.compile(r"(_s' is deprecated|is deprecated: This function or variable may be unsafe)")),
     ("UNKNOWN_PRAGMA_OR_FLAG",re.compile(r"(unknown pragma|unknown argument|unsupported option|unknown warning option)")),
     ("COMPILER_NOT_FOUND",    re.compile(r"error: compiler not found")),
+    ("NO_INPUT_FILES",        re.compile(r"error: no input files")),
 ]
 HEADER_RE = re.compile(r"fatal error: '([^']+)' file not found")
-DIAG_RE = re.compile(r"^(.*?):(\d+):(\d+): (error|fatal error): (.*)$")
+DIAG_RE = re.compile(r"^(.*?)(?::(\d+):(\d+)|\((\d+),(\d+)\)): (error|fatal error): (.*)$")
 
 
 def run_one(entry: dict, timeout: int, emit_ir: bool, ir_dir: Path | None) -> dict:
@@ -57,28 +58,43 @@ def run_one(entry: dict, timeout: int, emit_ir: bool, ir_dir: Path | None) -> di
         # "command" string form
         import shlex
         args = shlex.split(entry["command"])
-    # strip output/obj-related flags and the /c
-    cleaned = []
-    skip = False
-    for a in args:
+    # Split at "--": everything before is options, after is the source file.
+    # (Converter emits "--" so absolute paths like /workspace/... aren't parsed
+    # as cl options; tolerate its absence for hand-written databases.)
+    if "--" in args:
+        i = args.index("--")
+        opts, srcs = args[:i], args[i + 1:]
+    else:
+        opts, srcs = args[:-1], args[-1:]
+    cleaned, skip = [], False
+    for a in opts:
         if skip:
             skip = False
             continue
         if a in ("/c", "-c"):
             continue
         if a.startswith("/Fo") or a.startswith("-o"):
-            if a in ("-o",):
+            if a == "-o":
                 skip = True
             continue
         cleaned.append(a)
     src = entry["file"]
     if emit_ir and ir_dir is not None:
-        out = ir_dir / (Path(src).name + "." + str(abs(hash(src)) % 10**8) + ".bc")
-        cmd = cleaned + ["/c", "-emit-llvm", "-g", "-O0", "-Xclang", "-disable-O0-optnone", f"/Fo{out}"]
+        rel = Path(src)
+        for anchor in ("/workspace",):
+            try:
+                rel = Path(src).relative_to(anchor)
+            except ValueError:
+                pass
+        out = ir_dir / entry.get("project", "default") / (str(rel).replace("/", "__") + ".bc")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        # /clang:-o<path> rather than /Fo: with "--" in the command clang-cl
+        # dropped the /Fo output silently (verified 2026-09-11); /clang:-o works.
+        cmd = cleaned + ["/c", "/clang:-emit-llvm", "/clang:-g", "/clang:-O0",
+                         "-Xclang", "-disable-O0-optnone", f"/clang:-o{out}"]
     else:
-        cmd = cleaned + ["-fsyntax-only"]
-    # clang-cl accepts -fsyntax-only via driver passthrough; add -ferror-limit to bound output
-    cmd += ["-ferror-limit=5"]
+        cmd = cleaned + ["/Zs"]  # cl-mode syntax-only
+    cmd += ["/clang:-ferror-limit=5", "--"] + srcs
     t0 = time.time()
     try:
         p = subprocess.run(cmd, cwd=entry.get("directory") or None, capture_output=True, text=True, timeout=timeout)
@@ -94,17 +110,29 @@ def run_one(entry: dict, timeout: int, emit_ir: bool, ir_dir: Path | None) -> di
     for line in err.splitlines():
         m = DIAG_RE.match(line)
         if m:
-            diags.append({"file": m.group(1), "line": int(m.group(2)), "severity": m.group(4), "message": m.group(5)})
+            line_no = int(m.group(2) or m.group(4))
+            diags.append({"file": m.group(1), "line": line_no, "severity": m.group(6), "message": m.group(7)})
         if len(diags) >= 3:
             break
-    classes = [name for name, rx in ERROR_CLASSES if rx.search(err)]
+    classes = [name for name, rx in ERROR_CLASSES if rx.search(err)] if status != "PASS" else []
     if status == "FAIL" and not classes:
         classes = ["OTHER"]
     missing_headers = HEADER_RE.findall(err)
-    rec = {"file": src, "status": status, "seconds": secs, "error_classes": classes,
+    rec = {"file": src, "project": entry.get("project", "default"), "status": status, "seconds": secs, "error_classes": classes,
            "missing_headers": missing_headers, "diagnostics": diags}
     if emit_ir and status == "PASS":
-        rec["bitcode"] = str(out)
+        try:
+            with open(out, "rb") as fh:
+                magic = fh.read(4)
+            if magic[:2] != b"BC":
+                status = "FAIL"
+                rec_note = "output is not LLVM bitcode (COFF?)"
+                classes.append("NOT_BITCODE")
+            else:
+                rec["bitcode"] = str(out)
+        except OSError:
+            status = "FAIL"; classes.append("NO_OUTPUT")
+        rec["status"] = status; rec["error_classes"] = classes
     return rec
 
 

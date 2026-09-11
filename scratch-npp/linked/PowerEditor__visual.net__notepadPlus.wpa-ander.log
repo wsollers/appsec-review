@@ -1,0 +1,133 @@
+
+*********General Stats***************
+################ (program : PowerEditor__visual.net__notepadPlus.bc)###############
+AddrsNum            95511
+BBWith2Succ         51057
+BBWith3Succ         407
+CallsNum            25111
+ConstArrayObj       3977
+ConstStructObj      390
+ConstantObj         0
+CopysNum            22998
+FIObjNum            17172
+FSObjNum            67719
+FunctionObjs        14321
+GepsNum             112318
+GlobalObjs          4639
+HeapObjs            7
+IndCallSites        831
+LoadsNum            127817
+MaxStructSize       1431
+NonPtrObj           52852
+ReturnsNum          41757
+StackObjs           65924
+StoresNum           119789
+TotalCallSite       100092
+TotalFieldObjects   33528
+TotalObjects        118420
+TotalPTASVFStmts    441095
+TotalPointers       701792
+TotalSVFStmts       627425
+VarArrayObj         4591
+VarStructObj        16871
+----------------Time and memory stats--------------------
+LLVMIRTime          1.879
+SVFIRTime           10.365
+SymbolTableTime     0.604
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : PowerEditor__visual.net__notepadPlus.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   531
+MaxNodeInCycle      75
+NodeInCycle         243
+TotalCycle          67
+TotalEdge           99295
+TotalNode           14321
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : PowerEditor__visual.net__notepadPlus.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.197894
+AvgIn/OutCopyEdge   0.906009
+AvgIn/OutEdge       1.46538
+AvgIn/OutLoadEdge   0.189688
+AvgIn/OutStoreEdge  0.171785
+AvgPtsSetSize       120.58
+AvgTopLvlPtsSize    222.47
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    9.20179e+06
+MemoryUsageVmsize   9.20256e+06
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           109.554
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       95511
+CopyProcessed       271214
+DummyFieldPtrs      11458
+FieldObjs           33528
+GepProcessed        88749
+IndCallSites        831
+IndEdgeSolved       32
+LoadProcessed       3294975
+LocalVarInRecur     4502
+MaxInAddrEdge       1
+MaxInCopyEdge       3955
+MaxInLoadEdge       1532
+MaxInStoreEdge      100
+MaxNodesInSCC       591
+MaxOutAddrEdge      10621
+MaxOutCopyEdge      5605
+MaxOutLoadEdge      295
+MaxOutStoreEdge     2274
+MaxPtsSetSize       3955
+MemObjects          118420
+NodesInCycles       6256
+NullPointer         28616
+NumOfAddrs          91303
+NumOfCGEdge         584783
+NumOfCGNode         470856
+NumOfCopys          307424
+NumOfFieldExpand    0
+NumOfGeps           110585
+NumOfLoads          87517
+NumOfSCCDetect      9
+NumOfSFRs           0
+NumOfStores         79257
+NumOfValidNode      461374
+NumOfValidObjNode   106363
+Pointers            701792
+PointsToBlkPtr      0
+PointsToConstPtr    6663
+SolveIterations     9
+StoreProcessed      1913027
+TotalCycleNum       1104
+TotalObjects        118420
+TotalPWCCycleNum    53
+TotalPointers       701792
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : PowerEditor__visual.net__notepadPlus.bc)###############
+UniquePointsToSets       341452
+TotalUnions              1937128
+PropertyUnions           367134
+UniqueUnions             132180
+LookupUnions             1189017
+PreemptiveUnions         248797
+TotalComplements         5528345
+PropertyComplements      4178775
+UniqueComplements        100047
+LookupComplements        1149488
+PreemptiveComplements    100035
+TotalIntersections       640401
+PropertyIntersections    440330
+UniqueIntersections      1
+LookupIntersections      0
+PreemptiveIntersections  200070
+#######################################################

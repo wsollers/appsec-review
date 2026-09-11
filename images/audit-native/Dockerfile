@@ -43,9 +43,11 @@
 #                       Make/Ninja builds where a .vcxproj converter doesn't
 #                       apply.
 #
-# Base is ubuntu:22.04 deliberately: the SVF-LLVM tarball is built on jammy.
+# Base is ubuntu:24.04: SVF-3.3's CMakeLists requires CMake >= 3.23 (jammy ships
+# 3.22 and the build fails before compiling anything — first build, 2026-09-11),
+# and SVF's own Dockerfile builds on noble against this same "ubuntu22" tarball.
 
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG=C.UTF-8
@@ -60,16 +62,17 @@ ARG CPPCHECK_VERSION=2.21.1
 ARG XWIN_VERSION=0.10.0
 
 # --- Base packages -----------------------------------------------------------
-# libncurses5/libncurses-dev, zlib1g-dev: SVF build.sh's stated dependencies.
-# libtinfo5: LLVM 21 prebuilt binaries link against it on jammy.
+# Package list mirrors SVF-3.3's Dockerfile (lib_deps/build_deps) plus what this
+# image adds: ninja, bear, python, gnupg/lsb-release for the apt repos below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git xz-utils unzip zip \
-      build-essential cmake ninja-build pkg-config \
-      libncurses5 libncurses-dev zlib1g-dev libtinfo5 libxml2-dev \
-      python3 python3-pip python3-venv \
+      ca-certificates curl wget git xz-utils unzip zip tcl \
+      build-essential gcc g++ cmake ninja-build pkg-config \
+      zlib1g-dev libncurses5-dev libtinfo6 libssl-dev libpcre2-dev libzstd-dev libxml2-dev \
+      python3 python3-dev python3-pip python3-venv \
       bear \
       gnupg lsb-release \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && cmake --version | head -1
 
 # --- LLVM/Clang 21.1.0 (RTTI build, from SVF-tools' mirror) ------------------
 RUN mkdir -p /opt/llvm && cd /tmp \
@@ -83,11 +86,12 @@ ENV LLVM_DIR=/opt/llvm \
     LD_LIBRARY_PATH="/opt/llvm/lib"
 
 # --- clang-tidy + lld from apt.llvm.org, same major --------------------------
-# Different build of the same LLVM major. clang-tidy is a standalone binary and
+# apt.llvm.org noble repo (Release file verified 200 on 2026-09-11 for jammy;
+# noble is the same layout). Different build of the same LLVM major. clang-tidy is a standalone binary and
 # CodeChecker only needs it on PATH; lld-link is needed only if a link step is
 # ever attempted (it isn't for IR/CSA, but harness builds under 16.1 may want it).
 RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${LLVM_MAJOR} main" \
+    && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_MAJOR} main" \
        > /etc/apt/sources.list.d/llvm.list \
     && apt-get update && apt-get install -y --no-install-recommends \
        clang-tidy-${LLVM_MAJOR} lld-${LLVM_MAJOR} \
@@ -100,7 +104,10 @@ RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /us
 RUN cd /tmp \
     && curl -fsSL -o z3.zip \
        "https://github.com/Z3Prover/z3/releases/download/z3-${Z3_VERSION}/z3-${Z3_VERSION}-x64-ubuntu-16.04.zip" \
-    && unzip -q z3.zip && mv z3-${Z3_VERSION}-x64-ubuntu-16.04 /opt/z3 && rm z3.zip
+    && unzip -q z3.zip && mv z3-${Z3_VERSION}-x64-ubuntu-16.04 /opt/z3 && rm z3.zip \
+    && ln -s /opt/z3/bin/libz3.so /opt/z3/bin/libz3.so.4
+# libz3.so.4 symlink: SVF's own Dockerfile does this; the prebuilt Z3 ships only
+# the unversioned soname and SVF's binaries look for .so.4 at run time.
 ENV Z3_DIR=/opt/z3
 
 # --- SVF (tag SVF-3.3) --------------------------------------------------------
@@ -110,7 +117,8 @@ RUN git clone --depth 1 --branch ${SVF_TAG} https://github.com/SVF-tools/SVF.git
     && cd /opt/svf \
     && sed -i 's/^jobs=8$/jobs=$(nproc)/' build.sh \
     && bash ./build.sh \
-    && /opt/svf/Release-build/bin/wpa --version 2>/dev/null || ls /opt/svf/Release-build/bin
+    && ls /opt/svf/Release-build/bin \
+    && test -x /opt/svf/Release-build/bin/wpa
 ENV SVF_DIR=/opt/svf \
     PATH="/opt/svf/Release-build/bin:${PATH}" \
     LD_LIBRARY_PATH="/opt/svf/Release-build/lib:/opt/z3/bin:/opt/llvm/lib"
@@ -130,10 +138,12 @@ RUN cd /tmp \
 ENV PATH="/opt/joern-cli:${PATH}"
 
 # --- cppcheck 2.21.1 from source ---------------------------------------------
+# HAVE_RULES=OFF: rules support needs legacy libpcre (not pcre2) and is unused
+# here; ON failed the 2026-09-11 build with a missing-PCRE cmake error.
 RUN cd /tmp \
     && curl -fsSL -o cppcheck.tgz "https://github.com/danmar/cppcheck/archive/refs/tags/${CPPCHECK_VERSION}.tar.gz" \
     && tar -xzf cppcheck.tgz && cd cppcheck-${CPPCHECK_VERSION} \
-    && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DHAVE_RULES=ON -DUSE_MATCHCOMPILER=ON \
+    && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DHAVE_RULES=OFF -DUSE_MATCHCOMPILER=ON \
        -DCMAKE_INSTALL_PREFIX=/usr/local -DFILESDIR=/usr/local/share/cppcheck \
     && cmake --build build -j"$(nproc)" && cmake --install build \
     && cd /tmp && rm -rf cppcheck.tgz cppcheck-${CPPCHECK_VERSION} \
@@ -146,11 +156,20 @@ RUN cd /tmp \
     && tar -xzf xwin.tgz && mv xwin-${XWIN_VERSION}-x86_64-unknown-linux-musl/xwin /usr/local/bin/xwin \
     && rm -rf xwin.tgz xwin-${XWIN_VERSION}-x86_64-unknown-linux-musl && xwin --version
 
-# --- Python: CodeChecker + this image's scripts' deps -------------------------
-RUN pip3 install --no-cache-dir \
-      codechecker==${CODECHECKER_VERSION} \
-      pyyaml==6.0.2 \
-      lxml==5.3.0
+# --- Python: CodeChecker in its own venv ---------------------------------------
+# A venv, not --break-system-packages: the 2026-09-11 build failed because
+# codechecker pulls pyyaml and pip cannot replace the Debian-installed PyYAML
+# ("RECORD file not found"). Isolating CodeChecker avoids every such collision.
+# lxml pinned to 6.x because codechecker 6.29.0 requires lxml~=6.0 (5.3.0 gave
+# ResolutionImpossible); 6.1.3 verified on PyPI 2026-09-11.
+# The image's own scripts under /opt/scripts are stdlib-only and run on the
+# system /usr/bin/python3; they do not use this venv.
+RUN python3 -m venv /opt/codechecker-venv \
+    && /opt/codechecker-venv/bin/pip install --no-cache-dir \
+         codechecker==${CODECHECKER_VERSION} \
+         lxml==6.1.3 \
+    && ln -s /opt/codechecker-venv/bin/CodeChecker /usr/local/bin/CodeChecker \
+    && CodeChecker version
 
 # --- This image's scripts ------------------------------------------------------
 COPY scripts/ /opt/scripts/
