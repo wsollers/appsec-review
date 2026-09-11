@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+ <key>clang_version</key>
+<string>clang version 21.1.0 (https://github.com/bjjwwang/LLVM-compile 4f7056e8ada487923d1c8f9bc38df6472008eda3)</string>
+ <key>diagnostics</key>
+ <array>
+  <dict>
+   <key>path</key>
+   <array>
+    <dict>
+     <key>kind</key><string>event</string>
+     <key>location</key>
+     <dict>
+      <key>line</key><integer>1086</integer>
+      <key>col</key><integer>4</integer>
+      <key>file</key><integer>0</integer>
+     </dict>
+     <key>ranges</key>
+     <array>
+       <array>
+        <dict>
+         <key>line</key><integer>1086</integer>
+         <key>col</key><integer>13</integer>
+         <key>file</key><integer>0</integer>
+        </dict>
+        <dict>
+         <key>line</key><integer>1086</integer>
+         <key>col</key><integer>52</integer>
+         <key>file</key><integer>0</integer>
+        </dict>
+       </array>
+     </array>
+     <key>depth</key><integer>0</integer>
+     <key>extended_message</key>
+     <string>Value stored to &apos;result&apos; is never read</string>
+     <key>message</key>
+     <string>Value stored to &apos;result&apos; is never read</string>
+    </dict>
+   </array>
+   <key>description</key><string>Value stored to &apos;result&apos; is never read</string>
+   <key>category</key><string>Unused code</string>
+   <key>type</key><string>Dead assignment</string>
+   <key>check_name</key><string>deadcode.DeadStores</string>
+   <!-- This hash is experimental and going to change! -->
+   <key>issue_hash_content_of_line_in_context</key><string>22ee2d63a66643cc797aca275234cd00</string>
+  <key>issue_context_kind</key><string>C++ method</string>
+  <key>issue_context</key><string>backupCurrentBuffer</string>
+  <key>issue_hash_function_offset</key><string>124</string>
+  <key>location</key>
+  <dict>
+   <key>line</key><integer>1086</integer>
+   <key>col</key><integer>4</integer>
+   <key>file</key><integer>0</integer>
+  </dict>
+  <key>ExecutedLines</key>
+  <dict>
+   <key>0</key>
+   <array>
+    <integer>1086</integer>
+   </array>
+  </dict>
+  </dict>
+ </array>
+ <key>files</key>
+ <array>
+  <string>/workspace/PowerEditor/src/ScintillaComponent/Buffer.cpp</string>
+ </array>
+</dict>
+</plist>

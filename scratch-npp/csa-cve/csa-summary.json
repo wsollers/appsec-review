@@ -1,0 +1,48 @@
+{
+ "generator": "run_csa.py",
+ "compile_commands": "/scratch/compile_commands.json",
+ "filter": "Utf8_16|uchardet|Buffer\\.cpp",
+ "checkers": [
+  "security",
+  "optin.taint",
+  "core",
+  "cplusplus",
+  "unix",
+  "deadcode",
+  "nullability",
+  "alpha.security",
+  "alpha.core",
+  "alpha.cplusplus",
+  "alpha.unix"
+ ],
+ "tu_total": 2,
+ "tu_ok": 2,
+ "tu_error": 0,
+ "tu_timeout": 0,
+ "findings_total": 3,
+ "by_checker": {
+  "security.ArrayBound": 2,
+  "deadcode.DeadStores": 1
+ },
+ "wall_seconds": 13.9,
+ "per_tu": [
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/Buffer.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 13.9,
+   "plist": "/scratch/csa-cve/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__ScintillaComponent__Buffer.cpp.plist",
+   "diagnostics": 1,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/Utf8_16.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 3.4,
+   "plist": "/scratch/csa-cve/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__Utf8_16.cpp.plist",
+   "diagnostics": 2,
+   "stderr_tail": []
+  }
+ ]
+}
