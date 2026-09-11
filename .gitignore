@@ -1,0 +1,18 @@
+# evidence and run outputs never enter the repo
+/evidence/
+/scratch/
+/runs/
+*.jsonl
+!schemas/**/*.jsonl
+# licensed inputs (MSVC headers/libs) are mounted, never committed
+/msvc/
+/xwin-cache/
+# python
+__pycache__/
+*.pyc
+.venv/
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

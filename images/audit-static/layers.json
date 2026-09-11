@@ -1,0 +1,39 @@
+[
+  {
+    "name": "server-core-cpp",
+    "path": "fsh-server/Server/lib",
+    "type": "server",
+    "note": "C++ game server core + vendored native libs (protobuf, log4cpp, libcurl, lua). syft will catch what has a manifest; the vendored copies without one need the native-dependencies.csv pass instead."
+  },
+  {
+    "name": "server-web-php",
+    "path": "fsh-server/Server/www/gdip",
+    "type": "server",
+    "note": "PHP backend — has composer.json/.lock, should SBOM cleanly."
+  },
+  {
+    "name": "server-gm-java",
+    "path": "fsh-server/GM/gaiya/Restructure",
+    "type": "management-plane",
+    "note": "Java microservices platform (fosol / open-capacity-platform / xxl-job) — this is the bulk of the newly-discovered 'management plane'."
+  },
+  {
+    "name": "server-gm-dotnet",
+    "path": "fsh-server/GM/gaiya/WOD",
+    "type": "management-plane",
+    "note": ".NET GM tooling (LOT_WOD, ApiUpload) — has .sln/.csproj, should SBOM cleanly via syft's dotnet cataloguer."
+  },
+  {
+    "name": "infra-tools-go",
+    "path": "fsh-infra/tools",
+    "type": "management-plane",
+    "note": "Go utilities (process_db_seed, shengqu_source_import, vm_app_installer) — has go.mod/go.sum, should SBOM cleanly."
+  },
+  {
+    "name": "client-shelter",
+    "path": "fsh-client/UnityClient/Shelter",
+    "type": "client",
+    "platform": "android+ios (Unity — same C# layer ships to both; see note)",
+    "note": "syft will catch whatever Unity package manifest (Packages/manifest.json) and any NuGet-style deps exist. It will NOT resolve the real Android Gradle dependency graph or iOS CocoaPods/SPM graph for the exported native projects if those are built separately from this source tree — if Android/iOS export projects with their own Podfile.lock / build.gradle exist elsewhere, add them as their own layers (client-android, client-ios) pointed at those exported projects instead of guessing from the Unity source alone."
+  }
+]

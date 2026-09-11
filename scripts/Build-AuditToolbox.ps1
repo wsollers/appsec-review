@@ -1,0 +1,72 @@
+﻿<#
+.SYNOPSIS
+    Builds the vendor-audit-toolbox Docker image used by
+    Invoke-VendorAuditPrePass.ps1 (Phase 0A of the Vendor Code Audit Playbook).
+
+.DESCRIPTION
+    Thin wrapper around `docker build`. Split out from the orchestrator script
+    so you can rebuild the toolbox on its own (after editing the Dockerfile,
+    bumping a tool version, etc.) without re-running a scan.
+
+.PARAMETER DockerfileDir
+    Directory containing Dockerfile and the six scripts it COPYs in:
+    build_symbol_index.py, md_to_sarif.py, build_semantic_index.py,
+    query_semantic_index.py, scrub_evidence.py, php_parse_coverage.py.
+    Defaults to the directory this script lives in.
+
+.PARAMETER Tag
+    Image tag to build. Defaults to vendor-audit-toolbox:latest.
+
+.PARAMETER NoCache
+    Pass --no-cache to force a full rebuild (useful after bumping @latest
+    Go-tool versions baked into earlier layers).
+
+.EXAMPLE
+    ./Build-AuditToolbox.ps1
+    ./Build-AuditToolbox.ps1 -Tag vendor-audit-toolbox:2026-08-31 -NoCache
+#>
+[CmdletBinding()]
+param(
+    [string]$DockerfileDir = $PSScriptRoot,
+    [string]$Tag = "vendor-audit-toolbox:latest",
+    [switch]$NoCache
+)
+
+$ErrorActionPreference = "Stop"
+
+$dockerfile = Join-Path $DockerfileDir "Dockerfile"
+if (-not (Test-Path $dockerfile)) {
+    throw "No Dockerfile found at $dockerfile - pass -DockerfileDir, or run this script from the same folder as the Dockerfile."
+}
+# scrub_evidence.py (E4-1 fix - evidence-tree secret scrubbing) and
+# php_parse_coverage.py (S6-1 fix - PHP parse-coverage ledger) added to this
+# preflight list on 2026-09-01, alongside the Dockerfile COPY line that now
+# pulls them in - without both changes together, this check would pass but
+# `docker build` would fail later with a much less clear "file not found"
+# from COPY itself.
+foreach ($required in @("build_symbol_index.py", "md_to_sarif.py", "build_semantic_index.py", "query_semantic_index.py", "scrub_evidence.py", "php_parse_coverage.py")) {
+    if (-not (Test-Path (Join-Path $DockerfileDir $required))) {
+        throw "Missing $required next to the Dockerfile - the image COPYs this in at build time."
+    }
+}
+
+Write-Host "Building $Tag from $DockerfileDir ..." -ForegroundColor Cyan
+Write-Host "This installs a Go toolchain, a Rust toolchain (for weggli), Composer packages, and" -ForegroundColor DarkGray
+Write-Host "several pip/go-installed scanners from their upstream sources - expect this to take" -ForegroundColor DarkGray
+Write-Host "several minutes on first build and to need outbound network access." -ForegroundColor DarkGray
+
+# --progress=plain forces Docker to stream each RUN step's real stdout/stderr
+# instead of collapsing it behind the interactive BuildKit UI - without this,
+# a failure deep inside a chained RUN (e.g. one `go install` in a list of
+# eight) shows only the step boundary, not the actual compiler/tool error
+# that caused it. Worth the noisier output for that reason alone.
+$buildArgs = @("build", "--progress=plain", "-t", $Tag, "-f", $dockerfile)
+if ($NoCache) { $buildArgs += "--no-cache" }
+$buildArgs += $DockerfileDir
+
+& docker @buildArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "docker build failed with exit code $LASTEXITCODE - see output above. If a specific tool's install step failed, that's the most likely thing to have drifted (an @latest Go/cargo install pulling a version that changed its build requirements); pin that tool's version in the Dockerfile and retry."
+}
+
+Write-Host "Built $Tag" -ForegroundColor Green

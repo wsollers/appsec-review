@@ -1,0 +1,24 @@
+# fsh-client — confirmed out-of-scope paths (2026-08-31 decision)
+# Use with: python3 profile_repo.py "F:\Barracuda\fsh-client" -o profile2 --exclude-file fsh-client-exclude.txt --exclude-dir 官方版本
+#
+# Bundled Eclipse IDE distribution (EGit/ADT/m2e plugins) — developer
+# tooling, not vendor-authored product code.
+前端工具/SourceProject/JarProject/eclipse
+#
+# Bundled Sandcastle .NET documentation generator — third-party tooling.
+前端文档/Sandcastle
+#
+# Stale reference/test/scratch Unity projects, years behind the real client
+# (2022.3.62f2c1) — engine versions here range from 5.4 to 2017.4.
+前端工具/SourceProject/SdoSurvey
+前端工具/SourceProject/UnityTestProjs/TestPanelJsonSerialize
+前端文档/测试研究/GuideTest
+前端文档/测试研究/ParticleFadeOut
+前端文档/音频文档/SoundProject
+#
+# Note: the *official* (unmodified) copy of Unity's UGUI source is excluded
+# by directory NAME, not by path here — pass --exclude-dir 官方版本 alongside
+# this file, so only the "工程修改后" (vendor-modified) UGUI copy stays in
+# scope. Don't add a path line for it here; a name-based exclude is more
+# robust across the (currently at least two) UGUI version folders that
+# each contain an 官方版本 subdirectory.

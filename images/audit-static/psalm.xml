@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  Minimal static Psalm config, baked into the toolbox image at
+  /opt/config/psalm.xml (see Dockerfile) and passed explicitly via psalm's
+  config flag in run-sast-php.sh.
+
+  2026-09-08: psalm hard-requires a config file in the analyzed project and
+  refuses to run without one at all ("Could not locate a config XML file in
+  path /workspace. Have you run 'psalm init' ?" — confirmed live against a
+  real run). Since /workspace is bind-mounted read-only in this pipeline,
+  running psalm's own init step could never write a config there even as a
+  first pass. This file lives inside the image instead, and its
+  directory name entry below is an absolute path, so it works regardless of
+  psalm's own working directory or root-flag resolution.
+
+  Schema confirmed against Psalm's own documented minimal example (a bare
+  psalm/projectFiles element is valid with no namespace declaration
+  required) — not guessed.
+
+  errorLevel is set to 5 as a reasonable middle ground, not a carefully
+  tuned value — this step is already documented (S6-1, sast-php's own Note
+  in the orchestrator) as a SECONDARY PHP pass, with sast-multi-semgrep-php
+  as the primary signal, so psalm's exact strictness here matters less than
+  it existing at all. Adjust freely if psalm's findings prove too noisy or
+  too quiet once real output exists to judge that from.
+-->
+<psalm errorLevel="5">
+    <projectFiles>
+        <directory name="/workspace" />
+    </projectFiles>
+</psalm>

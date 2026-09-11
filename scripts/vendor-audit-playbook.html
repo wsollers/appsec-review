@@ -1,0 +1,767 @@
+<title>Vendor Code Audit Playbook</title>
+<style>
+:root{
+  --bg:#eef0ec; --surface:#ffffff; --surface-2:#e2e6df; --ink:#1b2420; --muted:#5b6b62;
+  --line:#c9d0c4; --accent:#b5402a; --accent-ink:#fbf3ee; --good:#2f7d6e; --warn:#9c6b1f;
+  --crit:#8f2a2a; --info:#35618c; --code-bg:#1b2420; --code-ink:#e7ece6;
+  --font-display:'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-body:'IBM Plex Sans', -apple-system, Segoe UI, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121613; --surface:#191f1b; --surface-2:#212820; --ink:#e7ece6; --muted:#93a396;
+    --line:#2a332c; --accent:#e2704f; --accent-ink:#1b120d; --good:#5fb39f; --warn:#d9a441;
+    --crit:#e2635f; --info:#6fa3cf; --code-bg:#0d100e; --code-ink:#dde6df;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121613; --surface:#191f1b; --surface-2:#212820; --ink:#e7ece6; --muted:#93a396;
+  --line:#2a332c; --accent:#e2704f; --accent-ink:#1b120d; --good:#5fb39f; --warn:#d9a441;
+  --crit:#e2635f; --info:#6fa3cf; --code-bg:#0d100e; --code-ink:#dde6df;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent); color:var(--accent-ink);}
+a{color:var(--info);}
+a:focus-visible, button:focus-visible, summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+h1,h2,h3,h4{font-family:var(--font-display); font-weight:600; text-wrap:balance; line-height:1.2; margin:0 0 .5em;}
+p{margin:0 0 1em;}
+.eyebrow{
+  font-family:var(--font-mono); font-size:.72rem; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin:0 0 .4em;
+}
+code, .mono{font-family:var(--font-mono);}
+
+/* ---- shell layout ---- */
+.shell{display:grid; grid-template-columns:272px minmax(0,1fr); min-height:100vh;}
+.nav{
+  position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+  border-right:1px solid var(--line); padding:1.75rem 1.25rem 3rem; background:var(--surface);
+}
+.nav .brand{font-family:var(--font-mono); font-size:.78rem; letter-spacing:.08em; color:var(--accent); text-transform:uppercase; margin-bottom:.15rem;}
+.nav h1{font-size:1.15rem; margin-bottom:1.4rem;}
+.nav ol{list-style:none; margin:0; padding:0; counter-reset:phase;}
+.nav li{counter-increment:phase; margin-bottom:.15rem;}
+.nav a{
+  display:flex; gap:.6rem; padding:.4rem .5rem; border-radius:4px; text-decoration:none;
+  color:var(--muted); font-size:.87rem;
+}
+.nav a::before{
+  content:counter(phase,decimal-leading-zero); font-family:var(--font-mono); font-size:.75rem;
+  color:var(--muted); flex:none;
+}
+.nav a:hover, .nav a:focus-visible{background:var(--surface-2); color:var(--ink);}
+main{padding:3rem clamp(1.25rem, 4vw, 4.5rem) 6rem; max-width:920px;}
+.lede{max-width:680px; margin-bottom:2.5rem;}
+.lede p{color:var(--muted); font-size:1.05rem;}
+
+section.phase{padding-top:3rem; margin-top:1rem; border-top:1px solid var(--line);}
+section.phase:first-of-type{border-top:none;}
+.phase-head{display:flex; align-items:baseline; gap:.9rem; margin-bottom:.9rem;}
+.phase-num{
+  font-family:var(--font-mono); font-size:1rem; color:var(--accent); flex:none;
+  border:1px solid var(--line); border-radius:4px; padding:.15rem .5rem; background:var(--surface);
+}
+.phase-head h2{font-size:1.55rem; margin:0;}
+.phase-sub{color:var(--muted); font-size:.95rem; margin:.2rem 0 1.3rem; max-width:680px;}
+
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:8px;
+  padding:1.25rem 1.4rem; margin:1.1rem 0;
+}
+.card h3, .card h4{margin-top:0;}
+.note{border-left:3px solid var(--info); padding-left:1rem; margin:1.1rem 0; color:var(--muted); font-size:.94rem;}
+.opinion{border-left:3px solid var(--accent); padding-left:1rem; margin:1.1rem 0; background:var(--surface); border-radius:0 8px 8px 0; padding:1rem 1.2rem;}
+.opinion .eyebrow{color:var(--accent);}
+
+table{width:100%; border-collapse:collapse; font-size:.9rem;}
+.table-wrap{overflow-x:auto; margin:1.1rem 0; border:1px solid var(--line); border-radius:8px;}
+.table-wrap table{margin:0;}
+th, td{text-align:left; padding:.55rem .75rem; border-bottom:1px solid var(--line); vertical-align:top;}
+th{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); background:var(--surface-2);}
+tr:last-child td{border-bottom:none;}
+td code{font-size:.82rem;}
+
+.chip{
+  display:inline-block; font-family:var(--font-mono); font-size:.68rem; letter-spacing:.04em;
+  text-transform:uppercase; padding:.15rem .5rem; border-radius:99px; font-weight:600;
+}
+.chip.crit{background:color-mix(in srgb, var(--crit) 18%, transparent); color:var(--crit);}
+.chip.high{background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent);}
+.chip.med{background:color-mix(in srgb, var(--warn) 20%, transparent); color:var(--warn);}
+.chip.low{background:color-mix(in srgb, var(--good) 18%, transparent); color:var(--good);}
+.chip.info{background:color-mix(in srgb, var(--info) 18%, transparent); color:var(--info);}
+
+.prompt{
+  position:relative; background:var(--code-bg); color:var(--code-ink); border-radius:8px;
+  margin:1rem 0; overflow:hidden; border:1px solid var(--line);
+}
+.prompt-head{
+  display:flex; justify-content:space-between; align-items:center; padding:.55rem .9rem;
+  border-bottom:1px solid rgba(255,255,255,.08); font-family:var(--font-mono); font-size:.72rem;
+  letter-spacing:.06em; text-transform:uppercase; color:#9fb0a6;
+}
+.copy-btn{
+  font-family:var(--font-mono); font-size:.7rem; letter-spacing:.04em; text-transform:uppercase;
+  background:transparent; color:#9fb0a6; border:1px solid rgba(255,255,255,.2); border-radius:5px;
+  padding:.25rem .6rem; cursor:pointer;
+}
+.copy-btn:hover{color:var(--code-ink); border-color:rgba(255,255,255,.4);}
+.copy-btn.copied{color:var(--good); border-color:var(--good);}
+.prompt pre{margin:0; padding:1.1rem 1.2rem 1.3rem; overflow-x:auto; font-family:var(--font-mono); font-size:.83rem; line-height:1.65; white-space:pre-wrap;}
+.prompt .ph{color:#f0b28f;}
+
+pre.plain, pre.mermaid{overflow-x:auto;}
+pre.plain{background:var(--surface-2); border:1px solid var(--line); border-radius:8px; padding:1rem 1.2rem; font-family:var(--font-mono); font-size:.83rem; white-space:pre-wrap;}
+.mermaid{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:1rem; margin:1.1rem 0;}
+
+ul, ol{padding-left:1.3rem;}
+li{margin-bottom:.4rem;}
+.taxo-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.6rem; margin:1rem 0;}
+.taxo-item{background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:.6rem .8rem; font-size:.85rem;}
+.taxo-item b{display:block; font-family:var(--font-mono); font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; color:var(--accent); margin-bottom:.2rem;}
+
+footer{border-top:1px solid var(--line); margin-top:3rem; padding-top:1.5rem; color:var(--muted); font-size:.85rem;}
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr;}
+  .nav{position:relative; height:auto;}
+}
+</style>
+
+<div class="shell">
+  <nav class="nav" aria-label="Playbook phases">
+    <div class="brand">AppSec Review</div>
+    <h1>Vendor Code Audit Playbook</h1>
+    <ol>
+      <li><a href="#how">How this playbook works</a></li>
+      <li><a href="#opinions">Where I'd change your plan</a></li>
+      <li><a href="#p0">Scope &amp; rules of engagement</a></li>
+      <li><a href="#pa">Tooling pre-pass</a></li>
+      <li><a href="#p1">Discovery &amp; classification</a></li>
+      <li><a href="#p2">Threat modeling</a></li>
+      <li><a href="#p3">ASVS partitioning</a></li>
+      <li><a href="#p4">ASVS-driven assessment</a></li>
+      <li><a href="#p5">CVE verification</a></li>
+      <li><a href="#p6">Consolidation</a></li>
+      <li><a href="#p7">Markdown → SARIF</a></li>
+      <li><a href="#p8">Reporting &amp; retest</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <div class="lede" id="how">
+      <p class="eyebrow">Process guide + copy-paste prompt library</p>
+      <h1 style="font-size:2.1rem;">A playbook for auditing a polyglot vendor codebase with an LLM in the loop</h1>
+      <p>This is built for the review you described: Unity/C# client, C++ game server, Python and Go utilities, Packer/Terraform infrastructure, and a PHP&nbsp;5 + MySQL backend, delivered by a vendor in China, for a mobile game with real players and real player data. Every phase below pairs a short rationale with a prompt block you can paste into a frontier model, plus notes on what should never touch the LLM raw and should instead be pre-processed by a tool first.</p>
+      <p>The core discipline: <b>tools produce evidence, the LLM reasons over evidence, humans verify conclusions.</b> Nothing below asks the model to "read the codebase" unstructured — every prompt tells it what artifact to consume and what shape to return.</p>
+    </div>
+
+    <section class="phase" id="opinions">
+      <div class="phase-head"><span class="phase-num">OP</span><h2>Where I'd change your plan</h2></div>
+      <p class="phase-sub">You asked for opinions, not just prompts. Here's what I'd add, reorder, or do differently before you start.</p>
+
+      <div class="opinion">
+        <div class="eyebrow">Reorder: threat model before ASVS execution, not after</div>
+        <p>Your outline was discovery → ASVS partition → ASVS run. I'd insert threat modeling as its own phase between the two, using the discovery inventory to build trust boundaries and attacker entry points <i>before</i> you run ASVS controls against the code. ASVS testing without a threat model turns into a checklist exercise — you verify controls exist without knowing which ones actually sit on an attack path. With the threat model done first, Phase 4's assessment prompts can say "this endpoint is reachable from an untrusted client across trust boundary B2" instead of grading every control as equally important.</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">Add a tooling pre-pass before any LLM discovery prompt</div>
+        <p>Don't hand a frontier model a raw file tree and ask it to classify a multi-language, multi-hundred-thousand-line vendor drop from scratch — it will miss files, hallucinate structure, and burn context re-deriving things a five-minute tool run gets exactly right. Run cloc/scc, a secrets scanner, an SBOM generator, and SAST tools <i>first</i>, then feed the LLM their structured output (JSON/CSV/SARIF) to classify and interpret. This is Phase A below and it's the single biggest change I'd make to your plan — it's also what makes the rest of the pipeline scale past a toy-sized codebase.</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">Add a dedicated vendor-trust / supply-chain workstream</div>
+        <p>Because this code ships from a vendor rather than being written in-house, you have a category of risk ASVS doesn't cover well: silent update mechanisms, opaque native plugin binaries, outbound "phone-home" telemetry to endpoints you don't control, embedded state-mandated cryptography (SM2/SM3/SM4 substitutions occasionally show up in vendor-supplied crypto that has to satisfy Chinese commercial cryptography regulation — worth understanding, not automatically a finding, but worth knowing it's there), and license/IP provenance for anything that looks copy-pasted rather than authored. I've folded this into Phase 1B and flagged it distinctly rather than burying it inside generic ASVS communication/config checks — you want an executive who reads this report to see "vendor trust" as its own risk axis, separate from "this input isn't validated."</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">ASVS is thin on native memory safety and has nothing on game-specific trust</div>
+        <p>ASVS is a web/application-layer standard. Your C++ game server has a whole risk class — buffer overflows, use-after-free, integer overflow in packet parsing, double-free, race conditions in shared game state — that ASVS's "Validation, Sanitization and Encoding" chapter gestures at but doesn't operationalize. Same for game-specific trust: anti-cheat bypass, IAP/economy fraud, matchmaking abuse, save-state or asset-bundle tampering — none of that is in ASVS at all. Rather than force-fitting these into ASVS categories (which produces awkward, unconvincing mappings), I've given them their own supplemental checklists driven by CWE/SEI&nbsp;CERT&nbsp;C++ and a short custom "game trust" list (Phase 4B/4C). Track them as first-class alongside your ASVS chapters, not as ASVS footnotes.</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">PHP 5 is a finding before you look at a single line of application code</div>
+        <p>PHP 5 reached end-of-life in January 2019 and has received no security patches since — no CVE fixes, no engine-level hardening, nothing. Flag "unsupported runtime, PHP 5.x" as a standing Critical/High finding independent of whatever the ASVS configuration chapter turns up, because it changes the entire risk calculus for that component: any RCE-class bug found in the PHP engine itself after 2019 is permanently unpatched on this stack. Treat modernization to a supported PHP 8.x line as the headline remediation item for the backend component, not a line item buried in a findings table.</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">Verify CVEs by reachability, not by presence</div>
+        <p>A dependency scanner will return hundreds of CVE hits across a codebase this size, and most will be in code paths that are never called, in dev-only tooling, or in transitive dependencies pulled in for one unused function. Don't report "347 known CVEs" — that number is meaningless and will get the report ignored. Build a reachability tier: <b>Confirmed-reachable</b> (the vulnerable function is in your call graph and reachable from an untrusted input), <b>Present-unreachable</b> (dependency is used, vulnerable code path is not), <b>Present-unused</b> (dependency imported but the vulnerable module isn't referenced at all). Phase 5 below is built around this triage, using the LLM to do the reachability judgment call once you've handed it the call site and the vulnerable function's signature from the advisory.</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">What to run outside the LLM, full stop</div>
+        <p>Anything deterministic, anything that needs to enumerate every file without sampling, and anything requiring bit-exact parsing (binary formats, ASN.1, IaC state files) belongs to a tool, not a model context window. Concretely: secrets scanning, SBOM/license generation, dependency CVE lookups, IaC misconfiguration scanning, C/C++ static analysis for memory safety, and code-size/complexity metrics should all run as tools and get fed to the LLM as evidence. What the LLM is genuinely good at and tools aren't: business-logic reasoning ("does this authorization check actually cover this code path"), synthesizing a threat model narrative, drafting remediation guidance in plain English, and triaging reachability/severity once given the raw facts. Match the phase to the tool that's actually better at it — see Phase A for the specific tool list.</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">Don't skip COPPA / age-appropriate design for a mobile game</div>
+        <p>You listed GDPR — correct, and given the vendor is China-based, also consider PIPL (China's Personal Information Protection Law) for any data that transits or is stored on vendor-controlled infrastructure. But mobile games routinely attract under-13 (COPPA, US) and under-18 (UK Age Appropriate Design Code, EU DSA minor-protection provisions) players regardless of intended audience. If there's no active age-gating or the game's genre/marketing skews young, add a data-protection-for-minors pass to Phase 2D — it changes what "excessive data collection" means and what consent flow is even legal to ship.</p>
+      </div>
+
+      <div class="opinion">
+        <div class="eyebrow">Make the markdown finding format machine-parseable from the start</div>
+        <p>Free-form markdown with prose severity ratings is a pain to convert to SARIF reliably. Use YAML frontmatter per finding (schema in Phase 6) so the conversion script parses structured fields instead of pattern-matching prose. This costs nothing extra to produce and turns the SARIF step into a 100-line deterministic script instead of a regex minefield.</p>
+      </div>
+    </section>
+
+    <section class="phase" id="p0">
+      <div class="phase-head"><span class="phase-num">00</span><h2>Scope &amp; rules of engagement</h2></div>
+      <p class="phase-sub">Not an LLM prompt — a worksheet to fill in before Phase A. Every prompt downstream references these decisions, so get them written down once rather than re-litigating scope mid-review.</p>
+      <div class="table-wrap"><table>
+        <tr><th>Decide</th><th>Why it matters downstream</th></tr>
+        <tr><td>Repos, branches, and exact commit hashes in scope</td><td>Findings need to cite a fixed reference point; vendor repos move.</td></tr>
+        <tr><td>Environments in scope (dev / stage / prod cloud accounts)</td><td>Terraform/Packer review differs sharply if prod credentials or state are in scope.</td></tr>
+        <tr><td>Data classes actually in play</td><td>Drives Phase 2D — enumerate up front: account ID, email, device ID (IDFA/GAID), IP, coarse vs. precise geolocation, payment/IAP tokens, chat/UGC text, friend graphs, biometric (rare, but check controller-input/face-filter features).</td></tr>
+        <tr><td>Regulatory scope</td><td>GDPR (EU players), PIPL (vendor is China-based — data transiting/stored there), CCPA/CPRA (CA players), COPPA / UK AADC (game may attract minors).</td></tr>
+        <tr><td>Nature of the vendor relationship</td><td>One-time IP delivery vs. an ongoing managed service with vendor-operated infra and standing access changes the whole supply-chain risk profile.</td></tr>
+        <tr><td>Handling rule for opaque/obfuscated vendor binaries</td><td>Decide up front whether these get reverse-engineered, sandboxed and behaviorally tested, or simply flagged as unauditable and treated as untrusted by default.</td></tr>
+        <tr><td>Escalation trigger to legal/compliance</td><td>State-mandated crypto substitutions, hardcoded connections to third-party Chinese infrastructure, or license provenance issues should route to legal, not sit as a plain appsec finding.</td></tr>
+      </table></div>
+    </section>
+
+    <section class="phase" id="pa">
+      <div class="phase-head"><span class="phase-num">0A</span><h2>Tooling pre-pass</h2></div>
+      <p class="phase-sub">Run before any LLM prompt. Cheap, deterministic, high-signal — this is what the discovery prompt in Phase 1 consumes instead of raw source.</p>
+
+      <div class="table-wrap"><table>
+        <tr><th>Track</th><th>Tooling</th><th>Output feeds</th></tr>
+        <tr><td>Inventory &amp; size</td><td><code>scc</code> / <code>cloc</code> per directory</td><td>Phase 1A</td></tr>
+        <tr><td>Secrets</td><td><code>gitleaks</code> or <code>trufflehog</code> — <b>full git history</b>, not just HEAD</td><td>Phase 1A (gate — triage before anything else)</td></tr>
+        <tr><td>SBOM &amp; licenses</td><td><code>syft</code> (or per-ecosystem: NuGet list for Unity, <code>pip-audit</code>/<code>pipdeptree</code>, <code>go list -m all</code>, <code>composer show</code>) → CycloneDX/SPDX + license report</td><td>Phase 5</td></tr>
+        <tr><td>Dependency CVEs</td><td><code>osv-scanner</code> against the SBOM; cross-check anything high-severity against GitHub Advisory / NVD directly</td><td>Phase 5</td></tr>
+        <tr><td>SAST — C#/Unity</td><td>Unity's Roslyn analyzers + Semgrep (<code>p/csharp</code>, <code>p/owasp-top-ten</code>); manually triage any native plugin binaries in <code>Plugins/</code> — opaque, can't be source-scanned</td><td>Phase 4</td></tr>
+        <tr><td>SAST — C++</td><td><code>cppcheck</code>, <code>clang-tidy</code>, Clang Static Analyzer for memory safety; Joern for a real dataflow/taint query on top — not CodeQL, see the note below the table</td><td>Phase 4B</td></tr>
+        <tr><td>SAST — Python</td><td><code>bandit</code>, Semgrep (<code>p/python</code>)</td><td>Phase 4</td></tr>
+        <tr><td>SAST — Go</td><td><code>gosec</code>, <code>go vet</code>, Semgrep (<code>p/golang</code>)</td><td>Phase 4</td></tr>
+        <tr><td>SAST — PHP 5</td><td>PHPStan/Psalm at max strictness (note: modern analyzer support for PHP 5 syntax is degrading — expect gaps, treat as a finding in itself) + Semgrep taint rules for SQLi/PHP object injection</td><td>Phase 4</td></tr>
+        <tr><td>IaC</td><td><code>checkov</code> and/or <code>tfsec</code>/Trivy config scan against Terraform + Packer templates</td><td>Phase 4</td></tr>
+        <tr><td>Image scan</td><td><code>trivy image</code> against any AMI/container Packer produces, post-build</td><td>Phase 4</td></tr>
+        <tr><td>Binary triage</td><td><code>strings</code> + entropy scan over shipped native plugins/resources for embedded keys/certs; regex pass for outbound domain/IP literals</td><td>Phase 1B</td></tr>
+        <tr><td>Database config</td><td>Manual pull of MySQL config: auth plugin, TLS enforcement, default/anonymous accounts, privilege grants</td><td>Phase 4</td></tr>
+        <tr><td>Code indexing</td><td>Universal ctags for a fast tag index; <code>build_symbol_index.py</code> (tree-sitter, delivered alongside this page) for a definitions/calls JSON per file — see "Code indexing" below</td><td>Phase 1A, Phase 5</td></tr>
+        <tr><td>Complexity / review priority</td><td><code>lizard</code> (cyclomatic complexity, multi-language) and <code>code2flow</code> (call-graph sketch for Python/PHP) to rank files by review priority before a human or an LLM reads them line by line</td><td>Phase 1A</td></tr>
+        <tr><td>C/C++ semantic pattern search</td><td><code>weggli</code> (fast, hypothesis-driven query search for vulnerable code shapes — e.g. a buffer used before its bounds check) and <code>ast-grep</code> (structural search/lint across every language in this stack, not just C++) — complement cppcheck's fixed rule set with queries you write per hypothesis</td><td>Phase 4B, Phase 1B</td></tr>
+        <tr><td>C/C++ code property graph</td><td><code>joern</code> — builds a real Code Property Graph and supports genuine taint/dataflow queries (e.g. "does anything from <code>handle_packet</code>'s buffer reach a <code>memcpy</code> without a bounds check"). Apache-2.0, and its fuzzy parser degrades gracefully without a full build — see the CodeQL note below</td><td>Phase 4B, Phase 5</td></tr>
+        <tr><td>License / vendored-code provenance</td><td>ScanCode Toolkit, run from its own official image, against anything that looks copy-pasted rather than pulled through a package manager</td><td>Phase 1B</td></tr>
+        <tr><td>Binary signature matching</td><td><code>yara</code> engine (installed; bring your own ruleset) against native plugins/binaries for known malware/backdoor signatures</td><td>Phase 1B</td></tr>
+        <tr><td>Semantic code retrieval</td><td><code>build_semantic_index.py</code> + <code>query_semantic_index.py</code> (LanceDB + an open code-embedding model, delivered alongside this page) — retrieve code by meaning for Phase 4 evidence selection on a codebase too large to hand-curate. See "Semantic retrieval layer" below</td><td>Phase 4, Phase 1B, Phase 6</td></tr>
+        <tr><td>IaC resource graph</td><td><code>terraform graph</code> (built into the Terraform CLI) for the authoritative resource-dependency graph — feed straight into Prompt 2C rather than reconstructing it by hand</td><td>Phase 2C</td></tr>
+      </table></div>
+      <div class="note">Keep every tool's raw output as a versioned artifact (JSON/SARIF/CSV) in a fixed folder structure, e.g. <code>/evidence/&lt;tool&gt;/&lt;date&gt;.json</code>. Every prompt below references specific files from this evidence set rather than asking you to paste an entire scan inline — attach the relevant excerpt per prompt to keep context focused.</div>
+
+      <h3 style="margin-top:2rem;">Code indexing: tree-sitter, ctags, and where LSIF/SCIP fit</h3>
+      <p>The Phase 5 CVE-reachability prompt needs actual call sites, and the Phase 1 discovery prompt is far more reliable when it's handed entry points instead of asked to find them. Three tiers, cheapest to most exact:</p>
+      <div class="table-wrap"><table>
+        <tr><th>Tier</th><th>Tool</th><th>What it gives you</th><th>What it can't do</th></tr>
+        <tr><td>Tag index</td><td><code>universal-ctags</code></td><td>A fast, per-language "jump to definition" tag file — cheap, near-zero setup, good for a human doing manual review alongside the LLM output</td><td>No call graph, no cross-file resolution</td></tr>
+        <tr><td>Syntax-level symbol/call index</td><td><code>build_symbol_index.py</code> (tree-sitter, delivered with this playbook)</td><td>Per-file JSON of function/class definitions and candidate call sites by name, across C#, C++, Python, Go, PHP, plus a structural pass over Terraform blocks — this is what feeds Phase 1 and Phase 5 below</td><td>Name-based matching only — no overload resolution, no dynamic-dispatch resolution, no cross-file symbol binding. Treat its call list as "candidates to verify," not ground truth</td></tr>
+        <tr><td>Semantic index (LSIF / SCIP)</td><td>Per-language: Roslyn workspace analysis for the Unity C# project, <code>gopls</code>-based indexing or <code>golang.org/x/tools/cmd/callgraph</code> for Go, a real Python language server (pyright/jedi) for the utilities, a Joern Code Property Graph for the C++ game server</td><td>An exact, semantically-resolved call graph — the right evidence to cite when a Phase 5 reachability verdict actually matters for the report</td><td>Needs the target repo's real build environment to resolve symbols correctly (Unity's package cache, the actual <code>go.mod</code>/module graph, a Python venv with the project's real dependencies) — this is why it isn't baked into the generic toolbox image below. Build these per-component, once you know the build actually resolves, and drop their output into the same evidence tree</td></tr>
+      </table></div>
+      <p class="note" style="border:none; padding:0; margin-top:.6rem;">Practical sequencing: run the tree-sitter index for everything, cheaply, in the pre-pass. Reach for a real Joern/LSIF/SCIP build only for the specific component a Phase 5 "Confirmed-Reachable" verdict hinges on — that's usually a handful of call sites in the C++ game server or a backend service, not the whole codebase.</p>
+
+      <div class="opinion">
+        <div class="eyebrow">Why Joern, not CodeQL, for the C++ semantic layer</div>
+        <p>CodeQL is the more famous option here and it's tempting to reach for it first, but it's wrong for this specific engagement for two independent reasons, not just one. First, licensing: the CodeQL CLI's terms restrict use to open-source and research code without a GitHub Advanced Security subscription — this is vendor-owned proprietary code, so that doesn't clearly cover this use. Second, and this is the one that would bite you even if licensing weren't a concern: CodeQL's C/C++ extractor needs the code to actually <b>build</b> to produce a full-quality database. <code>--build-mode=none</code> exists but gives a materially weaker extraction for C/C++ than a real compile — and a vendor-delivered game server building cleanly, from scratch, in your review environment, with no build-system archaeology, is not a given. Joern doesn't have either problem: it's genuinely Apache-2.0, and its fuzzy parser is designed to degrade gracefully without a full build. Use ast-grep and weggli for fast, hypothesis-driven structural queries, and reach for Joern when a hypothesis needs a real taint/dataflow answer rather than a pattern match.</p>
+      </div>
+
+      <h3 style="margin-top:2rem;">Semantic retrieval layer (vector search over the codebase)</h3>
+      <p>Everything above is exact — definitions, call sites, structural patterns. It all requires knowing roughly what you're looking for. The gap that leaves open: Phase 4's ASVS-assessment prompts need you to curate which files/functions go with which chapter, and on a codebase this size, hand-curating "everything touching session tokens" across five languages is slow and lossy. <code>build_semantic_index.py</code> and <code>query_semantic_index.py</code> (delivered alongside this page) close that gap with a small retrieval-augmented-generation layer:</p>
+      <ol>
+        <li>Read the per-file JSON <code>build_symbol_index.py</code> already produced, and chunk each source file at its actual function/class boundaries — not arbitrary line windows.</li>
+        <li>Embed every chunk with an open, code-aware embedding model, run locally via <code>fastembed</code> (ONNX-based — no multi-gigabyte torch install, which matters when this needs to run in a constrained build environment). Default model: <code>jinaai/jina-embeddings-v2-base-code</code>, a real currently-available open-weights code embedding model — swappable via a CLI flag, since this specific ranking shifts and shouldn't be hardcoded into a playbook.</li>
+        <li>Store chunk text + metadata (path, language, definition name, line range) + vector in a <b>LanceDB</b> table — embedded and file-based, so it lives in the <code>/evidence</code> tree like everything else here, no server to stand up or maintain. (If this stops being a one-off engagement and becomes a standing internal tool multiple analysts query concurrently across many vendor audits, Qdrant is the better call at that point — it's a real service with mature filtered search. Skip Milvus either way; it's built for distributed, billion-vector scale that a single codebase, even a large one, doesn't approach.)</li>
+        <li>Query it in plain language and get back ranked code chunks to attach as evidence to a Phase 4/1B/6 prompt, instead of a manually assembled file list.</li>
+      </ol>
+      <div class="card">
+        <h4 style="margin-top:0;">What this is (and isn't) trustworthy for</h4>
+        <p>Semantic similarity is a <b>recall</b> tool — it tells you what to hand the LLM, not a fact you can cite. Keep it out of Phase 5 reachability verdicts and out of the finding schema's <code>location</code> field; that stays on the structural/call-graph side (<code>build_symbol_index.py</code>, ast-grep, Joern). Tested end-to-end against a small synthetic multi-language sample: querying <em>"client-supplied currency balance trusted without server check"</em> correctly surfaced a C# <code>ApplyBalance</code> method assigning a client-supplied value straight to the wallet, ranked above unrelated code — the exact Phase 4C pattern this playbook flags as a presumptive Critical/High finding. Querying <em>"IAP purchase receipt verification"</em> correctly surfaced the Python receipt-validation function over a logging function in the same file. Retrieval quality tracks the embedding model and chunking strategy, not magic — validate it against a handful of known-location queries on the real codebase before trusting it for evidence selection at scale.</p>
+      </div>
+
+      <h3 style="margin-top:2rem;">Running the pre-pass: Dockerfile + PowerShell orchestrator</h3>
+      <p>Files delivered alongside this page: <code>Dockerfile</code> builds a toolbox image with the tools above (cloc/scc, gitleaks, syft, osv-scanner, semgrep, bandit, gosec, cppcheck/clang-tidy, weggli, ast-grep, Joern, Psalm/PHPStan/PHPCS for PHP, checkov/tfsec/Trivy for IaC, and the four evidence-shaping scripts — <code>build_symbol_index.py</code>, <code>md_to_sarif.py</code>, <code>build_semantic_index.py</code>, <code>query_semantic_index.py</code>); <code>Build-AuditToolbox.ps1</code> builds it; <code>Invoke-VendorAuditPrePass.ps1</code> runs every tool against a mounted repo checkout, writes each tool's output into a fixed <code>/evidence/&lt;track&gt;/</code> layout, respects the one real ordering dependency in this pass (the semantic index needs the symbol index to have produced output first — it checks and skips with a clear warning rather than failing confusingly if you run it out of order), and produces a <code>MANIFEST.json</code> (per-step exit code and duration) so a failed step is visible rather than silently missing from what you hand the LLM next.</p>
+      <div class="note">Two things this scaffold deliberately leaves to you: (1) tool CLI flags drift across releases — run one <code>--help</code> per tool against the image you actually built before trusting an unattended run, and (2) the Dockerfile's individual tool <em>install</em> steps have not been build-verified end to end — this session had no live Docker daemon available to build it against. What <em>was</em> tested, end to end, outside the container: <code>build_symbol_index.py</code> and <code>md_to_sarif.py</code> against synthetic sample input, and the full <code>build_symbol_index.py → build_semantic_index.py → query_semantic_index.py</code> pipeline including a real embedding-model download and the retrieval-quality check described above; the two PowerShell scripts were parse-checked and dry-run against a stubbed Docker client exercising every code path (argument construction, stdout/stderr capture, non-zero-exit handling, the dependency guard, the manifest) — that dry run caught and fixed a real bug (PowerShell's case-insensitive variables let the local step table silently clobber the <code>-Steps</code> parameter). Build the image, watch for the first tool whose install step has drifted, and pin that tool's version once you've confirmed it works.</div>
+    </section>
+
+    <section class="phase" id="p1">
+      <div class="phase-head"><span class="phase-num">01</span><h2>Discovery &amp; classification</h2></div>
+      <p class="phase-sub">Partition the codebase along two axes — <b>location</b> and <b>function</b> — using tool output as the evidence base, not a cold read of the file tree.</p>
+
+      <p class="eyebrow" style="margin-top:1.2rem;">Classification axes</p>
+      <div class="taxo-grid">
+        <div class="taxo-item"><b>Location</b>Client (Unity/C#) · Game Server (C++) · Backend Services (PHP/Python/Go) · Cloud/Infra (Terraform/Packer/MySQL)</div>
+        <div class="taxo-item"><b>Function</b>Communication/network · Auth &amp; session · Data storage (local/DB/cache) · File I/O · Cryptography · Third-party SDK/dependency · Config/secrets mgmt · Logging/telemetry · Payment/IAP · Anti-cheat/integrity · Admin/backoffice · Build/deploy pipeline</div>
+        <div class="taxo-item"><b>Data sensitivity</b>None · Internal · Player-PII · Player-PII-sensitive · Payment</div>
+        <div class="taxo-item"><b>Trust</b>Fully untrusted input (client-originated) · Semi-trusted (server-to-server) · Trusted (internal/admin)</div>
+      </div>
+
+      <div class="card">
+        <h3>Inventory schema</h3>
+        <div class="table-wrap"><table>
+          <tr><th>Field</th><th>Example</th></tr>
+          <tr><td><code>component_id</code></td><td><code>GAMESRV-MATCH-01</code></td></tr>
+          <tr><td><code>name</code></td><td>Matchmaking service</td></tr>
+          <tr><td><code>location</code></td><td>Game Server</td></tr>
+          <tr><td><code>language</code></td><td>C++17</td></tr>
+          <tr><td><code>function_tags</code></td><td>Communication, Auth</td></tr>
+          <tr><td><code>entry_points</code></td><td><code>net/match_listener.cpp:handle_connect()</code></td></tr>
+          <tr><td><code>data_handled</code></td><td>session token, device ID, coarse geo (region shard selection)</td></tr>
+          <tr><td><code>trust</code></td><td>Fully untrusted input</td></tr>
+          <tr><td><code>trust_boundary_crossed</code></td><td>yes — client → game server</td></tr>
+          <tr><td><code>external_deps</code></td><td>Protobuf, custom TLS wrapper</td></tr>
+          <tr><td><code>path</code></td><td><code>/gameserver/net/</code></td></tr>
+        </table></div>
+      </div>
+
+      <p class="eyebrow" style="margin-top:1.6rem;">Prompt 1A — Component &amp; data-flow discovery</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once per location (Client / Game Server / Backend / Cloud-Infra) to keep context manageable</span><button class="copy-btn" data-copy="p1a">Copy</button></div>
+        <pre id="p1a">You are performing application-security discovery on one location-slice of a larger vendor-delivered codebase. Do not read or summarize raw source files from memory or assumption — work only from the evidence attached below.
+
+CONTEXT
+- Product: mobile game. This slice: <span class="ph">{{LOCATION}}</span> (e.g. "Game Server, C++").
+- Vendor: third-party development shop based in China; this code was delivered, not written in-house.
+- Attached evidence: (1) `scc`/`cloc` output for this location, (2) file tree with directory-level comments if any exist, (3) relevant SAST tool JSON already scoped to this location, (4) dependency manifest(s).
+
+TASK
+Using only the attached evidence and files you are given direct excerpts of (ask for specific files by path if you need to see one before classifying it — do not guess its contents):
+
+1. Produce a component inventory table with these exact columns: component_id, name, location, language, function_tags (comma-separated from this fixed vocabulary: Communication, Auth-Session, Data-Storage, File-IO, Cryptography, Third-Party-SDK, Config-Secrets, Logging-Telemetry, Payment-IAP, Anti-Cheat-Integrity, Admin-Backoffice, Build-Deploy), entry_points, data_handled (plain language, flag anything that looks like player PII explicitly), trust (Fully-Untrusted / Semi-Trusted / Trusted), trust_boundary_crossed (yes/no + which boundary), external_deps, path.
+2. Assign component_id using the scheme <span class="ph">{{LOCATION-PREFIX}}</span>-<span class="ph">{{SUBSYSTEM}}</span>-<span class="ph">{{NN}}</span>, e.g. GAMESRV-MATCH-01.
+3. Flag every component that touches player data with a `data_handled` value that is not "none" — be specific (device ID, IP, precise geo, coarse geo, email, account ID, payment token, chat/UGC text, friend graph). This list is the input to a later PII data-lineage pass, so err toward over-flagging.
+4. Flag every component that is a third-party SDK, vendored library, or opaque binary (not authored by this vendor for this project) separately — these need supply-chain treatment, not just a function tag.
+5. Note anything you could not classify with confidence and say exactly what additional file or evidence you'd need to resolve it. Do not guess.
+
+OUTPUT FORMAT
+Markdown table as specified in step 1, followed by a short "Needs follow-up" list from step 5. No prose summary before the table.</pre>
+      </div>
+
+      <p class="eyebrow" style="margin-top:1.6rem;">Prompt 1B — Third-party binary &amp; phone-home triage (vendor-trust workstream)</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once, whole codebase — supply-chain specific</span><button class="copy-btn" data-copy="p1b">Copy</button></div>
+        <pre id="p1b">You are triaging supply-chain and vendor-trust risk in a codebase delivered by a third-party vendor, separate from the standard ASVS-style code review.
+
+ATTACHED EVIDENCE
+- List of all non-source binary artifacts shipped in the repo (native plugins, .so/.dll/.dylib, prebuilt libraries, asset bundles with embedded code).
+- `strings` + entropy-scan output for each binary (candidate embedded keys/certs/high-entropy blobs).
+- Regex pass results for outbound domain/IP literals found anywhere in source or binaries.
+- SBOM with license field populated per dependency.
+- Full list of third-party SDKs integrated in the client (ad networks, analytics, crash reporting, push, IAP).
+
+TASK
+1. For each opaque binary: state what evidence exists about its purpose (filename, adjacent code that calls into it, any embedded strings that reveal function), and mark it Unauditable-As-Is if there is no source available. Recommend whether it should be sandboxed/dynamically analyzed, or treated as fully untrusted at the interface level (i.e., validate everything crossing into/out of it as if from an external attacker).
+2. For each outbound domain/IP literal found: classify as (a) known first-party infrastructure, (b) known third-party SDK endpoint (name the SDK), or (c) unrecognized — flag unrecognized ones as highest priority for manual verification, since these are the candidates for undisclosed telemetry or update channels.
+3. For each embedded high-entropy string: state whether it looks like a cryptographic key/cert/token, and if so, whether it appears to be a static secret shared across all installs (bad) vs. a public key/cert (expected).
+4. Review the SBOM license column for anything copyleft (GPL/AGPL family) or with a missing/unrecognized license — flag for legal review given this is vendor-delivered IP being integrated into a commercial product.
+5. Separately list any dependency or embedded routine that looks like a non-standard/substituted cryptographic primitive (e.g. SM2/SM3/SM4 or other algorithms outside the project's stated crypto standard) — flag for legal/compliance review rather than treating as a plain code finding; this can indicate the vendor building to a different regulatory baseline than yours.
+6. Flag any self-update or remote-config mechanism that can change executable behavior post-install without going through your release process — this is the highest-severity supply-chain risk category and should be called out even if implemented "correctly," because the trust question is who controls the update channel, not whether the channel is secure.
+
+OUTPUT FORMAT
+One table per task (1-6), each row citing the specific file/binary/evidence line it's based on. End with a short "escalate to legal" list pulling together anything from steps 4-5.</pre>
+      </div>
+    </section>
+
+    <section class="phase" id="p2">
+      <div class="phase-head"><span class="phase-num">02</span><h2>Threat modeling &amp; dataflow diagrams</h2></div>
+      <p class="phase-sub">Built from the Phase 1 inventory, before ASVS execution. Four zone-level threat models, one dataflow diagram per component, one cross-environment diagram, and a player-data lineage trace — all mermaid, all in markdown.</p>
+
+      <p class="eyebrow">Prompt 2A — Zone threat model (STRIDE)</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run 4×: Client, Game Server, Cloud/Infra, Backend Services</span><button class="copy-btn" data-copy="p2a">Copy</button></div>
+        <pre id="p2a">You are building a STRIDE threat model for one zone of a larger system, using the component inventory produced in discovery.
+
+ATTACHED EVIDENCE
+- Component inventory rows where location = <span class="ph">{{ZONE}}</span>.
+- Component inventory rows for adjacent zones (so you can model cross-zone edges correctly).
+- Any known authentication/session mechanism description for this zone.
+
+TASK
+1. Identify every trust boundary this zone participates in (zone-internal boundaries too, e.g. client-side untrusted-input boundary between UI and game logic).
+2. For each boundary, list the assets that cross it and the direction of trust (which side is more trusted).
+3. Apply STRIDE (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege) per boundary — for each applicable threat, name the specific mechanism in THIS system that would realize it, not a generic textbook description. If a STRIDE category doesn't meaningfully apply to a boundary, say so briefly rather than forcing an entry.
+4. Produce a mermaid graph (flowchart TD) showing: components in this zone as nodes, trust boundaries as subgraph boundaries or dashed boundary lines, and edges labeled with the data/protocol crossing them. Use node shapes to distinguish component types (process, datastore, external entity) per standard DFD convention.
+5. For each identified threat, note whether existing code (cite the component) appears to have a mitigating control, based only on what's in the inventory/evidence — do not assume a control exists without evidence. Mark unknowns as "needs Phase 4 verification," not as mitigated.
+
+OUTPUT FORMAT
+### Threat Model: <span class="ph">{{ZONE}}</span>
+```mermaid
+flowchart TD
+  ...
+```
+Followed by a STRIDE table: Boundary | Threat Category | Specific Threat | Asset | Existing Control (or "unknown — needs verification") | Severity (qualitative).</pre>
+      </div>
+
+      <div class="mermaid">
+graph TD
+  subgraph Client["Client zone — trust boundary B1"]
+    UI[Game UI]
+    Logic[Client game logic]
+    Local[(Local save / PlayerPrefs)]
+  end
+  subgraph Edge["Boundary B1: untrusted client input"]
+  end
+  subgraph Server["Game Server zone"]
+    Listener[Connection listener]
+    Match[Matchmaking]
+    State[(Authoritative game state)]
+  end
+  UI --> Logic --> Local
+  Logic -- "session token, player actions" --> Listener
+  Listener --> Match --> State
+  Listener -. "validate all input as hostile" .-> Edge
+      </div>
+      <p class="note">Example shape only — illustrates the node/boundary convention the LLM should follow; it is not a finding about your actual system.</p>
+
+      <p class="eyebrow" style="margin-top:1.8rem;">Prompt 2B — Per-component network dataflow diagram</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once per component flagged Communication in discovery</span><button class="copy-btn" data-copy="p2b">Copy</button></div>
+        <pre id="p2b">Produce a network dataflow diagram for a single component, for inclusion in a security review document.
+
+ATTACHED EVIDENCE
+- Inventory row for component <span class="ph">{{COMPONENT_ID}}</span>.
+- Source excerpts for its entry points and any outbound calls it makes (network clients, DB clients, IPC).
+- Relevant SAST findings already scoped to this component, if any.
+
+TASK
+1. Enumerate every network-facing operation this component performs, both inbound (what calls it) and outbound (what it calls) — protocol, port/endpoint if known, authentication mechanism, and whether the payload is encrypted in transit.
+2. Note the data classification of each payload (none / internal / player-PII / payment) using the tags established in discovery.
+3. Produce a mermaid sequence diagram or flowchart (whichever fits better — sequence for request/response protocols, flowchart for fan-out/fan-in) showing this component's inbound and outbound edges labeled with protocol + data classification.
+4. Flag any edge that is unencrypted, uses weak/legacy TLS config, or has no visible authentication check on the receiving side, based only on the evidence attached — mark anything you can't confirm as "needs verification," not as safe.
+
+OUTPUT FORMAT
+### Dataflow: <span class="ph">{{COMPONENT_ID}}</span> — <span class="ph">{{component name}}</span>
+```mermaid
+sequenceDiagram
+  ...
+```
+Then a short table: Edge | Protocol | Auth | Encryption | Data Classification | Flag.</pre>
+      </div>
+
+      <p class="eyebrow" style="margin-top:1.8rem;">Prompt 2C — Cross-environment dataflow diagram</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once, using outputs of 2B as input</span><button class="copy-btn" data-copy="p2c">Copy</button></div>
+        <pre id="p2c">Synthesize a single cross-environment dataflow diagram from the per-component dataflow tables already produced.
+
+ATTACHED EVIDENCE
+- All Prompt 2B outputs (component-level dataflow tables).
+- The four Prompt 2A zone threat models.
+
+TASK
+1. Collapse the per-component edges into environment-level edges: Client ↔ Game Server, Client ↔ Backend Services, Game Server ↔ Backend Services, Backend Services ↔ Cloud/Infra (DB, object storage, secrets manager), Backend/Game Server ↔ any third-party service (payment processor, ad network, analytics, push notification provider, CDN).
+2. For each environment-to-environment edge, aggregate: protocols in use, whether any edge on that path is unencrypted or weakly authenticated (pull forward the flags from 2B), and the highest data-classification tag that crosses it.
+3. Produce one mermaid flowchart with environments as subgraphs (Client, Game Server, Backend Services, Cloud/Infra, Third Parties) and labeled edges between them — this is the diagram meant to go at the front of the report, so keep it to environment-level granularity, not component-level.
+4. Call out any edge that crosses a jurisdictional boundary you should know about — specifically anything where player data leaves the primary hosting region toward vendor-operated or China-based infrastructure — since that has PIPL/GDPR cross-border-transfer implications independent of the technical security of the edge itself.
+
+OUTPUT FORMAT
+```mermaid
+flowchart LR
+  ...
+```
+Then a table: Edge | Protocols | Weakest Link (from 2B flags) | Highest Data Classification | Jurisdiction Note.</pre>
+      </div>
+
+      <p class="eyebrow" style="margin-top:1.8rem;">Prompt 2D — Player-data lineage (PII / GDPR / PIPL / COPPA)</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once per data tag, e.g. device_id, precise_geo, email, payment_token</span><button class="copy-btn" data-copy="p2d">Copy</button></div>
+        <pre id="p2d">Trace one specific category of player data end-to-end through the system, for a data-protection review.
+
+DATA TAG UNDER REVIEW: <span class="ph">{{DATA_TAG}}</span> (e.g. "device ID", "precise geolocation", "email address", "IAP payment token")
+
+ATTACHED EVIDENCE
+- Every inventory row from Phase 1 where data_handled includes this tag.
+- The cross-environment dataflow diagram from Prompt 2C.
+- Any existing privacy policy or consent-flow description you have for this data type.
+
+TASK
+1. Identify the collection point(s): where does this data first enter the system, and is it collected with an observable consent/permission step, or silently?
+2. Trace every hop this data takes: client → transmission → server-side processing → storage (which datastore, encrypted at rest or not) → any third-party sharing (name the recipient SDK/service if it's shared with an ad network, analytics provider, etc.) → retention period if stated anywhere, → deletion/export mechanism if one exists.
+3. Identify every point where this data crosses a jurisdictional boundary (leaves the player's region, enters vendor-operated or China-based infrastructure, is shared with a third party in a different jurisdiction).
+4. Map applicable regulatory obligations against what you found: GDPR (lawful basis, data-subject rights, cross-border transfer mechanism), PIPL (separate consent for cross-border transfer, local storage requirements), CCPA/CPRA (sale/sharing disclosure), COPPA/UK-AADC (if the game's audience could include minors — flag this explicitly if you see no age-gating evidence).
+5. Rate the gap between what the code/infra evidence shows and what the regulation requires as Compliant / Partial / Non-Compliant / Unknown — Unknown means the evidence doesn't show a control either way, which is itself worth reporting distinctly from "confirmed non-compliant."
+
+OUTPUT FORMAT
+### Data Lineage: <span class="ph">{{DATA_TAG}}</span>
+```mermaid
+flowchart LR
+  ...
+```
+Then a table: Hop | Component | Action | Encrypted | Jurisdiction | Regulatory Note | Gap Rating.</pre>
+      </div>
+    </section>
+
+    <section class="phase" id="p3">
+      <div class="phase-head"><span class="phase-num">03</span><h2>ASVS partitioning</h2></div>
+      <p class="phase-sub">Map the Phase 1 inventory into OWASP ASVS chapters (v5.0 as of this writing — confirm you're standardizing on the same version before you start, since numbering shifted from 4.0.3). Mapping is many-to-many: one component can land in several chapters.</p>
+
+      <p class="eyebrow">Prompt 3A — ASVS mapping</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once per location, or once for the whole inventory if it fits context</span><button class="copy-btn" data-copy="p3a">Copy</button></div>
+        <pre id="p3a">Map a component inventory to OWASP ASVS chapters for a targeted, evidence-driven review (as opposed to running the entire ASVS checklist against everything, which wastes review time on chapters that don't apply to a given component).
+
+ATTACHED EVIDENCE
+- Component inventory table from Phase 1 (all columns).
+- The zone threat models and STRIDE tables from Phase 2A.
+
+ASVS VERSION: <span class="ph">{{ASVS_VERSION}}</span> (state the exact version you're mapping against — confirm chapter names/numbers against the official ASVS document for that version before running this, since section numbering differs between 4.0.3 and 5.0).
+
+TASK
+1. For each component, list every ASVS chapter it should be assessed against, with a one-line reason tied to its function_tags and trust rating (e.g. "GAMESRV-MATCH-01 → Authentication, Session Management, Communications — accepts untrusted client connections and issues session tokens").
+2. Build the inverse view: for each ASVS chapter, list every component that maps to it — this becomes the worklist for Phase 4.
+3. Explicitly call out components whose primary risk ASVS does not cover well: native C/C++ memory-safety issues, and game-specific trust/economy/anti-cheat concerns. Route these to the Phase 4B/4C supplemental checklists instead of forcing an ASVS chapter fit.
+4. Flag the PHP 5 runtime itself as a standing finding under the Configuration chapter, independent of any component-level mapping — unsupported runtime, no security patches since Jan 2019.
+
+OUTPUT FORMAT
+Two tables: (1) Component → ASVS chapters + reason, (2) ASVS chapter → Components (the Phase 4 worklist). Then a short list of components routed to Phase 4B/4C instead of/in addition to ASVS.</pre>
+      </div>
+    </section>
+
+    <section class="phase" id="p4">
+      <div class="phase-head"><span class="phase-num">04</span><h2>ASVS-driven assessment</h2></div>
+      <p class="phase-sub">The deep-review phase: one prompt template, run per ASVS chapter × component group from the Phase 3 worklist, plus two supplements for what ASVS doesn't cover.</p>
+
+      <p class="eyebrow">Prompt 4A — ASVS chapter assessment</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run per (ASVS chapter, component group) pair from the Phase 3 worklist</span><button class="copy-btn" data-copy="p4a">Copy</button></div>
+        <pre id="p4a">You are performing a targeted ASVS-based code review. Assess the listed components against ONE ASVS chapter only — do not drift into other chapters even if you notice unrelated issues; note those separately at the end instead.
+
+ASVS CHAPTER: <span class="ph">{{ASVS_CHAPTER}}</span> (e.g. "V6 Authentication" — cite the exact requirement numbers you're checking against, per <span class="ph">{{ASVS_VERSION}}</span>)
+COMPONENTS IN SCOPE: <span class="ph">{{COMPONENT_LIST}}</span>
+
+ATTACHED EVIDENCE
+- Source excerpts for each component's entry points and relevant logic (request these explicitly by file:line if not already attached — do not assess code you have not been shown).
+- SAST findings already scoped to these components and this concern area.
+- The relevant STRIDE entries from Phase 2A for boundaries these components sit on.
+
+TASK
+For each applicable ASVS requirement in this chapter:
+1. State the requirement ID and a one-line paraphrase.
+2. State whether the codebase satisfies it, based only on evidence shown — Satisfied / Not Satisfied / Partially Satisfied / Cannot Determine (evidence insufficient — say exactly what you'd need).
+3. If Not Satisfied or Partially Satisfied, produce a finding using the canonical schema below. Cite exact file:line. Do not describe a vulnerability you cannot point to specific code for — "this pattern is often vulnerable" is not a finding, a concrete instance is.
+4. Rate severity using CVSS-style reasoning (attack vector, complexity, privileges required, impact) rather than gut feel, and state the reasoning in one line.
+
+CANONICAL FINDING SCHEMA (produce one YAML-frontmatter block per finding, exactly this shape):
+---
+id: VEND-<span class="ph">{COMPONENT-PREFIX}</span>-<span class="ph">{NNN}</span>
+title: <short imperative title>
+severity: Critical|High|Medium|Low|Info
+status: Open
+component: <span class="ph">{component_id}</span>
+location: <span class="ph">{path}</span>:<span class="ph">{line}</span>
+category: <function tag from discovery>
+cwe: CWE-<span class="ph">{NNN}</span>
+asvs: <span class="ph">{chapter.section.requirement}</span>
+data_classes: [<span class="ph">{tags or empty}</span>]
+regulatory: [<span class="ph">{GDPR|PIPL|CCPA|COPPA or empty}</span>]
+cve: []
+confidence: Confirmed|Likely|Needs-Verification
+discovered_by: llm-assisted
+---
+### Description
+### Evidence
+### Impact
+### Likelihood
+### Remediation
+### References
+
+OUTPUT FORMAT
+Requirement-by-requirement satisfaction table first, then the full finding blocks for anything Not/Partially Satisfied, then a short "noticed but out of scope for this chapter" list.</pre>
+      </div>
+
+      <p class="eyebrow" style="margin-top:1.6rem;">Prompt 4B — Native memory-safety supplement (C++ game server)</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run per C++ component — ASVS doesn't cover this well</span><button class="copy-btn" data-copy="p4b">Copy</button></div>
+        <pre id="p4b">Review a C++ component for memory-safety and native-code risk classes that ASVS does not operationalize, using CWE and SEI CERT C++ as the reference standards.
+
+COMPONENT: <span class="ph">{{COMPONENT_ID}}</span>
+ATTACHED EVIDENCE
+- Source for this component, especially anything parsing untrusted network input.
+- cppcheck / clang-tidy / Clang Static Analyzer output already scoped to this component.
+
+TASK
+Check specifically for, citing file:line for any instance found:
+1. Buffer overflows / out-of-bounds access in packet or file parsing (CWE-119 family).
+2. Use-after-free and double-free (CWE-416, CWE-415), especially in connection/session teardown paths.
+3. Integer overflow/underflow feeding into allocation sizes or loop bounds (CWE-190/191).
+4. Race conditions on shared game state accessed from multiple threads without synchronization (CWE-362).
+5. Unchecked return values from allocation or I/O calls that lead to null-deref or silent failure (CWE-252).
+6. Format-string and unsanitized-input-to-format-function issues if any C-style formatting is used (CWE-134).
+7. Deserialization of untrusted network input without bounds/schema validation before use.
+
+For each finding, use the same canonical YAML-frontmatter schema as Prompt 4A, with `asvs: N/A - see supplement: native-memory-safety` and the appropriate CWE. Rate severity by whether the flaw is reachable from untrusted client input (game server accepts direct client connections, so most parsing code qualifies) — reachable memory-safety bugs in a network-facing C++ service are presumptively High or Critical.
+
+OUTPUT FORMAT
+Finding blocks only, ordered by severity, plus a one-line note on any of the 7 categories where you found nothing to report.</pre>
+      </div>
+
+      <p class="eyebrow" style="margin-top:1.6rem;">Prompt 4C — Game trust &amp; economy integrity supplement</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run against client + game server + backend components tagged Anti-Cheat-Integrity or Payment-IAP</span><button class="copy-btn" data-copy="p4c">Copy</button></div>
+        <pre id="p4c">Review the listed components for game-specific trust and economy-integrity risks that neither ASVS nor generic memory-safety review covers.
+
+COMPONENTS: <span class="ph">{{COMPONENT_LIST}}</span>
+ATTACHED EVIDENCE: source excerpts for authoritative-state handling, IAP validation, and any anti-cheat/integrity checks.
+
+CHECK FOR, citing file:line:
+1. Client-authoritative state: does the client ever send a value the server trusts without independent verification (score, currency balance, position/speed for movement validation, inventory contents)? Any client-authoritative economy value is a presumptive finding.
+2. IAP/receipt validation: is purchase validation done server-side against the platform's (Apple/Google) receipt-verification API, or does the client merely assert "purchase succeeded"?
+3. Save-state and asset-bundle integrity: are local save files or downloadable asset bundles signed/verified before use, or can a modified client load arbitrary tampered content?
+4. Matchmaking/session abuse: can a client join a match, request state, or claim rewards without a corresponding valid game session on the server?
+5. Rate limiting on economy-affecting actions (trades, rewards claims, currency purchases) — absence of rate limiting here is a fraud/abuse finding, not just an availability one.
+
+Use the same canonical finding schema as Prompt 4A, with `asvs: N/A - see supplement: game-trust-integrity`.
+
+OUTPUT FORMAT
+Finding blocks ordered by severity (client-authoritative economy state and unvalidated IAP receipts are typically Critical/High), plus a short note on anything checked with no finding.</pre>
+      </div>
+    </section>
+
+    <section class="phase" id="p5">
+      <div class="phase-head"><span class="phase-num">05</span><h2>CVE verification &amp; reachability</h2></div>
+      <p class="phase-sub">Turn a raw SBOM/CVE dump into a small, defensible list by triaging reachability rather than reporting every hit.</p>
+
+      <p class="eyebrow">Prompt 5A — Reachability triage</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Batch by dependency — group CVEs per package, not one prompt per CVE</span><button class="copy-btn" data-copy="p5a">Copy</button></div>
+        <pre id="p5a">Triage dependency CVEs by reachability, using the codebase's actual usage of the affected package rather than treating "package is present" as equivalent to "vulnerability applies."
+
+ATTACHED EVIDENCE
+- osv-scanner (or equivalent) results for package <span class="ph">{{PACKAGE_NAME}}</span> version <span class="ph">{{VERSION}}</span>, including the CVE list, affected function/module per advisory, and fixed version.
+- Every call site in the codebase that imports or calls into this package (grep/call-graph results — attach, don't ask the model to search from memory).
+
+TASK
+For each CVE against this package:
+1. State the vulnerable function/module per the advisory.
+2. Check the attached call sites: is the vulnerable function/module actually invoked anywhere in this codebase, directly or transitively through another function you can see is called?
+3. Classify as: Confirmed-Reachable (vulnerable code path is called, and at least one caller passes data that could plausibly be attacker-influenced — trace it back toward the nearest trust-boundary-crossing input if you can), Present-Unreachable (package used, vulnerable path not called), or Present-Unused (package imported but nothing in the codebase references it — candidate for removal regardless of the CVE).
+4. For Confirmed-Reachable results only, produce a finding using the canonical schema from Phase 4A, with the `cve` field populated and severity taken from the advisory's CVSS score, adjusted down one tier if reaching the vulnerable path requires privileged/authenticated access rather than being reachable pre-auth.
+5. For Present-Unreachable and Present-Unused, output one summary line each (package, CVE, classification, one-line reason) — these still belong in the report as a hygiene/upgrade backlog, just not as security findings requiring urgent remediation.
+
+OUTPUT FORMAT
+Finding blocks for Confirmed-Reachable only, then a compact table for everything else: Package | CVE | Fixed Version | Classification | Reason.</pre>
+      </div>
+      <div class="note">This is the phase most worth spending human review time on — reachability judgment calls are exactly where an LLM triage can be wrong in either direction. Spot-check a sample of Present-Unreachable classifications by hand before trusting the whole batch, especially for anything the advisory rates Critical.</div>
+    </section>
+
+    <section class="phase" id="p6">
+      <div class="phase-head"><span class="phase-num">06</span><h2>Consolidation &amp; dedup</h2></div>
+      <p class="phase-sub">Findings arrive from Phases 4 and 5 across many separate LLM runs — the same root cause often surfaces from more than one angle. Consolidate before publishing.</p>
+
+      <p class="eyebrow">Prompt 6A — Consolidation pass</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once, all raw finding blocks attached</span><button class="copy-btn" data-copy="p6a">Copy</button></div>
+        <pre id="p6a">Consolidate raw findings collected across multiple review passes into a single deduplicated set.
+
+ATTACHED EVIDENCE: every finding block produced in Phases 4 and 5 (concatenated, YAML-frontmatter format as specified earlier).
+
+TASK
+1. Identify findings that describe the same underlying root cause reached from different angles (e.g. an ASVS chapter finding and a memory-safety supplement finding both citing the same unvalidated-input function) — merge these into one finding, keep the most complete evidence/remediation text, and list the merged IDs in a `merged_from:` field added to the frontmatter.
+2. Identify findings whose `location` is identical or overlapping but whose `severity`/`confidence` disagree — do not silently pick one; surface the disagreement and recommend the more conservative (higher) severity pending human review, noting both original ratings in the description.
+3. Renumber the final `id` sequence to be contiguous per component prefix, and produce a change log mapping any renumbered ID back to its original.
+4. Produce a summary table: total findings by severity, by location, by ASVS chapter/supplement, and by regulatory tag (GDPR/PIPL/CCPA/COPPA) — this becomes the executive-summary input in Phase 8.
+
+OUTPUT FORMAT
+The full deduplicated set of finding blocks (canonical schema, unchanged structure), followed by the ID change log, followed by the summary table.</pre>
+      </div>
+    </section>
+
+    <section class="phase" id="p7">
+      <div class="phase-head"><span class="phase-num">07</span><h2>Markdown → SARIF</h2></div>
+      <p class="phase-sub">Deterministic step, not an LLM step. The consolidated markdown (YAML-frontmatter findings) is parsed by a small Python script into SARIF&nbsp;2.1.0 for ingestion into CI, code-scanning dashboards, or ticketing.</p>
+      <div class="card">
+        <h3>Why frontmatter, not prose parsing</h3>
+        <p>Every finding schema field (severity, cwe, asvs, location, cve) is already structured in the YAML block from Phase 4A onward — the script just needs <code>python-frontmatter</code> (or a hand-rolled splitter) plus a severity→SARIF-level map. No regex against free text, no brittle heading parsing. The full script is delivered alongside this document as <code>md_to_sarif.py</code>; the shape:</p>
+      </div>
+      <pre class="plain">SARIF level mapping:
+  Critical, High → "error"
+  Medium         → "warning"
+  Low, Info      → "note"
+
+Per finding block:
+  rule.id           = cwe (fallback: category)
+  rule.name         = title
+  result.ruleId     = rule.id
+  result.message    = description body
+  result.level      = mapped from severity
+  result.locations  = parsed "path:line" → SARIF artifactLocation + region
+  result.properties = { asvs, data_classes, regulatory, cve, confidence, status }
+
+One SARIF run per component `location` (Client / Game Server / Backend / Cloud-Infra),
+or a single run for the whole set — either works; per-location runs make it easier to
+gate CI on one component at a time.</pre>
+      <p class="note">The script is sent as a separate file alongside this document — see the delivery message for <code>md_to_sarif.py</code>.</p>
+    </section>
+
+    <section class="phase" id="p8">
+      <div class="phase-head"><span class="phase-num">08</span><h2>Reporting &amp; retest</h2></div>
+
+      <p class="eyebrow">Prompt 8A — Executive summary</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run once, consolidated findings + summary table attached</span><button class="copy-btn" data-copy="p8a">Copy</button></div>
+        <pre id="p8a">Write a one-page executive summary of this security review for a non-technical stakeholder audience (studio leadership, not engineers).
+
+ATTACHED: consolidated finding set + summary table from Phase 6, the four zone threat models, the cross-environment dataflow diagram.
+
+TASK
+1. Open with the single highest-severity, highest-confidence finding in plain language — what could happen, to whom, not the technical mechanism.
+2. State the overall risk posture in one paragraph: how many Critical/High findings, concentrated in which zone, and whether the pattern suggests a systemic issue (e.g. "most High findings are client-authoritative trust issues, one root cause across many symptoms") versus scattered unrelated bugs.
+3. Call out the PHP 5 end-of-life status and the vendor supply-chain findings as their own named risk items, even if no individual CVE, ranked by business impact rather than folded into the general count — these are the two categories most likely to be underweighted if only counted as "one finding each."
+4. Summarize the regulatory exposure from Phase 2D findings (GDPR/PIPL/CCPA/COPPA gaps) as a distinct short section — this typically needs different stakeholders (legal/privacy) than the rest of the report.
+5. Close with a prioritized remediation order (not just a severity-sorted list — sequence by what unblocks what, e.g. "fix the client-authoritative economy issue before anything else in the anti-cheat category becomes meaningful").
+
+OUTPUT FORMAT
+Markdown, no more than one page rendered, no code excerpts — this document links to the full findings set rather than repeating it.</pre>
+      </div>
+
+      <p class="eyebrow" style="margin-top:1.6rem;">Prompt 8B — Retest verification</p>
+      <div class="prompt">
+        <div class="prompt-head"><span>Run per finding marked "fixed" by the team</span><button class="copy-btn" data-copy="p8b">Copy</button></div>
+        <pre id="p8b">Verify whether a specific finding has actually been remediated, using a diff rather than trusting the "fixed" label.
+
+FINDING: paste the full finding block being retested.
+ATTACHED: diff of the change claimed to fix it (before/after source), plus updated SAST output for this file if available.
+
+TASK
+1. Confirm the specific line(s) cited in the original finding's `location` were actually changed — if the diff doesn't touch that location, this is not a fix, regardless of what else changed.
+2. Check whether the fix addresses the root cause described in the finding's Impact/Description, or only a narrower symptom (e.g. validates one field but the same unvalidated-input pattern exists two lines later, or a client-side check was added without an equivalent server-side one).
+3. Check for regression risk: does the fix change behavior in a way that could break a legitimate use case, based on what you can see in the diff?
+4. Recommend a new `status`: Fixed (root cause addressed, verified in diff), Partially-Fixed (narrower than the finding, restate what's still open as a new finding with `merged_from` pointing at the original ID), or Not-Fixed (diff doesn't address the location/cause — keep status Open and say why).
+
+OUTPUT FORMAT
+One paragraph verdict + the recommended `status` value +, if Partially-Fixed, a new finding block for the remaining gap.</pre>
+      </div>
+    </section>
+
+    <footer>
+      Built for the AppSec Review project · OWASP ASVS version numbers and tooling names should be reconfirmed against current releases before you standardize on them for a live engagement · The markdown finding schema and the <code>md_to_sarif.py</code> converter are delivered as separate files alongside this page.
+    </footer>
+  </main>
+</div>
+
+<script>
+document.querySelectorAll('.copy-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var target = document.getElementById(btn.getAttribute('data-copy'));
+    if(!target) return;
+    var text = target.innerText;
+    function done(){
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      setTimeout(function(){ btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1600);
+    }
+    try{
+      navigator.clipboard.writeText(text).then(done).catch(function(){
+        var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+        ta.select(); try{ document.execCommand('copy'); done(); }catch(e){} document.body.removeChild(ta);
+      });
+    }catch(e){
+      var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+      ta.select(); try{ document.execCommand('copy'); done(); }catch(err){} document.body.removeChild(ta);
+    }
+  });
+});
+</script>
