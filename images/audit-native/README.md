@@ -72,8 +72,15 @@ run.sh <ws> ./msvc <scratch> -- /opt/scripts/link_ir.py \
 
 # 4. Clang Static Analyzer over every TU (plist per TU, CodeChecker parse -> json + html,
 #    plus findings-csa.json independent of CodeChecker). --filter narrows to a regex.
+#    --ctu = cross-TU (on-demand parsing over the whole compile DB); the Win32 taint
+#    source config (scripts/taint-win32.yaml) is on by default. Both are required for
+#    security.ArrayBound to report input-derived indices into tables in other TUs.
 run.sh <ws> ./msvc <scratch> -- /opt/scripts/run_csa.py \
-    --compile-commands /scratch/compile_commands.json --out /scratch/csa [--alpha]
+    --compile-commands /scratch/compile_commands.json --out /scratch/csa --ctu [--alpha]
+
+# 6. SVF whole-program taint on a linked module (see svf-taint/README.md; build first)
+run.sh . - <scratch> -- /scratch/svf-taint-build/svf-taint -sources=ReadFile:1 \
+    -out=/scratch/svf-taint.json /scratch/linked/<project>.bc
 
 # 5. before/after: same TUs in two versions, matched by (checker, file, message)
 diff_findings.py --before <v-before>/csa/findings-csa.json --after <v-after>/csa/findings-csa.json \

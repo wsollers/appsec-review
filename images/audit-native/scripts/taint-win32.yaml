@@ -1,0 +1,74 @@
+# taint-win32.yaml — CSA optin.taint.TaintPropagation config for Windows-targeted code.
+#
+# CSA's built-in taint sources are libc (fread, read, getenv, ...). Windows code reads
+# untrusted bytes through Win32/WinSock/WinINet APIs, so without this file
+# security.ArrayBound and friends never see a tainted index and stay silent on the
+# exact class of bug CVE-2023-40036/40164 belong to (verified 2026-09-12: a two-TU
+# table-lookup case reports only with this config AND --ctu).
+#
+# Arg indices are 0-based. DstArgs = arguments that receive tainted data.
+# Extend per target: add the vendor's own deserialization / packet-read entry points.
+Propagations:
+  # --- file I/O ---
+  - Name: ReadFile
+    DstArgs: [1, 3]          # lpBuffer, lpNumberOfBytesRead
+  - Name: ReadFileEx
+    DstArgs: [1]
+  - Name: ReadFileScatter
+    DstArgs: [1]
+  - Name: MapViewOfFile
+    DstArgs: [-1]            # return value: mapped file contents
+  - Name: MapViewOfFileEx
+    DstArgs: [-1]
+  # --- sockets ---
+  - Name: recv
+    DstArgs: [1]
+  - Name: recvfrom
+    DstArgs: [1, 4, 5]
+  - Name: WSARecv
+    DstArgs: [1, 3]
+  - Name: WSARecvFrom
+    DstArgs: [1, 3, 5, 6]
+  - Name: WSARecvMsg
+    DstArgs: [1, 2]
+  # --- WinINet / WinHTTP ---
+  - Name: InternetReadFile
+    DstArgs: [1, 3]
+  - Name: InternetReadFileEx
+    DstArgs: [1]
+  - Name: WinHttpReadData
+    DstArgs: [1, 3]
+  - Name: WinHttpQueryHeaders
+    DstArgs: [3, 4]
+  # --- pipes / registry / environment ---
+  - Name: PeekNamedPipe
+    DstArgs: [1, 3, 4, 5]
+  - Name: RegQueryValueExW
+    DstArgs: [4, 5]
+  - Name: RegQueryValueExA
+    DstArgs: [4, 5]
+  - Name: RegGetValueW
+    DstArgs: [4, 5, 6]
+  - Name: GetEnvironmentVariableW
+    DstArgs: [1]
+  - Name: GetEnvironmentVariableA
+    DstArgs: [1]
+  - Name: GetCommandLineW
+    DstArgs: [-1]
+  - Name: GetCommandLineA
+    DstArgs: [-1]
+  # --- clipboard / drag-drop / IPC ---
+  - Name: GetClipboardData
+    DstArgs: [-1]
+  - Name: DragQueryFileW
+    DstArgs: [2]
+  - Name: DragQueryFileA
+    DstArgs: [2]
+
+# Filters: functions whose return means the argument was validated. Keep conservative;
+# a wrong filter hides bugs. (None by default.)
+Filters: []
+
+# Sinks beyond the built-ins (built-ins cover system(), exec*, memcpy sizes, array
+# indices via security.ArrayBound, format strings). Add vendor allocator wrappers here.
+Sinks: []

@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 DEFAULT_CHECKERS = ["security", "optin.taint", "core", "cplusplus", "unix", "deadcode", "nullability"]
+DEFAULT_TAINT_CONFIG = str(Path(__file__).with_name("taint-win32.yaml"))
 ALPHA_CHECKERS = ["alpha.security", "alpha.core", "alpha.cplusplus", "alpha.unix"]
 
 
@@ -51,7 +52,8 @@ def split_cmd(entry: dict) -> tuple[list[str], str]:
     return cleaned, src
 
 
-def analyze_one(entry: dict, out_dir: Path, checkers: list[str], timeout: int) -> dict:
+def analyze_one(entry: dict, out_dir: Path, checkers: list[str], timeout: int,
+                taint_config: str | None = None, ctu_dir: Path | None = None) -> dict:
     opts, src = split_cmd(entry)
     proj = entry.get("project", "default")
     rel = src[len("/workspace/"):] if src.startswith("/workspace/") else src
@@ -64,6 +66,14 @@ def analyze_one(entry: dict, out_dir: Path, checkers: list[str], timeout: int) -
                   "-Xclang", "-analyzer-config", "-Xclang", "aggressive-binary-operation-simplification=true"]
     for c in checkers:
         cmd += ["-Xclang", f"-analyzer-checker={c}"]
+    if taint_config:
+        cmd += ["-Xclang", "-analyzer-config", "-Xclang", f"optin.taint.TaintPropagation:Config={taint_config}"]
+    if ctu_dir is not None:
+        # Cross-TU with on-demand parsing: callee TUs are parsed from the invocation list
+        # when first needed (no .ast dumps). Verified with cl-mode argv 2026-09-12.
+        for kv in (f"experimental-enable-naive-ctu-analysis=true", f"ctu-dir={ctu_dir}",
+                   f"ctu-invocation-list={ctu_dir / 'invocations.yaml'}"):
+            cmd += ["-Xclang", "-analyzer-config", "-Xclang", kv]
     cmd += ["/clang:-o" + str(plist), "--", src]
     t0 = time.time()
     try:
@@ -82,6 +92,39 @@ def analyze_one(entry: dict, out_dir: Path, checkers: list[str], timeout: int) -
     return {"file": src, "project": proj, "status": status, "seconds": round(time.time() - t0, 1),
             "plist": str(plist) if plist.exists() else None, "diagnostics": n,
             "stderr_tail": err.strip().splitlines()[-3:] if status != "OK" else []}
+
+
+def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
+    """Phase 1 of CTU: externalDefMap.txt (clang-extdef-mapping over every TU) and the
+    on-demand invocation list. Uses ALL entries, not just the --filter subset, so
+    callees anywhere in the program can be loaded.
+
+    clang-extdef-mapping is a libTooling tool and rejects a compile DB with unknown
+    keys ("json-compilation-database: Unknown key: project"), so a stripped copy is
+    written under ctu_dir first."""
+    ctu_dir.mkdir(parents=True, exist_ok=True)
+    dbdir = ctu_dir / "db"; dbdir.mkdir(exist_ok=True)
+    clean = [{k: v for k, v in e.items() if k in ("directory", "file", "arguments", "command", "output")} for e in all_entries]
+    (dbdir / "compile_commands.json").write_text(json.dumps(clean))
+    with open(ctu_dir / "invocations.yaml", "w") as fh:
+        for e in all_entries:
+            args = [a for a in (e.get("arguments") or []) if a != "/c"]
+            fh.write(json.dumps(e["file"]) + ": " + json.dumps(args) + "\n")
+
+    def one(e):
+        p = subprocess.run(["clang-extdef-mapping", "-p", str(dbdir), e["file"]], capture_output=True, text=True, timeout=600)
+        return e["file"], p.returncode, p.stdout, p.stderr.strip().splitlines()[-1:] if p.returncode else []
+    lines, failed = [], []
+    with ThreadPoolExecutor(max_workers=jobs) as ex:
+        for f, rc, out, err in ex.map(one, all_entries):
+            if rc == 0:
+                lines.append(out)
+            else:
+                failed.append({"file": f, "error": err})
+    (ctu_dir / "externalDefMap.txt").write_text("".join(lines))
+    n = sum(1 for _ in (ctu_dir / "externalDefMap.txt").open())
+    print(f"CTU: {n} external definitions mapped from {len(all_entries) - len(failed)}/{len(all_entries)} TUs -> {ctu_dir}")
+    return {"ctu_dir": str(ctu_dir), "extdefs": n, "tus_mapped": len(all_entries) - len(failed), "mapping_failed": failed}
 
 
 def collect_findings(results: list[dict]) -> list[dict]:
@@ -114,19 +157,29 @@ def main():
     ap.add_argument("--timeout", type=int, default=600)
     ap.add_argument("--alpha", action="store_true", help="also enable alpha.* checkers (noisier)")
     ap.add_argument("--no-codechecker", action="store_true")
+    ap.add_argument("--ctu", action="store_true", help="cross-TU analysis (on-demand parsing over the WHOLE compile DB)")
+    ap.add_argument("--taint-config", default=DEFAULT_TAINT_CONFIG,
+                    help="optin.taint TaintPropagation YAML; 'none' for CSA's libc-only defaults")
     a = ap.parse_args()
 
-    entries = json.loads(Path(a.compile_commands).read_text())
+    all_entries = json.loads(Path(a.compile_commands).read_text())
+    entries = all_entries
+    taint_config = None if a.taint_config == "none" else a.taint_config
     if a.filter:
         rx = re.compile(a.filter)
         entries = [e for e in entries if rx.search(e["file"])]
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     checkers = DEFAULT_CHECKERS + (ALPHA_CHECKERS if a.alpha else [])
-    print(f"analyzing {len(entries)} TUs with {a.jobs} jobs; checkers: {', '.join(checkers)}")
+    ctu_info, ctu_dir = None, None
+    if a.ctu:
+        ctu_dir = out / "ctu-dir"
+        ctu_info = prepare_ctu(all_entries, ctu_dir, a.jobs)
+    print(f"analyzing {len(entries)} TUs with {a.jobs} jobs; checkers: {', '.join(checkers)}; "
+          f"taint config: {taint_config or 'built-in libc only'}; CTU: {'on' if a.ctu else 'off'}")
 
     results, t0 = [], time.time()
     with ThreadPoolExecutor(max_workers=a.jobs) as ex:
-        futs = [ex.submit(analyze_one, e, out / "plist", checkers, a.timeout) for e in entries]
+        futs = [ex.submit(analyze_one, e, out / "plist", checkers, a.timeout, taint_config, ctu_dir) for e in entries]
         for i, f in enumerate(as_completed(futs), 1):
             results.append(f.result())
             if i % 25 == 0 or i == len(futs):
@@ -139,7 +192,7 @@ def main():
         by_checker[f["checker"]] = by_checker.get(f["checker"], 0) + 1
     summary = {
         "generator": "run_csa.py", "compile_commands": a.compile_commands, "filter": a.filter,
-        "checkers": checkers, "tu_total": len(results),
+        "checkers": checkers, "taint_config": taint_config, "ctu": ctu_info, "tu_total": len(results),
         "tu_ok": sum(r["status"] == "OK" for r in results),
         "tu_error": sum(r["status"] == "ERROR" for r in results),
         "tu_timeout": sum(r["status"] == "TIMEOUT" for r in results),

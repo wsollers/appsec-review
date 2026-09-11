@@ -1,0 +1,341 @@
+{
+ "generator": "run_csa.py",
+ "compile_commands": "/scratch/compile_commands.json",
+ "filter": "Utf8_16|uchardet|Buffer\\.cpp",
+ "checkers": [
+  "security",
+  "optin.taint",
+  "core",
+  "cplusplus",
+  "unix",
+  "deadcode",
+  "nullability",
+  "alpha.security",
+  "alpha.core",
+  "alpha.cplusplus",
+  "alpha.unix"
+ ],
+ "taint_config": "/opt/scripts/taint-win32.yaml",
+ "ctu": {
+  "ctu_dir": "/scratch/csa-ctu/ctu-dir",
+  "extdefs": 6566,
+  "tus_mapped": 346,
+  "mapping_failed": []
+ },
+ "tu_total": 28,
+ "tu_ok": 14,
+ "tu_error": 14,
+ "tu_timeout": 0,
+ "findings_total": 0,
+ "by_checker": {},
+ "wall_seconds": 31.8,
+ "per_tu": [
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/Buffer.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 31.8,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/Utf8_16.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 4.4,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/CharDistribution.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.2,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__CharDistribution.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/JpCntx.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__JpCntx.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangBulgarianModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__LangBulgarianModel.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangCyrillicModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__LangCyrillicModel.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangGreekModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__LangGreekModel.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHebrewModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__LangHebrewModel.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHungarianModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__LangHungarianModel.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangThaiModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__LangThaiModel.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsBig5Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.3,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsCharSetProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.3,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__nsCharSetProber.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCJPProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.9,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCKRProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.3,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCTWProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.3,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscCharsetProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.3,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "error: multiple definitions are found for the same key in index ",
+    "4 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscSM.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.1,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__nsEscSM.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsGB2312Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.3,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsHebrewProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.5,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__nsHebrewProber.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsLatin1Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.2,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "1 error generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSGroupProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.6,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSSM.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.2,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__nsMBCSSM.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCSGroupProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.5,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCharSetProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.3,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__nsSBCharSetProber.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSJISProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.5,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUTF8Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "OK",
+   "seconds": 0.2,
+   "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__nsUTF8Prober.cpp.plist",
+   "diagnostics": 0,
+   "stderr_tail": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUniversalDetector.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 4.7,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/uchardet.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "ERROR",
+   "seconds": 0.6,
+   "plist": null,
+   "diagnostics": 0,
+   "stderr_tail": [
+    "error: multiple definitions are found for the same key in index ",
+    "fatal error: too many errors emitted, stopping now [-ferror-limit=]",
+    "20 errors generated."
+   ]
+  }
+ ]
+}
