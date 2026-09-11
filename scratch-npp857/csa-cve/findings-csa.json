@@ -24,5 +24,18 @@
   "issue_hash": "40962bba1332dc7d735f6925a0ee715f",
   "tu": "/workspace/PowerEditor/src/Utf8_16.cpp",
   "project": "PowerEditor__visual.net__notepadPlus"
+ },
+ {
+  "checker": "core.CallAndMessage",
+  "category": "Logic error",
+  "type": "Called C++ object pointer is null",
+  "file": "/workspace/PowerEditor/src/uchardet/nsUniversalDetector.cpp",
+  "line": 271,
+  "col": 16,
+  "message": "Called C++ object pointer is null",
+  "path_length": 38,
+  "issue_hash": "6c6c870095003f64aaa8392a67912c10",
+  "tu": "/workspace/PowerEditor/src/uchardet/nsUniversalDetector.cpp",
+  "project": "PowerEditor__visual.net__notepadPlus"
  }
 ]

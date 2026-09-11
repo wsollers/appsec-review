@@ -1253,6 +1253,318 @@
    "value": "_CRT_SECURE_NO_WARNINGS"
   },
   {
+   "file": "/workspace/PowerEditor/src/uchardet/CharDistribution.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/CharDistribution.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/JpCntx.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/JpCntx.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangBulgarianModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangBulgarianModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangCyrillicModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangCyrillicModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangGreekModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangGreekModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHebrewModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHebrewModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHungarianModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHungarianModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangThaiModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangThaiModel.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsBig5Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsBig5Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsCharSetProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsCharSetProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscCharsetProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscCharsetProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscSM.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscSM.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCJPProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCJPProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCKRProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCKRProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCTWProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCTWProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsGB2312Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsGB2312Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsHebrewProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsHebrewProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsLatin1Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsLatin1Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSGroupProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSGroupProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSSM.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSSM.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCharSetProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCharSetProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCSGroupProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCSGroupProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSJISProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSJISProber.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUniversalDetector.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUniversalDetector.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUTF8Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUTF8Prober.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/uchardet.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_WIN32_WINNT=_WIN32_WINNT_VISTA"
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/uchardet.cpp",
+   "flag": "SECURITY_RELEVANT_MACRO",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "value": "_CRT_SECURE_NO_WARNINGS"
+  },
+  {
    "file": "/workspace/lexilla/lexers/LexA68k.cxx",
    "flag": "SECURITY_RELEVANT_MACRO",
    "project": "/workspace/lexilla/src/Lexilla.vcxproj",
@@ -2757,7 +3069,7 @@
    "path": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
    "props_notes": [],
    "solution_dir": "/workspace/PowerEditor/visual.net/",
-   "translation_units": 101
+   "translation_units": 127
   },
   {
    "path": "/workspace/lexilla/src/Lexilla.vcxproj",
@@ -2867,42 +3179,60 @@
    "resolved": "/workspace/scintilla/win32/$(UserRootDir)/Microsoft.Cpp.x64.user.props"
   }
  ],
- "targets_not_evaluated": [
+ "targets_evaluated": [
   {
    "import": "notepadPlus.Resource.targets",
-   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj"
+   "note": "Target conditions/AfterTargets not evaluated; sources taken as always-built",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "targets": [
+    "AddImages"
+   ],
+   "translation_units": 0
   },
   {
    "import": "notepadPlus.uchardet.targets",
-   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj"
+   "note": "Target conditions/AfterTargets not evaluated; sources taken as always-built",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "targets": [
+    "AddUchardet"
+   ],
+   "translation_units": 26
+  }
+ ],
+ "targets_not_evaluated": [
+  {
+   "import": "$(VCTargetsPath)\\Microsoft.Cpp.targets",
+   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj",
+   "reason": "MSBuild-internal"
   },
   {
    "import": "$(VCTargetsPath)\\Microsoft.Cpp.targets",
-   "project": "/workspace/PowerEditor/visual.net/notepadPlus.vcxproj"
+   "project": "/workspace/lexilla/src/Lexilla.vcxproj",
+   "reason": "MSBuild-internal"
   },
   {
    "import": "$(VCTargetsPath)\\Microsoft.Cpp.targets",
-   "project": "/workspace/lexilla/src/Lexilla.vcxproj"
+   "project": "/workspace/lexilla/test/TestLexers.vcxproj",
+   "reason": "MSBuild-internal"
   },
   {
    "import": "$(VCTargetsPath)\\Microsoft.Cpp.targets",
-   "project": "/workspace/lexilla/test/TestLexers.vcxproj"
+   "project": "/workspace/lexilla/test/unit/UnitTester.vcxproj",
+   "reason": "MSBuild-internal"
   },
   {
    "import": "$(VCTargetsPath)\\Microsoft.Cpp.targets",
-   "project": "/workspace/lexilla/test/unit/UnitTester.vcxproj"
+   "project": "/workspace/scintilla/test/unit/UnitTester.vcxproj",
+   "reason": "MSBuild-internal"
   },
   {
    "import": "$(VCTargetsPath)\\Microsoft.Cpp.targets",
-   "project": "/workspace/scintilla/test/unit/UnitTester.vcxproj"
-  },
-  {
-   "import": "$(VCTargetsPath)\\Microsoft.Cpp.targets",
-   "project": "/workspace/scintilla/win32/Scintilla.vcxproj"
+   "project": "/workspace/scintilla/win32/Scintilla.vcxproj",
+   "reason": "MSBuild-internal"
   }
  ],
  "toolset_compat": "19.44",
- "translation_units_total": 320,
+ "translation_units_total": 346,
  "trust_state": "UNTRUSTED",
  "trust_state_note": "Set by the orchestrator after review of this seed; generator never asserts VALIDATED.",
  "unresolved_macros": {

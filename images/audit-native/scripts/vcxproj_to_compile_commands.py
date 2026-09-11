@@ -187,6 +187,7 @@ class Project:
             "MSBuildThisFileDirectory": str(self.dir) + "/",
         }
         self.props_notes: list[str] = []
+        self._local_targets: list[str] = []
         self._load_props()
 
     def _solution_dir(self) -> str:
@@ -237,7 +238,11 @@ class Project:
             proj = imp.get("Project", "")
             if not proj.lower().endswith(".props"):
                 if proj.lower().endswith(".targets"):
-                    self.audit["targets_not_evaluated"].append({"project": str(self.path), "import": proj})
+                    if "$(VCTargetsPath)" in proj or "$(MSBuild" in proj:
+                        self.audit["targets_not_evaluated"].append({"project": str(self.path), "import": proj,
+                                                                    "reason": "MSBuild-internal"})
+                    else:
+                        self._local_targets.append(proj)
                 continue
             if "$(VCTargetsPath)" in proj or "$(MSBuild" in proj:
                 continue
@@ -282,6 +287,56 @@ class Project:
         s = self._clcompile_settings(getattr(self, "_props_idg", []))
         s.update(self._clcompile_settings(self.xml.findall("m:ItemDefinitionGroup", NS)))
         return s
+
+    def _item_lists(self, xml_root) -> dict[str, list[str]]:
+        """Top-level <ItemGroup> custom item lists, e.g. <_ClCompileUchardet Include=...>."""
+        lists: dict[str, list[str]] = {}
+        for ig in xml_root.findall("m:ItemGroup", NS):
+            if not self.cond_matches(ig):
+                continue
+            for it in ig:
+                tag = it.tag.split("}")[-1]
+                inc = it.get("Include")
+                if inc and tag not in ("ClCompile", "ClInclude", "ResourceCompile", "None", "Manifest", "Text"):
+                    lists.setdefault(tag, []).append(inc)
+        return lists
+
+    def targets_items(self):
+        """ClCompile items injected by local .targets imports — the MSBuild idiom
+        <Target><ItemGroup><ClCompile Include="@(_List)"/></ItemGroup></Target> with
+        _List declared in a top-level ItemGroup of the same file. Notepad++ builds
+        uchardet this way (notepadPlus.uchardet.targets); without this, 26 TUs
+        holding CVE-2023-40036/40164 were absent from the compile DB (2026-09-12).
+        Conditions on the <Target> itself are not evaluated; recorded in the audit."""
+        for tproj in self._local_targets:
+            tp = win_to_posix(self.root, self.dir, self.expand(tproj))
+            if not tp.exists():
+                self.audit["targets_not_evaluated"].append({"project": str(self.path), "import": tproj,
+                                                            "reason": "file not found", "resolved": str(tp)})
+                continue
+            try:
+                tx = ET.parse(tp).getroot()
+            except ET.ParseError as e:
+                self.audit["targets_not_evaluated"].append({"project": str(self.path), "import": tproj, "reason": str(e)})
+                continue
+            lists = self._item_lists(tx)
+            n = 0
+            for cl in tx.iter("{%s}ClCompile" % NS["m"]):
+                inc = cl.get("Include")
+                if not inc:
+                    continue
+                m = re.fullmatch(r"@\(([A-Za-z_][A-Za-z0-9_]*)\)", inc.strip())
+                srcs = lists.get(m.group(1), []) if m else [inc]
+                if m and m.group(1) not in lists:
+                    self.audit["targets_not_evaluated"].append({"project": str(self.path), "import": tproj,
+                                                                "reason": f"item list {inc} not found in file"})
+                for src in srcs:
+                    n += 1
+                    yield src, {}, False, tp.name
+            self.audit["targets_evaluated"].append({"project": str(self.path), "import": tproj,
+                                                    "translation_units": n,
+                                                    "targets": [t.get("Name") for t in tx.findall("m:Target", NS)],
+                                                    "note": "Target conditions/AfterTargets not evaluated; sources taken as always-built"})
 
     def items(self):
         for ig in self.xml.findall("m:ItemGroup", NS):
@@ -448,7 +503,7 @@ def main():
         "msvc_root": args.msvc_root, "toolset_compat": args.toolset_compat,
         "vfs_overlay": args.vfs_overlay, "analysis_only_defines": ANALYSIS_ONLY_DEFINES,
         "projects": [], "unresolved_macros": {}, "conditions_not_evaluated": [],
-        "targets_not_evaluated": [], "props_missing": [], "directory_build_props_present": [],
+        "targets_not_evaluated": [], "targets_evaluated": [], "props_missing": [], "directory_build_props_present": [],
         "excluded_from_build": [], "missing_sources": [], "wildcard_includes": [],
         "flags": [], "trust_state": "UNTRUSTED",
         "trust_state_note": "Set by the orchestrator after review of this seed; generator never asserts VALIDATED.",
@@ -469,7 +524,8 @@ def main():
         charset = proj.macros.get("CharacterSet", "")
         base = proj.base_settings()
         n = 0
-        for inc, meta, excluded in proj.items():
+        all_items = [(inc, meta, ex, None) for inc, meta, ex in proj.items()] + list(proj.targets_items())
+        for inc, meta, excluded, via_targets in all_items:
           raw_src = win_to_posix(root, proj.dir, proj.expand(inc))
           expanded = expand_wildcards(raw_src)
           if expanded != [raw_src]:
@@ -497,8 +553,11 @@ def main():
             # gate uses it to place bitcode per project so the same source compiled
             # by two projects (Scintilla src in Scintilla + UnitTester) doesn't collide,
             # and link_ir.py links per project = per deployable.
-            entries.append({"directory": str(proj.dir), "file": str(src), "arguments": cmd,
-                            "output": str(src.with_suffix(".obj")), "project": project_id(vp, root)})
+            ent = {"directory": str(proj.dir), "file": str(src), "arguments": cmd,
+                   "output": str(src.with_suffix(".obj")), "project": project_id(vp, root)}
+            if via_targets:
+                ent["via_targets"] = via_targets  # provenance: injected by a .targets import
+            entries.append(ent)
             n += 1
             # --- audit flags (§23.4) ---
             for d in notes["defines"]:

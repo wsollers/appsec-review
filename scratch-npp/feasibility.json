@@ -1,0 +1,3137 @@
+{
+ "generator": "compile_feasibility_gate.py",
+ "mode": "syntax-only",
+ "compile_commands": "/scratch/compile_commands.json",
+ "tu_total": 346,
+ "tu_pass": 346,
+ "tu_fail": 0,
+ "tu_timeout": 0,
+ "pass_rate": 1.0,
+ "tier_recommendation": "A",
+ "tier_reason": "pass rate 1.000 >= 0.98",
+ "thresholds": {
+  "tier_a_min": 0.98,
+  "tier_b_min": 0.4
+ },
+ "error_classes": {},
+ "top_missing_headers": {},
+ "wall_seconds": 233.0,
+ "jobs": 15,
+ "timeout_per_tu": 120,
+ "per_tu": [
+  {
+   "file": "/workspace/PowerEditor/src/DarkMode/DarkMode.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 9.69,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/EncodingMapper.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 5.59,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/Common/Common.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.07,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/Common/FileInterface.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.29,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/Common/verifySignedfile.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 14.81,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/Exception/MiniDumper.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 10.1,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/Exception/Win32Exception.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 11.37,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/PluginsManager/PluginsManager.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.48,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/Process/Processus.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 25.6,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/RegExt/regExtDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/md5/md5Dlgs.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 15.98,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/sha1/calc_sha1.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 4.52,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/sha1/sha1.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 4.7,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/sha2/sha-256.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.11,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/MISC/sha512/sha512.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 5.72,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/Notepad_plus.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 42.79,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/Notepad_plus_Window.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 36.61,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/NppBigSwitch.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 37.86,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/NppCommands.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 45.17,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/NppDarkMode.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 17.82,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/NppIO.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 39.93,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/NppNotification.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 37.02,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/Parameters.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 42.41,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/AutoCompletion.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.01,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/Buffer.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.98,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/DocTabView.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 31.53,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/FindReplaceDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 34.87,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/FunctionCallTip.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 30.32,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/GoToLineDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 32.19,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/Printer.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 33.74,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/ScintillaCtrls.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 30.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/ScintillaEditView.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 41.57,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/SmartHighlighter.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 34.44,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/UserDefineDialog.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.63,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/columnEditor.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 29.23,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/ScintillaComponent/xmlMatchedTagsHighlighter.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.51,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinyXmlA/tinystrA.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.23,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinyXmlA/tinyxmlA.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.38,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinyXmlA/tinyxmlerrorA.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.35,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinyXmlA/tinyxmlparserA.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 21.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinystr.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.5,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinyxml.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.69,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinyxmlerror.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 20.06,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/TinyXml/tinyxmlparser.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 21.5,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/Utf8_16.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/AboutDlg/AboutDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 15.7,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/AboutDlg/URLCtrl.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.21,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/AnsiCharPanel/ListView.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.72,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/AnsiCharPanel/ansiCharPanel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 17.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/AnsiCharPanel/asciiListView.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 15.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ClipboardHistory/clipboardHistoryPanel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.08,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ColourPicker/ColourPicker.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 13.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ColourPicker/ColourPopup.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 14.78,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ColourPicker/WordStyleDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.65,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ContextMenu/ContextMenu.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.97,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/DockingWnd/DockingCont.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/DockingWnd/DockingManager.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.66,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/DockingWnd/DockingSplitter.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.47,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/DockingWnd/Gripper.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.74,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/DocumentMap/documentMap.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 31.64,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/DocumentMap/documentSnapshot.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 20.98,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/FileBrowser/fileBrowser.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.46,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/FindCharsInRange/FindCharsInRange.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 31.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/FunctionList/functionListPanel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 61.7,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/FunctionList/functionParser.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 29.83,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/Grid/BabyGrid.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 14.99,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/Grid/BabyGridWrapper.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 16.62,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/Grid/ShortcutMapper.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 38.64,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ImageListSet/ImageListSet.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 21.77,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/OpenSaveFileDialog/CustomFileDialog.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 29.19,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/PluginsAdmin/pluginsAdmin.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 61.61,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/Preference/preferenceDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 30.36,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ProjectPanel/ProjectPanel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.58,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ReadDirectoryChanges/ReadDirectoryChanges.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 11.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ReadDirectoryChanges/ReadDirectoryChangesPrivate.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 11.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ReadDirectoryChanges/ReadFileChanges.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 4.52,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/SplitterContainer/Splitter.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.47,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/SplitterContainer/SplitterContainer.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.57,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/StaticDialog/RunDlg/RunDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 39.02,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/StaticDialog/StaticDialog.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.35,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/StatusBar/StatusBar.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.62,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/TabBar/ControlsTab.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 20.1,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/TabBar/TabBar.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/TaskList/TaskList.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 21.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/TaskList/TaskListDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 25.27,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ToolBar/ToolBar.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 26.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/ToolTip/ToolTip.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 20.69,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/TrayIcon/trayIconControler.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 8.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/TreeView/TreeView.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.68,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/VerticalFileSwitcher/VerticalFileSwitcher.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/VerticalFileSwitcher/VerticalFileSwitcherListView.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 20.68,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/WindowsDlg/SizeableDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.77,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/WindowsDlg/WinMgr.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 12.69,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/WindowsDlg/WinRect.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 12.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/WindowsDlg/WindowsDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 24.9,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/shortcut/RunMacroDlg.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 31.02,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/WinControls/shortcut/shortcut.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 38.89,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/lastRecentFileList.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 27.09,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/lesDlgs.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 22.51,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/localization.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 35.92,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/CharDistribution.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.42,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/JpCntx.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.28,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangBulgarianModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.21,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangCyrillicModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.3,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangGreekModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.29,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHebrewModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.23,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangHungarianModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.21,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/LangThaiModel.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsBig5Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.11,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsCharSetProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCJPProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.3,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCKRProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.3,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEUCTWProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.22,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscCharsetProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.19,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsEscSM.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsGB2312Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsHebrewProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsLatin1Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.8,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSGroupProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.78,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsMBCSSM.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.77,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCSGroupProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.68,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSBCharSetProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.59,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsSJISProber.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.21,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUTF8Prober.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/nsUniversalDetector.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 0.22,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/uchardet/uchardet.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 5.38,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/PowerEditor/src/winmain.cpp",
+   "project": "PowerEditor__visual.net__notepadPlus",
+   "status": "PASS",
+   "seconds": 28.8,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/boostregex/BoostRegExSearch.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 6.07,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/boostregex/UTF8DocumentIterator.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.93,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/access/LexillaAccess.cxx",
+   "project": "lexilla__test__TestLexers",
+   "status": "PASS",
+   "seconds": 7.51,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexA68k.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.68,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAPDL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.02,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexASY.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.1,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAU3.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.08,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAVE.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.0,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAVS.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.29,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAbaqus.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.01,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAda.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.52,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAsciidoc.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.51,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAsm.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 6.41,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexAsn1.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.6,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexBaan.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 6.37,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexBash.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 6.78,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexBasic.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 6.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexBatch.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexBibTeX.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 6.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexBullant.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.69,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCIL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 6.46,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCLW.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCOBOL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.65,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCPP.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 7.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCSS.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.86,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCaml.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.13,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCmake.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCoffeeScript.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.21,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexConf.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.94,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCrontab.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.99,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexCsound.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.61,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexD.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.79,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexDMAP.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexDMIS.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.03,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexDataflex.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.85,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexDiff.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.69,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexECL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.55,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexEDIFACT.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.72,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexEScript.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.52,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexEiffel.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.59,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexErlang.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.62,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexErrorList.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexFSharp.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexFlagship.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.21,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexForth.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.28,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexFortran.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.92,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexGAP.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.0,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexGDScript.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexGui4Cli.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.3,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexHTML.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.45,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexHaskell.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.89,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexHex.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.5,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexHollywood.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.63,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexIndent.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.89,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexInno.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.1,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexJSON.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.56,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexJulia.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.08,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexKVIrc.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.28,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexKix.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.92,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexLaTeX.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.83,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexLisp.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexLout.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.29,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexLua.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.89,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMMIXAL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.91,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMPT.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.22,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMSSQL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.81,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMagik.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.32,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMake.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.32,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMarkdown.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.3,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMatlab.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMaxima.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMetapost.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.41,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexModula.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.38,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexMySQL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexNim.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.97,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexNimrod.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.39,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexNsis.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexNull.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.34,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexOScript.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.43,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexObjC.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.21,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexOpal.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.99,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPB.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.56,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPLM.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.87,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPO.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.9,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPOV.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 1.93,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPS.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.41,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPascal.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.43,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPerl.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPowerPro.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.51,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPowerShell.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.69,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexProgress.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.09,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexProps.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.07,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexPython.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 5.46,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexR.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexRaku.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.5,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexRebol.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.22,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexRegistry.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.93,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexRuby.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.8,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexRust.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.51,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSAS.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.49,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSML.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.23,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSQL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 5.38,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSTTXT.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.5,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexScriptol.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSearchResult.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.5,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSmalltalk.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSorcus.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.82,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSpecman.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.88,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexSpice.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.81,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexStata.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.49,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexTACL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.36,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexTADS3.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexTAL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.46,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexTCL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.0,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexTCMD.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexTeX.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexTxt2tags.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.17,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexUser.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 10.87,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexVB.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.49,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexVHDL.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.82,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexVerilog.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 7.29,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexVisualProlog.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 6.58,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexX12.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.65,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexers/LexYAML.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.29,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/Accessor.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.99,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/Accessor.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 1.94,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/CharacterCategory.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.0,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/CharacterSet.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 0.53,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/CharacterSet.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 0.11,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/DefaultLexer.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.68,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexAccessor.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexerBase.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.28,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexerBase.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 1.94,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexerModule.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.27,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexerModule.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.02,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexerNoExceptions.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexerSimple.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/LexerSimple.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 1.92,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/PropSetSimple.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 4.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/PropSetSimple.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.29,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/StyleContext.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 3.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/WordList.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.64,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/lexlib/WordList.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/src/Lexilla.cxx",
+   "project": "lexilla__src__Lexilla",
+   "status": "PASS",
+   "seconds": 2.13,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/TestDocument.cxx",
+   "project": "lexilla__test__TestLexers",
+   "status": "PASS",
+   "seconds": 8.88,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/TestLexers.cxx",
+   "project": "lexilla__test__TestLexers",
+   "status": "PASS",
+   "seconds": 20.98,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/unit/UnitTester.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 22.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/unit/testCharacterSet.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 4.91,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/unit/testLexerSimple.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 4.51,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/unit/testOptionSet.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 5.08,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/unit/testPropSetSimple.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 4.59,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/unit/testSparseState.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 5.0,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/lexilla/test/unit/testWordList.cxx",
+   "project": "lexilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 5.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/AutoComplete.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.42,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CallTip.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.6,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CaseConvert.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.87,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CaseConvert.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 3.59,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CaseFolder.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CaseFolder.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 2.61,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CellBuffer.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 3.18,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CellBuffer.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.43,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/ChangeHistory.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.82,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/ChangeHistory.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.1,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CharClassify.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 1.44,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CharClassify.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 2.11,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CharacterCategoryMap.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 1.99,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CharacterCategoryMap.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 1.94,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/CharacterType.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 0.36,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/ContractionState.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 3.19,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/ContractionState.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 5.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/DBCS.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 0.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Decoration.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 3.03,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Decoration.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.9,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Document.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 10.59,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Document.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 12.94,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/EditModel.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 7.38,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/EditView.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 14.44,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Editor.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 14.01,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Geometry.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 1.63,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Geometry.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 3.48,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Indicator.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 5.8,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/KeyMap.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/LineMarker.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 7.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/MarginView.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 7.32,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/PerLine.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 3.8,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/PerLine.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 6.58,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/PositionCache.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 9.79,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/RESearch.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.11,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/RESearch.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 3.92,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/RunStyles.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 3.32,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/RunStyles.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.83,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/ScintillaBase.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 7.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Selection.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.8,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/Style.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 4.4,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/UniConversion.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.9,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/UniConversion.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 3.82,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/UniqueString.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 2.79,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/UniqueString.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 3.79,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/ViewStyle.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 6.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/src/XPM.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 5.3,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/UnitTester.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 19.26,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testCellBuffer.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 11.98,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testCharClassify.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 9.95,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testCharacterCategoryMap.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 9.5,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testContractionState.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 9.12,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testDecoration.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 7.98,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testDocument.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 11.99,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testGeometry.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 10.0,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testPartitioning.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 10.2,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testPerLine.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 10.99,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testRESearch.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 9.68,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testRunStyles.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 10.71,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testSparseVector.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 11.61,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testSplitVector.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 7.62,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/test/unit/testUniConversion.cxx",
+   "project": "scintilla__test__unit__UnitTester",
+   "status": "PASS",
+   "seconds": 6.9,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/win32/HanjaDic.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 5.31,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/win32/PlatWin.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 5.57,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/win32/ScintillaDLL.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 3.9,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  },
+  {
+   "file": "/workspace/scintilla/win32/ScintillaWin.cxx",
+   "project": "scintilla__win32__Scintilla",
+   "status": "PASS",
+   "seconds": 5.56,
+   "error_classes": [],
+   "missing_headers": [],
+   "diagnostics": []
+  }
+ ]
+}
