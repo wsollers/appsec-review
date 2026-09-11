@@ -28,13 +28,13 @@
  "tu_timeout": 0,
  "findings_total": 0,
  "by_checker": {},
- "wall_seconds": 34.7,
+ "wall_seconds": 31.6,
  "per_tu": [
   {
    "file": "/workspace/PowerEditor/src/ScintillaComponent/Buffer.cpp",
    "project": "PowerEditor__visual.net__notepadPlus",
    "status": "ERROR",
-   "seconds": 34.7,
+   "seconds": 31.6,
    "plist": null,
    "diagnostics": 0,
    "stderr_tail": [
@@ -47,7 +47,7 @@
    "file": "/workspace/PowerEditor/src/Utf8_16.cpp",
    "project": "PowerEditor__visual.net__notepadPlus",
    "status": "ERROR",
-   "seconds": 4.7,
+   "seconds": 4.3,
    "plist": null,
    "diagnostics": 0,
    "stderr_tail": [
@@ -60,7 +60,7 @@
    "file": "/workspace/PowerEditor/src/uchardet/CharDistribution.cpp",
    "project": "PowerEditor__visual.net__notepadPlus",
    "status": "OK",
-   "seconds": 0.1,
+   "seconds": 0.2,
    "plist": "/scratch/csa-ctu/plist/PowerEditor__visual.net__notepadPlus/PowerEditor__src__uchardet__CharDistribution.cpp.plist",
    "diagnostics": 0,
    "stderr_tail": []
@@ -132,7 +132,7 @@
    "file": "/workspace/PowerEditor/src/uchardet/nsBig5Prober.cpp",
    "project": "PowerEditor__visual.net__notepadPlus",
    "status": "ERROR",
-   "seconds": 0.4,
+   "seconds": 0.3,
    "plist": null,
    "diagnostics": 0,
    "stderr_tail": [
@@ -293,7 +293,7 @@
    "file": "/workspace/PowerEditor/src/uchardet/nsSJISProber.cpp",
    "project": "PowerEditor__visual.net__notepadPlus",
    "status": "ERROR",
-   "seconds": 0.6,
+   "seconds": 0.5,
    "plist": null,
    "diagnostics": 0,
    "stderr_tail": [
@@ -315,7 +315,7 @@
    "file": "/workspace/PowerEditor/src/uchardet/nsUniversalDetector.cpp",
    "project": "PowerEditor__visual.net__notepadPlus",
    "status": "ERROR",
-   "seconds": 5.1,
+   "seconds": 4.7,
    "plist": null,
    "diagnostics": 0,
    "stderr_tail": [

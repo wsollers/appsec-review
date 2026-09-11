@@ -79,3 +79,22 @@ Numbers to write into the design, from measurement rather than aspiration:
    length, not a table index).
 2. `svf-taint` over the linked `notepadPlus` module. Acceptance: all three CSA misses
    appear as candidates. Not compiled yet.
+
+## Run log 2026-09-11 (finish-runs.sh)
+
+```
+  25/28
+  28/28
+--- findings v8.5.6:
+  25/28
+  28/28
+--- findings v8.5.7:
+before: 0 findings   after: 0 findings   unchanged: 0
+== REMOVED (in before, not in after) (0)
+== ADDED (in after, not in before) (0)
+funclet EH instructions: ################ [svf-taint: build, full SVFG attempt, ptr-only fallback] 14:14:34
+exit=134
+svf-taint: /opt/svf/svf/include/Graphs/VFG.h:479: void SVF::VFG::setDef(const SVF::ValVar*, const SVF::VFGNode*): Assertion `(it->second == node->getId()) && "a ValVar can only have unique definition "' failed.
+exit=134
+svf-taint: /opt/svf/svf/include/Graphs/VFG.h:479: void SVF::VFG::setDef(const SVF::ValVar*, const SVF::VFGNode*): Assertion `(it->second == node->getId()) && "a ValVar can only have unique definition "' failed.
+```
