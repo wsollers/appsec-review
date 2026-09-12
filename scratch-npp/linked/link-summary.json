@@ -1,25 +1,15 @@
 {
  "PowerEditor__visual.net__notepadPlus": {
-  "tus": 101,
+  "tus": 127,
   "linked": true,
   "module": "/scratch/linked/PowerEditor__visual.net__notepadPlus.bc",
-  "bytes": 23517160,
-  "wpa": {
-   "analysis": "ander",
-   "ok": true,
-   "log": "/scratch/linked/PowerEditor__visual.net__notepadPlus.wpa-ander.log"
-  }
+  "bytes": 23813452
  },
  "lexilla__src__Lexilla": {
   "tus": 134,
   "linked": true,
   "module": "/scratch/linked/lexilla__src__Lexilla.bc",
-  "bytes": 12285620,
-  "wpa": {
-   "analysis": "ander",
-   "ok": true,
-   "log": "/scratch/linked/lexilla__src__Lexilla.wpa-ander.log"
-  }
+  "bytes": 12285620
  },
  "lexilla__test__TestLexers": {
   "skipped": "excluded by --exclude-re",
@@ -37,11 +27,6 @@
   "tus": 38,
   "linked": true,
   "module": "/scratch/linked/scintilla__win32__Scintilla.bc",
-  "bytes": 16149072,
-  "wpa": {
-   "analysis": "ander",
-   "ok": true,
-   "log": "/scratch/linked/scintilla__win32__Scintilla.wpa-ander.log"
-  }
+  "bytes": 16149072
  }
 }

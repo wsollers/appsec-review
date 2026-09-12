@@ -113,8 +113,12 @@ ENV Z3_DIR=/opt/z3
 # --- SVF (tag SVF-3.3) --------------------------------------------------------
 # build.sh skips its own LLVM/Z3 downloads when LLVM_DIR / Z3_DIR point at
 # existing directories, which they do above. Shared libs + RTTI (its default).
+# patches/: source-level deviations from upstream, each self-documenting. Applied
+# between clone and build so they are part of the image, not the run.
+COPY patches/ /opt/patches/
 RUN git clone --depth 1 --branch ${SVF_TAG} https://github.com/SVF-tools/SVF.git /opt/svf \
     && cd /opt/svf \
+    && python3 /opt/patches/svf-3.3-vfg-setdef-diagnostic.py svf/include/Graphs/VFG.h \
     && sed -i 's/^jobs=8$/jobs=$(nproc)/' build.sh \
     && bash ./build.sh \
     && ls /opt/svf/Release-build/bin \

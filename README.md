@@ -14,6 +14,7 @@ remains the editing surface until this repo takes over — see `docs/decisions/A
 | `docs/` | Design doc, review notes, ADRs, migration notes |
 | `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `MIGRATION.md` |
 | `images/audit-native/` | **To build.** Pinned LLVM/clang-cl, SVF, CSA/CodeChecker, cppcheck, Joern, CMake/Ninja, bear, xwin. Runs only inside the hostile-build boundary. |
+| `images/audit-codeql/` | CodeQL bundle (pinned), offline; pre-engagement security-extended suites per language; license gate (ADR-0006) |
 | `images/audit-iac/`, `audit-container/`, `audit-report/`, `mythos-orchestrator/` | Planned; empty except README |
 | `orchestrator/` | Python: ledger writer + hash chain, contract validator, artifact registry, run-state regeneration |
 | `scripts/` | Existing toolbox scripts (PowerShell + Python + sh), copied as-is |

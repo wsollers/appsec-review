@@ -35,6 +35,7 @@
 #include "WPA/Andersen.h"
 #include "llvm/Support/ManagedStatic.h"
 
+#include <cstdio>
 #include <fstream>
 #include <map>
 #include <set>
@@ -73,7 +74,22 @@ static vector<pair<string,int>> parseList(const string& s) {
 }
 
 static string esc(const string& s) {
-    string o; for (char ch : s) { if (ch == '"' || ch == '\\') o += '\\'; if (ch == '\n') { o += "\\n"; continue; } o += ch; } return o;
+    // JSON string escaping incl. all control characters (LLVM instruction text carries tabs;
+    // an unescaped one made the first real output unparseable, 2026-09-12).
+    string o;
+    for (unsigned char ch : s) {
+        switch (ch) {
+        case '"': o += "\\\""; break;
+        case '\\': o += "\\\\"; break;
+        case '\n': o += "\\n"; break;
+        case '\t': o += "\\t"; break;
+        case '\r': o += "\\r"; break;
+        default:
+            if (ch < 0x20) { char b[8]; snprintf(b, sizeof b, "\\u%04x", ch); o += b; }
+            else o += (char)ch;
+        }
+    }
+    return o;
 }
 
 static bool nameMatches(const string& callee, const string& want) {
@@ -95,7 +111,7 @@ struct Taint {
     // tainted state
     Set<NodeID> taintedObjs;                     // memory objects holding untrusted bytes
     Map<NodeID, u32_t> taintedVals;              // ValVar id -> source index that tainted it
-    struct SourceRec { string name; int arg; string loc; string fun; };
+    struct SourceRec { string name; int arg; string loc; string fun; u32_t objs = 0; };
     vector<SourceRec> srcRecs;
     vector<Finding> findings;
 
@@ -117,7 +133,7 @@ struct Taint {
                     const auto& parms = cs->getActualParms();
                     if ((u32_t)arg >= parms.size()) continue;
                     NodeID ptr = parms[arg]->getId();
-                    for (NodeID o : ander->getPts(ptr)) taintedObjs.insert(pag->getBaseObjVarID(o));
+                    for (NodeID o : ander->getPts(ptr)) if (!pag->isBlkObjOrConstantObj(o)) { taintedObjs.insert(o); srcRecs[sidx].objs++; }
                     if (Verbose()) SVFUtil::outs() << "source " << cname << " arg " << arg << " taints " << ander->getPts(ptr).count() << " objects @ " << cs->getSourceLoc() << "\n";
                 } else {
                     const RetICFGNode* ret = cs->getRetICFGNode();
@@ -125,7 +141,7 @@ struct Taint {
                         const SVFVar* rv = pag->getCallSiteRet(ret);
                         markVal(rv->getId(), sidx);
                         // a returned pointer (MapViewOfFile) also taints what it points to
-                        for (NodeID o : ander->getPts(rv->getId())) taintedObjs.insert(pag->getBaseObjVarID(o));
+                        for (NodeID o : ander->getPts(rv->getId())) if (!pag->isBlkObjOrConstantObj(o)) { taintedObjs.insert(o); srcRecs[sidx].objs++; }
                     }
                 }
             }
@@ -159,7 +175,7 @@ struct Taint {
                 if (taintedVals.count(ld->getLHSVarID())) continue;
                 u32_t sidx = 0; bool hit = false;
                 for (NodeID o : ander->getPts(ld->getRHSVarID()))
-                    if (taintedObjs.count(pag->getBaseObjVarID(o))) { hit = true; break; }
+                    if (taintedObjs.count(o)) { hit = true; break; }
                 if (!hit) continue;
                 // attribute to whichever source tainted the pointer, else the first source
                 auto pit = taintedVals.find(ld->getRHSVarID());
@@ -170,7 +186,7 @@ struct Taint {
             for (SVFStmt* st : pag->getSVFStmtSet(SVFStmt::Store)) {
                 auto* s = SVFUtil::cast<StoreStmt>(st);
                 if (!taintedVals.count(s->getRHSVarID())) continue;
-                for (NodeID o : ander->getPts(s->getLHSVarID())) taintedObjs.insert(pag->getBaseObjVarID(o));
+                for (NodeID o : ander->getPts(s->getLHSVarID())) if (!pag->isBlkObjOrConstantObj(o)) taintedObjs.insert(o);
             }
             changed = taintedVals.size() != nv || taintedObjs.size() != no;
             if (Verbose()) SVFUtil::outs() << "iter " << iter << ": " << taintedVals.size() << " tainted values, " << taintedObjs.size() << " tainted objects\n";
@@ -238,7 +254,7 @@ struct Taint {
         o << " \"sources_seen\": " << srcRecs.size() << ", \"tainted_values\": " << taintedVals.size()
           << ", \"tainted_objects\": " << taintedObjs.size() << ", \"findings_total\": " << findings.size() << ",\n \"sources\": [\n";
         for (size_t i = 0; i < srcRecs.size(); ++i)
-            o << "  {\"name\": \"" << esc(srcRecs[i].name) << "\", \"arg\": " << srcRecs[i].arg << ", \"loc\": \"" << esc(srcRecs[i].loc) << "\", \"function\": \"" << esc(srcRecs[i].fun) << "\"}" << (i + 1 < srcRecs.size() ? ",\n" : "\n");
+            o << "  {\"name\": \"" << esc(srcRecs[i].name) << "\", \"arg\": " << srcRecs[i].arg << ", \"objects_tainted\": " << srcRecs[i].objs << ", \"loc\": \"" << esc(srcRecs[i].loc) << "\", \"function\": \"" << esc(srcRecs[i].fun) << "\"}" << (i + 1 < srcRecs.size() ? ",\n" : "\n");
         o << " ],\n \"findings\": [\n";
         for (size_t i = 0; i < findings.size(); ++i) {
             const Finding& f = findings[i];

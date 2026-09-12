@@ -32,6 +32,12 @@ Remaining first-build risks, in order: (1) the apt.llvm.org `noble` repo for
 `clang-tidy-21`/`lld-21`, (2) SVF `build.sh` behavior when `LLVM_DIR`/`Z3_DIR` are
 pre-set, (3) the `wpa` binary name/location under `Release-build/bin`.
 
+## Source patches to upstream tools (`patches/`)
+
+| Patch | Why | Status |
+|---|---|---|
+| `svf-3.3-vfg-setdef-diagnostic.py` | SVF's `VFG::setDef` asserts "a ValVar can only have unique definition" on the linked Notepad++ module (MSVC target), in both full and pointer-only SVFG. Patched to keep the first definition and print both with a `[SVF-PATCH]` prefix. | Diagnostic; root cause open (2026-09-12). Count occurrences per run; any result from a patched SVFG is recorded as such. |
+
 ## MSVC headers (ADR-0003 — default: xwin)
 
 On a networked host:

@@ -31,9 +31,9 @@ TotalSVFStmts       453162
 VarArrayObj         4591
 VarStructObj        16781
 ----------------Time and memory stats--------------------
-LLVMIRTime          1.537
-SVFIRTime           7.75
-SymbolTableTime     0.374
+LLVMIRTime          1.518
+SVFIRTime           7.805
+SymbolTableTime     0.378
 #######################################################
 
 *********PTACallGraph Stats (Andersen analysis)***************
@@ -60,11 +60,11 @@ AvgTopLvlPtsSize    123.86
 CollapseTime        0
 CopyGepTime         0
 LoadStoreTime       0
-MemoryUsageVmrss    7.42746e+06
+MemoryUsageVmrss    7.42771e+06
 MemoryUsageVmsize   7.42838e+06
 SCCDetectTime       0
 SCCMergeTime        0
-TotalTime           40.52
+TotalTime           41.46
 UpdateCGTime        0
 ----------------Numbers stats----------------------------
 AddrProcessed       53153
@@ -136,11 +136,11 @@ PreemptiveIntersections  246084
 ################ (program : npp.m2r.bc)###############
 ----------------Time and memory stats--------------------
 AverageRegSize      56.0629
-GenMUCHITime        2.326
-GenRegionTime       94.81
-InsertPHITime       1.267
-SSARenameTime       0.295
-TotalMSSATime       98.728
+GenMUCHITime        2.302
+GenRegionTime       94.766
+InsertPHITime       1.25
+SSARenameTime       0.286
+TotalMSSATime       98.63
 ----------------Numbers stats----------------------------
 BBHasMSSAPhi        11446
 CSChiNode           200462
@@ -159,4 +159,80 @@ MemRegions          32106
 StoreChiNode        24454
 StoreHasChi         27572
 #######################################################
-svf-taint: /opt/svf/svf/include/Graphs/VFG.h:479: void SVF::VFG::setDef(const SVF::ValVar*, const SVF::VFGNode*): Assertion `(it->second == node->getId()) && "a ValVar can only have unique definition "' failed.
+[SVF-PATCH] duplicate definition for ValVar 16565 (GlobalValVar ID: 16565
+ @"??_7_Iostream_error_category2@std@@6B@" = unnamed_addr alias ptr, getelementptr inbounds ({ [7 x ptr] }, ptr @13, i32 0, i32 0, i32 1)
+ { N/A })
+    existing: CopyVFGNode ID: 53156 CopyStmt: [Var16565 <-- Var0]	
+GlobalValVar ID: 16565
+ @"??_7_Iostream_error_category2@std@@6B@" = unnamed_addr alias ptr, getelementptr inbounds ({ [7 x ptr] }, ptr @13, i32 0, i32 0, i32 1)
+ { N/A }
+    ignored : CopyVFGNode ID: 53170 CopyStmt: [Var16565 <-- Var515]	
+GlobalValVar ID: 16565
+ @"??_7_Iostream_error_category2@std@@6B@" = unnamed_addr alias ptr, getelementptr inbounds ({ [7 x ptr] }, ptr @13, i32 0, i32 0, i32 1)
+ { N/A }
+[SVF-PATCH] duplicate definition for ValVar 15130 (GlobalValVar ID: 15130
+ @"??_7ToolTip@@6B@" = unnamed_addr alias ptr, getelementptr inbounds ({ [13 x ptr] }, ptr @156, i32 0, i32 0, i32 1)
+ { N/A })
+    existing: CopyVFGNode ID: 53155 CopyStmt: [Var15130 <-- Var0]	
+GlobalValVar ID: 15130
+ @"??_7ToolTip@@6B@" = unnamed_addr alias ptr, getelementptr inbounds ({ [13 x ptr] }, ptr @156, i32 0, i32 0, i32 1)
+ { N/A }
+    ignored : CopyVFGNode ID: 53346 CopyStmt: [Var15130 <-- Var15133]	
+GlobalValVar ID: 15130
+ @"??_7ToolTip@@6B@" = unnamed_addr alias ptr, getelementptr inbounds ({ [13 x ptr] }, ptr @156, i32 0, i32 0, i32 1)
+ { N/A }
+
+*********SVFG Statistics***************
+################ (program : npp.m2r.bc)###############
+----------------Time and memory stats--------------------
+ATNodeTime          2.25
+AvgWeight           98.5387
+ConnDirEdgeTime     0
+ConnIndEdgeTime     9.785
+OptTime             0
+TLNodeTime          0
+TotalTime           12.035
+----------------Numbers stats----------------------------
+ActualIn            406858
+ActualOut           200462
+ActualParam         125507
+ActualRet           33667
+Addr                53153
+AvgInDegree         1
+AvgIndInDeg         1
+AvgIndOutDeg        1
+AvgOutDegree        1
+Copy                5318
+DirectCallEdge      100011
+DirectEdge          513327
+DirectRetEdge       31727
+FormalIn            56592
+FormalOut           56586
+FormalParam         22045
+FormalRet           5619
+Gep                 112361
+IndCallEdge         437526
+IndRetEdge          222606
+IndirectEdge        1649766
+IndirectEdgeLabels  162565825
+Load                33369
+MSSAPhi             155531
+MaxInDegree         72023
+MaxIndInDeg         72023
+MaxIndOutDeg        13129
+MaxOutDegree        13129
+PHI                 8099
+Store               43047
+TotalEdge           2163093
+TotalNode           1318215
+#######################################################
+svf-taint: pointer-only SVFG (degraded: no integer propagation)
+source ?AddFile@CReadFileChanges@@QEAAXPEB_WK@Z arg 1 taints 2232 objects @ CallICFGNode: { "ln": 56, "cl": 0, "fl": "src/NppIO.cpp" }
+iter 1: 57987 tainted values, 5222 tainted objects
+iter 2: 61940 tainted values, 5467 tainted objects
+iter 3: 62504 tainted values, 5525 tainted objects
+iter 4: 62590 tainted values, 5555 tainted objects
+iter 5: 62641 tainted values, 5562 tainted objects
+iter 6: 62676 tainted values, 5562 tainted objects
+iter 7: 62676 tainted values, 5562 tainted objects
+svf-taint: 7 source calls, 62676 tainted values, 5562 tainted objects, 7186 candidates -> /scratch/svf-taint-ptr-only.json

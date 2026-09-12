@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+# audit-codeql-native — CodeQL layered on audit-native so the C/C++ extractor can TRACE the
+# same clang-cl invocations the pipeline uses (compile_commands.json + /msvc). Build-mode
+# none cannot see <windows.h>/UCRT and gave 0/4 on the Notepad++ CVEs (2026-09-12).
+FROM audit-native:local
+USER root
+# CodeQL's tracer resolves symlinks before deciding what compiler it mimics; the SVF
+# tarball ships clang-cl as a symlink to clang, so it mimicked clang and parsed cl-style
+# flags as GNU ones - 346/346 failed (2026-09-12). A real file fixes it.
+RUN rm /opt/llvm/bin/clang-cl && cp /opt/llvm/bin/clang-21 /opt/llvm/bin/clang-cl
+RUN apt-get update && apt-get install -y --no-install-recommends zstd openjdk-21-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+COPY codeql-bundle-linux64.tar.zst /opt/bundle.tar.zst
+RUN cd /opt \
+    && echo "5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a  bundle.tar.zst" | sha256sum -c - \
+    && tar --zstd -xf bundle.tar.zst && rm bundle.tar.zst \
+    && chmod -R a+rX /opt/codeql \
+    && /opt/codeql/codeql version --format=json | head -3
+COPY run-codeql.sh replay_compile_commands.py smoke-test.sh /opt/scripts/
+RUN chmod +x /opt/scripts/run-codeql.sh /opt/scripts/replay_compile_commands.py /opt/scripts/smoke-test.sh
+ENV CODEQL_LICENSE_BASIS=ghas \
+    PATH="/opt/codeql:${PATH}" \
+    CODEQL_BUNDLE=codeql-bundle-v2.27.0
+USER worker
+WORKDIR /scratch
