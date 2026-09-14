@@ -16,6 +16,7 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+# CodeQL bundle: downloaded on the host, COPY'd into audit-codeql
 images/audit-codeql/codeql-bundle-linux64.tar.zst
 # per-target scratch outputs (databases, bitcode, logs) — never committed
 /scratch*/

@@ -28,7 +28,8 @@ and why; each item becomes its own commit.
 | 5 | Replace `Invoke-VendorAuditPrePass.ps1` with `orchestrator/` (Python) | Linux-host requirement; PowerShell→docker.exe argv marshalling bit four steps | ADR-0002 |
 | 6 | `build_symbol_index.py` and Joern parse move to `audit-native` | They read C/C++ semantics; keep `audit-static` language-agnostic | §17 |
 | 7 | Split `audit-iac` (terraform, checkov, tfsec, kube-linter, hadolint) out of `audit-static` | Image-per-lane matches §17 | §17 |
-| 8 | Record every scan's rule-pack versions (Semgrep `p/*`) into `run-manifest.json` | Rule packs float at scan time regardless of binary pin | §9 |
+| 8 | Retire `scripts/build_symbol_index.py`'s C++ handling in favor of Joern/SVF outputs from `audit-native` | Symbol index is now a byproduct of the native pipeline | ADR-0001 |
+| 9 | Record every scan's rule-pack versions (Semgrep `p/*`) into `run-manifest.json` | Rule packs float at scan time regardless of binary pin | §9 |
 
 ## Files not carried over
 

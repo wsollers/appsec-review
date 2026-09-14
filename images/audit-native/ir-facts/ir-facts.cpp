@@ -108,6 +108,8 @@ json::Object describeBase(const Value *ptr, const DataLayout &DL) {
   for (int i = 0; i < 6; ++i) {
     if (auto *gep = dyn_cast<GetElementPtrInst>(base)) { base = gep->getPointerOperand()->stripPointerCasts(); continue; }
     if (auto *ld = dyn_cast<LoadInst>(base)) {
+      // -O0 spills pointers to allocas: `%this.addr`, `%buf.addr`. The loaded pointer's
+      // object is whatever was stored into that slot, not the slot itself.
       o["via_load"] = true;
       const Value *slot = ld->getPointerOperand()->stripPointerCasts();
       const Value *stored = nullptr;

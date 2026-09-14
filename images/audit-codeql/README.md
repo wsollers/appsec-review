@@ -3,13 +3,11 @@
 CodeQL CLI + bundled query packs, run offline, for **pre-engagement evidence gathering**
 (ADR-0006). Not the native memory-safety substrate (that is `audit-native`, ADR-0001).
 
-## License gate — read first
+## License basis
 
-The CodeQL CLI license covers open-source and academic use. Running it against a vendor's
-proprietary code in a commercial engagement requires GitHub Advanced Security (the
-vendor's, or yours). `run-codeql.sh` refuses to start unless `CODEQL_LICENSE_BASIS` is
-set to `oss`, `academic`, or `ghas`, and writes the value into `run-manifest.json`. There
-is no default on purpose: the decision is made per engagement and is auditable.
+`ghas` — GitHub Advanced Security via Microsoft (ZeniMax). Set as the image default and
+recorded in `run-manifest.json` on every run; override with `CODEQL_LICENSE_BASIS` if an
+engagement is run under a different basis (`oss`, `academic`).
 
 ## What it produces
 
@@ -32,11 +30,16 @@ can distinguish code changes from query changes (design §14).
 
 ## Run
 
+Build, then prove the image before touching a target (separate steps on purpose):
+
 ```
-docker build -t audit-codeql:local images/audit-codeql
-CODEQL_LICENSE_BASIS=oss AUDIT_NATIVE_IMAGE=audit-codeql:local \
+curl -L -C - -o images/audit-codeql/codeql-bundle-linux64.tar.zst \
+  https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.0/codeql-bundle-linux64.tar.zst
+docker build -t audit-codeql:local images/audit-codeql     # verifies the bundle sha256
+AUDIT_NATIVE_IMAGE=audit-codeql:local images/audit-native/run.sh . - ./scratch -- /opt/scripts/smoke-test.sh
+AUDIT_NATIVE_IMAGE=audit-codeql:local \
   images/audit-native/run.sh <source-root> - ./scratch-codeql -- \
-  env CODEQL_LICENSE_BASIS=oss /opt/scripts/run-codeql.sh --langs cpp,javascript --suite security-extended
+  /opt/scripts/run-codeql.sh --langs cpp,javascript --suite security-extended
 ```
 
 `run.sh` is reused for the boundary (no network, read-only `/workspace`, write only
@@ -46,6 +49,25 @@ configuration error, not a reason to open the network.
 
 Sizing: CodeQL wants RAM; `--ram <MB>` is passed through, default is CodeQL's own
 heuristic. `MEM_LIMIT` on `run.sh` must be above it.
+
+## Traced clang-cl extraction (`Dockerfile.native`)
+
+`audit-codeql-native` layers the CodeQL bundle on `audit-native:local`, so
+`codeql database create --command` can trace the exact `clang-cl` invocations from
+`compile_commands.json` with `/msvc` mounted. This is the C/C++ mode that matters for
+Windows code; build-mode none is for breadth on other languages.
+
+```
+docker build -t audit-codeql-native:local -f images/audit-codeql/Dockerfile.native images/audit-codeql
+cp scratch-npp/compile_commands.json scratch-npp/vfs-overlay.yaml scratch-codeql/    # same paths inside the container
+AUDIT_NATIVE_IMAGE=audit-codeql-native:local MEM_LIMIT=20g \
+  images/audit-native/run.sh <source-root> ./msvc ./scratch-codeql -- \
+  /opt/scripts/run-codeql.sh --langs cpp --traced-cpp /scratch/compile_commands.json --ram 12000
+```
+
+`replay_compile_commands.py` runs each entry under CodeQL's tracer; TU failures are
+counted, not fatal. `run-manifest.json` records `extraction_mode: traced-clang-cl` and the
+replay's ok/failed counts belong next to it.
 
 ## Validation
 

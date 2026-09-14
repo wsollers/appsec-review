@@ -13,7 +13,13 @@ reported. Status: **written, not yet compiled** — expect a round of QL compile
 | `ConstantLengthReadFromBoundedBuffer.ql` | `std::string(buf+i, 40)` / `memcpy(.., buf, K)` with the length parameter unchecked | 40166 |
 | `TableSizeExceedsArrayLength.ql` | ctor sets `ptr = TABLE` and `size = K` with K > entries in TABLE; index guarded by `size` | 40036 |
 
-## First run on the traced v8.5.6 database (2026-09-12)
+## Results (2026-09-12) — see validation/notepad-plus-plus-8.5.6.md for the table
+
+4/4 on v8.5.6 at exact lines; 40036 and 40166 clear at v8.5.7; 40031 and 40164 persist by design (shape, not size).
+Array length of `T x[] = {...}`: the Variable's type has no size; the initializer's type does.
+Use `--rerun` when iterating on a query — CodeQL caches evaluations by query name.
+
+## First run notes
 
 All three initial queries compiled first time. 42 findings: **40031 hit at `Utf8_16.cpp:175`**,
 **40164 hit at `nsCodingStateMachine.h:72`** (`charLenTable[state]`; the fix grew

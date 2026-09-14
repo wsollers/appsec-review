@@ -23,9 +23,9 @@ Two constraints shape how it can be used:
 ## Decision
 
 - Add `images/audit-codeql` (CodeQL bundle, pinned; query packs bundled; offline).
-- The run script refuses without `CODEQL_LICENSE_BASIS ∈ {oss, academic, ghas}`; the
-  value is recorded in `run-manifest.json` and must appear in the engagement's
-  `run-manifest.json` and negative-space notes.
+- License basis is `ghas` (GitHub Advanced Security via Microsoft/ZeniMax), set as the
+  image default and recorded in `run-manifest.json` on every run; the run script still
+  refuses an unset or unknown value so a different engagement basis is explicit.
 - Default extraction: interpreted/buildless where available; `--build-mode none` for
   C/C++, Java, C#. Traced clang-cl replay is an explicit opt-in experiment.
 - CodeQL C/C++ findings enter L3 only as candidates alongside CSA/SVF, never as the

@@ -22,15 +22,19 @@ ARG CODEQL_BUNDLE=codeql-bundle-v2.27.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl zstd git python3 python3-pip \
-      gcc g++ libc6-dev \
       openjdk-21-jre-headless nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Bundle is downloaded on the host (resumable; `curl -L -C - -o codeql-bundle-linux64.tar.zst <url>`)
-# and copied in. Its sha256 is recorded in run-manifest by run-codeql.sh via CODEQL_BUNDLE_SHA256.
+# The bundle is downloaded on the host and COPY'd in — an in-build curl of 553 MB has no
+# progress and one dropped connection fails the layer (2026-09-12). Host side:
+#   curl -L -C - -o images/audit-codeql/codeql-bundle-linux64.tar.zst \
+#     https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.0/codeql-bundle-linux64.tar.zst
+# Expected: 553280102 bytes, sha256 5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a
+# (the file is .gitignored; it is a build input like the MSVC headers, not source).
 COPY codeql-bundle-linux64.tar.zst /opt/bundle.tar.zst
-RUN cd /opt && tar --zstd -xf bundle.tar.zst && rm bundle.tar.zst \
-    && chmod -R a+rX /opt/codeql \
+RUN cd /opt \
+    && echo "5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a  bundle.tar.zst" | sha256sum -c - \
+    && tar --zstd -xf bundle.tar.zst && rm bundle.tar.zst \
     && /opt/codeql/codeql version --format=json \
     && /opt/codeql/codeql resolve languages
 ENV CODEQL_LICENSE_BASIS=ghas \

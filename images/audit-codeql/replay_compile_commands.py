@@ -9,6 +9,22 @@ entries = json.load(open(sys.argv[1]))
 ok = bad = 0
 for e in entries:
     args = list(e.get("arguments") or [])
+    gnu = not args[0].endswith("clang-cl")
+    if gnu:
+        # GNU driver (EASTL/yquake2/Unreal on Linux): keep -c, redirect -o into /scratch/obj, no "--" games
+        import os, hashlib
+        os.makedirs("/scratch/obj", exist_ok=True)
+        obj = "/scratch/obj/" + hashlib.sha1(e["file"].encode()).hexdigest()[:12] + ".o"
+        if "-c" not in args: args.insert(1, "-c")
+        if "-o" in args:
+            i = args.index("-o"); args[i + 1] = obj
+        else:
+            args += ["-o", obj]
+        r = subprocess.run(args, cwd=e.get("directory"), capture_output=True, text=True)
+        if r.returncode == 0: ok += 1
+        else:
+            bad += 1; print(f"FAIL {e['file']}: {r.stderr.strip().splitlines()[-1:]}", file=sys.stderr)
+        continue
     if "/c" not in args and "-c" not in args:
         args.insert(1, "/c")
     # /c writes <name>.obj into the cwd, which is the read-only /workspace -> "unable to

@@ -54,6 +54,10 @@ static Option<string> SinkCallsOpt("sink-calls",
     "memcpy:2,memmove:2,memset:2,CopyMemory:2,MoveMemory:2,RtlCopyMemory:2,wmemcpy:2,strncpy:2,wcsncpy:2,memcpy_s:1,memcpy_s:3,alloca:0,malloc:0,operator new:0");
 static Option<string> OutOpt("out", "JSON output path", "svf-taint.json");
 static Option<bool> Verbose("taint-verbose", "print progress", false);
+static Option<u32_t> MaxSourceObjs("max-source-objs",
+    "a source whose buffer points to more than this many objects is recorded as SOURCE_UNRESOLVED and not "
+    "seeded (Andersen collapses all std::allocator storage into one object: 2,231 objects from one ReadFile "
+    "on Notepad++ drowned every precise source, 2026-09-12)", 64);
 static Option<bool> PtrOnly("ptr-only",
     "build the pointer-only SVFG instead of the full one. Loses integer-arithmetic propagation "
     "(index = byte*2 breaks the chain) but avoids VFG::setDef 'unique definition' assertions seen "
@@ -93,9 +97,11 @@ static string esc(const string& s) {
 }
 
 static bool nameMatches(const string& callee, const string& want) {
-    // extern "C" names match exactly; C++ names arrive mangled or with signature — substring on the bare name.
+    // extern "C" names must match exactly (substring matched ReadFile against unrelated symbols).
+    // For MSVC-mangled C++ names, accept "?<want>@" (method/function name at mangling start).
     if (callee == want) return true;
-    return callee.find(want) != string::npos;
+    if (want.find('?') == string::npos && callee.rfind("?" + want + "@", 0) == 0) return true;
+    return false;
 }
 
 struct Finding {
@@ -109,9 +115,12 @@ struct Taint {
     SVFIR* pag; Andersen* ander; SVFG* svfg;
     vector<pair<string,int>> sources, sinkCalls;
     // tainted state
-    Set<NodeID> taintedObjs;                     // memory objects holding untrusted bytes
+    // Field-sensitive: these are SVF's precise object ids (GepObjVar per field), NOT base
+    // objects. Collapsing to bases tainted whole classes once their buffer field was
+    // tainted — every load of Buffer::_size etc. lit up (first Notepad++ run, 2026-09-12).
+    Set<NodeID> taintedObjs;                     // memory (sub)objects holding untrusted bytes
     Map<NodeID, u32_t> taintedVals;              // ValVar id -> source index that tainted it
-    struct SourceRec { string name; int arg; string loc; string fun; u32_t objs = 0; };
+    struct SourceRec { string name; int arg; string loc; string fun; string callee; u32_t objs = 0; string status = "seeded"; };
     vector<SourceRec> srcRecs;
     vector<Finding> findings;
 
@@ -128,20 +137,30 @@ struct Taint {
             for (auto& [name, arg] : sources) {
                 if (!nameMatches(cname, name)) continue;
                 u32_t sidx = srcRecs.size();
-                srcRecs.push_back({name, arg, cs->getSourceLoc(), funName(cs->getFun())});
+                srcRecs.push_back({name, arg, cs->getSourceLoc(), funName(cs->getFun()), cname});
+                SourceRec& rec = srcRecs.back();
                 if (arg >= 0) {
                     const auto& parms = cs->getActualParms();
-                    if ((u32_t)arg >= parms.size()) continue;
+                    if ((u32_t)arg >= parms.size()) { rec.status = "no_such_arg"; continue; }
                     NodeID ptr = parms[arg]->getId();
-                    for (NodeID o : ander->getPts(ptr)) if (!pag->isBlkObjOrConstantObj(o)) { taintedObjs.insert(o); srcRecs[sidx].objs++; }
-                    if (Verbose()) SVFUtil::outs() << "source " << cname << " arg " << arg << " taints " << ander->getPts(ptr).count() << " objects @ " << cs->getSourceLoc() << "\n";
+                    const PointsTo& pts = ander->getPts(ptr);
+                    rec.objs = pts.count();
+                    if (rec.objs == 0) { rec.status = "empty_pts"; }
+                    else if (rec.objs > MaxSourceObjs()) { rec.status = "SOURCE_UNRESOLVED"; }
+                    else for (NodeID o : pts) if (!pag->isBlkObjOrConstantObj(o)) taintedObjs.insert(o);
+                    if (Verbose()) SVFUtil::outs() << "source " << cname << " arg " << arg << " -> " << rec.objs << " objects, " << rec.status << " @ " << cs->getSourceLoc() << "\n";
                 } else {
                     const RetICFGNode* ret = cs->getRetICFGNode();
                     if (ret && pag->callsiteHasRet(ret)) {
                         const SVFVar* rv = pag->getCallSiteRet(ret);
-                        markVal(rv->getId(), sidx);
-                        // a returned pointer (MapViewOfFile) also taints what it points to
-                        for (NodeID o : ander->getPts(rv->getId())) if (!pag->isBlkObjOrConstantObj(o)) { taintedObjs.insert(o); srcRecs[sidx].objs++; }
+                        const PointsTo& pts = ander->getPts(rv->getId());
+                        rec.objs = pts.count();
+                        if (rec.objs > MaxSourceObjs()) { rec.status = "SOURCE_UNRESOLVED"; }
+                        else {
+                            markVal(rv->getId(), sidx);
+                            // a returned pointer (MapViewOfFile) also taints what it points to
+                            for (NodeID o : pts) if (!pag->isBlkObjOrConstantObj(o)) taintedObjs.insert(o);
+                        }
                     }
                 }
             }
@@ -254,7 +273,9 @@ struct Taint {
         o << " \"sources_seen\": " << srcRecs.size() << ", \"tainted_values\": " << taintedVals.size()
           << ", \"tainted_objects\": " << taintedObjs.size() << ", \"findings_total\": " << findings.size() << ",\n \"sources\": [\n";
         for (size_t i = 0; i < srcRecs.size(); ++i)
-            o << "  {\"name\": \"" << esc(srcRecs[i].name) << "\", \"arg\": " << srcRecs[i].arg << ", \"objects_tainted\": " << srcRecs[i].objs << ", \"loc\": \"" << esc(srcRecs[i].loc) << "\", \"function\": \"" << esc(srcRecs[i].fun) << "\"}" << (i + 1 < srcRecs.size() ? ",\n" : "\n");
+            o << "  {\"name\": \"" << esc(srcRecs[i].name) << "\", \"callee\": \"" << esc(srcRecs[i].callee) << "\", \"arg\": " << srcRecs[i].arg
+              << ", \"objects\": " << srcRecs[i].objs << ", \"status\": \"" << srcRecs[i].status
+              << "\", \"loc\": \"" << esc(srcRecs[i].loc) << "\", \"function\": \"" << esc(srcRecs[i].fun) << "\"}" << (i + 1 < srcRecs.size() ? ",\n" : "\n");
         o << " ],\n \"findings\": [\n";
         for (size_t i = 0; i < findings.size(); ++i) {
             const Finding& f = findings[i];

@@ -22,6 +22,9 @@ MSVC_MOUNT=()
 [ "$MSVC" != "-" ] && MSVC_MOUNT=(-v "$(realpath "$MSVC"):/msvc:ro")
 mkdir -p "$SCR"
 # --user: run as the invoking host user so /scratch (a bind mount) is writable.
+# The image's `worker` uid (10001) only matters when no bind mount is involved;
+# with one, the host uid must own the output. 2026-09-11: first run on
+# Zarathustra failed "mkdir /scratch/smoke: Permission denied" for this reason.
 exec docker run --rm \
   --user "$(id -u):$(id -g)" \
   --network none \

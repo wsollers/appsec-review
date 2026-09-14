@@ -24,7 +24,7 @@ def base(p): return (p or "").replace("\\", "/").split("/")[-1]
 class Facts:
     def __init__(self, paths):
         self.globals, self.globals_dem = {}, {}
-        self.by_loc = defaultdict(lambda: defaultdict(list))
+        self.by_loc = defaultdict(lambda: defaultdict(list))   # kind -> (file, line) -> [fact]
         for path in paths:
             d = json.load(open(path))
             for g in d["globals"]:
@@ -33,6 +33,7 @@ class Facts:
                 for f in d[kind]:
                     l = f.get("loc") or {}
                     if "file" in l:
+                        f["_module"] = d.get("module")
                         self.by_loc[kind][(base(l["file"]), int(l["line"]))].append(f)
     def near(self, kind, file, line, tol=2):
         out = []
@@ -62,6 +63,7 @@ def v_table_size(f, F):
     g = F.global_by_name(name)
     if not g: return result(f, "UNRESOLVED", {"reason": f"global {name} not in IR facts"})
     n_ir = g["elements"]
+    # the SARIF points at the constructor's declaration; the store is in its body
     stores = [s for s in F.near("ctor_stores", f["file"], f["line"], tol=25) if s["value"] == k]
     ev = {"global": g["name"], "ir_elements": n_ir, "query_elements": n_q, "bound": k,
           "ctor_store_seen": bool(stores), "element_bytes": g.get("element_bytes")}
@@ -99,6 +101,7 @@ def v_unchecked_index(f, F):
     if elems and idx.get("depends_on_arg"):
         return result(f, "VERIFIED_PRIMITIVE", ev, needs=["range: is index provably < %d? (value-range analysis or witness search)" % elems])
     if not elems and idx.get("depends_on_arg") and b.get("via_load"):
+        # table reached through a pointer (this->model->table): mechanism confirmed, size not at the GEP
         return result(f, "VERIFIED_PRIMITIVE", ev, needs=["table_length: resolve the pointee array (global initializer of the pointed-to struct)",
                                                           "range: index bound vs that length"])
     return result(f, "UNRESOLVED", ev, needs=["index provenance unclear in IR"])
@@ -137,7 +140,7 @@ def load_csa(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ir-facts", action="append", required=True)
+    ap.add_argument("--ir-facts", action="append", required=True, help="one per linked module; repeatable")
     ap.add_argument("--sarif", action="append", default=[])
     ap.add_argument("--csa", action="append", default=[]); ap.add_argument("--out", required=True)
     a = ap.parse_args()

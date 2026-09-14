@@ -79,6 +79,8 @@ def run_one(entry: dict, timeout: int, emit_ir: bool, ir_dir: Path | None) -> di
             continue
         cleaned.append(a)
     src = entry["file"]
+    # driver detection: clang-cl takes cl-style flags; clang/clang++/gcc/g++ take GNU style.
+    gnu = not (cleaned and cleaned[0].endswith("clang-cl"))
     if emit_ir and ir_dir is not None:
         rel = Path(src)
         for anchor in ("/workspace",):
@@ -90,11 +92,17 @@ def run_one(entry: dict, timeout: int, emit_ir: bool, ir_dir: Path | None) -> di
         out.parent.mkdir(parents=True, exist_ok=True)
         # /clang:-o<path> rather than /Fo: with "--" in the command clang-cl
         # dropped the /Fo output silently (verified 2026-09-11); /clang:-o works.
-        cmd = cleaned + ["/c", "/clang:-emit-llvm", "/clang:-g", "/clang:-O0",
-                         "-Xclang", "-disable-O0-optnone", f"/clang:-o{out}"]
+        if gnu:
+            cmd = cleaned + ["-c", "-emit-llvm", "-g", "-O0", "-Xclang", "-disable-O0-optnone", "-o", str(out)]
+        else:
+            cmd = cleaned + ["/c", "/clang:-emit-llvm", "/clang:-g", "/clang:-O0",
+                             "-Xclang", "-disable-O0-optnone", f"/clang:-o{out}"]
     else:
-        cmd = cleaned + ["/Zs"]  # cl-mode syntax-only
-    cmd += ["/clang:-ferror-limit=5", "--"] + srcs
+        cmd = cleaned + (["-fsyntax-only"] if gnu else ["/Zs"])
+    if gnu:
+        cmd += ["-ferror-limit=5"] + srcs          # GNU driver: absolute paths are fine, no "--" needed
+    else:
+        cmd += ["/clang:-ferror-limit=5", "--"] + srcs
     t0 = time.time()
     try:
         p = subprocess.run(cmd, cwd=entry.get("directory") or None, capture_output=True, text=True, timeout=timeout)

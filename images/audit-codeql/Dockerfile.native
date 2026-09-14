@@ -1,7 +1,16 @@
 # syntax=docker/dockerfile:1
-# audit-codeql-native — CodeQL layered on audit-native so the C/C++ extractor can TRACE the
-# same clang-cl invocations the pipeline uses (compile_commands.json + /msvc). Build-mode
-# none cannot see <windows.h>/UCRT and gave 0/4 on the Notepad++ CVEs (2026-09-12).
+#
+# audit-codeql-native — CodeQL on top of audit-native, so the C/C++ extractor can TRACE
+# the same clang-cl invocations the rest of the pipeline uses (compile_commands.json +
+# /msvc). Build-mode none (the base audit-codeql image) cannot see <windows.h>/UCRT and
+# produced 0/4 on the Notepad++ CVEs for that reason (2026-09-12); this image is the
+# fair test. CodeQL documents clang-cl tracing as preliminary — record what it does.
+#
+#   docker build -t audit-native:local images/audit-native          # first
+#   docker build -t audit-codeql-native:local -f images/audit-codeql/Dockerfile.native images/audit-codeql
+#
+# Runs under the same run.sh boundary; the tracer executes the compiler, i.e. this is
+# hostile-build territory exactly like audit-native itself.
 FROM audit-native:local
 USER root
 # CodeQL's tracer resolves symlinks before deciding what compiler it mimics; the SVF

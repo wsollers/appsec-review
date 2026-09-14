@@ -127,6 +127,18 @@ ENV SVF_DIR=/opt/svf \
     PATH="/opt/svf/Release-build/bin:${PATH}" \
     LD_LIBRARY_PATH="/opt/svf/Release-build/lib:/opt/z3/bin:/opt/llvm/lib"
 
+# --- in-tree LLVM tools: ir-facts (L7 fact extractor) and svf-taint (SVF client) ---
+# Built against the LLVM/SVF above so their ABI matches. Both are small.
+COPY ir-facts/ /opt/src/ir-facts/
+COPY svf-taint/ /opt/src/svf-taint/
+RUN mkdir -p /opt/ir-facts /opt/svf-taint \
+    && cmake -S /opt/src/ir-facts -B /tmp/b1 -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR="$LLVM_DIR/lib/cmake/llvm" > /dev/null \
+    && cmake --build /tmp/b1 -j"$(nproc)" > /dev/null && cp /tmp/b1/ir-facts /opt/ir-facts/ \
+    && cmake -S /opt/src/svf-taint -B /tmp/b2 -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR="$LLVM_DIR/lib/cmake/llvm" -DSVF_DIR="$SVF_DIR" -DZ3_DIR="$Z3_DIR" > /dev/null \
+    && cmake --build /tmp/b2 -j"$(nproc)" > /dev/null && cp /tmp/b2/svf-taint /opt/svf-taint/ \
+    && rm -rf /tmp/b1 /tmp/b2 && /opt/ir-facts/ir-facts --help 2>&1 | head -1
+ENV PATH="/opt/ir-facts:/opt/svf-taint:${PATH}"
+
 # --- Joern v4.0.625 (JDK 21) --------------------------------------------------
 RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(lsb_release -cs) main" \

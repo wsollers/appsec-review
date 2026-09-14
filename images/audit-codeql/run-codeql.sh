@@ -24,7 +24,13 @@ case "${CODEQL_LICENSE_BASIS:-}" in
   *) echo "REFUSING: CODEQL_LICENSE_BASIS must be oss|academic|ghas (CodeQL CLI license). Set it per engagement."; exit 3;;
 esac
 OUT=/scratch/codeql; mkdir -p "$OUT"; cd "$OUT"
-RAMOPT=(); [ -n "$RAM" ] && RAMOPT=(--ram "$RAM")
+# CodeQL sizes its heap from the HOST's memory, not the container's cgroup limit, and
+# dies "CodeQL is out of memory" under run.sh's MEM_LIMIT (Notepad++ analyze, 2026-09-12).
+# Default --ram to 70% of the cgroup limit when one is set.
+if [ -z "$RAM" ] && [ -r /sys/fs/cgroup/memory.max ] && [ "$(cat /sys/fs/cgroup/memory.max)" != "max" ]; then
+  RAM=$(( $(cat /sys/fs/cgroup/memory.max) / 1024 / 1024 * 70 / 100 ))
+fi
+RAMOPT=(); [ -n "$RAM" ] && RAMOPT=(--ram "$RAM") && echo "codeql --ram=$RAM MB (container limit $(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo ?))"
 SRC_HASH=$(cd /workspace && find . -type f -not -path './.git/*' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
 echo "{\"codeql\": $(codeql version --format=json), \"bundle\": \"${CODEQL_BUNDLE:-?}\", \"license_basis\": \"$CODEQL_LICENSE_BASIS\", \"suite\": \"$SUITE\", \"source_tree_sha256\": \"$SRC_HASH\", \"languages\": {}, \"started_utc\": \"$(date -u +%FT%TZ)\"}" > run-manifest.json
 
@@ -47,6 +53,7 @@ for L in ${LANGS//,/ }; do
       MODE="interpreted-or-buildless"
       codeql database create "$DB" --language="$L" --source-root=/workspace --threads="$THREADS" "${RAMOPT[@]}" > "create-$L.log" 2>&1;;
   esac
+  rm -f "$DB/$DB"/default/cache/.lock "$DB"/db-*/default/cache/.lock 2>/dev/null || true   # stale lock from an interrupted run blocks analyze
   FILES=$(codeql database print-baseline "$DB" 2>/dev/null | grep -oE '[0-9]+ files' | head -1 || echo "?")
   echo "   db ok ($FILES); analyze: codeql/$L-queries:codeql-suites/$L-$SUITE.qls"
   codeql database analyze "$DB" "codeql/$L-queries:codeql-suites/$L-$SUITE.qls" \

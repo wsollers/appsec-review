@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # smoke-test.sh — prove the audit-codeql image works before pointing it at a target.
+# Runs inside the container, no network, writes only under /scratch:
 #   AUDIT_NATIVE_IMAGE=audit-codeql:local images/audit-native/run.sh . - ./scratch -- /opt/scripts/smoke-test.sh
 set -euo pipefail
 OUT=/scratch/codeql-smoke; rm -rf "$OUT"; mkdir -p "$OUT/src"; cd "$OUT"
