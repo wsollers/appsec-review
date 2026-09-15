@@ -26,6 +26,7 @@
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
@@ -95,6 +96,17 @@ bool dependsOnArg(const Value *v, std::set<const Value *> &seen, int depth, std:
   return false;
 }
 
+bool structField(const GetElementPtrInst *g, std::string &sname, int64_t &field) {
+  bool found = false;
+  for (gep_type_iterator it = gep_type_begin(g), e = gep_type_end(g); it != e; ++it) {
+    if (StructType *st = it.getStructTypeOrNull()) {
+      if (auto *ci = dyn_cast<ConstantInt>(it.getOperand())) { sname = st->hasName() ? st->getName().str() : "?"; field = ci->getSExtValue(); found = true; }
+      else return false;
+    }
+  }
+  return found;
+}
+
 /** Field loads a value depends on: walks operands (bounded), collecting (struct, field-index)
     for every `load (gep %struct, 0, N)` reached. Used to relate an index to a bound field. */
 static std::map<const Function *, std::set<std::pair<std::string,int64_t>>> gGetterDeps;   // fn -> fields its return derives from
@@ -111,9 +123,7 @@ void fieldDeps(const Value *v, std::set<std::pair<std::string,int64_t>> &out, st
   }
   if (auto *ld = dyn_cast<LoadInst>(v)) {
     const Value *p = ld->getPointerOperand()->stripPointerCasts();
-    if (auto *g = dyn_cast<GetElementPtrInst>(p))
-      if (auto *st = dyn_cast<StructType>(g->getSourceElementType()); st && g->getNumIndices() == 2)
-        if (auto *fi = dyn_cast<ConstantInt>(g->getOperand(2))) out.insert({st->hasName() ? st->getName().str() : "?", fi->getSExtValue()});
+    if (auto *g = dyn_cast<GetElementPtrInst>(p)) { std::string sn; int64_t fi; if (structField(g, sn, fi)) out.insert({sn, fi}); }
     fieldDeps(p, out, seen, depth + 1);
     // through a spill slot: the value stored there
     for (const User *u : p->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == p) fieldDeps(st->getValueOperand(), out, seen, depth + 1);
@@ -128,9 +138,7 @@ bool loadedFromField(const Value *ptr, std::string &sname, int64_t &field) {
   for (int i = 0; i < 4; ++i) {
     if (auto *ld = dyn_cast<LoadInst>(p)) {
       const Value *src = ld->getPointerOperand()->stripPointerCasts();
-      if (auto *g = dyn_cast<GetElementPtrInst>(src))
-        if (auto *st = dyn_cast<StructType>(g->getSourceElementType()); st && g->getNumIndices() == 2)
-          if (auto *fi = dyn_cast<ConstantInt>(g->getOperand(2))) { sname = st->hasName() ? st->getName().str() : "?"; field = fi->getSExtValue(); return true; }
+      if (auto *g = dyn_cast<GetElementPtrInst>(src)) { if (structField(g, sname, field)) return true; }
       // spill slot: follow the store into it
       const Value *stored = nullptr;
       for (const User *u : src->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == src) { stored = st->getValueOperand()->stripPointerCasts(); break; }
