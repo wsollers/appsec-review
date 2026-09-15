@@ -36,6 +36,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <map>
 #include <set>
 #include <string>
 
@@ -91,6 +92,43 @@ bool dependsOnArg(const Value *v, std::set<const Value *> &seen, int depth, std:
   if (auto *i = dyn_cast<Instruction>(v))
     for (const Use &op : i->operands())
       if (dependsOnArg(op.get(), seen, depth + 1, via)) return true;
+  return false;
+}
+
+/** Field loads a value depends on: walks operands (bounded), collecting (struct, field-index)
+    for every `load (gep %struct, 0, N)` reached. Used to relate an index to a bound field. */
+void fieldDeps(const Value *v, std::set<std::pair<std::string,int64_t>> &out, std::set<const Value *> &seen, int depth) {
+  if (!v || depth > 10 || !seen.insert(v).second) return;
+  if (auto *ld = dyn_cast<LoadInst>(v)) {
+    const Value *p = ld->getPointerOperand()->stripPointerCasts();
+    if (auto *g = dyn_cast<GetElementPtrInst>(p))
+      if (auto *st = dyn_cast<StructType>(g->getSourceElementType()); st && g->getNumIndices() == 2)
+        if (auto *fi = dyn_cast<ConstantInt>(g->getOperand(2))) out.insert({st->hasName() ? st->getName().str() : "?", fi->getSExtValue()});
+    fieldDeps(p, out, seen, depth + 1);
+    // through a spill slot: the value stored there
+    for (const User *u : p->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == p) fieldDeps(st->getValueOperand(), out, seen, depth + 1);
+    return;
+  }
+  if (auto *i = dyn_cast<Instruction>(v)) for (const Use &op : i->operands()) fieldDeps(op.get(), out, seen, depth + 1);
+}
+
+/** If ptr is a load of a struct field (possibly through a spill slot), return (struct, field). */
+bool loadedFromField(const Value *ptr, std::string &sname, int64_t &field) {
+  const Value *p = ptr->stripPointerCasts();
+  for (int i = 0; i < 4; ++i) {
+    if (auto *ld = dyn_cast<LoadInst>(p)) {
+      const Value *src = ld->getPointerOperand()->stripPointerCasts();
+      if (auto *g = dyn_cast<GetElementPtrInst>(src))
+        if (auto *st = dyn_cast<StructType>(g->getSourceElementType()); st && g->getNumIndices() == 2)
+          if (auto *fi = dyn_cast<ConstantInt>(g->getOperand(2))) { sname = st->hasName() ? st->getName().str() : "?"; field = fi->getSExtValue(); return true; }
+      // spill slot: follow the store into it
+      const Value *stored = nullptr;
+      for (const User *u : src->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == src) { stored = st->getValueOperand()->stripPointerCasts(); break; }
+      if (!stored) return false;
+      p = stored; continue;
+    }
+    return false;
+  }
   return false;
 }
 
@@ -152,7 +190,8 @@ int main(int argc, char **argv) {
   if (!M) { err.print(argv[0], errs()); return 1; }
   const DataLayout &DL = M->getDataLayout();
 
-  json::Array globals, ctorStores, geps, sizeCalls, allocas;
+  json::Array globals, ctorStores, geps, sizeCalls, allocas, fieldGeps;
+  std::map<std::string, std::map<std::string, int>> pairVotes;   // struct -> "P:N" -> count
 
   for (const GlobalVariable &gv : M->globals()) {
     auto *at = dyn_cast<ArrayType>(gv.getValueType());
@@ -170,7 +209,42 @@ int main(int argc, char **argv) {
   for (const Function &F : *M) {
     if (F.isDeclaration()) continue;
     const std::string fname = F.getName().str(), fdem = demangleName(F.getName());
-    const bool isCtor = fname.rfind("??0", 0) == 0 || (fname.rfind("_ZN", 0) == 0 && (fname.find("C1E") != std::string::npos || fname.find("C2E") != std::string::npos));
+    // constructors: MSVC mangling `??0Class@@...`; Itanium `_ZN...C1E...`/`C2E...` (complete/base object ctor)
+    const bool isCtor = fname.rfind("??0", 0) == 0 ||
+                        (fname.rfind("_ZN", 0) == 0 && (fname.find("C1E") != std::string::npos || fname.find("C2E") != std::string::npos));
+    // comparisons in this function and the field loads each operand depends on
+    struct Cmp { const ICmpInst *I; std::set<std::pair<std::string,int64_t>> deps; std::set<const Value *> vals; };
+    std::vector<Cmp> cmps;
+    for (const BasicBlock &BB : F) for (const Instruction &I : BB)
+      if (auto *ic = dyn_cast<ICmpInst>(&I)) {
+        Cmp c; c.I = ic; std::set<const Value *> seen;
+        for (const Use &op : ic->operands()) { fieldDeps(op.get(), c.deps, seen, 0); }
+        c.vals = seen; cmps.push_back(std::move(c));
+      }
+    // GEPs through a pointer loaded from a struct field: is the index/result compared against another field?
+    for (const BasicBlock &BB : F) for (const Instruction &I : BB) {
+      auto *gep = dyn_cast<GetElementPtrInst>(&I);
+      if (!gep || gep->hasAllConstantIndices()) continue;
+      std::string sname; int64_t pf;
+      if (!loadedFromField(gep->getPointerOperand(), sname, pf)) continue;
+      const Value *idx = nullptr;
+      for (const Use &u : gep->indices()) if (!isa<ConstantInt>(u.get())) { idx = u.get(); break; }
+      json::Object o; o["function"] = fname; o["demangled"] = fdem; o["struct"] = sname; o["ptr_field"] = pf; o["loc"] = loc(I.getDebugLoc());
+      // deps of the index itself
+      std::set<std::pair<std::string,int64_t>> idxDeps; std::set<const Value *> seen0; fieldDeps(idx, idxDeps, seen0, 0);
+      json::Array bounds;
+      for (const Cmp &c : cmps) {
+        // does this comparison involve the index or the GEP result?
+        bool touches = c.vals.count(idx) || c.vals.count(gep);
+        if (!touches) for (const Value *v : c.vals) if (v == idx || v == gep) touches = true;
+        if (!touches) continue;
+        for (auto &d : c.deps) if (d.first == sname && d.second != pf) { bounds.push_back(json::Object{{"field", d.second}}); pairVotes[sname][std::to_string(pf) + ":" + std::to_string(d.second)]++; }
+      }
+      o["bounded_by_fields"] = std::move(bounds);
+      std::set<const Value *> seen1; std::string via; o["index_depends_on_arg"] = dependsOnArg(idx, seen1, 0, via);
+      if (auto *z = dyn_cast_or_null<ZExtInst>(idx)) o["index_zext_from_bits"] = (int64_t)z->getSrcTy()->getIntegerBitWidth();
+      fieldGeps.push_back(std::move(o));
+    }
     for (const BasicBlock &BB : F) for (const Instruction &I : BB) {
       if (isCtor) if (auto *st = dyn_cast<StoreInst>(&I)) if (auto *c = dyn_cast<ConstantInt>(st->getValueOperand())) {
         // store <const> through a GEP on `this` (arg 0)
@@ -246,6 +320,11 @@ int main(int argc, char **argv) {
   json::Object root;
   root["module"] = Input; root["globals"] = std::move(globals); root["ctor_stores"] = std::move(ctorStores);
   root["geps"] = std::move(geps); root["size_calls"] = std::move(sizeCalls); root["allocas"] = std::move(allocas);
+  root["field_geps"] = std::move(fieldGeps);
+  // data+size pair table: per struct, which (ptr field -> bound field) pairs the code itself uses in checks
+  json::Object pairs;
+  for (auto &[st, votes] : pairVotes) { json::Object v; for (auto &[k, n] : votes) v[k] = (int64_t)n; pairs[st] = std::move(v); }
+  root["field_pairs"] = std::move(pairs);
   std::error_code ec; raw_fd_ostream out(Output, ec);
   if (ec) { errs() << "cannot write " << Output << ": " << ec.message() << "\n"; return 1; }
   out << json::Value(std::move(root)) << "\n";

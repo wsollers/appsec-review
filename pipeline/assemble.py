@@ -36,10 +36,14 @@ for f in sarifs: cmd += ["--sarif", str(f)]
 for f in csa: cmd += ["--csa", str(f)]
 print(subprocess.run(cmd, capture_output=True, text=True).stdout.strip().splitlines()[0] if (sarifs or csa) else "no findings to verify")
 results = json.load(open(ver))["results"] if ver.exists() else []
+
+# CSA emits many code-quality checkers (DeadStores, CastToStruct, PointerArithm ...). Only
+# memory-safety checkers are candidates for the L3 lane; the rest are kept as informational
+# so the bundle's "unresolved" section is not 500 lines of alpha.* noise (EASTL, 2026-09-15).
 MEMSAFE_CSA = ("security.ArrayBound", "security.insecureAPI", "core.NullDereference", "core.uninitialized",
                "cplusplus.NewDelete", "cplusplus.NewDeleteLeaks", "unix.Malloc", "unix.MallocSizeof",
                "alpha.security.ArrayBound", "alpha.security.ReturnPtrRange", "alpha.security.taint",
-               "alpha.unix.cstring", "optin.taint", "core.StackAddressEscape",
+               "alpha.unix.cstring", "optin.taint", "alpha.core.BoolAssignment", "core.StackAddressEscape",
                "cplusplus.Move", "alpha.cplusplus.IteratorRange", "alpha.security.MallocOverflow")
 def is_candidate(r):
     return r["rule"].startswith("mythos/") or any(r["rule"].startswith(k) for k in MEMSAFE_CSA)

@@ -29,7 +29,10 @@ class Facts:
             d = json.load(open(path))
             for g in d["globals"]:
                 self.globals.setdefault(g["name"], g); self.globals_dem.setdefault(g.get("demangled", ""), g)
-            for kind in ("ctor_stores", "geps", "size_calls", "allocas"):
+            for st, votes in (d.get("field_pairs") or {}).items():
+                self.pairs.setdefault(st, {}).update(votes)
+            self.pairs = {}
+        for kind in ("ctor_stores", "geps", "size_calls", "allocas", "field_geps"):
                 for f in d[kind]:
                     l = f.get("loc") or {}
                     if "file" in l:
@@ -87,7 +90,28 @@ def v_constant_length_read(f, F):
         return result(f, "REFUTED" if c["size"] <= avail else "VERIFIED_PRIMITIVE", ev)
     return result(f, "UNRESOLVED", ev)
 
+def v_field_gep(f, F):
+    """Container-agnostic rule: index through a pointer loaded from a struct field.
+    REFUTED if the function compares the index/result against another field of the same struct
+    (mpEnd, ArrayNum, mCapacity...); VERIFIED_PRIMITIVE if the struct has a known bound field
+    (from field_pairs) that this site does not consult; else None (fall through)."""
+    fg = F.near("field_geps", f["file"], f["line"])
+    if not fg: return None
+    g = fg[0]
+    ev = {"struct": g["struct"], "ptr_field": g["ptr_field"], "bounded_by_fields": g["bounded_by_fields"],
+          "index_depends_on_arg": g.get("index_depends_on_arg")}
+    if g["bounded_by_fields"]:
+        return result(f, "REFUTED", ev | {"reason": "index compared against a sibling field of the same struct in this function"})
+    votes = F.pairs.get(g["struct"], {})
+    known = sorted((int(k.split(":")[1]), n) for k, n in votes.items() if int(k.split(":")[0]) == g["ptr_field"])
+    if known:
+        ev["known_bound_fields"] = known
+        return result(f, "VERIFIED_PRIMITIVE", ev, needs=["range: index vs bound field %s (used as the bound elsewhere in this struct's code) — not consulted here" % [k for k, _ in known]])
+    return None
+
 def v_unchecked_index(f, F):
+    r = v_field_gep(f, F)
+    if r: return r
     geps = F.near("geps", f["file"], f["line"])
     if not geps: return result(f, "UNRESOLVED", {"reason": "no non-constant GEP at this line in IR"})
     # pick the GEP whose base is a global/alloca array if any
