@@ -110,6 +110,11 @@ def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
     dbdir = ctu_dir / "db"; dbdir.mkdir(exist_ok=True)
     clean = [{k: v for k, v in e.items() if k in ("directory", "file", "arguments", "command", "output")} for e in all_entries]
     (dbdir / "compile_commands.json").write_text(json.dumps(clean))
+    import shutil
+    def resdir(cc):
+        try: return subprocess.run([cc, "-print-resource-dir"], capture_output=True, text=True, timeout=30).stdout.strip()
+        except Exception: return ""
+    cache = {}
     with open(ctu_dir / "invocations.yaml", "w") as fh:
         for e in all_entries:
             args, skip = [], False
@@ -119,6 +124,12 @@ def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
                 if a == "-o": skip = True; continue
                 if a.startswith("/Fo"): continue
                 args.append(a)
+            if args:
+                cc = shutil.which(args[0]) or args[0]
+                if cc not in cache: cache[cc] = resdir(cc)
+                args[0] = cc
+                if cache[cc] and not any(a.startswith("-resource-dir") for a in args):
+                    args.insert(1, f"-resource-dir={cache[cc]}")
             fh.write(json.dumps(e["file"]) + ": " + json.dumps(args) + "\n")
 
     def one(e):
