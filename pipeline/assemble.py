@@ -36,6 +36,15 @@ for f in sarifs: cmd += ["--sarif", str(f)]
 for f in csa: cmd += ["--csa", str(f)]
 print(subprocess.run(cmd, capture_output=True, text=True).stdout.strip().splitlines()[0] if (sarifs or csa) else "no findings to verify")
 results = json.load(open(ver))["results"] if ver.exists() else []
+MEMSAFE_CSA = ("security.ArrayBound", "security.insecureAPI", "core.NullDereference", "core.uninitialized",
+               "cplusplus.NewDelete", "cplusplus.NewDeleteLeaks", "unix.Malloc", "unix.MallocSizeof",
+               "alpha.security.ArrayBound", "alpha.security.ReturnPtrRange", "alpha.security.taint",
+               "alpha.unix.cstring", "optin.taint", "core.StackAddressEscape",
+               "cplusplus.Move", "alpha.cplusplus.IteratorRange", "alpha.security.MallocOverflow")
+def is_candidate(r):
+    return r["rule"].startswith("mythos/") or any(r["rule"].startswith(k) for k in MEMSAFE_CSA)
+informational = [r for r in results if not is_candidate(r)]
+results = [r for r in results if is_candidate(r)]
 
 # 2. dedupe
 seen, uniq = set(), []
@@ -73,7 +82,10 @@ bundle = {"schema": "mythos/bundle/0.1", "context": ctx, "modules": mods,
               "verified_primitive": "Mechanism confirmed against IR. Your job: resolve `needs` (reachability from an untrusted source, range, witness) or refute with evidence from a different substrate. Do not re-derive what evidence already states.",
               "unresolved": "Candidate with no mechanical disposition. State what fact would decide it before reading code.",
               "refuted": "Closed mechanically. Do not re-open without new evidence; listed so you know what was excluded and why."},
-          "verified_primitive": verified, "unresolved": unresolved, "refuted": refuted}
+          "verified_primitive": verified, "unresolved": unresolved, "refuted": refuted,
+          "informational": {"note": "non-memory-safety checkers; not lane input", "count": len(informational),
+                            "by_rule": dict(Counter(r["rule"] for r in informational).most_common()),
+                            "items": [{"rule": r["rule"], "file": r["file"], "line": r["line"], "message": r["message"][:160]} for r in informational]}}
 OUT.write_text(json.dumps(bundle, indent=1))
 
 # 5. markdown twin
@@ -86,4 +98,4 @@ for r in verified:
 md += ["", "## UNRESOLVED", ""] + [f"- {r['rule'].split('/')[-1]} `{r['file'].split('/')[-1]}:{r['line']}` — {r['verification']['evidence'].get('reason', '')}" for r in unresolved]
 md += ["", "## REFUTED (closed; evidence attached)", ""] + [f"- {r['rule'].split('/')[-1]} `{r['file'].split('/')[-1]}:{r['line']}` — {json.dumps(r['verification']['evidence'])[:120]}" for r in refuted]
 OUT.with_suffix(".md").write_text("\n".join(md) + "\n")
-print(f"bundle: {len(verified)} verified, {len(unresolved)} unresolved, {len(refuted)} refuted -> {OUT} / {OUT.with_suffix('.md')}")
+print(f"bundle: {len(verified)} verified, {len(unresolved)} unresolved, {len(refuted)} refuted, {len(informational)} informational -> {OUT} / {OUT.with_suffix('.md')}")

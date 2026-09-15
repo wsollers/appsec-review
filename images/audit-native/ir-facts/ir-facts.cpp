@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
   for (const Function &F : *M) {
     if (F.isDeclaration()) continue;
     const std::string fname = F.getName().str(), fdem = demangleName(F.getName());
-    const bool isCtor = fname.rfind("??0", 0) == 0;
+    const bool isCtor = fname.rfind("??0", 0) == 0 || (fname.rfind("_ZN", 0) == 0 && (fname.find("C1E") != std::string::npos || fname.find("C2E") != std::string::npos));
     for (const BasicBlock &BB : F) for (const Instruction &I : BB) {
       if (isCtor) if (auto *st = dyn_cast<StoreInst>(&I)) if (auto *c = dyn_cast<ConstantInt>(st->getValueOperand())) {
         // store <const> through a GEP on `this` (arg 0)
