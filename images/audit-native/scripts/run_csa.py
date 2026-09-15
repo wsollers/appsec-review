@@ -109,7 +109,13 @@ def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
     (dbdir / "compile_commands.json").write_text(json.dumps(clean))
     with open(ctu_dir / "invocations.yaml", "w") as fh:
         for e in all_entries:
-            args = [a for a in (e.get("arguments") or []) if a != "/c"]
+            args, skip = [], False
+            for a in (e.get("arguments") or []):
+                if skip: skip = False; continue
+                if a in ("/c", "-c"): continue
+                if a == "-o": skip = True; continue
+                if a.startswith("/Fo"): continue
+                args.append(a)
             fh.write(json.dumps(e["file"]) + ": " + json.dumps(args) + "\n")
 
     def one(e):
@@ -122,10 +128,16 @@ def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
                 lines.append(out)
             else:
                 failed.append({"file": f, "error": err})
-    (ctu_dir / "externalDefMap.txt").write_text("".join(lines))
-    n = sum(1 for _ in (ctu_dir / "externalDefMap.txt").open())
-    print(f"CTU: {n} external definitions mapped from {len(all_entries) - len(failed)}/{len(all_entries)} TUs -> {ctu_dir}")
-    return {"ctu_dir": str(ctu_dir), "extdefs": n, "tus_mapped": len(all_entries) - len(failed), "mapping_failed": failed}
+    defs = {}
+    for line in "".join(lines).splitlines():
+        if not line.strip(): continue
+        key, _, path = line.rpartition(" ")
+        defs.setdefault(key, set()).add(path)
+    unique = {k: next(iter(v)) for k, v in defs.items() if len(v) == 1}
+    ambiguous = sum(1 for v in defs.values() if len(v) > 1)
+    (ctu_dir / "externalDefMap.txt").write_text("".join(f"{k} {p}\n" for k, p in unique.items()))
+    print(f"CTU: {len(unique)} external definitions mapped ({ambiguous} ambiguous dropped) from {len(all_entries) - len(failed)}/{len(all_entries)} TUs -> {ctu_dir}")
+    return {"ctu_dir": str(ctu_dir), "extdefs": len(unique), "ambiguous_dropped": ambiguous, "tus_mapped": len(all_entries) - len(failed), "mapping_failed": failed}
 
 
 def collect_findings(results: list[dict]) -> list[dict]:
