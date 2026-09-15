@@ -97,10 +97,13 @@ bool dependsOnArg(const Value *v, std::set<const Value *> &seen, int depth, std:
 
 /** Field loads a value depends on: walks operands (bounded), collecting (struct, field-index)
     for every `load (gep %struct, 0, N)` reached. Used to relate an index to a bound field. */
-static std::map<const Function *, std::set<std::pair<std::string,int64_t>>> gGetterDeps;
+static std::map<const Function *, std::set<std::pair<std::string,int64_t>>> gGetterDeps;   // fn -> fields its return derives from
 
 void fieldDeps(const Value *v, std::set<std::pair<std::string,int64_t>> &out, std::set<const Value *> &seen, int depth) {
   if (!v || depth > 10 || !seen.insert(v).second) return;
+  // At -O0 nothing is inlined: `i < v.size()` compares against a CALL, not a field load.
+  // Getter summary: size()/end()/capacity() return values derived from fields (EASTL, 2026-09-15:
+  // VectorBase 0/123 bounded before this).
   if (auto *cb = dyn_cast<CallBase>(v)) {
     if (const Function *cf = cb->getCalledFunction()) { auto it = gGetterDeps.find(cf); if (it != gGetterDeps.end()) out.insert(it->second.begin(), it->second.end()); }
     for (const Use &op : cb->args()) fieldDeps(op.get(), out, seen, depth + 1);
@@ -222,22 +225,35 @@ int main(int argc, char **argv) {
       }
       if (!deps.empty()) gGetterDeps[&F] = deps;
     }
+  // comparisons per function, with the field loads each depends on and the values it touches
+  struct Cmp { const ICmpInst *I; std::set<std::pair<std::string,int64_t>> deps; std::set<const Value *> vals; };
+  std::map<const Function *, std::vector<Cmp>> fnCmps;
+  for (const Function &F : *M) {
+    if (F.isDeclaration()) continue;
+    for (const BasicBlock &BB : F) for (const Instruction &I : BB)
+      if (auto *ic = dyn_cast<ICmpInst>(&I)) {
+        Cmp c; c.I = ic; std::set<const Value *> seen;
+        for (const Use &op : ic->operands()) fieldDeps(op.get(), c.deps, seen, 0);
+        c.vals = seen; fnCmps[&F].push_back(std::move(c));
+      }
+  }
+  auto boundedIn = [&](const Function *fn, const Value *val, const std::string &sname, int64_t pf, json::Array *fields) {
+    bool any = false;
+    for (const Cmp &c : fnCmps[fn]) {
+      if (!c.vals.count(val)) continue;
+      for (auto &d : c.deps) if (d.first == sname && d.second != pf) { any = true; if (fields) fields->push_back(json::Object{{"field", d.second}}); }
+    }
+    return any;
+  };
+
   for (const Function &F : *M) {
     if (F.isDeclaration()) continue;
     const std::string fname = F.getName().str(), fdem = demangleName(F.getName());
     // constructors: MSVC mangling `??0Class@@...`; Itanium `_ZN...C1E...`/`C2E...` (complete/base object ctor)
     const bool isCtor = fname.rfind("??0", 0) == 0 ||
                         (fname.rfind("_ZN", 0) == 0 && (fname.find("C1E") != std::string::npos || fname.find("C2E") != std::string::npos));
-    // comparisons in this function and the field loads each operand depends on
-    struct Cmp { const ICmpInst *I; std::set<std::pair<std::string,int64_t>> deps; std::set<const Value *> vals; };
-    std::vector<Cmp> cmps;
-    for (const BasicBlock &BB : F) for (const Instruction &I : BB)
-      if (auto *ic = dyn_cast<ICmpInst>(&I)) {
-        Cmp c; c.I = ic; std::set<const Value *> seen;
-        for (const Use &op : ic->operands()) { fieldDeps(op.get(), c.deps, seen, 0); }
-        c.vals = seen; cmps.push_back(std::move(c));
-      }
-    // GEPs through a pointer loaded from a struct field: is the index/result compared against another field?
+    // GEPs through a pointer loaded from a struct field: is the index/result compared against
+    // another field of the same struct — here, or (if the index is a parameter) at the call sites?
     for (const BasicBlock &BB : F) for (const Instruction &I : BB) {
       auto *gep = dyn_cast<GetElementPtrInst>(&I);
       if (!gep || gep->hasAllConstantIndices()) continue;
@@ -247,19 +263,35 @@ int main(int argc, char **argv) {
       const Value *idx = nullptr;
       for (const Use &u : gep->indices()) if (!isa<ConstantInt>(u.get())) { idx = u.get(); break; }
       json::Object o; o["function"] = fname; o["demangled"] = fdem; o["struct"] = sname; o["ptr_field"] = pf; o["loc"] = loc(I.getDebugLoc());
-      // deps of the index itself
-      std::set<std::pair<std::string,int64_t>> idxDeps; std::set<const Value *> seen0; fieldDeps(idx, idxDeps, seen0, 0);
       json::Array bounds;
-      for (const Cmp &c : cmps) {
-        // does this comparison involve the index or the GEP result?
-        bool touches = c.vals.count(idx) || c.vals.count(gep);
-        if (!touches) for (const Value *v : c.vals) if (v == idx || v == gep) touches = true;
-        if (!touches) continue;
-        for (auto &d : c.deps) if (d.first == sname && d.second != pf) { bounds.push_back(json::Object{{"field", d.second}}); pairVotes[sname][std::to_string(pf) + ":" + std::to_string(d.second)]++; }
-      }
+      bool here = boundedIn(&F, idx, sname, pf, &bounds); here = boundedIn(&F, gep, sname, pf, &bounds) || here;
+      for (auto &b : bounds) pairVotes[sname][std::to_string(pf) + ":" + std::to_string(*b.getAsObject()->getInteger("field"))]++;
       o["bounded_by_fields"] = std::move(bounds);
       std::set<const Value *> seen1; std::string via; o["index_depends_on_arg"] = dependsOnArg(idx, seen1, 0, via);
       if (auto *z = dyn_cast_or_null<ZExtInst>(idx)) o["index_zext_from_bits"] = (int64_t)z->getSrcTy()->getIntegerBitWidth();
+      // interprocedural: index comes from parameter argN (operator[](n) is not inlined at -O0; the
+      // check `i < v.size()` is in the CALLER). Examine every call site of this function.
+      if (!here && !via.empty() && via.rfind("arg", 0) == 0) {
+        unsigned argNo = std::stoul(via.substr(3));
+        o["index_arg"] = (int64_t)argNo;
+        json::Array sites; int nb = 0, nu = 0;
+        for (const User *u : F.users()) {
+          auto *cb = dyn_cast<CallBase>(u);
+          if (!cb || cb->getCalledFunction() != &F || argNo >= cb->arg_size()) continue;
+          const Function *caller = cb->getFunction();
+          const Value *actual = cb->getArgOperand(argNo);
+          json::Array cf;
+          bool b = boundedIn(caller, actual, sname, pf, &cf);
+          if (!b) {   // the argument may be a load/zext of a local that is compared elsewhere in the caller
+            std::set<const Value *> seen2; std::string via2; (void)dependsOnArg(actual, seen2, 0, via2);
+            for (const Value *v : seen2) if (v != actual && boundedIn(caller, v, sname, pf, &cf)) { b = true; break; }
+          }
+          b ? ++nb : ++nu;
+          if (!b || sites.size() < 8)
+            sites.push_back(json::Object{{"caller", demangleName(caller->getName())}, {"loc", loc(cb->getDebugLoc())}, {"bounded", b}});
+        }
+        o["callsites_bounded"] = (int64_t)nb; o["callsites_unbounded"] = (int64_t)nu; o["callsites"] = std::move(sites);
+      }
       fieldGeps.push_back(std::move(o));
     }
     for (const BasicBlock &BB : F) for (const Instruction &I : BB) {

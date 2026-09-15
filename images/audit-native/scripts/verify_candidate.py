@@ -23,7 +23,7 @@ def base(p): return (p or "").replace("\\", "/").split("/")[-1]
 
 class Facts:
     def __init__(self, paths):
-        self.globals, self.globals_dem = {}, {}
+        self.globals, self.globals_dem, self.pairs = {}, {}, {}
         self.by_loc = defaultdict(lambda: defaultdict(list))   # kind -> (file, line) -> [fact]
         for path in paths:
             d = json.load(open(path))
@@ -31,8 +31,7 @@ class Facts:
                 self.globals.setdefault(g["name"], g); self.globals_dem.setdefault(g.get("demangled", ""), g)
             for st, votes in (d.get("field_pairs") or {}).items():
                 self.pairs.setdefault(st, {}).update(votes)
-            self.pairs = {}
-        for kind in ("ctor_stores", "geps", "size_calls", "allocas", "field_geps"):
+            for kind in ("ctor_stores", "geps", "size_calls", "allocas", "field_geps"):
                 for f in d[kind]:
                     l = f.get("loc") or {}
                     if "file" in l:
