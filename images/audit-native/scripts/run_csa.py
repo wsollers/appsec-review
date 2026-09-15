@@ -90,9 +90,12 @@ def analyze_one(entry: dict, out_dir: Path, checkers: list[str], timeout: int,
                 n = len(plistlib.load(fh).get("diagnostics", []))
         except Exception:
             status = "BAD_PLIST"
+    if status != "OK" and err:
+        plist.with_suffix(".stderr").write_text(err)   # full compiler/analyzer output for diagnosis
+    errs = [l for l in err.splitlines() if "error:" in l][:5]
     return {"file": src, "project": proj, "status": status, "seconds": round(time.time() - t0, 1),
             "plist": str(plist) if plist.exists() else None, "diagnostics": n,
-            "stderr_tail": err.strip().splitlines()[-3:] if status != "OK" else []}
+            "errors": errs, "stderr_tail": err.strip().splitlines()[-3:] if status != "OK" else []}
 
 
 def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
