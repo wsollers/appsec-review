@@ -26,19 +26,7 @@ R() { "$RUN" "$TARGET" "$MSVC" "$SCRATCH" -- "$@"; }
 step "compile database"
 if [ -n "$CDB" ]; then
   # normalise to container paths: the DB was produced on the host for <TARGET>; rewrite that prefix to /workspace
-  python3 - "$CDB" "$(realpath "$TARGET")" "$SCRATCH/compile_commands.json" "$PROJECT" <<'PY'
-import json, sys
-src, root, out, proj = sys.argv[1:]
-db = json.load(open(src)); n = 0
-for e in db:
-    e["project"] = e.get("project", proj)
-    for k in ("directory", "file", "output"):
-        if k in e and e[k].startswith(root): e[k] = "/workspace" + e[k][len(root):]
-    if "arguments" in e: e["arguments"] = ["/workspace" + a[len(root):] if a.startswith(root) else a for a in e["arguments"]]
-    if "command" in e: e["command"] = e["command"].replace(root, "/workspace")
-    n += 1
-json.dump(db, open(out, "w"), indent=1); print(f"{n} entries rewritten -> {out}")
-PY
+  python3 "$HERE/pipeline/normalize_compile_db.py" "$CDB" "$(realpath "$TARGET")" "$SCRATCH/compile_commands.json" "$PROJECT"
 else
   R /opt/scripts/vcxproj_to_compile_commands.py --root /workspace --config Release --platform x64 \
     --msvc-root /msvc --out /scratch/compile_commands.json --audit /scratch/compile-command-audit.seed.json

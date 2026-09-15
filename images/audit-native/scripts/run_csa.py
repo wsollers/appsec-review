@@ -59,6 +59,7 @@ def analyze_one(entry: dict, out_dir: Path, checkers: list[str], timeout: int,
     rel = src[len("/workspace/"):] if src.startswith("/workspace/") else src
     plist = out_dir / proj / (rel.replace("/", "__") + ".plist")
     plist.parent.mkdir(parents=True, exist_ok=True)
+    gnu = not opts[0].endswith("clang-cl")   # GNU driver (Linux targets) vs cl driver
     cmd = opts + ["--analyze", "-Xclang", "-analyzer-output=plist-multi-file",
                   # required by several alpha.* checkers; enabling their package without
                   # it is a hard error ("checker cannot be enabled with analyzer option
@@ -74,7 +75,7 @@ def analyze_one(entry: dict, out_dir: Path, checkers: list[str], timeout: int,
         for kv in (f"experimental-enable-naive-ctu-analysis=true", f"ctu-dir={ctu_dir}",
                    f"ctu-invocation-list={ctu_dir / 'invocations.yaml'}"):
             cmd += ["-Xclang", "-analyzer-config", "-Xclang", kv]
-    cmd += ["/clang:-o" + str(plist), "--", src]
+    cmd += (["-o", str(plist), src] if gnu else ["/clang:-o" + str(plist), "--", src])
     t0 = time.time()
     try:
         p = subprocess.run(cmd, cwd=entry.get("directory") or None, capture_output=True, text=True, timeout=timeout)
@@ -165,6 +166,9 @@ def main():
     all_entries = json.loads(Path(a.compile_commands).read_text())
     entries = all_entries
     taint_config = None if a.taint_config == "none" else a.taint_config
+    first = all_entries[0].get("arguments") or []
+    if taint_config == DEFAULT_TAINT_CONFIG and first and not first[0].endswith("clang-cl"):
+        taint_config = None   # Linux target: CSA's built-in libc sources apply; Win32 model would be inert
     if a.filter:
         rx = re.compile(a.filter)
         entries = [e for e in entries if rx.search(e["file"])]
