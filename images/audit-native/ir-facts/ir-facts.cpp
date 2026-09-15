@@ -97,8 +97,15 @@ bool dependsOnArg(const Value *v, std::set<const Value *> &seen, int depth, std:
 
 /** Field loads a value depends on: walks operands (bounded), collecting (struct, field-index)
     for every `load (gep %struct, 0, N)` reached. Used to relate an index to a bound field. */
+static std::map<const Function *, std::set<std::pair<std::string,int64_t>>> gGetterDeps;
+
 void fieldDeps(const Value *v, std::set<std::pair<std::string,int64_t>> &out, std::set<const Value *> &seen, int depth) {
   if (!v || depth > 10 || !seen.insert(v).second) return;
+  if (auto *cb = dyn_cast<CallBase>(v)) {
+    if (const Function *cf = cb->getCalledFunction()) { auto it = gGetterDeps.find(cf); if (it != gGetterDeps.end()) out.insert(it->second.begin(), it->second.end()); }
+    for (const Use &op : cb->args()) fieldDeps(op.get(), out, seen, depth + 1);
+    return;
+  }
   if (auto *ld = dyn_cast<LoadInst>(v)) {
     const Value *p = ld->getPointerOperand()->stripPointerCasts();
     if (auto *g = dyn_cast<GetElementPtrInst>(p))
@@ -206,6 +213,15 @@ int main(int argc, char **argv) {
     globals.push_back(std::move(o));
   }
 
+  for (int round = 0; round < 2; ++round)
+    for (const Function &F : *M) {
+      if (F.isDeclaration() || F.getReturnType()->isVoidTy()) continue;
+      std::set<std::pair<std::string,int64_t>> deps;
+      for (const BasicBlock &BB : F) if (auto *ret = dyn_cast<ReturnInst>(BB.getTerminator())) {
+        std::set<const Value *> seen; fieldDeps(ret->getReturnValue(), deps, seen, 0);
+      }
+      if (!deps.empty()) gGetterDeps[&F] = deps;
+    }
   for (const Function &F : *M) {
     if (F.isDeclaration()) continue;
     const std::string fname = F.getName().str(), fdem = demangleName(F.getName());
@@ -227,6 +243,7 @@ int main(int argc, char **argv) {
       if (!gep || gep->hasAllConstantIndices()) continue;
       std::string sname; int64_t pf;
       if (!loadedFromField(gep->getPointerOperand(), sname, pf)) continue;
+      if (sname.find("__va_list_tag") != std::string::npos) continue;
       const Value *idx = nullptr;
       for (const Use &u : gep->indices()) if (!isa<ConstantInt>(u.get())) { idx = u.get(); break; }
       json::Object o; o["function"] = fname; o["demangled"] = fdem; o["struct"] = sname; o["ptr_field"] = pf; o["loc"] = loc(I.getDebugLoc());

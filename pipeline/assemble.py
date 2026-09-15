@@ -34,7 +34,12 @@ cmd = [sys.executable, str(Path(a.repo) / "images/audit-native/scripts/verify_ca
 for f in facts: cmd += ["--ir-facts", f]
 for f in sarifs: cmd += ["--sarif", str(f)]
 for f in csa: cmd += ["--csa", str(f)]
-print(subprocess.run(cmd, capture_output=True, text=True).stdout.strip().splitlines()[0] if (sarifs or csa) else "no findings to verify")
+if sarifs or csa:
+    pr = subprocess.run(cmd, capture_output=True, text=True)
+    if pr.returncode != 0: sys.exit("verify_candidate failed:\n" + pr.stderr[-2000:])
+    print(pr.stdout.strip().splitlines()[0])
+else:
+    print("no findings to verify")
 results = json.load(open(ver))["results"] if ver.exists() else []
 
 # CSA emits many code-quality checkers (DeadStores, CastToStruct, PointerArithm ...). Only
