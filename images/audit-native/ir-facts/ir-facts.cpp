@@ -142,6 +142,24 @@ bool loadedFromField(const Value *ptr, std::string &sname, int64_t &field) {
   return false;
 }
 
+/** If idx is an integer parameter (through zext/sext/trunc or a -O0 spill slot), return its
+    number, else -1. Deliberately NOT "depends on an argument": a loop counter bounded by a
+    member depends on `this`, and treating `this` as the index parameter sent the call-site
+    check after the wrong value (EASTL FindSwitch, 2026-09-15). */
+int indexParam(const Value *v) {
+  for (int i = 0; i < 6 && v; ++i) {
+    if (auto *a = dyn_cast<Argument>(v)) return a->getType()->isIntegerTy() ? (int)a->getArgNo() : -1;
+    if (auto *c = dyn_cast<CastInst>(v)) { v = c->getOperand(0); continue; }
+    if (auto *ld = dyn_cast<LoadInst>(v)) {
+      const Value *slot = ld->getPointerOperand()->stripPointerCasts(); const Value *stored = nullptr;
+      for (const User *u : slot->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == slot) { stored = st->getValueOperand(); break; }
+      v = stored; continue;
+    }
+    return -1;
+  }
+  return -1;
+}
+
 std::string constOrExpr(const Value *v, bool &isConst, int64_t &cval) {
   isConst = false;
   if (auto *c = dyn_cast<ConstantInt>(v)) { isConst = true; cval = c->getSExtValue(); return std::to_string(cval); }
@@ -271,8 +289,9 @@ int main(int argc, char **argv) {
       if (auto *z = dyn_cast_or_null<ZExtInst>(idx)) o["index_zext_from_bits"] = (int64_t)z->getSrcTy()->getIntegerBitWidth();
       // interprocedural: index comes from parameter argN (operator[](n) is not inlined at -O0; the
       // check `i < v.size()` is in the CALLER). Examine every call site of this function.
-      if (!here && !via.empty() && via.rfind("arg", 0) == 0) {
-        unsigned argNo = std::stoul(via.substr(3));
+      int ip = indexParam(idx);
+      if (!here && ip >= 0) {
+        unsigned argNo = (unsigned)ip;
         o["index_arg"] = (int64_t)argNo;
         json::Array sites; int nb = 0, nu = 0;
         for (const User *u : F.users()) {
