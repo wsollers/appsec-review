@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review-process/artifact-manifest/0.1",
+  "run_id": "",
+  "project": "",
+  "target": {
+    "repo_path": "",
+    "compile_database": "",
+    "platforms": [],
+    "business_goal": ""
+  },
+  "engagement_output": "",
+  "core_artifacts": {
+    "job_status_md": "",
+    "job_status_json": "",
+    "job_manifest_jsonl": "",
+    "llm_input_md": "",
+    "coverage_ledger_json": "",
+    "correlated_findings_json": "",
+    "deep_confirmation_json": "",
+    "retrieval_plan_json": ""
+  },
+  "derived_artifacts": {
+    "component_purpose_map_json": "",
+    "component_purpose_map_md": "",
+    "dfd_stride_md": "",
+    "asvs_masvs_plan_md": "",
+    "verified_findings_json": "",
+    "final_report_md": ""
+  },
+  "notes": []
+}
+

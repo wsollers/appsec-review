@@ -1,0 +1,17 @@
+{
+  "schema": "appsec-review-process/lane-status/0.1",
+  "run_id": "",
+  "process": "",
+  "budget": "probe",
+  "status": "OK",
+  "started_at": "",
+  "completed_at": "",
+  "outputs": [],
+  "inputs": [],
+  "scope_included": [],
+  "scope_excluded": [],
+  "deferred_work": [],
+  "coverage_gaps": [],
+  "blocking_issues": [],
+  "next_recommended_process": ""
+}

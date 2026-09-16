@@ -1,0 +1,82 @@
+# Artifact Contract
+
+This file defines where process artifacts live and which artifacts are required before each lane.
+
+## Canonical Evidence
+
+Canonical scanner/evidence output lives under:
+
+```text
+scratch/<project>-engagement/
+```
+
+Expected core files:
+
+```text
+job-status.md
+job-status.json
+job-manifest.jsonl
+static-evidence/MANIFEST.json
+static-evidence/SUMMARY.md
+native-scratch/pregather-manifest.json
+llm/ENGAGEMENT_LLM_INPUT.md
+llm/coverage-ledger.json
+llm/correlated-findings.json
+llm/correlated-findings.md
+llm/deep-confirmation.json
+llm/deep-confirmation.md
+llm/retrieval-plan.json
+llm/retrieval-plan.md
+```
+
+## Process Run State
+
+Process orchestration state lives under:
+
+```text
+appsec-review-process/runs/<run_id>/
+```
+
+This directory is ignored by git. It may contain sensitive or large review outputs.
+
+Expected layout:
+
+```text
+run-status.json
+run-status.md
+events.jsonl
+inputs/artifact-manifest.json
+outputs/<process>/<artifact>.md
+outputs/<process>/<artifact>.json
+processes/<process>/status.json
+handoffs/<process>.md
+```
+
+## Artifact Manifest
+
+Each run should stage an artifact manifest at:
+
+```text
+appsec-review-process/runs/<run_id>/inputs/artifact-manifest.json
+```
+
+Use `templates/artifact-manifest.template.json` as the starting shape.
+
+## Lane Output Rule
+
+Every process lane should produce:
+
+- a markdown result for human review
+- a JSON result for downstream automation when structured data matters
+- a process `status.json`
+
+If a lane cannot produce its expected output, it must fail or block with a reason and a rerun point.
+
+## Sensitive Data
+
+Do not copy raw secret values into tracked files. If evidence includes secrets:
+
+- keep raw evidence in ignored scratch/process run directories
+- use scrubbed evidence for sharing
+- cite file paths/rule IDs/line numbers without reproducing secret values
+

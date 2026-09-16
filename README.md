@@ -21,6 +21,7 @@ remains the editing surface until this repo takes over — see `docs/decisions/A
 | `schemas/` | JSON Schema for findings, contracts, component-purpose-map, index-manifest, compile-command-audit, patch-policy |
 | `contracts/` | One YAML lane contract per lane (L0–L15, L0A, L6A/B) |
 | `prompts/skills/`, `prompts/lanes/` | Reusable agent skills and per-lane prompts |
+| `appsec-review-process/` | Tracked manual LLM process harness: initiation/recovery prompt, lane folders, configs, subprompts, ignored logs |
 | `validation/` | Ground-truth corpus manifest and harnesses (Notepad++ v8.5.6 → v8.5.7 first) |
 | `targets/` | Ignored local target checkouts, such as EASTL, kept out of git |
 | `scratch/` | Ignored local run outputs, databases, bitcode, logs, and LLM packages |

@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review-process/manifest/0.1",
+  "default_environment": "local-wsl-docker",
+  "default_budget": "probe",
+  "budget_policy": "appsec-review-process/budget-policy.md",
+  "state_root": "appsec-review-process/runs/<run_id>",
+  "artifact_policy": "canonical engagement artifacts stay under scratch/<project>-engagement; process-run notes and lane outputs stay under appsec-review-process/runs/<run_id>",
+  "process_order": [
+    "00-intake-recovery",
+    "02-evidence-pregather",
+    "01-component-characterization",
+    "03-threat-model-dfd-stride",
+    "04-asvs-masvs",
+    "05-native-memory",
+    "06-cve-reachability",
+    "07-red-team-adversarial",
+    "08-blue-team-refutation",
+    "09-independent-verification",
+    "10-synthesis-report"
+  ],
+  "required_global_inputs": [
+    "target repo path",
+    "engagement output directory",
+    "business decision / review goal",
+    "current job-status.md or plan to run pregather"
+  ],
+  "required_global_artifacts_after_pregather": [
+    "job-status.md",
+    "job-manifest.jsonl",
+    "llm/ENGAGEMENT_LLM_INPUT.md",
+    "llm/coverage-ledger.json",
+    "llm/correlated-findings.json",
+    "llm/deep-confirmation.json",
+    "llm/retrieval-plan.json"
+  ],
+  "completion_gate": {
+    "final_report_requires": [
+      "component-purpose map",
+      "coverage ledger",
+      "verified or explicitly unresolved findings",
+      "independent verification for high/critical or ship-blocking claims",
+      "documented limitations"
+    ]
+  }
+}
