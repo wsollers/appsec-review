@@ -405,8 +405,8 @@ RUN pip3 install --no-cache-dir \
       mobsfscan==${MOBSFSCAN_VERSION}
 
 # --- This repo's own evidence-shaping scripts --------------------------------
-COPY build_symbol_index.py md_to_sarif.py build_semantic_index.py query_semantic_index.py \
-     scrub_evidence.py php_parse_coverage.py run-sast-php.sh run-dockerfile-lint.sh \
+COPY scripts/build_symbol_index.py scripts/md_to_sarif.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
+     scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh scripts/run-dockerfile-lint.sh \
      /opt/scripts/
 RUN chmod +x /opt/scripts/*.py /opt/scripts/run-sast-php.sh /opt/scripts/run-dockerfile-lint.sh
 
@@ -426,7 +426,7 @@ RUN chmod +x /opt/scripts/*.py /opt/scripts/run-sast-php.sh /opt/scripts/run-doc
 # hit joern-parse and ast-grep-scan twice elsewhere in this toolbox).
 # psalm.xml's own schema was confirmed against Psalm's documented minimal
 # example, not guessed.
-COPY psalm.xml /opt/config/psalm.xml
+COPY images/audit-static/psalm.xml /opt/config/psalm.xml
 
 # 2026-09-10 fix (confirmed live against a real fsh-server run's
 # dockerfile-lint.stderr.log — not guessed): dockerfile-lint's own former

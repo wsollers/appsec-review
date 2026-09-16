@@ -1,6 +1,7 @@
 # evidence and run outputs never enter the repo
 /evidence/
 /scratch/
+/targets/
 /runs/
 *.jsonl
 !schemas/**/*.jsonl
@@ -20,4 +21,5 @@ Thumbs.db
 images/audit-codeql/codeql-bundle-linux64.tar.zst
 # per-target scratch outputs (databases, bitcode, logs) — never committed
 /scratch*/
+/targets*/
 /runs/

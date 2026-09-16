@@ -8,11 +8,10 @@
     so you can rebuild the toolbox on its own (after editing the Dockerfile,
     bumping a tool version, etc.) without re-running a scan.
 
-.PARAMETER DockerfileDir
-    Directory containing Dockerfile and the six scripts it COPYs in:
-    build_symbol_index.py, md_to_sarif.py, build_semantic_index.py,
-    query_semantic_index.py, scrub_evidence.py, php_parse_coverage.py.
-    Defaults to the directory this script lives in.
+.PARAMETER ContextDir
+    Docker build context. Defaults to the repository root. The Dockerfile lives
+    under images/audit-static and COPYs scripts from the repo's scripts/
+    directory.
 
 .PARAMETER Tag
     Image tag to build. Defaults to vendor-audit-toolbox:latest.
@@ -27,16 +26,16 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$DockerfileDir = $PSScriptRoot,
+    [string]$ContextDir = (Split-Path -Parent $PSScriptRoot),
     [string]$Tag = "vendor-audit-toolbox:latest",
     [switch]$NoCache
 )
 
 $ErrorActionPreference = "Stop"
 
-$dockerfile = Join-Path $DockerfileDir "Dockerfile"
+$dockerfile = Join-Path $ContextDir "images/audit-static/Dockerfile"
 if (-not (Test-Path $dockerfile)) {
-    throw "No Dockerfile found at $dockerfile - pass -DockerfileDir, or run this script from the same folder as the Dockerfile."
+    throw "No Dockerfile found at $dockerfile - pass -ContextDir pointing at the repository root."
 }
 # scrub_evidence.py (E4-1 fix - evidence-tree secret scrubbing) and
 # php_parse_coverage.py (S6-1 fix - PHP parse-coverage ledger) added to this
@@ -45,12 +44,12 @@ if (-not (Test-Path $dockerfile)) {
 # `docker build` would fail later with a much less clear "file not found"
 # from COPY itself.
 foreach ($required in @("build_symbol_index.py", "md_to_sarif.py", "build_semantic_index.py", "query_semantic_index.py", "scrub_evidence.py", "php_parse_coverage.py")) {
-    if (-not (Test-Path (Join-Path $DockerfileDir $required))) {
-        throw "Missing $required next to the Dockerfile - the image COPYs this in at build time."
+    if (-not (Test-Path (Join-Path $ContextDir "scripts/$required"))) {
+        throw "Missing scripts/$required - the image COPYs this in at build time."
     }
 }
 
-Write-Host "Building $Tag from $DockerfileDir ..." -ForegroundColor Cyan
+Write-Host "Building $Tag from $ContextDir using $dockerfile ..." -ForegroundColor Cyan
 Write-Host "This installs a Go toolchain, a Rust toolchain (for weggli), Composer packages, and" -ForegroundColor DarkGray
 Write-Host "several pip/go-installed scanners from their upstream sources - expect this to take" -ForegroundColor DarkGray
 Write-Host "several minutes on first build and to need outbound network access." -ForegroundColor DarkGray
@@ -62,7 +61,7 @@ Write-Host "several minutes on first build and to need outbound network access."
 # that caused it. Worth the noisier output for that reason alone.
 $buildArgs = @("build", "--progress=plain", "-t", $Tag, "-f", $dockerfile)
 if ($NoCache) { $buildArgs += "--no-cache" }
-$buildArgs += $DockerfileDir
+$buildArgs += $ContextDir
 
 & docker @buildArgs
 if ($LASTEXITCODE -ne 0) {

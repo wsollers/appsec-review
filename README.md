@@ -22,6 +22,8 @@ remains the editing surface until this repo takes over — see `docs/decisions/A
 | `contracts/` | One YAML lane contract per lane (L0–L15, L0A, L6A/B) |
 | `prompts/skills/`, `prompts/lanes/` | Reusable agent skills and per-lane prompts |
 | `validation/` | Ground-truth corpus manifest and harnesses (Notepad++ v8.5.6 → v8.5.7 first) |
+| `targets/` | Ignored local target checkouts, such as EASTL, kept out of git |
+| `scratch/` | Ignored local run outputs, databases, bitcode, logs, and LLM packages |
 
 ## Operating assumption
 
@@ -38,6 +40,29 @@ one appears, is a bonus (native `cl` builds for release/analysis diffing), not a
 4. `audit-static` refactor: strip native tooling out, pin the remaining floating installs
 5. `audit-container`, `audit-iac`, `audit-report`
 6. Prompts in dependency order: `lane-contract`, `finding-schema` skills → L0/L0A → L3 → L7 → L14 → discovery lanes
+
+## WSL-local target workflow
+
+For real runs on Windows/WSL, use a repo checkout on the WSL ext4 filesystem, not under
+`/mnt/c` or `/mnt/f`. Keep cloned targets under the ignored repo-local `targets/` directory
+and write outputs under ignored `scratch/` so Docker bind mounts stay on fast WSL storage.
+
+```bash
+cd ~/projects/appsec-review
+mkdir -p targets scratch
+git clone --depth 1 https://github.com/electronicarts/EASTL targets/eastl
+cmake -S targets/eastl -B targets/eastl/build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+export CODEQL_LICENSE_BASIS=oss
+bash pipeline/engagement_job.sh \
+  --project eastl \
+  --target "$PWD/targets/eastl" \
+  --compile-db "$PWD/targets/eastl/build/compile_commands.json" \
+  --out "$PWD/scratch/eastl-engagement" \
+  --msvc -
+
+cat scratch/eastl-engagement/job-status.md
+```
 
 ## Non-negotiables carried over from the previous toolbox
 

@@ -14,6 +14,8 @@ if ($CompileDb) {
 } else {
   R /opt/scripts/vcxproj_to_compile_commands.py --root /workspace --config Release --platform x64 --msvc-root /msvc --out /scratch/compile_commands.json --audit /scratch/compile-command-audit.seed.json
 }
+Step "native SAST (clang-tidy + cppcheck)"
+R /opt/scripts/run_native_sast.py --compile-commands /scratch/compile_commands.json --out /scratch/native-sast
 Step "feasibility gate"; R /opt/scripts/compile_feasibility_gate.py --compile-commands /scratch/compile_commands.json --out /scratch/feasibility.json
 Step "emit IR"; Remove-Item -Recurse -Force (Join-Path $Scratch ir),(Join-Path $Scratch linked) -ErrorAction SilentlyContinue
 R /opt/scripts/compile_feasibility_gate.py --compile-commands /scratch/compile_commands.json --out /scratch/feasibility-ir.json --emit-ir --ir-dir /scratch/ir
@@ -22,8 +24,11 @@ Step "ir-facts"; foreach ($m in Get-ChildItem (Join-Path $Scratch linked) -Filte
 if ($Csa) { Step "CSA"; R /opt/scripts/run_csa.py --compile-commands /scratch/compile_commands.json --out /scratch/csa --ctu --alpha }
 if ($CodeQL) { Step "CodeQL traced DB + mythos pack"
   $env:AUDIT_NATIVE_IMAGE = if ($env:AUDIT_CODEQL_IMAGE) { $env:AUDIT_CODEQL_IMAGE } else { "audit-codeql-native:local" }
-  & $Run $Target $Msvc $Scratch -- /opt/scripts/run-codeql.sh --langs cpp --traced-cpp /scratch/compile_commands.json --ram $(if ($env:CODEQL_RAM) { $env:CODEQL_RAM } else { "12000" })
-  & $Run $Here - $Scratch -- bash -c "cd /scratch/codeql && rm -f db-cpp/db-cpp/default/cache/.lock && codeql database analyze db-cpp /workspace/queries/mythos-cpp --additional-packs=/opt/codeql/qlpacks --format=sarif-latest --output=mythos.sarif --threads=4 --ram=12000 --rerun 2>&1 | grep -iE error || true"
+  $ram = if ($env:CODEQL_RAM) { $env:CODEQL_RAM } else { "12000" }
+  & $Run $Target $Msvc $Scratch -- /opt/scripts/run-codeql.sh --langs cpp --traced-cpp /scratch/compile_commands.json --ram $ram
+  if ($LASTEXITCODE) { throw "CodeQL regular suite failed ($LASTEXITCODE)" }
+  & $Run $Here - $Scratch -- bash -c "set -euo pipefail; cd /scratch/codeql; rm -f db-cpp/db-cpp/default/cache/.lock; codeql database analyze db-cpp /workspace/queries/mythos-cpp --additional-packs=/opt/codeql/qlpacks --format=sarif-latest --output=mythos.sarif --threads=4 --ram=$ram --rerun > mythos-analyze.log 2>&1; python3 -c 'import json; print(""mythos findings:"", sum(len(r.get(""results"", [])) for r in json.load(open(""mythos.sarif"")).get(""runs"", [])))'"
+  if ($LASTEXITCODE) { throw "CodeQL mythos query pack failed ($LASTEXITCODE)" }
   Remove-Item Env:AUDIT_NATIVE_IMAGE }
 Step "manifest"; python3 (Join-Path $Here "pipeline/manifest.py") $Scratch $Project $Target
 Write-Host "pregather complete -> $Scratch" -ForegroundColor Green

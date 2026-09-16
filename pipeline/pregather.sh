@@ -32,6 +32,8 @@ else
     --msvc-root /msvc --out /scratch/compile_commands.json --audit /scratch/compile-command-audit.seed.json
 fi
 
+step "native SAST (clang-tidy + cppcheck)"
+R /opt/scripts/run_native_sast.py --compile-commands /scratch/compile_commands.json --out /scratch/native-sast
 step "feasibility gate"
 R /opt/scripts/compile_feasibility_gate.py --compile-commands /scratch/compile_commands.json --out /scratch/feasibility.json
 step "emit IR"
@@ -48,8 +50,11 @@ if [ "$DO_CODEQL" = 1 ]; then step "CodeQL traced DB + mythos pack"
   AUDIT_NATIVE_IMAGE=${AUDIT_CODEQL_IMAGE:-audit-codeql-native:local} "$RUN" "$TARGET" "$MSVC" "$SCRATCH" -- \
     /opt/scripts/run-codeql.sh --langs cpp --traced-cpp /scratch/compile_commands.json --ram "${CODEQL_RAM:-12000}"
   AUDIT_NATIVE_IMAGE=${AUDIT_CODEQL_IMAGE:-audit-codeql-native:local} "$RUN" "$HERE" - "$SCRATCH" -- bash -c \
-    "cd /scratch/codeql && rm -f db-cpp/db-cpp/default/cache/.lock && codeql database analyze db-cpp /workspace/queries/mythos-cpp \
-     --additional-packs=/opt/codeql/qlpacks --format=sarif-latest --output=mythos.sarif --threads=4 --ram=${CODEQL_RAM:-12000} --rerun 2>&1 | grep -iE 'error' || true"
+    "set -euo pipefail; cd /scratch/codeql; rm -f db-cpp/db-cpp/default/cache/.lock; \
+     codeql database analyze db-cpp /workspace/queries/mythos-cpp \
+       --additional-packs=/opt/codeql/qlpacks --format=sarif-latest --output=mythos.sarif \
+       --threads=4 --ram=${CODEQL_RAM:-12000} --rerun > mythos-analyze.log 2>&1; \
+     python3 -c 'import json; print(\"mythos findings:\", sum(len(r.get(\"results\", [])) for r in json.load(open(\"mythos.sarif\")).get(\"runs\", [])))'"
 fi
 step "manifest"
 python3 "$HERE/pipeline/manifest.py" "$SCRATCH" "$PROJECT" "$TARGET"
