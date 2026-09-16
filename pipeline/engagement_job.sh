@@ -41,6 +41,8 @@ Outputs:
   DIR/llm/native-bundle.md
   DIR/llm/correlated-findings.json
   DIR/llm/correlated-findings.md
+  DIR/llm/deep-confirmation.json
+  DIR/llm/deep-confirmation.md
   DIR/llm/retrieval-plan.json
   DIR/llm/retrieval-plan.md
   DIR/llm/coverage-ledger.json
@@ -156,6 +158,12 @@ run_step "correlate-findings" python3 "$ROOT/pipeline/correlate_findings.py" \
   --bundle "$LLM_DIR/native-bundle.json" \
   --out "$LLM_DIR/correlated-findings.json" || true
 
+run_step "deep-confirmation" python3 "$ROOT/pipeline/deep_confirm.py" \
+  --static-evidence "$STATIC_EVIDENCE" \
+  --native-scratch "$NATIVE_SCRATCH" \
+  --correlated-findings "$LLM_DIR/correlated-findings.json" \
+  --out "$LLM_DIR/deep-confirmation.json" || true
+
 run_step "retrieval-plan" python3 "$ROOT/pipeline/generate_retrieval_plan.py" \
   --static-evidence "$STATIC_EVIDENCE" \
   --native-scratch "$NATIVE_SCRATCH" \
@@ -169,6 +177,7 @@ run_step "llm-input" python3 "$ROOT/pipeline/build_llm_input.py" \
   --native-scratch "$NATIVE_SCRATCH" \
   --bundle "$LLM_DIR/native-bundle.json" \
   --correlated-findings "$LLM_DIR/correlated-findings.json" \
+  --deep-confirmation "$LLM_DIR/deep-confirmation.json" \
   --retrieval-plan "$LLM_DIR/retrieval-plan.json" \
   --out-dir "$LLM_DIR" || true
 

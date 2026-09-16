@@ -53,6 +53,7 @@ def main() -> int:
         ("llm-input", llm / "ENGAGEMENT_LLM_INPUT.md", True),
         ("coverage-ledger", llm / "coverage-ledger.json", True),
         ("correlated-findings", llm / "correlated-findings.json", True),
+        ("deep-confirmation", llm / "deep-confirmation.json", True),
         ("retrieval-plan", llm / "retrieval-plan.json", True),
     ]
     if args.static_enabled:

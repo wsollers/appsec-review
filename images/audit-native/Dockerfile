@@ -189,7 +189,9 @@ RUN python3 -m venv /opt/codechecker-venv \
 
 # --- This image's scripts ------------------------------------------------------
 COPY scripts/ /opt/scripts/
-RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
+RUN find /opt/scripts -type f \( -name '*.py' -o -name '*.sh' \) -print0 \
+      | xargs -0 sed -i 's/\r$//' \
+    && chmod +x /opt/scripts/*.py /opt/scripts/*.sh
 
 # --- Non-root worker user, fixed mount points ----------------------------------
 # /workspace : vendor source, read-only

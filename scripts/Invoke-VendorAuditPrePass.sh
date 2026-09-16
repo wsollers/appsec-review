@@ -59,9 +59,35 @@ REPO_PATH=$(realpath "$REPO_PATH")
 mkdir -p "$EVIDENCE_PATH"
 EVIDENCE_PATH=$(realpath "$EVIDENCE_PATH")
 MANIFEST="$EVIDENCE_PATH/MANIFEST.json"
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+
+docker_clean_path() {
+  local mount_path="$1"
+  local rel="${2:-}"
+  local script
+  if [[ -n "$rel" ]]; then
+    script="rm -rf -- \"/evidence/$rel\""
+  else
+    script='find /evidence -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+  fi
+  docker run --rm -v "$mount_path:/evidence" --entrypoint sh "$IMAGE_TAG" -c "$script"
+}
+
+safe_remove_evidence_path() {
+  local rel="${1:-}"
+  if [[ -n "$rel" ]]; then
+    rm -rf -- "$EVIDENCE_PATH/$rel" 2>/dev/null && return 0
+    docker_clean_path "$EVIDENCE_PATH" "$rel" >/dev/null
+  else
+    find "$EVIDENCE_PATH" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null && return 0
+    echo "host cleanup could not remove every evidence artifact; retrying cleanup in Docker as root" >&2
+    docker_clean_path "$EVIDENCE_PATH" "" >/dev/null
+  fi
+}
 
 if [[ "$CLEAN_EVIDENCE" == 1 ]]; then
-  find "$EVIDENCE_PATH" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  safe_remove_evidence_path ""
 fi
 
 if [[ "$SKIP_DOCKER_CHECK" != 1 ]]; then
@@ -121,23 +147,23 @@ expected_ok() {
 clear_outputs() {
   local expected="$1" expected_any="$2" outfile="$3"
   local item
-  [[ -n "$expected" ]] && rm -f "$EVIDENCE_PATH/$expected"
+  [[ -n "$expected" ]] && safe_remove_evidence_path "$expected"
   if [[ -n "$expected_any" ]]; then
     IFS=',' read -ra items <<< "$expected_any"
-    for item in "${items[@]}"; do rm -f "$EVIDENCE_PATH/$item"; done
+    for item in "${items[@]}"; do safe_remove_evidence_path "$item"; done
   fi
-  [[ -n "$outfile" ]] && rm -f "$EVIDENCE_PATH/$outfile"
+  [[ -n "$outfile" ]] && safe_remove_evidence_path "$outfile"
   return 0
 }
 
 docker_base_args() {
   local image="${1:-$IMAGE_TAG}"
-  printf '%s\0' run --rm -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image"
+  printf '%s\0' run --rm --user "$HOST_UID:$HOST_GID" -e HOME=/tmp -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image"
 }
 
 run_container() {
   local image="$1"; shift
-  docker run --rm -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image" "$@"
+  docker run --rm --user "$HOST_UID:$HOST_GID" -e HOME=/tmp -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image" "$@"
 }
 
 write_post_success() {
