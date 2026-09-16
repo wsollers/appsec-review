@@ -96,6 +96,9 @@ bool dependsOnArg(const Value *v, std::set<const Value *> &seen, int depth, std:
   return false;
 }
 
+/** Innermost struct + field addressed by a GEP: walks the index chain (derived-class GEPs
+    address a base subobject then the field in ONE instruction: `vector, this, 0, 0, 0`).
+    Returns false if the GEP does not end in a constant struct field index. */
 bool structField(const GetElementPtrInst *g, std::string &sname, int64_t &field) {
   bool found = false;
   for (gep_type_iterator it = gep_type_begin(g), e = gep_type_end(g); it != e; ++it) {
@@ -105,6 +108,60 @@ bool structField(const GetElementPtrInst *g, std::string &sname, int64_t &field)
     }
   }
   return found;
+}
+
+/** Class name of the method being analysed (set per function). Used as the struct identity for
+    accesses through `this`: with opaque pointers, a field-0 access is a bare `load ptr, %this`
+    with NO getelementptr, so there is no struct type in the IR to read (EASTL vector::mpBegin,
+    2026-09-16). The demangled name is the same for every method of the class, so operator[]'s
+    mpBegin and size()'s mpEnd key on the same identity. */
+static std::string gThisClass;
+static const Argument *gThisArg = nullptr;
+
+std::string classOfMethod(const Function &F) {
+  std::string d = demangleName(F.getName());
+  size_t paren = d.find('(');                  // strip parameter list
+  if (paren == std::string::npos) return "";
+  std::string q = d.substr(0, paren);
+  size_t sp = q.rfind(' ');                    // strip return type ("void ", "int ")
+  if (sp != std::string::npos && q.find('<', sp) == std::string::npos) q = q.substr(sp + 1);
+  // last "::" at template depth 0 separates class from member
+  int depth = 0; size_t cut = std::string::npos;
+  for (size_t i = 0; i < q.size(); ++i) {
+    if (q[i] == '<') depth++; else if (q[i] == '>') depth--;
+    else if (depth == 0 && q[i] == ':' && i + 1 < q.size() && q[i + 1] == ':') cut = i;
+  }
+  return cut == std::string::npos ? "" : q.substr(0, cut);
+}
+
+/** Resolve a pointer to `this` through -O0 spill slots. */
+bool isThis(const Value *p) {
+  p = p->stripPointerCasts();
+  for (int i = 0; i < 4; ++i) {
+    if (p == gThisArg) return true;
+    if (auto *ld = dyn_cast<LoadInst>(p)) {
+      const Value *slot = ld->getPointerOperand()->stripPointerCasts(); const Value *stored = nullptr;
+      for (const User *u : slot->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == slot) { stored = st->getValueOperand()->stripPointerCasts(); break; }
+      if (!stored) return false;
+      p = stored; continue;
+    }
+    return false;
+  }
+  return false;
+}
+
+/** (struct, field) addressed by pointer `addr` (the pointer operand of a load/store):
+    a GEP -> innermost struct + field (through inheritance chains); if the GEP's base is `this`,
+    the class name is used as identity. A bare `this` -> (class, 0). */
+bool fieldOfAddress(const Value *addr, std::string &sname, int64_t &field) {
+  const Value *a = addr->stripPointerCasts();
+  if (auto *g = dyn_cast<GetElementPtrInst>(a)) {
+    if (!structField(g, sname, field)) return false;
+    if (!gThisClass.empty() && isThis(g->getPointerOperand())) sname = gThisClass;
+    return true;
+  }
+  if (!gThisClass.empty() && isThis(a)) { sname = gThisClass; field = 0; return true; }
+  return false;
 }
 
 /** Field loads a value depends on: walks operands (bounded), collecting (struct, field-index)
@@ -123,7 +180,7 @@ void fieldDeps(const Value *v, std::set<std::pair<std::string,int64_t>> &out, st
   }
   if (auto *ld = dyn_cast<LoadInst>(v)) {
     const Value *p = ld->getPointerOperand()->stripPointerCasts();
-    if (auto *g = dyn_cast<GetElementPtrInst>(p)) { std::string sn; int64_t fi; if (structField(g, sn, fi)) out.insert({sn, fi}); }
+    { std::string sn; int64_t fi; if (fieldOfAddress(p, sn, fi)) out.insert({sn, fi}); }
     fieldDeps(p, out, seen, depth + 1);
     // through a spill slot: the value stored there
     for (const User *u : p->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == p) fieldDeps(st->getValueOperand(), out, seen, depth + 1);
@@ -138,7 +195,7 @@ bool loadedFromField(const Value *ptr, std::string &sname, int64_t &field) {
   for (int i = 0; i < 4; ++i) {
     if (auto *ld = dyn_cast<LoadInst>(p)) {
       const Value *src = ld->getPointerOperand()->stripPointerCasts();
-      if (auto *g = dyn_cast<GetElementPtrInst>(src)) { if (structField(g, sname, field)) return true; }
+      if (fieldOfAddress(src, sname, field)) return true;
       // spill slot: follow the store into it
       const Value *stored = nullptr;
       for (const User *u : src->users()) if (auto *st = dyn_cast<StoreInst>(u)) if (st->getPointerOperand() == src) { stored = st->getValueOperand()->stripPointerCasts(); break; }
@@ -245,6 +302,7 @@ int main(int argc, char **argv) {
   for (int round = 0; round < 2; ++round)
     for (const Function &F : *M) {
       if (F.isDeclaration() || F.getReturnType()->isVoidTy()) continue;
+      gThisClass = classOfMethod(F); gThisArg = (F.arg_size() && F.getArg(0)->getType()->isPointerTy() && !gThisClass.empty()) ? F.getArg(0) : nullptr;
       std::set<std::pair<std::string,int64_t>> deps;
       for (const BasicBlock &BB : F) if (auto *ret = dyn_cast<ReturnInst>(BB.getTerminator())) {
         std::set<const Value *> seen; fieldDeps(ret->getReturnValue(), deps, seen, 0);
@@ -256,6 +314,7 @@ int main(int argc, char **argv) {
   std::map<const Function *, std::vector<Cmp>> fnCmps;
   for (const Function &F : *M) {
     if (F.isDeclaration()) continue;
+    gThisClass = classOfMethod(F); gThisArg = (F.arg_size() && F.getArg(0)->getType()->isPointerTy() && !gThisClass.empty()) ? F.getArg(0) : nullptr;
     for (const BasicBlock &BB : F) for (const Instruction &I : BB)
       if (auto *ic = dyn_cast<ICmpInst>(&I)) {
         Cmp c; c.I = ic; std::set<const Value *> seen;
@@ -275,6 +334,7 @@ int main(int argc, char **argv) {
   for (const Function &F : *M) {
     if (F.isDeclaration()) continue;
     const std::string fname = F.getName().str(), fdem = demangleName(F.getName());
+    gThisClass = classOfMethod(F); gThisArg = (F.arg_size() && F.getArg(0)->getType()->isPointerTy() && !gThisClass.empty()) ? F.getArg(0) : nullptr;
     // constructors: MSVC mangling `??0Class@@...`; Itanium `_ZN...C1E...`/`C2E...` (complete/base object ctor)
     const bool isCtor = fname.rfind("??0", 0) == 0 ||
                         (fname.rfind("_ZN", 0) == 0 && (fname.find("C1E") != std::string::npos || fname.find("C2E") != std::string::npos));
