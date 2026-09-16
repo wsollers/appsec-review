@@ -23,6 +23,14 @@ IR_KINDS = ("field_geps", "geps", "size_calls", "allocas", "ctor_stores")
 SOURCE_TOOLS = {"semgrep", "cppcheck-static", "binskim", "mobsfscan-android", "mobsfscan-ios"}
 NATIVE_TOOLS = {"clang-tidy", "cppcheck-native", "native-bundle", "native-informational"}
 CODEQL_TOOLS = {"codeql-cpp-security-extended", "codeql-mythos"}
+LEVEL_PRIORITY = {
+    "mechanism-confirmed": 0,
+    "codeql-ir-corroborated": 1,
+    "cross-tool-corroborated": 2,
+    "codeql-only": 3,
+    "source-only": 4,
+    "unclassified": 5,
+}
 
 
 def load_json(path: Path) -> Any | None:
@@ -181,6 +189,18 @@ def classify_cluster(cluster: dict, ir_near: list[dict]) -> tuple[str, list[str]
     return "unclassified", reasons
 
 
+def confirmation_sort_key(item: dict) -> tuple:
+    tools = set(item.get("tools", []) or [])
+    has_native = bool(tools & (NATIVE_TOOLS | CODEQL_TOOLS))
+    return (
+        LEVEL_PRIORITY.get(item.get("confirmation_level", "unclassified"), 9),
+        -int(bool(item.get("ir_facts_nearby"))),
+        -int(has_native),
+        item.get("file", ""),
+        int(item.get("line_min") or 0),
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--correlated-findings", required=True)
@@ -232,6 +252,7 @@ def main() -> int:
             "trust": "candidate callers/callees are syntax/name based; use CodeQL/Joern/source review for semantic reachability proof",
         })
 
+    confirmations.sort(key=confirmation_sort_key)
     level_counts = Counter(c["confirmation_level"] for c in confirmations)
     tool_counts = Counter(t for c in confirmations for t in c.get("tools", []))
     report = {
