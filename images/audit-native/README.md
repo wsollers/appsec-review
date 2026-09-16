@@ -32,6 +32,16 @@ Remaining first-build risks, in order: (1) the apt.llvm.org `noble` repo for
 `clang-tidy-21`/`lld-21`, (2) SVF `build.sh` behavior when `LLVM_DIR`/`Z3_DIR` are
 pre-set, (3) the `wpa` binary name/location under `Release-build/bin`.
 
+## ir-facts sections
+
+`globals`, `ctor_stores` (MSVC `??0` and Itanium `C1E/C2E`), `geps`, `size_calls`, `allocas`, and
+`field_geps` — GEPs through a pointer loaded from a struct field, with `bounded_by_fields` (same-
+struct fields compared against the index in this function), call-site bounding for accessor-style
+functions (`index_arg`, `callsites_*`), and `field_pairs` (per class, which pointer field the code
+bounds by which field — inferred, no names). Class identity is canonical (`eastl::vector`, no
+template args or LLVM suffixes) so member containers match their getters. Calibrate on a target's
+own test suite with `scripts/calibrate_field_geps.py`; see `validation/eastl.md` for the history.
+
 ## Source patches to upstream tools (`patches/`)
 
 | Patch | Why | Status |

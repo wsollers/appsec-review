@@ -110,6 +110,10 @@ def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
     dbdir = ctu_dir / "db"; dbdir.mkdir(exist_ok=True)
     clean = [{k: v for k, v in e.items() if k in ("directory", "file", "arguments", "command", "output")} for e in all_entries]
     (dbdir / "compile_commands.json").write_text(json.dumps(clean))
+    # On-demand parsing rebuilds each callee's invocation from this list WITHOUT the driver's
+    # help: a bare `clang++` argv[0] leaves it unable to find the resource dir, so builtin
+    # headers (stddef.h) are missing and every callee parse fails (EASTL, 2026-09-15).
+    # Use the absolute compiler path and pin -resource-dir explicitly.
     import shutil
     def resdir(cc):
         try: return subprocess.run([cc, "-print-resource-dir"], capture_output=True, text=True, timeout=30).stdout.strip()
@@ -142,6 +146,10 @@ def prepare_ctu(all_entries: list[dict], ctu_dir: Path, jobs: int) -> dict:
                 lines.append(out)
             else:
                 failed.append({"file": f, "error": err})
+    # Dedupe: templates/inline functions are defined in many TUs and produce the same USR
+    # from each; CTU rejects an ambiguous index ("multiple definitions are found for the
+    # same key" — 113/126 EASTL TUs, 2026-09-15). Like CodeChecker, drop USRs with more
+    # than one distinct definition location; keep the unambiguous rest.
     defs = {}
     for line in "".join(lines).splitlines():
         if not line.strip(): continue

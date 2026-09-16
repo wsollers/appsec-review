@@ -10,12 +10,7 @@ function Step($n) { Write-Host "`n#### [$n] $(Get-Date -Format T)" -ForegroundCo
 function R { param([Parameter(ValueFromRemainingArguments)][string[]]$c) & $Run $Target $Msvc $Scratch -- @c; if ($LASTEXITCODE) { throw "step failed ($LASTEXITCODE)" } }
 Step "compile database"
 if ($CompileDb) {
-  $root = (Resolve-Path $Target).Path -replace '\\','/'
-  $db = Get-Content $CompileDb -Raw | ConvertFrom-Json
-  foreach ($e in $db) { if (-not $e.project) { $e | Add-Member project $Project }
-    foreach ($k in 'directory','file','output') { if ($e.$k -and $e.$k.StartsWith($root)) { $e.$k = '/workspace' + $e.$k.Substring($root.Length) } }
-    if ($e.arguments) { $e.arguments = @($e.arguments | ForEach-Object { if ($_.StartsWith($root)) { '/workspace' + $_.Substring($root.Length) } else { $_ } }) } }
-  $db | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 (Join-Path $Scratch 'compile_commands.json')
+  python3 (Join-Path $Here "pipeline/normalize_compile_db.py") $CompileDb (Resolve-Path $Target).Path (Join-Path $Scratch "compile_commands.json") $Project
 } else {
   R /opt/scripts/vcxproj_to_compile_commands.py --root /workspace --config Release --platform x64 --msvc-root /msvc --out /scratch/compile_commands.json --audit /scratch/compile-command-audit.seed.json
 }

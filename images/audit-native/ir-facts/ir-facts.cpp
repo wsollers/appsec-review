@@ -79,6 +79,8 @@ json::Object gloc(const GlobalVariable &gv) {
   return o;
 }
 
+std::string canonClass(std::string n);
+
 /** Does value v depend (through a bounded number of instruction hops) on a function argument? */
 bool dependsOnArg(const Value *v, std::set<const Value *> &seen, int depth, std::string &via) {
   if (!v || depth > 12 || !seen.insert(v).second) return false;
@@ -396,9 +398,15 @@ int main(int argc, char **argv) {
             std::set<const Value *> seen2; std::string via2; (void)dependsOnArg(actual, seen2, 0, via2);
             for (const Value *v : seen2) if (v != actual && boundedIn(caller, v, sname, pf, &cf)) { b = true; break; }
           }
+          if (b)
+            for (auto &f : cf)
+              pairVotes[sname][std::to_string(pf) + ":" + std::to_string(*f.getAsObject()->getInteger("field"))]++;
           b ? ++nb : ++nu;
-          if (!b || sites.size() < 8)
-            sites.push_back(json::Object{{"caller", demangleName(caller->getName())}, {"loc", loc(cb->getDebugLoc())}, {"bounded", b}});
+          if (!b || sites.size() < 8) {
+            json::Object site{{"caller", demangleName(caller->getName())}, {"loc", loc(cb->getDebugLoc())}, {"bounded", b}};
+            if (b) site["bounded_by_fields"] = std::move(cf);
+            sites.push_back(std::move(site));
+          }
         }
         o["callsites_bounded"] = (int64_t)nb; o["callsites_unbounded"] = (int64_t)nu; o["callsites"] = std::move(sites);
       }
