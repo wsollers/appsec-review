@@ -3,6 +3,7 @@
 | Phase | Script | LLM? | Output |
 |---|---|---|---|
 | engagement job | `engagement_job.sh` | no | broad static evidence, native scratch, LLM input index, coverage ledger |
+| static prepass | `scripts/Invoke-VendorAuditPrePass.sh` / `.ps1` | no | Semgrep, gitleaks, Trivy/config, SBOM/SCA, BinSkim, Joern, symbol/semantic indexes, `MANIFEST.json` |
 | pregather | `pregather.sh` / `pregather.ps1` (twins; logic in container scripts) | no | compile DB, feasibility, IR, linked modules, ir-facts, CSA, CodeQL traced DB + regular C/C++ SARIF + mythos custom-memory SARIF, `pregather-manifest.json` |
 | assemble | `assemble.py` (Python, one impl) | no | `bundle.json` + `bundle.md`: verified / unresolved / refuted with IR evidence and `needs` |
 | handoff | (prompts/, orchestrator — next) | yes | lane runs over the bundle only |
@@ -24,6 +25,12 @@ The final `job_status.py` pass writes `job-status.json/.md` and exits non-zero w
 enabled phase failed or a required artifact is missing. That means the job can keep gathering
 partial evidence after CodeQL/Semgrep/etc. failures, while still ending with an explicit
 degraded status instead of a quiet success.
+
+The static prepass has two host runners over the same Docker toolbox image:
+`scripts/Invoke-VendorAuditPrePass.sh` for bash/Linux/WSL and
+`scripts/Invoke-VendorAuditPrePass.ps1` for PowerShell/Windows. `engagement_job.sh`
+defaults to `--static-runner auto`, which prefers the bash runner. Use
+`--static-runner powershell` only when you intentionally want the PowerShell path.
 
 Tools live in the images (`images/*/Dockerfile`) — that is the catalog; digests are recorded in
 every manifest. Run from WSL2 on Windows with sources on the WSL filesystem (fast); from a

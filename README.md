@@ -46,6 +46,8 @@ one appears, is a bonus (native `cl` builds for release/analysis diffing), not a
 For real runs on Windows/WSL, use a repo checkout on the WSL ext4 filesystem, not under
 `/mnt/c` or `/mnt/f`. Keep cloned targets under the ignored repo-local `targets/` directory
 and write outputs under ignored `scratch/` so Docker bind mounts stay on fast WSL storage.
+The default engagement path is bash + Docker. The PowerShell static prepass remains available
+for Windows + Docker runs via `--static-runner powershell`.
 
 ```bash
 cd ~/projects/appsec-review

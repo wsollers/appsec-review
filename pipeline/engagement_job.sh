@@ -11,6 +11,7 @@ OUT=""
 COMPILE_DB=""
 MSVC="-"
 STATIC_IMAGE="${STATIC_IMAGE:-vendor-audit-toolbox:latest}"
+STATIC_RUNNER="${STATIC_RUNNER:-auto}"
 RUN_STATIC=1
 RUN_NATIVE=1
 RUN_CODEQL=1
@@ -26,7 +27,8 @@ Options:
   --compile-db PATH       Existing compile_commands.json for native targets.
   --msvc PATH|-           MSVC mount for Windows targets; default "-".
   --static-image TAG      Static toolbox image; default vendor-audit-toolbox:latest.
-  --static-steps a,b,c    Optional subset for Invoke-VendorAuditPrePass.ps1.
+  --static-steps a,b,c    Optional subset for the static prepass runner.
+  --static-runner MODE    auto|bash|powershell; default auto, prefers bash.
   --skip-static           Do not run Semgrep/gitleaks/trivy/BinSkim/etc pre-pass.
   --skip-native           Do not run native pregather/IR/CSA/CodeQL.
   --no-codeql             Skip native CodeQL.
@@ -58,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     --msvc) MSVC="$2"; shift 2;;
     --static-image) STATIC_IMAGE="$2"; shift 2;;
     --static-steps) STATIC_STEPS="$2"; shift 2;;
+    --static-runner) STATIC_RUNNER="$2"; shift 2;;
     --skip-static) RUN_STATIC=0; shift;;
     --skip-native) RUN_NATIVE=0; shift;;
     --no-codeql) RUN_CODEQL=0; shift;;
@@ -102,21 +105,36 @@ run_step() {
 }
 
 if [[ "$RUN_STATIC" == 1 ]]; then
+  if [[ "$STATIC_RUNNER" != "auto" && "$STATIC_RUNNER" != "bash" && "$STATIC_RUNNER" != "powershell" ]]; then
+    echo "--static-runner must be auto, bash, or powershell" >&2
+    exit 2
+  fi
+  BASH_STATIC="$ROOT/scripts/Invoke-VendorAuditPrePass.sh"
   PWSH_BIN=""
   if command -v pwsh >/dev/null 2>&1; then
     PWSH_BIN="pwsh"
   elif command -v pwsh.exe >/dev/null 2>&1; then
     PWSH_BIN="pwsh.exe"
   fi
-  if [[ -n "$PWSH_BIN" ]]; then
-    static_args=("-NoProfile" "-File" "$ROOT/scripts/Invoke-VendorAuditPrePass.ps1" "$TARGET" "$STATIC_EVIDENCE" "-ImageTag" "$STATIC_IMAGE" "-CleanEvidence")
+  if [[ "$STATIC_RUNNER" != "powershell" && -f "$BASH_STATIC" ]]; then
+    static_args=("$TARGET" "$STATIC_EVIDENCE" "--image-tag" "$STATIC_IMAGE" "--clean-evidence")
+    if [[ -n "$STATIC_STEPS" ]]; then
+      static_args+=("--steps" "$STATIC_STEPS")
+    fi
+    run_step "static-prepass" bash "$BASH_STATIC" "${static_args[@]}" || true
+  elif [[ "$STATIC_RUNNER" != "bash" && -n "$PWSH_BIN" ]]; then
+    static_args=("-NoProfile")
+    if [[ "$PWSH_BIN" == *.exe ]]; then
+      static_args+=("-ExecutionPolicy" "Bypass")
+    fi
+    static_args+=("-File" "$ROOT/scripts/Invoke-VendorAuditPrePass.ps1" "$TARGET" "$STATIC_EVIDENCE" "-ImageTag" "$STATIC_IMAGE" "-CleanEvidence")
     if [[ -n "$STATIC_STEPS" ]]; then
       static_args+=("-Steps" "$STATIC_STEPS")
     fi
     run_step "static-prepass" "$PWSH_BIN" "${static_args[@]}" || true
   else
-    echo "WARNING: pwsh/pwsh.exe not found; skipping static pre-pass" | tee "$LOG_DIR/static-prepass.log"
-    printf '{"step":"static-prepass","exit_code":127,"seconds":0,"log":%s,"note":"pwsh/pwsh.exe not found"}\n' "$(json_escape "$LOG_DIR/static-prepass.log")" >> "$MANIFEST"
+    echo "WARNING: no usable static prepass runner found; skipping static pre-pass" | tee "$LOG_DIR/static-prepass.log"
+    printf '{"step":"static-prepass","exit_code":127,"seconds":0,"log":%s,"note":"no usable static prepass runner found"}\n' "$(json_escape "$LOG_DIR/static-prepass.log")" >> "$MANIFEST"
   fi
   run_step "static-summary" python3 "$ROOT/scripts/summarize_evidence.py" "$STATIC_EVIDENCE" -o "$STATIC_EVIDENCE/SUMMARY.md" || true
 fi
