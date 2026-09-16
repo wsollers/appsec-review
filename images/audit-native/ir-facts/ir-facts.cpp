@@ -37,6 +37,8 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
@@ -103,7 +105,7 @@ bool structField(const GetElementPtrInst *g, std::string &sname, int64_t &field)
   bool found = false;
   for (gep_type_iterator it = gep_type_begin(g), e = gep_type_end(g); it != e; ++it) {
     if (StructType *st = it.getStructTypeOrNull()) {
-      if (auto *ci = dyn_cast<ConstantInt>(it.getOperand())) { sname = st->hasName() ? st->getName().str() : "?"; field = ci->getSExtValue(); found = true; }
+      if (auto *ci = dyn_cast<ConstantInt>(it.getOperand())) { sname = st->hasName() ? canonClass(st->getName().str()) : "?"; field = ci->getSExtValue(); found = true; }
       else return false;
     }
   }
@@ -115,12 +117,22 @@ bool structField(const GetElementPtrInst *g, std::string &sname, int64_t &field)
     with NO getelementptr, so there is no struct type in the IR to read (EASTL vector::mpBegin,
     2026-09-16). The demangled name is the same for every method of the class, so operator[]'s
     mpBegin and size()'s mpEnd key on the same identity. */
+std::string canonClass(std::string n) {
+  for (const char *pre : {"class.", "struct.", "union."}) if (n.rfind(pre, 0) == 0) { n = n.substr(strlen(pre)); break; }
+  size_t dot = n.rfind('.');
+  if (dot != std::string::npos && dot + 1 < n.size() && std::all_of(n.begin() + dot + 1, n.end(), ::isdigit)) n = n.substr(0, dot);
+  std::string o; int depth = 0;
+  for (char c : n) { if (c == '<') depth++; else if (c == '>') depth--; else if (depth == 0) o += c; }
+  return o;
+}
+
 static std::string gThisClass;
 static const Argument *gThisArg = nullptr;
 
 std::string classOfMethod(const Function &F) {
   std::string d = demangleName(F.getName());
-  size_t paren = d.find('(');                  // strip parameter list
+  int dp = 0; size_t paren = std::string::npos;
+  for (size_t i = 0; i < d.size(); ++i) { if (d[i] == '<') dp++; else if (d[i] == '>') dp--; else if (dp == 0 && d[i] == '(') { paren = i; break; } }
   if (paren == std::string::npos) return "";
   // find the matching '(' of the parameter list at template depth 0 (operator() etc. aside)
   std::string q = d.substr(0, paren);
@@ -137,7 +149,7 @@ std::string classOfMethod(const Function &F) {
     if (q[i] == '<') depth++; else if (q[i] == '>') depth--;
     else if (depth == 0 && q[i] == ':' && i + 1 < q.size() && q[i + 1] == ':') cut = i;
   }
-  return cut == std::string::npos ? "" : q.substr(0, cut);
+  return cut == std::string::npos ? "" : canonClass(q.substr(0, cut));
 }
 
 /** Resolve a pointer to `this` through -O0 spill slots. */
