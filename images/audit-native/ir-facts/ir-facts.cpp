@@ -122,11 +122,17 @@ std::string classOfMethod(const Function &F) {
   std::string d = demangleName(F.getName());
   size_t paren = d.find('(');                  // strip parameter list
   if (paren == std::string::npos) return "";
+  // find the matching '(' of the parameter list at template depth 0 (operator() etc. aside)
   std::string q = d.substr(0, paren);
-  size_t sp = q.rfind(' ');                    // strip return type ("void ", "int ")
-  if (sp != std::string::npos && q.find('<', sp) == std::string::npos) q = q.substr(sp + 1);
-  // last "::" at template depth 0 separates class from member
-  int depth = 0; size_t cut = std::string::npos;
+  // strip return type: last SPACE at template depth 0 (spaces inside <...> are template args —
+  // "vector<Test*, eastl::allocator>::operator[]" was cut to "eastl", 2026-09-16)
+  int depth = 0; size_t sp = std::string::npos, cut = std::string::npos;
+  for (size_t i = 0; i < q.size(); ++i) {
+    if (q[i] == '<') depth++; else if (q[i] == '>') depth--;
+    else if (depth == 0 && q[i] == ' ') sp = i;
+  }
+  if (sp != std::string::npos) q = q.substr(sp + 1);
+  depth = 0;
   for (size_t i = 0; i < q.size(); ++i) {
     if (q[i] == '<') depth++; else if (q[i] == '>') depth--;
     else if (depth == 0 && q[i] == ':' && i + 1 < q.size() && q[i + 1] == ':') cut = i;
@@ -368,6 +374,11 @@ int main(int argc, char **argv) {
           const Function *caller = cb->getFunction();
           const Value *actual = cb->getArgOperand(argNo);
           json::Array cf;
+          if (isa<ConstantInt>(actual)) {   // v[0], v[3]: not input-derived; a different risk class than unbounded
+            ++nb;
+            if (sites.size() < 8) sites.push_back(json::Object{{"caller", demangleName(caller->getName())}, {"loc", loc(cb->getDebugLoc())}, {"bounded", true}, {"constant_index", cast<ConstantInt>(actual)->getSExtValue()}});
+            continue;
+          }
           bool b = boundedIn(caller, actual, sname, pf, &cf);
           if (!b) {   // the argument may be a load/zext of a local that is compared elsewhere in the caller
             std::set<const Value *> seen2; std::string via2; (void)dependsOnArg(actual, seen2, 0, via2);
