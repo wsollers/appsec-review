@@ -651,6 +651,22 @@ def cmd_run(args: argparse.Namespace) -> int:
     out_dir = run_dir(run_id) / "outputs" / lane
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Archive any previous attempt's output files before dispatching again.
+    # Without this, a stale status.json/result.md left over from an earlier
+    # (e.g. failed) attempt at this same lane gets mistaken by the
+    # self-report check below for something the lane just wrote THIS call --
+    # found for real when a credit-balance failure's synthesized fallback
+    # status.json survived into the next attempt and was misread as a fresh
+    # self-report. Moving prior outputs into outputs/<lane>/attempts/<ts>/
+    # keeps the self-report check honest and preserves a real attempt
+    # history for free.
+    prior_files = [p for p in ("result.md", "status.json", "raw-response.json") if (out_dir / p).exists()]
+    if prior_files:
+        attempt_dir = out_dir / "attempts" / now().replace(":", "").replace("-", "")
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        for name in prior_files:
+            (out_dir / name).replace(attempt_dir / name)
+
     mark_running = subprocess.run(
         [sys.executable, str(ROOT / "run_process.py"), "--run-id", run_id, "--process", lane, "--budget", budget, "--message", "dispatched via review_cli.py run"],
         capture_output=True, text=True,
