@@ -407,8 +407,9 @@ RUN pip3 install --no-cache-dir \
 # --- This repo's own evidence-shaping scripts --------------------------------
 COPY scripts/build_symbol_index.py scripts/md_to_sarif.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
      scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh scripts/run-dockerfile-lint.sh \
+     scripts/run-semantic-index-batched.sh \
      /opt/scripts/
-RUN chmod +x /opt/scripts/*.py /opt/scripts/run-sast-php.sh /opt/scripts/run-dockerfile-lint.sh
+RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
 
 # 2026-09-08 fix #3 (confirmed live against a real container, via sast-php's
 # own real stderr.log — not guessed): psalm hard-requires a config file in

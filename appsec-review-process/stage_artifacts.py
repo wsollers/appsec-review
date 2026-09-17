@@ -62,8 +62,12 @@ def main() -> int:
         "retrieval_plan_json": existing(out / "llm" / "retrieval-plan.json"),
     }
     derived = data.get("derived_artifacts", {})
-    derived.setdefault("component_purpose_map_json", "")
-    derived.setdefault("component_purpose_map_md", "")
+    component_output = run_dir / "outputs" / "01-component-characterization"
+    derived["component_purpose_map_json"] = existing(component_output / "component-purpose-map.json")
+    derived["component_purpose_map_md"] = existing(component_output / "component-purpose-map.md")
+    component_ir_dir = out / "llm" / "component-ir"
+    derived["component_ir_dir"] = existing(component_ir_dir)
+    derived["component_ir_summary_json"] = existing(component_ir_dir / "summary.json")
     data["derived_artifacts"] = derived
 
     missing = [k for k, v in data["core_artifacts"].items() if not v]
@@ -75,4 +79,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

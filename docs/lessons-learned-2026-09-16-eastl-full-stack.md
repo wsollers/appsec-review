@@ -110,6 +110,22 @@ The intended WSL workflow is:
 
 This keeps Docker bind mounts on fast WSL storage and avoids Windows filesystem IO drag.
 
+If a heavy run already happened elsewhere in WSL, normalize it back into this repo before prompt
+lanes:
+
+```bash
+scripts/sync-wsl-engagement-to-repo.sh \
+  --project eastl \
+  --source-url https://github.com/electronicarts/EASTL.git \
+  --source-ref master \
+  --engagement-dir ~/scratch/eastl-engagement \
+  --run-id <run_id>
+```
+
+The script clones or mirrors source into ignored `targets/eastl`, copies artifacts into ignored
+`scratch/eastl-engagement`, and can restage the run manifest so agents review exact source through
+repo-local paths.
+
 ### CRLF hardening
 
 The first native run failed at `link per project` with:
@@ -202,6 +218,40 @@ The deep confirmation markdown is sorted so the LLM sees stronger evidence first
 sorting, the first clusters are the `DecodePart` C++ clusters with source SAST plus nearby IR facts,
 not low-value workflow YAML Semgrep hits.
 
+### Semantic index memory behavior
+
+A full static EASTL PowerShell run showed `semantic-index` running for about 39 minutes before
+Docker killed it with exit 137 after climbing to roughly 29 GB resident memory. The underlying
+`build_semantic_index.py` already supported `--start`, `--limit`, and `--batch-size`, but the
+static runners called it once without those slice controls.
+
+Fix:
+
+- added `scripts/run-semantic-index-batched.sh`
+- wired both `scripts/Invoke-VendorAuditPrePass.ps1` and `.sh` to use it
+- changed `scripts/build_semantic_index.py` to write each embedded batch directly to LanceDB
+  instead of accumulating all vectors in memory
+- defaulted the semantic step to `SEMANTIC_INDEX_BATCH_SIZE=1`
+
+That means chunks are embedded one at a time and persisted incrementally. The wrapper still supports
+process slicing with `SEMANTIC_INDEX_SLICE_LIMIT=<n>` if a future target needs fresh process
+boundaries, but the default now keeps the normal full-run shape and avoids the 5,086-process EASTL
+case.
+
+Validation:
+
+- rebuilt `vendor-audit-toolbox:latest`
+- reran `symbol-index,semantic-index` from PowerShell against EASTL over a WSL UNC path
+- `semantic-index` completed in 875 seconds with exit 0
+- final `semantic-index/index.json` reported 5,086 available chunks, 5,086 rows written, 5,086
+  table rows, and `"complete": true`
+- `query_semantic_index.py` successfully retrieved EASTL UTF conversion chunks from the generated
+  LanceDB table
+
+Operational note: after interrupting the first strict-slice experiment, a stale Docker container
+continued writing the old `semantic-index/index.json`. Check `docker ps` and stop stale scanner
+containers before rerunning a step into the same evidence directory after an interrupt.
+
 ## EASTL Signal Snapshot
 
 The final EASTL deep confirmation summary showed:
@@ -219,6 +269,103 @@ Interpretation:
 - Most broad pre-pass results are source-only static-tool noise, which is expected.
 - The 9 cross-tool-corroborated clusters are the right LLM rehearsal targets.
 - EASTL is useful for pipeline rehearsal, not for measuring real-world game-server recall.
+
+## LLM Prompt Harness Updates After EASTL
+
+The first component-characterization probe was too physical: it identified directory buckets such as
+core library, tests/benchmarks, and fetched dependencies. That was useful for exclusions but not
+enough to drive ASVS/MASVS, native-memory, red-team, or blue-team work on a large game codebase.
+
+The component lane now requires:
+
+- code-scope classification and explicit exclusions
+- a functional component cloud with coarse groups, aliases, search terms, representative locations,
+  data classes, trust-boundary relevance, and `parallel_review_group`
+- negative evidence for major expected categories that were searched or considered but not found
+
+The component taxonomy now includes multiplayer/game-service categories such as identity/accounts,
+REST/microservices, RPC/gRPC/protobuf, TLS/crypto/secrets, player/social/game services,
+data/storage/records, admin/live-ops, mobile/console/PC UI and platform glue, content/update/assets,
+native runtime/memory, and build/deployment infrastructure.
+
+### Component IR compiled-evidence layer
+
+After component characterization, `pipeline/component_ir_slice.py` now consumes linked LLVM textual
+IR plus the component-purpose map and writes per-component compiled-evidence slices under
+`llm/component-ir/`.
+
+This closes an important gap between "component map plus source call graph" and "component map plus
+compiled evidence." Each slice records:
+
+- functions whose debug source locations match the component's representative locations
+- direct call edges observed in the linked IR
+- GEP/pointer-arithmetic instructions with source and IR line references
+- LLVM memory intrinsics
+- allocation-related calls when visible in the IR
+
+Validated on EASTL after disassembling `scratch/eastl-engagement/native-scratch/linked/eastl.bc`:
+
+```text
+scratch/eastl-engagement/llm/component-ir/summary.json
+```
+
+Summary from the EASTL component map:
+
+```text
+FC01 Memory Allocators And Fixed Pools: 6 functions, 2 call edges, 6 GEPs
+FC02 Containers, Capacity, And Iterator Arithmetic: 4 functions, 2 call edges, 1 GEP
+FC03 Hash Tables And Tree Containers: 12 functions, 27 call edges, 221 GEPs
+FC04 String, Encoding, And Text Conversion: 16 functions, 10 call edges, 61 GEPs, 3 memory intrinsics
+FC05 Algorithms And Generic Utilities: 8 functions, 11 call edges, 5 GEPs
+FC06 Atomic And Concurrency Primitives: 6 functions, 8 call edges, 9 GEPs
+FC07 Smart Pointers And Object Lifetime Helpers: 0 functions in linked EASTL IR
+```
+
+The FC01 slice now includes `eastl::fixed_pool_base::init(...)` at `source/fixed_pool.cpp:15` with
+six compiled GEP instructions. Empty component slices should be treated as coverage/build signals,
+not as proof that the component is safe.
+
+The red/blue process is also split:
+
+- general red team: open-ended adversarial inference
+- known-list red team: systematic review against the known issue catalog
+- general blue team: refutation plus defense/mitigation for open-ended scenarios
+- known-list blue team: evidence/control response for catalog-driven hypotheses
+
+This split should be preserved for the large repo so checklist coverage does not crowd out
+open-ended inference, and defensive control analysis does not get confused with false-positive
+refutation.
+
+### Independent verification and remediation proposal
+
+The first focused independent verification target was `RT-FC04-002` in `FC04 String, Encoding, And
+Text Conversion`. A small testcase under
+`scratch/eastl-engagement/verification/rt-fc04-002/utf8_extended_probe.cpp` verified that enough-length
+unsupported UTF-8 extended lead-byte forms return success, advance source/destination pointers, and
+produce `0x0000ffff`.
+
+The verification was repeated with native-image Clang 21.1.0 and reproduced the behavior. Plain
+linked LLVM IR and ASan/UBSan-instrumented linked LLVM IR were generated for the focused probe plus
+`targets/eastl/source/string.cpp`:
+
+```text
+scratch/eastl-engagement/verification/rt-fc04-002/rt-fc04-002-linked.ll
+scratch/eastl-engagement/verification/rt-fc04-002/rt-fc04-002-linked.asan-ubsan.ll
+```
+
+Executable sanitizer runs are blocked in the current native image because compiler-rt sanitizer
+runtime archives are missing. Treat that as an environment limitation, not as a finding refutation.
+If sanitizer runtime execution matters for the large repo, add the matching ASan/UBSan compiler-rt
+archives to the native image before relying on sanitizer run status.
+
+Added `appsec-review-process/11-remediation-proposal/` as the optional post-verification fix lane.
+It consumes a verified finding and testcase, proposes a minimal source/test patch, retests in the
+same environment, and writes `proposed-fix.patch` or `proposed-fix.diff`. The fresh-task continuation
+prompt for the current EASTL remediation rehearsal is:
+
+```text
+appsec-review-process/continuation-remediation-rt-fc04-002.md
+```
 
 ## Commands Worth Keeping
 
@@ -268,31 +415,33 @@ grep -n "Findings by tool" scratch/eastl-engagement/llm/ENGAGEMENT_LLM_INPUT.md
 
 ## What Is Still Only Design
 
-The multi-agent LLM choreography survived mainly as architecture in `docs/design-v3.md`, not as
-runnable prompts or orchestration code.
+The multi-agent LLM choreography is now partially tracked under `appsec-review-process/`, with lane
+prompts, run ids, handoffs, failure propagation, budgets, component taxonomy, and red/blue support
+files. It is not yet a fully automated orchestrator.
 
-Documented intent exists for:
+Tracked prompt/process support now exists for:
 
 - L0A component and purpose identification
 - L2 ASVS/MASVS control assessment
 - red-team hypothesis
 - blue-team refutation
 - independent verification
+- remediation proposal with same-environment retest
 - cross-lane synthesis
 - lane contracts
-- append-only ledger
 - component classification invalidation and rescoping
 
 Missing implementation:
 
-- no filled `prompts/lanes/*.md`
-- no filled `prompts/skills/*.md`
-- no lane contract YAML files
+- no fully automated subtask scheduler for launching all red/blue/verification lanes
+- no automatic component-cloud batching into parallel subtasks yet
+- no final report automation beyond the current synthesis lane prompt
 - no component-purpose-map generator
 - no ASVS/MASVS applicability runner
 - no subtask-spawning orchestrator
 - no restart/coordination loop for agent tasks
 - no canonical ledger writer beyond design placeholders
+- no accepted-fix application workflow beyond proposed patch/diff generation
 
 ## Recommended Next Build Step Before the Huge Repo
 
@@ -313,7 +462,10 @@ Create a lightweight manual LLM rehearsal harness before implementing a full orc
 5. independent verification prompt:
    - input: only cited evidence/source spans, not discoverer prose
    - output: confirmed/refuted/unresolved disposition
-6. synthesis prompt:
+6. remediation proposal prompt:
+   - input: verified finding, focused testcase, same-environment commands, IR/sanitizer status
+   - output: proposed patch/diff and same-environment retest status
+7. synthesis prompt:
    - input: verified facts only
    - output: prioritized findings, limitations, and follow-up work
 
@@ -340,4 +492,5 @@ Before expecting high-quality final findings, add at least:
 - L0A component characterization
 - ASVS/MASVS applicability planning
 - manual red-team / blue-team / verifier prompt templates
+- remediation proposal rehearsal on `RT-FC04-002`
 - a small EASTL rehearsal using those prompts

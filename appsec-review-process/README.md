@@ -16,6 +16,7 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 | `artifacts.md` | Artifact locations, staging rules, and lane output contract. |
 | `budget-policy.md` | Probe/standard/full budget contracts for subtasks. |
 | `manual-orchestration-runbook.md` | How to operate the process before a full orchestrator exists. |
+| `continuation-remediation-rt-fc04-002.md` | Fresh-task continuation prompt for the EASTL remediation probe. |
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
 | `templates/` | Handoff, artifact manifest, lane result, and status templates. |
 | `logs/` | Local run logs, scratch notes, and pasted outputs. Contents are ignored. |
@@ -36,6 +37,7 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 | `08-blue-team-refutation/` | Refutation, mitigating evidence, and false-positive analysis. |
 | `09-independent-verification/` | Fresh evidence-only verification of claims. |
 | `10-synthesis-report/` | Cross-lane synthesis, final disposition, and report assembly. |
+| `11-remediation-proposal/` | Proposed fix generation, same-environment retest, and patch artifact creation. |
 
 ## Operating Model
 
@@ -68,7 +70,25 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 
 6. Run `02-evidence-pregather` first unless there is already a fresh `job-status.md` with `Status: OK`.
 7. Run `01-component-characterization` before broad LLM analysis on large repos.
-8. Create lane handoffs with `create_handoff.py`; do not rely on chat history alone:
+   This lane builds both scope exclusions and a functional component cloud. It should identify
+   review domains such as identity/accounts, network/RPC/transport, crypto/secrets, player/social
+   services, data/records, admin/operations, client/platform UI, content/update, native runtime, and
+   build/deployment infrastructure.
+8. If linked LLVM IR exists, generate component compiled-evidence slices after component
+   characterization:
+
+   ```bash
+   python3 pipeline/component_ir_slice.py \
+     --ir scratch/<project>-engagement/native-scratch/component-ir/<project>.ll \
+     --component-map appsec-review-process/runs/<run_id>/outputs/01-component-characterization/component-purpose-map.json \
+     --all-components \
+     --out scratch/<project>-engagement/llm/component-ir
+   ```
+
+   These slices enrich the component cloud with compiled functions, direct calls, GEPs/pointer
+   arithmetic, and memory intrinsics. Empty slices are coverage signals, not proof that a component
+   is safe.
+9. Create lane handoffs with `create_handoff.py`; do not rely on chat history alone:
 
    ```bash
    python3 appsec-review-process/create_handoff.py \
@@ -77,9 +97,11 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
      --budget probe
    ```
 
-9. Validate returned lane outputs with `validate_lane_output.py`.
-10. Use `09-independent-verification` before accepting any High/Critical or ship-blocking claim.
-11. Use `10-synthesis-report` only from verified or explicitly unresolved evidence.
+10. Validate returned lane outputs with `validate_lane_output.py`.
+11. Use `09-independent-verification` before accepting any High/Critical or ship-blocking claim.
+12. Use `11-remediation-proposal` when the user wants a proposed fix for a verified issue. It must
+    produce a reviewable patch/diff and retest in the same environment as verification.
+13. Use `10-synthesis-report` only from verified or explicitly unresolved evidence.
 
 For detailed operation, see `manual-orchestration-runbook.md`.
 
@@ -126,6 +148,37 @@ Each numbered lane owns:
 - `config.md`: lane purpose, required inputs, expected outputs, and success criteria
 - `prompt.md`: the main user-facing prompt for a task or subtask
 - `subprompts.md`: smaller probes, red/blue team prompts, or specialist prompts
+- optional support files such as `taxonomy.md`
+
+`01-component-characterization/taxonomy.md` provides the coarse-to-fine component vocabulary used to
+build a component cloud. Its `parallel_review_group` values let the coordinator split a large
+multiplayer game review into independent batches, such as identity/access, network/RPC, crypto,
+player services, data/records, admin tools, client/platform UI, content/update, native runtime, and
+build/deployment.
+
+`07-red-team-adversarial/known-issue-catalog.md` maps those same review groups to common attack and
+security issue classes. It is hypothesis fuel for red-team prompts, not evidence by itself. Red-team
+outputs must still cite target-specific locations, findings, or coverage gaps before promoting any
+catalog item to a candidate scenario.
+
+`07-red-team-adversarial/` supports separate red-team modes:
+
+- `general-red-team.md`: open-ended adversarial inference beyond the catalog
+- `known-list-red-team.md`: systematic known-issue catalog walkthrough
+
+`08-blue-team-refutation/` mirrors those modes:
+
+- `general-blue-team.md`: refute, defend, and mitigate open-ended red-team scenarios
+- `known-list-blue-team.md`: answer catalog-driven hypotheses with evidence, controls, and residual
+  risk
+
+Keep these as separate subtasks on large targets so broad inference, checklist coverage, and
+defensive analysis can disagree productively before synthesis.
+
+`11-remediation-proposal/` is intentionally separated from verification. It is only for issues that
+already have an independent verification result. Its outputs are proposed source/test patches plus
+same-environment retest evidence; it should not quietly edit a target repository and call that a
+completed remediation without a reviewable diff.
 
 Recommended rehearsal before a huge repo:
 
@@ -133,7 +186,8 @@ Recommended rehearsal before a huge repo:
 2. `05-native-memory` with `probe` over a few deep-confirmed clusters
 3. `08-blue-team-refutation` with `probe` against one claim
 4. `09-independent-verification` with `probe` against the same claim
-5. `10-synthesis-report` with `probe`
+5. `11-remediation-proposal` with `probe` against the verified claim
+6. `10-synthesis-report` with `probe`
 
 Then repeat with `standard` or `full` on EASTL before moving to the larger target.
 

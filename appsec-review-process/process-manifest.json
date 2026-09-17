@@ -16,6 +16,7 @@
     "07-red-team-adversarial",
     "08-blue-team-refutation",
     "09-independent-verification",
+    "11-remediation-proposal",
     "10-synthesis-report"
   ],
   "required_global_inputs": [
@@ -39,6 +40,7 @@
       "coverage ledger",
       "verified or explicitly unresolved findings",
       "independent verification for high/critical or ship-blocking claims",
+      "remediation proposal status for accepted verified fixes, when requested",
       "documented limitations"
     ]
   }

@@ -43,7 +43,7 @@ if (-not (Test-Path $dockerfile)) {
 # pulls them in - without both changes together, this check would pass but
 # `docker build` would fail later with a much less clear "file not found"
 # from COPY itself.
-foreach ($required in @("build_symbol_index.py", "md_to_sarif.py", "build_semantic_index.py", "query_semantic_index.py", "scrub_evidence.py", "php_parse_coverage.py")) {
+foreach ($required in @("build_symbol_index.py", "md_to_sarif.py", "build_semantic_index.py", "query_semantic_index.py", "scrub_evidence.py", "php_parse_coverage.py", "run-semantic-index-batched.sh")) {
     if (-not (Test-Path (Join-Path $ContextDir "scripts/$required"))) {
         throw "Missing scripts/$required - the image COPYs this in at build time."
     }

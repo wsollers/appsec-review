@@ -37,7 +37,7 @@ Before the huge repo, run:
 2. `05-native-memory` with `probe` on the first 3 deep-confirmed clusters
 3. `08-blue-team-refutation` with `probe` against one native-memory claim
 4. `09-independent-verification` with `probe` against the same claim
-5. `10-synthesis-report` with `probe` using only those outputs
+5. `11-remediation-proposal` with `probe` against a verified claim, producing a proposed patch and same-environment retest
+6. `10-synthesis-report` with `probe` using only those outputs
 
 Then run the same sequence with `standard` or `full` on EASTL before moving to the huge repo.
-

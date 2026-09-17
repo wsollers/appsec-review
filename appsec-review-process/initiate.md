@@ -54,6 +54,7 @@ Find or ask for:
    - refutation: `08-blue-team-refutation`
    - evidence-only confirmation: `09-independent-verification`
    - final report: `10-synthesis-report`
+   - proposed fix and retest: `11-remediation-proposal`
 
 ## Minimal State Report
 

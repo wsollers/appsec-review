@@ -40,6 +40,33 @@ At minimum, include:
 - deep confirmation path
 - retrieval plan path
 
+## Normalize WSL Results Into Repo-Local Paths
+
+If evidence collection ran in WSL but prompt/lane work will happen from this repo checkout, first
+copy the source and engagement artifacts into the ignored repo-local layout:
+
+```bash
+scripts/sync-wsl-engagement-to-repo.sh \
+  --project <project> \
+  --source-url <git-url> \
+  --source-ref <branch-or-commit> \
+  --engagement-dir <wsl-scratch/project-engagement> \
+  --run-id <run_id> \
+  --business-goal "<goal>"
+```
+
+If the source is already cloned in WSL, use `--source-dir <wsl-target>` instead of
+`--source-url`. The script writes:
+
+```text
+targets/<project>/
+scratch/<project>-engagement/
+appsec-review-process/runs/<run_id>/inputs/artifact-manifest.json
+```
+
+Use this normalized manifest for LLM lanes so exact source review and deterministic artifacts are
+both available under repo-local paths.
+
 ## Run A Lane
 
 Start:
@@ -109,7 +136,8 @@ For a large game-code repo:
 8. `07-red-team-adversarial`
 9. `08-blue-team-refutation`
 10. `09-independent-verification`
-11. `10-synthesis-report`
+11. `11-remediation-proposal` for verified findings where the user wants a proposed fix and retest
+12. `10-synthesis-report`
 
 Run `05` and `06` in parallel only after component characterization exists.
 
@@ -160,3 +188,20 @@ the LLM package was regenerated. See:
 scratch/eastl-windows-codeql/job-status.md
 scratch/eastl-windows-codeql/llm/ENGAGEMENT_LLM_INPUT.md
 ```
+
+## EASTL WSL Sync Example
+
+After a WSL EASTL run such as `~/scratch/eastl-engagement`, normalize it into the repo with:
+
+```bash
+scripts/sync-wsl-engagement-to-repo.sh \
+  --project eastl \
+  --source-url https://github.com/electronicarts/EASTL.git \
+  --source-ref master \
+  --engagement-dir ~/scratch/eastl-engagement \
+  --run-id <run_id> \
+  --business-goal "Probe EASTL before running the large game repo."
+```
+
+That leaves prompt lanes pointed at `targets/eastl` and `scratch/eastl-engagement` instead of a
+WSL UNC path.

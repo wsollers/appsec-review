@@ -415,8 +415,14 @@ function New-EvidenceDir([string]$Sub) {
 # Dockerfile's "NOT included" note for why) to run against a different image
 # instead.
 function Get-BaseDockerArgs([string]$Image = $ImageTag) {
-    return @(
-        "run", "--rm",
+    $envArgs = @("-e", "HOME=/tmp")
+    foreach ($name in @("SEMANTIC_INDEX_BATCH_SIZE", "SEMANTIC_INDEX_SLICE_LIMIT", "SEMANTIC_INDEX_START", "SEMANTIC_INDEX_MODEL", "SEMANTIC_INDEX_TABLE")) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            $envArgs += @("-e", "$name=$value")
+        }
+    }
+    return @("run", "--rm") + $envArgs + @(
         "-v", "${RepoPath}:/workspace:ro",
         "-v", "${EvidencePath}:/evidence",
         $Image
@@ -1024,11 +1030,11 @@ $allSteps = @(
     [PSCustomObject]@{
         Name = "semantic-index"
         EvidenceSubdir = "semantic-index"
-        Cmd = @("python3", "/opt/scripts/build_semantic_index.py", "/workspace", "/evidence/symbol-index", "-o", "/evidence/semantic-index")
+        Cmd = @("bash", "/opt/scripts/run-semantic-index-batched.sh", "/workspace", "/evidence/symbol-index", "/evidence/semantic-index")
         CaptureStdout = $false
         DependsOn = "symbol-index"
         ExpectedOutput = "semantic-index/index.json"
-        Note = "Needs symbol-index to have run first (reuses its definition boundaries as chunks). Downloads the embedding model on first run - needs the container to have outbound network access; if your build environment is air-gapped, pre-bake the model into the image instead (see the Dockerfile's Python tools comment). This step deliberately does NOT set AllowNonZeroExit - a real run hit exit 137 (SIGKILL, almost always an OOM kill on a large repo) and was correctly reported as treatedOk=false already; if you see 137 again, re-run with a larger container memory limit or a smaller batch size rather than assuming the flags are wrong. OPEN ITEM (2026-09-03, unverified): ExpectedOutput here points at index.json - reported (not yet confirmed against a real successful run) that build_semantic_index.py's actual on-disk output may not include a file by that name at all if it stores its index via LanceDB (which writes its own .lance data files/manifests under a directory, not a single index.json). Verify what a real successful run actually writes before trusting this ExpectedOutput path, per the same lesson that already applied to MANIFEST.json's step-name mismatch."
+        Note = "Needs symbol-index to have run first (reuses its definition boundaries as chunks). Runs build_semantic_index.py through /opt/scripts/run-semantic-index-batched.sh, which defaults to SEMANTIC_INDEX_BATCH_SIZE=1 and SEMANTIC_INDEX_SLICE_LIMIT=0. That means one embedding at a time, written to LanceDB batch-by-batch in one normal process; set SEMANTIC_INDEX_SLICE_LIMIT to a positive integer only if you need fresh process boundaries. Downloads the embedding model on first run - needs the container to have outbound network access; if your build environment is air-gapped, pre-bake the model into the image instead (see the Dockerfile's Python tools comment). This step deliberately does NOT set AllowNonZeroExit - a signal kill such as 137 is treated as a real degraded run."
     },
     [PSCustomObject]@{
         Name = "binskim"

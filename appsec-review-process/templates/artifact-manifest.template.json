@@ -22,6 +22,8 @@
   "derived_artifacts": {
     "component_purpose_map_json": "",
     "component_purpose_map_md": "",
+    "component_ir_dir": "",
+    "component_ir_summary_json": "",
     "dfd_stride_md": "",
     "asvs_masvs_plan_md": "",
     "verified_findings_json": "",
@@ -29,4 +31,3 @@
   },
   "notes": []
 }
-

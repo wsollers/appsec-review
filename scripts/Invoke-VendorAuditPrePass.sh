@@ -158,12 +158,25 @@ clear_outputs() {
 
 docker_base_args() {
   local image="${1:-$IMAGE_TAG}"
-  printf '%s\0' run --rm --user "$HOST_UID:$HOST_GID" -e HOME=/tmp -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image"
+  local env_args=(-e HOME=/tmp)
+  for name in SEMANTIC_INDEX_BATCH_SIZE SEMANTIC_INDEX_SLICE_LIMIT SEMANTIC_INDEX_START SEMANTIC_INDEX_MODEL SEMANTIC_INDEX_TABLE; do
+    if [[ -n "${!name:-}" ]]; then
+      env_args+=(-e "$name=${!name}")
+    fi
+  done
+  printf '%s\0' run --rm --user "$HOST_UID:$HOST_GID" "${env_args[@]}" -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image"
 }
 
 run_container() {
   local image="$1"; shift
-  docker run --rm --user "$HOST_UID:$HOST_GID" -e HOME=/tmp -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image" "$@"
+  local env_args=(-e HOME=/tmp)
+  local name
+  for name in SEMANTIC_INDEX_BATCH_SIZE SEMANTIC_INDEX_SLICE_LIMIT SEMANTIC_INDEX_START SEMANTIC_INDEX_MODEL SEMANTIC_INDEX_TABLE; do
+    if [[ -n "${!name:-}" ]]; then
+      env_args+=(-e "$name=${!name}")
+    fi
+  done
+  docker run --rm --user "$HOST_UID:$HOST_GID" "${env_args[@]}" -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image" "$@"
 }
 
 write_post_success() {
@@ -209,7 +222,7 @@ step_meta() {
       ;;
     joern-parse) SUBDIR=joern; ALLOW_NONZERO=1; EXPECTED=joern/cpg.bin; POST_FILE=joern/README.txt; POST_TEXT="CPG built at /evidence/joern/cpg.bin. Open it interactively with Joern for hypothesis-driven dataflow queries."; CMD=(/opt/joern/joern-cli/c2cpg.sh /workspace --output /evidence/joern/cpg.bin --exclude "**/.git/**" --exclude "**/node_modules/**" --exclude "**/vendor/**");;
     symbol-index) SUBDIR=symbol-index; EXPECTED=symbol-index/index.json; CMD=(python3 /opt/scripts/build_symbol_index.py /workspace -o /evidence/symbol-index);;
-    semantic-index) SUBDIR=semantic-index; EXPECTED=semantic-index/index.json; CMD=(python3 /opt/scripts/build_semantic_index.py /workspace /evidence/symbol-index -o /evidence/semantic-index);;
+    semantic-index) SUBDIR=semantic-index; EXPECTED=semantic-index/index.json; CMD=(bash /opt/scripts/run-semantic-index-batched.sh /workspace /evidence/symbol-index /evidence/semantic-index);;
     binskim) SUBDIR=binskim; ALLOW_NONZERO=1; EXPECTED=binskim/binskim.sarif; CMD=(bash -lc "binskim analyze '/workspace/**' --recurse --output /evidence/binskim/binskim.sarif || true");;
     sast-mobile-android) SUBDIR=sast-mobile; ALLOW_NONZERO=1; EXPECTED=sast-mobile/android-coverage.txt; CMD=(bash -lc "files=\$(find /workspace -type f \\( -iname '*.java' -o -iname '*.kt' -o -iname '*.kts' -o -iname 'AndroidManifest.xml' \\) | wc -l); echo \"android candidate files: \$files\" > /evidence/sast-mobile/android-coverage.txt; mobsfscan /workspace --type android --sarif -o /evidence/sast-mobile/mobsfscan-android.sarif || true; if [ \"\$files\" -eq 0 ]; then echo 'WARNING: zero matching source files - treat mobsfscan-android.sarif as NOT-SCANNED, not clean.' >> /evidence/sast-mobile/android-coverage.txt; fi");;
     sast-mobile-ios) SUBDIR=sast-mobile; ALLOW_NONZERO=1; EXPECTED=sast-mobile/ios-coverage.txt; CMD=(bash -lc "files=\$(find /workspace -type f \\( -iname '*.swift' -o -iname '*.m' -o -iname '*.mm' -o -iname 'Info.plist' \\) | wc -l); echo \"ios candidate files: \$files\" > /evidence/sast-mobile/ios-coverage.txt; mobsfscan /workspace --type ios --sarif -o /evidence/sast-mobile/mobsfscan-ios.sarif || true; if [ \"\$files\" -eq 0 ]; then echo 'WARNING: zero matching source files - treat mobsfscan-ios.sarif as NOT-SCANNED, not clean.' >> /evidence/sast-mobile/ios-coverage.txt; fi");;

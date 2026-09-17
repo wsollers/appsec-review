@@ -17,6 +17,8 @@ Read these first:
 - `appsec-review-process/budget-policy.md`
 - `appsec-review-process/{{PROCESS}}/config.md`
 - `appsec-review-process/{{PROCESS}}/prompt.md`
+- any additional `.md` support files in `appsec-review-process/{{PROCESS}}/`, such as taxonomy or
+  subprompt files
 
 ## Inputs
 

@@ -21,6 +21,23 @@ Default for heavy evidence collection.
 - scanner execution: bash + Docker
 - canonical job: `pipeline/engagement_job.sh`
 
+If the heavy run happens in another WSL checkout or another WSL path, normalize it back into this
+repo before prompt/lane work:
+
+```bash
+scripts/sync-wsl-engagement-to-repo.sh \
+  --project <project> \
+  --source-url <git-url> \
+  --source-ref <branch-or-commit> \
+  --engagement-dir <wsl-scratch/project-engagement> \
+  --run-id <run_id>
+```
+
+The script writes only under ignored repo-local `targets/<project>` and
+`scratch/<project>-engagement`, then optionally restages
+`appsec-review-process/runs/<run_id>/inputs/artifact-manifest.json` so subsequent LLM lanes use
+repo-local paths instead of WSL UNC paths.
+
 ### Local Windows PowerShell + Docker
 
 Supported host path for parity, dry runs, and bounded engagements.
@@ -39,6 +56,7 @@ Default for prompt/lane work and source review.
 
 - read tracked process files first
 - inspect existing evidence before reading raw source
+- prefer repo-local target paths under `targets/` after WSL sync
 - write process state through `run_process.py`
 - write large lane outputs under `appsec-review-process/runs/<run_id>/outputs/`
 - do not edit target source unless the user explicitly asks for remediation

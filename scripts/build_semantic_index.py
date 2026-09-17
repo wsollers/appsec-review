@@ -47,20 +47,15 @@ Usage:
 
 Query afterward with query_semantic_index.py.
 
-Processing a very large chunk set in one long-lived process (2026-09-08):
-if the embedding runtime's memory grows unboundedly over a long run (a known
-class of behavior for ONNX Runtime's CPU execution-provider arena, which can
-grow to fit the largest input seen so far and never shrink back down) and the
-process gets SIGKILLed (exit 137) partway through, use --start/--limit to
-split the run into several fresh process invocations instead of reducing
---batch-size — each fresh process gets a clean runtime arena. The first
-slice (--start 0, the default) creates the table fresh; any later slice
-(--start > 0) appends to the existing table instead of recreating it. This
-is a mitigation to reach for IF a real run is confirmed to be OOMing partway
-through a long chunk list — read the full stderr log from a real failed run
-first to confirm that's actually what's happening, rather than assuming it
-(a separate, not-yet-ruled-out possibility is a Hugging Face model-download
-auth/rate-limit stall, which --start/--limit does nothing for).
+Processing a very large chunk set (2026-09-08, updated 2026-09-16):
+this script writes each embedded batch to LanceDB as soon as that batch is
+produced. Do not reintroduce a whole-run `vectors` accumulator — a real EASTL
+run showed the old shape could climb toward Docker's memory limit before the
+table write ever happened. Keep --batch-size small first; then use
+--start/--limit only if the embedding runtime itself still grows across a
+long run and needs fresh process boundaries. The first slice (--start 0, the
+default) creates the table fresh; any later slice (--start > 0) appends to
+the existing table instead of recreating it.
 
 2026-09-08 (second, independent OOM cause, found via find_oversized_chunks.py
 against a real fsh-server run): even with --start/--limit slicing in place
@@ -221,26 +216,13 @@ def main() -> None:
     print(f"Loading embedding model {args.model} (downloads on first use)...", file=sys.stderr)
     model = TextEmbedding(model_name=args.model)
 
-    texts = [c["text"] for c in chunks]
-    vectors: list[list[float]] = []
-    for i in range(0, len(texts), args.batch_size):
-        batch = texts[i:i + args.batch_size]
-        vectors.extend(v.tolist() for v in model.embed(batch))
-        if i % (args.batch_size * 10) == 0:
-            print(f"  embedded {i}/{len(texts)}...", file=sys.stderr)
-
-    rows = [
-        {**{k: v for k, v in c.items()}, "vector": vec}
-        for c, vec in zip(chunks, vectors)
-    ]
-
     args.output.mkdir(parents=True, exist_ok=True)
     db = lancedb.connect(str(args.output))
 
+    table = None
     if is_first_slice:
         if args.table in db.table_names():
             db.drop_table(args.table)
-        table = db.create_table(args.table, data=rows)
     else:
         if args.table not in db.table_names():
             sys.exit(
@@ -248,7 +230,27 @@ def main() -> None:
                 f"run the first slice (--start 0, or default) before any later slice."
             )
         table = db.open_table(args.table)
-        table.add(rows)
+
+    rows_written = 0
+    for i in range(0, len(chunks), args.batch_size):
+        batch_chunks = chunks[i:i + args.batch_size]
+        batch_texts = [c["text"] for c in batch_chunks]
+        batch_vectors = [v.tolist() for v in model.embed(batch_texts)]
+        rows = [
+            {**{k: v for k, v in c.items()}, "vector": vec}
+            for c, vec in zip(batch_chunks, batch_vectors)
+        ]
+        if table is None:
+            create_kwargs = {"mode": "overwrite"} if is_first_slice else {}
+            table = db.create_table(args.table, data=rows, **create_kwargs)
+        else:
+            table.add(rows)
+        rows_written += len(rows)
+        if i % (args.batch_size * 10) == 0:
+            print(f"  embedded and wrote {i + len(rows)}/{len(chunks)}...", file=sys.stderr)
+
+    if table is None:
+        sys.exit(f"No rows were written for slice [{args.start}:{end}] of {total} total chunk(s).")
 
     if is_last_slice:
         # Cheap to (re)build once the run's data is settled; safe to call even
@@ -261,7 +263,7 @@ def main() -> None:
 
     row_count = table.count_rows()
     print(
-        f"Wrote {len(rows)} chunk(s) this run to LanceDB table '{args.table}' at {args.output} "
+        f"Wrote {rows_written} chunk(s) this run to LanceDB table '{args.table}' at {args.output} "
         f"(table now has {row_count} total row(s))",
         file=sys.stderr,
     )
@@ -284,7 +286,7 @@ def main() -> None:
         "output_dir": str(args.output),
         "model": args.model,
         "total_chunks_available": total,
-        "rows_written_this_invocation": len(rows),
+        "rows_written_this_invocation": rows_written,
         "table_row_count_after_this_invocation": row_count,
         "slice_processed": [args.start, end],
         "complete": is_last_slice,
