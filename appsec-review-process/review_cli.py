@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,15 @@ def load_json(path: Path) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def load_manifest() -> dict[str, Any]:
@@ -248,17 +258,25 @@ def cmd_next_lane(args: argparse.Namespace) -> int:
         raise SystemExit(f"no run-status.json for run {run_id!r}; run_process.py --start first")
 
     if status.get("failed_process"):
+        # run-status.json's failed_process/resume_from pointer is shared
+        # between FAILED and BLOCKED (see run_process.py's
+        # update_run_for_process) -- look at the process's own status.json to
+        # report which one it actually is, rather than assuming FAILED.
+        stuck_lane = status["failed_process"]
+        stuck_status_data = load_json(run_dir(run_id) / "processes" / stuck_lane / "status.json")
+        real_state = stuck_status_data.get("status") or "FAILED"
         result = {
             "run_id": run_id,
             "recommended_lane": None,
             "blocked": True,
             "ambiguous_recovery_needed": True,
             "reason": (
-                f"process {status['failed_process']!r} is FAILED. This is a recovery decision, "
+                f"process {stuck_lane!r} is {real_state}. This is a recovery decision, "
                 "not a routing decision -- read runs/<run_id>/run-status.md and the lane's "
                 "runs/<run_id>/processes/<lane>/status.json message, decide whether to retry, "
                 "skip, or escalate to a human/LLM judgment call per initiate.md, then rerun "
-                "run_process.py --mark-ok/--fail-immediately accordingly before calling next-lane again."
+                "run_process.py --status OK/FAILED/BLOCKED/SKIPPED accordingly before calling "
+                "next-lane again."
             ),
         }
         print(json.dumps(result, indent=2))
@@ -645,6 +663,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         timed_out = True
     duration_seconds = time.time() - started
 
+    # raw-response.json is always written, unconditionally, before anything
+    # else touches this lane's output dir -- the one thing that must never be
+    # lost regardless of what follows.
     raw_path = out_dir / "raw-response.json"
     if proc is not None:
         raw_path.write_text(proc.stdout or "", encoding="utf-8")
@@ -655,9 +676,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     if proc is not None and proc.stdout:
         try:
             parsed = json.loads(proc.stdout)
-            # Field names not yet confirmed against a real call (see
-            # model-config.json invocation.open_questions) -- try the likely
-            # candidates rather than assume one, and record which (if any) hit.
             for key in ("result", "output", "text", "response", "content"):
                 if isinstance(parsed.get(key), str) and parsed[key].strip():
                     result_text = parsed[key]
@@ -665,26 +683,43 @@ def cmd_run(args: argparse.Namespace) -> int:
                     break
         except Exception:
             pass
-
     if not parse_ok and proc is not None:
-        # Nothing lost: raw-response.json above has the untouched output either way.
         result_text = proc.stdout or ""
 
-    (out_dir / "result.md").write_text(result_text, encoding="utf-8")
+    VALID_STATES = ("OK", "FAILED", "BLOCKED", "SKIPPED")
 
-    success = (not timed_out) and proc is not None and proc.returncode == 0
-    status_payload = {
-        "schema": "appsec-review-process/process-status/0.1",
-        "run_id": run_id,
-        "process": lane,
-        "budget": budget,
-        "status": "OK" if success else "FAILED",
-        "message": ("timed out after %ss" % args.timeout) if timed_out else (f"claude exit={proc.returncode}" if proc is not None else "no process result"),
-        "parse_ok": parse_ok,
-        "cost_usd": parsed.get("cost_usd") if isinstance(parsed, dict) else None,
-        "duration_seconds": duration_seconds,
-    }
-    (out_dir / "status.json").write_text(json.dumps(status_payload, indent=2) + "\n", encoding="utf-8")
+    # The lane itself may have already written its own result.md/status.json
+    # via its Write tool during the call (its prompt/config tells it to, and
+    # Write is in --allowedTools). That self-report is authoritative -- it
+    # can say BLOCKED or SKIPPED, which a bare claude-process exit code can
+    # never tell us (exit 0 only means the CLI call itself succeeded, not
+    # that the lane's actual outcome was "OK"). Never clobber it with a
+    # synthesized version; only fill in when the lane didn't write one.
+    self_status_path = out_dir / "status.json"
+    self_status = load_json(self_status_path) if self_status_path.exists() else {}
+    self_reported = isinstance(self_status.get("status"), str) and self_status["status"] in VALID_STATES
+
+    if self_reported:
+        final_status = self_status["status"]
+        status_source = "lane self-reported (status.json it wrote itself)"
+        # Leave the lane's own result.md/status.json exactly as it wrote them.
+    else:
+        final_status = "OK" if (not timed_out and proc is not None and proc.returncode == 0) else "FAILED"
+        status_source = "synthesized from claude exit code (lane did not write its own status.json -- cannot infer BLOCKED/SKIPPED this way)"
+        (out_dir / "result.md").write_text(result_text, encoding="utf-8")
+        write_json(self_status_path, {
+            "schema": "appsec-review-process/process-status/0.1",
+            "run_id": run_id,
+            "process": lane,
+            "budget": budget,
+            "status": final_status,
+            "updated_at": now(),
+            "message": ("timed out after %ss" % args.timeout) if timed_out else (f"claude exit={proc.returncode}" if proc is not None else "no process result"),
+            "parse_ok": parse_ok,
+            "status_source": status_source,
+            "cost_usd": parsed.get("cost_usd") if isinstance(parsed, dict) else None,
+            "duration_seconds": duration_seconds,
+        })
 
     telemetry_path = run_dir(run_id) / "telemetry.jsonl"
     with telemetry_path.open("a", encoding="utf-8") as f:
@@ -695,19 +730,23 @@ def cmd_run(args: argparse.Namespace) -> int:
             "cost_usd": parsed.get("cost_usd") if isinstance(parsed, dict) else None,
             "exit_code": (proc.returncode if proc is not None else None),
             "timed_out": timed_out,
+            "final_status": final_status,
+            "status_source": status_source,
         }) + "\n")
 
-    mark_cmd = [sys.executable, str(ROOT / "run_process.py"), "--run-id", run_id, "--process", lane, "--budget", budget]
-    mark_cmd += ["--mark-ok", "--message", "review_cli.py run: claude exited 0"] if success else ["--fail-immediately", "--message", status_payload["message"]]
+    mark_cmd = [
+        sys.executable, str(ROOT / "run_process.py"), "--run-id", run_id, "--process", lane, "--budget", budget,
+        "--status", final_status, "--message", f"review_cli.py run: {status_source}",
+    ]
     mark_result = subprocess.run(mark_cmd, capture_output=True, text=True)
 
     print(json.dumps({
-        "run_id": run_id, "lane": lane, "budget": budget, "success": success,
-        "status_json": str(out_dir / "status.json"), "result_md": str(out_dir / "result.md"),
+        "run_id": run_id, "lane": lane, "budget": budget, "final_status": final_status, "status_source": status_source,
+        "status_json": str(self_status_path), "result_md": str(out_dir / "result.md"),
         "raw_response": str(raw_path), "parse_ok": parse_ok,
         "run_process_output": json.loads(mark_result.stdout) if mark_result.stdout else None,
     }, indent=2))
-    return 0 if success else 1
+    return 0 if final_status in ("OK", "SKIPPED") else 1
 
 
 # ---------------------------------------------------------------------------

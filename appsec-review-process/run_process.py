@@ -131,7 +131,13 @@ def next_process_after(completed: list[str]) -> str | None:
 def update_run_for_process(run_id: str, process: str, state: str, message: str = "") -> dict[str, Any]:
     data = load_json(status_path(run_id))
     completed = list(data.get("completed_processes") or [])
-    if state == "OK":
+
+    # OK and SKIPPED both let the run advance to the next lane -- SKIPPED means
+    # "intentionally not run, don't block progress", which is the conventional
+    # meaning in build/CI pipelines. The process's own status.json/events still
+    # record "SKIPPED" verbatim (see mark_process), never silently rewritten to
+    # "OK" -- only run-level progression treats them the same way.
+    if state in ("OK", "SKIPPED"):
         if process not in completed:
             completed.append(process)
         nxt = next_process_after(completed)
@@ -139,8 +145,16 @@ def update_run_for_process(run_id: str, process: str, state: str, message: str =
         failed_process = None
         resume_from = nxt
         rerun_command = f"python3 appsec-review-process/run_process.py --run-id {run_id} --process {nxt}" if nxt else ""
-    elif state == "FAILED":
-        status = "FAILED"
+    elif state in ("FAILED", "BLOCKED"):
+        # Both halt run progression and need explicit human/LLM recovery
+        # judgment before continuing (see initiate.md) -- reusing the single
+        # failed_process/resume_from pointer for both rather than adding a
+        # second schema field, since every reader of run-status.json already
+        # treats "there's a stuck process" as one condition. The distinct
+        # FAILED vs. BLOCKED state itself is preserved verbatim in the
+        # process's own status.json and in events.jsonl, so nothing is lost --
+        # only the top-level run-status.json's halt pointer is shared.
+        status = state
         failed_process = process
         resume_from = process
         rerun_command = f"python3 appsec-review-process/run_process.py --run-id {run_id} --process {process}"
@@ -211,6 +225,19 @@ def main() -> int:
     ap.add_argument("--list-processes", action="store_true")
     ap.add_argument("--fail-immediately", action="store_true", help="mark process failed without doing work")
     ap.add_argument("--mark-ok", action="store_true", help="mark process successful")
+    ap.add_argument(
+        "--status",
+        choices=["OK", "FAILED", "BLOCKED", "SKIPPED"],
+        default="",
+        help=(
+            "explicit terminal status for this process. Supersedes --mark-ok/--fail-immediately "
+            "when given (those two remain for backward compatibility with existing manual usage "
+            "and only ever express OK or FAILED). Use this to record BLOCKED (e.g. missing "
+            "required inputs -- halts the run like FAILED, requires the same recovery judgment) "
+            "or SKIPPED (intentionally not run -- the run advances to the next lane, same as OK, "
+            "but the process's own status.json/events.jsonl still say SKIPPED, not OK)."
+        ),
+    )
     ap.add_argument("--message", default="")
     args = ap.parse_args()
 
@@ -221,12 +248,19 @@ def main() -> int:
 
     run_id, data = get_or_create_run(args.run_id or None)
 
-    if args.start and not args.process and not args.fail_immediately and not args.mark_ok:
+    if args.start and not args.process and not args.fail_immediately and not args.mark_ok and not args.status:
         markdown_summary(run_id, data)
         print(json.dumps({"run_id": run_id, "status": data.get("status"), "status_path": str(status_path(run_id))}, indent=2))
         return 0
 
     process = resolve_process(args.process or data.get("resume_from") or data.get("current_process") or "")
+
+    if args.status:
+        data = mark_process(run_id, process, args.status, args.message or f"marked {args.status}", args.budget)
+        markdown_summary(run_id, data)
+        exit_code = 0 if args.status in ("OK", "SKIPPED") else 1
+        print(json.dumps({"run_id": run_id, "process": process, "status": args.status, "resume_from": data.get("resume_from"), "status_path": str(status_path(run_id))}, indent=2))
+        return exit_code
     if args.fail_immediately:
         data = mark_process(run_id, process, "FAILED", args.message or "intentional failure propagation test", args.budget)
         markdown_summary(run_id, data)
