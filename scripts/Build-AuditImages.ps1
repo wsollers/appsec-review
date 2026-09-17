@@ -41,10 +41,18 @@
 .PARAMETER ContextDir
     Repo root. Defaults to the parent of this script's directory.
 
+.PARAMETER DockerContext
+    `docker --context NAME` for every build (e.g. `desktop-linux` to land images in Docker
+    Desktop's engine instead of WSL's own native dockerd when the two are separate contexts -
+    check with `docker context ls` / `docker context show`). Default: whatever the current
+    default context already resolves to; this overrides it for this invocation only, it does
+    not change your default context or touch images already built under a different one.
+
 .EXAMPLE
     ./Build-AuditImages.ps1
     ./Build-AuditImages.ps1 -Only iac,container -NoCache
     ./Build-AuditImages.ps1 -SkipCodeQL
+    ./Build-AuditImages.ps1 -DockerContext desktop-linux
 #>
 [CmdletBinding()]
 param(
@@ -53,7 +61,8 @@ param(
     [switch]$SkipCodeQL,
     [string]$CodeqlBundleVersion = "codeql-bundle-v2.27.0",
     [string]$StaticTag = "vendor-audit-toolbox:latest",
-    [string]$ContextDir = (Split-Path -Parent $PSScriptRoot)
+    [string]$ContextDir = (Split-Path -Parent $PSScriptRoot),
+    [string]$DockerContext = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,7 +71,15 @@ $selected = $Only -split "," | ForEach-Object { $_.Trim() }
 function Want([string]$name) { return $selected -contains $name }
 
 Write-Host "Repo root: $ContextDir" -ForegroundColor Cyan
-docker info | Out-Null
+$dockerCtxArgs = @()
+if ($DockerContext) {
+    $dockerCtxArgs = @("--context", $DockerContext)
+    Write-Host "Docker context: $DockerContext (override, this invocation only)" -ForegroundColor Cyan
+} else {
+    $currentCtx = (docker context show) 2>$null
+    Write-Host "Docker context: $currentCtx (default, not overridden)" -ForegroundColor DarkGray
+}
+& docker @dockerCtxArgs info | Out-Null
 
 # Preflight: audit-static and audit-container both COPY from repo-root scripts/;
 # fail loudly here rather than letting docker build fail with an opaque
@@ -90,7 +107,7 @@ function Build-One([string]$Name, [string]$Tag, [string]$Dockerfile, [string]$Co
     Write-Host ""
     Write-Host "=== Building $Name -> $Tag ===" -ForegroundColor Cyan
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $buildArgs = @("build", "--progress=plain") + $script:noCacheArgs + @("-t", $Tag, "-f", $Dockerfile, $Context)
+    $buildArgs = $script:dockerCtxArgs + @("build", "--progress=plain") + $script:noCacheArgs + @("-t", $Tag, "-f", $Dockerfile, $Context)
     & docker @buildArgs
     $sw.Stop()
     if ($LASTEXITCODE -ne 0) {

@@ -30,12 +30,20 @@
 #                                Default: codeql-bundle-v2.27.0 (matches images/audit-codeql/README.md).
 #   --static-tag TAG       Tag for audit-static. Default: vendor-audit-toolbox:latest
 #                           (the default $IMAGE_TAG every orchestrator script expects).
+#   --context NAME         `docker --context NAME` for every build (e.g. `desktop-linux` to land
+#                           images in Docker Desktop's engine instead of WSL's own native dockerd
+#                           when the two are separate contexts — check with `docker context ls`).
+#                           Default: whatever `docker context show` already resolves to; this
+#                           overrides it for this invocation only, it does not change your default
+#                           context or touch images already built under a different one.
 #   -h, --help             Show this help.
 #
 # Examples:
 #   scripts/build-audit-images.sh
 #   scripts/build-audit-images.sh --only iac,container --no-cache
 #   scripts/build-audit-images.sh --skip-codeql
+#   DOCKER_CONTEXT=desktop-linux scripts/build-audit-images.sh
+#   scripts/build-audit-images.sh --context desktop-linux
 
 set -euo pipefail
 
@@ -46,9 +54,10 @@ NO_CACHE=0
 SKIP_CODEQL=0
 CODEQL_BUNDLE_VERSION="codeql-bundle-v2.27.0"
 STATIC_TAG="vendor-audit-toolbox:latest"
+DOCKER_CONTEXT_NAME="${DOCKER_CONTEXT:-}"
 
 usage() {
-  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [[ $# -gt 0 ]]; do
@@ -58,6 +67,7 @@ while [[ $# -gt 0 ]]; do
     --skip-codeql) SKIP_CODEQL=1; shift;;
     --codeql-bundle-version) CODEQL_BUNDLE_VERSION="$2"; shift 2;;
     --static-tag) STATIC_TAG="$2"; shift 2;;
+    --context) DOCKER_CONTEXT_NAME="$2"; shift 2;;
     -h|--help) usage; exit 0;;
     *) echo "unknown option: $1" >&2; usage; exit 2;;
   esac
@@ -73,8 +83,16 @@ want() {
 NOCACHE_ARGS=()
 [[ "$NO_CACHE" == 1 ]] && NOCACHE_ARGS=(--no-cache)
 
+DOCKER_CTX_ARGS=()
+[[ -n "$DOCKER_CONTEXT_NAME" ]] && DOCKER_CTX_ARGS=(--context "$DOCKER_CONTEXT_NAME")
+
 echo "Repo root: $REPO_ROOT"
-docker info >/dev/null || { echo "docker is not available/running" >&2; exit 1; }
+if [[ -n "$DOCKER_CONTEXT_NAME" ]]; then
+  echo "Docker context: $DOCKER_CONTEXT_NAME (override, this invocation only)"
+else
+  echo "Docker context: $(docker context show 2>/dev/null || echo '(unknown)') (default, not overridden)"
+fi
+docker "${DOCKER_CTX_ARGS[@]}" info >/dev/null || { echo "docker is not available/running under this context" >&2; exit 1; }
 
 # Preflight: audit-static and audit-container both COPY from repo-root scripts/;
 # fail loudly here rather than letting docker build fail with an opaque
@@ -102,7 +120,7 @@ build_one() {
   echo "=== Building $name -> $tag ==="
   local start
   start=$(date +%s)
-  if docker build --progress=plain "${NOCACHE_ARGS[@]}" -t "$tag" -f "$dockerfile" "$context"; then
+  if docker "${DOCKER_CTX_ARGS[@]}" build --progress=plain "${NOCACHE_ARGS[@]}" -t "$tag" -f "$dockerfile" "$context"; then
     local dur=$(( $(date +%s) - start ))
     RESULTS+=("OK   $name -> $tag (${dur}s)")
   else
