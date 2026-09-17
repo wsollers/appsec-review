@@ -16,7 +16,10 @@ remains the editing surface until this repo takes over — see `docs/decisions/A
 | `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `MIGRATION.md` |
 | `images/audit-native/` | Pinned native-analysis image for clang-tidy/cppcheck, compile feasibility, IR emit/link, `ir-facts`, and CSA/CTU. Runs only inside the hostile-build boundary. |
 | `images/audit-codeql/` | CodeQL bundle (pinned), offline; pre-engagement security-extended suites per language; license gate (ADR-0006) |
-| `images/audit-iac/`, `audit-container/`, `audit-report/`, `mythos-orchestrator/` | Planned; empty except README |
+| `images/audit-iac/` | Terraform/Kubernetes/Helm/Kustomize policy scanning (checkov, tfsec, trivy config, kube-linter) — split out of `audit-static` 2026-09-17 |
+| `images/audit-container/` | Dockerfile linting + base-image inventory (Hadolint, docker-base-images) — split out of `audit-static` 2026-09-17 |
+| `images/audit-report/` | LaTeX -> PDF report build, adapted from the LRA governance project's standalone LaTeX image; report format/styleguide still undecided (see TODO) |
+| `images/mythos-orchestrator/` | Planned; empty except README |
 | `orchestrator/` | Python: ledger writer + hash chain, contract validator, artifact registry, run-state regeneration |
 | `scripts/` | Existing toolbox scripts (PowerShell + Python + sh), copied as-is |
 | `schemas/` | JSON Schema for findings, contracts, component-purpose-map, index-manifest, compile-command-audit, patch-policy |
@@ -57,7 +60,7 @@ shape, but it is slower for heavy `ir-facts` and CodeQL work.
 
 ## Build / Validation Order
 
-1. Build Docker images.
+1. Build Docker images: `scripts/build-audit-images.sh` (WSL/Linux, preferred) or `scripts/Build-AuditImages.ps1` (native Windows PowerShell). Builds audit-static, audit-native, audit-codeql, audit-iac, audit-container, and audit-report from one entrypoint; `--only`/`-Only` builds a subset.
 2. Run static prepass smoke (`cloc`) to validate Docker mounts.
 3. Run native pregather without CodeQL/CSA to validate compile DB normalization, native SAST, feasibility, IR, link, and `ir-facts`.
 4. Run CodeQL-enabled pregather to validate regular security-extended and custom Mythos CodeQL.

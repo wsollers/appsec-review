@@ -788,6 +788,10 @@ $allSteps = @(
     [PSCustomObject]@{
         Name = "iac"
         EvidenceSubdir = "iac"
+        # 2026-09-17: split out of the vendor-audit-toolbox omnibus image into
+        # its own audit-iac image (MIGRATION.md item 7) — checkov/tfsec/trivy
+        # config now live there, not in $ImageTag.
+        Image = "audit-iac:local"
         Cmd = @("bash", "-lc",
                 "checkov -d /workspace -o json --output-file-path /evidence/iac/ 2>/evidence/iac/checkov.stderr.log || true; " +
                 "tfsec /workspace --format json --out /evidence/iac/tfsec.json || true; " +
@@ -1083,6 +1087,10 @@ $allSteps = @(
     [PSCustomObject]@{
         Name = "iac-k8s"
         EvidenceSubdir = "iac-k8s"
+        # 2026-09-17: split out of the vendor-audit-toolbox omnibus image into
+        # its own audit-iac image (MIGRATION.md item 7) — kube-linter now
+        # lives there, not in $ImageTag.
+        Image = "audit-iac:local"
         Cmd = @("bash", "-lc",
                 "kube-linter lint /workspace --format json > /evidence/iac-k8s/kube-linter.json 2>/evidence/iac-k8s/kube-linter.stderr.log || true")
         CaptureStdout = $false
@@ -1093,6 +1101,10 @@ $allSteps = @(
     [PSCustomObject]@{
         Name = "dockerfile-lint"
         EvidenceSubdir = "iac-docker"
+        # 2026-09-17: split out of the vendor-audit-toolbox omnibus image into
+        # its own audit-container image (MIGRATION.md item 7) — hadolint and
+        # run-dockerfile-lint.sh now live there, not in $ImageTag.
+        Image = "audit-container:local"
         # 2026-09-10 fix (confirmed live against a real fsh-server run's
         # dockerfile-lint.stderr.log, not guessed): this step's Cmd used to
         # be @("bash", "-lc", "<compound string built via PowerShell '+'
@@ -1125,6 +1137,11 @@ $allSteps = @(
     [PSCustomObject]@{
         Name = "docker-base-images"
         EvidenceSubdir = "iac-docker"
+        # 2026-09-17: routed to audit-container for consistency with
+        # dockerfile-lint (same EvidenceSubdir, same "container" evidence
+        # group) even though this step only needs find/grep/awk, both present
+        # in audit-container's minimal base image (MIGRATION.md item 7).
+        Image = "audit-container:local"
         Cmd = @("bash", "-lc",
                 'find /workspace -iname "Dockerfile*" -type f -print0 | xargs -0 grep -H -i -E "^FROM[[:space:]]" | sort -u > /evidence/iac-docker/base-images.txt || true')
         CaptureStdout = $false

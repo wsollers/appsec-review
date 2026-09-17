@@ -1,0 +1,150 @@
+<#
+.SYNOPSIS
+    Builds every pinned appsec-review Docker image from one entrypoint.
+
+.DESCRIPTION
+    PowerShell twin of build-audit-images.sh. Prefer the bash version from WSL for the
+    performance reasons documented in the repo README (WSL ext4 filesystem, not
+    /mnt/c or /mnt/f) — typical WSL checkout: ~/projects/appsec-review. This script is
+    for building from native Windows PowerShell + Docker Desktop instead.
+
+    Builds, in order:
+      audit-static     vendor-audit-toolbox:latest   (repo-root context; COPYs scripts/)
+      audit-native     audit-native:local             (self-contained; slow - SVF build)
+      audit-codeql     audit-codeql:local             (needs a pre-downloaded CodeQL bundle;
+                                                        auto-downloaded unless -SkipCodeQL)
+      audit-iac        audit-iac:local                (self-contained)
+      audit-container  audit-container:local          (repo-root context; COPYs scripts/run-dockerfile-lint.sh)
+      audit-report     audit-report:local             (self-contained)
+
+    scancode-toolkit:local is deliberately NOT built here - it has its own dedicated
+    build path (Build-ScanCodeImage.ps1) because there is no publishable upstream image
+    to pull; see that script and images/audit-static's Dockerfile header for why.
+
+.PARAMETER Only
+    Comma-separated subset of: static,native,codeql,iac,container,report. Default: all.
+
+.PARAMETER NoCache
+    Pass --no-cache to every docker build.
+
+.PARAMETER SkipCodeQL
+    Skip audit-codeql entirely (no bundle download, no build).
+
+.PARAMETER CodeqlBundleVersion
+    CodeQL bundle release tag to download if missing. Default: codeql-bundle-v2.27.0
+    (matches images/audit-codeql/README.md).
+
+.PARAMETER StaticTag
+    Tag for audit-static. Default: vendor-audit-toolbox:latest (the default $ImageTag
+    every orchestrator script expects).
+
+.PARAMETER ContextDir
+    Repo root. Defaults to the parent of this script's directory.
+
+.EXAMPLE
+    ./Build-AuditImages.ps1
+    ./Build-AuditImages.ps1 -Only iac,container -NoCache
+    ./Build-AuditImages.ps1 -SkipCodeQL
+#>
+[CmdletBinding()]
+param(
+    [string]$Only = "static,native,codeql,iac,container,report",
+    [switch]$NoCache,
+    [switch]$SkipCodeQL,
+    [string]$CodeqlBundleVersion = "codeql-bundle-v2.27.0",
+    [string]$StaticTag = "vendor-audit-toolbox:latest",
+    [string]$ContextDir = (Split-Path -Parent $PSScriptRoot)
+)
+
+$ErrorActionPreference = "Stop"
+
+$selected = $Only -split "," | ForEach-Object { $_.Trim() }
+function Want([string]$name) { return $selected -contains $name }
+
+Write-Host "Repo root: $ContextDir" -ForegroundColor Cyan
+docker info | Out-Null
+
+# Preflight: audit-static and audit-container both COPY from repo-root scripts/;
+# fail loudly here rather than letting docker build fail with an opaque
+# "file not found" partway through a long build.
+$requiredScripts = @(
+    "scripts/build_symbol_index.py", "scripts/md_to_sarif.py", "scripts/build_semantic_index.py",
+    "scripts/query_semantic_index.py", "scripts/scrub_evidence.py", "scripts/php_parse_coverage.py",
+    "scripts/run-sast-php.sh", "scripts/run-semantic-index-batched.sh", "scripts/run-dockerfile-lint.sh"
+)
+$missing = @()
+foreach ($rel in $requiredScripts) {
+    if (-not (Test-Path (Join-Path $ContextDir $rel))) { $missing += $rel }
+}
+if ($missing.Count -gt 0) {
+    throw "Missing required file(s) expected by images/audit-static or images/audit-container COPY: $($missing -join ', ')"
+}
+
+$noCacheArgs = @()
+if ($NoCache) { $noCacheArgs = @("--no-cache") }
+
+$results = New-Object System.Collections.Generic.List[string]
+$anyFailed = $false
+
+function Build-One([string]$Name, [string]$Tag, [string]$Dockerfile, [string]$Context) {
+    Write-Host ""
+    Write-Host "=== Building $Name -> $Tag ===" -ForegroundColor Cyan
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $buildArgs = @("build", "--progress=plain") + $script:noCacheArgs + @("-t", $Tag, "-f", $Dockerfile, $Context)
+    & docker @buildArgs
+    $sw.Stop()
+    if ($LASTEXITCODE -ne 0) {
+        $script:results.Add("FAIL $Name -> $Tag ($([int]$sw.Elapsed.TotalSeconds)s)")
+        Write-Host "Build failed: $Name. If a tool install step failed, that tool's version pin most" -ForegroundColor Red
+        Write-Host "likely drifted (an unpinned go/pip/curl install pulling something new) - see the" -ForegroundColor Red
+        Write-Host "Dockerfile's own version-pinning header." -ForegroundColor Red
+        $script:anyFailed = $true
+        return
+    }
+    $script:results.Add("OK   $Name -> $Tag ($([int]$sw.Elapsed.TotalSeconds)s)")
+}
+
+if (Want "static") {
+    Build-One "audit-static" $StaticTag (Join-Path $ContextDir "images/audit-static/Dockerfile") $ContextDir
+}
+
+if (Want "native") {
+    Write-Host ""
+    Write-Host "audit-native build includes an SVF build from source - expect several minutes." -ForegroundColor DarkGray
+    Build-One "audit-native" "audit-native:local" (Join-Path $ContextDir "images/audit-native/Dockerfile") (Join-Path $ContextDir "images/audit-native")
+}
+
+if (Want "codeql") {
+    if ($SkipCodeQL) {
+        Write-Host ""
+        Write-Host "=== Skipping audit-codeql (-SkipCodeQL) ===" -ForegroundColor Yellow
+        $results.Add("SKIP audit-codeql (-SkipCodeQL)")
+    } else {
+        $bundle = Join-Path $ContextDir "images/audit-codeql/codeql-bundle-linux64.tar.zst"
+        if (-not (Test-Path $bundle)) {
+            Write-Host ""
+            Write-Host "=== Downloading CodeQL bundle ($CodeqlBundleVersion) - audit-codeql needs this before build ===" -ForegroundColor Cyan
+            $url = "https://github.com/github/codeql-action/releases/download/$CodeqlBundleVersion/codeql-bundle-linux64.tar.zst"
+            Invoke-WebRequest -Uri $url -OutFile $bundle
+        }
+        Build-One "audit-codeql" "audit-codeql:local" (Join-Path $ContextDir "images/audit-codeql/Dockerfile") (Join-Path $ContextDir "images/audit-codeql")
+    }
+}
+
+if (Want "iac") {
+    Build-One "audit-iac" "audit-iac:local" (Join-Path $ContextDir "images/audit-iac/Dockerfile") (Join-Path $ContextDir "images/audit-iac")
+}
+
+if (Want "container") {
+    Build-One "audit-container" "audit-container:local" (Join-Path $ContextDir "images/audit-container/Dockerfile") $ContextDir
+}
+
+if (Want "report") {
+    Build-One "audit-report" "audit-report:local" (Join-Path $ContextDir "images/audit-report/Dockerfile") (Join-Path $ContextDir "images/audit-report")
+}
+
+Write-Host ""
+Write-Host "=== Summary ===" -ForegroundColor Cyan
+foreach ($r in $results) { Write-Host $r }
+
+if ($anyFailed) { exit 1 }

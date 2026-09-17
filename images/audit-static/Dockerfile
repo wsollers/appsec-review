@@ -7,11 +7,18 @@
 # SpotBugs+FindSecBugs, build-dependent — and Semgrep's p/java + p/spring
 # rulesets, source-only and primary), mobile-source SAST for the Android/iOS
 # client (mobsfscan — MobSF's rule engine, runs against source, no build
-# required), IaC scanning (Terraform via checkov/tfsec/trivy, Kubernetes/Helm
-# via kube-linter, Dockerfiles via Hadolint), complexity metrics,
-# structural/semantic code search (ast-grep, weggli, Joern), binary hardening
-# checks (BinSkim, for PE/Windows binaries), and the tree-sitter symbol/call
-# indexer (build_symbol_index.py) that ships alongside this file.
+# required), complexity metrics, structural/semantic code search (ast-grep,
+# weggli, Joern), binary hardening checks (BinSkim, for PE/Windows binaries),
+# and the tree-sitter symbol/call indexer (build_symbol_index.py) that ships
+# alongside this file.
+#
+# NOT included as of 2026-09-17, and deliberately so: IaC policy scanning
+# (Terraform via checkov/tfsec/trivy config, Kubernetes/Helm via kube-linter)
+# moved to `images/audit-iac`; Dockerfile linting and base-image inventory
+# (Hadolint, docker-base-images) moved to `images/audit-container`. Both were
+# split out of this image (MIGRATION.md item 7, image-per-lane per design
+# §17) so an engagement without IaC/Docker surface never has to pull the
+# tooling for it, and vice versa.
 #
 # NOT included, and deliberately so:
 #   - ScanCode Toolkit (license/provenance/copyright detection). Its own
@@ -85,7 +92,6 @@
 #                    SAST pass per finding S6-1, which is the other reason it
 #                    must be pinned.)
 #     BinSkim        BINSKIM_VERSION    = 4.4.9.11
-#     Hadolint       HADOLINT_VERSION   = 2.14.0
 #     SpotBugs       SPOTBUGS_VERSION   = 4.8.6
 #     FindSecBugs    FINDSECBUGS_VERSION= 1.13.0
 #     Go toolchain   GO_VERSION         = 1.22.5
@@ -102,11 +108,13 @@
 # STILL FLOATING (verify with `go list -m -versions <module>` / each project's
 # releases page, then pin to an ARG the same way before the next real build,
 # and record the exact tag alongside the engagement's evidence):
-#     Go installs: gosec, osv-scanner, govulncheck, callgraph, digraph, tfsec,
-#                  scc, kube-linter
-#     install-script pulls: Trivy, Syft
-#     pip installs: bandit, pip-audit, checkov, lizard, code2flow (semgrep and
+#     Go installs: gosec, osv-scanner, govulncheck, callgraph, digraph, scc
+#     install-script pulls: Syft
+#     pip installs: bandit, pip-audit, lizard, code2flow (semgrep and
 #                  mobsfscan in this block ARE pinned; the rest are not)
+#     (tfsec, kube-linter, checkov, and Trivy moved to images/audit-iac /
+#     images/audit-container on 2026-09-17 — still floating there too, see
+#     those Dockerfiles' own headers, not tracked here anymore)
 #     NOTE: even with the semgrep binary pinned, the `p/*` rule packs the
 #     sast-multi-semgrep step pulls are fetched from the Semgrep registry at
 #     SCAN time, so they float regardless of this pin - record which rule-pack
@@ -175,21 +183,13 @@ RUN go install github.com/securego/gosec/v2/cmd/gosec@latest \
     && go install golang.org/x/vuln/cmd/govulncheck@latest \
     && go install golang.org/x/tools/cmd/callgraph@latest \
     && go install golang.org/x/tools/cmd/digraph@latest \
-    && go install github.com/aquasecurity/tfsec/cmd/tfsec@latest \
     && go install github.com/zricethezav/gitleaks/v8@${GITLEAKS_VERSION} \
     && go install github.com/boyter/scc/v3@latest
 
-# --- Terraform (HashiCorp apt repo) -----------------------------------------
-RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
-       > /etc/apt/sources.list.d/hashicorp.list \
-    && apt-get update && apt-get install -y --no-install-recommends terraform \
-    && rm -rf /var/lib/apt/lists/*
-
-# --- Trivy (image / IaC config scanning) + Syft (SBOM) ----------------------
-RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-      | sh -s -- -b /usr/local/bin \
-    && curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+# --- Syft (SBOM) -------------------------------------------------------------
+# Trivy moved to `images/audit-iac` (config scanning) / `images/audit-container`
+# (image/fs scanning) on 2026-09-17 — see MIGRATION.md item 7.
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
       | sh -s -- -b /usr/local/bin
 
 # --- Rust + weggli + ast-grep (C/C++ semantic pattern search, multi-lang
@@ -268,33 +268,9 @@ RUN mkdir -p /opt/binskim && cd /opt/binskim \
     && ln -s /opt/binskim/BinSkim /opt/binskim/binskim
 ENV PATH="/opt/binskim:${PATH}"
 
-# --- kube-linter (Kubernetes manifests + Helm charts + Kustomize) -----------
-# Answers "anything for Kubernetes?" directly - checkov/trivy config both have
-# partial K8s coverage already, but this is a dedicated, actively-maintained
-# K8s/Helm policy linter (stackrox/kube-linter, Apache-2.0, still shipping
-# releases). Deliberately NOT using Terrascan for this: Terrascan also claimed
-# Kubernetes/Helm/Dockerfile/Terraform coverage in one tool, but its GitHub
-# repo was archived 2025-11-20 and is no longer maintained - an unmaintained
-# security scanner's rule set goes stale, so it was left out rather than
-# added just because it existed. Confirmed kube-linter's active-maintenance
-# status directly against its repo before adding it here.
-RUN go install golang.stackrox.io/kube-linter/cmd/kube-linter@latest
+# kube-linter moved to `images/audit-iac` on 2026-09-17 (MIGRATION.md item 7).
 
-# --- Hadolint (Dockerfile linter) --------------------------------------------
-# Answers "decompose Dockerfiles and look at what's added" for the half of
-# that question that doesn't need a successful `docker build`: Hadolint
-# parses Dockerfile source into an AST and lints it directly (unpinned base
-# image tags, running as root, ADD vs COPY misuse, etc.) - same
-# "source-only, no build-availability risk" pattern as Semgrep vs
-# SpotBugs/CodeQL elsewhere in this file. The other half of that question -
-# actually decomposing a *built* image's layers/base components - needs the
-# vendor's Dockerfiles to build successfully first; see the `docker-base-images`
-# and `hadolint` orchestrator steps' notes for where that build-dependent
-# follow-up (syft/dive against the built image) belongs instead.
-ARG HADOLINT_VERSION=2.14.0
-RUN curl -fsSL "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" \
-      -o /usr/local/bin/hadolint \
-    && chmod +x /usr/local/bin/hadolint
+# Hadolint moved to `images/audit-container` on 2026-09-17 (MIGRATION.md item 7).
 
 # --- PHP static analyzers (Composer global installs) ------------------------
 # Note: this installs Psalm/PHPStan/PHPCS under the container's PHP 8.1 CLI.
@@ -394,7 +370,6 @@ RUN pip3 install --no-cache-dir \
       semgrep==${SEMGREP_VERSION} \
       bandit \
       pip-audit \
-      checkov \
       lizard \
       code2flow \
       pyyaml \
@@ -406,7 +381,7 @@ RUN pip3 install --no-cache-dir \
 
 # --- This repo's own evidence-shaping scripts --------------------------------
 COPY scripts/build_symbol_index.py scripts/md_to_sarif.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
-     scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh scripts/run-dockerfile-lint.sh \
+     scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh \
      scripts/run-semantic-index-batched.sh \
      /opt/scripts/
 RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
@@ -429,20 +404,9 @@ RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
 # example, not guessed.
 COPY images/audit-static/psalm.xml /opt/config/psalm.xml
 
-# 2026-09-10 fix (confirmed live against a real fsh-server run's
-# dockerfile-lint.stderr.log — not guessed): dockerfile-lint's own former
-# inline "bash -lc <compound string>" Cmd (a
-# `while IFS= read -r -d "" f; do ... done < <(find ... -print0)` pipeline
-# with an embedded empty-string delimiter) did not survive the
-# PowerShell-to-docker.exe argv marshalling — the SAME class of bug already
-# hit joern-parse, ast-grep-scan, and sast-php elsewhere in this toolbox.
-# Fixed the same way as those: moved into a static script baked into the
-# image (run-dockerfile-lint.sh, copied above) and invoked via a two-literal-
-# element Cmd array (`@("bash", "/opt/scripts/run-dockerfile-lint.sh")` in
-# the orchestrator) — no string concatenation, no shell re-parsing anywhere
-# in the PowerShell-to-docker.exe path. Behavior is unchanged from the
-# original inline command; tested against synthetic fixtures (including a
-# path with spaces and the zero-Dockerfile case) before shipping.
+# dockerfile-lint's fix history (the PowerShell-to-docker.exe argv-marshalling
+# bug, and its static-script fix) now lives with the step itself in
+# `images/audit-container/Dockerfile` and `scripts/run-dockerfile-lint.sh`.
 
 WORKDIR /workspace
 # No ENTRYPOINT/CMD by design — the orchestrator (Invoke-VendorAuditPrePass.ps1)

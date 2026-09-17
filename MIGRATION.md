@@ -24,12 +24,13 @@ and why; each item becomes its own commit.
 | 1 | Rename image to `audit-static`; strip `clang`, `clang-tidy`, `clang-tools`, `cppcheck`, Joern into `audit-native` | Native tooling must not share a container with evidence writers | §2.2, §17 |
 | 2 | Pin Joern to a release tag (currently `releases/latest`) | Joern is the Tier C fallback; its C frontend changes between releases | ADR-0001 |
 | 3 | Pin Trivy and Syft to release versions (currently `curl \| sh` from `main`) | Reproducibility | header note in Dockerfile |
-| 4 | Pin the remaining Go/pip floats (gosec, osv-scanner, govulncheck, tfsec, scc, kube-linter, bandit, pip-audit, checkov, lizard, code2flow) | Same | same |
+| 4 | Pin the remaining Go/pip floats (gosec, osv-scanner, govulncheck, scc, bandit, pip-audit, lizard, code2flow in `audit-static`; tfsec, kube-linter, checkov in `audit-iac`; Trivy in `audit-iac`/`audit-container`) | Same | same |
 | 5 | Replace `Invoke-VendorAuditPrePass.ps1` with `orchestrator/` (Python) | Linux-host requirement; PowerShell→docker.exe argv marshalling bit four steps | ADR-0002 |
 | 6 | `build_symbol_index.py` and Joern parse move to `audit-native` | They read C/C++ semantics; keep `audit-static` language-agnostic | §17 |
-| 7 | Split `audit-iac` (terraform, checkov, tfsec, kube-linter, hadolint) out of `audit-static` | Image-per-lane matches §17 | §17 |
+| 7 | ~~Split `audit-iac` (terraform, checkov, tfsec, kube-linter, hadolint) out of `audit-static`~~ — **done 2026-09-17**, split into two images instead of one: `audit-iac` (terraform, checkov, tfsec, kube-linter, trivy config) and `audit-container` (hadolint, docker-base-images), matching how the README's build-order table already scaffolded them separately | Image-per-lane matches §17 | §17 |
 | 8 | Retire `scripts/build_symbol_index.py`'s C++ handling in favor of Joern/SVF outputs from `audit-native` | Symbol index is now a byproduct of the native pipeline | ADR-0001 |
 | 9 | Record every scan's rule-pack versions (Semgrep `p/*`) into `run-manifest.json` | Rule packs float at scan time regardless of binary pin | §9 |
+| 10 | Build `audit-report` (LaTeX -> PDF), adapted from the LRA governance project's standalone LaTeX image | Lane 10 needs a report build environment; format/styleguide open (see TODO) | new, 2026-09-17 |
 
 ## Files not carried over
 
