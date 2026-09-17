@@ -35,6 +35,63 @@ Primary successful-run artifacts:
 The run is a process validation, not a claim that EASTL has exploitable vulnerabilities.
 EASTL is a small target here, but it is now a good rehearsal corpus for the LLM lanes.
 
+## Windows PowerShell Validation Addendum
+
+After the WSL/Bash run, the Windows PowerShell + Docker path was validated against the same EASTL
+checkout through a WSL UNC path.
+
+Validated Windows job:
+
+```powershell
+.\pipeline\engagement_job.ps1 `
+  -Project eastl `
+  -Target '\\wsl.localhost\Ubuntu-24.04\home\wsollers\targets\eastl' `
+  -CompileDb '\\wsl.localhost\Ubuntu-24.04\home\wsollers\targets\eastl\build\compile_commands.json' `
+  -Out scratch\eastl-windows-codeql `
+  -StaticRunner powershell `
+  -StaticSteps cloc
+```
+
+Result:
+
+- `scratch/eastl-windows-codeql/job-status.md`: `Status: OK`
+- static `cloc` through Docker: OK
+- native SAST over 126 TUs: OK
+- compile feasibility: Tier A, 126/126
+- IR feasibility: Tier A, 126/126
+- link: `eastl.bc`, about 84 MB
+- `ir-facts`: one fact file
+- regular CodeQL security-extended: 41 findings
+- custom Mythos CodeQL: 8 findings
+
+CSA/CTU was then run through the Windows native Docker wrapper against the same normalized scratch:
+
+```powershell
+.\images\audit-native\run.ps1 `
+  '\\wsl.localhost\Ubuntu-24.04\home\wsollers\targets\eastl' `
+  - `
+  scratch\eastl-windows-codeql\native-scratch `
+  -- /opt/scripts/run_csa.py --compile-commands /scratch/compile_commands.json --out /scratch/csa --ctu --alpha
+```
+
+CSA result:
+
+- 126/126 TUs analyzed
+- CTU map built
+- JSON and HTML outputs written
+- LLM package regenerated with CSA included
+
+Windows-specific fixes from this validation:
+
+- use PowerShell `.ProviderPath` instead of `.Path` for Docker bind mounts
+- map WSL UNC roots to `/workspace` in `normalize_compile_db.py`
+- rewrite include arguments such as `-I/home/...` to `-I/workspace/...`
+- avoid the Microsoft Store `python3.exe` app-execution alias when selecting host Python
+- pass container command arguments as explicit PowerShell arrays so `--compile-commands` is not parsed as a PowerShell parameter
+
+The full broad static toolbox was not run in the Windows validation; `-StaticSteps cloc` was used
+to bound cost while validating Docker, native, IR, CodeQL, CSA, and LLM packaging.
+
 ## What Changed
 
 ### WSL/Bash execution path
@@ -284,4 +341,3 @@ Before expecting high-quality final findings, add at least:
 - ASVS/MASVS applicability planning
 - manual red-team / blue-team / verifier prompt templates
 - a small EASTL rehearsal using those prompts
-

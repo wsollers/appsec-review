@@ -340,9 +340,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoPath = (Resolve-Path $RepoPath).Path
+$RepoPath = (Resolve-Path $RepoPath).ProviderPath
 New-Item -ItemType Directory -Force -Path $EvidencePath | Out-Null
-$EvidencePath = (Resolve-Path $EvidencePath).Path
+$EvidencePath = (Resolve-Path $EvidencePath).ProviderPath
 
 # 2026-09-04 fix: split any -Steps element that itself contains a comma.
 # Confirmed live and then independently confirmed in a local sandbox with a

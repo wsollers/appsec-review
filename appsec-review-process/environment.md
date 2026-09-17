@@ -21,6 +21,18 @@ Default for heavy evidence collection.
 - scanner execution: bash + Docker
 - canonical job: `pipeline/engagement_job.sh`
 
+### Local Windows PowerShell + Docker
+
+Supported host path for parity, dry runs, and bounded engagements.
+
+- repo checkout: Windows path, e.g. `F:\repos\appsec-review`
+- targets: any Docker Desktop bind-mountable path, including WSL UNC paths such as `\\wsl.localhost\Ubuntu-24.04\home\...`
+- outputs: `scratch\<target-name>-engagement`
+- scanner execution: PowerShell + Docker
+- canonical job: `pipeline\engagement_job.ps1`
+- validated against EASTL with static `cloc`, native Tier A, IR Tier A, CodeQL regular/custom, and CSA/CTU
+- the Bash/WSL job remains preferred for very large native scans when WSL ext4 I/O is faster
+
 ### Codex Task
 
 Default for prompt/lane work and source review.
@@ -73,4 +85,3 @@ The run status must include `resume_from` and `rerun_command`.
 - For High/Critical or ship-blocking claims, require independent verification.
 - For source-only findings, require corroboration, source review, or explicit unresolved status.
 - For candidate callers from symbol indexes, state that they are retrieval hints, not proof.
-

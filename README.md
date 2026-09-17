@@ -1,8 +1,9 @@
 # appsec-review
 
-Static/offline application-security review system ("Mythos v3" design): multi-agent
-discovery → refutation → independent verification → cross-lane synthesis, backed by an
-append-only hash-chained ledger and machine-enforced lane contracts.
+Static/offline application-security review system ("Mythos v3" design): deterministic
+evidence gathering → LLM-assisted discovery → refutation → independent verification →
+cross-lane synthesis. The current implementation combines Dockerized scanner/native
+evidence jobs with a tracked prompt/process harness under `appsec-review-process/`.
 
 Design authority: `docs/design-v3.md` (exported from the Google Doc on 2026-09-11; the Doc
 remains the editing surface until this repo takes over — see `docs/decisions/ADR-0004`).
@@ -13,7 +14,7 @@ remains the editing surface until this repo takes over — see `docs/decisions/A
 |---|---|
 | `docs/` | Design doc, review notes, ADRs, migration notes |
 | `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `MIGRATION.md` |
-| `images/audit-native/` | **To build.** Pinned LLVM/clang-cl, SVF, CSA/CodeChecker, cppcheck, Joern, CMake/Ninja, bear, xwin. Runs only inside the hostile-build boundary. |
+| `images/audit-native/` | Pinned native-analysis image for clang-tidy/cppcheck, compile feasibility, IR emit/link, `ir-facts`, and CSA/CTU. Runs only inside the hostile-build boundary. |
 | `images/audit-codeql/` | CodeQL bundle (pinned), offline; pre-engagement security-extended suites per language; license gate (ADR-0006) |
 | `images/audit-iac/`, `audit-container/`, `audit-report/`, `mythos-orchestrator/` | Planned; empty except README |
 | `orchestrator/` | Python: ledger writer + hash chain, contract validator, artifact registry, run-state regeneration |
@@ -21,26 +22,48 @@ remains the editing surface until this repo takes over — see `docs/decisions/A
 | `schemas/` | JSON Schema for findings, contracts, component-purpose-map, index-manifest, compile-command-audit, patch-policy |
 | `contracts/` | One YAML lane contract per lane (L0–L15, L0A, L6A/B) |
 | `prompts/skills/`, `prompts/lanes/` | Reusable agent skills and per-lane prompts |
-| `appsec-review-process/` | Tracked manual LLM process harness: initiation/recovery prompt, lane folders, configs, subprompts, ignored logs |
+| `appsec-review-process/` | Tracked manual LLM process harness: initiation/recovery prompt, lane folders, configs, subprompts, budgets, ignored logs, ignored run state |
 | `validation/` | Ground-truth corpus manifest and harnesses (Notepad++ v8.5.6 → v8.5.7 first) |
 | `targets/` | Ignored local target checkouts, such as EASTL, kept out of git |
 | `scratch/` | Ignored local run outputs, databases, bitcode, logs, and LLM packages |
 
+## Current Architecture
+
+The repo has two layers.
+
+The deterministic evidence layer is run by:
+
+- `pipeline/engagement_job.sh` on Bash/WSL/Linux
+- `pipeline/engagement_job.ps1` on Windows PowerShell/Docker
+
+It writes static evidence, native scratch artifacts, CodeQL/CSA/IR results, correlated findings,
+deep confirmation, retrieval plans, a coverage ledger, and `llm/ENGAGEMENT_LLM_INPUT.md`.
+
+The LLM process layer is run from `appsec-review-process/`. It starts with `initiate.md`, stages
+evidence into an ignored `runs/<run_id>/` directory, creates lane handoffs, records failures and
+resume points, and validates lane outputs.
+
+See `docs/appsec-review-architecture-and-jobs-2026-09-16.md` for the current job and prompt
+architecture.
+
 ## Operating assumption
 
-Plan for a **Linux server with no Windows and no Visual Studio**. That is the lowest common
-denominator across the candidate hosts (Windows workstation / Windows Server / Linux server)
-and the one the container isolation model in design §2.2 actually fits. A Windows host, if
-one appears, is a bonus (native `cl` builds for release/analysis diffing), not a dependency.
+Plan production-scale runs for a **Linux or WSL host with Docker** where target and scratch I/O stay
+on a native Linux filesystem. That remains the fastest and simplest container isolation model.
 
-## Build order
+Windows PowerShell + Docker is now a supported and validated host path for parity, smoke tests,
+and smaller engagements. It can bind-mount WSL UNC paths and run the same high-level engagement
+shape, but it is slower for heavy `ir-facts` and CodeQL work.
 
-1. `images/audit-native` Dockerfile + smoke test (trivial Win32 TU against mounted MSVC headers)
-2. Compile-feasibility gate (`.vcxproj` → `compile_commands.json` → `clang-cl --syntax-only` pass rate) — decides the L3 tier (ADR-0001)
-3. `orchestrator/` skeleton: ledger, contracts, artifact registry
-4. `audit-static` refactor: strip native tooling out, pin the remaining floating installs
-5. `audit-container`, `audit-iac`, `audit-report`
-6. Prompts in dependency order: `lane-contract`, `finding-schema` skills → L0/L0A → L3 → L7 → L14 → discovery lanes
+## Build / Validation Order
+
+1. Build Docker images.
+2. Run static prepass smoke (`cloc`) to validate Docker mounts.
+3. Run native pregather without CodeQL/CSA to validate compile DB normalization, native SAST, feasibility, IR, link, and `ir-facts`.
+4. Run CodeQL-enabled pregather to validate regular security-extended and custom Mythos CodeQL.
+5. Run CSA/CTU or enable `--csa`/`-Csa` for full native analyzer coverage.
+6. Regenerate assemble/correlation/deep-confirmation/retrieval/LLM input after adding evidence.
+7. Run `appsec-review-process` probe lanes before full LLM review.
 
 ## WSL-local target workflow
 
@@ -66,6 +89,33 @@ bash pipeline/engagement_job.sh \
 
 cat scratch/eastl-engagement/job-status.md
 ```
+
+## Windows PowerShell + Docker Workflow
+
+The Windows runner supports WSL UNC targets and writes the same output shape:
+
+```powershell
+.\pipeline\engagement_job.ps1 `
+  -Project eastl `
+  -Target '\\wsl.localhost\Ubuntu-24.04\home\wsollers\targets\eastl' `
+  -CompileDb '\\wsl.localhost\Ubuntu-24.04\home\wsollers\targets\eastl\build\compile_commands.json' `
+  -Out scratch\eastl-windows-codeql `
+  -StaticRunner powershell `
+  -StaticSteps cloc
+
+Get-Content scratch\eastl-windows-codeql\job-status.md
+```
+
+The bounded `-StaticSteps cloc` form is for plumbing validation. Omit it for a full broad static
+prepass.
+
+Windows validation against EASTL completed with:
+
+- native syntax feasibility Tier A, `126/126`
+- IR feasibility Tier A, `126/126`
+- linked bitcode and `ir-facts`
+- CodeQL security-extended and custom Mythos CodeQL
+- CSA/CTU verified through the native Docker wrapper and folded into regenerated LLM artifacts
 
 ## Non-negotiables carried over from the previous toolbox
 

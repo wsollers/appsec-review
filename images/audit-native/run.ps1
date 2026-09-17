@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 if ($Command.Count -gt 0 -and $Command[0] -eq "--") { $Command = $Command[1..($Command.Count - 1)] }
 $image = if ($env:AUDIT_NATIVE_IMAGE) { $env:AUDIT_NATIVE_IMAGE } else { "audit-native:local" }
 New-Item -ItemType Directory -Force -Path $Scratch | Out-Null
-$ws  = (Resolve-Path $Workspace).Path; $scr = (Resolve-Path $Scratch).Path
+$ws  = (Resolve-Path $Workspace).ProviderPath; $scr = (Resolve-Path $Scratch).ProviderPath
 $uid = if ($IsLinux) { "$(id -u):$(id -g)" } else { "10001:10001" }
 $mem = if ($env:MEM_LIMIT) { $env:MEM_LIMIT } else { "16g" }
 $args = @("run", "--rm", "--user", $uid, "--network", "none", "--hostname", "audit-native", "--add-host", "audit-native:127.0.0.1",
@@ -24,7 +24,7 @@ $args = @("run", "--rm", "--user", $uid, "--network", "none", "--hostname", "aud
           "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=4g", "--tmpfs", "/tmp/home:rw,noexec,nosuid,nodev,size=1g",
           "--tmpfs", "/tmp/jvm:rw,exec,nosuid,nodev,size=512m",
           "-v", "${ws}:/workspace:ro")
-if ($Msvc -ne "-") { $args += @("-v", "$((Resolve-Path $Msvc).Path):/msvc:ro") }
+if ($Msvc -ne "-") { $args += @("-v", "$((Resolve-Path $Msvc).ProviderPath):/msvc:ro") }
 $args += @("-v", "${scr}:/scratch:rw", "-e", "HOME=/tmp/home", "-e", "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/tmp/jvm", $image) + $Command
 & docker @args
 exit $LASTEXITCODE
