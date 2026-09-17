@@ -44,6 +44,49 @@ def load_manifest() -> dict[str, Any]:
     return load_json(ROOT / "process-manifest.json")
 
 
+def load_model_config() -> dict[str, Any]:
+    path = ROOT / "model-config.json"
+    data = load_json(path)
+    if not data:
+        raise SystemExit(f"could not read/parse {path} -- model-config.json is required (see its _notes field)")
+    return data
+
+
+def resolve_model(lane: str, budget: str) -> dict[str, Any]:
+    """Deterministic model/effort resolution: lane_overrides beats
+    budget_effort_floor beats default. Model identity itself is not
+    currently varied per lane/budget (single model family available) but
+    the field is read from config either way so a future multi-model setup
+    doesn't need this function's callers to change."""
+    cfg = load_model_config()
+    default = cfg.get("default") or {}
+    model = default.get("model", "")
+    effort = default.get("effort", "")
+
+    floor = (cfg.get("budget_effort_floor") or {}).get(budget)
+    if floor:
+        effort = floor
+
+    override = (cfg.get("lane_overrides") or {}).get(lane) or {}
+    if override.get("model"):
+        model = override["model"]
+    if override.get("effort"):
+        effort = override["effort"]
+
+    return {
+        "lane": lane,
+        "budget": budget,
+        "model": model,
+        "effort": effort,
+        "source": {
+            "default": default,
+            "budget_effort_floor_applied": floor,
+            "lane_override_applied": override or None,
+        },
+        "invocation": cfg.get("invocation"),
+    }
+
+
 def process_order() -> list[str]:
     manifest = load_manifest()
     order = manifest.get("process_order")
@@ -110,13 +153,20 @@ def cmd_check(args: argparse.Namespace) -> int:
     git_path = shutil.which("git")
     add("git", git_path is not None, git_path or "not found on PATH")
 
-    fable_bin = args.fable_cli or "fable"
-    fable_path = shutil.which(fable_bin)
+    model_cfg = load_model_config()
+    add("model-config.json parses", bool(model_cfg.get("default", {}).get("model")), f"default model={model_cfg.get('default', {}).get('model')!r} effort={model_cfg.get('default', {}).get('effort')!r}")
+
+    invocation = model_cfg.get("invocation") or {}
+    cmd_template = invocation.get("command_template") or []
+    model_bin = cmd_template[0] if cmd_template else ""
+    model_bin_path = shutil.which(model_bin) if model_bin else None
     add(
-        "fable CLI",
-        fable_path is not None,
-        fable_path or f"{fable_bin!r} not found on PATH -- set --fable-cli or FABLE_CLI env var once known",
+        f"model CLI ({model_bin!r})",
+        model_bin_path is not None,
+        model_bin_path or f"{model_bin!r} not found on PATH -- see model-config.json's invocation.status",
     )
+    if invocation.get("status", "").startswith("PROVISIONAL"):
+        add("model-config.json invocation.status", False, invocation["status"])
 
     manifest = load_manifest()
     add("process-manifest.json parses", bool(manifest.get("process_order")), f"{len(manifest.get('process_order') or [])} lanes in process_order")
@@ -138,6 +188,17 @@ def cmd_check(args: argparse.Namespace) -> int:
     ok = all(c["ok"] for c in checks)
     print(json.dumps({"ok": ok, "checks": checks}, indent=2))
     return 0 if ok else 1
+
+
+# ---------------------------------------------------------------------------
+# model
+# ---------------------------------------------------------------------------
+
+
+def cmd_model(args: argparse.Namespace) -> int:
+    lane = resolve_process(args.lane)
+    print(json.dumps(resolve_model(lane, args.budget), indent=2))
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -502,8 +563,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="command", required=True)
 
     p_check = sub.add_parser("check", help="verify prerequisites")
-    p_check.add_argument("--fable-cli", default="", help="name/path of the fable CLI binary (default: env FABLE_CLI or 'fable')")
     p_check.set_defaults(func=cmd_check)
+
+    p_model = sub.add_parser("model", help="resolve the effective model/effort for a lane+budget from model-config.json")
+    p_model.add_argument("--lane", required=True)
+    p_model.add_argument("--budget", required=True, choices=["probe", "standard", "full"])
+    p_model.set_defaults(func=cmd_model)
 
     p_next = sub.add_parser("next-lane", help="deterministic next-lane picker")
     p_next.add_argument("--run-id", required=True)
@@ -529,10 +594,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     ap = build_parser()
     args = ap.parse_args(argv)
-    import os
-
-    if args.command == "check" and not args.fable_cli:
-        args.fable_cli = os.environ.get("FABLE_CLI", "")
     return args.func(args)
 
 

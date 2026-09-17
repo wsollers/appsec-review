@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review-process/model-config/0.1",
+  "_notes": [
+    "Single model family available today (per 2026-09-17 design conversation): claude-sonnet-5.",
+    "Originally scoped around a private 'fable' model; superseded -- model identity now lives here, not hardcoded in review_cli.py, so it can be repointed without touching code.",
+    "'effort' is a reasoning-effort/tier label, not a distinct model family -- it is how lane/budget-tier stakes get expressed with only one model available (see design conversation: 09/10 keep the strongest tier regardless of budget; probe-budget lanes run cheaper/faster).",
+    "Quorum panels (design-v3.md Sec5) additionally use 'personas' (see quorum_personas below) since real model-family diversity isn't available yet -- every quorum result must still be tagged diversity_requirement_met:false downstream."
+  ],
+  "default": {
+    "model": "claude-sonnet-5",
+    "effort": "medium"
+  },
+  "budget_effort_floor": {
+    "probe": "low",
+    "standard": "medium",
+    "full": "medium"
+  },
+  "lane_overrides": {
+    "09-independent-verification": { "effort": "high" },
+    "10-synthesis-report": { "effort": "high" }
+  },
+  "quorum_personas": {
+    "_note": "Used only for lanes running an evidence-qualified quorum panel (currently 09). 2 personas for WARRANTED-tier votes, 3 for malfeasance/NO-GO/RE-DAST-escalation tier, per design-v3.md Sec5.1.",
+    "warranted_tier": ["skeptical-refuter", "neutral-evidence-auditor"],
+    "malfeasance_tier": ["skeptical-refuter", "neutral-evidence-auditor", "aggressive-hypothesis"]
+  },
+  "invocation": {
+    "type": "cli",
+    "command_template": ["claude", "-p", "{prompt}"],
+    "status": "PROVISIONAL -- the claude binary reachable from the Cowork device-bridge sandbox only supports bare `claude -p \"<prompt>\"`, no --model/--effort/other flags. This template assumes that restricted shape (prompt text only, no flag pass-through) until confirmed against the real WSL/terminal environment the harness will actually run in. If a fuller Claude Code CLI (or the fable endpoint, later) is available there with real --model/--effort flags, update command_template and this status field -- do not assume the sandboxed binary's limits apply to the real run environment."
+  }
+}
