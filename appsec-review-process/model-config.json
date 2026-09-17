@@ -55,7 +55,7 @@
     "type": "cli",
     "status": "CONFIRMED 2026-09-17 against claude 2.1.146 on hal5000 (real user install, not the sandbox-restricted binary). Flags are real flags from `claude -p --help`'s actual output. Prompt delivery, dollar caps, and permission-mode decided by the repo owner 2026-09-17 -- see decisions below.",
     "binary": "claude",
-    "fixed_flags": ["-p", "--output-format", "json", "--no-session-persistence", "--permission-mode", "bypassPermissions"],
+    "fixed_flags": ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--permission-mode", "bypassPermissions"],
     "prompt_delivery": "stdin -- the filled handoff prompt is piped to claude's stdin, not passed as a positional argument, to avoid any OS command-line length ceiling. Decided 2026-09-17.",
     "per_call_flags": {
       "model": "--model {model}",

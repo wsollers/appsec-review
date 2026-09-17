@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -601,6 +602,90 @@ def lane_tools(lane: str) -> list[str]:
     return list(lt.get(lane) or lt.get("default") or ["Read", "Grep", "Glob", "Write"])
 
 
+def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcript_path: Path) -> dict[str, Any]:
+    """Run `claude -p --output-format stream-json` and capture the full
+    turn-by-turn exchange (every SDK event: system/init, assistant messages,
+    tool_use, tool_result, the works) to transcript_path as JSONL, one event
+    per line, as it arrives -- not just the compressed final summary. This is
+    the SAME underlying API call as the old single-shot `--output-format
+    json` (it costs nothing extra); stream-json just asks the CLI to also
+    hand us every intermediate event locally instead of swallowing them.
+
+    Returns a dict with keys: final_result (the terminal `type: "result"`
+    event, shape-compatible with the old single-JSON-object response, or
+    None if the stream never produced one), events (list of all parsed
+    events), returncode, timed_out, stderr_text.
+    """
+    proc = subprocess.Popen(
+        argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", bufsize=1,
+    )
+
+    events: list[dict[str, Any]] = []
+    state: dict[str, Any] = {"final_result": None}
+
+    def _pump_stdout() -> None:
+        transcript_path.parent.mkdir(parents=True, exist_ok=True)
+        with transcript_path.open("w", encoding="utf-8") as tf:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                tf.write(line if line.endswith("\n") else line + "\n")
+                tf.flush()
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    ev = json.loads(stripped)
+                except Exception:
+                    continue
+                events.append(ev)
+                if isinstance(ev, dict) and ev.get("type") == "result":
+                    state["final_result"] = ev
+
+    def _feed_stdin() -> None:
+        try:
+            assert proc.stdin is not None
+            proc.stdin.write(prompt_text)
+        except Exception:
+            pass
+        finally:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+
+    reader = threading.Thread(target=_pump_stdout, daemon=True)
+    writer = threading.Thread(target=_feed_stdin, daemon=True)
+    reader.start()
+    writer.start()
+
+    timed_out = False
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        proc.kill()
+        proc.wait()
+
+    writer.join(timeout=10)
+    reader.join(timeout=10)
+
+    stderr_text = ""
+    try:
+        if proc.stderr is not None:
+            stderr_text = proc.stderr.read() or ""
+    except Exception:
+        pass
+
+    return {
+        "final_result": state["final_result"],
+        "events": events,
+        "returncode": proc.returncode,
+        "timed_out": timed_out,
+        "stderr_text": stderr_text,
+    }
+
+
 def build_claude_argv(lane: str, budget: str, run_id: str, model_override: str = "", effort_override: str = "") -> list[str]:
     resolved = resolve_model(lane, budget, model_override, effort_override)
     cfg = load_model_config()
@@ -735,7 +820,7 @@ def _cmd_run_locked(
     # self-report. Moving prior outputs into outputs/<lane>/attempts/<ts>/
     # keeps the self-report check honest and preserves a real attempt
     # history for free.
-    prior_files = [p for p in ("result.md", "status.json", "raw-response.json") if (out_dir / p).exists()]
+    prior_files = [p for p in ("result.md", "status.json", "raw-response.json", "transcript.jsonl", "stderr.log") if (out_dir / p).exists()]
     if prior_files:
         attempt_dir = out_dir / "attempts" / now().replace(":", "").replace("-", "")
         attempt_dir.mkdir(parents=True, exist_ok=True)
@@ -749,37 +834,60 @@ def _cmd_run_locked(
     if mark_running.returncode != 0:
         raise SystemExit(f"run_process.py (mark RUNNING) failed:\n{mark_running.stdout}\n{mark_running.stderr}")
 
+    # transcript.jsonl captures the FULL turn-by-turn exchange (every event
+    # the stream-json format emits: init, assistant messages, tool_use,
+    # tool_result, the terminal result) as it happens -- not just the final
+    # compressed summary. Same underlying API call as before, zero extra
+    # cost; --output-format stream-json just asks the CLI to hand us the
+    # intermediate events locally instead of swallowing them. Written fresh
+    # each attempt (prior attempts already archived above).
+    transcript_path = out_dir / "transcript.jsonl"
+
     started = time.time()
-    try:
-        proc = subprocess.run(argv, input=prompt_text, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=args.timeout)
-        timed_out = False
-    except subprocess.TimeoutExpired:
-        proc = None
-        timed_out = True
+    dispatch = _dispatch_streaming(argv, prompt_text, args.timeout, transcript_path)
     duration_seconds = time.time() - started
 
-    # raw-response.json is always written, unconditionally, before anything
-    # else touches this lane's output dir -- the one thing that must never be
-    # lost regardless of what follows.
-    raw_path = out_dir / "raw-response.json"
-    if proc is not None:
-        raw_path.write_text(proc.stdout or "", encoding="utf-8")
+    timed_out = dispatch["timed_out"]
+    returncode = dispatch["returncode"]
+    final_result = dispatch["final_result"]
 
-    parsed: dict[str, Any] = {}
+    class _ProcShim:
+        """Minimal stand-in for the old subprocess.run() CompletedProcess,
+        so the rest of this function (which only reads .returncode) doesn't
+        need to change."""
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+    proc = None if (timed_out and final_result is None and returncode is None) else _ProcShim(returncode)
+
+    # raw-response.json keeps its old shape (the single terminal result
+    # object, same fields as the old --output-format json response: is_error,
+    # subtype, total_cost_usd, usage, result, num_turns, ...) so nothing
+    # downstream that reads it needs to change. transcript.jsonl is the new,
+    # additional artifact with everything in between.
+    raw_path = out_dir / "raw-response.json"
+    raw_path.write_text(json.dumps(final_result, indent=2) if final_result is not None else "", encoding="utf-8")
+
+    if dispatch["stderr_text"]:
+        (out_dir / "stderr.log").write_text(dispatch["stderr_text"], encoding="utf-8")
+
+    parsed: dict[str, Any] = final_result if isinstance(final_result, dict) else {}
     result_text = ""
     parse_ok = False
-    if proc is not None and proc.stdout:
+    if isinstance(final_result, dict):
+        for key in ("result", "output", "text", "response", "content"):
+            if isinstance(final_result.get(key), str) and final_result[key].strip():
+                result_text = final_result[key]
+                parse_ok = True
+                break
+    if not parse_ok:
+        # No terminal result event parsed (crash, timeout mid-stream, or a
+        # stream-json format surprise) -- fall back to whatever raw text we
+        # captured in the transcript so nothing is silently empty.
         try:
-            parsed = json.loads(proc.stdout)
-            for key in ("result", "output", "text", "response", "content"):
-                if isinstance(parsed.get(key), str) and parsed[key].strip():
-                    result_text = parsed[key]
-                    parse_ok = True
-                    break
+            result_text = transcript_path.read_text(encoding="utf-8", errors="replace")
         except Exception:
-            pass
-    if not parse_ok and proc is not None:
-        result_text = proc.stdout or ""
+            result_text = ""
 
     VALID_STATES = ("OK", "FAILED", "BLOCKED", "SKIPPED")
 
@@ -845,7 +953,7 @@ def _cmd_run_locked(
     print(json.dumps({
         "run_id": run_id, "lane": lane, "budget": budget, "final_status": final_status, "status_source": status_source,
         "status_json": str(self_status_path), "result_md": str(out_dir / "result.md"),
-        "raw_response": str(raw_path), "parse_ok": parse_ok,
+        "raw_response": str(raw_path), "transcript": str(transcript_path), "parse_ok": parse_ok,
         "run_process_output": json.loads(mark_result.stdout) if mark_result.stdout else None,
     }, indent=2))
     return 0 if final_status in ("OK", "SKIPPED") else 1
