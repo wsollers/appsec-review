@@ -13,13 +13,15 @@ This file defines the operating environment for the manual appsec process harnes
 
 ### Local WSL + Docker
 
-Default for heavy evidence collection.
+Default for heavy evidence collection and authoritative native test/retest execution.
 
 - repo checkout: WSL ext4, e.g. `~/projects/appsec-review`
 - targets: `targets/<target-name>`
 - outputs: `scratch/<target-name>-engagement`
 - scanner execution: bash + Docker
 - canonical job: `pipeline/engagement_job.sh`
+- native verification/remediation: use the same Docker/native image and compile database that
+  produced the engagement evidence
 
 If the heavy run happens in another WSL checkout or another WSL path, normalize it back into this
 repo before prompt/lane work:
@@ -40,7 +42,8 @@ repo-local paths instead of WSL UNC paths.
 
 ### Local Windows PowerShell + Docker
 
-Supported host path for parity, dry runs, and bounded engagements.
+Supported host path for parity, dry runs, bounded engagements, and Docker/native-image execution
+from the Windows checkout.
 
 - repo checkout: Windows path, e.g. `F:\repos\appsec-review`
 - targets: any Docker Desktop bind-mountable path, including WSL UNC paths such as `\\wsl.localhost\Ubuntu-24.04\home\...`
@@ -49,6 +52,17 @@ Supported host path for parity, dry runs, and bounded engagements.
 - canonical job: `pipeline\engagement_job.ps1`
 - validated against EASTL with static `cloc`, native Tier A, IR Tier A, CodeQL regular/custom, and CSA/CTU
 - the Bash/WSL job remains preferred for very large native scans when WSL ext4 I/O is faster
+
+### Native Test Authority
+
+For C/C++ findings, host compilers such as MinGW, MSVC, or an ad hoc system Clang are diagnostic
+only unless they are the compiler/container recorded in the engagement evidence. Verification and
+remediation confidence should come from the native Docker image and compile database used by the
+pipeline. Prefer WSL + Docker for large targets, then sync `targets/` and `scratch/` artifacts back
+into the repo with `scripts/sync-wsl-engagement-to-repo.sh`.
+
+If a host-compiler smoke test is useful, label it `non-authoritative` and do not use it to mark a
+native finding verified, refuted, or fixed without matching Docker/native-image evidence.
 
 ### Codex Task
 

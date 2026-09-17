@@ -109,23 +109,30 @@ int main()
 
 ## Build Guidance
 
-Prefer the existing EASTL build configuration if convenient. Otherwise compile the scratch test
-against the copied EASTL source and support sources. Use the existing compile database and build
-logs to discover include paths if compilation fails.
+Use the native audit Docker image as the authoritative environment. Prefer WSL + Docker when running
+from a WSL checkout, then sync artifacts back into the repo-local `scratch/` layout. From the
+Windows checkout, use `images/audit-native/run.ps1` so the test still runs inside the same native
+container family as the evidence pipeline.
 
-Start with an intentionally simple command and then add include paths as needed:
+Authoritative Windows-to-Docker pattern:
 
 ```powershell
-g++ -std=c++17 `
-  -Itargets/eastl/include `
-  -Itargets/eastl/test/packages/EABase/include/Common `
-  scratch/eastl-engagement/verification/rt-fc04-002/utf8_extended_probe.cpp `
-  targets/eastl/source/string.cpp `
-  -o scratch/eastl-engagement/verification/rt-fc04-002/utf8_extended_probe.exe
+.\images\audit-native\run.ps1 `
+  F:\repos\appsec-review `
+  - `
+  F:\repos\appsec-review\scratch\eastl-engagement\verification\rt-fc04-002 `
+  -- bash -lc '/opt/llvm/bin/clang++ -std=c++17 \
+    -DEASTL_OPENSOURCE=1 -D_CHAR16T -D_CRT_SECURE_NO_WARNINGS -D_SCL_SECURE_NO_WARNINGS \
+    -I/workspace/targets/eastl/include \
+    -I/workspace/targets/eastl/build/_deps/eabase-src/include/Common \
+    /scratch/utf8_extended_probe.cpp /workspace/targets/eastl/source/string.cpp \
+    -o /scratch/utf8_extended_probe.clang && /scratch/utf8_extended_probe.clang'
 ```
 
-If the host compiler path is inconvenient on Windows, run the same idea in WSL or inside the native
-audit image. Do not edit EASTL source just to make the test compile.
+Host compilers such as MinGW may be used only as non-authoritative smoke checks. Do not use a host
+compiler result alone to mark the claim verified, refuted, or fixed.
+
+Do not edit EASTL source just to make the test compile.
 
 ## Error Handling And Reporting
 
@@ -152,13 +159,15 @@ For each attempted command, record:
 
 Attempt order:
 
-1. Try the simple host compile command from this prompt.
+1. Run in the native audit Docker image using the compile database include paths and defines.
 2. If headers are missing, inspect `targets/eastl/build/compile_commands.json` or the engagement
    compile database and add only the missing include/define arguments needed for this test.
-3. If host compilation is unavailable, try WSL or the native audit Docker image.
+3. If running from WSL, keep artifacts under the WSL checkout's `scratch/` and sync them back to the
+   repo-local Windows checkout when needed.
 4. If linking against `targets/eastl/source/string.cpp` fails because support symbols are missing,
    identify the missing symbols and add the minimal EASTL support source files required.
-5. If the test still cannot compile or link after reasonable attempts, write `verdict: unresolved`
+5. Optional: run a host compiler smoke check and label it `non-authoritative`.
+6. If the test still cannot compile or link after reasonable attempts, write `verdict: unresolved`
    with `blocked_reason: compile-or-link-failure` and include the exact next command or dependency
    needed to resume.
 

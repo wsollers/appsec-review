@@ -21,6 +21,7 @@
 
 - the fix addresses the verified behavior, not merely the symptom in the test
 - the original focused testcase fails before the fix and passes after the fix, or the lane explains why that is not possible
-- the same compiler/container/sanitizer environment is used as independent verification unless explicitly blocked
+- the same Docker/native-image compiler/container/sanitizer environment is used as independent verification unless explicitly blocked
+- host compiler results are labeled non-authoritative and are not used alone for `verified-locally`
 - generated artifacts are written under the run output directory or ignored scratch paths
 - target source is not silently changed without a reviewable patch/diff

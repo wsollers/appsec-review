@@ -344,9 +344,10 @@ Text Conversion`. A small testcase under
 unsupported UTF-8 extended lead-byte forms return success, advance source/destination pointers, and
 produce `0x0000ffff`.
 
-The verification was repeated with native-image Clang 21.1.0 and reproduced the behavior. Plain
-linked LLVM IR and ASan/UBSan-instrumented linked LLVM IR were generated for the focused probe plus
-`targets/eastl/source/string.cpp`:
+The authoritative verification environment is the native audit Docker image. Native-image Clang
+21.1.0 reproduced the behavior; the earlier MinGW host run is useful only as non-authoritative smoke
+evidence. Plain linked LLVM IR and ASan/UBSan-instrumented linked LLVM IR were generated for the
+focused probe plus `targets/eastl/source/string.cpp`:
 
 ```text
 scratch/eastl-engagement/verification/rt-fc04-002/rt-fc04-002-linked.ll
@@ -360,8 +361,9 @@ archives to the native image before relying on sanitizer run status.
 
 Added `appsec-review-process/11-remediation-proposal/` as the optional post-verification fix lane.
 It consumes a verified finding and testcase, proposes a minimal source/test patch, retests in the
-same environment, and writes `proposed-fix.patch` or `proposed-fix.diff`. The fresh-task continuation
-prompt for the current EASTL remediation rehearsal is:
+same Docker/native-image environment, and writes `proposed-fix.patch` or `proposed-fix.diff`. Host
+compiler results must be labeled non-authoritative and cannot alone justify `verified-locally`. The
+fresh-task continuation prompt for the current EASTL remediation rehearsal is:
 
 ```text
 appsec-review-process/continuation-remediation-rt-fc04-002.md
@@ -426,7 +428,9 @@ Tracked prompt/process support now exists for:
 - red-team hypothesis
 - blue-team refutation
 - independent verification
-- remediation proposal with same-environment retest
+- remediation proposal with Docker/native-image retest
+- id Software starter prompt that forces clone isolation, build discovery, and compile database
+  generation before evidence collection
 - cross-lane synthesis
 - lane contracts
 - component classification invalidation and rescoping
@@ -463,11 +467,33 @@ Create a lightweight manual LLM rehearsal harness before implementing a full orc
    - input: only cited evidence/source spans, not discoverer prose
    - output: confirmed/refuted/unresolved disposition
 6. remediation proposal prompt:
-   - input: verified finding, focused testcase, same-environment commands, IR/sanitizer status
-   - output: proposed patch/diff and same-environment retest status
+   - input: verified finding, focused testcase, Docker/native-image commands, IR/sanitizer status
+   - output: proposed patch/diff and Docker/native-image retest status
 7. synthesis prompt:
    - input: verified facts only
    - output: prioritized findings, limitations, and follow-up work
+
+For the first id Software follow-on, use:
+
+```text
+appsec-review-process/initial-idsoftware-game-repo-compile-and-review.md
+```
+
+Current seed clone:
+
+```text
+project slug: idsoftware-doom3-bfg
+repo: https://github.com/id-Software/DOOM-3-BFG.git
+commit: 1caba1979589971b5ed44e315d9ead30b278d8b4
+Windows target: targets/idsoftware-doom3-bfg
+Windows output: scratch/idsoftware-doom3-bfg-engagement
+WSL target: ~/targets/idsoftware-doom3-bfg
+WSL output: ~/scratch/idsoftware-doom3-bfg-engagement
+```
+
+The first output should be a build-discovery note, not findings. The prompt should identify the
+buildable projects under the clone, choose a representative native target, and produce or recover a
+compile database before the engagement pipeline runs.
 
 This can be driven manually in Codex subtasks first; automation can follow once the prompt shapes
 are stable.
@@ -494,3 +520,4 @@ Before expecting high-quality final findings, add at least:
 - manual red-team / blue-team / verifier prompt templates
 - remediation proposal rehearsal on `RT-FC04-002`
 - a small EASTL rehearsal using those prompts
+- Doom 3 BFG build-discovery and compile database bootstrap using the id Software starter prompt

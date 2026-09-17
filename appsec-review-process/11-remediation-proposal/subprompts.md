@@ -9,7 +9,9 @@ refactors were avoided.
 ## Same-Environment Retest
 
 Re-run the independent verification testcase before and after the patch using the same compiler,
-container, flags, sanitizer settings, and input data. If exact parity is blocked, record the
+container, flags, sanitizer settings, and input data. For native C/C++ findings, this means the
+Docker/native image and compile database environment used by the evidence pipeline, preferably from
+WSL for large targets with artifacts synced back afterward. If exact parity is blocked, record the
 difference as a limitation and do not upgrade confidence based on a weaker environment.
 
 ## Regression Test Authoring

@@ -7,6 +7,9 @@ hypothesis about a real defect, but do not assume the first obvious patch is cor
 
 - Read the independent verification result first.
 - Reproduce or inspect the same testcase and environment used by verification.
+- For native C/C++ findings, use the Docker/native image and compile database environment that
+  produced the engagement evidence. Prefer WSL + Docker for large targets and sync artifacts back
+  into the repo-local `scratch/` layout. Host compilers are non-authoritative smoke checks only.
 - Identify the smallest code or configuration change that fixes the root cause.
 - Preserve public API, ABI, compatibility, and expected legacy behavior unless the verified issue
   requires a deliberate breaking change.
@@ -23,7 +26,7 @@ hypothesis about a real defect, but do not assume the first obvious patch is cor
 4. Inspect source, callers, IR/deep-confirmation evidence, and compatibility constraints.
 5. Propose the smallest root-cause fix.
 6. Apply the fix only in a reviewable working area, then generate a unified diff.
-7. Re-run the original focused testcase in the same environment as verification.
+7. Re-run the original focused testcase in the same Docker/native-image environment as verification.
 8. When practical, run an additional negative/compatibility testcase that exercises expected valid
    behavior.
 9. If native code is involved and Clang/LLVM IR was used in verification, regenerate comparable IR
@@ -74,4 +77,5 @@ Allowed statuses:
 - `not-recommended`
 
 Do not label a remediation as `verified-locally` unless the original verifier testcase, or a stricter
-equivalent, passes after the patch in the same environment used by independent verification.
+equivalent, passes after the patch in the same Docker/native-image environment used by independent
+verification. Do not use MinGW/MSVC/ad hoc host compiler results alone for this status.

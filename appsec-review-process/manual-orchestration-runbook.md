@@ -67,6 +67,28 @@ appsec-review-process/runs/<run_id>/inputs/artifact-manifest.json
 Use this normalized manifest for LLM lanes so exact source review and deterministic artifacts are
 both available under repo-local paths.
 
+## Authoritative Native Test And Fix Retest
+
+For C/C++ verification and remediation, use the same Docker/native image and compile database
+environment that produced the engagement evidence. Prefer WSL + Docker for large targets, then sync
+the resulting `targets/` and `scratch/` artifacts back into this repo with
+`scripts/sync-wsl-engagement-to-repo.sh`.
+
+From Windows, invoke the native image through `images/audit-native/run.ps1` instead of compiling
+with a host compiler:
+
+```powershell
+.\images\audit-native\run.ps1 `
+  <repo-root> `
+  - `
+  <scratch-dir> `
+  -- bash -lc '<clang/llvm/test command>'
+```
+
+Host compiler runs such as MinGW/MSVC/ad hoc Clang are useful smoke checks, but they are
+non-authoritative. Do not mark a native finding verified, refuted, fixed, or `verified-locally`
+based only on host-compiler evidence.
+
 ## Run A Lane
 
 Start:

@@ -225,7 +225,7 @@ Current lanes:
 | `07-red-team-adversarial` | run separate general and known-list red-team reviews |
 | `08-blue-team-refutation` | run separate general and known-list blue-team refutation/defense reviews |
 | `09-independent-verification` | independent evidence-only verification before accepting serious claims |
-| `11-remediation-proposal` | propose a minimal fix for a verified claim, generate a patch/diff, and retest in the same environment |
+| `11-remediation-proposal` | propose a minimal fix for a verified claim, generate a patch/diff, and retest in the Docker/native-image environment used by verification |
 | `10-synthesis-report` | final disposition, report, risk summary, and evidence map |
 
 Process state lives under ignored `appsec-review-process/runs/<run_id>/`.
@@ -289,8 +289,10 @@ defensive analysis can disagree before `09-independent-verification`, optional
 `11-remediation-proposal` is the optional fix lane after independent verification. It consumes a
 verified claim plus the verifier's testcase/environment, proposes the smallest root-cause fix,
 generates `proposed-fix.patch` or `proposed-fix.diff`, and reruns the original testcase in the same
-environment. It may mark a fix `verified-locally` only when the original testcase or a stricter
-equivalent passes after the patch. Final synthesis should consume this remediation status when the
+Docker/native-image environment used by the evidence pipeline. For native C/C++ findings, host
+compiler results such as MinGW/MSVC/ad hoc Clang are non-authoritative smoke checks only. The lane
+may mark a fix `verified-locally` only when the original testcase or a stricter equivalent passes
+after the patch in the native image. Final synthesis should consume this remediation status when the
 user asks for a fix recommendation or patch.
 
 For the current EASTL rehearsal, use:
@@ -318,16 +320,15 @@ python appsec-review-process/validate_lane_output.py \
 
 ### Current EASTL Continuation
 
-The next EASTL prompt rehearsal is the remediation proposal lane for verified finding
-`RT-FC04-002`. The continuation prompt is tracked at:
+The EASTL remediation proposal lane for verified finding `RT-FC04-002` is tracked at:
 
 ```text
 appsec-review-process/continuation-remediation-rt-fc04-002.md
 ```
 
 It tells a fresh task to read the independent verification artifacts, propose a minimal fix, generate
-a reviewable patch/diff, retest in the same Clang/native-image environment used by the testcase, and
-preserve the current sanitizer runtime limitation unless the native image is updated.
+a reviewable patch/diff, retest in the same Docker/native-image Clang environment used by the
+testcase, and preserve the current sanitizer runtime limitation unless the native image is updated.
 
 Generate or refresh its handoff with:
 
@@ -337,6 +338,33 @@ python appsec-review-process/create_handoff.py \
   --process 11-remediation-proposal \
   --budget probe
 ```
+
+### id Software Follow-On
+
+The next larger target bootstrap is tracked at:
+
+```text
+appsec-review-process/initial-idsoftware-game-repo-compile-and-review.md
+```
+
+It requires a fresh run id, isolated target and scratch paths, Windows and WSL clones of the same
+repository/ref, explicit project/build discovery, and compile database generation before scanner
+evidence is treated as meaningful. The current seed target is:
+
+```text
+project slug: idsoftware-doom3-bfg
+repo: https://github.com/id-Software/DOOM-3-BFG.git
+commit: 1caba1979589971b5ed44e315d9ead30b278d8b4
+Windows target: targets/idsoftware-doom3-bfg
+Windows output: scratch/idsoftware-doom3-bfg-engagement
+WSL target: ~/targets/idsoftware-doom3-bfg
+WSL output: ~/scratch/idsoftware-doom3-bfg-engagement
+```
+
+The first deliverable for that target should be
+`appsec-review-process/runs/<run_id>/outputs/00-intake-recovery/build-discovery.md`, including the
+buildable project candidates, commands attempted, dependencies, compile database strategy, and exact
+resume command if blocked.
 
 ## Budget Model
 

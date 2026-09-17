@@ -17,6 +17,7 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 | `budget-policy.md` | Probe/standard/full budget contracts for subtasks. |
 | `manual-orchestration-runbook.md` | How to operate the process before a full orchestrator exists. |
 | `continuation-remediation-rt-fc04-002.md` | Fresh-task continuation prompt for the EASTL remediation probe. |
+| `initial-idsoftware-game-repo-compile-and-review.md` | Fresh-task starter prompt for selecting, cloning, building, and staging an id Software game/engine repo. |
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
 | `templates/` | Handoff, artifact manifest, lane result, and status templates. |
 | `logs/` | Local run logs, scratch notes, and pasted outputs. Contents are ignored. |
@@ -37,7 +38,7 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 | `08-blue-team-refutation/` | Refutation, mitigating evidence, and false-positive analysis. |
 | `09-independent-verification/` | Fresh evidence-only verification of claims. |
 | `10-synthesis-report/` | Cross-lane synthesis, final disposition, and report assembly. |
-| `11-remediation-proposal/` | Proposed fix generation, same-environment retest, and patch artifact creation. |
+| `11-remediation-proposal/` | Proposed fix generation, Docker/native-image retest, and patch artifact creation. |
 
 ## Operating Model
 
@@ -100,7 +101,8 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 10. Validate returned lane outputs with `validate_lane_output.py`.
 11. Use `09-independent-verification` before accepting any High/Critical or ship-blocking claim.
 12. Use `11-remediation-proposal` when the user wants a proposed fix for a verified issue. It must
-    produce a reviewable patch/diff and retest in the same environment as verification.
+    produce a reviewable patch/diff and retest in the same Docker/native-image environment used by
+    verification for native C/C++ findings.
 13. Use `10-synthesis-report` only from verified or explicitly unresolved evidence.
 
 For detailed operation, see `manual-orchestration-runbook.md`.
@@ -135,6 +137,10 @@ python3 appsec-review-process/verify_failure_propagation.py
 - Prefer deterministic artifacts first: `job-status`, coverage ledger, CodeQL/CSA/IR, correlated findings, deep confirmation, retrieval plan.
 - The symbol index is a retrieval aid, not a semantic call graph proof.
 - If a claim requires runtime observation, label it as dynamic testing required.
+- For native C/C++ claims, host compilers such as MinGW, MSVC, or ad hoc Clang are
+  non-authoritative smoke checks unless they are the compiler/container recorded in the engagement
+  evidence. Verification, refutation, and `verified-locally` remediation status should come from the
+  Docker/native image and compile database used by the evidence pipeline.
 
 ## Prompt Architecture
 
@@ -177,8 +183,15 @@ defensive analysis can disagree productively before synthesis.
 
 `11-remediation-proposal/` is intentionally separated from verification. It is only for issues that
 already have an independent verification result. Its outputs are proposed source/test patches plus
-same-environment retest evidence; it should not quietly edit a target repository and call that a
-completed remediation without a reviewable diff.
+Docker/native-image retest evidence; it should not quietly edit a target repository and call that a
+completed remediation without a reviewable diff. Host compiler results can be recorded as diagnostic
+smoke evidence, but they do not justify `verified-locally` for native C/C++ findings.
+
+`initial-idsoftware-game-repo-compile-and-review.md` is the starter prompt for moving beyond EASTL to
+an open-source id Software game/engine target. It requires a fresh run id, isolated
+`targets/<project-slug>` and `scratch/<project-slug>-engagement` paths, Windows and WSL clones of the
+same repository/ref, explicit build-system discovery before evidence collection, and a
+`build-discovery.md` note before treating scanner evidence as meaningful.
 
 Recommended rehearsal before a huge repo:
 
@@ -190,6 +203,20 @@ Recommended rehearsal before a huge repo:
 6. `10-synthesis-report` with `probe`
 
 Then repeat with `standard` or `full` on EASTL before moving to the larger target.
+
+Current larger-target seed:
+
+```text
+project slug: idsoftware-doom3-bfg
+repo: https://github.com/id-Software/DOOM-3-BFG.git
+commit: 1caba1979589971b5ed44e315d9ead30b278d8b4
+Windows target: targets/idsoftware-doom3-bfg
+Windows output: scratch/idsoftware-doom3-bfg-engagement
+WSL target: ~/targets/idsoftware-doom3-bfg
+WSL output: ~/scratch/idsoftware-doom3-bfg-engagement
+```
+
+The next step for that target is build discovery and compile database generation, not a scanner run.
 
 ## Evidence Job Architecture
 
