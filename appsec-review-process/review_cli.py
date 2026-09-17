@@ -632,7 +632,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     handoff_path = run_dir(run_id) / "handoffs" / f"{lane}.md"
     handoff_cmd = [sys.executable, str(ROOT / "create_handoff.py"), "--run-id", run_id, "--process", lane, "--budget", budget]
-    handoff_proc = subprocess.run(handoff_cmd, capture_output=True, text=True)
+    handoff_proc = subprocess.run(handoff_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if handoff_proc.returncode != 0:
         raise SystemExit(f"create_handoff.py failed:\n{handoff_proc.stdout}\n{handoff_proc.stderr}")
     if not handoff_path.exists():
@@ -669,14 +669,14 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     mark_running = subprocess.run(
         [sys.executable, str(ROOT / "run_process.py"), "--run-id", run_id, "--process", lane, "--budget", budget, "--message", "dispatched via review_cli.py run"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if mark_running.returncode != 0:
         raise SystemExit(f"run_process.py (mark RUNNING) failed:\n{mark_running.stdout}\n{mark_running.stderr}")
 
     started = time.time()
     try:
-        proc = subprocess.run(argv, input=prompt_text, capture_output=True, text=True, timeout=args.timeout)
+        proc = subprocess.run(argv, input=prompt_text, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=args.timeout)
         timed_out = False
     except subprocess.TimeoutExpired:
         proc = None
@@ -764,7 +764,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         sys.executable, str(ROOT / "run_process.py"), "--run-id", run_id, "--process", lane, "--budget", budget,
         "--status", final_status, "--message", f"review_cli.py run: {status_source}",
     ]
-    mark_result = subprocess.run(mark_cmd, capture_output=True, text=True)
+    mark_result = subprocess.run(mark_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     print(json.dumps({
         "run_id": run_id, "lane": lane, "budget": budget, "final_status": final_status, "status_source": status_source,
