@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -63,12 +64,15 @@ def load_model_config() -> dict[str, Any]:
     return data
 
 
-def resolve_model(lane: str, budget: str) -> dict[str, Any]:
-    """Deterministic model/effort resolution: lane_overrides beats
-    budget_effort_floor beats default. Model identity itself is not
-    currently varied per lane/budget (single model family available) but
-    the field is read from config either way so a future multi-model setup
-    doesn't need this function's callers to change."""
+def resolve_model(lane: str, budget: str, model_override: str = "", effort_override: str = "") -> dict[str, Any]:
+    """Deterministic model/effort resolution: a per-call CLI override (--model/
+    --effort on `run`) beats lane_overrides beats budget_effort_floor beats
+    default. Model identity itself is not currently varied per lane/budget by
+    config (single model family available) but the field is read from config
+    either way so a future multi-model setup doesn't need this function's
+    callers to change. The CLI override exists so a cheap model/effort can be
+    used for a dev/mechanics-validation pass without editing model-config.json
+    (its `default` stays the real, intended-for-actual-review setting)."""
     cfg = load_model_config()
     default = cfg.get("default") or {}
     model = default.get("model", "")
@@ -84,6 +88,11 @@ def resolve_model(lane: str, budget: str) -> dict[str, Any]:
     if override.get("effort"):
         effort = override["effort"]
 
+    if model_override:
+        model = model_override
+    if effort_override:
+        effort = effort_override
+
     return {
         "lane": lane,
         "budget": budget,
@@ -93,6 +102,7 @@ def resolve_model(lane: str, budget: str) -> dict[str, Any]:
             "default": default,
             "budget_effort_floor_applied": floor,
             "lane_override_applied": override or None,
+            "cli_override_applied": {"model": model_override, "effort": effort_override} if (model_override or effort_override) else None,
         },
         "invocation": cfg.get("invocation"),
     }
@@ -591,8 +601,8 @@ def lane_tools(lane: str) -> list[str]:
     return list(lt.get(lane) or lt.get("default") or ["Read", "Grep", "Glob", "Write"])
 
 
-def build_claude_argv(lane: str, budget: str, run_id: str) -> list[str]:
-    resolved = resolve_model(lane, budget)
+def build_claude_argv(lane: str, budget: str, run_id: str, model_override: str = "", effort_override: str = "") -> list[str]:
+    resolved = resolve_model(lane, budget, model_override, effort_override)
     cfg = load_model_config()
     invocation = cfg.get("invocation") or {}
     usd = (cfg.get("budget_max_usd_per_call") or {}).get(budget)
@@ -622,6 +632,60 @@ def build_claude_argv(lane: str, budget: str, run_id: str) -> list[str]:
     return argv
 
 
+LOCK_STALE_SECONDS = 3600  # a lock held longer than this is assumed abandoned
+                           # (e.g. a killed/crashed process that never reached
+                           # the `finally` release) and is reclaimed rather
+                           # than waited on forever.
+
+
+def acquire_run_lock(run_id: str, poll_seconds: int = 10, wait_timeout_seconds: int = 3600) -> Path:
+    """Directory-based mutex so two `review_cli.py run` invocations against the
+    same run-id can't race on outputs/<lane>/ archiving or run-status.json
+    writes -- `Path.mkdir()` is atomic on both POSIX and Windows (it raises
+    FileExistsError if the directory already exists), so no extra dependency
+    is needed. Polls with a plain time.sleep(poll_seconds) while waiting; this
+    is pure local wall-clock time -- no claude/API calls happen in this loop,
+    so waiting here costs nothing beyond the wait itself. Always release with
+    release_run_lock() in a `finally` block."""
+    lock_dir = run_dir(run_id) / ".lock"
+    lock_meta = lock_dir / "holder.json"
+    waited = 0
+    while True:
+        try:
+            lock_dir.mkdir(parents=True, exist_ok=False)
+            write_json(lock_meta, {"pid": os.getpid(), "acquired_at": now()})
+            return lock_dir
+        except FileExistsError:
+            age = None
+            try:
+                held = load_json(lock_meta)
+                acquired_at = held.get("acquired_at", "")
+                if acquired_at:
+                    then = datetime.fromisoformat(acquired_at.replace("Z", "+00:00"))
+                    age = (datetime.now(timezone.utc) - then).total_seconds()
+            except Exception:
+                pass
+            if age is not None and age > LOCK_STALE_SECONDS:
+                print(f"run lock at {lock_dir} is {age:.0f}s old (> {LOCK_STALE_SECONDS}s) -- "
+                      f"assuming abandoned (a prior review_cli.py run likely crashed/was killed "
+                      f"before releasing it), reclaiming", file=sys.stderr)
+                shutil.rmtree(lock_dir, ignore_errors=True)
+                continue
+            if waited >= wait_timeout_seconds:
+                raise SystemExit(
+                    f"could not acquire run lock at {lock_dir} after {wait_timeout_seconds}s -- "
+                    f"another review_cli.py run is likely still dispatching this run-id, or the "
+                    f"lock is stale but younger than {LOCK_STALE_SECONDS}s; if you're sure nothing "
+                    f"else is running, remove {lock_dir} by hand"
+                )
+            time.sleep(poll_seconds)
+            waited += poll_seconds
+
+
+def release_run_lock(lock_dir: Path) -> None:
+    shutil.rmtree(lock_dir, ignore_errors=True)
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     run_id = args.run_id
     lane = resolve_process(args.lane)
@@ -639,7 +703,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise SystemExit(f"create_handoff.py reported success but {handoff_path} does not exist")
     prompt_text = handoff_path.read_text(encoding="utf-8")
 
-    argv = build_claude_argv(lane, budget, run_id)
+    argv = build_claude_argv(lane, budget, run_id, args.model, args.effort)
 
     if args.dry_run:
         print(json.dumps({
@@ -649,6 +713,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     out_dir = run_dir(run_id) / "outputs" / lane
+    lock_dir = acquire_run_lock(run_id, wait_timeout_seconds=args.lock_wait_timeout)
+    try:
+        return _cmd_run_locked(args, run_id, lane, budget, argv, prompt_text, handoff_path, out_dir)
+    finally:
+        release_run_lock(lock_dir)
+
+
+def _cmd_run_locked(
+    args: argparse.Namespace, run_id: str, lane: str, budget: str, argv: list[str],
+    prompt_text: str, handoff_path: Path, out_dir: Path,
+) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Archive any previous attempt's output files before dispatching again.
@@ -747,7 +822,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     with telemetry_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps({
             "lane": lane, "budget": budget,
-            "model": resolve_model(lane, budget)["model"], "effort": resolve_model(lane, budget)["effort"],
+            "model": resolve_model(lane, budget, args.model, args.effort)["model"],
+            "effort": resolve_model(lane, budget, args.model, args.effort)["effort"],
             "duration_seconds": duration_seconds,
             "total_cost_usd": parsed.get("total_cost_usd") if isinstance(parsed, dict) else None,
             "input_tokens": usage.get("input_tokens"),
@@ -815,6 +891,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--lane", required=True)
     p_run.add_argument("--budget", choices=["probe", "standard", "full"], default="", help="defaults to the run's default_budget")
     p_run.add_argument("--timeout", type=int, default=1800, help="seconds before the claude subprocess is killed (default 1800)")
+    p_run.add_argument("--model", default="", help="override the resolved model for this call only (e.g. claude-haiku-4-5 for a cheap dev/mechanics-validation pass) -- does not touch model-config.json's default")
+    p_run.add_argument("--effort", default="", choices=["", "low", "medium", "high", "xhigh", "max"], help="override the resolved effort tier for this call only -- does not touch model-config.json's default")
+    p_run.add_argument("--lock-wait-timeout", type=int, default=3600, help="max seconds to wait for another review_cli.py run against this run-id to release its directory lock before giving up (default 3600)")
     p_run.add_argument("--dry-run", action="store_true", help="build the handoff and the claude argv, print them, execute nothing")
     p_run.set_defaults(func=cmd_run)
 
