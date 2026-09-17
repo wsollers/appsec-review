@@ -60,9 +60,15 @@ ANALYSIS_ONLY_DEFINES = [
     # semantics: printf family is not inlined; we never link, so none.
     "_NO_CRT_STDIO_INLINE",
 ]
+ANALYSIS_ONLY_FLAGS = [
+    # The June 2010 DirectX SDK's xaudio2.h uses GUID token-pasting that modern
+    # clang-cl diagnoses as invalid preprocessing tokens. MSVC accepts the header,
+    # and this keeps Doom 3 BFG's recovered XAudio TUs in the syntax/IR substrate.
+    "/clang:-Wno-invalid-token-paste",
+]
 
 
-def write_vfs_overlay(root: Path, out: Path) -> int:
+def write_vfs_overlay(root: Path, out: Path, extra_roots: list[Path] | None = None) -> int:
     """Clang VFS overlay with case-sensitive:false over `root`, so #include
     directives and /I paths resolve the way they do on Windows. Needs the full
     tree enumerated (directory-remap delegates to the real FS and stays
@@ -80,8 +86,12 @@ def write_vfs_overlay(root: Path, out: Path) -> int:
                 n += 1
                 ents.append({"name": c.name, "type": "file", "external-contents": str(c)})
         return ents
+    roots = [root]
+    for extra in extra_roots or []:
+        if extra and extra.exists() and extra not in roots:
+            roots.append(extra)
     doc = {"version": 0, "case-sensitive": "false",
-           "roots": [{"name": str(root), "type": "directory", "contents": tree(root)}]}
+           "roots": [{"name": str(r), "type": "directory", "contents": tree(r)} for r in roots]}
     out.write_text(json.dumps(doc))
     return n
 
@@ -120,8 +130,12 @@ def ci_resolve(p: Path) -> Path:
 
 def win_to_posix(root: Path, base: Path, p: str) -> Path:
     p = p.strip().strip('"')
+    if os.name != "nt" and p.startswith("/"):
+        return ci_resolve(Path(p.replace("\\", "/")))
     wp = PureWindowsPath(p)
     if wp.is_absolute():
+        if os.name == "nt":
+            return ci_resolve(Path(p))
         # absolute Windows path: try to re-root under /workspace by tail match
         parts = list(wp.parts[1:])
         cand = (root / Path(*parts)) if parts else root
@@ -158,12 +172,33 @@ def msvc_flags(msvc_root: str, platform: str) -> list[str]:
                 flags += ["-imsvc", str(d)]
         return flags
     if (r / "VC" / "Tools" / "MSVC").is_dir() or (r / "VC" / "include").is_dir():
+        if os.name == "nt":
+            flags = []
+            tools = r / "VC" / "Tools" / "MSVC"
+            versions = sorted((p for p in tools.iterdir() if p.is_dir()), key=lambda p: p.name) if tools.is_dir() else []
+            if versions:
+                msvc = versions[-1]
+                for d in (msvc / "include", msvc / "atlmfc" / "include"):
+                    if d.is_dir():
+                        flags += ["-imsvc", str(d)]
+            elif (r / "VC" / "include").is_dir():
+                flags += ["-imsvc", str(r / "VC" / "include")]
+            kits = Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Windows Kits" / "10" / "Include"
+            kit_versions = sorted((p for p in kits.iterdir() if p.is_dir()), key=lambda p: p.name) if kits.is_dir() else []
+            if kit_versions:
+                sdk = kit_versions[-1]
+                for sub in ("ucrt", "um", "shared", "winrt", "cppwinrt"):
+                    d = sdk / sub
+                    if d.is_dir():
+                        flags += ["-imsvc", str(d)]
+            if flags:
+                return flags
         return ["/winsysroot", str(r)]
     return ["/winsysroot", str(r)]  # unknown layout; let clang complain loudly
 
 
 class Project:
-    def __init__(self, path: Path, root: Path, config: str, platform: str, audit: dict):
+    def __init__(self, path: Path, root: Path, config: str, platform: str, audit: dict, extra_macros: dict[str, str] | None = None):
         self.path = path
         self.root = root
         self.dir = path.parent
@@ -186,6 +221,8 @@ class Project:
             "MSBuildProjectDirectory": str(self.dir),
             "MSBuildThisFileDirectory": str(self.dir) + "/",
         }
+        if extra_macros:
+            self.macros.update(extra_macros)
         self.props_notes: list[str] = []
         self._local_targets: list[str] = []
         self._load_props()
@@ -389,6 +426,7 @@ def build_command(proj: Project, src: Path, settings: dict, args) -> tuple[list[
     notes: dict = {"defines": [], "undefines": [], "includes": [], "forced_includes": [], "flags": []}
     for d in ANALYSIS_ONLY_DEFINES:
         cmd.append(f"/D{d}")
+    cmd.extend(ANALYSIS_ONLY_FLAGS)
     if args.vfs_overlay:
         cmd += ["/clang:-ivfsoverlay", f"/clang:{args.vfs_overlay}", "-Wno-nonportable-include-path"]
 
@@ -420,15 +458,20 @@ def build_command(proj: Project, src: Path, settings: dict, args) -> tuple[list[
                 cmd += ["-imsvc", str(p_)]
             notes["includes"].append(str(p_))
     for fi in split_list(proj.expand(settings.get("ForcedIncludeFiles", ""))):
+        if not fi or fi.startswith("%("):
+            continue
         cmd.append(f"/FI{fi}")
         notes["forced_includes"].append(fi)
 
     pch = settings.get("PrecompiledHeader", "").lower()
-    pch_file = settings.get("PrecompiledHeaderFile", "stdafx.h")
+    pch_file = settings.get("PrecompiledHeaderFile", "stdafx.h") or ""
     if pch == "use":
         # clang-cl can't consume MSVC .pch; treat the PCH header as a forced include instead
-        cmd.append(f"/FI{pch_file}")
-        notes["flags"].append(f"PCH_USE_AS_FORCED_INCLUDE:{pch_file}")
+        if pch_file:
+            cmd.append(f"/FI{pch_file}")
+            notes["flags"].append(f"PCH_USE_AS_FORCED_INCLUDE:{pch_file}")
+        else:
+            notes["flags"].append("PCH_USE_WITH_EMPTY_HEADER_IGNORED")
     elif pch == "create":
         notes["flags"].append(f"PCH_CREATE_IGNORED:{pch_file}")
 
@@ -485,16 +528,35 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--audit", required=True)
     ap.add_argument("--include", action="append", default=[], help="only .vcxproj paths containing this substring")
+    ap.add_argument("--property", action="append", default=[],
+                    help="extra MSBuild property in KEY=VALUE form, e.g. DXSDK_DIR=/deps/DXSDK/")
     ap.add_argument("--vfs-overlay", default=None,
                     help="path for the case-insensitive VFS overlay (default: next to --out); 'none' to disable")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
+    extra_macros: dict[str, str] = {}
+    for prop in args.property:
+        if "=" not in prop:
+            print(f"--property must be KEY=VALUE, got {prop!r}", file=sys.stderr)
+            sys.exit(2)
+        key, value = prop.split("=", 1)
+        key = key.strip()
+        if not key:
+            print(f"--property must have a non-empty key, got {prop!r}", file=sys.stderr)
+            sys.exit(2)
+        extra_macros[key] = value
     if args.vfs_overlay == "none":
         args.vfs_overlay = None
     else:
         ov = Path(args.vfs_overlay) if args.vfs_overlay else Path(args.out).with_name("vfs-overlay.yaml")
-        nfiles = write_vfs_overlay(root, ov)
+        extra_vfs_roots = []
+        if args.msvc_root:
+            extra_vfs_roots.append(Path(args.msvc_root))
+        dxsdk = extra_macros.get("DXSDK_DIR", "").rstrip("/\\")
+        if dxsdk:
+            extra_vfs_roots.append(Path(dxsdk))
+        nfiles = write_vfs_overlay(root, ov, extra_vfs_roots)
         args.vfs_overlay = str(ov)
         print(f"vfs overlay ({nfiles} files, case-insensitive) -> {ov}")
     audit = {
@@ -502,6 +564,7 @@ def main():
         "config": args.config, "platform": args.platform,
         "msvc_root": args.msvc_root, "toolset_compat": args.toolset_compat,
         "vfs_overlay": args.vfs_overlay, "analysis_only_defines": ANALYSIS_ONLY_DEFINES,
+        "analysis_only_flags": ANALYSIS_ONLY_FLAGS,
         "projects": [], "unresolved_macros": {}, "conditions_not_evaluated": [],
         "targets_not_evaluated": [], "targets_evaluated": [], "props_missing": [], "directory_build_props_present": [],
         "excluded_from_build": [], "missing_sources": [], "wildcard_includes": [],
@@ -516,7 +579,7 @@ def main():
 
     for vp in vcxprojs:
         try:
-            proj = Project(vp, root, args.config, args.platform, audit)
+            proj = Project(vp, root, args.config, args.platform, audit, extra_macros)
         except ET.ParseError as e:
             audit["projects"].append({"path": str(vp), "error": f"parse: {e}"})
             continue
@@ -579,6 +642,9 @@ def main():
     for d in ANALYSIS_ONLY_DEFINES:
         audit["flags"].append({"flag": "ANALYSIS_ONLY_MACRO_DIFFERENCE", "value": d,
                                "note": "added to every TU by the converter; see ANALYSIS_ONLY_DEFINES"})
+    for f in ANALYSIS_ONLY_FLAGS:
+        audit["flags"].append({"flag": "ANALYSIS_ONLY_COMPILER_FLAG", "value": f,
+                               "note": "added to every TU by the converter; see ANALYSIS_ONLY_FLAGS"})
     if audit["unresolved_macros"]:
         audit["flags"].append({"flag": "SOURCE_PATH_MISMATCH", "value": sorted(audit["unresolved_macros"]),
                                "note": "unresolved MSBuild macros; paths containing them are wrong"})
