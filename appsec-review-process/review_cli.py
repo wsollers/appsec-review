@@ -21,6 +21,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -558,6 +559,158 @@ def cmd_cost(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# run
+# ---------------------------------------------------------------------------
+
+
+def lane_tools(lane: str) -> list[str]:
+    cfg = load_model_config()
+    lt = cfg.get("lane_tools") or {}
+    return list(lt.get(lane) or lt.get("default") or ["Read", "Grep", "Glob", "Write"])
+
+
+def build_claude_argv(lane: str, budget: str, run_id: str) -> list[str]:
+    resolved = resolve_model(lane, budget)
+    cfg = load_model_config()
+    invocation = cfg.get("invocation") or {}
+    usd = (cfg.get("budget_max_usd_per_call") or {}).get(budget)
+
+    argv = [invocation.get("binary", "claude")] + list(invocation.get("fixed_flags") or ["-p", "--output-format", "json", "--no-session-persistence", "--permission-mode", "bypassPermissions"])
+    argv += ["--model", resolved["model"], "--effort", resolved["effort"]]
+    if usd is not None:
+        argv += ["--max-budget-usd", str(usd)]
+    argv += ["--fallback-model", cfg.get("default", {}).get("model", "claude-sonnet-5")]
+    argv += ["--allowedTools", ",".join(lane_tools(lane))]
+
+    # Scope --add-dir to what this lane actually needs to read/write: the run's
+    # own directory (inputs/outputs) plus the target repo and engagement output
+    # from the artifact manifest, when known. Real filesystem scoping, not a
+    # prompt instruction -- narrower than "the whole machine" even in this
+    # unpooled slice.
+    manifest = manifest_for_run(run_id)
+    add_dirs = [str(run_dir(run_id))]
+    target_path = (manifest.get("target") or {}).get("repo_path", "")
+    engagement_output = manifest.get("engagement_output", "")
+    for p in (target_path, engagement_output):
+        if p:
+            add_dirs.append(p)
+    for d in add_dirs:
+        argv += ["--add-dir", d]
+
+    return argv
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    run_id = args.run_id
+    lane = resolve_process(args.lane)
+    status = run_status(run_id)
+    if not status:
+        raise SystemExit(f"no run-status.json for run {run_id!r}; run_process.py --start first")
+    budget = args.budget or str(status.get("default_budget") or "probe")
+
+    handoff_path = run_dir(run_id) / "handoffs" / f"{lane}.md"
+    handoff_cmd = [sys.executable, str(ROOT / "create_handoff.py"), "--run-id", run_id, "--process", lane, "--budget", budget]
+    handoff_proc = subprocess.run(handoff_cmd, capture_output=True, text=True)
+    if handoff_proc.returncode != 0:
+        raise SystemExit(f"create_handoff.py failed:\n{handoff_proc.stdout}\n{handoff_proc.stderr}")
+    if not handoff_path.exists():
+        raise SystemExit(f"create_handoff.py reported success but {handoff_path} does not exist")
+    prompt_text = handoff_path.read_text(encoding="utf-8")
+
+    argv = build_claude_argv(lane, budget, run_id)
+
+    if args.dry_run:
+        print(json.dumps({
+            "run_id": run_id, "lane": lane, "budget": budget, "dry_run": True,
+            "argv": argv, "stdin_source": str(handoff_path), "stdin_chars": len(prompt_text),
+        }, indent=2))
+        return 0
+
+    out_dir = run_dir(run_id) / "outputs" / lane
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    mark_running = subprocess.run(
+        [sys.executable, str(ROOT / "run_process.py"), "--run-id", run_id, "--process", lane, "--budget", budget, "--message", "dispatched via review_cli.py run"],
+        capture_output=True, text=True,
+    )
+    if mark_running.returncode != 0:
+        raise SystemExit(f"run_process.py (mark RUNNING) failed:\n{mark_running.stdout}\n{mark_running.stderr}")
+
+    started = time.time()
+    try:
+        proc = subprocess.run(argv, input=prompt_text, capture_output=True, text=True, timeout=args.timeout)
+        timed_out = False
+    except subprocess.TimeoutExpired:
+        proc = None
+        timed_out = True
+    duration_seconds = time.time() - started
+
+    raw_path = out_dir / "raw-response.json"
+    if proc is not None:
+        raw_path.write_text(proc.stdout or "", encoding="utf-8")
+
+    parsed: dict[str, Any] = {}
+    result_text = ""
+    parse_ok = False
+    if proc is not None and proc.stdout:
+        try:
+            parsed = json.loads(proc.stdout)
+            # Field names not yet confirmed against a real call (see
+            # model-config.json invocation.open_questions) -- try the likely
+            # candidates rather than assume one, and record which (if any) hit.
+            for key in ("result", "output", "text", "response", "content"):
+                if isinstance(parsed.get(key), str) and parsed[key].strip():
+                    result_text = parsed[key]
+                    parse_ok = True
+                    break
+        except Exception:
+            pass
+
+    if not parse_ok and proc is not None:
+        # Nothing lost: raw-response.json above has the untouched output either way.
+        result_text = proc.stdout or ""
+
+    (out_dir / "result.md").write_text(result_text, encoding="utf-8")
+
+    success = (not timed_out) and proc is not None and proc.returncode == 0
+    status_payload = {
+        "schema": "appsec-review-process/process-status/0.1",
+        "run_id": run_id,
+        "process": lane,
+        "budget": budget,
+        "status": "OK" if success else "FAILED",
+        "message": ("timed out after %ss" % args.timeout) if timed_out else (f"claude exit={proc.returncode}" if proc is not None else "no process result"),
+        "parse_ok": parse_ok,
+        "cost_usd": parsed.get("cost_usd") if isinstance(parsed, dict) else None,
+        "duration_seconds": duration_seconds,
+    }
+    (out_dir / "status.json").write_text(json.dumps(status_payload, indent=2) + "\n", encoding="utf-8")
+
+    telemetry_path = run_dir(run_id) / "telemetry.jsonl"
+    with telemetry_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "lane": lane, "budget": budget,
+            "model": resolve_model(lane, budget)["model"], "effort": resolve_model(lane, budget)["effort"],
+            "duration_seconds": duration_seconds,
+            "cost_usd": parsed.get("cost_usd") if isinstance(parsed, dict) else None,
+            "exit_code": (proc.returncode if proc is not None else None),
+            "timed_out": timed_out,
+        }) + "\n")
+
+    mark_cmd = [sys.executable, str(ROOT / "run_process.py"), "--run-id", run_id, "--process", lane, "--budget", budget]
+    mark_cmd += ["--mark-ok", "--message", "review_cli.py run: claude exited 0"] if success else ["--fail-immediately", "--message", status_payload["message"]]
+    mark_result = subprocess.run(mark_cmd, capture_output=True, text=True)
+
+    print(json.dumps({
+        "run_id": run_id, "lane": lane, "budget": budget, "success": success,
+        "status_json": str(out_dir / "status.json"), "result_md": str(out_dir / "result.md"),
+        "raw_response": str(raw_path), "parse_ok": parse_ok,
+        "run_process_output": json.loads(mark_result.stdout) if mark_result.stdout else None,
+    }, indent=2))
+    return 0 if success else 1
+
+
+# ---------------------------------------------------------------------------
 # CLI wiring
 # ---------------------------------------------------------------------------
 
@@ -591,6 +744,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_cost = sub.add_parser("cost", help="summarize runs/<run_id>/telemetry.jsonl")
     p_cost.add_argument("--run-id", default="", help="defaults to the most recently updated run")
     p_cost.set_defaults(func=cmd_cost)
+
+    p_run = sub.add_parser("run", help="dispatch one lane to the real claude CLI (single-agent, unpooled -- see model-config.json invocation.open_questions for what's not yet wired)")
+    p_run.add_argument("--run-id", required=True)
+    p_run.add_argument("--lane", required=True)
+    p_run.add_argument("--budget", choices=["probe", "standard", "full"], default="", help="defaults to the run's default_budget")
+    p_run.add_argument("--timeout", type=int, default=1800, help="seconds before the claude subprocess is killed (default 1800)")
+    p_run.add_argument("--dry-run", action="store_true", help="build the handoff and the claude argv, print them, execute nothing")
+    p_run.set_defaults(func=cmd_run)
 
     return ap
 

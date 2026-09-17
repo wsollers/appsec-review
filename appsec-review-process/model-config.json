@@ -1,11 +1,11 @@
 {
-  "schema": "appsec-review-process/model-config/0.2",
+  "schema": "appsec-review-process/model-config/0.3",
   "_notes": [
     "Single model family available today (per 2026-09-17 design conversation): claude-sonnet-5, via the real Claude Code CLI (v2.1.146+, confirmed on hal5000 at C:\\Users\\wsoll\\.local\\bin\\claude.exe -- NOT the restricted /opt/cowork/claude-bin/claude found on the Cowork device-bridge sandbox's own PATH, which only supports bare `claude -p \"<prompt>\"`).",
     "Originally scoped around a private 'fable' model; superseded -- model identity now lives here, not hardcoded in review_cli.py, so it can be repointed without touching code.",
     "'effort' is a reasoning-effort/tier label, not a distinct model family -- it is how lane/budget-tier stakes get expressed with only one model available (see design conversation: 09/10 keep the strongest tier regardless of budget; probe-budget lanes run cheaper/faster). Maps directly to claude's own --effort low|medium|high|xhigh|max.",
     "Quorum panels (design-v3.md Sec5) additionally use 'personas' (see quorum_personas below) since real model-family diversity isn't available yet -- every quorum result must still be tagged diversity_requirement_met:false downstream. Personas are implemented as claude --agents/--agent (real named agents, not just swapped system-prompt text), see quorum_personas.agent_definitions.",
-    "max_budget_usd values below are PLACEHOLDERS ($ figures not yet confirmed with the repo owner) -- do not treat as final; see open question in the accompanying chat turn."
+    "max_budget_usd values below are PLACEHOLDERS, explicitly accepted as such by the repo owner on 2026-09-17 pending real-run experience -- revisit once a full-budget pooled lane has actually run once."
   ],
   "default": {
     "model": "claude-sonnet-5",
@@ -17,7 +17,7 @@
     "full": "medium"
   },
   "budget_max_usd_per_call": {
-    "_note": "PLACEHOLDER figures -- confirm real dollar caps before run/run-all goes live. These are per single `claude -p` invocation, not per lane or per run; a pooled lane with N workers spends up to N times this per lane.",
+    "_note": "Placeholder figures, accepted as a starting point 2026-09-17. Per single `claude -p` invocation, not per lane or per run -- a pooled lane with N workers spends up to N times this for that one lane.",
     "probe": 0.5,
     "standard": 2.0,
     "full": 5.0
@@ -25,6 +25,12 @@
   "lane_overrides": {
     "09-independent-verification": { "effort": "high" },
     "10-synthesis-report": { "effort": "high" }
+  },
+  "lane_tools": {
+    "_note": "Real filesystem/tool scoping via --allowedTools, not just prompt instruction. default applies unless a lane is listed here.",
+    "default": ["Read", "Grep", "Glob", "Write"],
+    "02-evidence-pregather": ["Read", "Grep", "Glob", "Write", "Bash"],
+    "11-remediation-proposal": ["Read", "Grep", "Glob", "Write", "Edit"]
   },
   "quorum_personas": {
     "_note": "Used only for lanes running an evidence-qualified quorum panel (currently 09). 2 personas for WARRANTED-tier votes, 3 for malfeasance/NO-GO/RE-DAST-escalation tier, per design-v3.md Sec5.1.",
@@ -47,25 +53,23 @@
   },
   "invocation": {
     "type": "cli",
-    "status": "CONFIRMED 2026-09-17 against claude 2.1.146 on hal5000 (real user install, not the sandbox-restricted binary). Flags below are all real flags from `claude -p --help`'s actual output, not assumed.",
+    "status": "CONFIRMED 2026-09-17 against claude 2.1.146 on hal5000 (real user install, not the sandbox-restricted binary). Flags are real flags from `claude -p --help`'s actual output. Prompt delivery, dollar caps, and permission-mode decided by the repo owner 2026-09-17 -- see decisions below.",
     "binary": "claude",
-    "fixed_flags": ["-p", "--output-format", "json", "--no-session-persistence"],
+    "fixed_flags": ["-p", "--output-format", "json", "--no-session-persistence", "--permission-mode", "bypassPermissions"],
+    "prompt_delivery": "stdin -- the filled handoff prompt is piped to claude's stdin, not passed as a positional argument, to avoid any OS command-line length ceiling. Decided 2026-09-17.",
     "per_call_flags": {
-      "prompt": "positional argument, the filled handoff prompt text (or read via stdin -- TBD, see open question)",
       "model": "--model {model}",
       "effort": "--effort {effort}",
       "max_budget_usd": "--max-budget-usd {budget_max_usd_per_call[<tier>]}",
       "fallback_model": "--fallback-model claude-sonnet-5",
-      "add_dir": "--add-dir {scoped_paths} -- for pooled lanes (07/08/03/04), scope each worker to ONLY its assigned parallel_review_group's paths plus the run's inputs/outputs dirs, not the whole target repo. Real filesystem-level scoping, not just a prompt instruction.",
-      "allowed_tools": "--allowedTools {lane_tool_allowlist} -- per-lane, e.g. most lanes: Read,Grep,Glob,Write (Write restricted to this lane's own outputs dir via --add-dir); 02-evidence-pregather needs Bash; 11-remediation-proposal needs Edit for patch proposals. Not yet enumerated per lane -- next slice.",
-      "permission_mode": "--permission-mode bypassPermissions -- PROPOSED, not yet confirmed with repo owner: since nobody is present to answer an interactive permission prompt in an unattended run, and --allowedTools/--add-dir already provide the real scope boundary, permission-mode bypass is proposed as the mechanism rather than relying on interactive approval that would just hang. Open question -- see chat."
+      "add_dir": "--add-dir {scoped_paths} -- for pooled lanes (07/08/03/04), scope each worker to ONLY its assigned parallel_review_group's paths plus the run's inputs/outputs dirs, not the whole target repo. Real filesystem-level scoping, not just a prompt instruction. Pool dispatch itself is a follow-up slice; single-lane `run` uses the run's engagement_output + target repo_path from the artifact manifest.",
+      "allowed_tools": "--allowedTools {lane_tools[<lane>] or lane_tools.default}"
     },
-    "agent_flag": "--agent {persona_name} --agents {quorum_personas.agent_definitions as JSON} -- used only for quorum panel calls (currently lane 09), one call per panelist.",
+    "agent_flag": "--agent {persona_name} --agents {quorum_personas.agent_definitions as JSON} -- used only for quorum panel calls (currently lane 09), one call per panelist. Not yet wired into `run` -- follow-up slice alongside pool dispatch.",
     "open_questions": [
-      "Prompt delivery: positional arg vs. stdin vs. a prompt file flag -- handoff prompts can be long (subprompts.md content, artifact manifest); need to confirm claude -p's practical limit for a positional-argument prompt before deciding.",
-      "Real dollar caps for budget_max_usd_per_call -- currently placeholders, not confirmed.",
-      "permission-mode choice (bypassPermissions vs. a narrower mode) -- proposed, not confirmed.",
-      "Whether claude -p inside a WSL/bash invocation vs. a PowerShell invocation changes any of the above -- confirmed so far only from a PowerShell shell on hal5000."
+      "Exact --output-format json response shape (field names for the model's text output, cost, duration) -- not yet confirmed against a real call. `run` will write the raw JSON response to disk regardless of whether parsing succeeds, so nothing is lost if the shape assumed here turns out wrong.",
+      "Whether claude -p inside a WSL/bash invocation vs. a PowerShell invocation changes any of the above -- confirmed so far only from a PowerShell shell on hal5000.",
+      "--add-dir scoping and --agents quorum dispatch are not implemented in `run` yet -- single-lane, unpooled, non-quorum execution only in this slice."
     ]
   }
 }
