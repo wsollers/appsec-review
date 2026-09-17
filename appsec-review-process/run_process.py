@@ -33,7 +33,33 @@ def process_dirs() -> list[Path]:
 
 
 def process_names() -> list[str]:
-    return [p.name for p in process_dirs()]
+    # The authoritative lane sequence is process-manifest.json's process_order
+    # (deliberately NOT alphabetical -- e.g. 02-evidence-pregather runs before
+    # 01-component-characterization, and 10-synthesis-report runs last, after
+    # 11/12). Alphabetical directory listing was the original placeholder and
+    # silently diverged from that order, which made this script's own
+    # resume_from/rerun_command point at the wrong next lane (discovered
+    # 2026-09-17: after 00-intake-recovery completed, this returned
+    # "01-component-characterization" instead of the manifest's
+    # "02-evidence-pregather", which review_cli.py next-lane -- already
+    # reading process-manifest.json directly -- correctly recommended).
+    # Fall back to alphabetical only if the manifest is missing/unreadable,
+    # so the script still works before it's staged.
+    on_disk = {p.name for p in process_dirs()}
+    manifest_path = ROOT / "process-manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        order = manifest.get("process_order")
+    except Exception:
+        order = None
+    if isinstance(order, list) and order:
+        ordered = [name for name in order if name in on_disk]
+        # Any lane directory that exists on disk but isn't listed in the
+        # manifest still needs to be reachable -- append it (alphabetically)
+        # rather than silently dropping it from the run.
+        extra = sorted(on_disk - set(ordered))
+        return ordered + extra
+    return sorted(on_disk)
 
 
 def resolve_process(name: str) -> str:
