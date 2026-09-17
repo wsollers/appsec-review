@@ -12,7 +12,9 @@
         <EvidencePath>/
           cloc/            cloc.json, scc.json
           secrets/         gitleaks.json, binary-cert-inventory.txt (S7-1)
-          sbom/            sbom.cdx.json
+          sbom/            sbom.cdx.json, dependency-lifecycle.json (2026-09-17 - L1 broadening:
+                            license inventory re-surfaced from the SBOM + best-effort EOL/
+                            abandonware signals from eol-reference.json; see that step's Note)
           sca/             osv-scanner.json
           sast-python/     bandit.json
           sast-go/         gosec.json, govulncheck.txt
@@ -1157,6 +1159,20 @@ $allSteps = @(
         AllowNonZeroExit = $true
         ExpectedOutput = "license/scancode.json"
         Note = "ScanCode Toolkit - license/copyright/package-origin detection, run from its own separately-built image rather than baked into the main toolbox - deliberately kept out of that image per the Dockerfile's own note (heavy dependency footprint). IMPORTANT: there is no publishable ghcr.io/aboutcode-org/scancode-toolkit image to pull (verified directly - anonymous manifest pull returns 'denied', and ScanCode's own docs confirm you must build it yourself); run Build-ScanCodeImage.ps1 once first to produce the local scancode-toolkit:local tag this step references, or this step will fail with 'Unable to find image'. Note the image's own ENTRYPOINT already runs scancode, so Cmd here is scancode's arguments only, not the word 'scancode' itself. Can be slow on a large tree (-clip = copyright+license+info+package); consider a narrower -RepoPath for fsh-client given its size before running this against the whole thing."
+    },
+    [PSCustomObject]@{
+        Name = "dependency-lifecycle"
+        EvidenceSubdir = "sbom"
+        Cmd = @("python3", "/opt/scripts/analyze_dependency_lifecycle.py",
+                "--sbom", "/evidence/sbom/sbom.cdx.json",
+                "--eol-reference", "/opt/scripts/eol-reference.json",
+                "--scancode", "/evidence/license/scancode.json",
+                "-o", "/evidence/sbom/dependency-lifecycle.json")
+        CaptureStdout = $false
+        AllowNonZeroExit = $true
+        ExpectedOutput = "sbom/dependency-lifecycle.json"
+        DependsOn = "sbom"
+        Note = "2026-09-17, added for design-v3.md L1 broadening (full SBOM/dependency/EOL/license scope, not just CVE reachability): cross-references the sbom step's CycloneDX component list against a small hand-curated, offline EOL/abandonware reference table (scripts/eol-reference.json) and re-surfaces the SBOM's own per-component license data, which syft already produces for free but no lane previously consumed. Does NOT call any live EOL-tracking API by design -- see eol-reference.json's own header for why a live lookup here would break the pipeline's run-to-run determinism. --scancode points at the scancode step's deeper license/copyright scan for cross-reference if that step has also run; this step degrades gracefully (a note in the output, not a failure) if scancode.json is absent. Anything not covered by the reference table is reported as 'unknown', never inferred as current -- same discipline the rest of the pipeline applies to code coverage."
     },
     [PSCustomObject]@{
         Name = "evidence-scrub"

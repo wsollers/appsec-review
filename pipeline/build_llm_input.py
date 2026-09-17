@@ -122,6 +122,34 @@ def count_codechecker(path: Path) -> int | None:
     return None
 
 
+def count_sbom_components(path: Path) -> int | None:
+    data = load_json(path)
+    if not isinstance(data, dict):
+        return None
+    components = data.get("components")
+    return len(components) if isinstance(components, list) else None
+
+
+def count_scancode(path: Path) -> int | None:
+    data = load_json(path)
+    if not isinstance(data, dict):
+        return None
+    files = data.get("files")
+    if isinstance(files, list):
+        return sum(len(f.get("licenses", []) or []) for f in files if isinstance(f, dict))
+    return None
+
+
+def count_dependency_lifecycle_flags(path: Path) -> int | None:
+    data = load_json(path)
+    if not isinstance(data, dict):
+        return None
+    summary = data.get("summary")
+    if isinstance(summary, dict):
+        return summary.get("components_flagged_by_eol_reference")
+    return None
+
+
 def manifest_steps(static_manifest) -> dict[str, dict]:
     if not isinstance(static_manifest, list):
         return {}
@@ -168,6 +196,9 @@ def build_tool_counts(evidence: Path, scratch: Path, static_manifest) -> list[di
         tool_row("Clang Static Analyzer / CSA", scratch / "csa" / "codechecker.json", count_codechecker(scratch / "csa" / "codechecker.json")),
         tool_row("CodeQL C/C++ security extended", scratch / "codeql" / "cpp.sarif", count_sarif(scratch / "codeql" / "cpp.sarif")),
         tool_row("CodeQL custom Mythos memory", scratch / "codeql" / "mythos.sarif", count_sarif(scratch / "codeql" / "mythos.sarif")),
+        tool_row("syft SBOM (dependency + license inventory)", evidence / "sbom" / "sbom.cdx.json", count_sbom_components(evidence / "sbom" / "sbom.cdx.json"), ran=step_ran("sbom"), note="component count; per-component licenses are in this file, consumed by 06-cve-reachability's L1-broadened scope"),
+        tool_row("ScanCode Toolkit (license/copyright/origin)", evidence / "license" / "scancode.json", count_scancode(evidence / "license" / "scancode.json"), ran=step_ran("scancode"), note="license-detections-per-file count; deeper/more authoritative than the SBOM's own license field on conflict"),
+        tool_row("dependency-lifecycle (EOL/abandonware, L1 broadening)", evidence / "sbom" / "dependency-lifecycle.json", count_dependency_lifecycle_flags(evidence / "sbom" / "dependency-lifecycle.json"), ran=step_ran("dependency-lifecycle"), note="components flagged by the curated eol-reference.json table; unflagged means unknown, not confirmed current"),
     ]
     return rows
 

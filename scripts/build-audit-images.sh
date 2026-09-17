@@ -102,7 +102,8 @@ preflight_scripts() {
   for f in \
     scripts/build_symbol_index.py scripts/md_to_sarif.py scripts/build_semantic_index.py \
     scripts/query_semantic_index.py scripts/scrub_evidence.py scripts/php_parse_coverage.py \
-    scripts/run-sast-php.sh scripts/run-semantic-index-batched.sh scripts/run-dockerfile-lint.sh
+    scripts/run-sast-php.sh scripts/run-semantic-index-batched.sh scripts/run-dockerfile-lint.sh \
+    scripts/analyze_dependency_lifecycle.py scripts/eol-reference.json
   do
     if [[ ! -f "$REPO_ROOT/$f" ]]; then
       echo "MISSING: $f (expected by images/audit-static or images/audit-container COPY)" >&2

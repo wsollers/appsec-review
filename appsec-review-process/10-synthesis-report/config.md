@@ -1,5 +1,9 @@
 # Config — Synthesis And Report
 
+This lane no longer derives CVSS 4.0 scores or priority ranking itself (2026-09-17: extracted
+into `12-scoring-prioritization`, design L8). Consume that lane's output directly; if it hasn't run,
+say so as a limitation rather than re-deriving scores here.
+
 ## Required Inputs
 
 - verified findings
@@ -9,6 +13,7 @@
 - threat model
 - ASVS/MASVS assessment
 - red/blue/verifier outputs
+- scoring and priority ranking (from `12-scoring-prioritization`)
 
 ## Required Outputs
 

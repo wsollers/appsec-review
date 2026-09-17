@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "purpose": "Curated, manually-maintained EOL/abandonware reference table for dependency-lifecycle analysis (design-v3.md L1 scope). Deliberately NOT a live query against endoflife.date or similar: the evidence pipeline is designed to be deterministic and reproducible on every run (see architecture doc's 'no caching, full rebuild every run' rule and the 'no @latest' non-negotiable), and EOL status is exactly the kind of external, time-varying fact a live network call during evidence gathering would make non-reproducible run-to-run. This table is intentionally the same pattern as native-dependencies.csv: a seeded, hand-maintained tracking artifact, not an automated oracle.",
+    "coverage": "Best-effort and non-exhaustive. Anything not listed here is reported as 'unknown', never inferred as supported — consistent with the pipeline's 'never infer that an unscanned file is clean' discipline applied to dependency lifecycle instead of code coverage.",
+    "maintenance": "Update this file by hand when a new engagement's SBOM surfaces an ecosystem/version not yet covered here. Match keys are case-insensitive substring matches against the SBOM component name (see analyze_dependency_lifecycle.py); version ranges are informational strings for the reviewer, not machine-parsed semver comparisons.",
+    "last_updated": "2026-09-17"
+  },
+  "entries": [
+    {"match": "python", "versions": "2.x", "status": "known_eol", "eol_date": "2020-01-01", "note": "Python 2 reached end of life 2020-01-01; no security patches from upstream."},
+    {"match": ".net framework", "versions": "4.5.x and earlier", "status": "known_eol", "eol_date": "2022-04-26", "note": ".NET Framework 4.5/4.5.1/4.5.2 out of support since 2022-04-26; 4.6.2+ still supported under the OS lifecycle."},
+    {"match": "php", "versions": "5.x", "status": "known_eol", "eol_date": "2019-01-01", "note": "PHP 5 series fully EOL since 2019-01-01."},
+    {"match": "php", "versions": "7.0-7.3", "status": "known_eol", "eol_date": "2022-12-06", "note": "PHP 7.0-7.3 EOL; PHP 7.4 EOL 2022-11-28. Confirm exact minor version before citing."},
+    {"match": "node", "versions": "<=14", "status": "known_eol", "eol_date": "2023-04-30", "note": "Node.js 14 and earlier LTS lines are EOL; check the exact major against nodejs.org's release schedule for the engagement date."},
+    {"match": "openssl", "versions": "1.0.x", "status": "known_eol", "eol_date": "2019-12-31", "note": "OpenSSL 1.0.2 EOL 2019-12-31 (extended support existed for some vendors only); 1.1.1 EOL 2023-09-11."},
+    {"match": "log4j", "versions": "1.x", "status": "known_eol", "eol_date": "2015-08-01", "note": "Log4j 1.x end-of-life since 2015; also carries known deserialization/JMS-appender CVEs unrelated to Log4Shell (which is 2.x). Do not confuse with log4cpp (a separate, unrelated C++ project) without verifying which library the SBOM actually names."},
+    {"match": "centos", "versions": "6.x, 7.x, 8.x", "status": "known_eol", "eol_date": "2024-06-30", "note": "CentOS Linux (non-Stream) 8 EOL 2021-12-31; 7 EOL 2024-06-30; 6 EOL 2020-11-30. Any CentOS Linux base image (not CentOS Stream) is EOL as of this table's last_updated."},
+    {"match": "ubuntu 16.04", "versions": "16.04", "status": "known_eol", "eol_date": "2021-04-30", "note": "Ubuntu 16.04 LTS standard support ended 2021-04-30 (ESM available separately)."},
+    {"match": "ubuntu 18.04", "versions": "18.04", "status": "known_eol", "eol_date": "2023-05-31", "note": "Ubuntu 18.04 LTS standard support ended 2023-05-31 (ESM available separately)."},
+    {"match": "unity", "versions": "2017.x, 2018.x, 2019.x", "status": "known_eol", "eol_date": "varies", "note": "Older Unity LTS lines fall out of support on a rolling schedule; verify the exact Unity version against Unity's published LTS support table before citing an exact date."},
+    {"match": "lua", "versions": "5.1.x", "status": "known_supported_upstream_but_old", "eol_date": "n/a", "note": "Lua does not publish EOL dates the way OS/runtime vendors do; 5.1 (2006) has had no upstream security patches in years and is a common abandonware flag for embedded interpreters even without a formal EOL date."},
+    {"match": "protobuf", "versions": "2.x", "status": "known_eol", "eol_date": "n/a", "note": "protobuf 2.x is unsupported upstream (project moved to proto3 / modern 3.x+ lines long ago); no formal EOL date published, flagged on abandonware grounds — confirm current protobuf security-advisory coverage for the exact vendored version."},
+    {"match": "vs2013", "versions": "2013", "status": "known_eol", "eol_date": "2018-04-10", "note": "Visual Studio 2013 mainstream support ended 2015-07-14, extended support ended 2018-04-10. Relevant to VS2013-era native validation targets noted in design-v3.md §19."}
+  ]
+}

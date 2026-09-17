@@ -6,7 +6,9 @@ unverified hypotheses to findings.
 Produce:
 
 - merged findings
-- severity and confidence
+- severity, confidence, and priority rank (consumed from `12-scoring-prioritization`'s output — do
+  not re-derive CVSS vectors or ranking here; if that lane's output is missing, report it as a
+  limitation instead of scoring ad hoc)
 - affected components
 - evidence references
 - remediation guidance

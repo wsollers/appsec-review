@@ -383,6 +383,7 @@ RUN pip3 install --no-cache-dir \
 COPY scripts/build_symbol_index.py scripts/md_to_sarif.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
      scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh \
      scripts/run-semantic-index-batched.sh \
+     scripts/analyze_dependency_lifecycle.py scripts/eol-reference.json \
      /opt/scripts/
 RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
 

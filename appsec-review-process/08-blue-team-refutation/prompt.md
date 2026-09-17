@@ -18,6 +18,8 @@ Do not rely on benign-vendor assumptions. If a claim only fails under a generous
 
 For each claim, output:
 
+- design lane answered: `L4` or `L5` (carried through from the red-team claim, see
+  07-red-team-adversarial's 2026-09-17 design-lane tagging)
 - red-team mode answered: `general` or `known-list`
 - refutation evidence
 - existing defenses or controls
