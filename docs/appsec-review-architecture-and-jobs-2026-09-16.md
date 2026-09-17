@@ -366,6 +366,22 @@ The first deliverable for that target should be
 buildable project candidates, commands attempted, dependencies, compile database strategy, and exact
 resume command if blocked.
 
+Current Doom 3 BFG bootstrap lessons:
+
+- The repo is Visual Studio/vcxproj-first. The DirectX SDK June 2010 dependency can be satisfied by
+  an extracted SDK payload and `DXSDK_DIR`, without a global SDK install.
+- Windows/MSVC-shaped LLVM IR should come from VS-bundled `clang-cl` or a compile database replay
+  that preserves MSVC/Windows SDK semantics. Use a current-Windows-SDK-compatible C++ standard, for
+  example `/clang:-std=c++14`; C++03 avoids one legacy source syntax issue but fails against modern
+  Windows SDK headers.
+- `Game-d3xp`'s missing `TypeInfo.h` is a generated-tool dependency. The BFG public repo expects
+  `TypeInfo.exe` in a prebuild event but omits the generator project. The older Doom 3 GPL repo has
+  `neo/TypeInfo` and is the recovery reference.
+- Full Release Win32 MSBuild can be made to produce `Doom3BFG.exe` with compile-enablement patches:
+  restored TypeInfo runtime support, TypeInfo project-file entries/PCH adjustment, modern
+  string-literal spacing, `idList::Sort` adaptation, `WINVER`/`_WIN32_WINNT` modernization, and
+  `afxres.h` to `winres.h` resource compatibility.
+
 ## Budget Model
 
 The process supports `probe`, `standard`, and `full` budgets. These are operational contracts, not hard token limits.

@@ -17,6 +17,7 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 | `budget-policy.md` | Probe/standard/full budget contracts for subtasks. |
 | `manual-orchestration-runbook.md` | How to operate the process before a full orchestrator exists. |
 | `continuation-remediation-rt-fc04-002.md` | Fresh-task continuation prompt for the EASTL remediation probe. |
+| `continuation-doom3-bfg-full-static-analysis.md` | Fresh-task continuation prompt for Doom 3 BFG full static-analysis pregather. |
 | `initial-idsoftware-game-repo-compile-and-review.md` | Fresh-task starter prompt for selecting, cloning, building, and staging an id Software game/engine repo. |
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
 | `templates/` | Handoff, artifact manifest, lane result, and status templates. |
@@ -216,7 +217,8 @@ WSL target: ~/targets/idsoftware-doom3-bfg
 WSL output: ~/scratch/idsoftware-doom3-bfg-engagement
 ```
 
-The next step for that target is build discovery and compile database generation, not a scanner run.
+The next step for that target is full `02-evidence-pregather`, gated on regenerating a trusted
+compile database and proving clang-cl syntax/IR coverage before scanner output is used by LLM lanes.
 
 ## Evidence Job Architecture
 

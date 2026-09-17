@@ -198,6 +198,24 @@ If old code requires compatibility work, prefer build flags or toolchain selecti
 If a source edit is unavoidable just to compile, keep it as a reviewable patch artifact and label the
 evidence as compile-enablement-modified.
 
+For legacy Visual Studio game projects that need Windows/MSVC semantics, prefer the Visual Studio
+bundled `clang-cl` when the goal is LLVM IR. Pass the Windows SDK, MSVC, and project macros through
+the compile database rather than replaying the project under unrelated Linux Clang. With MSBuild
+probes, `PlatformToolset=ClangCL` is the closest host smoke test. Use `_CL_` for late compiler flags
+such as `/WX-` and `/clang:-std=c++14`. Avoid forcing `/clang:-std=c++03` against modern Windows SDKs:
+it can hide old source syntax issues, but current SDK headers require newer C++ constructs such as
+`constexpr`.
+
+For Doom 3 BFG specifically, record the legacy DirectX SDK path as `DXSDK_DIR` if the SDK is
+extracted instead of machine-installed. Also check whether `TypeInfo.exe` and generated
+`d3xp/gamesys/TypeInfo.h` exist before treating `Game-d3xp` failures as include-path failures. The
+BFG public tree retains a prebuild command for `TypeInfo.exe` but does not include the generator
+project; the older id Software Doom 3 GPL tree includes `neo/TypeInfo` and can be used as a recovery
+reference. If recovery uses older Doom 3 TypeInfo runtime support instead of a working generator,
+label the target as compile-enablement-modified and record the project-file, PCH, keyword-macro,
+container API, Windows SDK version macro, and resource include compatibility edits before trusting
+any generated compile database.
+
 ## Phase 4 - Evidence Pregather
 
 Once a compile database exists, run the engagement job in the environment with the highest compile

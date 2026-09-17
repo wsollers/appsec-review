@@ -495,6 +495,41 @@ The first output should be a build-discovery note, not findings. The prompt shou
 buildable projects under the clone, choose a representative native target, and produce or recover a
 compile database before the engagement pipeline runs.
 
+### Doom 3 BFG build-discovery addendum
+
+The first Doom 3 BFG Windows probe showed that the public BFG tree is a legacy Visual Studio
+solution, not a CMake project. The release expects the Microsoft DirectX SDK June 2010. On the
+Windows host, the SDK can be used from an extracted payload under
+`scratch/directx-sdk-jun2010-extract/DXSDK`; a machine-wide install is not required for build
+discovery if `DXSDK_DIR` is passed to MSBuild.
+
+For Windows/MSVC-shaped IR, prefer the Visual Studio bundled `clang-cl` toolchain over generic Linux
+Clang. Use `PlatformToolset=ClangCL` when probing through MSBuild, and carry compatibility flags via
+the `_CL_` environment variable or compile database command. `clang-cl` ignores `/std:c++03`, but
+accepts `/clang:-std=...`. C++03 can hide the old adjacent-string-literal issue, but it is too old
+for modern Windows SDK headers that use `constexpr`; prefer a Windows-SDK-compatible standard such
+as `/clang:-std=c++14` and fix legacy literal adjacency with whitespace if source changes are
+unavoidable.
+
+The BFG `Game-d3xp` build failure for `TypeInfo.h` is not a normal include-path problem. The BFG
+project imports `_Game-d3xp.props`, whose prebuild event expects
+`..\build\Win32\"$(Configuration)"\TypeInfo.exe`, but the BFG public repo does not include a
+`TypeInfo` project, `neo/TypeInfo` sources, `TypeInfo.exe`, or generated `d3xp/gamesys/TypeInfo.h`.
+The older id Software Doom 3 GPL repo does include `neo/TypeInfo` and a `TypeInfo` project in
+`doom.sln`. Treat this as a missing generated-tool dependency when recovering the build; do not mark
+the compile database trusted until the generator/output path is restored or explicitly replaced with
+a compile-enablement patch.
+
+The recovered Windows build now produces `Doom3BFG.exe` under Release Win32, but only after clearly
+labeled compile-enablement changes. The older Doom 3 `TypeInfo` generator does not drop into BFG
+unchanged because the BFG framework changed `idCommon`, threading symbols, containers, and literal
+syntax. The smaller recovery was to restore the older runtime `TypeInfo.h`, `TypeInfo.cpp`, and
+`NoGameTypeInfo.h`, add them to `game-d3xp.vcxproj`, disable PCH for `TypeInfo.cpp`, define
+`_ALLOW_KEYWORD_MACROS`, and adapt the removed `idList::Sort` call. Additional modern-toolchain
+repairs were adjacent string-literal whitespace in DoomClassic and `SysCmds.cpp`, Vista-era
+`WINVER`/`_WIN32_WINNT` defaults for `LCMapStringEx`, and replacing resource-script `afxres.h` with
+`winres.h`.
+
 This can be driven manually in Codex subtasks first; automation can follow once the prompt shapes
 are stable.
 
