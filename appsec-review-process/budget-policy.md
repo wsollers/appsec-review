@@ -13,7 +13,7 @@ contracts that each task must follow and report against.
 
 | Budget | Max Clusters | Max Components | Max Source Files | Max Output Lines | Stop Rule |
 |---|---:|---:|---:|---:|---|
-| `probe` | 3 | 3 | 12 | 120 | stop after first useful defect in process/artifacts or after budget exhausted |
+| `probe` | 3 | 3 | 12 | 1000 | stop after first useful defect in process/artifacts or after budget exhausted |
 | `standard` | 25 | 15 | 80 | 350 | stop and summarize if remaining work is repetitive or needs a new batch |
 | `full` | all | all | bounded by lane | 800 | batch large outputs; write continuation points |
 
