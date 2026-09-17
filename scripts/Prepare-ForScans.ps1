@@ -85,12 +85,40 @@ function Install-WingetPackage {
     return $true
 }
 
-# Each entry: key, human name, detection scriptblock (returns bool), winget package id
+function Find-SevenZip {
+    # 7-Zip's own installer does NOT add 7z.exe to PATH by default, so
+    # Get-Command alone produces false negatives on real installs. Check PATH
+    # first, then the well-known Program Files locations, then the registry
+    # key 7-Zip's installer writes (HKLM:\SOFTWARE\7-Zip / WOW6432Node twin).
+    $onPath = Get-Command 7z -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
+
+    $candidates = @(
+        (Join-Path $env:ProgramFiles "7-Zip\7z.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "7-Zip\7z.exe")
+    )
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path $c)) { return $c }
+    }
+
+    foreach ($key in @("HKLM:\SOFTWARE\7-Zip", "HKLM:\SOFTWARE\WOW6432Node\7-Zip")) {
+        $regPath = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue).Path
+        if ($regPath) {
+            $exe = Join-Path $regPath "7z.exe"
+            if (Test-Path $exe) { return $exe }
+        }
+    }
+    return $null
+}
+
+# Each entry: key, human name, detection scriptblock (returns a path string
+# when found so Write-Result can show where, or $null when not found),
+# winget package id.
 $Tools = @(
-    @{ Key = "git";        Name = "git";                  Check = { [bool](Get-Command git -ErrorAction SilentlyContinue) };  WingetId = "Git.Git" }
-    @{ Key = "ripgrep";    Name = "ripgrep (rg)";          Check = { [bool](Get-Command rg -ErrorAction SilentlyContinue) };   WingetId = "BurntSushi.ripgrep.MSVC" }
-    @{ Key = "7zip";       Name = "7-Zip (7z)";            Check = { [bool](Get-Command 7z -ErrorAction SilentlyContinue) };   WingetId = "7zip.7zip" }
-    @{ Key = "gh";         Name = "GitHub CLI (gh)";       Check = { [bool](Get-Command gh -ErrorAction SilentlyContinue) };   WingetId = "GitHub.cli" }
+    @{ Key = "git";        Name = "git";                  Check = { (Get-Command git -ErrorAction SilentlyContinue).Source };  WingetId = "Git.Git" }
+    @{ Key = "ripgrep";    Name = "ripgrep (rg)";          Check = { (Get-Command rg -ErrorAction SilentlyContinue).Source };   WingetId = "BurntSushi.ripgrep.MSVC" }
+    @{ Key = "7zip";       Name = "7-Zip (7z)";            Check = { Find-SevenZip };                                          WingetId = "7zip.7zip" }
+    @{ Key = "gh";         Name = "GitHub CLI (gh)";       Check = { (Get-Command gh -ErrorAction SilentlyContinue).Source };   WingetId = "GitHub.cli" }
 )
 
 Write-Host "=== appsec-review host bootstrap ==="
@@ -105,9 +133,10 @@ $results = @()
 
 foreach ($tool in $Tools) {
     if ($tool.Key -notin $Selected) { continue }
-    $ok = & $tool.Check
+    $foundPath = & $tool.Check
+    $ok = [bool]$foundPath
     if ($ok) {
-        Write-Result -Name $tool.Name -Ok $true -Detail "found"
+        Write-Result -Name $tool.Name -Ok $true -Detail "found at $foundPath"
         $results += @{ tool = $tool.Key; ok = $true; action = "none" }
         continue
     }
@@ -117,9 +146,10 @@ foreach ($tool in $Tools) {
         continue
     }
     if (Confirm-Install -Name $tool.Name) {
-        $installed = Install-WingetPackage -Id $tool.WingetId -Name $tool.Name
-        $ok2 = & $tool.Check
-        Write-Result -Name $tool.Name -Ok $ok2 -Detail $(if ($ok2) { "installed" } else { "install ran but tool still not detected on PATH -- a new shell may be needed" })
+        Install-WingetPackage -Id $tool.WingetId -Name $tool.Name | Out-Null
+        $foundPath2 = & $tool.Check
+        $ok2 = [bool]$foundPath2
+        Write-Result -Name $tool.Name -Ok $ok2 -Detail $(if ($ok2) { "installed at $foundPath2" } else { "install ran but tool still not detected -- a new shell may be needed" })
         $results += @{ tool = $tool.Key; ok = $ok2; action = "installed" }
     } else {
         Write-Result -Name $tool.Name -Ok $false -Detail "skipped (declined)"

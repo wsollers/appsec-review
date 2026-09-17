@@ -157,16 +157,20 @@ def cmd_check(args: argparse.Namespace) -> int:
     add("model-config.json parses", bool(model_cfg.get("default", {}).get("model")), f"default model={model_cfg.get('default', {}).get('model')!r} effort={model_cfg.get('default', {}).get('effort')!r}")
 
     invocation = model_cfg.get("invocation") or {}
-    cmd_template = invocation.get("command_template") or []
-    model_bin = cmd_template[0] if cmd_template else ""
+    model_bin = invocation.get("binary", "")
     model_bin_path = shutil.which(model_bin) if model_bin else None
     add(
         f"model CLI ({model_bin!r})",
         model_bin_path is not None,
-        model_bin_path or f"{model_bin!r} not found on PATH -- see model-config.json's invocation.status",
+        (model_bin_path or f"{model_bin!r} not found on PATH -- see model-config.json's invocation.status")
+        + " -- NOTE: this resolves against review_cli.py's own process PATH, which differs between the device-bridge sandbox and your real terminal; a pass here from the sandbox does not confirm your real environment, and a fail here does not mean your real environment lacks it.",
     )
-    if invocation.get("status", "").startswith("PROVISIONAL"):
-        add("model-config.json invocation.status", False, invocation["status"])
+    status = invocation.get("status", "")
+    if status.startswith("PROVISIONAL"):
+        add("model-config.json invocation.status", False, status)
+    open_qs = invocation.get("open_questions") or []
+    if open_qs:
+        add("model-config.json invocation.open_questions", False, f"{len(open_qs)} unresolved: {'; '.join(open_qs)}")
 
     manifest = load_manifest()
     add("process-manifest.json parses", bool(manifest.get("process_order")), f"{len(manifest.get('process_order') or [])} lanes in process_order")
