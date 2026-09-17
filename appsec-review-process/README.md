@@ -35,6 +35,7 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 | `04-asvs-masvs/` | ASVS/MASVS applicability and targeted control assessment. |
 | `05-native-memory/` | Native C/C++ memory-safety review using IR/CSA/CodeQL/deep confirmation. |
 | `06-cve-reachability/` | Dependency/CVE reachability and exploitability triage. |
+| `15-deployment-hardening/` | L15 static deployment hardening: container/IaC/K8s hardening baselines, declared network exposure, static IAM modeling. |
 | `07-red-team-adversarial/` | Hostile-vendor, abuse-case, and exploitability challenge. |
 | `08-blue-team-refutation/` | Refutation, mitigating evidence, and false-positive analysis. |
 | `09-independent-verification/` | Fresh evidence-only verification of claims. |

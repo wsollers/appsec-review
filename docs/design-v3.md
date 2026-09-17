@@ -73,6 +73,35 @@ The review begins with a seeded validation gate and deterministic pregather, mov
 | L14 | Cross-lane synthesis | Small integrator team correlates only verified facts into attack/control chains and escalations. |
 | L15 | Static deployment hardening | Container/cloud/IaC hardening, declared network exposure, IAM, datastore, crypto, backup/recovery, logging. |
 
+### 4.1 Current harness mapping (00–11 lanes)
+
+The tracked process harness under `appsec-review-process/` currently runs as eleven numbered lanes
+(`00`–`11`) rather than the eighteen slots above (`L0`–`L15`, with `L6` split `L6A`/`L6B`). This section
+records the mapping as it exists today so the two documents can be reconciled incrementally instead of
+silently drifting.
+
+| Harness lane | Design lane(s) | Status |
+|---|---|---|
+| `00-intake-recovery` | L0 | Matches. |
+| `01-component-characterization` | L0A | Matches (see §22). |
+| `02-evidence-pregather` | — (infrastructure) | Runs the deterministic pipeline; not itself an L-lane. |
+| `03-threat-model-dfd-stride` | L6A | Matches. |
+| `04-asvs-masvs` | L2 | Matches. |
+| `05-native-memory` | subset of L3 | Narrower than L3: covers native memory-safety only, not the full native-build/SAST scope L3 describes. |
+| `06-cve-reachability` | subset of L1 | Narrower than L1: covers dependency/CVE reachability only, not the full SBOM/EOL/license/license-inventory scope L1 describes. |
+| `07-red-team-adversarial` | subset of L4 / L5 | Covers general and known-list adversarial discovery; design splits this into L4 (AppSec discovery) and L5 (malfeasance) as separate lanes. |
+| `08-blue-team-refutation` | not in the §4 table | Built and running as its own dedicated lane, paired with `07`. Design §18 lists `blue-team-refutation` only as a reusable skill, with no dedicated lane slot in §4's table — this is a real divergence, not a naming gap. Until §4 is revised to either add a dedicated lane or make explicit that refutation is meant to be invoked inline within L4/L5, the harness's standalone lane is the de facto implementation and should be treated as the source of truth for how refutation actually runs. |
+| `09-independent-verification` | L7 | Matches. |
+| `10-synthesis-report` | subset of L9 / L14 | Covers report assembly and cross-lane synthesis; does not yet implement L8 scoring/prioritization as a distinct upstream step. |
+| `11-remediation-proposal` | L11 | Matches. |
+| `15-deployment-hardening` | L15 | Matches (added 2026-09-17; reuses `audit-iac`/`audit-container` evidence gathered by the existing pregather step). |
+| — (unbuilt) | L1 (full scope), L6B, L8, L10, L12, L13, L15 | No harness lane exists yet; see the L1/L3/L4/L5/L9 narrowing notes above and the standalone gaps list below. |
+
+Unbuilt as standalone lanes: `L6B` (threat-model reconciliation), `L8` (scoring/prioritization), `L10`
+(static protocol/parser/wire-format analysis), `L12` (supply-chain/provenance beyond SBOM), `L13`
+(privacy/data protection). `L15` (static deployment hardening) has a harness lane as of this revision
+(see §12 and `appsec-review-process/15-deployment-hardening/`).
+
 ## 5. Multi-agent operating model
 
 ### 5.1 Role separation
@@ -81,6 +110,7 @@ The review begins with a seeded validation gate and deterministic pregather, mov
 - Panel members form initial conclusions independently before seeing other votes.
 - Prompt diversity matters independently of model diversity.
 - Model diversity is consequence-weighted: strongest for malfeasance, NO-GO, and RE/DAST escalation decisions.
+- Minimum distinct model families: at least 2 for any WARRANTED-tier vote; at least 3 distinct model families for malfeasance, NO-GO, and RE/DAST escalation votes specifically. A vote that does not meet its tier's minimum is not quorum-eligible regardless of agreement.
 
 ### 5.2 Evidence-qualified quorum
 
@@ -173,6 +203,10 @@ The ledger is the authoritative chronological record of the review. Agents submi
 | verified-facts.jsonl | Compact normalized verified facts/edges consumed by L14; full evidence remains referenced by ID. |
 | build-isolation-manifest.json | Isolation mode, worker identity, input/output hashes, privilege/network settings, resource limits, and allowlisted artifacts imported from each build attempt. |
 
+All evidence passes through a secrets-scrubbing step (`scripts/scrub_evidence.py`) before it enters any LLM lane
+prompt or is written to the append-only ledger. Scrubbing records what was redacted (location, rule matched,
+count) as evidence metadata; it never writes the secret value itself to canonical evidence or the ledger.
+
 ## 10. Assurance and coverage discipline
 
 | Assurance class | Meaning |
@@ -234,6 +268,7 @@ No single absence signal (for example, "no SQL driver detected") is sufficient b
 
 - OWASP ASVS 5.0.0 for application controls; MASVS/MASTG for mobile client controls.
 - CVSS 4.0 for severity vectors; EPSS and CISA KEV used only where applicable for prioritization context.
+- CVSS 4.0 vector components are derived deterministically wherever a verified-fact attribute maps directly to a metric (e.g. trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → the Vulnerable/Subsequent System impact metrics); the LLM is only invoked for the residual metrics that have no direct verified-fact mapping. The derivation mapping and its inputs are recorded so a vector can be regenerated from the same verified facts.
 - MITRE CWE; CAPEC/ATT&CK where useful for attack mapping.
 - NIST SP 800-53, SP 800-190, and SP 800-218 SSDF mappings.
 - Platform-specific CIS benchmarks and applicable DISA STIG/SRG controls for supplied deployment artifacts.
@@ -324,6 +359,7 @@ Before vendor results are trusted, the same pinned pipeline must pass a seeded v
 - Legitimate anti-cheat/anti-analysis mechanism.
 - Ambiguous mechanism that must remain INTENT_UNRESOLVED.
 - Deployment hardening defects such as root container, privileged pod, wildcard IAM, mutable image tag, public management rule.
+- A second validation target built with a VS2013-era toolchain against a known historical CVE, exercising the ADR-0001 compile-feasibility tiering on an older/less-compliant compiler surface rather than only the primary validation target.
 
 ## 20. Finalization gate
 
@@ -337,6 +373,18 @@ Before vendor results are trusted, the same pinned pipeline must pass a seeded v
 8. Validate required report artifacts.
 9. Record RUN_INTEGRITY_VALIDATED.
 10. Only then transition report_status to FINAL.
+
+### 20.1 Human gates
+
+The following decisions require an explicit named human sign-off recorded as a ledger event; no lane or
+quorum result may substitute for them.
+
+| Gate | Who | Ledger event |
+|---|---|---|
+| Intent disposition (malicious vs. accidental vs. legitimate) for any INTENT_UNRESOLVED or malfeasance-tier finding | Engagement lead | HUMAN_INTENT_DISPOSITION_RECORDED |
+| Approval to modify any protected test asset (ADR-governed fixtures, validation corpus, planted-defect files) | Engagement lead | HUMAN_PROTECTED_TEST_MODIFICATION_APPROVED |
+| Sign-off transitioning report_status to FINAL | Engagement lead or designated reviewer | HUMAN_FINAL_SIGNOFF_RECORDED |
+| Authorization for any follow-on RE/DAST/fuzz/live-state escalation | Engagement lead, with client sign-off where the target is client-owned | HUMAN_ESCALATION_AUTHORIZED |
 
 ## 21. Design conclusion
 
@@ -539,6 +587,11 @@ Whenever COMPONENT_CLASSIFICATION_UPDATED is emitted, the orchestrator identifie
 Any lane that skipped, pruned, marked N/A, reduced liveness, suppressed findings, or excluded the component from threat modeling/index queries is marked RESCOPE_REQUIRED for the affected component/control range.
 
 Re-scoping is targeted. The system reruns only invalidated work rather than restarting the entire engagement.
+
+Re-scoping is bounded: a given component may be automatically re-scoped at most twice. A third
+COMPONENT_CLASSIFICATION_UPDATED for the same component forces LANE_RESCOPE_REQUIRED to escalate to human
+review (§20.1) instead of triggering another automated re-scope, to prevent classification oscillation from
+running the engagement in circles.
 
 Required artifact: `/evidence/mythos/state/classification-dependencies.json` — records which lane decisions depended on each component classification so invalidation can be deterministic.
 

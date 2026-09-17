@@ -13,6 +13,7 @@
     "04-asvs-masvs",
     "05-native-memory",
     "06-cve-reachability",
+    "15-deployment-hardening",
     "07-red-team-adversarial",
     "08-blue-team-refutation",
     "09-independent-verification",
