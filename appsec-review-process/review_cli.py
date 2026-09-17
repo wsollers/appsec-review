@@ -559,6 +559,7 @@ def cmd_cost(args: argparse.Namespace) -> int:
 
     by_lane: dict[str, dict[str, float]] = {}
     total_calls = 0
+    total_cost_usd = 0.0
     for line in telemetry_path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             span = json.loads(line)
@@ -566,13 +567,16 @@ def cmd_cost(args: argparse.Namespace) -> int:
             continue
         total_calls += 1
         lane = str(span.get("lane") or "unknown")
-        agg = by_lane.setdefault(lane, {"calls": 0, "duration_seconds": 0.0, "input_tokens": 0.0, "output_tokens": 0.0})
+        agg = by_lane.setdefault(lane, {"calls": 0, "duration_seconds": 0.0, "total_cost_usd": 0.0, "input_tokens": 0.0, "output_tokens": 0.0, "cache_read_input_tokens": 0.0, "cache_creation_input_tokens": 0.0})
         agg["calls"] += 1
         agg["duration_seconds"] += float(span.get("duration_seconds") or 0)
-        agg["input_tokens"] += float(span.get("input_tokens") or 0)
-        agg["output_tokens"] += float(span.get("output_tokens") or 0)
+        cost = float(span.get("total_cost_usd") or 0)
+        agg["total_cost_usd"] += cost
+        total_cost_usd += cost
+        for field in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+            agg[field] += float(span.get(field) or 0)
 
-    print(json.dumps({"run_id": run_id, "total_calls": total_calls, "by_lane": by_lane}, indent=2))
+    print(json.dumps({"run_id": run_id, "total_calls": total_calls, "total_cost_usd": round(total_cost_usd, 4), "by_lane": by_lane}, indent=2))
     return 0
 
 
@@ -717,17 +721,23 @@ def cmd_run(args: argparse.Namespace) -> int:
             "message": ("timed out after %ss" % args.timeout) if timed_out else (f"claude exit={proc.returncode}" if proc is not None else "no process result"),
             "parse_ok": parse_ok,
             "status_source": status_source,
-            "cost_usd": parsed.get("cost_usd") if isinstance(parsed, dict) else None,
+            "total_cost_usd": parsed.get("total_cost_usd") if isinstance(parsed, dict) else None,
             "duration_seconds": duration_seconds,
         })
 
+    usage = parsed.get("usage") if isinstance(parsed, dict) else None
+    usage = usage if isinstance(usage, dict) else {}
     telemetry_path = run_dir(run_id) / "telemetry.jsonl"
     with telemetry_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps({
             "lane": lane, "budget": budget,
             "model": resolve_model(lane, budget)["model"], "effort": resolve_model(lane, budget)["effort"],
             "duration_seconds": duration_seconds,
-            "cost_usd": parsed.get("cost_usd") if isinstance(parsed, dict) else None,
+            "total_cost_usd": parsed.get("total_cost_usd") if isinstance(parsed, dict) else None,
+            "input_tokens": usage.get("input_tokens"),
+            "output_tokens": usage.get("output_tokens"),
+            "cache_read_input_tokens": usage.get("cache_read_input_tokens"),
+            "cache_creation_input_tokens": usage.get("cache_creation_input_tokens"),
             "exit_code": (proc.returncode if proc is not None else None),
             "timed_out": timed_out,
             "final_status": final_status,
