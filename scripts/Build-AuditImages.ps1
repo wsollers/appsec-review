@@ -16,13 +16,22 @@
       audit-iac        audit-iac:local                (self-contained)
       audit-container  audit-container:local          (repo-root context; COPYs scripts/run-dockerfile-lint.sh)
       audit-report     audit-report:local             (self-contained)
-
-    scancode-toolkit:local is deliberately NOT built here - it has its own dedicated
-    build path (Build-ScanCodeImage.ps1) because there is no publishable upstream image
-    to pull; see that script and images/audit-static's Dockerfile header for why.
+      scancode         scancode-toolkit:local          (clones aboutcode-org/scancode-toolkit and
+                                                         builds ITS OWN Dockerfile -- there is no
+                                                         publishable ghcr.io/aboutcode-org/scancode-toolkit
+                                                         image to pull; confirmed directly, anonymous
+                                                         manifest pull returns "denied", and ScanCode's
+                                                         own install docs say to build it yourself. Kept
+                                                         as its own build step -- not baked into
+                                                         audit-static -- per that Dockerfile's own "NOT
+                                                         included" note (heavy dependency footprint).)
 
 .PARAMETER Only
-    Comma-separated subset of: static,native,codeql,iac,container,report. Default: all.
+    Comma-separated subset of: static,native,codeql,iac,container,report,scancode. Default: all.
+
+.PARAMETER ScanCodeCloneDir
+    Where to clone aboutcode-org/scancode-toolkit source for the scancode build step. Reused
+    as-is on later runs (delete it to re-clone fresh). Default: scripts/scancode-toolkit-src.
 
 .PARAMETER NoCache
     Pass --no-cache to every docker build.
@@ -56,13 +65,14 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Only = "static,native,codeql,iac,container,report",
+    [string]$Only = "static,native,codeql,iac,container,report,scancode",
     [switch]$NoCache,
     [switch]$SkipCodeQL,
     [string]$CodeqlBundleVersion = "codeql-bundle-v2.27.0",
     [string]$StaticTag = "vendor-audit-toolbox:latest",
     [string]$ContextDir = (Split-Path -Parent $PSScriptRoot),
-    [string]$DockerContext = ""
+    [string]$DockerContext = "",
+    [string]$ScanCodeCloneDir = (Join-Path $PSScriptRoot "scancode-toolkit-src")
 )
 
 $ErrorActionPreference = "Stop"
@@ -158,6 +168,35 @@ if (Want "container") {
 
 if (Want "report") {
     Build-One "audit-report" "audit-report:local" (Join-Path $ContextDir "images/audit-report/Dockerfile") (Join-Path $ContextDir "images/audit-report")
+}
+
+if (Want "scancode") {
+    Write-Host ""
+    Write-Host "=== Building scancode-toolkit:local ===" -ForegroundColor Cyan
+    $scancodeCloneOk = $true
+    if (-not (Test-Path $ScanCodeCloneDir)) {
+        if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+            Write-Host "git is required to clone the ScanCode Toolkit source - install Git for Windows and retry, or build scancode manually with Build-ScanCodeImage.ps1." -ForegroundColor Red
+            $results.Add("FAIL scancode -> scancode-toolkit:local (git not found)")
+            $anyFailed = $true
+            $scancodeCloneOk = $false
+        } else {
+            Write-Host "Cloning aboutcode-org/scancode-toolkit into $ScanCodeCloneDir ..." -ForegroundColor Cyan
+            & git clone --depth 1 "https://github.com/aboutcode-org/scancode-toolkit.git" $ScanCodeCloneDir
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "git clone failed with exit code $LASTEXITCODE" -ForegroundColor Red
+                $results.Add("FAIL scancode -> scancode-toolkit:local (git clone failed)")
+                $anyFailed = $true
+                $scancodeCloneOk = $false
+            }
+        }
+    } else {
+        Write-Host "$ScanCodeCloneDir already exists - using it as-is (delete it first to re-clone fresh)." -ForegroundColor DarkGray
+    }
+    if ($scancodeCloneOk) {
+        Write-Host "Building scancode-toolkit:local from ScanCode Toolkit's own Dockerfile (separate, fairly heavy multi-stage build - its own Python env, native deps; expect several minutes) ..." -ForegroundColor DarkGray
+        Build-One "scancode" "scancode-toolkit:local" (Join-Path $ScanCodeCloneDir "Dockerfile") $ScanCodeCloneDir
+    }
 }
 
 Write-Host ""

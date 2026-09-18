@@ -12,18 +12,25 @@
 #   audit-iac        audit-iac:local                (self-contained)
 #   audit-container  audit-container:local          (repo-root context; COPYs scripts/run-dockerfile-lint.sh)
 #   audit-report     audit-report:local             (self-contained)
-#
-# scancode-toolkit:local is deliberately NOT built here — it has its own
-# dedicated build path (scripts/Build-ScanCodeImage.ps1) because there is no
-# publishable upstream image to pull; see that script and images/audit-static's
-# Dockerfile header for why.
+#   scancode         scancode-toolkit:local          (clones aboutcode-org/scancode-toolkit and
+#                                                      builds ITS OWN Dockerfile -- there is no
+#                                                      publishable ghcr.io/aboutcode-org/scancode-toolkit
+#                                                      image to pull; confirmed directly, anonymous
+#                                                      manifest pull returns "denied", and ScanCode's
+#                                                      own install docs say to build it yourself. Kept
+#                                                      as its own build step -- not baked into
+#                                                      audit-static -- per that Dockerfile's own "NOT
+#                                                      included" note (heavy dependency footprint).)
 #
 # Usage:
 #   scripts/build-audit-images.sh [options]
 #
 # Options:
-#   --only NAMES         Comma-separated subset of: static,native,codeql,iac,container,report
+#   --only NAMES         Comma-separated subset of: static,native,codeql,iac,container,report,scancode
 #                         Default: all of them.
+#   --scancode-clone-dir DIR   Where to clone aboutcode-org/scancode-toolkit source for the
+#                               scancode build step. Reused as-is on later runs (delete it to
+#                               re-clone fresh). Default: scripts/scancode-toolkit-src.
 #   --no-cache            Pass --no-cache to every docker build.
 #   --skip-codeql          Skip audit-codeql entirely (no bundle download, no build).
 #   --codeql-bundle-version V   CodeQL bundle release tag to download if missing.
@@ -49,12 +56,13 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-ONLY="static,native,codeql,iac,container,report"
+ONLY="static,native,codeql,iac,container,report,scancode"
 NO_CACHE=0
 SKIP_CODEQL=0
 CODEQL_BUNDLE_VERSION="codeql-bundle-v2.27.0"
 STATIC_TAG="vendor-audit-toolbox:latest"
 DOCKER_CONTEXT_NAME="${DOCKER_CONTEXT:-}"
+SCANCODE_CLONE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scancode-toolkit-src"
 
 usage() {
   sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -68,6 +76,7 @@ while [[ $# -gt 0 ]]; do
     --codeql-bundle-version) CODEQL_BUNDLE_VERSION="$2"; shift 2;;
     --static-tag) STATIC_TAG="$2"; shift 2;;
     --context) DOCKER_CONTEXT_NAME="$2"; shift 2;;
+    --scancode-clone-dir) SCANCODE_CLONE_DIR="$2"; shift 2;;
     -h|--help) usage; exit 0;;
     *) echo "unknown option: $1" >&2; usage; exit 2;;
   esac
@@ -173,6 +182,29 @@ fi
 
 if want report; then
   build_one "audit-report" "audit-report:local" "$REPO_ROOT/images/audit-report/Dockerfile" "$REPO_ROOT/images/audit-report" || FAILED=1
+fi
+
+if want scancode; then
+  echo ""
+  echo "=== Building scancode-toolkit:local ==="
+  if [[ ! -d "$SCANCODE_CLONE_DIR" ]]; then
+    echo "Cloning aboutcode-org/scancode-toolkit into $SCANCODE_CLONE_DIR ..."
+    if ! git clone --depth 1 "https://github.com/aboutcode-org/scancode-toolkit.git" "$SCANCODE_CLONE_DIR"; then
+      echo "FAIL scancode -> scancode-toolkit:local (git clone failed)" >&2
+      RESULTS+=("FAIL scancode -> scancode-toolkit:local (git clone failed)")
+      FAILED=1
+      SCANCODE_CLONE_OK=0
+    else
+      SCANCODE_CLONE_OK=1
+    fi
+  else
+    echo "$SCANCODE_CLONE_DIR already exists -- using it as-is (delete it first to re-clone fresh)."
+    SCANCODE_CLONE_OK=1
+  fi
+  if [[ "${SCANCODE_CLONE_OK:-0}" == 1 ]]; then
+    echo "Building scancode-toolkit:local from ScanCode Toolkit's own Dockerfile (separate, fairly heavy multi-stage build -- its own Python env, native deps; expect several minutes) ..."
+    build_one "scancode" "scancode-toolkit:local" "$SCANCODE_CLONE_DIR/Dockerfile" "$SCANCODE_CLONE_DIR" || FAILED=1
+  fi
 fi
 
 echo ""

@@ -230,7 +230,7 @@ step_meta() {
     iac-k8s) SUBDIR=iac-k8s; ALLOW_NONZERO=1; EXPECTED=iac-k8s/kube-linter.json; IMAGE=audit-iac:local; CMD=(bash -lc "kube-linter lint /workspace --format json > /evidence/iac-k8s/kube-linter.json || true");;
     dockerfile-lint) SUBDIR=iac-docker; ALLOW_NONZERO=1; IMAGE=audit-container:local; CMD=(bash /opt/scripts/run-dockerfile-lint.sh);;
     docker-base-images) SUBDIR=iac-docker; ALLOW_NONZERO=1; IMAGE=audit-container:local; CMD=(bash -lc "find /workspace -iname 'Dockerfile*' -type f -print0 | xargs -0 -r awk 'BEGIN{IGNORECASE=1} /^FROM[[:space:]]+/ {print FILENAME \":\" NR \":\" \$0}' > /evidence/iac-docker/base-images.txt");;
-    scancode) SUBDIR=license; ALLOW_NONZERO=1; EXPECTED=license/scancode.json; IMAGE=ghcr.io/aboutcode-org/scancode-toolkit:latest; CMD=(-clip --json-pp /evidence/license/scancode.json /workspace);;
+    scancode) SUBDIR=license; ALLOW_NONZERO=1; EXPECTED=license/scancode.json; IMAGE=scancode-toolkit:local; CMD=(-clip --json-pp /evidence/license/scancode.json /workspace);;
     dependency-lifecycle) SUBDIR=sbom; ALLOW_NONZERO=1; EXPECTED=sbom/dependency-lifecycle.json; CMD=(python3 /opt/scripts/analyze_dependency_lifecycle.py --sbom /evidence/sbom/sbom.cdx.json --eol-reference /opt/scripts/eol-reference.json --scancode /evidence/license/scancode.json -o /evidence/sbom/dependency-lifecycle.json);;
     evidence-scrub) SUBDIR=_shareable; ALLOW_NONZERO=1; CMD=(python3 /opt/scripts/scrub_evidence.py /evidence -o /evidence/_shareable);;
     *) return 1;;

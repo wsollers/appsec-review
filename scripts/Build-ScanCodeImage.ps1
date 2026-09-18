@@ -4,6 +4,10 @@
     "scancode" step in Invoke-VendorAuditPrePass.ps1.
 
 .DESCRIPTION
+    Build-AuditImages.ps1 now builds this automatically as part of its normal
+    "scancode" step (added 2026-09-18) -- use this script instead only if you want
+    to (re)build just this one image without running the full image-build pass.
+
     There is no published ghcr.io/aboutcode-org/scancode-toolkit image to pull
     (confirmed directly: an anonymous `docker manifest inspect` against that
     path returns "denied", and ScanCode Toolkit's own docs - Install ScanCode

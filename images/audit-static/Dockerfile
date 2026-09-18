@@ -26,8 +26,11 @@
 #     (corrected 2026-09-01): there is NO publishable
 #     ghcr.io/aboutcode-org/scancode-toolkit image to `docker run` — an
 #     anonymous manifest pull returns "denied", and ScanCode's own docs say
-#     to build it yourself. Build it once with Build-ScanCodeImage.ps1 (which
-#     produces the local `scancode-toolkit:local` tag); the orchestrator's
+#     to build it yourself. Build-AuditImages.ps1 / build-audit-images.sh now
+#     build it automatically as part of their normal "scancode" step (added
+#     2026-09-18); or build it standalone with Build-ScanCodeImage.ps1/.sh.
+#     Either way it produces the local `scancode-toolkit:local` tag; the
+#     orchestrator's
 #     `scancode` step runs against that local image. The built image's own
 #     ENTRYPOINT already runs `scancode`, so that step passes scancode's
 #     arguments only (e.g. `-clip --json-pp /evidence/license/scancode.json
