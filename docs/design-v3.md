@@ -251,6 +251,79 @@ real compile/link output to work from — not just source text. Two internal pas
 
 This section records the design decision; neither tier is implemented yet.
 
+### 4.2.1 Tier B progress update (2026-09-18, same-day continuation)
+
+Two scripts now exist in `scripts/` (commit `201d5b7`) implementing the first half of Tier B's
+pipeline, both tested against a real clang/ld toolchain (not just written blind):
+
+- **`scripts/capture_build_commands.py`** — command-line capture. Takes `compile_commands.json`
+  (already a standard artifact this pipeline produces) and, per-entry, re-invokes the compile
+  command with clang's `-###` flag appended, which prints the real `-cc1` subprocess argv without
+  executing it — staying inside the hostile-build boundary's existing "compile or syntax-check"
+  permitted list (§2.2). Separately accepts `--link-recipe`, a caller-supplied JSON array of
+  driver-level link commands (e.g. `clang++ ... -o app`), which it likewise expands via `-###` to
+  the real `ld`/`lld`/`collect2` subprocess argv — this is what actually carries every `-L` search
+  path and positional `.a`/`.so`/`.o` the link pulled in. Output: `build-commands.jsonl`, one JSON
+  record per real subprocess invocation, tagged `kind` (compile/assemble/link/other) and `stage`
+  (driver-level vs. `-###`-expanded).
+- **`scripts/extract_vendor_candidates.py`** — the heuristic pass. Parses `-I`/`-L`/`-l` and
+  positional object/library paths out of `build-commands.jsonl`, resolves them to absolute paths,
+  classifies in-tree vs. out-of-tree against `--repo-root`, dedupes to distinct candidate
+  directories, and runs a bounded walk (`--max-depth`, default 4, *from each candidate directory*,
+  not from the repo root) looking for version-carrying files (`version.h`-style filenames,
+  `*-config.cmake`/`*.pc`, `CHANGELOG`), `#define ...VERSION...` macros in small header/text files,
+  and version-looking path segments — checked both in the candidate directory's own descendants
+  *and* a few levels of its ancestors (a flag typically points at `.../foo-1.2.3/include`, not at
+  the versioned directory itself — missed in the first draft, caught by testing against a real
+  fixture, fixed before commit). Confidence-scores each candidate (`high`/`medium`/`low`) from what
+  combination of signals it found. Output: `native-vendor-candidates.json` — evidence records only,
+  explicitly never a verdict; product/version disambiguation is left to a later, deliberately small
+  inference pass over just this candidate list, not the whole tree.
+
+**A real, non-obvious bug found by testing against the actual toolchain, not just written blind**:
+an unfiltered real link command line (`clang++ main.o -L. -lvendor -o app` on a stock Ubuntu 18.1.3
+clang host) pulled in over 80 `.pc` files from `/usr/lib/x86_64-linux-gnu` alone — standard
+toolchain/OS library search paths that show up on essentially every real link line via the
+compiler driver's own default search path, not anything the target vendored. Left unfiltered, this
+would have flooded the "small, focused candidate list" the whole design exists to produce.
+**Fixed**: `extract_vendor_candidates.py` now excludes standard system library directory prefixes
+(`/usr/lib`, `/usr/lib64`, `/usr/local/lib`, `/lib`, `/lib64`, and anything nested under them, e.g.
+`/usr/lib/gcc/.../13`) by default, with `--include-system-libdirs` to disable and
+`--system-libdir-prefix` to override the list. Re-verified end-to-end after the fix: the same test
+fixture went from 7 emitted candidates (4 of them pure system noise) down to 3 real candidates.
+
+**Neither script is wired into `pregather.sh` yet, and two concrete things remain open before that
+can happen:**
+
+1. **How `compile_commands.json` is actually produced for a real target (e.g. `targets/eastl`) is
+   not yet confirmed from this repo's own scripts.** `pipeline/pregather.sh` accepts an existing
+   compile database (`--compile-db`) or converts one via `pipeline/normalize_compile_db.py`, and
+   there's a separate MSVC/vcxproj path (`vcxproj_to_compile_commands.py`) for the Windows/MSBuild
+   case — but nothing found so far in `pipeline/`/`scripts/` shows a CMake generator invocation
+   (`cmake -G Ninja`, `cmake -G "Unix Makefiles"`, or a `bear --`-wrapped build) for the Linux/CMake
+   case. This matters directly for the link-recipe question: `ninja -t commands <target>` (or an
+   equivalent Make dry-run query) can supply real driver-level link commands cheaply, without
+   executing a real build, *only if* Ninja is the actual generator in use. If it isn't — or if
+   different targets use different generators — `capture_build_commands.py`'s `--link-recipe` input
+   needs a different, possibly per-build-system, producer. **Needs the repo owner to confirm** how
+   `compile_commands.json` gets generated today for `targets/eastl` specifically before this gap
+   can be closed for real, rather than guessed at further.
+2. **Real integration and validation against an actual target's real build, inside the
+   `audit-native` container**, is something this session's sandbox cannot do (no Docker, no C++
+   target checkout, no compile_commands.json for a real multi-file C++ project available here) —
+   the synthetic-fixture testing above validates the scripts' own logic against the real clang/ld
+   toolchain, but not against a real project's actual scale, oddities, or build-system quirks.
+   Matches this project's established discipline (see `claude/review-cli-harness-2026-09-17.md`'s
+   "every real bug found this session was found by actually running the real CLI" lesson) — real
+   validation needs to happen on hal5000/WSL against `targets/eastl` or a similarly real tree.
+
+Once (1) and (2) are resolved, the remaining pieces of the full sequence discussed with the repo
+owner — the step-1 pregather extension to actually export `build-commands.jsonl` as a first-class
+artifact (alongside IR), the scoped LLM disambiguation pass over `native-vendor-candidates.json`,
+and the expanded SBOM-merge container/step consuming both Tier A and Tier B output — are still
+design-only, not yet built.
+
+
 
 ## 5. Multi-agent operating model
 
