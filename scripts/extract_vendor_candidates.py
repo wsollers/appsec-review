@@ -58,10 +58,19 @@ inference scoped to the leftover candidate set, not the whole tree, and
 keep it separate from any one-time/offline pass used to *tune* the
 heuristics below.
 
+--libdir-reference points at scripts/native-libdir-reference.json (same
+pattern as analyze_dependency_lifecycle.py's --eol-reference: a curated,
+hand-maintained data file, not a live/derived source), which supplies both
+the system-libdir exclusion prefixes and the in-tree vendor-dirname list.
+Optional -- when omitted, this script falls back to its own built-in
+defaults (kept in sync with that file's initial content) and says so, the
+same graceful-degradation discipline the rest of this pipeline uses.
+
 Usage:
     python3 extract_vendor_candidates.py \\
         --build-commands /scratch/native-build/build-commands.jsonl \\
         --repo-root /workspace \\
+        --libdir-reference scripts/native-libdir-reference.json \\
         -o /evidence/sbom/native-vendor-candidates.json
 """
 from __future__ import annotations
@@ -303,8 +312,16 @@ def score_confidence(c: Candidate) -> str:
 def cmd_extract(args: argparse.Namespace) -> None:
     build_commands_path = Path(args.build_commands)
     repo_root = Path(args.repo_root).resolve()
-    vendor_dirnames = {d.lower() for d in (args.in_tree_vendor_dirnames or DEFAULT_VENDOR_DIRNAMES)}
-    system_libdir_prefixes = tuple(args.system_libdir_prefix or DEFAULT_SYSTEM_LIBDIR_PREFIXES)
+    ref_vendor_dirnames, ref_system_prefixes = load_libdir_reference(
+        Path(args.libdir_reference) if args.libdir_reference else None
+    )
+    # Precedence: explicit CLI override > --libdir-reference file > built-in default.
+    vendor_dirnames = {d.lower() for d in (
+        args.in_tree_vendor_dirnames or ref_vendor_dirnames or DEFAULT_VENDOR_DIRNAMES
+    )}
+    system_libdir_prefixes = tuple(
+        args.system_libdir_prefix or ref_system_prefixes or DEFAULT_SYSTEM_LIBDIR_PREFIXES
+    )
 
     records = load_build_commands(build_commands_path)
     print(f"Loaded {len(records)} build-command record(s) from {build_commands_path}", file=sys.stderr)
@@ -458,6 +475,34 @@ def is_system_libdir(path: Path, prefixes: tuple[str, ...]) -> bool:
     return any(s == pfx or s.startswith(pfx.rstrip("/") + "/") for pfx in prefixes)
 
 
+def load_libdir_reference(path: Path | None) -> tuple[set[str] | None, tuple[str, ...] | None]:
+    """Returns (in_tree_vendor_dirnames, system_libdir_prefixes) from a
+    native-libdir-reference.json-shaped file, or (None, None) if path is
+    None -- caller falls back to its own built-in defaults in that case."""
+    if path is None:
+        return None, None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"WARNING: could not read/parse --libdir-reference {path} ({e}); "
+              f"falling back to built-in defaults", file=sys.stderr)
+        return None, None
+    vendor_dirnames = {
+        entry["dirname"].lower()
+        for entry in data.get("in_tree_vendor_dirnames", [])
+        if entry.get("dirname")
+    } or None
+    system_prefixes = tuple(
+        entry["prefix"]
+        for entry in data.get("system_libdir_prefixes", [])
+        if entry.get("prefix")
+    ) or None
+    print(f"Loaded libdir reference from {path}: "
+          f"{len(vendor_dirnames or [])} vendor dirname(s), "
+          f"{len(system_prefixes or [])} system libdir prefix(es)", file=sys.stderr)
+    return vendor_dirnames, system_prefixes
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--build-commands", required=True, help="Path to build-commands.jsonl")
@@ -471,7 +516,9 @@ def main() -> None:
     ap.add_argument("--include-system-libdirs", action="store_true",
                      help="Don't exclude standard toolchain/OS library search paths (/usr/lib, /lib, etc. -- see DEFAULT_SYSTEM_LIBDIR_PREFIXES). Off by default: these are near-universal link-command noise, not vendored dependencies.")
     ap.add_argument("--system-libdir-prefix", action="append",
-                     help="Override the default system-libdir exclusion prefix list (repeatable).")
+                     help="Override the default system-libdir exclusion prefix list (repeatable). Takes precedence over --libdir-reference.")
+    ap.add_argument("--libdir-reference",
+                     help="Path to a native-libdir-reference.json-shaped file (see scripts/native-libdir-reference.json) supplying both list defaults. Optional -- falls back to this script's own built-in defaults if omitted.")
     ap.set_defaults(func=cmd_extract)
 
     args = ap.parse_args()
