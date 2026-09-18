@@ -811,16 +811,25 @@ def _cmd_run_locked(
 ) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Archive any previous attempt's output files before dispatching again.
-    # Without this, a stale status.json/result.md left over from an earlier
-    # (e.g. failed) attempt at this same lane gets mistaken by the
-    # self-report check below for something the lane just wrote THIS call --
-    # found for real when a credit-balance failure's synthesized fallback
-    # status.json survived into the next attempt and was misread as a fresh
-    # self-report. Moving prior outputs into outputs/<lane>/attempts/<ts>/
-    # keeps the self-report check honest and preserves a real attempt
-    # history for free.
-    prior_files = [p for p in ("result.md", "status.json", "raw-response.json", "transcript.jsonl", "stderr.log") if (out_dir / p).exists()]
+    # Archive EVERY previous attempt's output file before dispatching again
+    # -- not just the fixed result.md/status.json/raw-response.json set.
+    # Originally this list was hardcoded to those three (later five, once
+    # transcript.jsonl/stderr.log were added), which missed each lane's own
+    # derived artifacts (e.g. component-purpose-map.json/.md for lane 01,
+    # dfd-stride.md for lane 03, ...). A stale derived artifact left in
+    # out_dir from a prior attempt does two bad things: (1) it mimics a
+    # fresh self-report the same way a stale status.json did (see the
+    # original comment/bug this replaces), and (2) worse, found for real on
+    # 2026-09-18 -- when the lane's Write tool call hits an existing file it
+    # hasn't Read first, it errors "File has not been read yet", which
+    # pushed the model into an unreliable PowerShell-heredoc workaround loop
+    # instead of a clean write, and directly preceded a run where the
+    # required component-purpose-map.md was silently never produced despite
+    # a self-reported OK. Archiving every plain file directly under out_dir
+    # (never touching subdirectories like attempts//pool/) means every
+    # dispatch starts from a genuinely empty output directory regardless of
+    # which files a given lane happens to produce.
+    prior_files = [p.name for p in out_dir.iterdir() if p.is_file()] if out_dir.exists() else []
     if prior_files:
         attempt_dir = out_dir / "attempts" / now().replace(":", "").replace("-", "")
         attempt_dir.mkdir(parents=True, exist_ok=True)
