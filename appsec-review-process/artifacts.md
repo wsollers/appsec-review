@@ -29,6 +29,17 @@ llm/retrieval-plan.json
 llm/retrieval-plan.md
 ```
 
+Per-tool static-evidence output lives one level deeper, under `static-evidence/<step>/<file>` --
+e.g. `static-evidence/sbom/sbom.cdx.json`, `static-evidence/sbom/dependency-lifecycle.json`,
+`static-evidence/sca/osv-scanner.json`, `static-evidence/license/scancode.json`. `MANIFEST.json`
+lists every step that actually ran (with `outputOk`/`treatedOk`); a lane consuming any per-tool
+file should confirm the exact path under its own step's subfolder rather than assuming a location,
+and should list the step's subfolder directly before concluding a file is missing. (Added
+2026-09-18 after a real dispatch on `06-cve-reachability` reported `sbom.cdx.json` and
+`dependency-lifecycle.json` as "does not exist" when both existed at these exact paths -- this
+list previously named only the two aggregate files above and left every per-tool path unstated,
+which is the most likely contributor to that lane's confusion.)
+
 Optional compiled component evidence may exist after component characterization:
 
 ```text
