@@ -151,6 +151,107 @@ just CVE reachability), `L4`/`L5` (2026-09-17: explicit design-lane tagging with
 `L4B`/`L5B` (2026-09-17: `08` formalized as its own row) are now fully covered by existing harness
 lanes; see the rows above for what changed.
 
+### 4.2 L12 design note — native/vendored supply-chain inference (added 2026-09-18, design only, not yet implemented)
+
+**Motivating gap, confirmed concretely on the `targets/eastl` run.** The `sbom` step's tool
+(`syft dir:/workspace -o cyclonedx-json@1.5=...`) only extracts dependencies from files it
+recognizes as package-manager manifests/lockfiles (`package.json`, `go.mod`, `requirements.txt`/
+`poetry.lock`, `pom.xml`/`build.gradle`, `*.csproj`, `Cargo.lock`, `conan.lock`, `vcpkg.json`, etc.).
+It has no reader for raw `CMakeLists.txt` dependency declarations and no ability to infer vendored
+code with no manifest at all. On EASTL — a header-only C++ template library with only a
+`CMakeLists.txt` and no lockfile — this produced exactly 4 "components," all GitHub Actions
+CI-workflow references (`actions/checkout@v4` etc.), not EASTL's own tree. Once the real ScanCode
+scan ran (2026-09-18), it directly disproved the "EASTL has no third-party code" reading of that
+result: `3RDPARTYLICENSES.TXT` documents real vendored HP (1994) and LLVM/libc++ (2009–2015)
+license/copyright text bundled in the tree, and 689 of 1317 scanned files carry real
+license/copyright hits. The SBOM step is silently blind to all of it. This is expected behavior for
+syft given its actual ecosystem support, not a bug in this repo's own code — but it means `L1`'s
+dependency inventory is incomplete for exactly the kind of target (native C/C++, vendored-not-
+packaged) this pipeline exists to review, and the gap will recur on `targets/idsoftware-doom3-bfg`
+and the real engagement repo, not just here.
+
+**Two tiers, decided 2026-09-18 with the repo owner:**
+
+**Tier A — static, ScanCode-clustering heuristic (cheap, no build required, closes today's specific
+gap).** A new deterministic script clusters ScanCode's existing per-file `license_detections`/
+`copyrights` output into candidate "vendored component" entries: files sharing a directory,
+license expression, and a copyright holder distinct from the project's own declared license become
+one flagged pseudo-component, explicitly marked `confidence: "candidate — no package-manager
+manifest, inferred from bundled license/copyright evidence"` (never promoted to a definitive SBOM
+entry without a human or a later, stronger signal confirming it). Output feeds
+`analyze_dependency_lifecycle.py` as a supplementary, clearly-labeled source alongside the syft-
+derived component list, not a replacement for it. This is implementable and testable today against
+the eastl evidence already on disk (it would surface `3RDPARTYLICENSES.TXT`'s HP/LLVM cluster as a
+candidate component) and needs no pipeline reordering.
+
+**Tier B — dynamic, post-build native-dependency inference (needs compiled/linked output; larger
+design scope; placement decided below).** Per the repo owner's explicit direction, this job moves
+to run *after* the hostile-build step, not alongside static evidence pregather, because it needs
+real compile/link output to work from — not just source text. Two internal passes:
+
+1. **Known/easy pass first**: run every popular native build-tool and package-manager's own
+   manifest/lockfile reader across the tree before falling back to heuristics — CMake (via any
+   `conan.lock`/`conanfile.txt`/`vcpkg.json`/`vcpkg-configuration.json` it references, not raw
+   `CMakeLists.txt` parsing), Ninja, Make, Conan, vcpkg, Maven, Ant, Gradle, NuGet, pip/Poetry,
+   Cargo, Go modules, npm/yarn — "whatever popular build and code-vendoring solution exists" per
+   the repo owner. This is a broader-coverage superset of what `syft` already does for the
+   ecosystems it supports, run explicitly rather than assumed complete.
+2. **Heuristic pass for what's left unaccounted for**: only after the known/easy pass runs, inspect
+   the actual build/link step's output (object files, static/shared libraries, linker command
+   lines and logs, final binaries) for vendored code the manifest pass didn't catch. Heuristics to
+   apply, per the repo owner's own list:
+   - Semantic-versioning-aware parsing where it applies, with the explicit caveat that some vendored
+     deps are old enough that strict semver parsing may not be meaningful — degrade gracefully
+     (report a raw version string with low confidence rather than failing to match a semver regex).
+   - Version signals hiding in: directory paths (`.../2.2.4/...`), filenames (`libraryA-20.4`),
+     config files, header comments/includes, macro/`#define` constants, and version banners embedded
+     as string/byte-array constants inside compiled binaries (a `strings`-style scan of build output
+     for version-looking text near a product-name match).
+   - Focus/prioritize heuristics on conventionally-named directories first — `lib`, `libs`, `sdk`,
+     `tools`, `shared`, `libraries`, and their common siblings (`vendor`, `third_party`, `extern`,
+     `deps`) — rather than scanning the entire tree with equal weight.
+
+**Isolation and placement (decided 2026-09-18):**
+
+- **New dedicated lane/step, not folded into `05-native-memory`'s evidence gathering** — the repo
+  owner's explicit choice, to keep this on the `L12` supply-chain/provenance track (already listed
+  as unbuilt in §4.1) as its own thing, rather than overloading native-memory's evidence scope.
+  Concretely: a new evidence-gathering step (name/numbering TBD — needs a `process-manifest.json`
+  slot, following the same "authoritative manifest order, not assumed numeric sequence" discipline
+  bug #11 established) that runs after the hostile-build step, and a new harness lane consuming it
+  that maps to `L12` in the §4.1 table (currently the `— (unbuilt)` row).
+- **A separate, purpose-built isolated Docker image** for this step's tooling (the repo owner's own
+  suggestion) — not merged into `images/audit-native`'s existing hostile-build worker. That worker's
+  isolation profile (§2.2.1: `--network none`, `--read-only` root, no-exec tmpfs except the one JVM
+  carve-out, `--cap-drop ALL`, tight pid/memory/cpu quotas) is scoped to the specific static-analysis
+  tools it already runs (clang-cl/clang, SVF, CSA/CodeChecker, cppcheck, Joern/JVM); adding a wide
+  matrix of package-manager CLIs and a binary-strings heuristic scanner to that same image would
+  needlessly widen its surface. This new step should consume the hostile-build worker's *exported,
+  allowlisted* artifacts (compile_commands.json, build/link logs, and whichever compiled
+  binaries/objects the worker already exports across the import boundary per §2.2's "only explicitly
+  allowlisted artifacts... may cross the import boundary" rule) rather than re-running or re-entering
+  the hostile-build sandbox itself — so it needs standard read-only evidence-consumption isolation,
+  not the same hostile-execution boundary as the build step.
+
+**Open items before Tier B can actually be built (not resolved by this design note):**
+
+- **Confirm exactly what the hostile-build worker currently exports across the import boundary.**
+  `images/audit-native/run.sh`'s own header only documents the isolation profile, not the specific
+  allowlisted artifact set (compile_commands.json is certainly produced per §2.2's "permitted" list;
+  whether compiled object files/static or shared libraries/final binaries are also exported, or only
+  logs and the compile database, is unconfirmed and needs to be checked against the actual
+  native-pregather orchestration before Tier B's heuristic pass can be designed in more detail — a
+  binary-strings scan needs the binaries themselves, not just compile_commands.json).
+- **Exact step/lane name and its slot in `process-manifest.json`'s authoritative `process_order`** —
+  not chosen yet.
+- **Whether Tier A should be built now, independent of Tier B's larger design/build timeline** — Tier
+  A has no dependency on Tier B or on the hostile-build export question above, and would close the
+  concrete gap already flagged for the eastl run today. Not yet confirmed with the repo owner whether
+  to build it now or hold both tiers together.
+
+This section records the design decision; neither tier is implemented yet.
+
+
 ## 5. Multi-agent operating model
 
 ### 5.1 Role separation
