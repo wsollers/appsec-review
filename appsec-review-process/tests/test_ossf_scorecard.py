@@ -12,6 +12,7 @@ import execution_state as state
 import ossf_scorecard as scorecard
 import phase1
 import test_phase1 as fixtures
+from schema_validate import validate_document
 
 
 COMMIT = "a" * 40
@@ -82,6 +83,7 @@ class ScorecardTests(unittest.TestCase):
         published = result["projects"][0]
         self.assertEqual(published["raw_sha256"], state.file_hash(output / published["raw_path"]))
         self.assertEqual(result["projects"][1]["status"], "not-published")
+        self.assertEqual(validate_document(result, "ossf-scorecard-results.schema.json"), [])
 
     def test_network_permission_and_redirect_fail_closed(self):
         path = state.run_path(self.run_id) / "inputs" / scorecard.INPUT_NAME
@@ -103,23 +105,27 @@ class ScorecardTests(unittest.TestCase):
 
     def test_attempt_reuse_force_tamper_and_failed_newer_attempt(self):
         self.stage()
-        def successful(argv, cwd, logs, timeout, **kwargs):
-            projects, _ = scorecard.load_input(Path(argv[-2]))
+        def successful(spec, **kwargs):
+            projects, _ = scorecard.load_input(Path(spec.argv[-2]))
             response = Response()
-            scorecard.fetch_projects(projects, Path(argv[-1]),
+            scorecard.fetch_projects(projects, Path(spec.argv[-1]),
                                      opener=lambda request, timeout: response)
-            state.atomic_bytes(logs / "stdout.log", b"fetched\n")
-            state.atomic_bytes(logs / "stderr.log", b"")
-            return {"exit_code": 0, "error": None, "argv": argv}
-        with patch.object(scorecard, "execute", side_effect=successful):
+            state.atomic_bytes(spec.log_dir / "stdout.log", b"fetched\n")
+            state.atomic_bytes(spec.log_dir / "stderr.log", b"")
+            return {"exit_code": 0, "error": None, "argv": list(spec.argv)}
+        with patch.object(scorecard, "execute_child", side_effect=successful):
             first = scorecard.run(self.run_id, "dagster-a")
             self.assertEqual(first, scorecard.run(self.run_id, "dagster-b"))
             forced = scorecard.run(self.run_id, "dagster-c", force=True)
         attempt = scorecard.validate(self.run_id, forced)
+        legacy_pointer = {"status": forced["status"], "attempt_id": forced["attempt_id"],
+                          "hashes": state.tree_hashes(attempt)}
+        self.assertEqual(scorecard.validate(self.run_id, legacy_pointer), attempt)
         with (attempt / "outputs" / "scorecard-results.json").open("ab") as stream:
             stream.write(b"tamper")
         with self.assertRaises(state.Blocked): scorecard.validate(self.run_id, forced)
-        with patch.object(scorecard, "execute", return_value={"exit_code": 9, "error": "fixture"}):
+        with patch.object(scorecard, "execute_child",
+                          return_value={"exit_code": 9, "error": "fixture"}):
             with self.assertRaises(state.Blocked): scorecard.run(self.run_id, "dagster-d", force=True)
         self.assertEqual(state.read_json(scorecard.root(self.run_id) / "accepted.json")["status"],
                          "FAILED")

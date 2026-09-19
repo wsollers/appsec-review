@@ -71,13 +71,14 @@ To inspect failure propagation through the whole graph:
 python -B appsec-review-process/launch_job.py --run-id <run_id> --job full_review --wait
 ```
 
-This currently fails at repository partition discovery with `WORKER_NOT_IMPLEMENTED`. Build
-discovery remains preserved. Resume the bounded integration with `--job build_discovery`; completing
-`full_review` requires implementing and qualifying the remaining workers. A successful discovery
-result never claims a successful target build or a completed security review. `build_execution` is
-not yet wired into `full_review`'s graph -- it is launched on its own, once `build_discovery` has
-already published for the run, the same way `build_discovery` itself was proven out solo before
-`02-repository-partition-discovery` started consuming its output.
+This currently reaches the repository-partition supplied-artifact gate and issues an actionable
+handoff when no schema-valid result has been supplied. Build discovery remains preserved. The
+`02-build-configure` lifecycle node is wired to the same worker as standalone `build_execution`,
+but it is not qualified through a real `full_review`: both supplied discovery gates must first
+publish accepted results, and the worker still reads the accepted build-discovery plan from disk.
+A successful discovery or configure result never claims a successful target build or completed
+security review. Use the standalone job for bounded diagnostics while the lifecycle chain remains
+unqualified.
 
 ## Submit build execution
 
@@ -160,8 +161,9 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 
 ## Registered lifecycle jobs
 
-See the [full Dagster dependency flow](full-review-workflow.mmd). Build discovery is a supporting
-workflow op before partition discovery, distinct from full developer project discovery.
+See the manifest-generated [lifecycle dependency flow](full-review-workflow.mmd). Build discovery
+is a supporting workflow op before partition discovery, distinct from the 42-node lifecycle view
+and from full developer project discovery.
 
 | Job | Execution readiness | Registry template |
 |---|---|---|
@@ -208,6 +210,16 @@ workflow op before partition discovery, distinct from full developer project dis
 | `02-operations-doc-ingest` | Worker blocked | Missing |
 
 ## Discovery hand-off gate (02-repository-partition-discovery, 02-dev-project-discovery)
+
+The repository-partition gate now emits the common worker-result envelope and uses the shared
+read-only validation/atomic-publication boundary. Its bounded standalone Dagster diagnostic is:
+
+```powershell
+python -B appsec-review-process/launch_job.py --run-id <run_id> --job repository_partition_discovery --wait
+```
+
+This standalone entrypoint invokes the same supplied-artifact lifecycle worker; it does not perform
+automatic analysis. Developer discovery deliberately retains its older supplied-gate runtime.
 
 Added 2026-09-19 to unblock `02-build-configure`'s real declared dependency chain
 (`02-build-configure` -> `02-dev-project-discovery` -> `02-repository-partition-discovery`) inside

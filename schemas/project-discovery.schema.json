@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project-discovery.schema.json",
+  "title": "Repository Project Discovery Result",
+  "type": "object",
+  "required": ["schema", "target", "source_revision", "projects", "safe_command_plan", "coverage_gaps"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "appsec-review/project-discovery/1.0"},
+    "target": {"type": "string"},
+    "source_revision": {"type": "string"},
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["project_id", "root", "languages", "manifests", "lockfiles", "candidate_buildenv_images", "commands", "evidence_citations", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "root": {"type": "string"},
+          "languages": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "manifests": {"type": "array", "items": {"type": "string"}},
+          "lockfiles": {"type": "array", "items": {"type": "string"}},
+          "candidate_buildenv_images": {"type": "array", "items": {"type": "string"}},
+          "commands": {"type": "array", "items": {"type": "string"}},
+          "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}},
+          "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
+        }
+      }
+    },
+    "safe_command_plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["project_id", "purpose", "argv", "authorization", "side_effects", "evidence_citations"],
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {"type": "string"},
+          "purpose": {"type": "string"},
+          "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "authorization": {"type": "string", "enum": ["read-only", "network-required", "script-execution-required"]},
+          "side_effects": {"type": "array", "items": {"type": "string"}},
+          "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
+        }
+      }
+    },
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}

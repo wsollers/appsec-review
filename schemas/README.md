@@ -10,21 +10,27 @@ JSON Schema for the common finding/evidence/interjob-transfer format (added 2026
 - `finding.schema.json` -- one claim: standard_refs (CWE/ASVS/CIS/ATT&CK/CAPEC, all optional), evidence_citations, a taxonomy-scoped classification (see verdict-taxonomies.json), attack_scenario narrative (no remediation code -- that's 11-remediation-proposal's job), and requires_executed_verification/executed_verification for the executed-vs-manual-confidence question raised in the harness doc.
 - `lane-status.schema.json` -- forward-looking replacement shape for a lane's status.json, with findings[]/artifacts_read[] as the intended single source of truth (no separate freehand tally to drift from the real content -- see the 07/08 scenario-count bug). additionalProperties:true and findings/artifacts_read optional-but-validated-if-present during migration; existing lanes 00-09/13/15 predate this and are not expected to already conform.
 - `handoff-transfer.schema.json` -- what create_handoff.py should validate before naming an upstream artifact as available in a ## Upstream Outputs section (the "validate on read" half of the schema-validator wiring).
+- `worker-result-envelope.schema.json` -- the versioned terminal result shared by deterministic, container, persona, pool, controller, and supplied-decision workers. Cross-field skip, gap, retry, acceptance, and supersession rules are enforced by `worker_result.py`; `validate_job_output.py` adds run/job ownership, input freshness, in-attempt artifact hashes, registry-required files, and exact-edge skip authorization.
+- `ossf-scorecard-results.schema.json` -- normalized published-results ingestion records. Contract-specific validation additionally ties records to staged requests and raw response hashes.
 - `verdict-taxonomies.json` -- not a JSON Schema itself, a curated registry of named verdict vocabularies (adversarial-verdict, static-hardening, memory-safety-disposition, cve-reachability) that finding.classification is checked against, keyed by finding.classification_taxonomy. Different lane families genuinely need different verdict language; this keeps that real difference structured instead of forcing one global enum or letting each lane's prose drift independently.
 
 Composable review schemas (added for the registry/worklist layer):
 
 - `repository-partition-map.schema.json` -- coarse repository areas, evidence, developer/DevOps/SRE review routes, relationships, scope dispositions, and inventory coverage gaps. Cross-record IDs, path containment, and semantic claim rules remain job-validator responsibilities.
+- `project-discovery.schema.json` -- project roots, manifests, lockfiles, candidate build environments, bounded command plans, evidence citations, and explicit coverage gaps. It describes supplied project analysis; it does not make persona dispatch executable.
 - `persona.schema.json` -- reusable reviewer stance, assumptions, inputs, outputs, and hard boundaries.
 - `role.schema.json` -- reusable work function such as intelligence extraction, standards validation, or platform hardening validation.
 - `domain.schema.json` -- reviewed surface, common failure modes, standards context, and evidence hints.
 - `tooling-profile.schema.json` -- allowed evidence/actions and claim limits, including static-only boundaries.
-- `output-contract.schema.json` -- required files, status fields, and validation rules for a composed job.
+- `output-contract.schema.json` -- required files, status fields, validation rules, and an optional
+  one-artifact result-schema identity plus an optional claim-class declaration for a composed job.
+  Optional declarations preserve historical contract readability.
 - `job-template.schema.json` -- dispatchable lane job composition.
 - `standard-control.schema.json` -- per-control standard record with upstream source lineage.
 - `standards-worklist.schema.json` -- per-component or per-platform checklist work items.
 - `component-tag-cloud.schema.json` -- component tags used to route standards and persona work.
 - `intelligence-payload.schema.json` -- scrubbed doc/test/API intelligence facts with source lineage.
+- `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
 engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --

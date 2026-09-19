@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "design-parity-capability.schema.json",
+  "type": "object",
+  "required": ["id", "design_refs", "jobs", "execution_mode", "readiness", "resource_pool", "qualification", "gaps", "blocking_decisions", "next_prerequisite"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[0-9a-z][0-9a-z-]*$"},
+    "design_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "jobs": {"type": "array", "items": {"type": "string"}},
+    "execution_mode": {"type": "string", "enum": ["deterministic_python", "pinned_container", "persona", "pool_coordinator", "supplied_artifact", "join_controller", "none"]},
+    "readiness": {"type": "string", "enum": ["implemented_and_qualified", "implemented_not_qualified", "standalone_only", "supplied_artifact_gate", "registered_planned_not_executable", "missing_prerequisites", "decision_blocked", "not_applicable_design_decision"]},
+    "resource_pool": {"type": "string"},
+    "qualification": {
+      "type": "object",
+      "required": ["levels", "references"],
+      "additionalProperties": false,
+      "properties": {
+        "levels": {"type": "array", "items": {"type": "string"}},
+        "references": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "blocking_decisions": {"type": "array", "items": {"type": "string"}},
+    "next_prerequisite": {"type": ["string", "null"]}
+  }
+}

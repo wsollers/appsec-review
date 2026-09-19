@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "design-parity-manifest.schema.json",
+  "title": "Mythos design parity manifest",
+  "type": "object",
+  "required": ["schema", "design_authority", "sources", "worker_result_contract", "graph_contract", "generated_views", "dagster_inventory", "jobs", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "appsec-review/design-parity-manifest/1.0"},
+    "design_authority": {"type": "string"},
+    "sources": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "worker_result_contract": {
+      "type": "object",
+      "required": ["definition_file", "schema_file"],
+      "additionalProperties": false,
+      "properties": {
+        "definition_file": {"type": "string"},
+        "schema_file": {"type": "string"}
+      }
+    },
+    "graph_contract": {
+      "type": "object",
+      "required": ["roots", "dependency_kinds"],
+      "additionalProperties": false,
+      "properties": {
+        "roots": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "dependency_kinds": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "generated_views": {
+      "type": "object",
+      "required": ["lifecycle_mermaid", "readiness_table"],
+      "additionalProperties": false,
+      "properties": {
+        "lifecycle_mermaid": {"type": "string"},
+        "readiness_table": {"type": "string"}
+      }
+    },
+    "dagster_inventory": {
+      "type": "object",
+      "required": ["standalone_jobs", "standalone_relationships", "launcher_jobs", "failure_sensor_jobs", "cancellation_sensor_jobs", "queue", "resource_pools"],
+      "additionalProperties": false,
+      "properties": {
+        "standalone_jobs": {"type": "array", "items": {"type": "string"}},
+        "standalone_relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["job", "lifecycle_jobs", "relationship"],
+            "additionalProperties": false,
+            "properties": {
+              "job": {"type": "string"},
+              "lifecycle_jobs": {"type": "array", "items": {"type": "string"}},
+              "relationship": {"type": "string"}
+            }
+          }
+        },
+        "launcher_jobs": {"type": "array", "items": {"type": "string"}},
+        "failure_sensor_jobs": {"type": "array", "items": {"type": "string"}},
+        "cancellation_sensor_jobs": {"type": "array", "items": {"type": "string"}},
+        "queue": {
+          "type": "object",
+          "required": ["max_concurrent_runs", "per_engagement_limit", "workflow_max_concurrent_steps"],
+          "additionalProperties": false,
+          "properties": {
+            "max_concurrent_runs": {"type": "integer"},
+            "per_engagement_limit": {"type": "integer"},
+            "workflow_max_concurrent_steps": {"type": "integer"}
+          }
+        },
+        "resource_pools": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "jobs": {"type": "array", "minItems": 1, "items": {"$ref": "design-parity-job.schema.json"}},
+    "capabilities": {"type": "array", "minItems": 1, "items": {"$ref": "design-parity-capability.schema.json"}}
+  }
+}

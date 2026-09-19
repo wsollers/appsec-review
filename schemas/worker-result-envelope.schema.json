@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "worker-result-envelope.schema.json",
+  "title": "Mythos common worker result envelope",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "worker_kind",
+    "execution_status",
+    "acceptance_status",
+    "input_fingerprint",
+    "output_contract",
+    "started_at",
+    "finished_at",
+    "summary",
+    "artifacts",
+    "gaps",
+    "skip_reason",
+    "cause",
+    "retry",
+    "superseded_by_attempt_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "appsec-review/worker-result-envelope/1.0"},
+    "run_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"},
+    "job_id": {"type": "string", "pattern": "^[0-9a-z][0-9a-z-]*$"},
+    "attempt_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"},
+    "worker_kind": {
+      "type": "string",
+      "enum": ["deterministic_python", "pinned_container", "persona", "pool_coordinator", "join_controller", "supplied_human_decision"]
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": ["OK", "OK_WITH_GAPS", "SKIPPED", "BLOCKED", "FAILED", "CANCELED", "UNRESOLVED"]
+    },
+    "acceptance_status": {"type": "string", "enum": ["CURRENT", "NOT_ACCEPTED", "SUPERSEDED"]},
+    "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "output_contract": {"type": "string", "pattern": "^[0-9a-z][0-9a-z-]*$"},
+    "started_at": {"type": "string"},
+    "finished_at": {"type": "string"},
+    "summary": {"type": "string"},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "media_type"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "media_type": {"type": "string"}
+        }
+      }
+    },
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "skip_reason": {"type": ["string", "null"]},
+    "cause": {"type": ["string", "null"]},
+    "retry": {
+      "type": "object",
+      "required": ["allowed", "resume_command"],
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {"type": "boolean"},
+        "resume_command": {"type": ["string", "null"]}
+      }
+    },
+    "superseded_by_attempt_id": {"type": ["string", "null"]}
+  }
+}

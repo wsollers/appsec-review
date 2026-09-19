@@ -4,7 +4,19 @@
   "display_name": "OpenSSF Scorecard Published Results",
   "required_files": ["manifest.json", "outputs/scorecard-results.json", "outputs/summary.md", "status.json"],
   "required_status_fields": ["status", "attempt_id", "dagster_run_id"],
-  "claim_types": ["supply_chain_posture_evidence", "evidence_gap"],
+  "result_schema": {
+    "artifact": "outputs/scorecard-results.json",
+    "schema_file": "ossf-scorecard-results.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "supply_chain_posture_evidence",
+    "allowed_assertions": [
+      "published-scorecard-posture",
+      "published-check-evidence",
+      "publication-coverage-gap"
+    ],
+    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+  },
   "validation_rules": [
     "network permission and fixed api.scorecard.dev endpoint are recorded",
     "redirects and oversized responses are rejected",
@@ -12,6 +24,7 @@
     "raw response and normalized output hashes validate",
     "404 is an explicit not-published coverage gap; other HTTP and transport errors fail",
     "aggregate and check scores are evidence, not verified findings",
+    "the result cannot promote evidence to a finding, severity, or observed runtime state",
     "latest failed attempt blocks older accepted output"
   ]
 }

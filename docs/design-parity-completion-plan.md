@@ -7,6 +7,13 @@ output contract, recovery behavior, and service-level qualification.
 
 ## Current baseline
 
+- The versioned parity source of truth is
+  `appsec-review-process/design-parity-manifest.json` (`appsec-review/design-parity-manifest/1.0`).
+  `validate_design_parity.py` reconciles it against the graph, registry, Dagster definitions,
+  launcher, sensors, entrypoints, contracts, schemas, queue limits, pools, and qualification
+  references. The deterministic human view is `docs/design-parity-report.md`; the lifecycle graph
+  and operator table are generated as `docs/full-review-workflow.mmd` and
+  `docs/design-parity-readiness.md` and are rejected when stale.
 - The lifecycle graph declares 42 jobs. Only `00-intake`, `02-ossf-scorecard`, and
   `02-evidence-index` are currently marked implemented in `job-graph.json`.
 - Several useful standalone Dagster jobs exist, but standalone registration does not prove that
@@ -38,20 +45,26 @@ Design parity is achieved only when all of the following are true:
 
 ## Workstream A: parity inventory and executable contracts
 
-- [ ] Create a machine-readable parity manifest mapping each design capability to lifecycle job,
+- [x] Create a machine-readable parity manifest mapping each design capability to lifecycle job,
   registry composition, worker, validator, schema, prompt, tool/image identity, permission set,
   resource pool, and qualification case.
-- [ ] Add a validator that fails when a graph node is described as implemented without all required
+- [x] Add a validator that fails when a graph node is described as implemented without all required
   executable and validation references, or when a standalone job has no declared lifecycle
   relationship.
-- [ ] Reconcile the design document, `job-graph.json`, Dagster definitions, launcher choices,
+- [x] Reconcile the design document, `job-graph.json`, Dagster definitions, launcher choices,
   diagrams, readiness tables, registry records, and operator documentation from that manifest.
-- [ ] Define one common worker result envelope for deterministic tools, persona workers, pool
+  The manifest now deterministically generates and validates both the Mermaid and readiness table.
+- [x] Define one common worker result envelope for deterministic tools, persona workers, pool
   coordinators, joins, and supplied human decisions.
-- [ ] Define explicit terminal states and allowed transitions for `OK`, `OK_WITH_GAPS`, `SKIPPED`,
+- [x] Define explicit terminal states and allowed transitions for `OK`, `OK_WITH_GAPS`, `SKIPPED`,
   `BLOCKED`, `FAILED`, `CANCELED`, `UNRESOLVED`, and superseded attempts.
-- [ ] Add graph checks for cycles, unreachable nodes, invalid optional dependencies, missing skip
+- [x] Add graph checks for cycles, unreachable nodes, invalid optional dependencies, missing skip
   semantics, namespace collisions, and a downstream contract that does not match its producer.
+
+The versioned envelope and state machine are in `appsec-review-process/worker-result-contract.json`
+and `schemas/worker-result-envelope.schema.json`. Supersession is an acceptance disposition over an
+immutable terminal attempt, not a rewritten execution status. Runtime adapter migration remains
+Workstream B work.
 
 Validation:
 
@@ -63,14 +76,44 @@ Validation:
 
 ## Workstream B: shared dispatch and validation runtime
 
-- [ ] Implement `create_job_handoff.py` from resolved registry records, with immutable prompt and
+The first bounded validation-runtime slice is implemented in `worker_result.py`,
+`validate_job_output.py`, and `worker_adapters.py`. It validates the common envelope, immutable
+reuse, artifact paths/hashes, required contract files, input freshness, and dependency-edge skip
+authorization. Deterministic Python and supplied-human adapters are defined; existing workers and
+the remaining adapter kinds are not migrated or claimed complete.
+
+- [x] Implement `create_job_handoff.py` from resolved registry records, with immutable prompt and
   composition hashes and bounded run-scoped inputs.
 - [ ] Implement `validate_job_output.py` with contract-specific schemas, citation validation,
   source freshness, claim-class limits, status semantics, artifact hashes, and secret redaction.
 - [ ] Define a worker adapter interface for Python workers, pinned container argv arrays, persona
   workers, and supplied human artifacts; reject arbitrary shell strings.
+
+Completed subset:
+
+- [x] Common status/acceptance, artifact hash/path, registry-required-file, input-fingerprint,
+  dependency-edge skip, and immutable-reuse validation.
+- [x] Contract-declared single-result schema validation for Scorecard, repository partition maps,
+  and project discovery; required status values; bounded repository citation/path freshness;
+  cross-record IDs; and non-mutating secret-leak rejection.
+- [x] Registry-declared claim-class identity and non-mutating rejection of finding, severity, and
+  observed-runtime promotion for the same three bounded result contracts.
+- [x] Narrow deterministic Python and supplied-human-decision adapter protocol and implementations.
+- [ ] Broader contract migration, pinned-container argv, persona invocation, pool, and controller
+  adapters.
 - [ ] Centralize attempt allocation, locking, timeout, cancellation, stream draining, child cleanup,
   publication, reuse, and newer-failure blocking so new workers do not reimplement the state model.
+  Atomic publication, reuse validation, collision-safe allocation, interrupted-attempt recovery,
+  terminal `BLOCKED`/`FAILED`/`CANCELED` recording, and newer-failure blocking are centralized and
+  qualified for Scorecard and repository-partition discovery. Common success persistence and
+  reusable-candidate admission also reject corrupt/stale pointers and recover a validated envelope
+  left behind `PENDING` without rerunning payload work. The per-job lock and lock-scoped lifecycle
+  sequence are now also common for those two workers: preflight blockers, work/validation failures,
+  and cancellation route to one terminal recorder while the original exception still reaches
+  Dagster. Scorecard alone now uses the versioned argv-only deterministic-child boundary for
+  timeout, bounded concurrent stdout/stderr draining, cancellation diagnostics, and complete
+  child-tree cleanup. Payload construction and contract-specific validation remain worker-local;
+  repository-partition discovery has no child, and no broader worker was migrated.
 - [ ] Add permission capabilities for target execution, network destinations, dynamic testing,
   debugger/ptrace, credentials, package restore, and target mutation.
 - [ ] Add Dagster resource pools for CPU-heavy, memory-heavy, Docker, network, LLM/persona, and

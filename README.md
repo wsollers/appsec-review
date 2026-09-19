@@ -86,6 +86,14 @@ Top-level process docs now live under `docs/`:
 - [`docs/critical-findings-sarif-job.md`](docs/critical-findings-sarif-job.md)
 
 The active process TODO list is [`appsec-review-process/TODO.md`](appsec-review-process/TODO.md).
+Machine-readable implementation readiness lives in
+[`appsec-review-process/design-parity-manifest.json`](appsec-review-process/design-parity-manifest.json).
+Validate it with `python -B appsec-review-process/validate_design_parity.py`; generated stable
+views are the [parity report](docs/design-parity-report.md),
+[lifecycle graph](docs/full-review-workflow.mmd), and
+[operator readiness table](docs/design-parity-readiness.md). The shared terminal result/state
+contract and read-only validation boundary are described in
+[the worker-result envelope](docs/worker-result-envelope.md).
 
 Script migration policy: review-work scripts currently under `scripts/` should be treated as
 temporary compatibility surfaces. The target home for deterministic review work is `pipeline/` for

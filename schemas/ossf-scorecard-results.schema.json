@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ossf-scorecard-results.schema.json",
+  "title": "OpenSSF Scorecard Published Results",
+  "type": "object",
+  "required": [
+    "schema",
+    "source",
+    "semantics",
+    "projects",
+    "published_count",
+    "not_published_count"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "appsec-review/ossf-scorecard-results/1"},
+    "source": {"const": "https://api.scorecard.dev/projects"},
+    "semantics": {"const": "published-results-ingest-not-live-scan"},
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["repository", "status", "request_url", "retrieved_at", "http_status"],
+        "additionalProperties": false,
+        "properties": {
+          "repository": {"type": "string", "pattern": "^(github\\.com|gitlab\\.com)/[^/]+/[^/]+$"},
+          "requested_commit": {"type": ["string", "null"]},
+          "status": {"type": "string", "enum": ["published", "not-published"]},
+          "request_url": {"type": "string"},
+          "retrieved_at": {"type": "string"},
+          "http_status": {"type": "integer"},
+          "response_headers": {"type": "object"},
+          "raw_path": {"type": "string", "pattern": "^response-[0-9]{3}\\.json$"},
+          "raw_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "result": {"type": "object"},
+          "coverage_gap": {"type": "string"}
+        }
+      }
+    },
+    "published_count": {"type": "integer"},
+    "not_published_count": {"type": "integer"}
+  }
+}

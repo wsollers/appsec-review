@@ -53,3 +53,20 @@ Design rules:
 - Static-only jobs can emit declared/static-state assessments, not observed runtime claims.
 - Discovery jobs emit candidate claims or control/worklist assessments, not verified findings.
 - Verification jobs independently satisfy or reject proof obligations.
+
+The shared output-validation slice is `../validate_job_output.py`. It resolves the declared
+output contract from this registry, requires its files in the common artifact manifest, verifies
+in-attempt paths and hashes, validates required status fields, and checks skip authorization against
+the exact graph edge. Contracts may opt in to one explicit `result_schema` artifact/schema pair;
+older contracts remain readable without that field. Scorecard, repository-partition-map, and
+project-discovery have explicit dispatch for their bounded semantics. Discovery citations require
+fresh repository-relative source files and hashes, cross-record IDs resolve, and secret-like result
+values fail validation without being repaired or redacted in place. Those three contracts also
+declare a bounded claim-class identity: Scorecard can report published posture/check evidence,
+partition discovery can report declared or statically inferred structure/routing, and project
+discovery can report declared structure or a statically inferred build plan. Finding, severity, and
+observed-runtime promotion is rejected. `../create_job_handoff.py` separately hashes opted-in result
+schema and claim-class declarations with the complete registry composition, prompt, and bounded
+run-owned inputs. `../publish_job_output.py` separately performs
+atomic publication after read-only validation. Scorecard and repository-partition discovery remain
+the only adopted paths; the latter remains supplied analysis rather than automatic persona dispatch.

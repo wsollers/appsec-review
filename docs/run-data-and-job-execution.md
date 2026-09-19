@@ -73,3 +73,49 @@ and bound retries. Redact secrets in command records and UI exports; raw evidenc
 
 The canonical state writer must synchronize CLI, file and Dagster views without allowing independent
 writers to race. A green process exit or Dagster step alone does not certify accepted evidence.
+
+The shared v1.0 terminal boundary is implemented by `worker_result.py` and
+`validate_job_output.py`. Validation is read-only and fail-closed: the common envelope must match
+the staged input fingerprint; every artifact must be a normalized path beneath its immutable
+attempt with a matching hash; registry-required files must be declared; and `SKIPPED` must name a
+reason allowed by the exact consumer edge. Opted-in output contracts name exactly one result
+artifact and result schema. The validator also enforces required status fields and explicit
+Scorecard/discovery semantics, including bounded repository-relative citation freshness,
+cross-record IDs, and negative secret-leak checks. It never repairs worker output. Contracts that
+opt into the result-schema boundary may also declare a claim class. The three current declarations
+limit output to published posture evidence, supplied structure/routing, or supplied project/build
+discovery and reject finding, severity, and observed-runtime promotion. Contracts that predate the
+optional declarations remain readable. Existing workers retain their
+legacy shapes until explicitly migrated and qualified; this contract does not retroactively
+certify them.
+
+`publish_job_output.py` consumes that read-only validation result and atomically updates the
+accepted pointer only for the newest `CURRENT` envelope. Attempt allocation first writes a
+non-current `PENDING` pointer, so invalid, corrupt, stale, canceled, blocked, or failed newer work
+cannot fall back to an older accepted result. This boundary is adopted only by
+`02-ossf-scorecard` and supplied `02-repository-partition-discovery`; historical attempts remain
+untouched. Those two adopted paths also use the same collision-safe allocator and terminal
+non-current recorder. Allocation persists inputs and `RUNNING` status before moving the
+`PENDING`/`latest.json` view, recovers an abandoned pending attempt to an immutable `FAILED`
+envelope before replacement, and retries bounded UUID collisions. `BLOCKED`, `FAILED`, and
+`CANCELED` results are hashed, newest-attempt checked, and recorded without rewriting a durable
+candidate envelope that failed validation. For the same two paths, a common coordinator now owns
+the per-job lock, reusable admission, interrupted-attempt recovery/allocation, and terminal
+exception routing. Preflight blockers, post-allocation work/validation failures, and
+`KeyboardInterrupt` become `BLOCKED`, `FAILED`, and `CANCELED` respectively, and the original
+exception is re-raised so Dagster failure behavior is unchanged. Execution, timeout, child cleanup,
+streams, logs, and payload production otherwise remain worker-local; this is not yet a general
+worker controller. Scorecard is the one bounded exception: it uses the versioned argv-only
+`deterministic_child.py` sub-contract with a fixed executable/prefix, explicit environment,
+one-MiB retained limits for each diagnostic stream, timeout/cancellation recording, and complete
+Windows Job Object or POSIX process-session cleanup. Repository partition discovery has no child
+process and is deliberately not routed through it. No other worker inherits this behavior yet.
+
+The same two paths use common success and reuse transitions. Reuse requires a common accepted
+pointer with the expected run, job, input fingerprint and newest-attempt identity, then rechecks
+the immutable attempt tree, envelope hash and full output contract. A corrupt matching pointer
+fails closed; it is not silently converted into a cache miss. Final `OK`, `OK_WITH_GAPS`, and
+edge-authorized `SKIPPED` status, artifact hashes and envelope persistence share one ordered path.
+If a worker stops after the `CURRENT` envelope is durable but before `accepted.json` advances from
+`PENDING`, the next non-forced invocation validates worker-specific semantics before publishing
+that same immutable attempt. It does not allocate a replacement or rerun payload production.

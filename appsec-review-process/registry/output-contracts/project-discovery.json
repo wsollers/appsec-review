@@ -18,10 +18,24 @@
     "tooling_profile_id",
     "artifacts_read"
   ],
+  "result_schema": {
+    "artifact": "project-inventory.json",
+    "schema_file": "project-discovery.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "supplied_project_discovery",
+    "allowed_assertions": [
+      "declared-project-structure",
+      "statically-inferred-build-plan",
+      "coverage-gap"
+    ],
+    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+  },
   "validation_rules": [
     "project inventory must cite manifests or explicit gaps",
     "safe command plan must separate read-only, network-required, and script-executing commands",
     "each project should name a candidate buildenv image or explain why none fits",
-    "runtime state claims are forbidden"
+    "runtime state claims are forbidden",
+    "the result cannot promote discovery evidence to a finding or severity"
   ]
 }

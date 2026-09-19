@@ -1,0 +1,71 @@
+{
+  "schema": "appsec-review/worker-result-contract/1.0",
+  "envelope_schema": "schemas/worker-result-envelope.schema.json",
+  "worker_kinds": [
+    "deterministic_python",
+    "pinned_container",
+    "persona",
+    "pool_coordinator",
+    "join_controller",
+    "supplied_human_decision"
+  ],
+  "execution_states": {
+    "initial": "PENDING",
+    "transient": ["PENDING", "READY", "RUNNING"],
+    "terminal": [
+      "OK",
+      "OK_WITH_GAPS",
+      "SKIPPED",
+      "BLOCKED",
+      "FAILED",
+      "CANCELED",
+      "UNRESOLVED"
+    ],
+    "transitions": {
+      "PENDING": ["READY", "BLOCKED", "CANCELED"],
+      "READY": ["RUNNING", "BLOCKED", "CANCELED"],
+      "RUNNING": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED",
+        "UNRESOLVED"
+      ],
+      "OK": [],
+      "OK_WITH_GAPS": [],
+      "SKIPPED": [],
+      "BLOCKED": [],
+      "FAILED": [],
+      "CANCELED": [],
+      "UNRESOLVED": []
+    }
+  },
+  "acceptance_states": {
+    "initial": "NOT_ACCEPTED",
+    "terminal": ["CURRENT", "NOT_ACCEPTED", "SUPERSEDED"],
+    "transitions": {
+      "NOT_ACCEPTED": ["CURRENT", "SUPERSEDED"],
+      "CURRENT": ["SUPERSEDED"],
+      "SUPERSEDED": []
+    }
+  },
+  "skip_reasons": [
+    "no-debug-symbols",
+    "not-applicable-after-partition-review",
+    "not-applicable-non-native",
+    "not-requested",
+    "not-requested-no-scorecard-projects"
+  ],
+  "semantics": {
+    "OK": "All contracted work completed and required artifacts validated.",
+    "OK_WITH_GAPS": "Contracted work completed and artifacts validated, with explicit bounded coverage gaps.",
+    "SKIPPED": "The work was inapplicable or not requested under an edge-authorized skip reason, with supporting evidence.",
+    "BLOCKED": "Required evidence, authorization, capability, or upstream state was unavailable before work could complete.",
+    "FAILED": "Execution or validation failed after work began or the result could not be recorded reliably.",
+    "CANCELED": "An authorized cancellation stopped execution; cancellation is not success and cannot be accepted as output.",
+    "UNRESOLVED": "Bounded work completed but the contracted question could not be resolved; uncertainty and follow-up are recorded.",
+    "SUPERSEDED": "Acceptance-view disposition for an immutable older attempt replaced by a named newer attempt; it is not an execution status."
+  }
+}

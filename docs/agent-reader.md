@@ -80,6 +80,33 @@ Important job boundaries:
 - `full_review`: exposes the lifecycle graph, but many workers intentionally block with
   `WORKER_NOT_IMPLEMENTED` until implemented and qualified.
 
+Before changing lifecycle readiness, run:
+
+```powershell
+python -B appsec-review-process/validate_design_parity.py
+```
+
+The source inventory is `appsec-review-process/design-parity-manifest.json`; its deterministic
+views are `docs/design-parity-report.md`, `docs/full-review-workflow.mmd`, and
+`docs/design-parity-readiness.md`. The common worker terminal contract is documented in
+`docs/worker-result-envelope.md`. An unassigned pool or missing qualification is a gap, not an
+implicit default or success.
+
+For a migrated worker attempt, validate without publishing:
+
+```powershell
+python -B appsec-review-process/validate_job_output.py `
+  --attempt-root <attempt-directory> `
+  --envelope <worker-result.json> `
+  --expected-run-id <run-id> `
+  --expected-job-id <job-id> `
+  --expected-input-fingerprint sha256:<digest>
+```
+
+Add `--consumer-job <job-id>` for `SKIPPED` so the validator can check the exact dependency edge.
+Add `--accepted-envelope <path> --reuse` only when proving immutable reuse of the current attempt.
+This validator is read-only and does not make a legacy worker conform automatically.
+
 ## Persona And Registry Lookups
 
 Personas are reviewer stances, not proof. Registry jobs compose a persona, role, domain, tooling

@@ -18,14 +18,18 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from typing import Any, Callable
 
-from execution_state import (ROOT, Blocked, Lock, atomic_bytes, atomic_json, data_path, digest,
-                             event, execute, file_hash, identifier, now, read_json, run_path,
+from create_job_handoff import create_handoff, default_inputs, read_latest_handoff
+from deterministic_child import CONTRACT as CHILD_CONTRACT, ChildExecutionSpec, execute_child
+from execution_state import (ROOT, Blocked, atomic_bytes, atomic_json, data_path, digest,
+                             event, file_hash, identifier, now, read_json, run_path,
                              tree_hashes)
 from job_graph import composition
 from phase1 import config_for
+from publish_job_output import (common_pointer, coordinate_worker_lifecycle,
+                                record_terminal_current, validate_published)
+from validate_job_output import validate_contract_result
 
 JOB_ID = "02-ossf-scorecard"
 INPUT_NAME = "ossf-scorecard-projects.json"
@@ -36,6 +40,9 @@ MAX_PROJECTS = 100
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 TIMEOUT_SECONDS = 600
 REQUEST_TIMEOUT_SECONDS = 20
+STDOUT_LIMIT_BYTES = 1024 * 1024
+STDERR_LIMIT_BYTES = 1024 * 1024
+CONSUMER_JOB_ID = "02-evidence-assembly"
 REPOSITORY_RE = re.compile(
     r"^(?P<host>github\.com|gitlab\.com)/(?P<owner>[A-Za-z0-9_.-]{1,100})/"
     r"(?P<repo>[A-Za-z0-9_.-]{1,100})$"
@@ -198,19 +205,38 @@ def fetch_projects(projects: list[dict[str, str]], output: Path, *,
     return result
 
 
-def current_inputs(run_id: str) -> dict[str, Any]:
+def current_inputs(run_id: str, persist_handoff: bool = True) -> dict[str, Any]:
     config = config_for(run_id)
     source = input_path(run_id)
     job = template()
+    handoff_inputs = default_inputs(run_id)
+    if source.exists() and f"inputs/{INPUT_NAME}" not in handoff_inputs:
+        handoff_inputs.append(f"inputs/{INPUT_NAME}")
+    handoff_path, handoff = (create_handoff(run_id, JOB_ID, handoff_inputs)
+                             if persist_handoff else read_latest_handoff(run_id, JOB_ID))
     common = {"composition": job["composition"], "timeout_seconds": job["timeout_seconds"],
               "endpoint": API_BASE, "network_permission": NETWORK_PERMISSION,
+              "handoff": {"path": handoff_path.relative_to(run_path(run_id)).as_posix(),
+                          "sha256": file_hash(handoff_path),
+                          "input_fingerprint": handoff["input_fingerprint"]},
               "tool": {"name": "OpenSSF Scorecard Results API", "contract": "JSON2",
                        "python": platform.python_version(), "openssl": ssl.OPENSSL_VERSION,
                        "executable": str(Path(sys.executable).resolve()),
                        "image": os.environ.get("APPSEC_WORKER_IMAGE", "appsec-review-dagster:local")},
               "code": {"ossf_scorecard.py": file_hash(Path(__file__)),
+                       "deterministic_child.py": file_hash(ROOT / "deterministic_child.py"),
+                       "execution_state.py": file_hash(ROOT / "execution_state.py"),
+                       "process_gate.py": file_hash(ROOT / "process_gate.py"),
+                       "create_job_handoff.py": file_hash(ROOT / "create_job_handoff.py"),
+                       "publish_job_output.py": file_hash(ROOT / "publish_job_output.py"),
+                       "validate_job_output.py": file_hash(ROOT / "validate_job_output.py"),
                        f"registry/job-templates/{JOB_ID}.json": file_hash(
-                           ROOT / "registry" / "job-templates" / f"{JOB_ID}.json")}}
+                           ROOT / "registry" / "job-templates" / f"{JOB_ID}.json")},
+              "child_execution": {"contract": CHILD_CONTRACT, "argv_only": True,
+                                  "shell_allowed": False,
+                                  "stdout_limit_bytes": STDOUT_LIMIT_BYTES,
+                                  "stderr_limit_bytes": STDERR_LIMIT_BYTES,
+                                  "child_tree_cleanup": "always"}}
     if not source.exists():
         return {**common, "applicable": False, "skip_reason": "not-requested-no-scorecard-projects"}
     projects, size = load_input(source)
@@ -221,141 +247,170 @@ def current_inputs(run_id: str) -> dict[str, Any]:
                        "bytes": size, "projects": projects}}
 
 
-def validate(run_id: str, pointer: dict[str, Any] | None = None) -> Path:
+def _validate_attempt_payload(attempt: Path, record: dict[str, Any]) -> None:
+    del record  # inputs.json is the immutable source used by the contract validator.
+    contract = read_json(ROOT / "registry" / "output-contracts" /
+                         "ossf-scorecard-results.json")
+    errors = validate_contract_result(
+        attempt, contract, run_id=read_json(attempt / "status.json").get("run_id", ""))
+    if errors:
+        raise Blocked("invalid OpenSSF Scorecard result: " + "; ".join(errors))
+
+
+def _validate_legacy(run_id: str, pointer: dict[str, Any]) -> Path:
     base = root(run_id)
-    pointer = pointer or read_json(base / "accepted.json")
     if pointer.get("status") not in {"OK", "SKIPPED"}:
         raise Blocked("OpenSSF Scorecard attempt is not accepted")
     attempt = base / "attempts" / identifier(pointer["attempt_id"])
     if tree_hashes(attempt) != pointer.get("hashes"):
         raise Blocked("OpenSSF Scorecard attempt artifacts changed")
-    record = read_json(attempt / "inputs.json")
-    if current_inputs(run_id) != record:
-        raise Blocked("OpenSSF Scorecard inputs, authorization, tooling or implementation are stale")
+    stored = read_json(attempt / "inputs.json")
     status = read_json(attempt / "status.json")
     if status.get("status") != pointer["status"]:
         raise Blocked("OpenSSF Scorecard attempt status mismatch")
-    results_path = attempt / "outputs" / "scorecard-results.json"
-    results = read_json(results_path)
-    if results.get("schema") != "appsec-review/ossf-scorecard-results/1":
-        raise Blocked("invalid OpenSSF Scorecard results schema")
-    if record["applicable"]:
-        if len(results.get("projects", [])) != len(record["source"]["projects"]):
-            raise Blocked("OpenSSF Scorecard result count mismatch")
-        for requested, result in zip(record["source"]["projects"], results["projects"]):
-            if result.get("repository") != requested["repository"]:
-                raise Blocked("OpenSSF Scorecard result ordering mismatch")
-            if result.get("status") == "published":
-                validate_payload(result.get("result"), requested)
-                raw_name = result.get("raw_path")
-                if not isinstance(raw_name, str) or not re.fullmatch(r"response-[0-9]{3}\.json", raw_name):
-                    raise Blocked("OpenSSF Scorecard raw response path is invalid")
-                raw = attempt / "outputs" / raw_name
-                if file_hash(raw) != result.get("raw_sha256"):
-                    raise Blocked("OpenSSF Scorecard raw response hash mismatch")
-            elif result.get("status") != "not-published":
-                raise Blocked("unsupported OpenSSF Scorecard result status")
-    manifest = read_json(attempt / "manifest.json")
-    if manifest.get("results_sha256") != file_hash(results_path):
-        raise Blocked("OpenSSF Scorecard manifest output hash mismatch")
+    _validate_attempt_payload(attempt, stored)
     return attempt
+
+
+def validate(run_id: str, pointer: dict[str, Any] | None = None) -> Path:
+    base = root(run_id)
+    pointer = pointer or read_json(base / "accepted.json")
+    if not common_pointer(pointer):
+        # Historical pointers remain integrity-readable, but run() never reuses them as current.
+        return _validate_legacy(run_id, pointer)
+    record = current_inputs(run_id, persist_handoff=False)
+    fingerprint = "sha256:" + digest(record)
+    attempt, _envelope = validate_published(
+        base, pointer, fingerprint, expected_run_id=run_id, expected_job_id=JOB_ID,
+        consumer_job_id=CONSUMER_JOB_ID)
+    if read_json(attempt / "inputs.json") != record:
+        raise Blocked("OpenSSF Scorecard immutable attempt inputs changed")
+    _validate_attempt_payload(attempt, record)
+    return attempt
+
+
+def _failure_record(run_id: str, source: Path, exc: BaseException) -> dict[str, Any]:
+    descriptor: dict[str, Any] = {"run_id": run_id, "job": JOB_ID,
+                                  "preflight_error": f"{type(exc).__name__}: {exc}",
+                                  "code": file_hash(Path(__file__))}
+    if source.is_file() and not source.is_symlink():
+        descriptor["source"] = {"path": f"inputs/{INPUT_NAME}",
+                                "sha256": file_hash(source), "bytes": source.stat().st_size}
+    return descriptor
 
 
 def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
     base = root(run_id)
-    with Lock(base / "job.lock"):
-        record = current_inputs(run_id)
-        fingerprint = digest(record)
-        if not force and (base / "accepted.json").exists():
-            candidate = read_json(base / "accepted.json")
-            if candidate.get("fingerprint") == fingerprint:
-                try:
-                    validate(run_id, candidate)
-                    atomic_json(data_path(run_id, "orchestration", "dagster", dagster_id,
-                                          "ossf-scorecard-reuse.json"),
-                                {"status": candidate["status"], "reused": True,
-                                 "producer": candidate, "time": now()})
-                    return candidate
-                except (ValueError, Blocked, OSError, KeyError):
-                    pass
-        if (base / "latest.json").exists():
-            previous = read_json(base / "latest.json")
-            old = base / "attempts" / identifier(previous["attempt_id"]) / "status.json"
-            if old.exists() and read_json(old).get("status") == "RUNNING":
-                atomic_json(old, {**read_json(old), "status": "FAILED",
-                                  "error": "INTERRUPTED_WORKER", "ended_at": now()})
-        attempt_id = uuid.uuid4().hex
-        attempt = base / "attempts" / attempt_id
+    resume = (f"python -B appsec-review-process/launch_job.py --run-id {run_id} "
+              "--job ossf_scorecard --wait")
+
+    def post_validate(attempt: Path, _envelope: dict[str, Any],
+                      record: dict[str, Any]) -> None:
+        if read_json(attempt / "inputs.json") != record:
+            raise Blocked("OpenSSF Scorecard immutable attempt inputs changed")
+        _validate_attempt_payload(attempt, record)
+
+    def on_reuse(admitted: dict[str, Any]) -> None:
+        candidate, envelope = admitted["pointer"], admitted["envelope"]
+        atomic_json(data_path(run_id, "orchestration", "dagster", dagster_id,
+                              "ossf-scorecard-reuse.json"),
+                    {"status": envelope["execution_status"], "reused": True,
+                     "publication_recovered": admitted["recovered_publication"],
+                     "producer": candidate, "time": now()})
+
+    def execute_attempt(allocation: dict[str, Any], record: dict[str, Any],
+                        fingerprint: str) -> dict[str, Any]:
+        attempt_id = allocation["attempt_id"]
+        attempt = allocation["attempt"]
         (attempt / "outputs").mkdir(parents=True)
+        started = allocation["started_at"]
         status = {"status": "RUNNING", "run_id": run_id, "attempt_id": attempt_id,
-                  "dagster_run_id": dagster_id, "started_at": now(), "fingerprint": fingerprint}
-        atomic_json(base / "accepted.json", {"status": "PENDING", "attempt_id": attempt_id})
-        atomic_json(base / "latest.json", {"attempt_id": attempt_id})
-        try:
-            atomic_json(attempt / "status.json", status)
-            atomic_json(attempt / "inputs.json", record)
-            atomic_json(attempt / "pre.json", {"status": "OK", "network_authorized": record["applicable"],
-                                                "endpoint": API_BASE})
-            if record["applicable"]:
-                environment = {key: value for key, value in os.environ.items()
-                               if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "LANG", "LC_ALL",
-                                                  "SSL_CERT_FILE", "SSL_CERT_DIR"}}
-                environment["PYTHONDONTWRITEBYTECODE"] = "1"
-                argv = [sys.executable, "-B", str(Path(__file__)), "worker", str(input_path(run_id)),
-                        str(attempt / "outputs")]
-                result = execute(argv, ROOT, attempt / "logs", record["timeout_seconds"], env=environment)
-                atomic_json(attempt / "command.json", result)
-                if result.get("error") or result.get("exit_code") != 0:
-                    raise Blocked("OpenSSF Scorecard fetch failed; inspect separate attempt logs")
-                if file_hash(input_path(run_id)) != record["source"]["sha256"]:
-                    raise Blocked("OpenSSF Scorecard input changed during fetch")
-                final_status, reason = "OK", None
-            else:
-                (attempt / "logs").mkdir()
-                atomic_bytes(attempt / "logs" / "stdout.log", b"")
-                atomic_bytes(attempt / "logs" / "stderr.log", b"")
-                event(attempt / "logs" / "events.jsonl", "SKIP", reason=record["skip_reason"])
-                atomic_json(attempt / "command.json", {"argv": [], "exit_code": None,
-                                                        "network_used": False})
-                atomic_json(attempt / "outputs" / "scorecard-results.json",
-                            {"schema": "appsec-review/ossf-scorecard-results/1", "source": API_BASE,
-                             "semantics": "published-results-ingest-not-live-scan", "projects": [],
-                             "published_count": 0, "not_published_count": 0})
-                atomic_bytes(attempt / "outputs" / "summary.md",
-                             b"# OpenSSF Scorecard published results\n\nNot requested; no project input was staged.\n")
-                final_status, reason = "SKIPPED", record["skip_reason"]
-            if record["code"] != current_inputs(run_id)["code"]:
-                raise Blocked("OpenSSF Scorecard implementation changed during work")
-            results_path = attempt / "outputs" / "scorecard-results.json"
-            manifest = {"schema": "appsec-review/ossf-scorecard-manifest/1", "run_id": run_id,
-                        "attempt_id": attempt_id, "source_endpoint": API_BASE,
-                        "semantics": "published-results-ingest-not-live-scan",
-                        "network_authorized": record["applicable"], "network_used": record["applicable"],
-                        "input_sha256": record.get("source", {}).get("sha256"),
-                        "results_sha256": file_hash(results_path), "tool": record["tool"],
-                        "target_execution": False}
-            atomic_json(attempt / "manifest.json", manifest)
-            atomic_json(attempt / "post.json", {"status": "OK", "schema_validation": "PASS",
-                                                 "freshness": "PASS", "hash_validation": "PASS"})
-            status.update(status=final_status, ended_at=now())
-            if reason:
-                status["reason"] = reason
-            atomic_json(attempt / "status.json", status)
-            pointer = {"status": final_status, "run_id": run_id, "job": JOB_ID,
-                       "attempt_id": attempt_id, "fingerprint": fingerprint,
-                       "hashes": tree_hashes(attempt)}
-            if reason:
-                pointer["reason"] = reason
-            atomic_json(base / "accepted.json", pointer)
-            validate(run_id, pointer)
-            return pointer
-        except BaseException as exc:
-            status.update(status="FAILED", error=f"{type(exc).__name__}: {exc}", ended_at=now())
-            atomic_json(attempt / "status.json", status)
-            atomic_json(base / "accepted.json", {"status": "FAILED", "attempt_id": attempt_id})
-            raise
+                  "dagster_run_id": dagster_id, "started_at": started, "fingerprint": fingerprint}
+        atomic_json(attempt / "status.json", status)
+        atomic_json(attempt / "pre.json", {"status": "OK",
+                                            "network_authorized": record["applicable"],
+                                            "endpoint": API_BASE})
+        if record["applicable"]:
+            environment = {key: value for key, value in os.environ.items()
+                           if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "LANG", "LC_ALL",
+                                              "SSL_CERT_FILE", "SSL_CERT_DIR"}}
+            environment["PYTHONDONTWRITEBYTECODE"] = "1"
+            python_executable = str(Path(sys.executable).resolve())
+            argv = [python_executable, "-B", str(Path(__file__)), "worker",
+                    str(input_path(run_id)), str(attempt / "outputs")]
+            result = execute_child(ChildExecutionSpec(
+                argv=tuple(argv), argv_prefix=tuple(argv[:4]), executable=Path(python_executable),
+                cwd=ROOT.resolve(), owner_root=attempt.resolve(),
+                log_dir=(attempt / "logs").resolve(),
+                timeout_seconds=record["timeout_seconds"],
+                stdout_limit_bytes=record["child_execution"]["stdout_limit_bytes"],
+                stderr_limit_bytes=record["child_execution"]["stderr_limit_bytes"],
+                env=environment))
+            atomic_json(attempt / "command.json", result)
+            if result.get("error") or result.get("exit_code") != 0:
+                raise Blocked("OpenSSF Scorecard fetch failed; inspect separate attempt logs")
+            if file_hash(input_path(run_id)) != record["source"]["sha256"]:
+                raise Blocked("OpenSSF Scorecard input changed during fetch")
+            final_status, reason = "OK", None
+        else:
+            (attempt / "logs").mkdir()
+            atomic_bytes(attempt / "logs" / "stdout.log", b"")
+            atomic_bytes(attempt / "logs" / "stderr.log", b"")
+            event(attempt / "logs" / "events.jsonl", "SKIP", reason=record["skip_reason"])
+            atomic_json(attempt / "command.json", {"argv": [], "exit_code": None,
+                                                    "network_used": False})
+            atomic_json(attempt / "outputs" / "scorecard-results.json",
+                        {"schema": "appsec-review/ossf-scorecard-results/1", "source": API_BASE,
+                         "semantics": "published-results-ingest-not-live-scan", "projects": [],
+                         "published_count": 0, "not_published_count": 0})
+            atomic_bytes(
+                attempt / "outputs" / "summary.md",
+                b"# OpenSSF Scorecard published results\n\n"
+                b"Not requested; no project input was staged.\n")
+            final_status, reason = "SKIPPED", record["skip_reason"]
+        if record["code"] != current_inputs(run_id)["code"]:
+            raise Blocked("OpenSSF Scorecard implementation changed during work")
+        results_path = attempt / "outputs" / "scorecard-results.json"
+        manifest = {"schema": "appsec-review/ossf-scorecard-manifest/1", "run_id": run_id,
+                    "attempt_id": attempt_id, "source_endpoint": API_BASE,
+                    "semantics": "published-results-ingest-not-live-scan",
+                    "network_authorized": record["applicable"],
+                    "network_used": record["applicable"],
+                    "input_sha256": record.get("source", {}).get("sha256"),
+                    "results_sha256": file_hash(results_path), "tool": record["tool"],
+                    "target_execution": False}
+        atomic_json(attempt / "manifest.json", manifest)
+        atomic_json(attempt / "post.json", {"status": "OK", "schema_validation": "PASS",
+                                             "freshness": "PASS", "hash_validation": "PASS"})
+        declared = ["manifest.json", "outputs/scorecard-results.json",
+                    "outputs/summary.md", "status.json"]
+        declared += sorted(path.relative_to(attempt).as_posix()
+                           for path in (attempt / "outputs").glob("response-*.json"))
+        gaps = (["One or more requested repositories have no published Scorecard result."]
+                if record["applicable"] and
+                read_json(results_path).get("not_published_count", 0) else [])
+        return record_terminal_current(
+            base, attempt, run_id=run_id, job_id=JOB_ID,
+            dagster_run_id=dagster_id, worker_kind="deterministic_python",
+            output_contract="ossf-scorecard-results", input_fingerprint=fingerprint,
+            started_at=started, execution_status=final_status,
+            summary=("Published Scorecard results ingested." if final_status == "OK" else
+                     "Scorecard ingestion was not requested."),
+            status_record=status, artifact_paths=declared, gaps=gaps,
+            skip_reason=reason, consumer_job_id=CONSUMER_JOB_ID,
+            pre_envelope_validate=lambda path, _status: _validate_attempt_payload(path, record))
 
-
+    return coordinate_worker_lifecycle(
+        base, run_id=run_id, job_id=JOB_ID, dagster_run_id=dagster_id,
+        worker_kind="deterministic_python", output_contract="ossf-scorecard-results",
+        resume_command=resume, derive_inputs=lambda: current_inputs(run_id),
+        fingerprint_inputs=lambda value: "sha256:" + digest(value),
+        execute_attempt=execute_attempt,
+        preflight_failure_inputs=lambda exc: _failure_record(run_id, input_path(run_id), exc),
+        force=force, consumer_job_id=CONSUMER_JOB_ID, post_validate=post_validate,
+        on_reuse=on_reuse,
+        blocked_summary="OpenSSF Scorecard preflight did not complete.",
+        failed_summary="OpenSSF Scorecard ingestion did not publish.")
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)

@@ -1,5 +1,34 @@
 # AppSec Review Process TODO
 
+## Workstream B Batch 8 checkpoint (2026-09-19)
+
+- [x] Add fully resolved immutable registry handoffs and bounded run-owned input hashes.
+- [x] Add the dedicated project-discovery result schema without enabling persona dispatch.
+- [x] Adopt the common envelope and separated publication boundary in exactly
+  `02-ossf-scorecard` and supplied `02-repository-partition-discovery`.
+- [x] Qualify Windows/Linux validation plus live Dagster publication, reuse, newer-failure
+  blocking, and recovery. See `continuation-design-parity-worker-envelope.md` for run IDs.
+- [x] Centralize collision-safe allocation, fail-closed `PENDING`/`latest.json` movement,
+  interrupted-attempt recovery, and durable `BLOCKED`/`FAILED`/`CANCELED` envelopes for exactly
+  the same two adopted workers. Worker execution and process control remain local.
+- [x] Centralize immutable reusable-candidate admission and successful terminal persistence for
+  those same two workers, including recovery of a validated `CURRENT` envelope left behind a
+  `PENDING` pointer. Matching corrupt or stale pointers fail closed.
+- [x] Centralize the per-job lock, reuse decision, interrupted-attempt recovery/allocation, and
+  exception-to-terminal routing for those same two workers. Preflight failures become `BLOCKED`,
+  post-allocation work/validation failures become `FAILED`, and `KeyboardInterrupt` becomes
+  `CANCELED` without changing the exception observed by Dagster or writing a second terminal.
+- [x] Qualify the Batch 7 lifecycle coordinator on Windows and Linux plus the actual Dagster
+  service.
+- [x] Add `appsec-review/deterministic-child/1.0` as an argv-only execution boundary with a fixed
+  executable/prefix, explicit environment, timeout, bounded concurrent stdout/stderr draining,
+  cancellation diagnostics, and complete child-tree cleanup.
+- [x] Adopt that child boundary in exactly `02-ossf-scorecard`; supplied repository partition
+  discovery has no child and remains unchanged.
+- [x] Fault-inject timeout, cancellation, simultaneous stream pressure, retained-log truncation,
+  child loss, and log-write failure on Windows and Linux, then exercise a real published Scorecard
+  API ingest through Dagster. Exact identities and evidence are in the continuation prompt.
+
 This list is ordered by the current Dagster/run-owned architecture. New work should preserve the
 rule that accepted evidence lives under `runs/<run_id>/data/`, with immutable attempts and explicit
 publication through `accepted.json`.
@@ -7,8 +36,9 @@ publication through `accepted.json`.
 The cross-cutting implementation and acceptance backlog for parity with `docs/design-v3.md` is
 [`docs/design-parity-completion-plan.md`](../docs/design-parity-completion-plan.md). It is the
 authoritative checklist for pools, all lifecycle jobs, personas, feedback loops, standards decision
-gates, and final end-to-end qualification. Start a fresh implementation task with
-[`continuation-design-parity-todo.md`](continuation-design-parity-todo.md). The sections below retain
+gates, and final end-to-end qualification. Continue the next bounded Workstream B batch with
+[`continuation-design-parity-worker-envelope.md`](continuation-design-parity-worker-envelope.md).
+The sections below retain
 subsystem-specific detail.
 
 ## 0. Accepted foundation
@@ -26,6 +56,19 @@ subsystem-specific detail.
   skills, and root `AGENTS.md`.
 
 ## 1. Immediate qualification gates
+
+- [x] Add the v1.0 machine-readable design-parity manifest, strict validator, deterministic report,
+  and focused mutation tests. The honest baseline covers 42 lifecycle jobs and 15 cross-cutting
+  design capabilities; missing workers, validators, contracts, schemas, pools, qualification, and
+  Workstream G decisions remain explicit gaps rather than inferred readiness.
+- [x] Generate and freshness-check the lifecycle Mermaid and operator readiness table from the
+  parity manifest. Workstream A now also defines the common worker-result envelope, immutable
+  terminal/acceptance transitions, and graph integrity checks; runtime adoption is Workstream B.
+- [x] Implement the first bounded Workstream B validation runtime: common envelope/state module,
+  run-owned artifact path/hash and input-fingerprint checks, registry-required-file validation,
+  edge-authorized skips, immutable reuse, and narrow deterministic/supplied-human adapters.
+- [ ] Add contract-specific schemas, citations/source freshness, claim-class limits, redaction,
+  remaining adapters, and migrate selected workers through live Dagster qualification.
 
 - [ ] Run and record `qualify_build_execution.py` on a host with Docker and the Dagster service.
   This is the current gate for whether `build_execution` actually produces

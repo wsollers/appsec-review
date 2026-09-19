@@ -321,8 +321,7 @@ def build_configure_work(context, configured, upstream):
     return result
 
 
-@op(name='job_02_repository_partition_discovery', ins={'configured': In(dict), 'upstream': In(list)})
-def repository_partition_discovery_work(context, configured, upstream):
+def run_repository_partition_discovery(context, configured):
     # Validated hand-off gate, not real analysis -- see discovery_gate.py's module docstring for
     # why this job cannot honestly be a deterministic worker. Accepts an out-of-band-supplied,
     # schema-valid repository-partition-map if present; otherwise issues an actionable hand-off
@@ -330,8 +329,27 @@ def repository_partition_discovery_work(context, configured, upstream):
     job = '02-repository-partition-discovery'
     result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(path / 'repository-partition-map.json')),
+        'envelope': MetadataValue.path(str(path / 'result.json'))})
     return result
+
+
+@op
+def repository_partition_discovery_standalone_work(context, configured):
+    return run_repository_partition_discovery(context, configured)
+
+
+@op(name='job_02_repository_partition_discovery', ins={'configured': In(dict), 'upstream': In(list)})
+def repository_partition_discovery_work(context, configured, upstream):
+    return run_repository_partition_discovery(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def repository_partition_discovery():
+    repository_partition_discovery_standalone_work(build_execution_config())
 
 
 @op(name='job_02_dev_project_discovery', ins={'configured': In(dict), 'upstream': In(list)})
@@ -378,7 +396,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -388,7 +406,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

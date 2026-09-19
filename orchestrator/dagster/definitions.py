@@ -210,7 +210,7 @@ def phase1_intake():
     intake_post_validation(intake_work(intake_pre_validation(intake_config())))
 
 
-from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
+from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
 
-defs = Definitions(jobs=[orchestration_smoke, phase1_intake, engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, full_review],
+defs = Definitions(jobs=[orchestration_smoke, phase1_intake, engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, full_review],
                    sensors=[reconcile_workflow_failure, reconcile_workflow_cancellation])

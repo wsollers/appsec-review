@@ -46,6 +46,7 @@ def legacy_identity(records):
 def contracts():
     from job_graph import composition,load_graph,mermaid
     from schema_validate import validate_document
+    from validate_design_parity import validate_manifest
     kinds={'personas':('persona','persona_id'),'roles':('role','role_id'),'domains':('domain','domain_id'),
            'tooling-profiles':('tooling-profile','tooling_profile_id'),'output-contracts':('output-contract','contract_id'),
            'job-templates':('job-template','job_template_id')}
@@ -58,7 +59,12 @@ def contracts():
             count+=1
     graph=load_graph()
     if mermaid(graph) != (REPO/'docs/phase-1-job-graph.mmd').read_text(): raise ValueError('diagram drift')
-    print(json.dumps({'registry_records':count,'graph_jobs':len(graph['jobs']),'schemas_and_semantics':'PASS'}))
+    parity_manifest=read_json(ROOT/'design-parity-manifest.json')
+    parity=validate_manifest(parity_manifest)
+    if parity['errors']: raise ValueError('design parity validation failed: '+'; '.join(parity['errors']))
+    print(json.dumps({'registry_records':count,'graph_jobs':len(graph['jobs']),
+                      'parity_capabilities':parity['capability_count'],
+                      'schemas_and_semantics':'PASS','design_parity_inventory':'PASS'}))
 
 
 def main(argv=None):
