@@ -284,8 +284,8 @@ footer{border-top:1px solid var(--line); margin-top:3rem; padding-top:1.5rem; co
       </div>
 
       <h3 style="margin-top:2rem;">Running the pre-pass: Dockerfile + PowerShell orchestrator</h3>
-      <p>Files delivered alongside this page: <code>Dockerfile</code> builds a toolbox image with the tools above (cloc/scc, gitleaks, syft, osv-scanner, semgrep, bandit, gosec, cppcheck/clang-tidy, weggli, ast-grep, Joern, Psalm/PHPStan/PHPCS for PHP, checkov/tfsec/Trivy for IaC, and the four evidence-shaping scripts — <code>build_symbol_index.py</code>, <code>md_to_sarif.py</code>, <code>build_semantic_index.py</code>, <code>query_semantic_index.py</code>); <code>Build-AuditToolbox.ps1</code> builds it; <code>Invoke-VendorAuditPrePass.ps1</code> runs every tool against a mounted repo checkout, writes each tool's output into a fixed <code>/evidence/&lt;track&gt;/</code> layout, respects the one real ordering dependency in this pass (the semantic index needs the symbol index to have produced output first — it checks and skips with a clear warning rather than failing confusingly if you run it out of order), and produces a <code>MANIFEST.json</code> (per-step exit code and duration) so a failed step is visible rather than silently missing from what you hand the LLM next.</p>
-      <div class="note">Two things this scaffold deliberately leaves to you: (1) tool CLI flags drift across releases — run one <code>--help</code> per tool against the image you actually built before trusting an unattended run, and (2) the Dockerfile's individual tool <em>install</em> steps have not been build-verified end to end — this session had no live Docker daemon available to build it against. What <em>was</em> tested, end to end, outside the container: <code>build_symbol_index.py</code> and <code>md_to_sarif.py</code> against synthetic sample input, and the full <code>build_symbol_index.py → build_semantic_index.py → query_semantic_index.py</code> pipeline including a real embedding-model download and the retrieval-quality check described above; the two PowerShell scripts were parse-checked and dry-run against a stubbed Docker client exercising every code path (argument construction, stdout/stderr capture, non-zero-exit handling, the dependency guard, the manifest) — that dry run caught and fixed a real bug (PowerShell's case-insensitive variables let the local step table silently clobber the <code>-Steps</code> parameter). Build the image, watch for the first tool whose install step has drifted, and pin that tool's version once you've confirmed it works.</div>
+      <p>Archived delivery note: the original toolbox included <code>md_to_sarif.py</code>. The current repository no longer bakes that post-verification transform into the scanner image; use the registered <code>critical_findings_sarif</code> Dagster job documented in <code>docs/critical-findings-sarif-job.md</code>. The remaining text on this page describes the legacy toolbox and is reference material, not current workflow instruction.</p>
+      <div class="note">Historical qualification in the original toolbox included the old SARIF converter. Current qualification and immutable publication requirements are documented with the registered replacement job.</div>
     </section>
 
     <section class="phase" id="p1">
@@ -674,7 +674,7 @@ The full deduplicated set of finding blocks (canonical schema, unchanged structu
       <p class="phase-sub">Deterministic step, not an LLM step. The consolidated markdown (YAML-frontmatter findings) is parsed by a small Python script into SARIF&nbsp;2.1.0 for ingestion into CI, code-scanning dashboards, or ticketing.</p>
       <div class="card">
         <h3>Why frontmatter, not prose parsing</h3>
-        <p>Every finding schema field (severity, cwe, asvs, location, cve) is already structured in the YAML block from Phase 4A onward — the script just needs <code>python-frontmatter</code> (or a hand-rolled splitter) plus a severity→SARIF-level map. No regex against free text, no brittle heading parsing. The full script is delivered alongside this document as <code>md_to_sarif.py</code>; the shape:</p>
+        <p>Every finding schema field (severity, cwe, asvs, location, cve) is structured in YAML frontmatter. The current run-owned converter is <code>appsec-review-process/critical_findings_sarif.py</code> and is invoked through Dagster, not from this archived playbook.</p>
       </div>
       <pre class="plain">SARIF level mapping:
   Critical, High → "error"
@@ -693,7 +693,7 @@ Per finding block:
 One SARIF run per component `location` (Client / Game Server / Backend / Cloud-Infra),
 or a single run for the whole set — either works; per-location runs make it easier to
 gate CI on one component at a time.</pre>
-      <p class="note">The script is sent as a separate file alongside this document — see the delivery message for <code>md_to_sarif.py</code>.</p>
+      <p class="note">Legacy delivery note superseded by the registered <code>critical_findings_sarif</code> job.</p>
     </section>
 
     <section class="phase" id="p8">
@@ -737,7 +737,7 @@ One paragraph verdict + the recommended `status` value +, if Partially-Fixed, a 
     </section>
 
     <footer>
-      Built for the AppSec Review project · OWASP ASVS version numbers and tooling names should be reconfirmed against current releases before you standardize on them for a live engagement · The markdown finding schema and the <code>md_to_sarif.py</code> converter are delivered as separate files alongside this page.
+      Built for the AppSec Review project · archived legacy playbook; use tracked process docs and registered jobs for current operation.
     </footer>
   </main>
 </div>

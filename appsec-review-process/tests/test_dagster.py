@@ -15,6 +15,44 @@ class DagsterTests(unittest.TestCase):
     tearDown=fixtures.Phase1Tests.tearDown
     new_run=fixtures.Phase1Tests.new_run
 
+    def test_repository_loads_complete_lifecycle(self):
+        from definitions import defs
+        from dagster_workflow import full_review, LIFECYCLE
+        repository=defs.get_repository_def()
+        repository.load_all_definitions()
+        self.assertIn('critical_findings_sarif',{job.name for job in repository.get_all_jobs()})
+        self.assertIn('ossf_scorecard',{job.name for job in repository.get_all_jobs()})
+        names={node.name for node in full_review.graph.node_defs}
+        for name in LIFECYCLE:
+            if name not in ('00-intake','02-evidence-index'): self.assertIn('job_'+name.replace('-','_'),names)
+        self.assertIn('build_discovery_work',names)
+        self.assertIn('evidence_index_work',names)
+        self.assertIn('job_02_ossf_scorecard',names)
+
+    def test_build_publication_rejects_mixed_generations(self):
+        from dagster import build_op_context, Failure
+        from dagster_workflow import build_discovery_publish
+        (self.root/'dagster').mkdir()
+        with DagsterInstance.local_temp(str(self.root/'dagster')) as instance:
+            with build_op_context(instance=instance) as context:
+                with self.assertRaisesRegex(Failure,'mixed intake generations'):
+                    build_discovery_publish(context,{'engagement_run_id':self.run_id,'intake':{'fingerprint':'new'}},
+                                            {'upstream':'old'})
+
+    def test_unavailable_worker_records_resume_command(self):
+        from dagster import build_op_context, Failure
+        from dagster_workflow import LIFECYCLE_OPS
+        (self.root/'dagster').mkdir()
+        with DagsterInstance.local_temp(str(self.root/'dagster')) as instance:
+            with build_op_context(instance=instance) as context:
+                with self.assertRaisesRegex(Failure,'WORKER_NOT_IMPLEMENTED'):
+                    LIFECYCLE_OPS['02-devops-project-discovery'](context,{'engagement_run_id':self.run_id},[])
+                record=state.read_json(state.data_path(self.run_id,'orchestration','dagster',context.run_id,
+                                                     '02-devops-project-discovery','pre.json'))
+                self.assertEqual(record['status'],'BLOCKED')
+                self.assertEqual(record['resume_command'],
+                    'python -B appsec-review-process/launch_job.py --run-id '+self.run_id+' --job full_review --wait')
+
     def dispatch(self):
         (self.root/'dagster').mkdir()
         with DagsterInstance.local_temp(str(self.root/'dagster')) as instance:

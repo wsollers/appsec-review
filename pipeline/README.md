@@ -4,6 +4,8 @@
 |---|---|---|---|
 | engagement job | `engagement_job.sh` / `engagement_job.ps1` | no | broad static evidence, native scratch, LLM input index, coverage ledger |
 | static prepass | `scripts/Invoke-VendorAuditPrePass.sh` / `.ps1` | no | Semgrep, gitleaks, Trivy/config, SBOM/SCA, BinSkim, Joern, symbol/semantic indexes, `MANIFEST.json` |
+| static summary | `summarize_evidence.py` (ported from `scripts/` 2026-09-19) | no | `SUMMARY.md`: mechanical per-tool rollup + `MANIFEST.json` status table |
+| SBOM component locations | `extract_component_locations.py` (ported from `scripts/` 2026-09-19) | no | CSV preserving Syft package locations and cataloger metadata, plus bounded path/no-location summaries |
 | pregather | `pregather.sh` / `pregather.ps1` (twins; logic in container scripts) | no | compile DB, feasibility, IR, linked modules, ir-facts, CSA, CodeQL traced DB + regular C/C++ SARIF + mythos custom-memory SARIF, `pregather-manifest.json` |
 | assemble | `assemble.py` (Python, one impl) | no | `bundle.json` + `bundle.md`: verified / unresolved / refuted with IR evidence and `needs` |
 | correlate | `correlate_findings.py` | no | cross-tool clusters by nearby file/line across Semgrep, native SAST, CSA/native bundle, CodeQL, and SARIF tools |
@@ -12,6 +14,20 @@
 | retrieval plan | `generate_retrieval_plan.py` | no | risky files, semantic queries, CodeQL follow-up commands, and source searches |
 | handoff | `appsec-review-process/create_handoff.py` | yes | lane-specific task prompt over staged evidence |
 | report | `appsec-review-process/10-synthesis-report/` | yes | executive + technical report inputs |
+
+Extract the Syft location metadata from a legacy CycloneDX package without assigning reachability
+or scope:
+
+```powershell
+python -B pipeline\extract_component_locations.py `
+  --sbom scratch\<project>-engagement\static-evidence\sbom\sbom.cdx.json `
+  --out scratch\<project>-engagement\static-evidence\sbom\component-locations.csv `
+  --summary-top-levels 3
+```
+
+The CSV contains one row per package/location and retains a row for components with no location.
+The console summaries group path prefixes and missing-location packages by Syft cataloger metadata.
+This transform does not prove that a dependency is shipped, reachable, vulnerable, or in scope.
 
 `engagement_job.sh` and `engagement_job.ps1` are the high-level runners for real engagements. They run the existing broad
 static pre-pass (Semgrep, gitleaks, Trivy/config, BinSkim, SBOM/SCA, search/indexing, etc.),

@@ -1,0 +1,55 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "10-critical-findings-sarif",
+  "display_name": "Critical Findings SARIF",
+  "process": "10-synthesis-report",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "report-artifact-publisher",
+    "role_id": "sarif-exporter",
+    "domain_id": "verified-findings",
+    "tooling_profile_id": "local-sarif-transform",
+    "output_contract_id": "critical-findings-sarif"
+  },
+  "inputs": {
+    "required": [
+      "inputs/critical-findings.md containing independently verified or explicitly unresolved findings"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/10-critical-findings-sarif/whole/attempts/<attempt_id>",
+    "files": [
+      "manifest.json",
+      "outputs/critical-findings.sarif",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "verified_findings",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 120,
+  "execution": {
+    "worker": "critical_findings_sarif.py",
+    "arguments": [
+      "worker",
+      "{run_input}/critical-findings.md",
+      "{attempt}/outputs/critical-findings.sarif"
+    ]
+  },
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "after independent verification supplies at least one structured finding",
+  "permissions": [
+    "read-run-inputs",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator"
+}

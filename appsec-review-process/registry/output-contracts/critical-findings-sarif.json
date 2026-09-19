@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "critical-findings-sarif",
+  "display_name": "Critical Findings SARIF",
+  "required_files": [
+    "manifest.json",
+    "outputs/critical-findings.sarif",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "attempt_id",
+    "dagster_run_id"
+  ],
+  "claim_types": [
+    "critical_findings_sarif"
+  ],
+  "validation_rules": [
+    "strict finding fields and unique IDs",
+    "SARIF 2.1.0 envelope and result count",
+    "fresh run-owned input hash",
+    "immutable output and manifest hashes",
+    "separate stdout and stderr",
+    "latest failed attempt blocks old success"
+  ]
+}

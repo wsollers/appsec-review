@@ -29,6 +29,15 @@ Use `--job build_discovery` for the first build-discovery integration. `--job fu
 all lifecycle and registry jobs with explicit blockers for missing workers. See
 [build discovery and readiness](docs/build-discovery-integration.md).
 
+Use `--job critical_findings_sarif` after staging validated finding Markdown at
+`runs/<run_id>/inputs/critical-findings.md`. The job is a format transform, not finding
+verification; it publishes only after strict input, SARIF, freshness and hash checks pass.
+
+Use `--job ossf_scorecard` only after staging a fixed project list and granting
+`network:api.scorecard.dev`. It ingests published OpenSSF Scorecard JSON2 results with immutable
+response provenance; it is not a live repository scan or a finding verdict. See
+[the Scorecard job guide](docs/ossf-scorecard-job.md).
+
 Job requirements, queue semantics, monitoring, run-owned output locations and persona/registry
 lookups are documented in [Dagster launching](docs/dagster-launching.md) and the
 [agent reader](docs/agent-reader.md).
@@ -56,7 +65,7 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | `images/audit-report/` | LaTeX -> PDF report build, adapted from the LRA governance project's standalone LaTeX image; report format/styleguide still undecided (see `appsec-review-process/TODO.md`) |
 | `images/mythos-orchestrator/` | Planned; empty except README |
 | `orchestrator/` | Python: ledger writer + hash chain, contract validator, artifact registry, run-state regeneration |
-| `scripts/` | Legacy toolbox compatibility scripts. Do not add new review-work logic here; port active review work into `pipeline/` or Dagster/run-owned workers, qualify it, then remove the old script or leave only a thin compatibility wrapper. |
+| `scripts/` | Legacy toolbox compatibility scripts. Do not add new review-work logic here; port active review work into `pipeline/` or Dagster/run-owned workers, qualify it, then delete the old script outright -- no thin compatibility wrapper. |
 | `schemas/` | JSON Schema for findings, contracts, component-purpose-map, index-manifest, compile-command-audit, patch-policy |
 | `contracts/` | One YAML lane contract per lane (L0–L15, L0A, L6A/B) |
 | `prompts/skills/`, `prompts/lanes/` | Reusable agent skills and per-lane prompts |
@@ -73,6 +82,7 @@ Top-level process docs now live under `docs/`:
 - [`docs/composable-review-template-proposal.md`](docs/composable-review-template-proposal.md)
 - [`docs/intelligence-sources-and-jobs.md`](docs/intelligence-sources-and-jobs.md)
 - [`docs/standards-checklist-validation-proposal.md`](docs/standards-checklist-validation-proposal.md)
+- [`docs/design-parity-completion-plan.md`](docs/design-parity-completion-plan.md)
 - [`docs/critical-findings-sarif-job.md`](docs/critical-findings-sarif-job.md)
 
 The active process TODO list is [`appsec-review-process/TODO.md`](appsec-review-process/TODO.md).

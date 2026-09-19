@@ -94,6 +94,7 @@ monitoring but leaves server execution running.
 | `build_discovery` | `--job build_discovery` | Intake and cited discovery of build requirements/commands; no build execution |
 | `build_execution` | `--job build_execution` | One sandboxed configure step after accepted build discovery; records compile database evidence when produced |
 | `evidence_index` | `--job evidence_index` | Accepted searchable source/discovery evidence for LLM retrieval |
+| `critical_findings_sarif` | `--job critical_findings_sarif` | Strict run-owned conversion of independently verified finding Markdown to accepted SARIF 2.1.0 |
 | `full_review` | `--job full_review` | All lifecycle/registry jobs; currently stops at the first unimplemented worker |
 
 `python -B appsec-review-process/review_cli.py intake --run-id $runId` selects the intake-only
@@ -132,6 +133,7 @@ All engagement files live under `appsec-review-process/runs/<run_id>/`:
 | `data/jobs/00-workflow-preparation/<branch>/attempts/<attempt_id>/` | Branch inputs, result, validation and separate stdout/stderr |
 | `data/jobs/00-workflow-preparation/build_execution/attempts/<attempt_id>/build/discovery/compile_commands.json` | Compile database from `build_execution`, only when the configure step produced one |
 | `data/jobs/02-evidence-index/whole/accepted.json` | Accepted evidence index pointer for retrieval |
+| `data/jobs/10-critical-findings-sarif/whole/accepted.json` | Accepted SARIF pointer; immutable output is under its referenced attempt |
 
 `run-status.json` retains the intake/lane view; it is not proof that the whole workflow succeeded.
 Workflow `OK` means bounded intake and preparation passed, not that a full security review finished.
@@ -240,6 +242,18 @@ The UI uses the same `workflow_settings` configuration and engagement tag shown 
 Its independent acceptance lives under `data/jobs/02-evidence-index/whole/`, not the preparation
 workflow's aggregate status. After abrupt worker loss, consult Dagster and retry the job; the
 worker preserves the interrupted attempt and writes a recovery receipt before allocating another.
+
+For explicitly authorized published OpenSSF Scorecard evidence, stage
+`inputs/ossf-scorecard-projects.json`, include `network:api.scorecard.dev` in the run permissions,
+and submit:
+
+```sh
+python -B appsec-review-process/launch_job.py --run-id <linux_run_id> --job ossf_scorecard --wait
+```
+
+The accepted pointer is under `data/jobs/02-ossf-scorecard/whole/`. This fetches published JSON2;
+it does not run the Scorecard CLI against the repository. See
+[the job contract](ossf-scorecard-job.md).
 
 - [Workflow architecture, parallelism and qualification](dagster-workflow.md)
 - [Runtime limits, imports and adapter diagnostics](phase-1-operations.md)

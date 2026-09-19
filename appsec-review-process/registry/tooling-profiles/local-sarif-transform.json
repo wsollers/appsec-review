@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "local-sarif-transform",
+  "display_name": "Local SARIF Transform",
+  "mode": "static-only",
+  "required_inputs": [
+    "run-owned critical-findings.md"
+  ],
+  "optional_inputs": [],
+  "allowed_actions": [
+    "parse bounded YAML frontmatter as untrusted data",
+    "write run-owned immutable SARIF",
+    "compute SHA-256 manifests"
+  ],
+  "isolation": "Bounded standard-library/PyYAML child process; no network, shell, target import, or target execution.",
+  "disallowed_actions": [
+    "execute target content",
+    "read arbitrary paths",
+    "external publication"
+  ],
+  "claim_limits": {
+    "allowed": [
+      "critical_findings_sarif",
+      "validation_result"
+    ],
+    "forbidden": [
+      "verified_security_finding",
+      "runtime_deployment_claim",
+      "successful_build"
+    ]
+  }
+}

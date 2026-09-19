@@ -1,0 +1,17 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "ossf-scorecard-results",
+  "display_name": "OpenSSF Scorecard Published Results",
+  "required_files": ["manifest.json", "outputs/scorecard-results.json", "outputs/summary.md", "status.json"],
+  "required_status_fields": ["status", "attempt_id", "dagster_run_id"],
+  "claim_types": ["supply_chain_posture_evidence", "evidence_gap"],
+  "validation_rules": [
+    "network permission and fixed api.scorecard.dev endpoint are recorded",
+    "redirects and oversized responses are rejected",
+    "published JSON2 repository and optional commit match the request",
+    "raw response and normalized output hashes validate",
+    "404 is an explicit not-published coverage gap; other HTTP and transport errors fail",
+    "aggregate and check scores are evidence, not verified findings",
+    "latest failed attempt blocks older accepted output"
+  ]
+}

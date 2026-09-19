@@ -1,0 +1,14 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "open-source-project-posture",
+  "display_name": "Open-source Project Security Posture",
+  "surfaces": ["published OpenSSF Scorecard results", "repository identity", "project security-practice checks"],
+  "common_failure_modes": [
+    "aggregate score treated as a vulnerability finding",
+    "result attributed to the wrong repository or commit",
+    "unpublished project mistaken for a clean project",
+    "stale or malformed remote data silently accepted"
+  ],
+  "preferred_standards": ["OpenSSF Scorecard JSON2"],
+  "required_evidence_hints": ["repository URL", "commit SHA", "Scorecard version", "retrieval time", "response SHA-256"]
+}

@@ -1,14 +1,42 @@
 """Dagster multiprocessing graph. Each stateful unit owns its lock in one process."""
-from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, MetadataValue, RetryPolicy, failure_hook,
+from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, MetadataValue, RetryPolicy, In, failure_hook,
                      job, multiprocess_executor, op, resource, run_failure_sensor, run_status_sensor)
 from execution_state import Blocked, Lock, atomic_json, data_path, emergency, now, read_json
 from phase1 import Session, config_for
 import workflow
+import build_execution as build_execution_worker
+import discovery_gate
+import evidence_store
+import critical_findings_sarif as critical_findings_sarif_worker
+import ossf_scorecard as ossf_scorecard_worker
+import json
+import os
+import urllib.error
+import urllib.request
 
 
 @resource(config_schema={'engagement_run_id':str,'force':bool})
 def workflow_settings(context):
     return context.resource_config
+
+
+def notify_discord(run_id, message):
+    """Best-effort outbound alert for a workflow FAILED transition, added 2026-09-19 in direct
+    response to the repo owner's "if this job fails it should alert me and terminate" ask.
+    Configured via the DISCORD_WEBHOOK_URL environment variable on hal5000 -- if it is unset,
+    this is a silent no-op and the prior disk-only status.json signal is all that happens, exactly
+    as before this change. A notification failure must never mask or replace the real workflow
+    failure it's trying to report, so any error here is swallowed (recorded via emergency()), never
+    re-raised."""
+    webhook = os.environ.get('DISCORD_WEBHOOK_URL')
+    if not webhook:
+        return
+    payload = json.dumps({'content': 'AppSec Review workflow FAILED -- run ' + run_id + ': ' + message}).encode('utf-8')
+    request = urllib.request.Request(webhook, data=payload, headers={'Content-Type': 'application/json'})
+    try:
+        urllib.request.urlopen(request, timeout=10)
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        emergency(exc)
 
 
 def fail_workflow(run_id, dagster_id, message):
@@ -21,6 +49,7 @@ def fail_workflow(run_id, dagster_id, message):
         atomic_json(workflow.root(run_id)/'attempts'/dagster_id/'failure.json',value)
         atomic_json(path,value)
         atomic_json(workflow.root(run_id)/'accepted.json',{'status':'FAILED','dagster_run_id':dagster_id})
+    notify_discord(run_id, message)
 
 
 @failure_hook(required_resource_keys={'workflow_settings'})
@@ -68,8 +97,8 @@ def workflow_intake(context, configured: dict):
     return {**configured,'intake':pointer}
 
 
-def branch_op(name):
-    @op(name=name)
+def branch_op(name, op_name=None):
+    @op(name=op_name or name)
     def prepared(context, intake: dict):
         pointer=workflow.run_branch(intake['engagement_run_id'],name,intake['intake'],context.run_id,intake['force'])
         path=data_path(intake['engagement_run_id'],'jobs','00-workflow-preparation',name,'attempts',pointer['attempt_id'])
@@ -100,7 +129,256 @@ def engagement_workflow():
     workflow_publish(intake,scope_check(intake),native_plan_check(intake),discovery_handoffs(intake))
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow],default_status=DefaultSensorStatus.RUNNING)
+build_discovery_work=branch_op('build_discovery','build_discovery_work')
+
+
+@op
+def build_discovery_publish(context, intake: dict, discovered: dict):
+    run_id=intake['engagement_run_id']
+    if discovered['upstream']!=intake['intake']['fingerprint']:
+        raise Failure('mixed intake generations at build discovery publication')
+    from phase1 import accepted
+    if accepted(run_id,fresh=True)!=intake['intake']:
+        raise Failure('source changed before build discovery publication')
+    with Lock(data_path(run_id,'jobs','00-workflow-preparation','build_discovery','job.lock')):
+        with Lock(data_path(run_id,'publication.lock')):
+            workflow.validate_branch(run_id,'build_discovery',discovered)
+            if accepted(run_id,fresh=False)!=intake['intake']:
+                raise Failure('intake changed at build discovery publication')
+            if read_json(workflow.root(run_id)/'status.json')['dagster_run_id']!=context.run_id:
+                raise Failure('build discovery generation superseded')
+            value={'status':'OK','run_id':run_id,'dagster_run_id':context.run_id,'intake':intake['intake'],
+                   'branches':[discovered],'ended_at':now(),'next_job':'02-repository-partition-discovery',
+                   'scope':'build discovery only; build not executed'}
+            atomic_json(workflow.root(run_id)/'attempts'/context.run_id/'result.json',value)
+            atomic_json(workflow.root(run_id)/'status.json',value)
+            atomic_json(workflow.root(run_id)/'accepted.json',value)
+    return value
+
+
+@job(resource_defs={'workflow_settings':workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent':3}),
+     hooks={workflow_failed},op_retry_policy=RetryPolicy(max_retries=0))
+def build_discovery():
+    intake=workflow_intake(workflow_config())
+    build_discovery_publish(intake,build_discovery_work(intake))
+
+
+@op(required_resource_keys={'workflow_settings'})
+def build_execution_config(context):
+    # Deliberately does NOT touch workflow.root(run_id)/status.json. That shared file's
+    # RUNNING/OK lifecycle is owned by whichever of engagement_workflow/build_discovery last
+    # published to it; build_execution is a separate, independently launchable job and must not
+    # contend for or reset that ownership. It still enforces the same run-tag/config check.
+    settings=context.resources.workflow_settings
+    run_id=settings['engagement_run_id']
+    config_for(run_id)
+    if context.dagster_run.tags.get('engagement_run_id')!=run_id:
+        raise Failure('engagement_run_id run tag must match config so the Dagster queue can serialize this engagement')
+    return dict(settings)
+
+
+@op
+def build_execution_work(context, intake: dict):
+    # This is the one op in the graph allowed to execute target-adjacent commands (a bounded
+    # CMake configure inside audit-buildenv-cpp). See build_execution.py's module docstring for
+    # why it owns its own immutable-attempt lifecycle instead of reusing workflow.run_branch.
+    result=build_execution_worker.run(intake['engagement_run_id'],context.run_id,intake['force'])
+    path=build_execution_worker.root(intake['engagement_run_id'])/'attempts'/result['attempt_id']
+    context.add_output_metadata({'output':MetadataValue.path(str(path/'output.json')),
+                                 'stdout':MetadataValue.path(str(path/'logs/stdout.log')),
+                                 'stderr':MetadataValue.path(str(path/'logs/stderr.log'))})
+    return result
+
+
+@job(resource_defs={'workflow_settings':workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent':2}),
+     hooks={workflow_failed},op_retry_policy=RetryPolicy(max_retries=0))
+def build_execution():
+    # Depends on build_discovery having already published an accepted branch for this run
+    # (checked on disk by build_execution.discovered_plan, not by chaining Dagster ops together,
+    # since build_discovery is its own independently launched job, not always run in this graph).
+    intake=workflow_intake(build_execution_config())
+    build_execution_work(intake)
+
+
+@op
+def evidence_index_work(context, intake: dict, discovered: dict):
+    if discovered['upstream'] != intake['intake']['fingerprint']:
+        raise Failure('mixed intake generations at evidence indexing')
+    result = evidence_store.run(intake['engagement_run_id'], context.run_id, intake['force'])
+    path = evidence_store.root(intake['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({name: MetadataValue.path(str(path / relative)) for name, relative in
+        [('manifest', 'manifest.json'), ('index', 'index.sqlite'), ('ssdeep', 'ssdeep.csv'),
+         ('stdout', 'logs/stdout.log'), ('stderr', 'logs/stderr.log')]})
+    return result
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 2}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def evidence_index():
+    # Independent source branch; does not wait for native builds or reset aggregate status.
+    intake = workflow_intake(build_execution_config())
+    evidence_index_work(intake, build_discovery_work(intake))
+
+
+@op
+def critical_findings_sarif_work(context, configured: dict):
+    result = critical_findings_sarif_worker.run(configured['engagement_run_id'], context.run_id,
+                                                configured['force'])
+    path = critical_findings_sarif_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'sarif': MetadataValue.path(str(path / 'outputs/critical-findings.sarif')),
+        'manifest': MetadataValue.path(str(path / 'manifest.json')),
+        'stdout': MetadataValue.path(str(path / 'logs/stdout.log')),
+        'stderr': MetadataValue.path(str(path / 'logs/stderr.log'))})
+    return result
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def critical_findings_sarif():
+    # This post-verification transform has a fixed run-owned input and does not mutate the
+    # engagement preparation workflow's aggregate status.
+    critical_findings_sarif_work(build_execution_config())
+
+
+def run_ossf_scorecard(context, configured: dict):
+    result = ossf_scorecard_worker.run(configured['engagement_run_id'], context.run_id,
+                                       configured['force'])
+    path = ossf_scorecard_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'results': MetadataValue.path(str(path / 'outputs/scorecard-results.json')),
+        'summary': MetadataValue.path(str(path / 'outputs/summary.md')),
+        'manifest': MetadataValue.path(str(path / 'manifest.json')),
+        'stdout': MetadataValue.path(str(path / 'logs/stdout.log')),
+        'stderr': MetadataValue.path(str(path / 'logs/stderr.log'))})
+    return result
+
+
+@op
+def ossf_scorecard_work(context, configured: dict):
+    return run_ossf_scorecard(context, configured)
+
+
+@op(name='job_02_ossf_scorecard', ins={'configured': In(dict), 'upstream': In(list)})
+def ossf_scorecard_lifecycle_work(context, configured: dict, upstream: list):
+    return run_ossf_scorecard(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def ossf_scorecard():
+    # Published-result ingestion only. The worker enforces explicit network authorization and
+    # records a SKIPPED receipt when no fixed project list is staged.
+    ossf_scorecard_work(build_execution_config())
+
+
+def blocked_op(name, node):
+    @op(name='job_'+name.replace('-','_'),ins={'configured':In(dict),'upstream':In(list)},
+        description='BLOCKED: worker not implemented. Dependencies and failure are explicit.')
+    def unavailable(context, configured, upstream):
+        path=data_path(configured['engagement_run_id'],'orchestration','dagster',context.run_id,name)
+        value={'status':'BLOCKED','job':name,'reason':'WORKER_NOT_IMPLEMENTED',
+               'definition':node,'time':now(),'dependency_count':len(upstream),
+               'resume_prerequisite':'Implement and qualify this worker before retrying.',
+               'resume_command':'python -B appsec-review-process/launch_job.py --run-id '+configured['engagement_run_id']+' --job full_review --wait'}
+        atomic_json(path/'pre.json',value)
+        raise Failure(name+': WORKER_NOT_IMPLEMENTED; no downstream acceptance published',
+                      metadata={'blocker':MetadataValue.path(str(path/'pre.json'))})
+    return unavailable
+
+
+@op(name='job_02_build_configure',ins={'configured':In(dict),'upstream':In(list)})
+def build_configure_work(context, configured, upstream):
+    # Bridges job-graph.json's '02-build-configure' lifecycle node (planned_scope: "Isolated
+    # configure and validated compile database") to build_execution.py's real, sandboxed
+    # CMake+Ninja configure worker -- added 2026-09-19 after reconciling against the repo owner's
+    # automated-pipeline ask. Before this, build_execution existed only as a separate, standalone
+    # job that full_review's graph never called, so this exact lifecycle node fell through to
+    # blocked_op above every time, identically to every other unimplemented worker.
+    #
+    # KNOWN, DELIBERATE GAP (documented in claude project TODO, 2026-09-19, not hidden here):
+    # this node's real declared dependency per job-graph.json is '02-dev-project-discovery', not
+    # build_discovery -- but '02-dev-project-discovery' (and its own dependency,
+    # '02-repository-partition-discovery') are themselves unimplemented blocked_op stubs. Until
+    # those are built, `upstream` (that lifecycle chain's output) can never actually arrive here in
+    # a real full_review run -- reaching either of those still-blocked nodes first raises Failure
+    # and halts the whole run before this op is ever invoked. This op is wired correctly for when
+    # that upstream chain exists, but it does not yet make configure execute automatically inside
+    # full_review. For now, exactly like the standalone `build_execution` job before it,
+    # `discovered_plan()` reads build_discovery's accepted branch directly from disk (the only real
+    # discovery evidence that currently exists) rather than from `upstream` -- `upstream` is
+    # accepted per the shared blocked_op-compatible signature but intentionally unused here.
+    result = build_execution_worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
+    path = build_execution_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json')),
+                                 'stdout': MetadataValue.path(str(path / 'logs/stdout.log')),
+                                 'stderr': MetadataValue.path(str(path / 'logs/stderr.log'))})
+    return result
+
+
+@op(name='job_02_repository_partition_discovery', ins={'configured': In(dict), 'upstream': In(list)})
+def repository_partition_discovery_work(context, configured, upstream):
+    # Validated hand-off gate, not real analysis -- see discovery_gate.py's module docstring for
+    # why this job cannot honestly be a deterministic worker. Accepts an out-of-band-supplied,
+    # schema-valid repository-partition-map if present; otherwise issues an actionable hand-off
+    # and fails clearly (never silently succeeds as a no-op).
+    job = '02-repository-partition-discovery'
+    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    return result
+
+
+@op(name='job_02_dev_project_discovery', ins={'configured': In(dict), 'upstream': In(list)})
+def dev_project_discovery_work(context, configured, upstream):
+    # Same validated hand-off gate as repository_partition_discovery_work above, for the
+    # project-discovery contract. See discovery_gate.py.
+    job = '02-dev-project-discovery'
+    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    return result
+
+
+# Construct the full graph from the same validated lifecycle contract as intake.
+# Missing workers fail explicitly instead of succeeding as no-op placeholders.
+from job_graph import load_graph
+LIFECYCLE=load_graph()['jobs']
+LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
+                if name not in ('00-intake','02-evidence-index','02-build-configure',
+                                 '02-repository-partition-discovery','02-dev-project-discovery',
+                                 '02-ossf-scorecard')}
+LIFECYCLE_OPS['02-build-configure']=build_configure_work
+LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
+LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
+LIFECYCLE_OPS['02-ossf-scorecard']=ossf_scorecard_lifecycle_work
+
+
+@job(resource_defs={'workflow_settings':workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent':3}),
+     hooks={workflow_failed},op_retry_policy=RetryPolicy(max_retries=0))
+def full_review():
+    configured=workflow_config()
+    intake=workflow_intake(configured)
+    discovered=build_discovery_work(intake)
+    outputs={'00-intake':intake, '02-evidence-index': evidence_index_work(intake, discovered)}
+    pending=dict(LIFECYCLE_OPS)
+    while pending:
+        for name in list(pending):
+            deps=[d['job'] for d in LIFECYCLE[name]['dependencies'] if d.get('enabled',True)]
+            if all(dep in outputs for dep in deps):
+                upstream=[outputs[dep] for dep in deps]
+                if name=='02-repository-partition-discovery': upstream.append(discovered)
+                outputs[name]=pending.pop(name)(configured,upstream)
+
+
+
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -110,7 +388,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

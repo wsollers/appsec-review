@@ -1,0 +1,16 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "scorecard-results-ingestor",
+  "display_name": "OpenSSF Scorecard Results Ingestor",
+  "category": "intelligence",
+  "summary": "Fetches and validates bounded published OpenSSF Scorecard JSON2 results with commit and response provenance.",
+  "allowed_outputs": ["supply_chain_posture_evidence", "evidence_gap"],
+  "forbidden_outputs": ["verified_security_finding", "runtime_deployment_claim", "successful_build"],
+  "required_behavior": [
+    "preserve repository and commit identity",
+    "record response hashes, timestamps, safe headers, endpoint and Scorecard version",
+    "treat a missing published result as a coverage gap",
+    "fail on transport, rate-limit, malformed-response, or provenance errors"
+  ],
+  "must_not": ["silently fall back to stale output", "follow redirects", "score private repositories"]
+}

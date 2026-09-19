@@ -5,6 +5,9 @@ flowchart TD
   build --> evidence_index[02-evidence-index: snapshots / ssdeep / FTS5]
   j00_intake --> evidence_index
   evidence_index --> j02_evidence_assembly
+  j02_ossf_scorecard[02-ossf-scorecard: authorized published JSON2 ingestion]
+  j00_intake --> j02_ossf_scorecard
+  j02_ossf_scorecard --> j02_evidence_assembly
   j02_repository_partition_discovery["02-repository-partition-discovery: worker blocked"]
   j00_intake --> j02_repository_partition_discovery
   j02_dev_project_discovery["02-dev-project-discovery: worker blocked"]

@@ -53,7 +53,7 @@ if (-not (Test-Path $dockerfile)) {
 # directory" (exit 2) until the image was rebuilt. Added retroactively here so
 # this preflight check actually catches the next drift of this kind before a
 # docker build, instead of after a step silently fails inside a stale image.
-foreach ($required in @("build_symbol_index.py", "md_to_sarif.py", "build_semantic_index.py", "query_semantic_index.py", "scrub_evidence.py", "php_parse_coverage.py", "run-semantic-index-batched.sh", "run-sast-php.sh", "analyze_dependency_lifecycle.py", "eol-reference.json")) {
+foreach ($required in @("build_symbol_index.py", "build_semantic_index.py", "query_semantic_index.py", "scrub_evidence.py", "php_parse_coverage.py", "run-semantic-index-batched.sh", "run-sast-php.sh", "analyze_dependency_lifecycle.py", "eol-reference.json")) {
     if (-not (Test-Path (Join-Path $ContextDir "scripts/$required"))) {
         throw "Missing scripts/$required - the image COPYs this in at build time."
     }

@@ -27,6 +27,18 @@ Current pregather-oriented compositions include project discovery for developer,
 personas; standards/doc/API/test intelligence ingestion; standards validation worklist generation;
 and binary intelligence ingestion with the `reverse-engineer` persona.
 
+`10-critical-findings-sarif` is an implemented post-verification transform composition. It uses
+the report artifact publisher persona, SARIF exporter role, verified-findings domain and local
+SARIF tooling profile. Its standalone Dagster job consumes only the fixed run-owned
+`inputs/critical-findings.md`; it does not make the still-planned synthesis or verification workers
+implemented and it cannot verify or upgrade a finding.
+
+`02-ossf-scorecard` is an implemented external-evidence ingestion composition. It uses the
+supply-chain evidence curator persona, Scorecard results ingestor role, open-source project posture
+domain, authorized Scorecard API tooling profile and Scorecard results contract. It requires an
+explicit fixed-host network permission, preserves JSON2 response provenance, and cannot emit a
+verified finding or claim that a repository was scanned live.
+
 Start coarse scope discovery with `02-repository-partition-discovery`. Its map identifies client,
 server, API, infrastructure, delivery, and operations areas, including shared or unresolved scope,
 and routes each area to developer, DevOps, and/or SRE review. Specialist discovery jobs consume

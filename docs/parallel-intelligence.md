@@ -1,9 +1,10 @@
 # Parallel build and intelligence collection
 
-The machine graph now declares 41 lifecycle/registry jobs. Source evidence indexing is now runnable
-([retrieval guide](evidence-retrieval.md)); the native/scanner collection workers remain
+The machine graph now declares 42 lifecycle/registry jobs. Source evidence indexing is runnable
+([retrieval guide](evidence-retrieval.md)), as is explicitly authorized published OpenSSF Scorecard
+JSON2 ingestion ([job guide](ossf-scorecard-job.md)); the native/scanner collection workers remain
 explicitly blocked until implemented and qualified. Dagster can schedule the dependency graph;
-registration does not establish tool readiness or authorize a successful evidence receipt.
+registration alone does not establish tool readiness or authorize a successful evidence receipt.
 
 ## Existing capabilities
 
@@ -15,6 +16,7 @@ registration does not establish tool readiness or authorize a successful evidenc
 | Binary triage and symbols | `images/audit-binary-analysis/analyze-binary.sh` | File/sections/imports/disassembly, Binwalk, DWARF and symbol tools exist; wrapper suppresses many errors |
 | CFG and decompilation | `angr-summary.py`, optional Ghidra/RetDec calls in binary wrapper | angr currently emits bounded function/call summaries, not a complete serialized CFG; Ghidra needs a structured export script |
 | Documents/API/test source | Existing registry ingestion templates | Workers and consumers still need implementation |
+| Open-source project posture | `02-ossf-scorecard` published-results worker | Public cached JSON2 only; not a live scan and not a finding verdict |
 
 `build_execution.py` is configure-only work: producing a compile database does not prove that
 compilation or linking succeeded. Preserve that work and add a distinct successful-build receipt.
@@ -27,6 +29,7 @@ binary by itself does not supply the original LLVM IR.
 flowchart TD
     I[Accepted source snapshot] --> S[Source-only SAST]
     I --> D[Documents, API and test-source consumers]
+    I --> O[Authorized published OpenSSF Scorecard results]
     I --> P[Partition and developer discovery]
     P --> C[Isolated configure and compile database]
     C --> B[Compile and link; validate build manifest]
@@ -45,6 +48,7 @@ flowchart TD
     G --> X
     S --> J[Validate all required intelligence receipts]
     D --> J
+    O --> J
     N --> J
     F --> J
     X --> J

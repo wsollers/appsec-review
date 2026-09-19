@@ -10,6 +10,7 @@ import uuid
 from execution_state import ROOT, Blocked, Lock, atomic_json, atomic_bytes, data_path, digest, execute, file_hash, identifier, now, read_json, tree_hashes, emergency
 from phase1 import accepted, job_root, config_for
 from job_graph import composition, load_graph
+import build_discovery
 
 PLAN = ROOT/'workflow-plan.json'
 
@@ -38,6 +39,8 @@ def intake_data(run_id, pointer):
 
 
 def branch_result(branch, data, templates):
+    if branch=='build_discovery':
+        return build_discovery.discover(data,templates['_build_evidence'])
     common={'schema':'appsec-review/preparation/1','branch':branch,'source_fingerprint':data['source_fingerprint'],
             'findings':[],'target_execution':False}
     if branch=='scope_check':
@@ -90,12 +93,16 @@ def validate_branch(run_id, branch, pointer):
 
 
 def run_branch(run_id, branch, pointer, dagster_id, force=False):
-    if branch not in plan()['branches']: raise Blocked('unconfigured branch')
+    if branch not in [*plan()['branches'],'build_discovery']: raise Blocked('unconfigured branch')
     base=data_path(run_id,'jobs','00-workflow-preparation',branch)
     with Lock(base/'job.lock'):
         data=intake_data(run_id,pointer)
-        inputs={'intake':data,'templates':templates_for(data),'producer':pointer,
-                'code':{name:file_hash(ROOT/name) for name in ('workflow.py','workflow-plan.json','dagster_workflow.py')},
+        templates=templates_for(data)
+        if branch=='build_discovery':
+            if accepted(run_id,fresh=True)!=pointer: raise Blocked('stale build discovery input')
+            templates['_build_evidence']=build_discovery.collect(run_id,pointer,data)
+        inputs={'intake':data,'templates':templates,'producer':pointer,
+                'code':{name:file_hash(ROOT/name) for name in ('workflow.py','workflow-plan.json','dagster_workflow.py','build_discovery.py')},
                 'validator':read_json(ROOT/'registry/job-templates/00-validation.json')['composition'],
                 'coordinator':read_json(ROOT/'registry/job-templates/00-intake.json')['composition']}
         fingerprint=digest(inputs)
@@ -134,6 +141,8 @@ def run_branch(run_id, branch, pointer, dagster_id, force=False):
             expected=branch_result(branch,data,inputs['templates'])
             if read_json(attempt/'output.json')!=expected: raise Blocked('preparation result mismatch')
             intake_data(run_id,pointer)
+            if branch=='build_discovery' and accepted(run_id,fresh=True)!=pointer:
+                raise Blocked('source changed during build discovery')
             if inputs['code'] != {name:file_hash(ROOT/name) for name in inputs['code']}:
                 raise Blocked('preparation code changed during work')
             atomic_json(attempt/'post.json',{'status':'OK','semantic_validation':'PASS'})
@@ -200,3 +209,4 @@ if __name__=='__main__':
     value=read_json(attempt/'inputs.json')
     atomic_json(attempt/'output.json',branch_result(branch,value['intake'],value['templates']))
     print('Prepared '+branch+'; no target execution.')
+    print('Target builds and dependency availability remain unverified.',file=sys.stderr)

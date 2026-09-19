@@ -2,6 +2,10 @@ flowchart TD
   00_intake_config["00-intake: resolve job configuration"] --> 00_intake_pre["00-intake: pre-validation"]
   00_intake_pre --> 00_intake["00-intake: work or reuse"]
   00_intake --> 00_intake_post["00-intake: post-validation and publish"]
+  02_ossf_scorecard_config["02-ossf-scorecard: resolve job configuration"] --> 02_ossf_scorecard_pre["02-ossf-scorecard: pre-validation"]
+  02_ossf_scorecard_pre --> 02_ossf_scorecard["02-ossf-scorecard: work or reuse"]
+  02_ossf_scorecard --> 02_ossf_scorecard_post["02-ossf-scorecard: post-validation and publish"]
+  00_intake_post -->|required| 02_ossf_scorecard_config
   02_repository_partition_discovery["02-repository-partition-discovery (planned; not dispatched)"]
   00_intake_post -->|required| 02_repository_partition_discovery
   02_dev_project_discovery["02-dev-project-discovery (planned; not dispatched)"]
@@ -26,6 +30,7 @@ flowchart TD
   02_test_coverage_ingest -->|required| 02_evidence_assembly
   02_operations_doc_ingest -->|required| 02_evidence_assembly
   02_evidence_index_post -->|required| 02_evidence_assembly
+  02_ossf_scorecard_post -->|required| 02_evidence_assembly
   01_component_characterization["01-component-characterization (planned; not dispatched)"]
   02_evidence_assembly -->|required| 01_component_characterization
   03_threat_model_dfd_stride["03-threat-model-dfd-stride (planned; not dispatched)"]

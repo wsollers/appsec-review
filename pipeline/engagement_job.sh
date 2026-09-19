@@ -145,7 +145,7 @@ if [[ "$RUN_STATIC" == 1 ]]; then
     echo "WARNING: no usable static prepass runner found; skipping static pre-pass" | tee "$LOG_DIR/static-prepass.log"
     printf '{"step":"static-prepass","exit_code":127,"seconds":0,"log":%s,"note":"no usable static prepass runner found"}\n' "$(json_escape "$LOG_DIR/static-prepass.log")" >> "$MANIFEST"
   fi
-  run_step "static-summary" python3 "$ROOT/scripts/summarize_evidence.py" "$STATIC_EVIDENCE" -o "$STATIC_EVIDENCE/SUMMARY.md" || true
+  run_step "static-summary" python3 "$ROOT/pipeline/summarize_evidence.py" "$STATIC_EVIDENCE" -o "$STATIC_EVIDENCE/SUMMARY.md" || true
 fi
 
 if [[ "$RUN_NATIVE" == 1 ]]; then

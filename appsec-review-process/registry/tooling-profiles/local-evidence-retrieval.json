@@ -1,0 +1,35 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "local-evidence-retrieval",
+  "display_name": "Local Evidence Retrieval",
+  "mode": "static-only",
+  "required_inputs": [
+    "fresh accepted intake"
+  ],
+  "optional_inputs": [
+    "accepted build discovery"
+  ],
+  "allowed_actions": [
+    "read accepted source and evidence",
+    "write run-owned immutable snapshots",
+    "compute SHA-256 and ssdeep",
+    "query local FTS5"
+  ],
+  "isolation": "Trusted bounded Python worker; filesystem reads only; no target code import; no Docker socket or credentials mounted into Dagster.",
+  "disallowed_actions": [
+    "execute target code",
+    "external publication",
+    "arbitrary SQL from an LLM"
+  ],
+  "claim_limits": {
+    "allowed": [
+      "intake_inventory",
+      "validation_result"
+    ],
+    "forbidden": [
+      "verified_security_finding",
+      "runtime_deployment_claim",
+      "successful_build"
+    ]
+  }
+}

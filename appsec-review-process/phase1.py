@@ -503,7 +503,11 @@ def handoff(run_id):
         'Source fingerprint: '+result['source_fingerprint'], 'Next: 02-repository-partition-discovery (planned; dispatcher not implemented).',
         'Whole scope and unavailable paths are recorded in intake.json. Do not execute target scripts from this handoff.',
         'All new evidence/build/log paths must be allocated by the adapter beneath this run data root.',
-        'No security findings or successful builds are claimed.', ''])
+        'No security findings or successful builds are claimed.',
+        'Tooling addendum: appsec-review-process/tooling/llm-retrieval-addendum.md',
+        'Load skill: appsec-review-process/agent-skills/codex/evidence-retrieval/SKILL.md',
+        'Use the evidence_index Dagster job and evidence_store.py search/read/similar commands for this run.',
+        'Capability receipts under data/tooling qualify LSP/MCP availability; a catalog entry alone is not proof.', ''])
 
 
 def pipeline_out(run_id, attempt_id, out, reserve=False):

@@ -1,0 +1,24 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "verified-findings",
+  "display_name": "Verified finding artifacts",
+  "surfaces": [
+    "finding metadata",
+    "source locations",
+    "severity and confidence",
+    "machine-readable report exchange"
+  ],
+  "common_failure_modes": [
+    "unverified claim exported as final",
+    "malformed finding silently omitted",
+    "stale or tampered report artifact"
+  ],
+  "preferred_standards": [
+    "SARIF 2.1.0"
+  ],
+  "required_evidence_hints": [
+    "finding IDs",
+    "source file and line",
+    "producer hash"
+  ]
+}

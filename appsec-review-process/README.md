@@ -24,6 +24,16 @@ The guide includes a complete Freeciv21 example and Dagster UI config/tag instru
 The existing shared-scratch examples below describe legacy behavior. Downstream discovery,
 collection and review jobs remain planned; their presence in the graph does not dispatch them.
 
+The independently registered `critical_findings_sarif` job is available after a verification or
+synthesis task stages `inputs/critical-findings.md`. It is a strict run-owned format transform,
+not a finding aggregator or verifier. See
+[`docs/critical-findings-sarif-job.md`](../docs/critical-findings-sarif-job.md).
+
+The independently registered `ossf_scorecard` job ingests published OpenSSF Scorecard JSON2 only
+when the run supplies a fixed project list and explicit `network:api.scorecard.dev` permission.
+It preserves raw response provenance and coverage gaps; it is not a live scan or finding verdict.
+See [`docs/ossf-scorecard-job.md`](../docs/ossf-scorecard-job.md).
+
 | Path | Purpose |
 |---|---|
 | `initiate.md` | Start/recovery prompt for the whole process. |

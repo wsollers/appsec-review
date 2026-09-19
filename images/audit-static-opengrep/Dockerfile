@@ -244,7 +244,7 @@ ENV PATH="/root/.opengrep/cli/latest:${PATH}"
 COPY images/audit-static-opengrep/rules/ /opt/rules/opengrep/
 
 # --- This repo's own evidence-shaping scripts (unchanged from images/audit-static) -----
-COPY scripts/build_symbol_index.py scripts/md_to_sarif.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
+COPY scripts/build_symbol_index.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
      scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh \
      scripts/run-semantic-index-batched.sh \
      scripts/analyze_dependency_lifecycle.py scripts/eol-reference.json \

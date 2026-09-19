@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-ossf-scorecard",
+  "display_name": "OpenSSF Scorecard Published Results",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "scorecard-results-ingestor",
+    "domain_id": "open-source-project-posture",
+    "tooling_profile_id": "authorized-scorecard-api",
+    "output_contract_id": "ossf-scorecard-results"
+  },
+  "inputs": {
+    "required": ["inputs/ossf-scorecard-projects.json when requested", "network:api.scorecard.dev permission when requested"],
+    "optional": ["40-hex commit pin per repository"]
+  },
+  "outputs": {
+    "directory": "data/jobs/02-ossf-scorecard/whole/attempts/<attempt_id>",
+    "files": ["manifest.json", "outputs/scorecard-results.json", "outputs/summary.md", "status.json"]
+  },
+  "prompt_sections": ["governing_rules", "scope", "network_authorization", "validation", "output_contract"],
+  "implemented": true,
+  "timeout_seconds": 600,
+  "execution": {
+    "worker": "ossf_scorecard.py",
+    "arguments": ["worker", "{run_input}/ossf-scorecard-projects.json", "{attempt}/outputs"]
+  },
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "applicability": "explicit project list; otherwise accepted SKIPPED with not-requested-no-scorecard-projects",
+  "permissions": ["read-run-inputs", "write-run-data", "network:api.scorecard.dev"],
+  "coordinator": "intake-coordinator"
+}

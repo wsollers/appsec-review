@@ -10,6 +10,21 @@
       "namespace": "00-intake",
       "dependencies": []
     },
+    "02-ossf-scorecard": {
+      "lane": "02-evidence-pregather",
+      "contract": "ossf-scorecard-results",
+      "template": "02-ossf-scorecard",
+      "implemented": true,
+      "namespace": "02-ossf-scorecard",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
     "02-repository-partition-discovery": {
       "lane": "02-evidence-pregather",
       "contract": "repository-partition-map",
@@ -100,8 +115,123 @@
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review"
           ]
+        },
+        {
+          "job": "02-api-collection-intelligence-ingest",
+          "kind": "required",
+          "contract": "intelligence-extract",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        },
+        {
+          "job": "02-binary-intelligence-ingest",
+          "kind": "required",
+          "contract": "binary-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-doc-intelligence-ingest",
+          "kind": "required",
+          "contract": "intelligence-extract",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        },
+        {
+          "job": "02-standards-source-ingest",
+          "kind": "required",
+          "contract": "standards-source-extract",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        },
+        {
+          "job": "02-test-intelligence-ingest",
+          "kind": "required",
+          "contract": "intelligence-extract",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        },
+        {
+          "job": "02-source-sast",
+          "kind": "required",
+          "contract": "source-sast",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-native-sast",
+          "kind": "required",
+          "contract": "native-sast",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "required",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-test-result-ingest",
+          "kind": "required",
+          "contract": "test-result-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-test-coverage-ingest",
+          "kind": "required",
+          "contract": "test-coverage-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-operations-doc-ingest",
+          "kind": "required",
+          "contract": "operations-doc-intelligence",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review",
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-evidence-index",
+          "kind": "required",
+          "contract": "evidence-index",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-ossf-scorecard",
+          "kind": "required",
+          "contract": "ossf-scorecard-results",
+          "allowed_skip_reasons": [
+            "not-requested-no-scorecard-projects"
+          ]
         }
-      ]
+      ],
+      "join_policy": {
+        "mode": "all-required-terminal-accepted",
+        "same_source_snapshot": true,
+        "compatible_build_variants": true,
+        "require_explicit_skip_receipts": true,
+        "failure_is_not_skip": true,
+        "preserve_successful_siblings": true,
+        "output_manifest": "intel-manifest.json"
+      }
     },
     "01-component-characterization": {
       "lane": "01-component-characterization",
@@ -151,6 +281,14 @@
           "kind": "required",
           "contract": "03-threat-model-dfd-stride",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "04-owasp-validation-worklist",
+          "kind": "required",
+          "contract": "control-worklist",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
         }
       ]
     },
@@ -229,6 +367,14 @@
           "kind": "required",
           "contract": "component-map",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "15-stig-srg-validation-worklist",
+          "kind": "required",
+          "contract": "control-worklist",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
         }
       ]
     },
@@ -426,6 +572,453 @@
             "not-requested"
           ]
         }
+      ]
+    },
+    "02-api-collection-intelligence-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "intelligence-extract",
+      "template": "02-api-collection-intelligence-ingest",
+      "implemented": false,
+      "namespace": "02-api-collection-intelligence-ingest",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-binary-intelligence-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "binary-intelligence",
+      "template": "02-binary-intelligence-ingest",
+      "implemented": false,
+      "namespace": "02-binary-intelligence-ingest",
+      "dependencies": [
+        {
+          "job": "02-binary-triage",
+          "kind": "required",
+          "contract": "binary-triage",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-binary-cfg",
+          "kind": "required",
+          "contract": "binary-cfg",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ]
+    },
+    "02-doc-intelligence-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "intelligence-extract",
+      "template": "02-doc-intelligence-ingest",
+      "implemented": false,
+      "namespace": "02-doc-intelligence-ingest",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-standards-source-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "standards-source-extract",
+      "template": "02-standards-source-ingest",
+      "implemented": false,
+      "namespace": "02-standards-source-ingest",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-test-intelligence-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "intelligence-extract",
+      "template": "02-test-intelligence-ingest",
+      "implemented": false,
+      "namespace": "02-test-intelligence-ingest",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "04-owasp-validation-worklist": {
+      "lane": "04-asvs-masvs",
+      "contract": "control-worklist",
+      "template": "04-owasp-validation-worklist",
+      "implemented": false,
+      "namespace": "04-owasp-validation-worklist",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "15-stig-srg-validation-worklist": {
+      "lane": "15-deployment-hardening",
+      "contract": "control-worklist",
+      "template": "15-stig-srg-validation-worklist",
+      "implemented": false,
+      "namespace": "15-stig-srg-validation-worklist",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-build-configure": {
+      "lane": "02-evidence-pregather",
+      "contract": "configured-build",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-build-configure",
+      "dependencies": [
+        {
+          "job": "02-dev-project-discovery",
+          "kind": "required",
+          "contract": "project-discovery",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Isolated configure and validated compile database; configure success is not build success.",
+      "required_artifacts": [
+        "compile_commands.json",
+        "configuration.json",
+        "toolchain.json"
+      ]
+    },
+    "02-native-build": {
+      "lane": "02-evidence-pregather",
+      "contract": "native-build",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-native-build",
+      "dependencies": [
+        {
+          "job": "02-build-configure",
+          "kind": "required",
+          "contract": "configured-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Isolated compile/link. Preserve actual flags, generated inputs, build variant, binaries and matching symbols.",
+      "required_artifacts": [
+        "build-manifest.json",
+        "compile_commands.json",
+        "binary-manifest.json",
+        "debug-symbol-manifest.json"
+      ]
+    },
+    "02-source-sast": {
+      "lane": "02-evidence-pregather",
+      "contract": "source-sast",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-source-sast",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Source-only scanners; no build, binary or IR dependency.",
+      "required_artifacts": [
+        "tool-results.json",
+        "coverage.json"
+      ]
+    },
+    "02-native-sast": {
+      "lane": "02-evidence-pregather",
+      "contract": "native-sast",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-native-sast",
+      "dependencies": [
+        {
+          "job": "02-native-build",
+          "kind": "required",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Compile-database analyzers with generated headers; independent of RE/IR output.",
+      "required_artifacts": [
+        "tool-results.json",
+        "coverage.json"
+      ]
+    },
+    "02-ir-capture": {
+      "lane": "02-evidence-pregather",
+      "contract": "llvm-ir",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-ir-capture",
+      "dependencies": [
+        {
+          "job": "02-native-build",
+          "kind": "required",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Instrumented build capture or explicitly labelled compiler replay with matching generated inputs and compiler version.",
+      "required_artifacts": [
+        "ir-manifest.json",
+        "translation-unit-coverage.json"
+      ]
+    },
+    "02-ir-link": {
+      "lane": "02-evidence-pregather",
+      "contract": "linked-llvm-ir",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-ir-link",
+      "dependencies": [
+        {
+          "job": "02-ir-capture",
+          "kind": "required",
+          "contract": "llvm-ir",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Link per compatible product/module and build variant; preserve failed and excluded translation units.",
+      "required_artifacts": [
+        "linked-module-manifest.json"
+      ]
+    },
+    "02-ir-facts": {
+      "lane": "02-evidence-pregather",
+      "contract": "ir-facts",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-ir-facts",
+      "dependencies": [
+        {
+          "job": "02-ir-link",
+          "kind": "required",
+          "contract": "linked-llvm-ir",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Extract compiled facts, call edges, debug locations and memory operations; no verified finding claims.",
+      "required_artifacts": [
+        "ir-facts-manifest.json",
+        "coverage.json"
+      ]
+    },
+    "02-debug-symbol-index": {
+      "lane": "02-evidence-pregather",
+      "contract": "debug-symbol-index",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-debug-symbol-index",
+      "dependencies": [
+        {
+          "job": "02-native-build",
+          "kind": "required",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Verify binary/symbol identity, index DWARF/PDB; absence is explicit and does not disable binary triage.",
+      "required_artifacts": [
+        "symbol-index.json",
+        "symbol-coverage.json"
+      ]
+    },
+    "02-binary-triage": {
+      "lane": "02-evidence-pregather",
+      "contract": "binary-triage",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-binary-triage",
+      "dependencies": [
+        {
+          "job": "02-native-build",
+          "kind": "required",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Static file/header/section/import/string/security-property inspection and bounded Binwalk signatures.",
+      "required_artifacts": [
+        "binary-triage-manifest.json",
+        "tool-results.json"
+      ]
+    },
+    "02-binary-cfg": {
+      "lane": "02-evidence-pregather",
+      "contract": "binary-cfg",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-binary-cfg",
+      "dependencies": [
+        {
+          "job": "02-binary-triage",
+          "kind": "required",
+          "contract": "binary-triage",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-debug-symbol-index",
+          "kind": "required",
+          "contract": "debug-symbol-index",
+          "allowed_skip_reasons": [
+            "no-debug-symbols",
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Bounded static Ghidra/angr CFG and call-graph extraction. Record uncertainty and limits; no target execution.",
+      "required_artifacts": [
+        "cfg-manifest.json",
+        "tool-results.json",
+        "coverage.json"
+      ]
+    },
+    "02-test-execution": {
+      "lane": "02-evidence-pregather",
+      "contract": "test-execution",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-test-execution",
+      "dependencies": [
+        {
+          "job": "02-native-build",
+          "kind": "required",
+          "contract": "native-build",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Explicit isolated test plan; capture test results and optional instrumentation, with time/resource limits.",
+      "required_artifacts": [
+        "test-run-manifest.json",
+        "test-results.json"
+      ]
+    },
+    "02-test-result-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "test-result-intelligence",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-test-result-ingest",
+      "dependencies": [
+        {
+          "job": "02-test-execution",
+          "kind": "required",
+          "contract": "test-execution",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Consume unit/integration/regression results by suite; distinguish missing, skipped, failed and passed.",
+      "required_artifacts": [
+        "test-results-index.json",
+        "test-gaps.json"
+      ]
+    },
+    "02-test-coverage-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "test-coverage-intelligence",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-test-coverage-ingest",
+      "dependencies": [
+        {
+          "job": "02-test-execution",
+          "kind": "required",
+          "contract": "test-execution",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        }
+      ],
+      "planned_scope": "Consume coverage only when instrumentation is identified; missing coverage is an explicit gap.",
+      "required_artifacts": [
+        "test-coverage-index.json",
+        "coverage-gaps.json"
+      ]
+    },
+    "02-operations-doc-ingest": {
+      "lane": "02-evidence-pregather",
+      "contract": "operations-doc-intelligence",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-operations-doc-ingest",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Consume runbooks, deployment/build guides and operational constraints with source citations.",
+      "required_artifacts": [
+        "operations-doc-index.json",
+        "evidence-gaps.json"
+      ]
+    },
+    "02-evidence-index": {
+      "lane": "02-evidence-pregather",
+      "contract": "evidence-index",
+      "template": "02-evidence-index",
+      "implemented": true,
+      "namespace": "02-evidence-index",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "preparation_dependencies": [
+        "build_discovery"
       ]
     }
   }

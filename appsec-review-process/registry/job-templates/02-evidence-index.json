@@ -1,0 +1,58 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-evidence-index",
+  "display_name": "Evidence Index",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-indexer",
+    "domain_id": "intake-state",
+    "tooling_profile_id": "local-evidence-retrieval",
+    "output_contract_id": "evidence-index"
+  },
+  "inputs": {
+    "required": [
+      "fresh accepted intake",
+      "accepted build discovery"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-evidence-index/whole/attempts/<attempt_id>",
+    "files": [
+      "manifest.json",
+      "index.sqlite",
+      "ssdeep.csv",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 600,
+  "execution": {
+    "worker": "evidence_store.py",
+    "arguments": [
+      "collect",
+      "--run-id",
+      "{run_id}",
+      "--attempt",
+      "{attempt_id}"
+    ]
+  },
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "all engagements",
+  "permissions": [
+    "read-source"
+  ],
+  "coordinator": "intake-coordinator"
+}

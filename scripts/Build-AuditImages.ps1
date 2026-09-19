@@ -95,7 +95,7 @@ if ($DockerContext) {
 # fail loudly here rather than letting docker build fail with an opaque
 # "file not found" partway through a long build.
 $requiredScripts = @(
-    "scripts/build_symbol_index.py", "scripts/md_to_sarif.py", "scripts/build_semantic_index.py",
+    "scripts/build_symbol_index.py", "scripts/build_semantic_index.py",
     "scripts/query_semantic_index.py", "scripts/scrub_evidence.py", "scripts/php_parse_coverage.py",
     "scripts/run-sast-php.sh", "scripts/run-semantic-index-batched.sh", "scripts/run-dockerfile-lint.sh"
 )

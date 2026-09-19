@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "evidence-index",
+  "display_name": "Local Searchable Evidence",
+  "required_files": [
+    "manifest.json",
+    "index.sqlite",
+    "ssdeep.csv",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "attempt_id",
+    "dagster_run_id"
+  ],
+  "claim_types": [
+    "evidence_index"
+  ],
+  "validation_rules": [
+    "fresh accepted upstream producers",
+    "immutable snapshots and index hash validation",
+    "explicit text and binary exclusions",
+    "separate stdout/stderr",
+    "latest failed attempt blocks old success"
+  ]
+}

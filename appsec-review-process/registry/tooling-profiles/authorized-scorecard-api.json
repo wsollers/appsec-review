@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "authorized-scorecard-api",
+  "display_name": "Authorized OpenSSF Scorecard Results API",
+  "mode": "live-safe",
+  "required_inputs": ["fixed run-owned project list", "network:api.scorecard.dev permission"],
+  "optional_inputs": ["40-hex commit pin per repository"],
+  "allowed_actions": [
+    "send bounded HTTPS GET requests only to api.scorecard.dev",
+    "store raw published JSON2 responses in immutable run-owned attempts",
+    "validate repository, commit, tool version, checks and response hashes"
+  ],
+  "isolation": "Bounded Python child with a fixed HTTPS host, rejected redirects, no credentials, no target mount writes, response limits and separate streams.",
+  "disallowed_actions": [
+    "access any non-allowlisted host",
+    "follow redirects",
+    "send credentials or target content",
+    "execute a repository scan",
+    "publish data or invoke target scripts"
+  ],
+  "claim_limits": {
+    "supply_chain_posture_evidence": "allowed_with_provenance",
+    "evidence_gap": "allowed",
+    "verified_security_finding": "forbidden",
+    "runtime_state": "forbidden"
+  }
+}

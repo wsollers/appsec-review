@@ -129,7 +129,7 @@ if ($runStatic) {
     }
 
     [void](Invoke-LoggedStep -Name "static-summary" -FilePath "python" -Arguments @(
-        (Join-Path $Root "scripts/summarize_evidence.py"),
+        (Join-Path $Root "pipeline/summarize_evidence.py"),
         $StaticEvidence,
         "-o",
         (Join-Path $StaticEvidence "SUMMARY.md")

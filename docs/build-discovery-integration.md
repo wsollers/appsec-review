@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 41 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 42 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -166,8 +166,9 @@ workflow op before partition discovery, distinct from full developer project dis
 | Job | Execution readiness | Registry template |
 |---|---|---|
 | `00-intake` | Intake qualified | Present |
-| `02-repository-partition-discovery` | Worker blocked | Present |
-| `02-dev-project-discovery` | Worker blocked | Present |
+| `02-ossf-scorecard` | Qualified published-results ingestion; explicit fixed-host network permission, or validated not-requested skip | Present |
+| `02-repository-partition-discovery` | Validated hand-off gate wired (2026-09-19); blocks with an actionable hand-off until a schema-valid result is supplied | Present |
+| `02-dev-project-discovery` | Validated hand-off gate wired (2026-09-19); blocks with an actionable hand-off until a result is supplied | Present |
 | `02-devops-project-discovery` | Worker blocked | Present |
 | `02-sre-operations-topology` | Worker blocked | Present |
 | `02-evidence-assembly` | Worker blocked | Missing |
@@ -205,3 +206,26 @@ workflow op before partition discovery, distinct from full developer project dis
 | `02-test-result-ingest` | Worker blocked | Missing |
 | `02-test-coverage-ingest` | Worker blocked | Missing |
 | `02-operations-doc-ingest` | Worker blocked | Missing |
+
+## Discovery hand-off gate (02-repository-partition-discovery, 02-dev-project-discovery)
+
+Added 2026-09-19 to unblock `02-build-configure`'s real declared dependency chain
+(`02-build-configure` -> `02-dev-project-discovery` -> `02-repository-partition-discovery`) inside
+`full_review`, without inventing an in-Dagster LLM execution model or fabricating repository
+analysis. Both jobs' contracts (see `schemas/repository-partition-map.schema.json`) require real
+judgment about the specific target's code -- partition boundaries, routing rationale, confidence,
+overlap notes -- that a deterministic script cannot honestly produce.
+
+`appsec-review-process/discovery_gate.py` wires both as a validated hand-off gate, following the
+project's existing "supplied artifact" precedent (`phase1.validate_supplied`): a human or agent
+session does the actual analysis out-of-band and writes a schema-conformant result to
+`runs/<run_id>/data/jobs/<job>/supplied/result.json`. The Dagster op accepts it (schema-validated,
+recorded as an immutable attempt, same `accepted.json`/`attempts/` shape as every other job root)
+if present and valid; otherwise it writes an actionable `handoff.md`/`handoff.json` under that
+job's root and fails clearly, instead of `blocked_op`'s generic `WORKER_NOT_IMPLEMENTED`.
+
+This makes the dependency chain resolvable end to end once both results are supplied -- it does
+not make `02-build-configure` fire with zero human/agent involvement, and it should not: fabricating
+a partition map would put false coverage/confidence claims into a security review. `02-dev-project-
+discovery` has no dedicated schema yet, so it is validated structurally (non-empty JSON object)
+until one is authored.
