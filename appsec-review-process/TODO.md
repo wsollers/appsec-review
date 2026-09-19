@@ -41,6 +41,574 @@ gates, and final end-to-end qualification. Continue the next bounded Workstream 
 The sections below retain
 subsystem-specific detail.
 
+## Independent work protocol
+
+The batch IDs below are the executable backlog. An agent may claim exactly one `READY` batch at a
+time. The older subsystem lists later in this file explain context but are not standalone work
+orders unless a batch points to them.
+
+For every batch:
+
+- Start from current `origin/main` on a dedicated branch. Do not commit directly to `main` and do
+  not merge the branch. Report the branch and commit so the integrator can review it.
+- Read `AGENTS.md`, the applicable process-reader skill, `docs/agent-reader.md`,
+  `docs/run-data-and-job-execution.md`, and the batch's named source documents before editing.
+- Preserve unrelated work and ignored run evidence. Never reset, clean, stash, rewrite historical
+  attempts, delete locks, or make old evidence look current.
+- Treat every path listed under **Shared surfaces** as exclusive. Only one active batch may edit
+  those paths. A batch may add its named worker/schema/test paths without claiming unrelated files.
+- Do not infer Workstream G decisions. A decision batch records options and an explicit user gate;
+  a dependent implementation stays `BLOCKED` until the ADR is approved.
+- New or migrated jobs must use run-owned immutable attempts, the common terminal envelope,
+  read-only validation, fail-closed publication, newest-failure blocking, explicit recovery, and
+  exact permission checks. A registered job or green process exit is not acceptance by itself.
+- Minimum local acceptance is focused tests, `python -B -m py_compile` for changed Python,
+  `python -B appsec-review-process/validate_design_parity.py`,
+  `python -B appsec-review-process/qualify_phase1.py --check-contracts`, and
+  `git diff --check`. Run the focused suite in the Linux code-server too.
+- If Dagster registration, worker execution identity, lifecycle wiring, sensors, or launcher
+  behavior changes, check for active runs first and perform a bounded live service qualification.
+  Record run IDs, attempt IDs, report path/hash, image identity, failure injection, and recovery.
+- A batch result must state scope included/excluded, files changed, commands and counts, evidence,
+  limitations, and the next unblocked batch. Missing prerequisites mean `BLOCKED`, not improvised
+  scope expansion.
+
+Shared surfaces are `appsec-review-process/job-graph.json`,
+`appsec-review-process/design-parity-manifest.json`, `appsec-review-process/dagster_workflow.py`,
+`appsec-review-process/launch_job.py`, `orchestrator/dagster/definitions.py`, common runtime modules,
+generated parity views, and this TODO. Batches that name any of them must run sequentially.
+
+Status vocabulary: `READY` means independently executable now; `BLOCKED(<ids>)` names required
+predecessors or decisions; `HUMAN_GATE` produces an ADR/options packet but may not choose policy;
+`INTEGRATION` combines already-qualified producers and should not invent missing worker behavior.
+
+Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, and `02-evidence-index`.
+Every one of the 42 graph job IDs appears in this backlog; a later batch may harden an implemented
+node without changing the honest current readiness flag.
+
+Cross-cutting capability ownership is explicit:
+
+| Manifest capability | Owning batches |
+|---|---|
+| `common-worker-result-envelope` | B09, B10, B13, B14 |
+| `dedicated-resource-pools` | B15 |
+| `persona-tool-pool-dispatch` | C01 |
+| `wait-all-rendezvous` | C02 |
+| `deterministic-pool-merge` | C03 |
+| `evidence-qualified-quorum` | C04 |
+| `claim-ledger-routing` | L01 |
+| `remediation-retest-feedback` | L09 |
+| `dynamic-rescope` | L10 |
+| `completeness-feedback` | L11 |
+| `synthetic-hypothesis-resynthesis` | L11 |
+| `threat-model-standard` | G01, S02 |
+| `owasp-checklist-model` | G02, S03 |
+| `disa-nsa-hardening-model` | G03, S04 |
+| `final-publication-gate` | L12 |
+
+## Dependency-ordered implementation batches
+
+### Runtime foundation
+
+#### B09 — Critical-findings SARIF common-runtime adoption — READY
+
+- Depends: Batch 8 checkpoint.
+- Deliver: migrate standalone `10-critical-findings-sarif` to the common lifecycle, envelope,
+  validator/publication boundary, and deterministic-child contract without changing its strict
+  fixed-input Markdown-to-SARIF semantics.
+- Primary paths: `critical_findings_sarif.py`, its focused test, SARIF output contract/schema,
+  `publish_job_output.py` only if a proven generic gap exists, qualification script/docs, and the
+  shared registration/parity surfaces only where identity or readiness changes.
+- Acceptance: semantic parity fixture; success/reuse/force/tamper; preflight/work/cancellation;
+  timeout/stream/child/log faults; pending-publication recovery; interrupted attempt; no fallback
+  after newer failure; Windows/Linux tests; one live success/reuse/failure/recovery sequence.
+- Excludes: synthesis binding, developer discovery, containers, personas, pools, and standards.
+
+#### B10 — Supplied developer-discovery common envelope — BLOCKED(B09)
+
+- Deliver: migrate only the existing supplied `02-dev-project-discovery` gate to the same common
+  allocation, terminal, validation, publication, reuse, and recovery boundary. It remains supplied
+  human/agent data and performs no automatic analysis.
+- Primary paths: `discovery_gate.py`, `project-discovery` contract/schema, focused adoption tests,
+  qualification evidence, and parity/docs. Do not touch repository partition behavior except
+  shared regression coverage.
+- Acceptance: schema/citation/cross-ID/claim-class/secret rejection, immutable reuse, invalid-newer
+  blocking, interrupted recovery, Windows/Linux tests, and live supplied-result qualification.
+
+#### B11 — Permission-capability model — READY (parallel only if B09 owns no shared surfaces)
+
+- Deliver: versioned capability records and validation for target execution, fixed network
+  destinations, dynamic testing, debugger/ptrace, credentials, package restore, and target
+  mutation. Default deny; exact capabilities become part of the input fingerprint.
+- Primary paths: new permission schema/registry module/tests and permission documentation. Changes
+  to shared manifest/graph/launcher are integration-only and require exclusive ownership.
+- Acceptance: unknown, widened, target-controlled, missing, stale, and conflicting permissions all
+  fail before work; redaction tests prove credential values never enter tracked or UI-safe records.
+
+#### B12 — Operator status and resume detail — BLOCKED(B09,B10)
+
+- Deliver: `review_cli.py status` reports job, worker kind, attempt, upstream generation,
+  permission decision, execution/acceptance status, coverage gaps, evidence pointer, and actionable
+  resume prerequisite for common-runtime workers plus existing build/evidence-index jobs.
+- Primary paths: `review_cli.py`, focused status tests, operator docs; no worker behavior changes.
+- Acceptance: current, pending, failed-newer, canceled, corrupt, stale, and missing-prerequisite
+  fixtures on Windows/Linux; status remains read-only.
+
+#### B13 — Pinned-container argv adapter — BLOCKED(B11)
+
+- Deliver: one versioned adapter that accepts only registry-resolved image digests and argv arrays,
+  uses the maintained wrapper, read-only target mounts, run-owned writable scratch, disabled network
+  by default, resource limits, and bounded diagnostics. No shell strings or raw `docker run`.
+- Primary paths: `worker_adapters.py`, new container execution module/schema/tests, wrapper identity
+  docs, permission integration. Do not migrate a lifecycle worker in this batch.
+- Acceptance: hostile argv/mount/image/network/capability cases, timeout/cancel/worker-loss/log
+  failure, Windows-host/Linux-worker parity, and a harmless pinned fixture container.
+
+#### B14 — Persona invocation adapter — BLOCKED(B11)
+
+- Deliver: isolated invocation request/result contract pinning outer prompt, selected persona,
+  model/tool identity, budget, exact readable inputs, writable output root, and prohibited claims.
+  Implement dispatch protocol only; do not enable a lifecycle persona job.
+- Primary paths: `worker_adapters.py`, new persona request/result schemas, tests, persona registry
+  validation, and docs.
+- Acceptance: hostile prompt/evidence cannot widen scope, permissions, claim class, or output path;
+  missing model identity, unbounded context, self-verification, and malformed result fail closed.
+
+#### B15 — Dedicated resource pools — BLOCKED(B11)
+
+- Deliver: named Dagster pools for CPU, memory, Docker, network, persona/LLM, and dynamic-analysis
+  work while preserving global and per-engagement outer limits. Record an explicit unassigned state.
+- Primary paths: Dagster configuration/definitions, parity manifest/validator, queue tests, operator
+  docs. Do not raise concurrency until measured.
+- Acceptance: service tests prove per-pool limits, fairness, cancellation, restart behavior, and
+  unchanged engagement serialization; record load evidence before any limit increase.
+
+### Pool runtime
+
+#### C01 — Pool specification and deterministic instance expansion — BLOCKED(B13,B14,B15)
+
+- Deliver: versioned pool schema covering lane, worker kind, persona/tool identity, count, scope,
+  inputs, budget, permissions, timeout, pool, and `wait_all`; deterministic unique instance IDs and
+  private run-owned roots.
+- Primary paths: new pool schema/runtime/tests and parity capability record.
+- Acceptance: zero/one/many, duplicates, mixed kinds, invalid counts/scopes, ID collisions, and
+  cross-instance path access.
+
+#### C02 — Wait-all rendezvous and terminal-instance manifest — BLOCKED(C01)
+
+- Deliver: bounded non-busy waiter that observes every expected instance to a terminal state and
+  publishes a manifest without treating missing workers as empty success.
+- Acceptance: late finish, failure, timeout, cancel, crash, restart, duplicate terminal, and missing
+  instance; publication never occurs early.
+
+#### C03 — Deterministic typed merges — BLOCKED(C02)
+
+- Deliver: separate stable merges for persona claims, deterministic tool evidence, and coverage
+  receipts. Mixed pools retain types and failures instead of flattening them.
+- Acceptance: order independence, duplicate IDs, malformed result, partial failure, degraded
+  coverage, stable hashes, and immutable reuse.
+
+#### C04 — Evidence-qualified quorum and diversity accounting — BLOCKED(C03)
+
+- Deliver: claim-keyed quorum using evidence and declared persona/model independence; record unmet
+  diversity without inferring independence from worker count.
+- Acceptance: duplicate personas/models, conflicting claims, missing citations, minority dissent,
+  insufficient quorum, and deterministic recomputation.
+
+### Decision gates (can run independently; implementation remains blocked on user approval)
+
+#### G01 — Threat-model ADR/options packet — HUMAN_GATE
+
+- Deliver: decision-ready ADR covering DFD/STRIDE versus composed privacy/abuse/attack-tree/runtime
+  overlays; element schema; evidence types; applicability/completeness; rescope; disagreement; and
+  approval authority. Do not choose for the user.
+- Primary paths: new ADR under `docs/decisions/`, Workstream G cross-reference only.
+- Acceptance: options, tradeoffs, recommendation, explicit questions, golden/mutation fixture plan,
+  and no worker/readiness claim.
+
+#### G02 — OWASP applicability/evidence ADR/options packet — HUMAN_GATE
+
+- Deliver: options for pinned ASVS profile/level, MASVS/MASTG, API Top 10, LLM guidance,
+  applicability overrides, per-control statuses/evidence, crosswalks, and finding-promotion rules.
+- Acceptance: version/license storage plan, static/runtime boundary, positive/negative/partial/NA/
+  cannot-verify fixtures, explicit user questions, and no inferred selection.
+
+#### G03 — DISA/NSA hardening ADR/options packet — HUMAN_GATE
+
+- Deliver: options for supported STIG/SRG and NSA/CISA sources, platform applicability, host versus
+  container/runtime boundaries, precedence, tailoring, licensing, and reference storage.
+- Acceptance: precedence conflicts, tailoring evidence, platform fixtures, explicit user questions,
+  and no inferred selection.
+
+### Discovery and source intelligence
+
+#### D01 — Repository-partition persona dispatch — BLOCKED(B14,C01,C02,C03)
+
+- Deliver: automatic persona mode for `02-repository-partition-discovery` while retaining supplied
+  mode as an explicit validated alternative. Never fabricate target classification.
+- Acceptance: dispatch, supplied mode, inapplicable/gap, citation freshness, rescope trigger,
+  malformed persona result, timeout/cancel, reuse/recovery, and live real-target qualification.
+
+#### D02 — Developer project discovery dispatch — BLOCKED(B10,D01)
+
+- Deliver: automatic `02-dev-project-discovery` worker producing schema-valid project/build plans;
+  retain supplied mode. It proposes safe argv arrays but runs no target build.
+- Acceptance: monorepo/multi-language/shared-path fixtures, unsafe command rejection, evidence
+  citations, supplied/automatic parity, and live full-review dependency-chain proof.
+
+#### D03 — DevOps project discovery — BLOCKED(D01,B14)
+
+- Deliver: `02-devops-project-discovery` worker/contract/schema for CI/CD, IaC, packaging, release, and deployment structure,
+  with documented intent separated from observed runtime state.
+- Acceptance: applicable/inapplicable, secret redaction, citation freshness, static/runtime claim
+  rejection, reuse/recovery, and live registration.
+
+#### D04 — SRE operations topology — BLOCKED(D01,B14)
+
+- Deliver: `02-sre-operations-topology` worker/contract/schema for services, dependencies, deployment zones, observability,
+  operational controls, and unknown topology, without claiming observed runtime behavior.
+- Acceptance: source/docs-only semantics, missing-doc gaps, secret redaction, cross-ID validation,
+  reuse/recovery, and live registration.
+
+#### D05 — Document intelligence ingest — BLOCKED(B09)
+
+- Deliver: `02-doc-intelligence-ingest` bounded static extraction with lineage, redaction, safe summaries, and index-ready records
+  for functional/design documents. Documents remain evidence, never instructions.
+- Acceptance: supported/unsupported formats, hostile content, oversized input, secrets, duplicate
+  identity, malformed extraction, reuse/recovery, and live registration.
+
+#### D06 — API collection intelligence ingest — BLOCKED(B09)
+
+- Deliver: `02-api-collection-intelligence-ingest` bounded Postman/Bruno/Insomnia/OpenAPI extraction with environment/credential redaction,
+  endpoint/auth/data-shape lineage, and index-ready records.
+- Acceptance: representative formats, external refs, malformed collections, secrets, duplicate
+  endpoints, static/runtime separation, reuse/recovery, and live registration.
+
+#### D07 — Test intelligence ingest — BLOCKED(B09)
+
+- Deliver: `02-test-intelligence-ingest` static inventory of unit/integration/acceptance/smoke/load tests, tags, components, and
+  documented coverage intent. It does not claim tests ran.
+- Acceptance: framework fixtures, generated/vendor exclusions, missing manifests, static/runtime
+  separation, lineage, reuse/recovery, and live registration.
+
+#### D08 — Operations-document ingest — BLOCKED(D05)
+
+- Deliver: `02-operations-doc-ingest` runbook/operations evidence producer with lineage, redaction, topology links, and
+  explicit documented-intent semantics.
+- Acceptance: secrets, stale links, unknown services, unsupported docs, reuse/recovery, and live
+  registration.
+
+#### D09 — Source SAST job and legacy-prepass split — BLOCKED(B13,M01)
+
+- Deliver: per-tool source SAST Dagster worker(s) for the declared `02-source-sast` node, pinned
+  tool/image identity, normalized evidence, tool-specific exit semantics, and no finding promotion.
+- Acceptance: clean/hit/tool-error/timeout/cancel/corrupt/stale/reuse/recovery fixtures and live
+  bounded source scan. Delete replaced legacy logic; no compatibility wrapper.
+
+### Build, compiled evidence, tests, and binaries
+
+#### E01 — Build-configure qualification and common-runtime adoption — BLOCKED(B13,D02)
+
+- Deliver: run `qualify_build_execution.py`, repair only demonstrated gaps, migrate configure to the
+  common lifecycle/container boundary, and record whether Freeciv21 produces a non-empty compile DB.
+- Acceptance: discovery generation match, safe argv/mounts, configure success/no-compile-db/failure,
+  cancel/recovery/newer-failure, Windows/Linux tests, and live service evidence.
+
+#### E02 — Native-build variants and provenance — BLOCKED(E01)
+
+- Deliver: distinct `02-native-build` worker with Debug, RelWithDebInfo, and Release manifests;
+  compiler/dependency/generated-source/binary/symbol/compile-DB identities; no configure-only
+  success claim.
+- Acceptance: variant mismatch, stale compile DB, missing symbols, partial build, hostile build,
+  timeout/cancel/recovery, and authoritative container qualification.
+
+#### E03 — Native SAST — BLOCKED(E02,B13)
+
+- Deliver: `02-native-sast` worker with pinned tools, compile-DB lineage, separate outputs and
+  tool-specific exit handling. Results are evidence leads, not verified findings.
+- Acceptance: supported/unsupported TU, stale DB, analyzer error, partial coverage, reuse/recovery,
+  and bounded real-target run.
+
+#### E04 — IR capture — BLOCKED(E02,B13)
+
+- Deliver: `02-ir-capture` worker with variant/compiler/source-generation provenance and explicit
+  uncovered units.
+- Acceptance: zero/partial/full capture, stale variant, malformed bitcode, cancel/recovery, and live
+  bounded qualification.
+
+#### E05 — IR link and facts — BLOCKED(E04)
+
+- Deliver: separate `02-ir-link` and `02-ir-facts` accepted attempts with linked-module provenance,
+  debug locations, pointer/memory facts, coverage gaps, and no vulnerability verdicts.
+- Acceptance: link conflict, missing module, stale capture, malformed facts, deterministic output,
+  reuse/recovery, and live qualification.
+
+#### E06 — Debug-symbol index — BLOCKED(E02)
+
+- Deliver: `02-debug-symbol-index` worker binding binaries, symbols, source revision, build variant,
+  and supported lookup records.
+- Acceptance: mismatched/stripped/partial symbols, duplicate binary IDs, stale build, reuse/recovery,
+  and live bounded qualification.
+
+#### E07 — Binary triage — BLOCKED(E02,B13,M02)
+
+- Deliver: `02-binary-triage` worker and finalized inventory/tool-evidence/candidate/follow-up
+  schemas, static-only by default, with image/tool lineage and redaction.
+- Acceptance: format matrix, stripped/packed/unknown binaries, tool failure, secrets, partial
+  coverage, reuse/recovery, and live static qualification.
+
+#### E08 — Binary CFG and intelligence ingest — BLOCKED(E06,E07)
+
+- Deliver: `02-binary-cfg` plus `02-binary-intelligence-ingest`, preserving binary/symbol/build
+  lineage and separating decompiler/tool leads from verified claims.
+- Acceptance: missing symbols, unsupported architecture, malformed CFG, cross-ID mismatches,
+  partial coverage, reuse/recovery, and bounded live qualification.
+
+#### E09 — Test execution — BLOCKED(E02,B11,B13)
+
+- Deliver: authorized `02-test-execution` worker with exact argv, environment, build/source identity,
+  timeout, artifacts, and explicit network/credential/target-mutation decisions.
+- Acceptance: pass/fail/skip/crash/timeout/cancel, flaky retry prohibition, secret redaction,
+  generation mismatch, reuse/recovery, and live fixture execution.
+
+#### E10 — Test-result and coverage ingest — BLOCKED(E09)
+
+- Deliver: separate `02-test-result-ingest` and `02-test-coverage-ingest` producers tied to exact
+  execution/binary/source identities; unsupported formats become gaps.
+- Acceptance: passing/failing/partial/malformed result sets, stale or mismatched coverage, duplicate
+  tests, deterministic merge, reuse/recovery, and live fixture qualification.
+
+### Evidence assembly and characterization
+
+#### F01 — Evidence-index enrichment and partition exposure — BLOCKED(B10,D01,D05,D06,D07,D08,E05,E08,E10)
+
+- Deliver: enrich `02-evidence-index` to safely index accepted derived intelligence and partition maps with producer attempt IDs,
+  citations, hashes, redaction, and type labels; never index raw secrets or conflate intent/runtime.
+- Acceptance: stale producer, corrupt pointer, duplicate record, secret negative tests, query bounds,
+  immutable reuse, and CLI/MCP retrieval qualification.
+
+#### F02 — Evidence assembly rendezvous — BLOCKED(D02,D03,D04,D05,D06,D07,D08,D09,E03,E05,E08,E10,F01,S01)
+
+- Deliver: `02-evidence-assembly` barrier validating applicability, required/authorized skips,
+  schemas, hashes, producer IDs, generations, build lineage, freshness, permissions, and coverage
+  before publishing `intel-manifest.json`.
+- Acceptance: every required producer success/skip/failure/stale/corrupt/mixed-generation case,
+  no early publication, deterministic manifest, reuse/recovery, and parallel live qualification.
+
+#### F03 — Component characterization and tag cloud — BLOCKED(F02)
+
+- Deliver: `01-component-characterization` worker and schema with component purpose, ownership,
+  paths, relationships, evidence citations, confidence, unknowns, and tag cloud; rescope events are
+  explicit and bounded.
+- Acceptance: web/native/mobile/IaC/library/mixed fixtures, overlaps/unassigned paths, citation
+  freshness, deterministic IDs, reuse/recovery, and live qualification.
+
+### Standards sources and decision-dependent workers
+
+#### S01 — Standards-source ingest — BLOCKED(G02,G03 user-approved ADRs,B09)
+
+- Deliver: pinned licensed source store and `02-standards-source-ingest` worker with version/hash/
+  license lineage and per-control records. A mapping or checklist is not proof.
+- Acceptance: changed source/version/license, missing control text, duplicate IDs, crosswalk lineage,
+  offline reuse, recovery, and live registration.
+
+#### S02 — Threat model — BLOCKED(G01 user-approved ADR,F03,B14)
+
+- Deliver: `03-threat-model-dfd-stride` according to the approved ADR, with modeled elements,
+  trust-boundary flows, cited threats, unknowns, completeness, dissent, and rescope triggers.
+- Acceptance: approved golden and mutation fixtures; every threat cites an element/evidence and every
+  in-scope crossing is assessed or explicitly unresolved.
+
+#### S03 — OWASP worklist and ASVS/MASVS — BLOCKED(G02 user-approved ADR,S01,F03,S02)
+
+- Deliver: `04-owasp-validation-worklist` and `04-asvs-masvs` per approved applicability/evidence
+  rules, preserving per-control status and separating gaps from promoted findings.
+- Acceptance: family/version/applicability matrix, positive/negative/partial/NA/cannot-verify,
+  runtime-evidence requirements, crosswalk dedupe, reuse/recovery, and live qualification.
+
+#### S04 — STIG/SRG worklist and deployment hardening — BLOCKED(G03 user-approved ADR,S01,F03)
+
+- Deliver: `15-stig-srg-validation-worklist` and `15-deployment-hardening` per approved platform,
+  precedence, tailoring, and evidence rules.
+- Acceptance: host/container/cloud/platform fixtures, conflicts/tailoring/unknowns, static/runtime
+  boundaries, reuse/recovery, and live qualification.
+
+### Analysis, claim lifecycle, and reporting
+
+#### L01 — Append-only claim/decision ledger — BLOCKED(C04,F03)
+
+- Deliver: hash-linked ledger with stable claim IDs, citations, producer/persona/model identity,
+  status/confidence/components, proof obligations, dissent, supersession, and causal links; illegal
+  transitions fail closed.
+- Acceptance: verified/refuted/narrowed/duplicate/conflicting/unresolved/superseded scenarios,
+  tamper/cycle/self-verification/stale-evidence rejection, and crash/restart recovery.
+
+#### L02 — Native-memory analysis — BLOCKED(F03,E03,E05,L01)
+
+- Deliver: `05-native-memory` worker using accepted source/native/IR evidence with explicit coverage
+  and proof obligations; no host-compiler-only verification.
+- Acceptance: seeded positive/negative/unknown fixtures, source-only limits, sanitizer/IR lineage,
+  persona independence, reuse/recovery, and authoritative container qualification.
+
+#### L03 — CVE reachability — BLOCKED(F03,F02,L01,M05)
+
+- Deliver: `06-cve-reachability` worker connecting pinned dependency/CVE evidence to component,
+  build, import/call/configuration evidence; version match alone is not reachability.
+- Acceptance: reachable/unreachable/unknown/dev-only/vendored/generated cases, database staleness,
+  cited paths, reuse/recovery, and bounded real-target qualification.
+
+#### L04 — Fuzz-target triage — BLOCKED(S02,L02,L03,L01)
+
+- Deliver: `13-fuzz-target-triage` prioritized targets with harness feasibility, input surfaces,
+  sanitizers, dictionaries/corpora, blockers, and evidence; it does not claim fuzz execution.
+- Acceptance: native/non-native/inapplicable targets, duplicate surfaces, missing build evidence,
+  deterministic ranking, reuse/recovery, and live qualification.
+
+#### L05 — Red-team discovery — BLOCKED(S02,S03,S04,L02,L03,L04,L01,B14,C04)
+
+- Deliver: `07-red-team-adversarial` pool producing cited candidate claims only, with dissent and
+  coverage. It cannot self-verify or promote severity.
+- Acceptance: hostile evidence, duplicate/conflicting claims, insufficient diversity, partial pool
+  failure, timeout/cancel, deterministic merge, ledger routing, and live qualification.
+
+#### L06 — Blue-team refutation — BLOCKED(L05,L01,B14,C04)
+
+- Deliver: `08-blue-team-refutation` independent pool routing each candidate to refuted, narrowed,
+  surviving, or unresolved with evidence and dissent.
+- Acceptance: no self-refutation, every candidate accounted for, conflicting evidence, partial
+  failure, quorum/diversity, ledger transitions, recovery, and live qualification.
+
+#### L07 — Independent verification — BLOCKED(L06,L01,B14,C04)
+
+- Deliver: `09-independent-verification` with proof obligations, same-environment deterministic
+  checks where applicable, explicit unresolved status, and independent producer identity.
+- Acceptance: verified/refuted/unresolved/blocked, static/runtime boundaries, High/Critical gate,
+  no self-verification, ledger transitions, recovery, and live qualification.
+
+#### L08 — Scoring and prioritization — BLOCKED(L07,S02,S04,L01)
+
+- Deliver: `12-scoring-prioritization` from accepted verification, threat, business, exploitability,
+  exposure, and control evidence with explainable scoring and no severity inflation.
+- Acceptance: missing factors, conflicting evidence, deterministic tie handling, stale inputs,
+  reuse/recovery, and live qualification.
+
+#### L09 — Remediation and same-environment retest loop — BLOCKED(L07,E02,E09,L01)
+
+- Deliver: `11-remediation-proposal` plus bounded retest/reverification controller. Patches remain
+  proposals until explicitly authorized; `fixed` requires same-environment retest and independent
+  re-verification.
+- Acceptance: accepted/declined patch, build failure, failed retest, regression, stale source,
+  loop limit/no progress, unresolved terminal, recovery, and ledger audit.
+
+#### L10 — Dynamic rescope controller — BLOCKED(F03,L01)
+
+- Deliver: dependency index and bounded rescope for changed component classification, source/build
+  generation, applicability, or invalidated evidence; recompute only affected descendants.
+- Acceptance: generation advance, unaffected branch preservation, no-progress/iteration bounds,
+  crash recovery, and no silent deletion.
+
+#### L11 — Completeness and synthetic-hypothesis feedback — BLOCKED(L07,L08,L10)
+
+- Deliver: completeness auditor, coverage feedback, synthetic hypothesis routing, bounded targeted
+  analysis, and resynthesis trigger with `UNRESOLVED_AND_REPORTED` termination.
+- Acceptance: missing edge, false gap, duplicate hypothesis, partial evidence, iteration/no-progress
+  limits, deterministic routing, ledger preservation, and restart recovery.
+
+#### L12 — Synthesis, SARIF binding, and final publication gate — BLOCKED(L08,L09 optional,L11,B09)
+
+- Deliver: `10-synthesis-report`, bind SARIF generation to accepted synthesis/verification while
+  retaining standalone diagnostic mode, completion validator, human signoff ledger, and immutable
+  publication package.
+- Acceptance: every claim traceable, dissent/gaps/unresolved retained, High/Critical independently
+  verified, optional remediation represented honestly, stale/mixed generations rejected, and
+  publication blocked without signoff.
+
+### Legacy-script decomposition and tooling qualification
+
+#### M01 — Vendor-prepass graph/contract decision — READY
+
+- Deliver: explicit graph-node and output-contract decisions for secrets, IaC, SBOM/SCA, container,
+  BinSkim/binary-hardening, mobile SAST, and source SAST. Map old steps; do not implement tools yet.
+- Primary paths: ADR/plan, job graph/parity proposal fixtures. Do not guess hidden generic nodes.
+- Acceptance: each legacy step has one disposition, producer/consumer edge, claim limit, permission,
+  image/tool identity requirement, and migration/delete gate.
+
+#### M02 — Binary image pinning/split decision — READY
+
+- Deliver: decide static/firmware/mobile/dynamic image split and pin or lock every external binary
+  tool download. Dynamic execution remains separately authorized.
+- Acceptance: reproducible image identities, licenses, offline/static default, smoke fixtures, and
+  no unpinned download or network-enabled analysis by default.
+
+#### M03 — Secrets and IaC per-tool jobs — BLOCKED(M01,B13)
+
+- Deliver: separate run-owned secrets and IaC jobs/contracts/schemas, safe redaction, pinned images,
+  and legacy-step deletion after parity. Scanner hits remain evidence leads.
+- Acceptance: clean/hit/secret-output/tool-error/timeout/cancel/reuse/recovery and bounded live runs.
+
+#### M04 — Container, mobile, and binary-hardening jobs — BLOCKED(M01,M02,B13)
+
+- Deliver: separate jobs selected by applicability with pinned tools and explicit static/dynamic
+  semantics; remove replaced legacy steps without wrappers.
+- Acceptance: applicable/inapplicable/unsupported artifacts, tool failure, permissions, partial
+  coverage, reuse/recovery, and bounded live qualification.
+
+#### M05 — SBOM/SCA evidence jobs — BLOCKED(M01,B13)
+
+- Deliver: separate SBOM, dependency lifecycle, vulnerability database, and license producers with
+  component/version/source/database timestamps and hashes; do not claim reachability.
+- Acceptance: lockfile/binary/vendor cases, offline/stale DB, unknown version, duplicate component,
+  tool failure, reuse/recovery, and bounded live qualification.
+
+#### M06 — Semantic-index disposition — READY
+
+- Deliver: compare legacy semantic-index scripts with accepted `evidence_store.py`/MCP capability;
+  delete as superseded or port only unique qualified behavior. No compatibility wrapper.
+- Acceptance: feature matrix, retrieval parity fixtures, explicit disposition, updated callers/docs,
+  and no duplicate mutable index authority.
+
+#### M07 — Remaining script disposition/migration — BLOCKED(M01,M06)
+
+- Deliver: process Tier 2–4 inventory in dependency order; each script gets delete/superseded/port/
+  retain-tooling disposition, caller update, focused parity test, and no thin wrapper.
+- Acceptance: zero undocumented executable callers and updated migration inventory after each slice.
+
+### Operations, documentation, and release
+
+#### Q01 — Full host/Linux regression baseline — BLOCKED(B09,B10)
+
+- Deliver: run complete supported suites against one pinned commit, record service/image identities,
+  failures, quarantines, timing, and hashes; do not edit behavior merely to make tests green.
+
+#### Q02 — Real supplied discovery/build chain — BLOCKED(B10,E01)
+
+- Deliver: create schema-valid partition and developer-discovery results for a real engagement and
+  prove `full_review` reaches build configure with exact source/generation lineage.
+
+#### Q03 — LSP semantic-reference qualification — BLOCKED(E01)
+
+- Deliver: qualify supported language servers against accepted compile DB/build variants and record
+  semantic coverage separately from initialization smoke success.
+
+#### Q04 — Reusable skill installation documentation — READY
+
+- Deliver: tested Codex and Claude installation/use instructions for tracked process-reader,
+  retrieval, and project-discovery skills; no untracked personal-path assumption.
+
+#### Q05 — CI contract/parity/retrieval coverage — BLOCKED(Q01)
+
+- Deliver: CI for registry/contracts, parity/generation freshness, focused runtime tests, evidence
+  index bounds, stale/corrupt rejection, and platform-appropriate skips with no fabricated service
+  success.
+
+#### R01 — Full-system release qualification — BLOCKED(all applicable batches above)
+
+- Deliver: a clean `full_review` with zero applicable `WORKER_NOT_IMPLEMENTED`, accepted skip/gap
+  receipts for inapplicable/unavailable evidence, failure/recovery and cancellation scenarios,
+  reproducible qualification manifest, independent review, and documented residual deviations.
+- Acceptance: every enabled node has worker, validator, composition, contract/schema, recovery,
+  permission, pool, qualification, and traceable evidence; final publication requires human signoff.
+
 ## 0. Accepted foundation
 
 - [x] Re-vet and implement Phase 1 intake: [A01-A16 PASS](../docs/phase-1-acceptance.md).
@@ -132,12 +700,16 @@ subsystem-specific detail.
   so `02-build-configure`'s dependency chain resolves end to end in `full_review` (currently wired
   but unexercised with real data).
 - [ ] Expose the accepted partition map in the engagement evidence index once real data exists.
-- [ ] Implement `create_job_handoff.py` to render registry job templates into run-scoped handoffs
-  with persona, role, domain, tooling profile and output contract sections.
-- [ ] Implement `validate_job_output.py` for registry output contracts, citation checks,
-  static/runtime claim limits and required status fields.
-- [ ] Add smoke tests for job-template rendering once `create_job_handoff.py` exists.
-- [ ] Add negative tests proving discovery/persona jobs cannot emit verified findings.
+- [x] Implement `create_job_handoff.py` to render registry job templates into run-scoped handoffs
+  with persona, role, domain, tooling profile and output contract sections, including immutable
+  composition/input hashes.
+- [x] Implement the first `validate_job_output.py` contract slice: common envelope/status/artifact
+  checks plus dedicated Scorecard, repository-partition, and project-discovery schema, citation,
+  claim-class, cross-record, freshness, and secret-leak checks. Broader contracts remain in the
+  owning batches above.
+- [x] Add smoke and mutation tests for job-template rendering and immutable handoffs.
+- [x] Add negative tests proving the adopted discovery contracts cannot emit findings, severity,
+  or observed-runtime claims.
 - [ ] Add the registry qualification command to CI when CI orchestration is introduced.
 
 ## 5. Intelligence ingestion
