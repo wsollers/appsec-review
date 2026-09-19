@@ -56,7 +56,7 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | `images/audit-report/` | LaTeX -> PDF report build, adapted from the LRA governance project's standalone LaTeX image; report format/styleguide still undecided (see `appsec-review-process/TODO.md`) |
 | `images/mythos-orchestrator/` | Planned; empty except README |
 | `orchestrator/` | Python: ledger writer + hash chain, contract validator, artifact registry, run-state regeneration |
-| `scripts/` | Existing toolbox scripts (PowerShell + Python + sh), copied as-is |
+| `scripts/` | Legacy toolbox compatibility scripts. Do not add new review-work logic here; port active review work into `pipeline/` or Dagster/run-owned workers, qualify it, then remove the old script or leave only a thin compatibility wrapper. |
 | `schemas/` | JSON Schema for findings, contracts, component-purpose-map, index-manifest, compile-command-audit, patch-policy |
 | `contracts/` | One YAML lane contract per lane (L0–L15, L0A, L6A/B) |
 | `prompts/skills/`, `prompts/lanes/` | Reusable agent skills and per-lane prompts |
@@ -76,6 +76,12 @@ Top-level process docs now live under `docs/`:
 - [`docs/critical-findings-sarif-job.md`](docs/critical-findings-sarif-job.md)
 
 The active process TODO list is [`appsec-review-process/TODO.md`](appsec-review-process/TODO.md).
+
+Script migration policy: review-work scripts currently under `scripts/` should be treated as
+temporary compatibility surfaces. The target home for deterministic review work is `pipeline/` for
+legacy engagement assembly or `appsec-review-process/` Dagster workers for run-owned jobs. Once a
+replacement is qualified and callers are updated, remove the old script rather than continuing to
+maintain two implementations.
 
 ## Current Architecture
 

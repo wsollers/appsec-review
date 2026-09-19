@@ -4,6 +4,12 @@ Everything under `scripts/` and `images/audit-static/` was copied verbatim from 
 toolbox on 2026-09-11. Nothing has been refactored yet. This file tracks what has to change
 and why; each item becomes its own commit.
 
+Migration rule: `scripts/` is not the destination for new review-work logic. Active review scripts
+should be ported into `pipeline/` when they are part of the legacy deterministic engagement package,
+or into Dagster/run-owned workers under `appsec-review-process/` when they produce accepted job
+evidence. After the replacement is qualified and callers are updated, remove the old script or keep
+only a thin compatibility wrapper with an explicit deprecation note.
+
 ## Known breakage in the as-copied state
 
 - **`images/audit-static/Dockerfile` `COPY` paths are wrong for this layout.** It expects
