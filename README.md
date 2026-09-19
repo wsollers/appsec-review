@@ -8,6 +8,10 @@ evidence jobs with a tracked prompt/process harness under `appsec-review-process
 Design authority: `docs/design-v3.md` (exported from the Google Doc on 2026-09-11; the Doc
 remains the editing surface until this repo takes over — see `docs/decisions/ADR-0004`).
 
+Agent entrypoints live in [`AGENTS.md`](AGENTS.md). Agents should use
+[`docs/agent-reader.md`](docs/agent-reader.md) to find the current Dagster, run-output, persona,
+registry and evidence-retrieval docs before operating on a run.
+
 ## Submit a job
 
 Follow the [job submission guide](docs/dagster-launching.md) to create and stage a Linux-owned
@@ -20,6 +24,14 @@ python -B appsec-review-process/review_cli.py status --run-id <run_id>
 
 The default is `engagement_workflow`: intake, parallel scope/native-plan/handoff preparation,
 then a validated final join. Use `--job phase1_intake` only when requesting intake alone.
+
+Use `--job build_discovery` for the first build-discovery integration. `--job full_review` exposes
+all lifecycle and registry jobs with explicit blockers for missing workers. See
+[build discovery and readiness](docs/build-discovery-integration.md).
+
+Job requirements, queue semantics, monitoring, run-owned output locations and persona/registry
+lookups are documented in [Dagster launching](docs/dagster-launching.md) and the
+[agent reader](docs/agent-reader.md).
 
 ## Layout
 
@@ -52,6 +64,11 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | `validation/` | Ground-truth corpus manifest and harnesses (Notepad++ v8.5.6 → v8.5.7 first) |
 | `targets/` | Ignored local target checkouts, such as EASTL, kept out of git |
 | `scratch/` | Ignored local run outputs, databases, bitcode, logs, and LLM packages |
+
+The persona catalog and intelligence/job catalog live under
+[`docs/persona-catalog.md`](docs/persona-catalog.md) and
+[`docs/intelligence-sources-and-jobs.md`](docs/intelligence-sources-and-jobs.md). The root files
+with those names are compatibility pointers.
 
 ## Current Architecture
 
@@ -153,3 +170,10 @@ Windows validation against EASTL completed with:
   command array. No shell strings assembled at runtime (this bug was fixed four separate
   times in the previous orchestrator).
 - `/workspace` is mounted read-only. Build workers never write canonical evidence.
+
+## Evidence retrieval
+
+Submit `evidence_index` through Dagster to collect accepted source/discovery evidence, compute
+ssdeep fingerprints and publish a cited SQLite full-text index. See the
+[LLM tooling addendum](appsec-review-process/tooling/llm-retrieval-addendum.md) for CLI/MCP queries,
+language servers, capability probes and recovery, and [qualification](docs/evidence-retrieval.md).

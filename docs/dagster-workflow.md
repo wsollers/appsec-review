@@ -1,5 +1,9 @@
 # Dagster engagement workflow
 
+The additional `build_discovery` and `full_review` jobs are described in
+[build discovery and full-graph readiness](build-discovery-integration.md). The preparation workflow
+below remains the default; registration of downstream jobs does not enable their missing workers.
+
 `launch_job.py` now submits `engagement_workflow` by default. Dagster owns the queue, dependency
 graph, multiprocessing, cancellation and run history. Python functions and subprocesses perform
 bounded units of work. See the [Mermaid graph](dagster-workflow.mmd) and the machine

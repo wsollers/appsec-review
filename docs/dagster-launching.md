@@ -91,11 +91,16 @@ monitoring but leaves server execution running.
 |---|---|---|
 | `engagement_workflow` | Default, or `--job engagement_workflow` | Intake plus parallel preparation and final join |
 | `phase1_intake` | `--job phase1_intake` | Intake only, with four visible config/pre/work/post ops |
+| `build_discovery` | `--job build_discovery` | Intake and cited discovery of build requirements/commands; no build execution |
+| `build_execution` | `--job build_execution` | One sandboxed configure step after accepted build discovery; records compile database evidence when produced |
+| `evidence_index` | `--job evidence_index` | Accepted searchable source/discovery evidence for LLM retrieval |
+| `full_review` | `--job full_review` | All lifecycle/registry jobs; currently stops at the first unimplemented worker |
 
 `python -B appsec-review-process/review_cli.py intake --run-id $runId` selects the intake-only
 job and waits. Direct `phase1.py intake` remains an explicit host adapter diagnostic, not the normal
-workflow submission path. The launcher accepts these two registered jobs; it does not accept
-arbitrary scripts or currently unimplemented downstream job templates.
+workflow submission path. The launcher accepts the registered jobs listed above; it does not accept
+arbitrary scripts. See [build discovery and full-graph readiness](build-discovery-integration.md)
+before selecting `full_review`.
 
 ## 4. Check status and results
 
@@ -125,9 +130,54 @@ All engagement files live under `appsec-review-process/runs/<run_id>/`:
 | `data/workflows/engagement/accepted.json` | Aggregate acceptance after the final join |
 | `data/jobs/00-intake/whole/attempts/<attempt_id>/` | Intake evidence, validation and separate stdout/stderr |
 | `data/jobs/00-workflow-preparation/<branch>/attempts/<attempt_id>/` | Branch inputs, result, validation and separate stdout/stderr |
+| `data/jobs/00-workflow-preparation/build_execution/attempts/<attempt_id>/build/discovery/compile_commands.json` | Compile database from `build_execution`, only when the configure step produced one |
+| `data/jobs/02-evidence-index/whole/accepted.json` | Accepted evidence index pointer for retrieval |
 
 `run-status.json` retains the intake/lane view; it is not proof that the whole workflow succeeded.
 Workflow `OK` means bounded intake and preparation passed, not that a full security review finished.
+
+## 4.1 Job requirements and boundaries
+
+Every Dagster job requires:
+
+- a staged run manifest under `appsec-review-process/runs/<run_id>/inputs/artifact-manifest.json`
+- an execution platform matching the run owner; create Linux-owned runs in the code-server for
+  Dagster work
+- a matching `engagement_run_id` tag for service submissions
+- immutable attempt output under the run's `data/jobs/.../attempts/<attempt_id>/`
+- validation through the job's declared output contract before publication
+
+Do not use old `scratch/<project>-engagement/` directories as implicit inputs for new workflows.
+Import legacy evidence explicitly into a new run if it is needed. Do not delete locks, reset Dagster
+volumes, or mark files OK by hand to recover a job.
+
+Current job boundaries matter:
+
+- `engagement_workflow` performs intake and preparation only. It does not run target builds,
+  scanners, partition discovery, specialist review lanes or LLMs.
+- `build_discovery` reads accepted intake evidence and cites build instructions; it does not run
+  package managers, target scripts or compilers.
+- `build_execution` depends on an accepted `build_discovery` result and runs one restricted CMake
+  configure step inside the selected build environment. Its compile database, when present, lives
+  at `data/jobs/00-workflow-preparation/build_execution/attempts/<attempt_id>/build/discovery/compile_commands.json`.
+- `full_review` exposes the lifecycle graph for dependency qualification. Many workers are
+  intentionally blocked until implemented and qualified.
+
+## 4.2 Personas and registry jobs
+
+Dagster worker configuration is registry-driven. Registry jobs compose a persona, role, domain,
+tooling profile and output contract. Use these references before adding or dispatching work:
+
+- [persona catalog](persona-catalog.md) for human-readable reviewer stances
+- [registry README](../appsec-review-process/registry/README.md) for record types and dispatch rules
+- `appsec-review-process/registry/personas/` for machine persona records
+- `appsec-review-process/registry/job-templates/` for registered job compositions
+- [intelligence sources and jobs](intelligence-sources-and-jobs.md) for doc/API/test/binary
+  intelligence ingestion
+
+Personas are a review stance and scope contract, not evidence by themselves. A completed persona
+job still needs cited artifacts, a valid status, and any downstream verification required by the
+lane.
 
 ## 5. Reconnect, recover or cancel
 
@@ -177,6 +227,19 @@ the matching tag. Prefer a new full workflow launch for recovery, which validate
 do not bypass generation setup with isolated step selection.
 
 ## Further reading
+
+For searchable source and accepted discovery evidence, submit:
+
+```sh
+python -B appsec-review-process/launch_job.py --run-id <linux_run_id> --job evidence_index --wait
+```
+
+This job prepares/reuses intake and build discovery automatically. Query via the
+[CLI or read-only MCP server](../appsec-review-process/tooling/llm-retrieval-addendum.md).
+The UI uses the same `workflow_settings` configuration and engagement tag shown above.
+Its independent acceptance lives under `data/jobs/02-evidence-index/whole/`, not the preparation
+workflow's aggregate status. After abrupt worker loss, consult Dagster and retry the job; the
+worker preserves the interrupted attempt and writes a recovery receipt before allocating another.
 
 - [Workflow architecture, parallelism and qualification](dagster-workflow.md)
 - [Runtime limits, imports and adapter diagnostics](phase-1-operations.md)

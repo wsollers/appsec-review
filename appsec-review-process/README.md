@@ -37,7 +37,7 @@ collection and review jobs remain planned; their presence in the graph does not 
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
 | `registry/` | Composable persona, role, domain, tooling-profile, output-contract, and job-template records. |
 | `tooling/buildenv-catalog.json` | Language, LSP, MCP, and binary-analysis image catalog. |
-| `agent-skills/` | Codex and Claude skill prompts that explain how agents should use the review tooling. |
+| `agent-skills/` | Codex and Claude reader, evidence-retrieval and project-discovery prompts that explain how agents should use the review tooling. |
 | `templates/` | Handoff, artifact manifest, lane result, and status templates. |
 | `logs/` | Local run logs, scratch notes, and pasted outputs. Contents are ignored. |
 | `runs/` | Local run state. Contents are ignored except `.gitignore`; each run gets a generated run id. |
@@ -287,6 +287,14 @@ authorization and the approved wrapper flags.
 Agent skill prompts live under `appsec-review-process/agent-skills/`. They are local guidance for
 Codex and Claude-style agents; they do not override user scope, process rules, or the untrusted-data
 boundary.
+
+Use the process reader first:
+
+- Codex: `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`
+- Claude: `appsec-review-process/agent-skills/claude/process-reader.md`
+
+Both point to `docs/agent-reader.md`, which links the current Dagster submission, queueing,
+monitoring, output-location, job-requirement, persona, registry and evidence-retrieval docs.
 
 ## Relationship to Older Project Context
 

@@ -11,6 +11,11 @@ Use `review_cli.py status --run-id <run_id>` for workflow status. Reattach with 
 monitor an existing execution; omit it for a new recovery launch after correcting a failure.
 Direct `phase1.py` intake is reserved for explicit adapter diagnostics.
 All generated evidence, extracted data, builds and diagnostics belong under that run's `data/`.
+Before evidence discovery, read the [LLM tooling addendum](tooling/llm-retrieval-addendum.md)
+and load the [evidence-retrieval skill](agent-skills/codex/evidence-retrieval/SKILL.md).
+Use the accepted full-text index, cited snapshot reads, ssdeep and qualified language servers
+where they fit the question. Check run-owned capability receipts and MCP tool discovery;
+installed tools are not automatically connected to every LLM client. Use bounded grep for gaps.
 Read the workflow and Dagster status after interruption; do not delete locks or mark it OK
 manually. Intake plans partition discovery before specialist collection and characterization.
 Do not run a full pregather simply because scanner output is absent during initial intake.

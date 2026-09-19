@@ -9,6 +9,19 @@
 
 ## Registry And Job Orchestration
 
+- [x] Declare parallel source SAST/doc/API/test consumers, build-gated IR and binary analysis,
+  separate test-result/coverage consumers and an evidence rendezvous: [collection plan](../docs/parallel-intelligence.md).
+- [ ] Implement successful-build manifests with separate Debug/RelWithDebInfo/Release provenance,
+  matching symbols, generated inputs and compile databases; configure success is insufficient.
+- [ ] Adapt IR emit/link/facts and each binary tool to bounded execution, separate streams and explicit
+  tool outcomes. Remove reliance on legacy binary-wrapper `|| true` for acceptance.
+- [ ] Implement the intelligence join's receipt, freshness, variant, skip and coverage validation;
+  qualify parallel Freeciv21 collection and failed-branch recovery.
+
+- [x] Register lifecycle/registry jobs in the full Dagster graph with explicit missing-worker gates.
+- [x] Implement and qualify the bounded build-discovery integration, separate streams, immutable reuse,
+  full-graph failure and recovery: [integration evidence](../docs/build-discovery-integration.md).
+
 - [x] Add a persistent Dagster run queue, per-engagement serialization, parallel preparation,
   a validated final join and branch recovery: [workflow documentation](../docs/dagster-workflow.md).
 - Implement isolated scanner/specialist executors and resource pools before enabling heavy
@@ -31,9 +44,14 @@
 
 ## Images, MCP, And Skills
 
+- [x] Implement the Dagster source evidence index, immutable snapshots, ssdeep and FTS5 retrieval,
+  bounded read-only MCP tools and Codex/Claude retrieval skills. See [retrieval](../docs/evidence-retrieval.md).
+- [x] Add repeatable LSP and MCP filesystem/memory protocol probes with image identities and run-owned receipts.
+- [ ] Qualify language-server semantic references against accepted compile databases/build variants;
+  initialization smoke tests alone do not establish semantic coverage.
+
 - Decide whether the large binary analysis image should be split into static, firmware, mobile, and dynamic variants.
 - Add version-pinning or lock metadata for external binary-tool downloads in `images/audit-binary-analysis/Dockerfile`.
-- Add MCP smoke coverage for filesystem/memory servers in each buildenv image.
 - Publish reusable Codex and Claude skill install instructions from `appsec-review-process/agent-skills/`.
 - Add skill guidance for the new `reverse-engineer` persona and binary-intelligence job.
 
