@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "purpose": "Tracks progress toward Opengrep rule-coverage parity with the 7 Semgrep p/* packs Invoke-VendorAuditPrePass.ps1's sast-multi-semgrep-* steps currently use. Decided 2026-09-19 (repo owner): stay on Semgrep as the production SAST engine; author our OWN Opengrep rules over time to reach parity, rather than vendoring github.com/semgrep/semgrep-rules (Semgrep Rules License v1.0 -- see images/audit-static-opengrep/Dockerfile's header for why that content is not used here). Update this file whenever a rule file is added under rules/<category>/, so 'are we there yet' is answerable by reading a file, not by memory.",
+    "created": "2026-09-19",
+    "convention": "status is one of: not_started, in_progress, parity_reached. parity_reached does not mean byte-identical coverage to the semgrep pack -- it means someone deliberately judged our own rules/<category>/*.yml to cover the same real weakness classes for this project's actual targets (C/C++, PHP, native/game-engine code -- not every language semgrep's packs cover is necessarily relevant here) and recorded that judgment in notes."
+  },
+  "categories": [
+    {"category": "owasp-top-ten", "semgrep_reference_pack": "p/owasp-top-ten", "status": "not_started", "opengrep_rule_files": [], "last_updated": "2026-09-19", "notes": ""},
+    {"category": "csharp",        "semgrep_reference_pack": "p/csharp",        "status": "not_started", "opengrep_rule_files": [], "last_updated": "2026-09-19", "notes": ""},
+    {"category": "golang",        "semgrep_reference_pack": "p/golang",        "status": "not_started", "opengrep_rule_files": [], "last_updated": "2026-09-19", "notes": ""},
+    {"category": "python",        "semgrep_reference_pack": "p/python",        "status": "not_started", "opengrep_rule_files": [], "last_updated": "2026-09-19", "notes": ""},
+    {"category": "php",           "semgrep_reference_pack": "p/php",           "status": "not_started", "opengrep_rule_files": [], "last_updated": "2026-09-19", "notes": "Highest real priority of the 7 -- p/php is this pipeline's PRIMARY PHP SAST pass per finding S6-1 (see Invoke-VendorAuditPrePass.ps1's sast-multi-semgrep-php step Note), so this category should not stay not_started as long as the others once real authoring starts."},
+    {"category": "java",          "semgrep_reference_pack": "p/java",          "status": "not_started", "opengrep_rule_files": [], "last_updated": "2026-09-19", "notes": "p/java also carries the java.spring.security.* rules (p/spring's content was folded in after p/spring 404'd on the registry -- see the sast-multi-semgrep-java step Note). Any parity effort here needs to cover that too, not just generic Java rules."},
+    {"category": "security-audit","semgrep_reference_pack": "p/security-audit","status": "not_started", "opengrep_rule_files": [], "last_updated": "2026-09-19", "notes": ""}
+  ]
+}

@@ -9,7 +9,7 @@ disposition separately per design lane.
 
 - red-team claim
 - red-team design lane: `L4` or `L5`
-- red-team mode: `general` or `known-list`
+- red-team mode: `general`, `known-list`, or `kill-chain`
 - cited source/evidence
 - component map
 - known issue catalog, when answering known-list red-team claims
@@ -23,6 +23,23 @@ disposition separately per design lane.
 - missing evidence
 - residual risk
 - recommended disposition
+
+## Answering a `kill-chain` claim (added 2026-09-18)
+
+A kill-chain claim lists ordered steps. Refuting the overall narrative is not enough and refuting
+one step is not automatically a full refutation either -- be explicit about scope:
+
+- Address **each step** with its own disposition (refuted / not refuted / partially mitigated),
+  citing evidence per step, the same as any other claim.
+- State explicitly whether breaking one step breaks the whole chain (usually yes -- a chain with a
+  refuted link is refuted overall) or whether the red team's chain has an alternate path around
+  that step (rare, but call it out if evidence supports it rather than assuming the chain is dead).
+- For a tainted-data chain, a refutation must show the taint is actually sanitized, validated, or
+  blocked at a specific hop with cited evidence -- "the sink looks safe" is not a refutation if the
+  path to reach it with attacker-controlled data was never addressed.
+- Do not mark a kill-chain claim `NOT_APPLICABLE` just because one step looks like a design
+  limitation (the way `L5-GEN-002`-style single-step claims can be); a design limitation at one
+  step can still be a real, usable link in a chain if it is genuinely reachable with tainted data.
 
 ## Blue-Team Modes
 

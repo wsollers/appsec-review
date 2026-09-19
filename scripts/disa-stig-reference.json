@@ -1,0 +1,719 @@
+{
+  "_meta": {
+    "purpose": "Curated DISA STIG/SRG reference for the 15-deployment-hardening IaC persona pool (iac-k8s-helm-hardening-reviewer, iac-container-dockerfile-auditor), per docs/design-v3.md §5.4: DISA STIGs/SRGs are public-domain US federal works (17 U.S.C. §105), safe to vendor and quote directly -- unlike CIS, which this project never vendors. A finding may only set standard_refs.disa_stig_id when it was read from this file, never recalled from training knowledge.",
+    "documents": {
+      "kubernetes_stig": {
+        "title": "Kubernetes Security Technical Implementation Guide",
+        "version": "V2R1",
+        "source_published_date": "2024-06-10",
+        "source_release_date_per_stig_library_page": "2024-07-24",
+        "date_discrepancy_note": "cyber.trackr.live's API metadata records 'Published: 2024-06-10' for this document version, while its own rendered document-summary page states 'Release Date: July 24, 2024'. Recorded both rather than picking one -- most likely 2024-06-10 is the STIG's internal finalization date and 2024-07-24 is DISA's quarterly public-release-batch date, but this was not independently confirmed against DISA's own STIG Library Compilation changelog. Re-verify against public.cyber.mil directly before citing a date in an external-facing deliverable.",
+        "source_urls": [
+          "https://cyber.trackr.live/stig/Kubernetes/2/1",
+          "https://cyber.trackr.live/api/stig/Kubernetes/2/1"
+        ],
+        "fetched": "2026-09-19",
+        "total_rules": 91,
+        "severity_breakdown": {
+          "high": 18,
+          "medium": 73,
+          "low": 0
+        },
+        "scope_finding": "IMPORTANT, evidence-grounded, checked rule-by-rule before writing this file (not assumed): the large majority of this STIG's 91 rules are Kubernetes CONTROL-PLANE / CLUSTER-OPERATOR hardening checks -- their own check-text says to run commands like 'kubectl get ...' against a live cluster, or to grep API-server/kubelet manifest files under /etc/kubernetes/manifests on a control-plane host, or to 'ps -ef | grep kubelet' on a live node. None of that is reachable from this lane's static-evidence-only scope (config.md/prompt.md, design §2.1 -- no live cluster access at all) or from kube-linter's actual evidence (which lints checked-in application-level K8s manifests: Deployments, Pods, Services, etc., not cluster bootstrap/control-plane config). Only a small subset of rules are genuinely evaluable from static application-manifest content a typical IaC/app repo would check in -- see 'manifest_evaluable_rules' below. The persona's HARDENING_BASELINE_ASSESSMENT completeness claim must be scoped to that subset, not to this STIG as a whole, and prompt.md's FOLLOW_ON_EFFECTIVE_STATE_REVIEW_RECOMMENDED mechanism is the correct way to flag the remaining ~85 control-plane-level rules as out of static-evidence reach rather than silently ignoring them.",
+        "all_rules": [
+          {
+            "id": "V-242376",
+            "rule": "SV-242376r960759_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Controller Manager must use TLS 1.2, at a minimum, to protect the confidentiality of sensitive data during electronic dissemination."
+          },
+          {
+            "id": "V-242377",
+            "rule": "SV-242377r960759_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Scheduler must use TLS 1.2, at a minimum, to protect the confidentiality of sensitive data during electronic dissemination."
+          },
+          {
+            "id": "V-242378",
+            "rule": "SV-242378r960759_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server must use TLS 1.2, at a minimum, to protect the confidentiality of sensitive data during electronic dissemination."
+          },
+          {
+            "id": "V-242379",
+            "rule": "SV-242379r960759_rule",
+            "severity": "medium",
+            "title": "The Kubernetes etcd must use TLS to protect the confidentiality of sensitive data during electronic dissemination."
+          },
+          {
+            "id": "V-242380",
+            "rule": "SV-242380r960759_rule",
+            "severity": "medium",
+            "title": "The Kubernetes etcd must use TLS to protect the confidentiality of sensitive data during electronic dissemination."
+          },
+          {
+            "id": "V-242381",
+            "rule": "SV-242381r960768_rule",
+            "severity": "high",
+            "title": "The Kubernetes Controller Manager must create unique service accounts for each work payload."
+          },
+          {
+            "id": "V-242382",
+            "rule": "SV-242382r960792_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server must enable Node,RBAC as the authorization mode."
+          },
+          {
+            "id": "V-242383",
+            "rule": "SV-242383r960801_rule",
+            "severity": "high",
+            "title": "User-managed resources must be created in dedicated namespaces."
+          },
+          {
+            "id": "V-242384",
+            "rule": "SV-242384r960792_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Scheduler must have secure binding."
+          },
+          {
+            "id": "V-242385",
+            "rule": "SV-242385r960792_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Controller Manager must have secure binding."
+          },
+          {
+            "id": "V-242386",
+            "rule": "SV-242386r960792_rule",
+            "severity": "high",
+            "title": "The Kubernetes API server must have the insecure port flag disabled."
+          },
+          {
+            "id": "V-242387",
+            "rule": "SV-242387r960792_rule",
+            "severity": "high",
+            "title": "The Kubernetes Kubelet must have the \"readOnlyPort\" flag disabled."
+          },
+          {
+            "id": "V-242388",
+            "rule": "SV-242388r960792_rule",
+            "severity": "high",
+            "title": "The Kubernetes API server must have the insecure bind address not set."
+          },
+          {
+            "id": "V-242389",
+            "rule": "SV-242389r960792_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API server must have the secure port set."
+          },
+          {
+            "id": "V-242390",
+            "rule": "SV-242390r960792_rule",
+            "severity": "high",
+            "title": "The Kubernetes API server must have anonymous authentication disabled."
+          },
+          {
+            "id": "V-242391",
+            "rule": "SV-242391r960792_rule",
+            "severity": "high",
+            "title": "The Kubernetes Kubelet must have anonymous authentication disabled."
+          },
+          {
+            "id": "V-242392",
+            "rule": "SV-242392r960792_rule",
+            "severity": "high",
+            "title": "The Kubernetes kubelet must enable explicit authorization."
+          },
+          {
+            "id": "V-242393",
+            "rule": "SV-242393r960792_rule",
+            "severity": "medium",
+            "title": "Kubernetes Worker Nodes must not have sshd service running."
+          },
+          {
+            "id": "V-242394",
+            "rule": "SV-242394r960792_rule",
+            "severity": "medium",
+            "title": "Kubernetes Worker Nodes must not have the sshd service enabled."
+          },
+          {
+            "id": "V-242395",
+            "rule": "SV-242395r960792_rule",
+            "severity": "medium",
+            "title": "Kubernetes dashboard must not be enabled."
+          },
+          {
+            "id": "V-242396",
+            "rule": "SV-242396r960792_rule",
+            "severity": "medium",
+            "title": "Kubernetes Kubectl cp command must give expected access and results."
+          },
+          {
+            "id": "V-242397",
+            "rule": "SV-242397r960792_rule",
+            "severity": "high",
+            "title": "The Kubernetes kubelet staticPodPath must not enable static pods."
+          },
+          {
+            "id": "V-242398",
+            "rule": "SV-242398r960792_rule",
+            "severity": "medium",
+            "title": "Kubernetes DynamicAuditing must not be enabled."
+          },
+          {
+            "id": "V-242399",
+            "rule": "SV-242399r960792_rule",
+            "severity": "medium",
+            "title": "Kubernetes DynamicKubeletConfig must not be enabled."
+          },
+          {
+            "id": "V-242400",
+            "rule": "SV-242400r960792_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API server must have Alpha APIs disabled."
+          },
+          {
+            "id": "V-242402",
+            "rule": "SV-242402r960888_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server must have an audit log path set."
+          },
+          {
+            "id": "V-242403",
+            "rule": "SV-242403r986135_rule",
+            "severity": "medium",
+            "title": "Kubernetes API Server must generate audit records that identify what type of event has occurred, identify the source of the event, contain the event results, identify any users, and identify any containers associated with the event."
+          },
+          {
+            "id": "V-242404",
+            "rule": "SV-242404r960960_rule",
+            "severity": "medium",
+            "title": "Kubernetes Kubelet must deny hostname override."
+          },
+          {
+            "id": "V-242405",
+            "rule": "SV-242405r960960_rule",
+            "severity": "medium",
+            "title": "The Kubernetes manifests must be owned by root."
+          },
+          {
+            "id": "V-242406",
+            "rule": "SV-242406r960960_rule",
+            "severity": "medium",
+            "title": "The Kubernetes KubeletConfiguration file must be owned by root."
+          },
+          {
+            "id": "V-242407",
+            "rule": "SV-242407r960960_rule",
+            "severity": "medium",
+            "title": "The Kubernetes KubeletConfiguration files must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242408",
+            "rule": "SV-242408r960960_rule",
+            "severity": "medium",
+            "title": "The Kubernetes manifest files must have least privileges."
+          },
+          {
+            "id": "V-242409",
+            "rule": "SV-242409r960963_rule",
+            "severity": "medium",
+            "title": "Kubernetes Controller Manager must disable profiling."
+          },
+          {
+            "id": "V-242410",
+            "rule": "SV-242410r960966_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server must enforce ports, protocols, and services (PPS) that adhere to the Ports, Protocols, and Services Management Category Assurance List (PPSM CAL)."
+          },
+          {
+            "id": "V-242411",
+            "rule": "SV-242411r960966_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Scheduler must enforce ports, protocols, and services (PPS) that adhere to the Ports, Protocols, and Services Management Category Assurance List (PPSM CAL)."
+          },
+          {
+            "id": "V-242412",
+            "rule": "SV-242412r960966_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Controllers must enforce ports, protocols, and services (PPS) that adhere to the Ports, Protocols, and Services Management Category Assurance List (PPSM CAL)."
+          },
+          {
+            "id": "V-242413",
+            "rule": "SV-242413r960966_rule",
+            "severity": "medium",
+            "title": "The Kubernetes etcd must enforce ports, protocols, and services (PPS) that adhere to the Ports, Protocols, and Services Management Category Assurance List (PPSM CAL)."
+          },
+          {
+            "id": "V-242414",
+            "rule": "SV-242414r960966_rule",
+            "severity": "medium",
+            "title": "The Kubernetes cluster must use non-privileged host ports for user pods."
+          },
+          {
+            "id": "V-242415",
+            "rule": "SV-242415r986134_rule",
+            "severity": "high",
+            "title": "Secrets in Kubernetes must not be stored as environment variables."
+          },
+          {
+            "id": "V-242417",
+            "rule": "SV-242417r961095_rule",
+            "severity": "medium",
+            "title": "Kubernetes must separate user functionality."
+          },
+          {
+            "id": "V-242418",
+            "rule": "SV-242418r961110_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API server must use approved cipher suites."
+          },
+          {
+            "id": "V-242419",
+            "rule": "SV-242419r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes API Server must have the SSL Certificate Authority set."
+          },
+          {
+            "id": "V-242420",
+            "rule": "SV-242420r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes Kubelet must have the SSL Certificate Authority set."
+          },
+          {
+            "id": "V-242421",
+            "rule": "SV-242421r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes Controller Manager must have the SSL Certificate Authority set."
+          },
+          {
+            "id": "V-242422",
+            "rule": "SV-242422r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes API Server must have a certificate for communication."
+          },
+          {
+            "id": "V-242423",
+            "rule": "SV-242423r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must enable client authentication to secure service."
+          },
+          {
+            "id": "V-242424",
+            "rule": "SV-242424r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes Kubelet must enable tlsPrivateKeyFile for client authentication to secure service."
+          },
+          {
+            "id": "V-242425",
+            "rule": "SV-242425r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes Kubelet must enable tlsCertFile for client authentication to secure service."
+          },
+          {
+            "id": "V-242426",
+            "rule": "SV-242426r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must enable client authentication to secure service."
+          },
+          {
+            "id": "V-242427",
+            "rule": "SV-242427r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must have a key file for secure communication."
+          },
+          {
+            "id": "V-242428",
+            "rule": "SV-242428r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must have a certificate for communication."
+          },
+          {
+            "id": "V-242429",
+            "rule": "SV-242429r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must have the SSL Certificate Authority set."
+          },
+          {
+            "id": "V-242430",
+            "rule": "SV-242430r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must have a certificate for communication."
+          },
+          {
+            "id": "V-242431",
+            "rule": "SV-242431r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must have a key file for secure communication."
+          },
+          {
+            "id": "V-242432",
+            "rule": "SV-242432r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must have peer-cert-file set for secure communication."
+          },
+          {
+            "id": "V-242433",
+            "rule": "SV-242433r961110_rule",
+            "severity": "medium",
+            "title": "Kubernetes etcd must have a peer-key-file set for secure communication."
+          },
+          {
+            "id": "V-242434",
+            "rule": "SV-242434r961131_rule",
+            "severity": "high",
+            "title": "Kubernetes Kubelet must enable kernel protection."
+          },
+          {
+            "id": "V-242436",
+            "rule": "SV-242436r961359_rule",
+            "severity": "high",
+            "title": "The Kubernetes API server must have the ValidatingAdmissionWebhook enabled."
+          },
+          {
+            "id": "V-242437",
+            "rule": "SV-242437r961359_rule",
+            "severity": "high",
+            "title": "Kubernetes must have a pod security policy set."
+          },
+          {
+            "id": "V-242438",
+            "rule": "SV-242438r961620_rule",
+            "severity": "medium",
+            "title": "Kubernetes API Server must configure timeouts to limit attack surface."
+          },
+          {
+            "id": "V-242442",
+            "rule": "SV-242442r961677_rule",
+            "severity": "medium",
+            "title": "Kubernetes must remove old components after updated versions have been installed."
+          },
+          {
+            "id": "V-242443",
+            "rule": "SV-242443r961683_rule",
+            "severity": "medium",
+            "title": "Kubernetes must contain the latest updates as authorized by IAVMs, CTOs, DTMs, and STIGs."
+          },
+          {
+            "id": "V-242444",
+            "rule": "SV-242444r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes component manifests must be owned by root."
+          },
+          {
+            "id": "V-242445",
+            "rule": "SV-242445r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes component etcd must be owned by etcd."
+          },
+          {
+            "id": "V-242446",
+            "rule": "SV-242446r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes conf files must be owned by root."
+          },
+          {
+            "id": "V-242447",
+            "rule": "SV-242447r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Kube Proxy kubeconfig must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242448",
+            "rule": "SV-242448r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Kube Proxy kubeconfig must be owned by root."
+          },
+          {
+            "id": "V-242449",
+            "rule": "SV-242449r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Kubelet certificate authority file must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242450",
+            "rule": "SV-242450r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes Kubelet certificate authority must be owned by root."
+          },
+          {
+            "id": "V-242451",
+            "rule": "SV-242451r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes component PKI must be owned by root."
+          },
+          {
+            "id": "V-242452",
+            "rule": "SV-242452r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes kubelet KubeConfig must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242453",
+            "rule": "SV-242453r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes kubelet KubeConfig file must be owned by root."
+          },
+          {
+            "id": "V-242454",
+            "rule": "SV-242454r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes kubeadm.conf must be owned by root."
+          },
+          {
+            "id": "V-242455",
+            "rule": "SV-242455r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes kubeadm.conf must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242456",
+            "rule": "SV-242456r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes kubelet config must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242457",
+            "rule": "SV-242457r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes kubelet config must be owned by root."
+          },
+          {
+            "id": "V-242459",
+            "rule": "SV-242459r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes etcd must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242460",
+            "rule": "SV-242460r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes admin kubeconfig must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242461",
+            "rule": "SV-242461r961863_rule",
+            "severity": "medium",
+            "title": "Kubernetes API Server audit logs must be enabled."
+          },
+          {
+            "id": "V-242462",
+            "rule": "SV-242462r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server must be set to audit log max size."
+          },
+          {
+            "id": "V-242463",
+            "rule": "SV-242463r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server must be set to audit log maximum backup."
+          },
+          {
+            "id": "V-242464",
+            "rule": "SV-242464r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server audit log retention must be set."
+          },
+          {
+            "id": "V-242465",
+            "rule": "SV-242465r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes API Server audit log path must be set."
+          },
+          {
+            "id": "V-242466",
+            "rule": "SV-242466r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes PKI CRT must have file permissions set to 644 or more restrictive."
+          },
+          {
+            "id": "V-242467",
+            "rule": "SV-242467r961863_rule",
+            "severity": "medium",
+            "title": "The Kubernetes PKI keys must have file permissions set to 600 or more restrictive."
+          },
+          {
+            "id": "V-245541",
+            "rule": "SV-245541r961068_rule",
+            "severity": "medium",
+            "title": "Kubernetes Kubelet must not disable timeouts."
+          },
+          {
+            "id": "V-245542",
+            "rule": "SV-245542r961632_rule",
+            "severity": "high",
+            "title": "Kubernetes API Server must disable basic authentication to protect information in transit."
+          },
+          {
+            "id": "V-245543",
+            "rule": "SV-245543r961632_rule",
+            "severity": "high",
+            "title": "Kubernetes API Server must disable token authentication to protect information in transit."
+          },
+          {
+            "id": "V-245544",
+            "rule": "SV-245544r961632_rule",
+            "severity": "high",
+            "title": "Kubernetes endpoints must use approved organizational certificate and key pair to protect information in transit."
+          },
+          {
+            "id": "V-254800",
+            "rule": "SV-254800r961359_rule",
+            "severity": "high",
+            "title": "Kubernetes must have a Pod Security Admission control file configured."
+          },
+          {
+            "id": "V-254801",
+            "rule": "SV-254801r961359_rule",
+            "severity": "high",
+            "title": "Kubernetes must enable PodSecurity admission controller on static pods and Kubelets."
+          }
+        ],
+        "manifest_evaluable_rules": [
+          {
+            "id": "V-242415",
+            "rule": "SV-242415r986134_rule",
+            "severity": "high",
+            "title": "Secrets in Kubernetes must not be stored as environment variables.",
+            "discussion": "Sensitive data like passwords, keys, tokens, and certificates risk exposure when stored as environment variables. Such data becomes accessible through Kubernetes API calls and to systems with access to container definition files, including CI/CD pipelines. Proper protection requires mounting secrets from files or using dedicated password vaults.",
+            "check_text": "On the Kubernetes Control Plane, run: kubectl get all -o jsonpath='{range .items[?(@..secretKeyRef)]} {.kind} {.metadata.name} {\"\\n\"}{end}' -A. If any of the values returned reference environment variables, this is a finding.",
+            "fix_text": "Any secrets stored as environment variables must be moved to the secret files with the proper protections and enforcements or placed within a password vault.",
+            "static_manifest_evaluable": true,
+            "evaluability_note": "The live check-text runs kubectl against a cluster, but the same condition (a container spec's env[] referencing a Secret's data inline vs. via secretKeyRef, or a raw secret value hardcoded in env[].value) is visible directly in a checked-in Deployment/Pod manifest -- this persona may approximate this check statically against source manifests, citing the manifest path/line, not a live kubectl call it never ran.",
+            "mapped_persona": "iac-k8s-helm-hardening-reviewer"
+          },
+          {
+            "id": "V-242414",
+            "rule": "SV-242414r960966_rule",
+            "severity": "medium",
+            "title": "The Kubernetes cluster must use non-privileged host ports for user pods.",
+            "discussion": "Ports below 1024 require system privileges to operate. When containers can directly map to these privileged ports, they must run as privileged users, creating security risks. Kubernetes should prevent containers from accessing these restricted ports. The approved approach involves mapping non-privileged external ports to container ports (e.g., external port 8080 to container port 80).",
+            "check_text": "kubectl get pod <podname> -o yaml | grep -i port for user-namespace pods; any hostPort < 1024 is a finding.",
+            "fix_text": "Reconfigure the pod to use a Service to map a host non-privileged port to the pod port, or reconfigure the image to use non-privileged ports.",
+            "static_manifest_evaluable": true,
+            "evaluability_note": "hostPort is a literal field in a Pod/Deployment manifest's containerPort spec -- directly readable from checked-in source without a live cluster.",
+            "mapped_persona": "iac-k8s-helm-hardening-reviewer"
+          },
+          {
+            "id": "V-242383",
+            "rule": "SV-242383r960801_rule",
+            "severity": "high",
+            "title": "User-managed resources must be created in dedicated namespaces.",
+            "discussion": "Kubernetes namespaces support Role-Based Access Control implementation. Placing user resources in default namespaces undermines the ability to enforce RBAC policies, service account restrictions, network segmentation, and related security controls.",
+            "check_text": "kubectl get all in the default/kube-public/kube-node-lease namespaces; any user resource present (other than the kubernetes service) is a finding.",
+            "fix_text": "Relocate user-managed resources from default, kube-public, and kube-node-lease namespaces to dedicated user-created namespaces.",
+            "static_manifest_evaluable": true,
+            "evaluability_note": "A manifest's metadata.namespace field (or its absence, which defaults to 'default') is directly readable from source. Confidence should stay medium-not-high: a manifest with no namespace field is deployed to 'default' by convention but could be overridden at apply-time by '-n'/kustomize/Helm release namespace, which static evidence alone cannot see -- note this caveat in the finding rather than treating an unset namespace field as a guaranteed violation.",
+            "mapped_persona": "iac-k8s-helm-hardening-reviewer"
+          },
+          {
+            "id": "V-242417",
+            "rule": "SV-242417r961095_rule",
+            "severity": "medium",
+            "title": "Kubernetes must separate user functionality.",
+            "discussion": "Separating user functionality from management functionality is required across all Kubernetes Control Plane components. Without this separation, users could access management functions that degrade the architecture and services offered, potentially bypassing testing and validation before production deployment.",
+            "check_text": "kubectl get pods --all-namespaces; any user pod present in a system namespace (kube-system, kube-public, kube-node-lease) is a finding.",
+            "fix_text": "Relocate user pods found in Kubernetes system namespaces to appropriate user-specific namespaces.",
+            "static_manifest_evaluable": true,
+            "evaluability_note": "Same evaluability shape and same caveat as V-242383 -- a manifest declaring metadata.namespace: kube-system (or similar) for a non-system workload is directly readable from source.",
+            "mapped_persona": "iac-k8s-helm-hardening-reviewer"
+          }
+        ],
+        "not_evaluable_from_this_lanes_evidence": "The remaining 87 rules (all TLS/cert config, RBAC authorization-mode flags, kubelet/API-server/etcd runtime flags, file ownership/permissions on control-plane hosts, audit-log configuration, admission-controller feature-gates, and similar) require either a live cluster (kubectl against a running API server) or SSH/file access to a control-plane or worker node's filesystem -- neither is in scope for this lane (design §2.1, static evidence only). Do not cite these as disa_stig_id on a finding built from kube-linter/static-manifest evidence alone; where the target repo happens to include actual kubeadm bootstrap manifests or kubelet config files as tracked IaC source (uncommon for an application repo, more plausible for a platform/cluster-provisioning repo), re-evaluate case by case rather than assuming inapplicability."
+      },
+      "container_platform_srg": {
+        "title": "Container Platform Security Requirements Guide",
+        "version": "V2R1",
+        "source_published_date": "2024-05-28",
+        "source_release_date_per_stig_library_page": "2024-07-24",
+        "date_discrepancy_note": "Same discrepancy pattern as the Kubernetes STIG entry above -- both dates recorded, not reconciled against DISA's own changelog. Re-verify before citing externally.",
+        "source_urls": [
+          "https://cyber.trackr.live/stig/Container_Platform_Security_Requirements_Guide/2/1",
+          "https://cyber.trackr.live/api/stig/Container_Platform_Security_Requirements_Guide/2/1"
+        ],
+        "fetched": "2026-09-19",
+        "total_rules": 185,
+        "severity_breakdown": {
+          "high": 6,
+          "medium": 176,
+          "low": 3
+        },
+        "scope_finding": "IMPORTANT, evidence-grounded finding, and a more severe version of the Kubernetes STIG's own scope finding above: every rule sampled from this SRG (6 of the most Dockerfile-adjacent-looking candidates were pulled and read in full, not assumed) is written as a CONTAINER PLATFORM PRODUCT configuration/policy requirement -- 'review the container platform configuration', 'configure the container platform to...', 'review registry documentation and configuration'. This SRG governs the platform/registry/runtime software that HOSTS and RUNS containers (think: a CaaS product, an enterprise registry, an orchestration platform's own hardening), not the CONTENT of an individual Dockerfile. This persona's only evidence (hadolint.txt, base-images.txt) is exactly the latter -- static Dockerfile source and a base-image inventory, with no visibility into any platform/registry/runtime configuration at all. CONCLUSION: no rule in this SRG should be cited as a direct standard_refs.disa_stig_id on a finding sourced purely from hadolint/base-images evidence -- doing so would misrepresent what was actually evaluated (a platform-configuration requirement, evaluated from Dockerfile text alone). The 'conceptually_related_rules' below exist for context/narrative only (e.g. explaining *why* a hadolint USER-root finding matters, in terms a reader familiar with the SRG's V-233163 intent would recognize) -- never as a citation on the finding's standard_refs field.",
+        "all_rules_count_note": "The complete 185-rule ID/severity/title catalog (V-233015 through V-263601) is recorded in claude/TODO.md's 'session 10 continuation 3' entry and the WebSearch/WebFetch transcript this file was built from, but is not fully duplicated in this JSON file since -- per the scope_finding above -- none of it is citable as disa_stig_id from this persona's actual evidence anyway; only the 6 conceptually-related rules below are kept here, to avoid vendoring 179 rules' full text/check/fix content that has no path to ever being cited. If a future persona (e.g. a live/runtime deployment-hardening lane, or a registry/platform-operations lane) gets evidence that actually reaches platform/registry configuration, re-fetch the full catalog the same way the Kubernetes STIG's was and add it here properly -- don't hand-copy from memory.",
+        "conceptually_related_rules": [
+          {
+            "id": "V-233127",
+            "rule": "SV-233127r961149_rule",
+            "severity": "medium",
+            "title": "The container platform must prohibit containers from accessing privileged resources.",
+            "discussion": "Container instantiation within the platform may request access to host system resources. Privileged resource access risks unauthorized information transfer. Default policy should deny containers instantiation when requesting privileged resources, granting access only post-approval. Protected resources include kernel namespaces and sensitive directories like /etc and /usr.",
+            "check_text": "Review documentation and configuration to determine if the container platform disallows instantiation of containers trying to access host system privileged resources. If the container platform does not block containers requesting host system privileged resources, this is a finding.",
+            "fix_text": "Configure the container platform to block instantiation of containers requesting access to host system-privileged resources.",
+            "static_dockerfile_evaluable": false,
+            "evaluability_note": "This rule is about the PLATFORM'S enforcement policy, not the Dockerfile. A hadolint finding that a Dockerfile requests privileged capabilities (rare -- hadolint doesn't directly detect --privileged, that's a docker-run/compose/K8s-manifest concern) is related in spirit but is not evidence this SRG rule was evaluated. Cite as narrative context only, never as disa_stig_id.",
+            "mapped_persona": "iac-container-dockerfile-auditor (context only)"
+          },
+          {
+            "id": "V-233163",
+            "rule": "SV-233163r961359_rule",
+            "severity": "medium",
+            "title": "Container images instantiated by the container platform must execute using least privileges.",
+            "discussion": "Containers must operate as non-privileged users. Privileged container execution creates significant security risks. The platform runtime should validate container users and prevent instantiation of containers requesting excessive privileges, root access, or escalation capabilities.",
+            "check_text": "Review documentation and configuration to determine if the container platform disallows instantiation of containers trying to execute with more privileges than required or with privileged permissions.",
+            "fix_text": "Configure the container platform to block instantiation with no more privileges than necessary.",
+            "static_dockerfile_evaluable": false,
+            "evaluability_note": "Closest conceptual match to hadolint DL3002 ('Last USER should not be root') of anything in this SRG, but the rule itself is a platform-enforcement requirement, not a Dockerfile-authoring requirement -- a Dockerfile ending in USER root is evidence of a bad practice hadolint itself already flags on its own terms; it is not evidence this SRG rule passed or failed, since the SRG is about whether the PLATFORM would block such an image from running, not whether the Dockerfile happens to specify non-root. Cite as narrative context only.",
+            "mapped_persona": "iac-container-dockerfile-auditor (context only)"
+          },
+          {
+            "id": "V-233064",
+            "rule": "SV-233064r981843_rule",
+            "severity": "medium",
+            "title": "The container platform must be built from verified packages.",
+            "discussion": "Maintaining security requires obtaining patches and upgrades from trusted sources. The container platform must validate authenticity through digital signatures from organization-approved sources before installation.",
+            "check_text": "Review the container platform configuration to verify it has been built from packages that are digitally signed by known and approved sources.",
+            "fix_text": "Rebuild the container platform from verified packages that are digitally signed by known and approved sources.",
+            "static_dockerfile_evaluable": false,
+            "evaluability_note": "'The container platform' here means the platform software itself (the CaaS/registry/runtime product), not an application image's base layer. Do not conflate with the base-image EOL/lifecycle check this persona already does via eol-reference.json -- that is a genuinely different, already-covered concern, not this rule.",
+            "mapped_persona": "iac-container-dockerfile-auditor (context only, explicitly do not conflate with base-image EOL check)"
+          },
+          {
+            "id": "V-233065",
+            "rule": "SV-233065r981844_rule",
+            "severity": "medium",
+            "title": "The container platform must verify container images.",
+            "discussion": "Container platforms require validation that images are digitally signed by approved sources. Unverified images risk introducing untrusted or malicious services that could compromise the hosting server, platform integrity, other services, and organizational security.",
+            "check_text": "Review the container platform configuration to determine if container images are verified by enforcing image signing and that the image signature is from an approved source.",
+            "fix_text": "Configure the container platform to verify container images are digitally signed and the signature is from a recognized and approved source.",
+            "static_dockerfile_evaluable": false,
+            "evaluability_note": "Image-signing enforcement is a registry/admission-controller/platform policy, not something visible in a Dockerfile or a static base-image inventory. If a future persona gets evidence of an actual signature-verification policy (e.g. cosign/notation config in the IaC source), re-scope this rule then.",
+            "mapped_persona": "iac-container-dockerfile-auditor (context only)"
+          },
+          {
+            "id": "V-233192",
+            "rule": "SV-233192r961479_rule",
+            "severity": "medium",
+            "title": "The container platform registry must employ a deny-all, permit-by-exception (whitelist) policy to allow only authorized container images in the container platform.",
+            "discussion": "Restricting container image sources prevents unauthorized software deployment. Allowing any container image to be introduced and instantiated within the container platform may introduce malicious code and vulnerabilities to the platform and the hosting system.",
+            "check_text": "Review configuration to verify whitelist policies restrict container component execution, following a deny-all, permit-by-exception approach.",
+            "fix_text": "Configure the container platform to utilize a deny-all, permit-by-exception policy when allowing the execution of authorized software.",
+            "static_dockerfile_evaluable": false,
+            "evaluability_note": "Registry admission policy, not Dockerfile content. base-images.txt records which base images were referenced, not whether a registry-level allowlist exists.",
+            "mapped_persona": "iac-container-dockerfile-auditor (context only)"
+          },
+          {
+            "id": "V-233231",
+            "rule": "SV-233231r961677_rule",
+            "severity": "medium",
+            "title": "The container platform registry must remove old container images after updating versions have been made available.",
+            "discussion": "Obsolete and stale images should be removed from registries to maintain security posture. While storing these images presents no direct threat, they increase the risk of deploying vulnable versions. Retaining only current, approved versions eliminates the possibility of deploying insecure images.",
+            "check_text": "Review registry documentation/configuration to verify organization-defined images contain the latest approved vendor software version and that obsolete images are removed after updates.",
+            "fix_text": "Configure the container platform registry to update images with current approved vendor versions and remove obsolete images after updates are installed.",
+            "static_dockerfile_evaluable": false,
+            "evaluability_note": "Conceptually the closest match to this persona's existing eol-reference.json base-image lifecycle check, but the rule is about REGISTRY retention/cleanup policy, not about whether a specific Dockerfile pins an EOL base image tag. The existing eol-reference.json check stays a hadolint/base-images.txt-grounded finding on its own terms (no disa_stig_id); this SRG rule is not evidence for or against that finding.",
+            "mapped_persona": "iac-container-dockerfile-auditor (context only, explicitly do not conflate with base-image EOL check)"
+          }
+        ]
+      }
+    }
+  }
+}

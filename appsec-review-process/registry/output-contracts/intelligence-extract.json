@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "intelligence-extract",
+  "display_name": "Scrubbed Intelligence Extract",
+  "required_files": [
+    "summary.md",
+    "facts.json",
+    "search-records.jsonl",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "budget",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "artifacts_read"
+  ],
+  "validation_rules": [
+    "facts.json must validate against intelligence-payload.schema.json or a narrower derivative",
+    "source lineage must point back to the raw artifact",
+    "search records must contain scrubbed text only",
+    "raw secrets, credentials, and customer data must not be indexed"
+  ]
+}

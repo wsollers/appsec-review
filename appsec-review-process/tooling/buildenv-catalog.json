@@ -1,0 +1,249 @@
+{
+  "schema": "appsec-review/buildenv-catalog/0.1",
+  "runtime_wrapper": {
+    "bash": "images/audit-buildenv-common/run.sh",
+    "powershell": "images/audit-buildenv-common/run.ps1",
+    "default_network": "none",
+    "network_override_env": "ALLOW_NETWORK=1",
+    "debug_capability_override_env": "DEBUG_CAPS=1"
+  },
+  "images": [
+    {
+      "language": "cpp",
+      "image": "audit-buildenv-cpp:local",
+      "dockerfile": "images/audit-buildenv-cpp/Dockerfile",
+      "extends": "audit-native:local",
+      "project_markers": [
+        "compile_commands.json",
+        "CMakeLists.txt",
+        "*.vcxproj",
+        "Makefile",
+        "*.sln"
+      ],
+      "lsp": [
+        "clangd"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "java",
+      "image": "audit-buildenv-java:local",
+      "dockerfile": "images/audit-buildenv-java/Dockerfile",
+      "project_markers": [
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "settings.gradle",
+        "settings.gradle.kts"
+      ],
+      "lsp": [
+        "jdtls"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "go",
+      "image": "audit-buildenv-go:local",
+      "dockerfile": "images/audit-buildenv-go/Dockerfile",
+      "project_markers": [
+        "go.mod",
+        "go.work"
+      ],
+      "lsp": [
+        "gopls"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "typescript",
+      "image": "audit-buildenv-typescript:local",
+      "dockerfile": "images/audit-buildenv-typescript/Dockerfile",
+      "project_markers": [
+        "package.json",
+        "pnpm-workspace.yaml",
+        "yarn.lock",
+        "package-lock.json",
+        "tsconfig.json",
+        "jsconfig.json"
+      ],
+      "lsp": [
+        "typescript-language-server",
+        "vscode-langservers-extracted"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "php",
+      "image": "audit-buildenv-php:local",
+      "dockerfile": "images/audit-buildenv-php/Dockerfile",
+      "project_markers": [
+        "composer.json",
+        "composer.lock",
+        "artisan",
+        "index.php"
+      ],
+      "lsp": [
+        "phpactor"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "dotnet",
+      "image": "audit-buildenv-dotnet:local",
+      "dockerfile": "images/audit-buildenv-dotnet/Dockerfile",
+      "project_markers": [
+        "*.sln",
+        "*.csproj",
+        "*.fsproj",
+        "global.json",
+        "Directory.Build.props"
+      ],
+      "lsp": [
+        "csharp-ls"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "python",
+      "image": "audit-buildenv-python:local",
+      "dockerfile": "images/audit-buildenv-python/Dockerfile",
+      "project_markers": [
+        "pyproject.toml",
+        "requirements.txt",
+        "setup.py",
+        "setup.cfg",
+        "Pipfile",
+        "poetry.lock",
+        "uv.lock"
+      ],
+      "lsp": [
+        "pylsp",
+        "basedpyright"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "rust",
+      "image": "audit-buildenv-rust:local",
+      "dockerfile": "images/audit-buildenv-rust/Dockerfile",
+      "project_markers": [
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain",
+        "rust-toolchain.toml"
+      ],
+      "lsp": [
+        "rust-analyzer"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    {
+      "language": "binary-analysis",
+      "image": "audit-binary-analysis:local",
+      "dockerfile": "images/audit-binary-analysis/Dockerfile",
+      "project_markers": [
+        "*.exe",
+        "*.dll",
+        "*.so",
+        "*.dylib",
+        "*.pdb",
+        "*.dSYM",
+        "*.debug",
+        "*.elf",
+        "*.o",
+        "*.a",
+        "*.wasm"
+      ],
+      "formats": [
+        "ELF",
+        "PE",
+        "DWARF",
+        "PDB",
+        "symbols",
+        "debug files"
+      ],
+      "tools": [
+        "analyze-binary",
+        "binary-summary",
+        "file",
+        "readelf",
+        "eu-readelf",
+        "llvm-readobj",
+        "llvm-objdump",
+        "objdump",
+        "nm",
+        "dwarfdump",
+        "pahole",
+        "scanelf",
+        "checksec",
+        "binwalk",
+        "yara",
+        "floss",
+        "diec",
+        "ssdeep",
+        "tlsh",
+        "syft",
+        "grype",
+        "trivy",
+        "qemu-user-static",
+        "qemu-x86_64-static",
+        "apktool",
+        "jadx",
+        "ilspycmd",
+        "frida-tools",
+        "frida",
+        "frida-ps",
+        "frida-trace",
+        "frida-discover",
+        "frida-itrace",
+        "frida-apk",
+        "gdbserver",
+        "valgrind",
+        "rr",
+        "gdb",
+        "lldb",
+        "ghidra",
+        "ghidra-analyzeHeadless",
+        "angr",
+        "angr-summary",
+        "retdec-fileinfo",
+        "retdec-decompiler",
+        "cwe_checker",
+        "check_cwe",
+        "capa",
+        "lief",
+        "pefile",
+        "pyelftools",
+        "capstone"
+      ],
+      "mcp": [
+        "@modelcontextprotocol/server-filesystem",
+        "@modelcontextprotocol/server-memory"
+      ]
+    }
+  ]
+}

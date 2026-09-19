@@ -1,0 +1,11 @@
+{
+  "name": "hello-typescript",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit",
+    "start": "node src/hello.js",
+    "test": "npm run build && npm run start"
+  },
+  "devDependencies": {}
+}

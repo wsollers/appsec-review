@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "role.schema.json",
+  "title": "Composable Review Role",
+  "type": "object",
+  "required": [
+    "schema",
+    "role_id",
+    "display_name",
+    "category",
+    "summary",
+    "allowed_outputs",
+    "forbidden_outputs",
+    "required_behavior",
+    "must_not"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/role/0.1"
+    },
+    "role_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "discovery",
+        "refutation",
+        "verification",
+        "intelligence",
+        "standards",
+        "stakeholder-output",
+        "remediation",
+        "synthesis"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "allowed_outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "forbidden_outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_behavior": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "must_not": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

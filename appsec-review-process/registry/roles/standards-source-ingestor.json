@@ -1,0 +1,30 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "standards-source-ingestor",
+  "display_name": "Standards Source Ingestor",
+  "category": "intelligence",
+  "summary": "Extracts upstream standards into per-control and per-test records with source lineage and reverse indexes.",
+  "allowed_outputs": [
+    "standard_control_record",
+    "standard_test_record",
+    "source_manifest",
+    "control_to_test_index",
+    "component_tag_to_control_index"
+  ],
+  "forbidden_outputs": [
+    "control_verdict",
+    "verified_finding",
+    "compliance_score"
+  ],
+  "required_behavior": [
+    "preserve upstream metadata and source lineage",
+    "keep controls small and separately assignable",
+    "build reverse indexes from controls to tests when test mappings exist",
+    "record unsupported or license-restricted references as gaps"
+  ],
+  "must_not": [
+    "hand-enrich controls with uncited mappings",
+    "drop version/ref metadata",
+    "mix extracted reference data with engagement-specific verdicts"
+  ]
+}

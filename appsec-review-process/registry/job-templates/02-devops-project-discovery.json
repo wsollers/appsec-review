@@ -1,0 +1,47 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-devops-project-discovery",
+  "display_name": "DevOps Project And Pipeline Discovery",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "devops-engineer",
+    "role_id": "repo-project-discoverer",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "static-repo-project-inspector",
+    "output_contract_id": "project-discovery"
+  },
+  "inputs": {
+    "required": [
+      "target repository path",
+      "CI/CD and deployment artifact inventory"
+    ],
+    "optional": [
+      "Dockerfiles",
+      "IaC",
+      "environment templates",
+      "build logs"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/project-intel",
+    "files": [
+      "project-inventory.json",
+      "project-discovery-summary.md",
+      "safe-command-plan.json",
+      "pipeline-project-inventory.json",
+      "devops-discovery-summary.md",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "pipeline_artifacts",
+    "task",
+    "output_contract"
+  ]
+}

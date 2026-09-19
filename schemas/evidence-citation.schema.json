@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence-citation.schema.json",
+  "title": "Evidence Citation",
+  "description": "The atomic unit every finding and every artifacts_read/artifacts_consumed entry is built from. Added 2026-09-19 as part of the common finding/evidence/interjob-transfer format effort (see claude project TODO).",
+  "type": "object",
+  "required": ["source_type", "path"],
+  "additionalProperties": false,
+  "properties": {
+    "source_type": {
+      "type": "string",
+      "enum": ["tool_output", "source_file", "upstream_lane", "manual_diagnostic", "reference_data"],
+      "description": "tool_output = a deterministic scanner's own output file; source_file = target repo source/config; upstream_lane = another lane's status.json/result.md; manual_diagnostic = a one-off command run and recorded (e.g. a docker run sanity check); reference_data = a curated offline reference file (eol-reference.json, cis-*-reference.json, etc.)."
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Relative to engagement_output for tool_output/reference_data, relative to the target repo root for source_file, or the real outputs/<lane>/{status.json,result.md} path for upstream_lane."
+    },
+    "line_range": {"type": ["string", "null"]},
+    "tool_name": {"type": ["string", "null"]},
+    "tool_rule_id": {"type": ["string", "null"], "description": "e.g. a ShellCheck SC code, a PSScriptAnalyzer rule name, a CodeQL query id, a Semgrep rule id."},
+    "content_hash": {
+      "type": ["string", "null"],
+      "description": "sha256 of the cited file at citation time, when feasible. Lets a downstream validator detect that evidence changed since a claim cited it -- this project has hit real stale-evidence bugs (item #16, #20, #22 in the harness doc) that a hash check would have caught immediately instead of requiring a manual mtime/git-log investigation."
+    },
+    "note": {"type": ["string", "null"]}
+  }
+}

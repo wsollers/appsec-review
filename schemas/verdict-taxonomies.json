@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "purpose": "Named verdict vocabularies a finding.classification may be drawn from, keyed by classification_taxonomy. Same curated-reference-file convention as eol-reference.json/native-libdir-reference.json -- hand-maintained, not derived. Add a new taxonomy here rather than inventing a new ad hoc enum inside a lane prompt.",
+    "created": "2026-09-19",
+    "maintenance": "Update when a lane's real verdict language changes (e.g. if 07/08/09 add a new disposition) -- keep this in sync with actual prompt.md wording, don't let them drift independently."
+  },
+  "taxonomies": {
+    "adversarial-verdict": {
+      "used_by": ["07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification"],
+      "values": ["CONFIRMED", "REFUTED", "PARTIALLY_MITIGATED", "STILL_PLAUSIBLE", "NOT_APPLICABLE", "CANNOT_VERIFY"]
+    },
+    "static-hardening": {
+      "used_by": ["15-deployment-hardening"],
+      "values": ["hardened", "hardening-gap-confirmed", "hardening-baseline-assessment", "image-artifact-not-provided", "declared-exposure-only", "cannot-verify"]
+    },
+    "memory-safety-disposition": {
+      "used_by": ["05-native-memory"],
+      "values": ["likely_real", "likely_benign", "cannot_verify", "refuted"]
+    },
+    "cve-reachability": {
+      "used_by": ["06-cve-reachability"],
+      "values": ["reachable", "unreachable", "unknown_missing_declaration", "unknown_eol_status"]
+    }
+  }
+}

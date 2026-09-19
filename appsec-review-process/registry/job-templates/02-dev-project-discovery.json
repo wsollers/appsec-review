@@ -1,0 +1,44 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-dev-project-discovery",
+  "display_name": "Developer Project Discovery",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "repo-project-discoverer",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "static-repo-project-inspector",
+    "output_contract_id": "project-discovery"
+  },
+  "inputs": {
+    "required": [
+      "target repository path",
+      "language build environment image catalog"
+    ],
+    "optional": [
+      "developer docs",
+      "CI workflow files",
+      "existing component map"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/project-intel",
+    "files": [
+      "project-inventory.json",
+      "project-discovery-summary.md",
+      "safe-command-plan.json",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "buildenv_catalog",
+    "task",
+    "output_contract"
+  ]
+}

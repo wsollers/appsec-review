@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "static-api-collection-parser",
+  "display_name": "Static API Collection Parser",
+  "mode": "static-only",
+  "required_inputs": [
+    "API collection path",
+    "collection format"
+  ],
+  "optional_inputs": [
+    "environment path",
+    "OpenAPI spec",
+    "component map",
+    "route inventory"
+  ],
+  "allowed_actions": [
+    "parse collection files",
+    "scrub environment values",
+    "extract route and assertion inventory",
+    "emit candidate verification requests",
+    "write safe search records"
+  ],
+  "disallowed_actions": [
+    "execute requests",
+    "index bearer tokens, cookies, API keys, or passwords",
+    "claim observed runtime behavior"
+  ],
+  "claim_limits": {
+    "route_inventory": "allowed",
+    "test_coverage": "allowed_with_caveat",
+    "observed_runtime_state": "forbidden"
+  }
+}

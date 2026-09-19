@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "stig-worklist-builder",
+  "display_name": "STIG/SRG Applicability And Worklist Builder",
+  "mode": "static-only",
+  "required_inputs": [
+    "platform or image inventory",
+    "SBOM/package inventory",
+    "curated STIG/SRG/hardening references"
+  ],
+  "optional_inputs": [
+    "Dockerfile inventory",
+    "service configuration evidence",
+    "Trivy/Grype/Syft output",
+    "kube-bench or Docker Bench output"
+  ],
+  "allowed_actions": [
+    "identify platform hardening targets",
+    "map products and evidence modes to applicable controls",
+    "mark live-state-required checks",
+    "emit platform applicability matrix"
+  ],
+  "disallowed_actions": [
+    "apply host checks to unrelated container evidence",
+    "assess runtime daemon state from package presence",
+    "use CIS identifiers without permitted local reference or scanner lineage"
+  ],
+  "claim_limits": {
+    "applicability": "allowed",
+    "control_verdict": "forbidden",
+    "live_state": "follow_up_only"
+  }
+}

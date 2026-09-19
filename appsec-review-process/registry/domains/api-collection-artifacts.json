@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "api-collection-artifacts",
+  "display_name": "API Collection Artifacts",
+  "surfaces": [
+    "Postman collections",
+    "Bruno collections",
+    "Insomnia exports",
+    "OpenAPI specifications",
+    "API environment files"
+  ],
+  "common_failure_modes": [
+    "environment secrets indexed",
+    "auth-positive tests mistaken for auth-negative tests",
+    "collection behavior treated as runtime proof",
+    "unmapped routes excluded from control worklists"
+  ],
+  "preferred_standards": [
+    "OWASP API Security Top 10",
+    "OWASP ASVS",
+    "OpenCRE"
+  ],
+  "required_evidence_hints": [
+    "collection path",
+    "collection format",
+    "optional scrubbed environment path"
+  ]
+}

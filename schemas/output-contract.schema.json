@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "output-contract.schema.json",
+  "title": "Composable Review Output Contract",
+  "type": "object",
+  "required": [
+    "schema",
+    "contract_id",
+    "display_name",
+    "required_files",
+    "required_status_fields",
+    "validation_rules"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/output-contract/0.1"
+    },
+    "contract_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "required_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_status_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation_rules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

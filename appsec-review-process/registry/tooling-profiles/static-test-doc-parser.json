@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "static-test-doc-parser",
+  "display_name": "Static Test Artifact Parser",
+  "mode": "static-only",
+  "required_inputs": [
+    "test path",
+    "test type or auto-detection"
+  ],
+  "optional_inputs": [
+    "coverage report",
+    "component map",
+    "route inventory",
+    "CI test metadata"
+  ],
+  "allowed_actions": [
+    "read test source and metadata",
+    "extract test names, assertions, fixtures, roles, routes, and target files",
+    "map tests to components, routes, and controls where supported",
+    "emit scrubbed search records"
+  ],
+  "disallowed_actions": [
+    "execute tests unless a separate authorized-active profile is selected",
+    "index raw fixture secrets",
+    "claim production behavior from mocked tests"
+  ],
+  "claim_limits": {
+    "test_inventory": "allowed",
+    "coverage_gap": "allowed",
+    "control_satisfied": "forbidden"
+  }
+}

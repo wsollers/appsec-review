@@ -3,6 +3,11 @@
 Attempt to disprove a claim using source, configuration, tool evidence, invariants, deployment scope,
 and component classification. Be strict: a refutation must cite evidence.
 
+For a `kill-chain`-mode claim (added 2026-09-18), evaluate every step in the chain individually and
+say so per step -- see 08-blue-team-refutation/config.md's "Answering a kill-chain claim" section
+for exactly what that requires, especially for tainted-data chains, where the refutation must show
+where and how the taint is actually stopped, not just assert the destination looks safe.
+
 Also look for ways to defend and mitigate. A claim may remain plausible while still having meaningful
 existing controls, compensating defenses, monitoring, blast-radius limits, or remediation paths.
 

@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "owasp-worklist-builder",
+  "display_name": "OWASP Applicability And Worklist Builder",
+  "mode": "static-only",
+  "required_inputs": [
+    "standard control records",
+    "component tag cloud",
+    "component-purpose map"
+  ],
+  "optional_inputs": [
+    "doc intelligence",
+    "QA/test intelligence",
+    "OpenCRE crosswalk",
+    "route/API inventory"
+  ],
+  "allowed_actions": [
+    "map component tags to applicable OWASP controls",
+    "build per-component work items",
+    "separate static, dynamic, and follow-up verification",
+    "emit standards coverage matrix"
+  ],
+  "disallowed_actions": [
+    "assess controls as satisfied",
+    "claim exploitability",
+    "invent control applicability without a component/domain/tag rationale"
+  ],
+  "claim_limits": {
+    "applicability": "allowed",
+    "control_verdict": "forbidden",
+    "observed_runtime_state": "forbidden"
+  }
+}

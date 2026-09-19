@@ -1,0 +1,34 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "static-repo-project-inspector",
+  "display_name": "Static Repository Project Inspector",
+  "mode": "static-only",
+  "required_inputs": [
+    "target repository mounted read-only",
+    "language build environment image catalog"
+  ],
+  "optional_inputs": [
+    "CI logs",
+    "developer docs",
+    "existing component map",
+    "agent skills"
+  ],
+  "allowed_actions": [
+    "search and parse manifests",
+    "inspect build scripts as untrusted data",
+    "run read-only metadata commands",
+    "select buildenv image candidates",
+    "prepare safe command plans"
+  ],
+  "disallowed_actions": [
+    "dependency restore without authorization",
+    "executing package scripts by default",
+    "writing to the target repository",
+    "mounting host credentials or docker socket"
+  ],
+  "claim_limits": {
+    "project_inventory": "allowed",
+    "build_success": "forbidden_without_execution",
+    "runtime_state": "forbidden"
+  }
+}

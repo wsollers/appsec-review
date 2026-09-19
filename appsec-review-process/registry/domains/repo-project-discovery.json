@@ -1,0 +1,34 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "repo-project-discovery",
+  "display_name": "Repository Project Discovery",
+  "surfaces": [
+    "language manifests",
+    "lockfiles",
+    "workspace files",
+    "solution files",
+    "build scripts",
+    "test directories",
+    "CI/CD files",
+    "Dockerfiles and compose files"
+  ],
+  "common_failure_modes": [
+    "monorepo workspaces missed",
+    "generated code or vendored code mistaken for primary project",
+    "unsafe install/build scripts executed too early",
+    "CI-only build requirements undocumented",
+    "test commands unavailable because dependency restore was skipped or unsafe"
+  ],
+  "preferred_standards": [
+    "SLSA",
+    "OWASP SCVS",
+    "OpenSSF Scorecard",
+    "organization build policy"
+  ],
+  "required_evidence_hints": [
+    "target repository path",
+    "manifest and lockfile inventory",
+    "CI workflow inventory",
+    "build environment image catalog"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "binary-intelligence",
+  "display_name": "Binary Intelligence",
+  "required_files": [
+    "binary-artifact-inventory.json",
+    "binary-intelligence-summary.md",
+    "tool-evidence-manifest.json",
+    "candidate-leads.json",
+    "verification-followups.json",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "budget",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "artifacts_read"
+  ],
+  "validation_rules": [
+    "binary-artifact-inventory.json must include artifact path, hash, file type, architecture or an explicit gap",
+    "tool-evidence-manifest.json must list each tool output path and whether it succeeded, failed, or was skipped",
+    "candidate-leads.json must classify leads as attack, defense, dependency, similarity, symbol, string, debug, or follow-up evidence",
+    "candidate leads must cite evidence files and remain candidate or follow_on_required unless independently verified",
+    "binary-intelligence-summary.md must state scope, flags enabled, unsupported formats, and coverage limitations",
+    "status.json must include every required status field",
+    "runtime behavior, exploitability, and High/Critical findings are forbidden without downstream independent verification"
+  ]
+}

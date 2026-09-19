@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "domain.schema.json",
+  "title": "Composable Review Domain",
+  "type": "object",
+  "required": [
+    "schema",
+    "domain_id",
+    "display_name",
+    "surfaces",
+    "common_failure_modes",
+    "preferred_standards",
+    "required_evidence_hints"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/domain/0.1"
+    },
+    "domain_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "surfaces": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "common_failure_modes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preferred_standards": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "required_evidence_hints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

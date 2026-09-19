@@ -1,0 +1,50 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "04-owasp-validation-worklist",
+  "display_name": "OWASP Validation Worklist Generation",
+  "process": "04-asvs-masvs",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-worklist-builder",
+    "output_contract_id": "control-worklist"
+  },
+  "inputs": {
+    "required": [
+      "appsec-review-process/standards/catalog/owasp-*",
+      "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
+      "scratch/<project>-engagement/standards-intel/component-tag-cloud.json"
+    ],
+    "optional": [
+      "scratch/<project>-engagement/doc-intel/*.json",
+      "scratch/<project>-engagement/qa-intel/*.json",
+      "scratch/<project>-engagement/intel/lane-briefs/04-asvs-masvs.md",
+      "appsec-review-process/standards/indexes/opencre-crosswalk.json"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/standards-intel",
+    "files": [
+      "worklist.json",
+      "summary.md",
+      "status.json",
+      "applicable-controls.json",
+      "owasp-validation-worklist.json",
+      "standards-coverage-matrix.json",
+      "owasp-validation-summary.md"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "component_tag_cloud",
+    "standard_controls",
+    "task",
+    "output_contract"
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "standards-worklist.schema.json",
+  "title": "Standards Validation Worklist",
+  "type": "object",
+  "required": [
+    "schema",
+    "worklist_id",
+    "standard_family",
+    "generated_from",
+    "work_items"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/standards-worklist/0.1"
+    },
+    "worklist_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "standard_family": {
+      "type": "string"
+    },
+    "generated_from": {
+      "type": "array",
+      "items": {
+        "$ref": "evidence-citation.schema.json"
+      }
+    },
+    "work_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "work_item_id",
+          "standard",
+          "control_id",
+          "component_id",
+          "domain",
+          "evidence_mode",
+          "required_artifacts",
+          "verification_questions",
+          "expected_output"
+        ],
+        "properties": {
+          "work_item_id": {
+            "type": "string"
+          },
+          "standard": {
+            "type": "string"
+          },
+          "control_id": {
+            "type": "string"
+          },
+          "component_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "evidence_mode": {
+            "type": "string"
+          },
+          "required_artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verification_questions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_output": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

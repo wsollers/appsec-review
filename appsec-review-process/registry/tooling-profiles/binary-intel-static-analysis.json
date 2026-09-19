@@ -1,0 +1,44 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "binary-intel-static-analysis",
+  "display_name": "Binary Intelligence Static Analysis",
+  "mode": "static-only",
+  "required_inputs": [
+    "target binary artifact mounted read-only",
+    "writable scratch output directory",
+    "audit-binary-analysis image",
+    "artifact provenance or explicit provenance gap"
+  ],
+  "optional_inputs": [
+    "YARA rules",
+    "source component map",
+    "SBOM or package inventory",
+    "debug symbols or separate debug files",
+    "known-good or known-bad binary comparison corpus",
+    "agent skills for repository project discovery"
+  ],
+  "allowed_actions": [
+    "compute hashes and file metadata",
+    "extract strings, symbols, imports, exports, debug metadata, and disassembly",
+    "run analyze-binary default static checks",
+    "run YARA, FLOSS, DIE, capa, RetDec fileinfo, ssdeep, TLSH, Syft, Grype, Trivy, JADX, ILSpy, Ghidra headless, angr summary, and cwe_checker where authorized by job flags",
+    "write derived evidence under scratch",
+    "produce candidate red-team and blue-team leads with proof obligations"
+  ],
+  "disallowed_actions": [
+    "execute target binaries by default",
+    "attach debuggers or Frida instrumentation without explicit authorization",
+    "enable network access for vulnerability database updates without explicit authorization",
+    "write to the target repository",
+    "mount host credentials, host devices, or the Docker socket",
+    "claim observed runtime behavior from static evidence alone"
+  ],
+  "claim_limits": {
+    "binary_inventory": "allowed_with_hashes",
+    "indicator_or_string_lead": "allowed_as_candidate",
+    "function_or_callgraph_hint": "allowed_as_retrieval_hint",
+    "dependency_or_cve_hint": "allowed_as_candidate_until_reachability_review",
+    "exploitability": "forbidden_without_independent_verification",
+    "runtime_state": "forbidden"
+  }
+}

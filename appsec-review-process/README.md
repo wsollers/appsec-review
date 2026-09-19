@@ -20,6 +20,9 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 | `continuation-doom3-bfg-full-static-analysis.md` | Fresh-task continuation prompt for Doom 3 BFG full static-analysis pregather. |
 | `initial-idsoftware-game-repo-compile-and-review.md` | Fresh-task starter prompt for selecting, cloning, building, and staging an id Software game/engine repo. |
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
+| `registry/` | Composable persona, role, domain, tooling-profile, output-contract, and job-template records. |
+| `tooling/buildenv-catalog.json` | Language, LSP, MCP, and binary-analysis image catalog. |
+| `agent-skills/` | Codex and Claude skill prompts that explain how agents should use the review tooling. |
 | `templates/` | Handoff, artifact manifest, lane result, and status templates. |
 | `logs/` | Local run logs, scratch notes, and pasted outputs. Contents are ignored. |
 | `runs/` | Local run state. Contents are ignored except `.gitignore`; each run gets a generated run id. |
@@ -242,6 +245,33 @@ scratch/<project>-engagement/
 
 The LLM lanes should read `llm/ENGAGEMENT_LLM_INPUT.md` first, then drill into the coverage ledger,
 native bundle, correlated findings, deep confirmation, and retrieval plan as needed.
+
+## Composable Registry, Skills, And Worker Images
+
+The registry under `appsec-review-process/registry/` now contains dispatchable building blocks for
+bounded work inside lanes:
+
+- personas for developer, DevOps, SRE, standards validation, QA/test intelligence, document
+  intelligence, and binary reverse engineering
+- roles for project discovery, operations topology, standards ingestion/validation,
+  doc/API/test intelligence extraction, and binary intelligence extraction
+- job templates for project discovery, standards ingestion/worklists, doc/API/test ingestion,
+  SRE topology mapping, and binary intelligence ingestion
+
+Language worker images live under `images/audit-buildenv-*`. They provide build, LSP, MCP
+filesystem/memory server support, smoke-test fixtures under `images/test/`, and shared restricted
+runtime wrappers under `images/audit-buildenv-common/`.
+
+The binary worker is `audit-binary-analysis:local`. It supports PE/ELF/debug/symbol/APK/.NET
+analysis with tools such as Ghidra, angr, RetDec, cwe_checker/check_cwe, FLOSS, DIE, YARA,
+Syft/Grype/Trivy, ssdeep/TLSH, QEMU user emulation, APK helpers, ILSpy, Frida, and debugger
+tooling. Static binary intelligence belongs in `02-evidence-pregather`; execution, tracing,
+debugging, Frida instrumentation, and networked vulnerability DB updates require explicit
+authorization and the approved wrapper flags.
+
+Agent skill prompts live under `appsec-review-process/agent-skills/`. They are local guidance for
+Codex and Claude-style agents; they do not override user scope, process rules, or the untrusted-data
+boundary.
 
 ## Relationship to Older Project Context
 

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "component-tag-cloud.schema.json",
+  "title": "Component Tag Cloud",
+  "type": "object",
+  "required": [
+    "schema",
+    "project",
+    "components"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/component-tag-cloud/0.1"
+    },
+    "project": {
+      "type": "string"
+    },
+    "generated_from": {
+      "type": "array",
+      "items": {
+        "$ref": "evidence-citation.schema.json"
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "component_id",
+          "name",
+          "component_tags",
+          "standard_domains",
+          "platform_products"
+        ],
+        "properties": {
+          "component_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "component_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "standard_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "platform_products": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

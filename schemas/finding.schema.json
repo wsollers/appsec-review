@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "finding.schema.json",
+  "title": "Finding",
+  "description": "One claim, from any lane/persona. Added 2026-09-19. classification/classification_taxonomy are cross-checked against schemas/verdict-taxonomies.json by schema_validate.py, not by this file alone, because different lane families legitimately need different verdict vocabularies (adversarial refutation vs static-hardening vs memory-safety disposition) -- forcing one global enum here would paper over a real, deliberate design difference (see 15-deployment-hardening's static-vs-observed taxonomy vs 07/08/09's REFUTED/CONFIRMED/etc.).",
+  "type": "object",
+  "required": ["finding_id", "persona_id", "domain", "classification_taxonomy", "classification", "evidence_citations", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "finding_id": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$"},
+    "persona_id": {"type": "string", "description": "e.g. redteam-l4-general, iac-cloud-terraform-auditor, bash-checker, permission-checker. Domain-prefixed convention decided 2026-09-19 (design-v3.md \u00a75.5) to avoid collisions once IaC/red-team/blue-team/verifier personas share this field across lanes."},
+    "domain": {"type": "string", "description": "free-text short label, e.g. injection, iam, memory-safety, supply-chain, secrets."},
+    "design_lanes": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["L0","L0A","L1","L2","L3","L4","L4B","L5","L5B","L6A","L6B","L7","L8","L9","L10","L11","L12","L13","L14","L15"]}
+    },
+    "standard_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cwe_id": {"type": ["string", "null"], "pattern": "^CWE-[0-9]+$"},
+        "asvs_control": {"type": ["string", "null"]},
+        "cis_benchmark_id": {"type": ["string", "null"]},
+        "attack_technique": {"type": ["string", "null"], "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$"},
+        "capec_id": {"type": ["string", "null"], "pattern": "^CAPEC-[0-9]+$"},
+        "disa_stig_id": {"type": ["string", "null"], "pattern": "^(V-[0-9]+|SV-[0-9]+r[0-9]+_rule)$", "description": "Added 2026-09-19 -- DISA STIGs/SRGs are public-domain (17 U.S.C. \u00a7105) and may be vendored/quoted per design-v3.md \u00a75.4, unlike CIS. Only from a curated, version-pinned reference file, not recalled from training knowledge."},
+        "nist_800_53_control": {"type": ["string", "null"], "pattern": "^[A-Z]{2}-[0-9]+(\\([0-9]+\\))?$", "description": "Added 2026-09-19, e.g. AC-3. Often too high-level on its own to support a completeness claim -- see design-v3.md \u00a75.4 on asymmetric standards coverage."}
+      },
+      "description": "Every field optional and nullable -- a finding is not required to have every taxonomy, and must not force one that doesn't genuinely apply (e.g. do not force an attack_technique onto a pure memory-safety finding with no attacker-facing technique yet)."
+    },
+    "evidence_citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "evidence-citation.schema.json"}
+    },
+    "classification_taxonomy": {
+      "type": "string",
+      "description": "Key into schemas/verdict-taxonomies.json#/taxonomies -- the named vocabulary this finding's classification is drawn from."
+    },
+    "classification": {
+      "type": "string",
+      "description": "Must be a member of schemas/verdict-taxonomies.json#/taxonomies/<classification_taxonomy> -- checked by schema_validate.py, not expressible as a plain JSON Schema enum here since it depends on the sibling classification_taxonomy field."
+    },
+    "attack_scenario": {
+      "type": ["string", "null"],
+      "description": "Narrative only. Never a working exploit/PoC code block, and never remediation code -- verified remediation is 11-remediation-proposal's job, not any discovery/refutation/hardening persona's."
+    },
+    "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    "requires_executed_verification": {
+      "type": "boolean",
+      "description": "True if this finding's classification/confidence should not be trusted without an actual compiled/executed test (per the RT-FC04-002 lesson and the open question about kill-chain claims needing the same bar as 09's reused-binary rule)."
+    },
+    "executed_verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ran": {"type": "boolean"},
+        "method": {"type": ["string", "null"], "description": "e.g. 'compiled fresh in audit-native:local via images/audit-native/run.ps1, ran and observed exit code'."},
+        "result": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

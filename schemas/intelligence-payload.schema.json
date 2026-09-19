@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "intelligence-payload.schema.json",
+  "title": "Intelligence Payload",
+  "type": "object",
+  "required": [
+    "schema",
+    "payload_id",
+    "source_type",
+    "source_lineage",
+    "facts",
+    "gaps",
+    "search_records"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/intelligence-payload/0.1"
+    },
+    "payload_id": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "functional_doc",
+        "architecture_doc",
+        "network_diagram",
+        "runbook",
+        "postman_collection",
+        "bruno_collection",
+        "openapi",
+        "unit_tests",
+        "integration_tests",
+        "acceptance_tests",
+        "smoke_tests",
+        "load_tests",
+        "upstream_lane"
+      ]
+    },
+    "source_lineage": {
+      "type": "array",
+      "items": {
+        "$ref": "evidence-citation.schema.json"
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fact_id",
+          "fact_type",
+          "summary",
+          "confidence",
+          "citations"
+        ],
+        "properties": {
+          "fact_id": {
+            "type": "string"
+          },
+          "fact_type": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "evidence-citation.schema.json"
+            }
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "search_records": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "persona.schema.json",
+  "title": "Composable Review Persona",
+  "type": "object",
+  "required": [
+    "schema",
+    "persona_id",
+    "display_name",
+    "category",
+    "primary_failure_mode_caught",
+    "assumptions",
+    "required_inputs",
+    "outputs",
+    "must_not"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/persona/0.1"
+    },
+    "persona_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "attacker",
+        "defender",
+        "verifier",
+        "domain-specialist",
+        "evidence-ingestion",
+        "stakeholder-output",
+        "synthesis",
+        "standards-validator"
+      ]
+    },
+    "primary_failure_mode_caught": {
+      "type": "string"
+    },
+    "best_used_in_lanes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "object"
+    },
+    "required_inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "must_not": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

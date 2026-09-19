@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "static-ops-topology-inspector",
+  "display_name": "Static Operations Topology Inspector",
+  "mode": "static-only",
+  "required_inputs": [
+    "target repository mounted read-only",
+    "deployment and operations artifacts"
+  ],
+  "optional_inputs": [
+    "runbooks",
+    "monitoring exports",
+    "smoke test scripts",
+    "service catalog"
+  ],
+  "allowed_actions": [
+    "parse manifests and runbooks",
+    "inventory declared services and dependencies",
+    "extract health, smoke, and observability checks",
+    "prepare live-state follow-up questions"
+  ],
+  "disallowed_actions": [
+    "mutate infrastructure",
+    "query production systems without explicit live-state authorization",
+    "claim alert effectiveness from static config alone"
+  ],
+  "claim_limits": {
+    "declared_topology": "allowed",
+    "observed_topology": "forbidden",
+    "live_state_followup": "allowed"
+  }
+}

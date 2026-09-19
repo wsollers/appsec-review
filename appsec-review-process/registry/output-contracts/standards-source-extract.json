@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "standards-source-extract",
+  "display_name": "Standards Source Extract",
+  "required_files": [
+    "source-manifest.json",
+    "extraction-log.jsonl",
+    "controls/",
+    "indexes/",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "budget",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "artifacts_read"
+  ],
+  "validation_rules": [
+    "each control record must validate against standard-control.schema.json",
+    "every control and test must preserve upstream source metadata",
+    "reverse indexes must be derived from extracted records",
+    "unsupported or license-restricted references must be recorded as gaps"
+  ]
+}

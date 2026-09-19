@@ -1,0 +1,50 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "15-stig-srg-validation-worklist",
+  "display_name": "STIG/SRG Validation Worklist Generation",
+  "process": "15-deployment-hardening",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "nsa-stig-platform-engineer",
+    "role_id": "platform-hardening-validator",
+    "domain_id": "platform-hardening-controls",
+    "tooling_profile_id": "stig-worklist-builder",
+    "output_contract_id": "control-worklist"
+  },
+  "inputs": {
+    "required": [
+      "Dockerfile/image/platform inventory",
+      "SBOM or package inventory",
+      "curated STIG/SRG/NSA reference records"
+    ],
+    "optional": [
+      "scratch/<project>-engagement/static-evidence/**",
+      "scratch/<project>-engagement/standards-intel/component-tag-cloud.json",
+      "service configuration files",
+      "kube-bench, Docker Bench, Trivy, Grype, or Syft outputs"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/standards-intel",
+    "files": [
+      "worklist.json",
+      "summary.md",
+      "status.json",
+      "platform-hardening-targets.json",
+      "stig-validation-worklist.json",
+      "stig-applicability-matrix.json",
+      "stig-validation-summary.md"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "platform_inventory",
+    "reference_controls",
+    "task",
+    "output_contract"
+  ]
+}

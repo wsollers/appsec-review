@@ -1,0 +1,47 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-standards-source-ingest",
+  "display_name": "Standards Source Ingestion",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "standards-reference-curator",
+    "role_id": "standards-source-ingestor",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "standards-source-static-ingest",
+    "output_contract_id": "standards-source-extract"
+  },
+  "inputs": {
+    "required": [
+      "upstream standards source path or curated local reference",
+      "standard family and version/ref",
+      "license or usage notes"
+    ],
+    "optional": [
+      "existing appsec-review-process/standards/indexes/*",
+      "OpenCRE crosswalk records",
+      "DISA/STIG reference metadata"
+    ]
+  },
+  "outputs": {
+    "directory": "appsec-review-process/standards/catalog/<standard-family>/<version-or-ref>",
+    "files": [
+      "source-manifest.json",
+      "extraction-log.jsonl",
+      "controls/",
+      "tests/",
+      "indexes/",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "source_lineage",
+    "task",
+    "output_contract"
+  ]
+}

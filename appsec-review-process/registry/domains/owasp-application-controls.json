@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "owasp-application-controls",
+  "display_name": "OWASP Application Controls",
+  "surfaces": [
+    "web application controls",
+    "API controls",
+    "mobile controls",
+    "LLM and agentic application controls",
+    "control-to-test mappings"
+  ],
+  "common_failure_modes": [
+    "control selected without applicability evidence",
+    "documentation treated as implementation proof",
+    "dynamic-only control marked complete from static evidence",
+    "standards mapping guessed from memory"
+  ],
+  "preferred_standards": [
+    "OWASP ASVS",
+    "OWASP MASVS",
+    "OWASP MASTG",
+    "OWASP API Security Top 10",
+    "OpenCRE"
+  ],
+  "required_evidence_hints": [
+    "applicable-controls.json",
+    "owasp-validation-worklist.json",
+    "component tag cloud",
+    "source/config evidence",
+    "QA/doc intelligence where available"
+  ]
+}

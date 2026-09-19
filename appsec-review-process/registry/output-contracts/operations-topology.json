@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "operations-topology",
+  "display_name": "Operations Topology",
+  "required_files": [
+    "service-inventory.json",
+    "operations-topology-summary.md",
+    "live-state-followups.json",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "budget",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "artifacts_read"
+  ],
+  "validation_rules": [
+    "declared topology must cite static evidence",
+    "observed topology requires live-state evidence and is otherwise forbidden",
+    "health and observability claims must distinguish configured, tested, and observed",
+    "mutation commands are forbidden"
+  ]
+}

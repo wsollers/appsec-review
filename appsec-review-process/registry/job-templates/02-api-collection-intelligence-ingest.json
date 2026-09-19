@@ -1,0 +1,50 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-api-collection-intelligence-ingest",
+  "display_name": "QA/API Collection Intelligence Ingestion",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "qa-test-validator",
+    "role_id": "api-collection-intelligence-extractor",
+    "domain_id": "api-collection-artifacts",
+    "tooling_profile_id": "static-api-collection-parser",
+    "output_contract_id": "intelligence-extract"
+  },
+  "inputs": {
+    "required": [
+      "collection path",
+      "collection format"
+    ],
+    "optional": [
+      "environment path",
+      "OpenAPI spec",
+      "route inventory",
+      "component map"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/qa-intel",
+    "files": [
+      "summary.md",
+      "facts.json",
+      "search-records.jsonl",
+      "status.json",
+      "api-collection-inventory.json",
+      "api-collection-summary.md",
+      "security-test-coverage.json",
+      "candidate-verification-requests.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "source_lineage",
+    "redaction",
+    "task",
+    "output_contract"
+  ]
+}

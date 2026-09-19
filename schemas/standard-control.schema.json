@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "standard-control.schema.json",
+  "title": "Standard Control",
+  "type": "object",
+  "required": [
+    "schema",
+    "standard",
+    "standard_version",
+    "control_id",
+    "title",
+    "source",
+    "applicable_domains",
+    "applicable_component_tags",
+    "evidence_modes"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/standard-control/0.1"
+    },
+    "standard": {
+      "type": "string"
+    },
+    "standard_version": {
+      "type": "string"
+    },
+    "control_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "source_url",
+        "source_path",
+        "source_hash",
+        "license"
+      ],
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "license": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "applicable_domains": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "applicable_component_tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_modes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "static-source",
+          "static-config",
+          "test",
+          "scanner",
+          "dynamic",
+          "live-state",
+          "human-attestation"
+        ]
+      }
+    },
+    "verification_tests": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tooling-profile.schema.json",
+  "title": "Composable Review Tooling Profile",
+  "type": "object",
+  "required": [
+    "schema",
+    "tooling_profile_id",
+    "display_name",
+    "mode",
+    "required_inputs",
+    "optional_inputs",
+    "allowed_actions",
+    "disallowed_actions",
+    "claim_limits"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/tooling-profile/0.1"
+    },
+    "tooling_profile_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "static-only",
+        "live-safe",
+        "authorized-active",
+        "evidence-only",
+        "synthesis-only"
+      ]
+    },
+    "required_inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "optional_inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "allowed_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "disallowed_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "claim_limits": {
+      "type": "object"
+    }
+  }
+}

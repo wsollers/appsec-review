@@ -1,0 +1,41 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "binary-artifact-analysis",
+  "display_name": "Binary Artifact Analysis",
+  "surfaces": [
+    "ELF binaries and shared objects",
+    "PE executables and DLLs",
+    "Mach-O binaries and dSYM/debug artifacts",
+    "PDB, DWARF, stripped symbols, and separate debug files",
+    "static libraries, object files, firmware blobs, and packed archives",
+    "Android APK/DEX artifacts",
+    ".NET assemblies",
+    "WebAssembly modules"
+  ],
+  "common_failure_modes": [
+    "shipped artifact differs from reviewed source",
+    "dangerous imports, exports, or syscall surfaces are missed",
+    "embedded endpoints, credentials, paths, feature flags, or protocol strings are missed",
+    "debug symbols or build paths leak sensitive implementation details",
+    "packed, stripped, or obfuscated binaries cause false confidence",
+    "native dependency or vulnerable component evidence is missed by source-only SBOMs",
+    "binary similarity hints are treated as proof instead of clustering evidence",
+    "decompiler output is over-trusted without source or independent corroboration"
+  ],
+  "preferred_standards": [
+    "CWE",
+    "MITRE ATT&CK",
+    "OWASP MASVS",
+    "OWASP ASVS",
+    "NIST SSDF",
+    "SLSA"
+  ],
+  "required_evidence_hints": [
+    "artifact hash and path",
+    "file format, architecture, compiler/runtime hints, and import/export tables",
+    "strings, FLOSS output, YARA matches, DIE classification, capa output, and RetDec fileinfo when available",
+    "SBOM/CVE binary-package evidence from Syft, Grype, or Trivy when available",
+    "function, symbol, debug, CFG, decompiler, or Ghidra/angr/cwe_checker evidence when explicitly run",
+    "tool failure logs and unsupported-format notes"
+  ]
+}

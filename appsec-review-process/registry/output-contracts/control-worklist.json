@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "control-worklist",
+  "display_name": "Standards Control Worklist",
+  "required_files": [
+    "worklist.json",
+    "summary.md",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "budget",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "artifacts_read"
+  ],
+  "validation_rules": [
+    "worklist.json must validate against standards-worklist.schema.json",
+    "each work item must name a control, component or platform target, evidence mode, and expected output",
+    "generated_from must preserve source lineage",
+    "worklist generation must not emit control satisfaction verdicts"
+  ]
+}

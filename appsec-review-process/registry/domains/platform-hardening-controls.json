@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "platform-hardening-controls",
+  "display_name": "Platform And System Hardening Controls",
+  "surfaces": [
+    "container base images",
+    "Linux and Windows OS evidence",
+    "Kubernetes manifests",
+    "nginx, Apache, Tomcat, OpenSSH, Redis, PostgreSQL, MySQL",
+    "runtime and daemon configuration where available"
+  ],
+  "common_failure_modes": [
+    "host STIG applied to container image without applicability",
+    "Dockerfile treated as built image proof",
+    "package inventory treated as service configuration proof",
+    "static manifest treated as live cluster state"
+  ],
+  "preferred_standards": [
+    "DISA STIG",
+    "DISA SRG",
+    "NSA/CISA hardening guidance",
+    "CIS Benchmark when locally permitted",
+    "scanner-backed hardening checks"
+  ],
+  "required_evidence_hints": [
+    "platform-hardening-targets.json",
+    "SBOM/package inventory",
+    "Dockerfile and image evidence",
+    "service configuration files",
+    "STIG/SRG reference records"
+  ]
+}

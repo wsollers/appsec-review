@@ -1,0 +1,31 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "functional-design-docs",
+  "display_name": "Functional And Design Documents",
+  "surfaces": [
+    "PRDs",
+    "functional specs",
+    "architecture docs",
+    "ADRs",
+    "runbooks",
+    "network diagrams"
+  ],
+  "common_failure_modes": [
+    "roles and data classes missing from threat model",
+    "trust boundaries only described in docs",
+    "product abuse cases absent from source-derived evidence",
+    "documentation assumptions never verified"
+  ],
+  "preferred_standards": [
+    "OWASP ASVS",
+    "OWASP MASVS",
+    "privacy threat modeling",
+    "OpenCRE"
+  ],
+  "required_evidence_hints": [
+    "document source path",
+    "document type",
+    "redaction policy",
+    "source hash"
+  ]
+}

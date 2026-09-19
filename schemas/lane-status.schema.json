@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lane-status.schema.json",
+  "title": "Lane Status",
+  "description": "Forward-looking replacement shape for a lane's status.json. Added 2026-09-19. Corrected 2026-09-19 after the first real test run against archived eastl output: budget widened to string|object (07/09/13/15 already use a structured budget object; forcing a downgrade to string would be wrong, not rigorous), and the version field renamed from schema_version to schema to match the appsec-review-process/<name>/<version> convention model-config.json and real status.json files already use. additionalProperties is intentionally true for now -- existing lanes (00-09,13,15) predate this schema and have their own idiosyncratic extra fields (e.g. results.scenarios_analyzed); tightening to false is a deliberate later step once lanes are migrated to author findings[] as the single source of truth instead of a separate freehand tally (the exact bug class that caused 07/08's self-reported scenario-count mismatch -- see claude project TODO 'session 9'). Until migration, schema_validate.py treats findings/artifacts_read as present-if-valid, absent-is-a-warning-not-an-error.",
+  "type": "object",
+  "required": [
+    "process",
+    "status",
+    "budget"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "const": "lane-status/1"
+    },
+    "process": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "FAILED",
+        "BLOCKED",
+        "SKIPPED",
+        "SCHEMA_INVALID"
+      ]
+    },
+    "budget": {
+      "type": [
+        "string",
+        "object"
+      ],
+      "description": "Real lanes use both shapes today: a plain tier name (older lanes) or a structured object like {selected, max_clusters, ...} or {type, max_output_lines, used_..., status}. Both are legitimate -- do not force a downgrade to string."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "finding.schema.json"
+      }
+    },
+    "artifacts_read": {
+      "type": "array",
+      "items": {
+        "$ref": "evidence-citation.schema.json"
+      }
+    },
+    "disposition": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "next_batch_recommendation": {
+      "type": [
+        "string",
+        "object",
+        "null"
+      ],
+      "description": "Real lanes use both shapes: a plain sentence (most lanes) or a structured object (01, 13) e.g. naming the specific downstream lane and reason. Both legitimate."
+    },
+    "schema": {
+      "type": "string",
+      "pattern": "^appsec-review-process/(lane|process)-status/[0-9]+\\.[0-9]+$",
+      "description": "Matches the convention already used in real status.json files and in model-config.json's own 'schema' field -- not 'schema_version'. Accepts both lane-status and process-status as the middle segment -- 00-intake-recovery predates/intentionally diverges from the lane-status convention as the bootstrap/recovery lane; most other lanes (02,04,06,07,08,09,15) currently omit the schema field entirely, which is fine since it is not in required[]."
+    }
+  }
+}

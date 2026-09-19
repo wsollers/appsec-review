@@ -53,6 +53,23 @@ component-purpose map. Treat them as compiled retrieval evidence: direct call ed
 locations, GEP/pointer arithmetic, and memory intrinsics. They are not standalone vulnerability
 verdicts and are only available for code covered by the compile database and linked bitcode.
 
+Optional binary intelligence evidence may exist after reverse-engineering pregather:
+
+```text
+binary-intel/binary-artifact-inventory.json
+binary-intel/binary-intelligence-summary.md
+binary-intel/tool-evidence-manifest.json
+binary-intel/candidate-leads.json
+binary-intel/verification-followups.json
+binary-intel/status.json
+```
+
+Raw per-tool outputs should stay under `binary-intel/` or the job's scratch subdirectories and may
+include outputs from `analyze-binary`, FLOSS, DIE, YARA, RetDec, Ghidra, angr, cwe_checker,
+Syft/Grype/Trivy, ssdeep/TLSH, JADX, and ILSpy. Treat these as pregather and retrieval evidence:
+strings, symbols, fuzzy hashes, decompiler output, and tool hits are not verified findings without
+downstream corroboration.
+
 ## Process Run State
 
 Process orchestration state lives under:

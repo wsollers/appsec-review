@@ -64,6 +64,33 @@ into the repo with `scripts/sync-wsl-engagement-to-repo.sh`.
 If a host-compiler smoke test is useful, label it `non-authoritative` and do not use it to mark a
 native finding verified, refuted, or fixed without matching Docker/native-image evidence.
 
+#### Where the authoritative container and toolchain actually are
+
+Added 2026-09-18 after a real lane 09 dispatch spent several turns rediscovering this by trial
+(`docker images | grep audit-native`, `cat images/audit-native/run.ps1`, `which clang++`) instead
+of being told directly -- do this lookup once here, not per dispatch:
+
+- **Image**: `audit-native:local` (override with the `AUDIT_NATIVE_IMAGE` env var if a run needs a
+  different tag). Built from `images/audit-native/Dockerfile`.
+- **Wrapper (always go through this, never `docker run` by hand)**:
+  `images/audit-native/run.ps1` (Windows PowerShell) / `images/audit-native/run.sh` (WSL/Linux) --
+  identical flags in the same order, see "One tool per container" and the hostile-build boundary
+  comments at the top of each file for why (`--network none`, read-only `/workspace`, `--cap-drop
+  ALL`, no-new-privileges, resource limits -- do not add flags that weaken this).
+  ```
+  images\audit-native\run.ps1 <workspace-dir> <msvc-dir-or-"-"> <scratch-dir> -- <command...>
+  ```
+  `<workspace-dir>` is mounted read-only at `/workspace`; `<scratch-dir>` is mounted read-write at
+  `/scratch` -- write any test source, build artifacts, or intermediate output there, never expect
+  to write under `/workspace`.
+- **Compiler inside the image**: `clang++` at `/opt/llvm/bin/clang++` (confirmed live,
+  2026-09-18: `clang version 21.1.0`, target `x86_64-unknown-linux-gnu`). Also on `PATH` inside the
+  container as plain `clang++`.
+- **Confirming the image exists locally before spending a dispatch on it**: `docker images | grep
+  audit-native` (or `docker image inspect audit-native:local`) -- if it's missing, that is itself a
+  real blocking finding to report (image needs building via the project's step-0 image-build
+  scripts), not something to work around with a host compiler.
+
 ### Codex Task
 
 Default for prompt/lane work and source review.

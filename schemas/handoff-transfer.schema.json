@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "handoff-transfer.schema.json",
+  "title": "Handoff Transfer",
+  "description": "What actually crosses a lane boundary in a rendered ## Upstream Outputs section. Added 2026-09-19 to close the 'validate on read' gap: create_handoff.py's cross-lane wiring (process-manifest.json depends_on) points a downstream lane at an upstream file path, but until this schema nothing checked that file was well-formed before handing it over -- it was trusted by construction.",
+  "type": "object",
+  "required": [
+    "schema",
+    "source_lane",
+    "source_run_id",
+    "generated_at",
+    "lane_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_lane": {
+      "type": "string"
+    },
+    "source_run_id": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "lane_status": {
+      "$ref": "lane-status.schema.json"
+    },
+    "schema": {
+      "pattern": "^appsec-review-process/handoff-transfer/[0-9]+\\.[0-9]+$",
+      "type": "string"
+    }
+  }
+}

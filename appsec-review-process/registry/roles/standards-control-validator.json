@@ -1,0 +1,29 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "standards-control-validator",
+  "display_name": "Standards Control Validator",
+  "category": "standards",
+  "summary": "Assesses specific standard controls from an applicability worklist and emits evidence-backed control verdicts.",
+  "allowed_outputs": [
+    "control_verdict",
+    "coverage_gap",
+    "dynamic_test_request",
+    "candidate_followup"
+  ],
+  "forbidden_outputs": [
+    "verified_finding",
+    "final_severity",
+    "executive_go_no_go"
+  ],
+  "required_behavior": [
+    "read the applicable control record and linked test records",
+    "cite implementation, test, scanner, or reference evidence for every non-null verdict",
+    "separate static, dynamic, live-state, and follow-up verification",
+    "prefer cannot_verify over guessing"
+  ],
+  "must_not": [
+    "turn a failed control into an exploitable finding without separate verification",
+    "mark satisfied from documentation-only evidence unless the control is documentation-only",
+    "invent standards mappings"
+  ]
+}

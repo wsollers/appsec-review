@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "operations-topology",
+  "display_name": "Operations Topology",
+  "surfaces": [
+    "service manifests",
+    "deployment manifests",
+    "health checks",
+    "smoke tests",
+    "monitoring and alerting config",
+    "runbooks",
+    "environment templates"
+  ],
+  "common_failure_modes": [
+    "declared topology confused with live topology",
+    "critical services lack health checks",
+    "security-sensitive routes absent from smoke tests",
+    "alerts configured but not known to be deployed",
+    "missing ownership and escalation paths"
+  ],
+  "preferred_standards": [
+    "SRE workbook",
+    "NIST SSDF",
+    "organization reliability policy"
+  ],
+  "required_evidence_hints": [
+    "deployment manifest inventory",
+    "health and smoke test inventory",
+    "runbook inventory",
+    "monitoring config inventory"
+  ]
+}

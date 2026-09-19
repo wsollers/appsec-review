@@ -1,0 +1,29 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "api-collection-intelligence-extractor",
+  "display_name": "API Collection Intelligence Extractor",
+  "category": "intelligence",
+  "summary": "Normalizes API collections and specs into route, auth, assertion, and verification-request intelligence.",
+  "allowed_outputs": [
+    "api_inventory",
+    "security_test_coverage",
+    "candidate_verification_request",
+    "scrubbed_search_record"
+  ],
+  "forbidden_outputs": [
+    "executed_request_result",
+    "verified_runtime_behavior",
+    "raw_environment_secret"
+  ],
+  "required_behavior": [
+    "parse requests without executing them",
+    "redact environment values and collection secrets",
+    "map routes to components where possible",
+    "separate positive tests from negative security tests"
+  ],
+  "must_not": [
+    "execute requests",
+    "index raw secrets",
+    "treat collection assertions as production proof"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-sre-operations-topology",
+  "display_name": "SRE Operations Topology Discovery",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "sre-engineer",
+    "role_id": "operations-topology-mapper",
+    "domain_id": "operations-topology",
+    "tooling_profile_id": "static-ops-topology-inspector",
+    "output_contract_id": "operations-topology"
+  },
+  "inputs": {
+    "required": [
+      "target repository path",
+      "deployment and operations artifact inventory"
+    ],
+    "optional": [
+      "runbooks",
+      "smoke tests",
+      "monitoring and alerting config",
+      "service catalog"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/project-intel",
+    "files": [
+      "service-inventory.json",
+      "operations-topology-summary.md",
+      "live-state-followups.json",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "ops_artifacts",
+    "task",
+    "output_contract"
+  ]
+}

@@ -25,6 +25,8 @@ Read these first:
 - artifact manifest: `appsec-review-process/runs/{{RUN_ID}}/inputs/artifact-manifest.json`
 - evidence package: `{{ENGAGEMENT_OUTPUT}}/llm/ENGAGEMENT_LLM_INPUT.md`
 
+{{UPSTREAM_OUTPUTS}}
+
 ## Required Output
 
 Write lane output to:

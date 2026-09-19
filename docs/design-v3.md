@@ -347,6 +347,133 @@ L6 is split into two stages. L6A runs immediately after intake to create the ini
 
 `L0 → L6A → parallel specialist discovery → streaming L7 verification → L6B reconciliation → L14 synthesis`
 
+### 5.4 Standards-reference discipline (added 2026-09-19)
+
+A finding may cite a standard identifier (CWE, ASVS control, ATT&CK technique, CAPEC, a DISA STIG
+V-number, a NIST 800-53 control, a CIS Benchmark control) but the citation discipline differs by
+standard, decided against each standard's actual licensing/versioning status rather than treated
+uniformly:
+
+- **CWE / ATT&CK / CAPEC** — published under permissive terms, IDs and short names are stable. A
+  lane/persona may cite these from its own knowledge; the schema treats the field as optional and
+  nullable so a lane leaves it null rather than guessing when unsure.
+- **DISA STIGs/SRGs and NSA technical guidance** (general-release, unclassified only — not
+  CAC/PKI-gated CUI compilations) — public-domain US federal works (17 U.S.C. §105), safe to vendor
+  and quote directly, unlike CIS. A curated, version-pinned offline reference file (same convention
+  as `scripts/eol-reference.json`) may hold real control text for the specific STIGs a lane actually
+  uses, re-pinned when the source STIG revises.
+- **CIS Benchmarks** — restricted: the free PDFs carry CIS's own Terms of Use, which additionally
+  prohibit derivative works and posting/mirroring beyond the underlying CC BY-NC-SA license. Control
+  numbering also is not stable across benchmark versions. **Rule: never vendor CIS text, and never
+  let a lane/persona recall a CIS control number from its own training knowledge.** A finding may
+  only carry a CIS control ID when it was read directly from a scanner's own output (e.g. a
+  checkov/trivy rule that already states its CIS mapping) — relayed evidence, not reconstructed
+  knowledge.
+- **Coverage is not symmetric across domains, and a lane must say so rather than imply otherwise.**
+  DISA/NIST have no resource-level equivalent to CIS's AWS/Azure/GCP Foundations Benchmarks for
+  cloud/Terraform configuration (DISA's Cloud Computing SRG is authorization/boundary-level, not a
+  per-resource checklist) — a lane covering that ground has no legally-vendorable, versioned document
+  to claim completeness against, and must scope its own `HARDENING_BASELINE_ASSESSMENT`-style claim
+  as "complete relative to the tool's own ruleset," not "complete relative to a named standard,"
+  when no such standard exists at the needed resolution. This is a real, evidence-grounded scoping
+  limit, the same category as an ASVS/MASVS-does-not-apply determination (§13), not a gap to elide.
+
+### 5.5 Pool launcher, waiter, and rendezvous (proposed 2026-09-19, under discussion — not yet implemented)
+
+§5.1's panel model ("panel members form initial conclusions independently before seeing other
+votes," "prompt diversity matters independently of model diversity") and §5.2's evidence-qualified
+quorum have so far been descriptions of a voting *outcome*, not a mechanism that actually launches
+N independent reviewers and waits for them. This section proposes that mechanism. It generalizes the
+`15-deployment-hardening` IaC persona pool (§12; `claude/TODO.md`'s "session 10" entries) into
+something every panel-shaped lane can use — `07-red-team-adversarial`, `08-blue-team-refutation`,
+and `09-independent-verification` are the immediate intended consumers, not `15` alone.
+
+**Job config, not CLI flags.** A pool job is declared as a config file, the same convention as
+`model-config.json`/`process-manifest.json`, rather than assembled from ad hoc CLI flags — the
+whole point is that "3 workers of persona X, 2 of persona Y" is a fact about the job worth keeping
+on record alongside the run, not a one-off invocation to retype. Sketch:
+
+```json
+{
+  "job_id": "07-red-team-adversarial-pool-01",
+  "lane": "07-red-team-adversarial",
+  "run_id": "20260917T193147Z-2319a6",
+  "budget": "standard",
+  "workers": [
+    { "worker_id": "rt-l4-general", "kind": "persona", "persona_id": "redteam-l4-general", "count": 3 },
+    { "worker_id": "rt-l5-malfeasance", "kind": "persona", "persona_id": "redteam-l5-malfeasance", "count": 2 },
+    { "worker_id": "gitleaks", "kind": "tool", "step": "secrets" }
+  ],
+  "rendezvous": { "mode": "wait_all", "timeout_seconds": 3600 }
+}
+```
+
+**Two worker kinds, one bookkeeping mechanism.** A worker is either:
+
+- `kind: "persona"` — an LLM dispatch: the lane's own `config.md`/`prompt.md` stays the fixed outer
+  task framing ("you are red team, find vulnerabilities in this design lane"), and `persona_id`
+  selects one `subprompts.md` entry as the inner variation. `count: N` expands to N independent
+  worker instances of that exact (lane, persona_id) pair, each its own subprocess/container, no
+  shared context between instances — this *is* §5.1's "prompt diversity" panel, materialized: running
+  the same persona N times independently produces N independent votes for §5.2's evidence-qualified
+  quorum, the same way running different personas produces reviewer diversity.
+- `kind: "tool"` — a bare deterministic invocation with no LLM/persona layer at all (the "run
+  gitleaks" case). Same job config, same launcher, same rendezvous bookkeeping, but no `claude -p`
+  call — this is a deliberate unification, not a special case bolted on: a job that mixes reasoning
+  workers and deterministic scanner workers should rendezvous as one wave, not two systems that
+  happen to run near each other in time.
+
+**Launcher**: expands each worker spec's `count` into concrete instances, launches each at its own
+scoped output path (`outputs/<lane>/pool/<job_id>/<instance_id>/`, generalizing the
+`workers/<parallel_review_group>/` shape from the pool-dispatch output-merging design note in
+`claude/TODO.md` to be keyed by instance id rather than assuming component-sharding is the only
+axis a pool ever splits on), and records each instance's expected output path in a job manifest —
+the single source of truth the waiter reads.
+
+**Waiter / rendezvous**: polls (not busy-loops — the same zero-API-cost `time.sleep(N)` pattern as
+the existing `acquire_run_lock` mutex) for every instance in the job manifest to reach a terminal
+state, then hands off to a deterministic (non-LLM) merge step. Per §7 (non-short-circuit
+completion), one worker's failure does not abort the wave — it's recorded as a failed/degraded
+instance in the merge, not silently dropped or allowed to block the others indefinitely (bounded by
+the job's own `timeout_seconds`, mirroring `acquire_run_lock`'s stale-lock reclaim).
+
+**Decided 2026-09-19 — tool-worker dispatch is deterministic, not a shell-out to the legacy
+scripts.** `kind: "tool"` workers are launched natively by the pool launcher itself as pinned-image,
+argv-array container invocations — the same discipline ADR-0002 already established for the Python
+orchestrator over the old PowerShell prepass (never a shell string assembled at runtime; one step is
+one tool invocation). The launcher does not shell out to `Invoke-VendorAuditPrePass.ps1`/`.sh` as an
+external subprocess; those scripts' step table is the reference for which tools/images/args exist
+today, but a `tool` worker's own dispatch path lives in the pool launcher, moving this project one
+step further toward the evidence pipeline and the LLM harness converging under one Python mechanism
+rather than staying two systems that happen to run near each other in time. Migrating the *existing*
+`Invoke-VendorAuditPrePass.ps1`/`.sh` step table into this format is follow-on work, not implied to
+be done at once — the decision here is the shape new tool-worker dispatch takes, not a mandate to
+port every existing step immediately.
+
+**Decided 2026-09-19 — rendezvous is `wait_all` only; quorum evaluation waits for every worker to
+exit.** No early-exit-on-quorum mode. Evidence-qualified quorum (§5.2) requires independent
+agreement on mechanism/evidence, not just a headcount of completions, so evaluating it against a
+partial worker set (even one that already has enough same-persona agreement to nominally satisfy a
+count) would trade real coverage for wall-clock savings the design doesn't want. This closes the
+question raised in the prior revision of this section rather than leaving early-exit as a future
+optimization to revisit.
+
+**Still open, genuinely undecided — not to be read as settled by appearing in this doc:**
+
+- Concurrency limits: bounded by Docker daemon capacity for `tool` workers, and — separately, still
+  an open question from `claude/TODO.md`'s driver-open-items list — whether Max-subscription rate
+  limits get tripped by many concurrent `claude -p` dispatches, which this proposal would make more
+  likely to actually exercise than the current unpooled single-call path has so far.
+- The merge step is not one operation: `persona` workers produce `finding.schema.json`-shaped
+  findings that need array-level merging (§5.2 quorum keyed off `persona_id`), evaluated only once
+  every worker in the wave has exited per the rendezvous decision above; `tool` workers produce raw
+  scanner evidence that gets filed into the evidence tree, not merged into a findings array at all.
+  A single "pool merge" concept covering both still needs to say which kind of merge it's doing per
+  worker, not treat them uniformly.
+- `persona_id` naming convention across lanes (e.g. `redteam-l4-general` vs. a bare `l4-general`) —
+  needed before `07`/`08`/`09` personas are actually authored, to avoid collisions with the IaC
+  personas already namespaced for `15` (`claude/TODO.md`, "session 10 continuation").
+
 ## 6. Mechanism vs. intent
 
 Mythos separates technical verification from attribution. A dangerous or hidden mechanism may be severe even when intent is unresolved; a verified mechanism does not itself prove malfeasance.

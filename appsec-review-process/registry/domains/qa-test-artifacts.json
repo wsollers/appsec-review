@@ -1,0 +1,31 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "qa-test-artifacts",
+  "display_name": "QA And Test Artifacts",
+  "surfaces": [
+    "unit tests",
+    "integration tests",
+    "acceptance and E2E tests",
+    "smoke tests",
+    "load and performance tests",
+    "coverage reports"
+  ],
+  "common_failure_modes": [
+    "mocked control mistaken for real control",
+    "missing negative tests hidden by positive coverage",
+    "release smoke tests cover availability but not security-critical paths",
+    "security-relevant source areas have no corresponding tests"
+  ],
+  "preferred_standards": [
+    "OWASP ASVS",
+    "OWASP MASVS",
+    "OWASP MASTG",
+    "OpenCRE"
+  ],
+  "required_evidence_hints": [
+    "test path",
+    "test type",
+    "framework hints",
+    "coverage report where available"
+  ]
+}

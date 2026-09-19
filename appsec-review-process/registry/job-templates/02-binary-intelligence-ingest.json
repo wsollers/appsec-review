@@ -1,0 +1,49 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-binary-intelligence-ingest",
+  "display_name": "Binary Intelligence Ingest",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "reverse-engineer",
+    "role_id": "binary-intelligence-extractor",
+    "domain_id": "binary-artifact-analysis",
+    "tooling_profile_id": "binary-intel-static-analysis",
+    "output_contract_id": "binary-intelligence"
+  },
+  "inputs": {
+    "required": [
+      "target binary artifact path or binary artifact inventory",
+      "audit-binary-analysis image",
+      "writable scratch output directory"
+    ],
+    "optional": [
+      "YARA rules",
+      "source component map",
+      "SBOM or package inventory",
+      "debug symbols or separate debug files",
+      "known-good or known-bad binary comparison corpus"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/binary-intel",
+    "files": [
+      "binary-artifact-inventory.json",
+      "binary-intelligence-summary.md",
+      "tool-evidence-manifest.json",
+      "candidate-leads.json",
+      "verification-followups.json",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "buildenv_catalog",
+    "task",
+    "output_contract"
+  ]
+}

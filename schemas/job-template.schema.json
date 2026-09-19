@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "job-template.schema.json",
+  "title": "Composable Review Job Template",
+  "type": "object",
+  "required": [
+    "schema",
+    "job_template_id",
+    "display_name",
+    "process",
+    "budget_default",
+    "composition",
+    "inputs",
+    "outputs",
+    "prompt_sections"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/job-template/0.1"
+    },
+    "job_template_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z-]*$"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "process": {
+      "type": "string"
+    },
+    "budget_default": {
+      "type": "string",
+      "enum": [
+        "probe",
+        "standard",
+        "full"
+      ]
+    },
+    "composition": {
+      "type": "object",
+      "required": [
+        "persona_id",
+        "role_id",
+        "domain_id",
+        "tooling_profile_id",
+        "output_contract_id"
+      ],
+      "properties": {
+        "persona_id": {
+          "type": "string"
+        },
+        "role_id": {
+          "type": "string"
+        },
+        "domain_id": {
+          "type": "string"
+        },
+        "tooling_profile_id": {
+          "type": "string"
+        },
+        "output_contract_id": {
+          "type": "string"
+        }
+      }
+    },
+    "inputs": {
+      "type": "object"
+    },
+    "outputs": {
+      "type": "object"
+    },
+    "prompt_sections": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

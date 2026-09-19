@@ -21,7 +21,8 @@
           sast-cpp/        cppcheck.xml
           sast-multi/      semgrep-owasp.json, semgrep-csharp.json, semgrep-golang.json,
                             semgrep-python.json, semgrep-php.json, semgrep-java.json,
-                            semgrep-security-audit.json (2026-09-02 - one file per
+                            semgrep-security-audit.json, semgrep-terraform.json (added
+                            2026-09-19, 8th pack) (2026-09-02 - one file per
                             ruleset, was a single combined semgrep.json; see the
                             comment block above the sast-multi-semgrep-* steps)
           sast-php/        psalm.json, phpstan.json, phpcs.json,
@@ -457,6 +458,32 @@ function Test-IsSignalKillExitCode([int]$ExitCode) {
 # PowerShell stdout redirection/encoding pitfalls). Tools that only support
 # stdout use `CaptureStdout` and get redirected to `OutFile` by this script.
 #
+# ARCHITECTURAL GUIDELINE (formalized 2026-09-18, after the iac-checkov/
+# iac-trivy split - see those two steps' Notes for the full incident): one
+# tool per container, always, as the default - never chain multiple tools
+# together in one `bash -c` string inside a single step's Cmd. This was
+# already the stated design above, but it drifted (the old combined "iac"
+# step chained checkov;tfsec;trivy in one bash -c) and that drift cost a
+# full day of confusing debugging: every individual piece (each tool alone,
+# the image, the env, the /evidence mount, the exact output paths) worked
+# fine in isolation, including a bare manual `docker run` reproducing the
+# EXACT chained command - but the real orchestrator invocation of that same
+# command, through PowerShell's `& docker @dockerArgs` array-splat, silently
+# dropped the later tool's output every time, with zero trace in stdout or
+# stderr. The actual mechanism was never pinned down and isn't worth
+# chasing further - splitting into separate steps just works, is easier to
+# read, gives each tool its own real stderr log and ExpectedOutput check for
+# free, and costs nothing but one more container start per tool.
+#
+# If a step genuinely needs more than one tool in the same container run -
+# a rare case, e.g. two tools that must share one filesystem view/handoff
+# that separate `docker run` invocations can't provide - that's allowed,
+# but ONLY when documented at the step itself: record (1) why one-tool-per-
+# container was tried and didn't work (or was infeasible) for this specific
+# case, and (2) what was done about it (workaround, or the accepted
+# limitation). Don't chain tools together just to save a container start -
+# that's exactly the mistake this guideline exists to prevent.
+#
 # ExpectedOutput / ExpectedOutputAny (2026-09-02): path(s), relative to
 # EvidencePath, that must exist and be non-empty (>0 bytes) for the step to
 # be treatedOk. ExpectedOutput is a single required path; ExpectedOutputAny
@@ -747,6 +774,19 @@ $allSteps = @(
         Note = "Part of the 7-way semgrep split (see the comment block above sast-multi-semgrep-owasp). Added 2026-09-01 (finding S1-3) - the playbook's PHP-security-coverage reasoning already assumed this ruleset was running; it wasn't, until this was added."
     },
     [PSCustomObject]@{
+        Name = "sast-multi-semgrep-terraform"
+        EvidenceSubdir = "sast-multi"
+        Cmd = @("semgrep", "scan", "--config=p/terraform", "--verbose",
+                "--exclude=.git", "--exclude=node_modules", "--exclude=vendor",
+                "--exclude=bin", "--exclude=obj", "--exclude=.terraform",
+                "--exclude=Library", "--exclude=Temp",
+                "--json", "--output=/evidence/sast-multi/semgrep-terraform.json", "/workspace")
+        CaptureStdout = $false
+        AllowNonZeroExit = $true
+        ExpectedOutput = "sast-multi/semgrep-terraform.json"
+        Note = "Added 2026-09-19 (persona-pool build for 15-deployment-hardening) - 8th semgrep registry pack. p/terraform is GA-tier per Semgrep's own docs (same tier as python/java) but a smaller, community-rules-only corpus (no Pro rules) - gives the cloud-terraform-iac-auditor persona SAST-style findings (hardcoded credentials, risky patterns) on top of checkov/trivy/tfsec's policy-based misconfiguration checks, which check a genuinely different thing. No image change - runs in the same vendor-audit-toolbox:latest default image as the other 7 packs."
+    },
+    [PSCustomObject]@{
         Name = "sast-php"
         EvidenceSubdir = "sast-php"
         # 2026-09-08 fix (confirmed live against a real container's own
@@ -788,20 +828,92 @@ $allSteps = @(
         Note = "S6-1 fix: independent of Psalm/PHPStan/PHPCS entirely - runs php -l (the interpreter's own syntax check) against every .php file and records NOT_ANALYZED for anything that fails to parse under this container's PHP version. This is the ledger sast-php's Note tells you to cross-check against."
     },
     [PSCustomObject]@{
-        Name = "iac"
+        Name = "iac-checkov"
         EvidenceSubdir = "iac"
         # 2026-09-17: split out of the vendor-audit-toolbox omnibus image into
         # its own audit-iac image (MIGRATION.md item 7) — checkov/tfsec/trivy
         # config now live there, not in $ImageTag.
         Image = "audit-iac:local"
-        Cmd = @("bash", "-lc",
-                "checkov -d /workspace -o json --output-file-path /evidence/iac/ 2>/evidence/iac/checkov.stderr.log || true; " +
-                "tfsec /workspace --format json --out /evidence/iac/tfsec.json || true; " +
-                "trivy config --format json --output /evidence/iac/trivy-config.json /workspace || true")
+        # 2026-09-18: this step (and iac-trivy right below it) used to be ONE
+        # step named "iac" that chained "checkov ...; trivy ..." together in a
+        # single bash -c inside one container run - a real deviation from this
+        # orchestrator's own stated design ("One step = one tool invocation",
+        # see the comment above the step-array's start). That deviation is what
+        # caused a full day of confusing, hard-to-reproduce debugging: tfsec and
+        # trivy each ran perfectly fine completely standalone (confirmed live,
+        # real output, exit 0), and even checkov+trivy chained together writing
+        # to /tmp worked, and even checkov+trivy chained together writing to the
+        # real /evidence/iac mount worked in a bare manual `docker run` - but the
+        # real orchestrator invocation of that exact same chained command
+        # (same image, same env, same mounts, same output paths) reproducibly
+        # never let trivy (or tfsec, before it was dropped) produce any output,
+        # with zero trace in stdout or stderr. Every single variable was tested
+        # and ruled out individually (HOME=/tmp, the /evidence bind mount, the
+        # exact output filename, running chained-to-/tmp, running chained-to-
+        # /evidence in a bare manual replica) without ever reproducing the
+        # failure outside the orchestrator itself - meaning the actual
+        # difference lives somewhere in how PowerShell's `& docker @dockerArgs`
+        # array-splat invocation runs a *multi-statement bash -c string*
+        # specifically, not in the tools/image/mounts/env. Rather than keep
+        # chasing that (tfsec is already deprecated and not worth it; trivy is
+        # not, so this got fixed properly instead of worked around): checkov and
+        # trivy are now two separate one-tool-one-container steps, matching the
+        # design this orchestrator was supposed to follow throughout. No more
+        # bash -c wrapper needed for checkov either - AllowNonZeroExit already
+        # tolerates a non-zero exit without needing "|| true", and the
+        # orchestrator's own automatic per-step stderr log (see $stderrFile
+        # above) replaces the inline "2>...checkov.stderr.log" redirect.
+        Cmd = @("checkov", "-d", "/workspace", "-o", "json", "--output-file-path", "/evidence/iac/")
         CaptureStdout = $false
         AllowNonZeroExit = $true
-        ExpectedOutputAny = @("iac/trivy-config.json", "iac/tfsec.json", "iac/results_json.json")
-        Note = "tfsec is upstream-deprecated in favor of Trivy (confirmed during the 2026-09-01 review) - it's left running here for now since it's already wired up and free to keep, but trivy config is the actively-maintained tool this step should be considered to depend on going forward; don't add new IaC coverage to tfsec specifically."
+        ExpectedOutput = "iac/results_json.json"
+        Note = "GitHub Actions / CI-workflow + general policy scanning via checkov. Confirmed live against eastl (71 passed, 1 failed check, real checkov 3.3.19 JSON)."
+    },
+    [PSCustomObject]@{
+        Name = "iac-trivy"
+        EvidenceSubdir = "iac"
+        Image = "audit-iac:local"
+        # 2026-09-18: split from the former combined "iac" step - see the
+        # iac-checkov step's Note just above for the full history of why.
+        # tfsec was ALSO dropped the same day (repo owner's call - already
+        # upstream-deprecated in favor of trivy per the 2026-09-01 review, and
+        # not worth chasing the same chained-invocation bug for a tool on its
+        # way out). trivy config is now the sole dedicated IaC-policy scanner
+        # here; checkov (iac-checkov, above) covers CI/workflow + general
+        # policy checks. Confirmed live against eastl as its own container
+        # invocation: real trivy 0.74.0 JSON report, "Detected config files
+        # num=0" (correct - EASTL is a header-only C++ template library with
+        # no Terraform/CloudFormation/K8s content), exit 0.
+        Cmd = @("trivy", "config", "--format", "json", "--output", "/evidence/iac/trivy-config.json", "/workspace")
+        CaptureStdout = $false
+        AllowNonZeroExit = $true
+        ExpectedOutput = "iac/trivy-config.json"
+        Note = "trivy config against Terraform/CloudFormation/K8s manifests. A 0-detected-config-files result is expected and correct for a repo with no IaC content, same as iac-k8s's kube-linter result for EASTL - not itself a failure signal."
+    },
+    [PSCustomObject]@{
+        Name = "iac-tfsec"
+        EvidenceSubdir = "iac"
+        Image = "audit-iac:local"
+        # 2026-09-19 ("session 10 continuation"): reactivated as its own
+        # one-tool-one-container step, matching the iac-checkov/iac-trivy
+        # split above. tfsec was dropped on 2026-09-18 only because chasing
+        # the chained-bash-c bug for a tool already upstream-deprecated
+        # wasn't worth it (see iac-trivy's Note) - it was never actually
+        # removed from the audit-iac image itself (still go-installed, see
+        # that Dockerfile), so this needs no image rebuild. Reintroduced
+        # because Trivy's own IaC-scanning engine (Rego/OPA-based) is
+        # confirmed NOT a drop-in superset of tfsec's original ruleset -
+        # aquasecurity/trivy#4450 documents a real check tfsec catches that
+        # Trivy did not - so running both closes a real, evidenced coverage
+        # gap rather than being pure redundancy. Also fixes a latent
+        # doc/pipeline mismatch: 15-deployment-hardening/config.md's Required
+        # Inputs has listed static-evidence/iac/tfsec.json all along, even
+        # through the period this step didn't exist to produce it.
+        Cmd = @("tfsec", "/workspace", "--format", "json", "--out", "/evidence/iac/tfsec.json")
+        CaptureStdout = $false
+        AllowNonZeroExit = $true
+        ExpectedOutput = "iac/tfsec.json"
+        Note = "Native --out flag, no bash -c wrapper - same discipline as iac-checkov/iac-trivy above, deliberately avoiding the exact chained-bash-c shape that caused the original iac step's silent-failure bug."
     },
     [PSCustomObject]@{
         Name = "weggli-note"
@@ -1093,7 +1205,21 @@ $allSteps = @(
         # its own audit-iac image (MIGRATION.md item 7) — kube-linter now
         # lives there, not in $ImageTag.
         Image = "audit-iac:local"
-        Cmd = @("bash", "-lc",
+        # 2026-09-18: was "bash", "-lc" (login shell) - changed to "-c" while chasing a
+        # real "tfsec: command not found" / "kube-linter: command not found" seen in eastl's
+        # static-evidence/{iac,iac-k8s}/*.stderr.log. RESOLVED, and it was NOT a shell/PATH
+        # bug: those stderr logs are dated 2026-09-16 19:41/20:22, but the audit-iac image
+        # (this Dockerfile, with tfsec/kube-linter go-installed into it) wasn't created until
+        # commit f2b8ab1 on 2026-09-17 14:37 - a full day later. The eastl evidence simply
+        # predates this image existing in working form; it was never regenerated after the
+        # split. Confirmed directly on hal5000 2026-09-18: both
+        # `docker run --rm audit-iac:local bash -lc 'which tfsec kube-linter'` and the same
+        # with `-c` resolve both binaries fine, with identical PATH either way - so -lc was
+        # never the problem. Left as -c anyway (a non-login, non-interactive shell is the
+        # objectively correct choice for a programmatic invocation like this), but the real
+        # fix was just re-running -Steps iac,iac-k8s to regenerate the evidence against the
+        # current image.
+        Cmd = @("bash", "-c",
                 "kube-linter lint /workspace --format json > /evidence/iac-k8s/kube-linter.json 2>/evidence/iac-k8s/kube-linter.stderr.log || true")
         CaptureStdout = $false
         AllowNonZeroExit = $true
@@ -1289,6 +1415,25 @@ foreach ($step in $selectedSteps) {
         if (Test-Path $p -PathType Leaf) {
             Remove-Item -Path $p -Force
             Write-Host "    cleared stale output: $rel" -ForegroundColor DarkGray
+        } elseif (Test-Path $p -PathType Container) {
+            # 2026-09-18 fix: a declared output path is always meant to be a FILE
+            # this step writes directly (checkov/tfsec/trivy/etc. via
+            # --out/--output-file-path/etc.) - a directory sitting at that exact
+            # path is never legitimate output and always blocks the tool's write.
+            # Confirmed live on eastl: iac/results_json.json existed as a
+            # directory (containing a nested results_json.json file, both dated
+            # 2026-09-16 - the same stale pre-image-evidence category documented
+            # in the iac step's own Cmd comment above, just manifesting as a
+            # wrongly-typed leftover this time instead of a missing file) and was
+            # silently skipped by the PathType Leaf check above on every single
+            # run since, causing checkov to fail with IsADirectoryError
+            # ("/evidence/iac//results_json.json") on every subsequent iac
+            # dispatch. This is a real, confirmed, previously-invisible bug (not
+            # a hypothesis) - the PathType Leaf check above only ever cleared a
+            # stale *file*, never a stale *directory* wrongly occupying the same
+            # declared-output path.
+            Remove-Item -Path $p -Recurse -Force
+            Write-Host "    cleared stale output (was a directory): $rel" -ForegroundColor DarkGray
         }
     }
 
@@ -1307,6 +1452,19 @@ foreach ($step in $selectedSteps) {
     # sast-python/etc. there was nothing to check. Now the orchestrator always
     # writes one, whichever execution branch a step takes.
     $stderrFile = Join-Path $EvidencePath "$($step.EvidenceSubdir)/$($step.Name).stderr.log"
+    # 2026-09-18 fix: a step without CaptureStdout (most steps - they write
+    # their own output file directly via --out/--output-file-path/etc.)
+    # previously had its container's stdout go nowhere but the live
+    # PowerShell console - never persisted to disk. Confirmed live: the iac
+    # step's tfsec/trivy sub-invocations produced neither tfsec.json nor
+    # trivy-config.json, with iac.stderr.log completely empty (0 bytes) -
+    # whatever tfsec/trivy actually printed (a lot of CLI tools write their
+    # own error/usage/version output to stdout, not stderr) was silently
+    # discarded, making the failure unrecoverable after the fact without
+    # reproducing it live and watching the console in real time. Every step
+    # now also gets a persisted stdout log on this branch, so a repeat of
+    # this can be diagnosed from the evidence folder alone.
+    $stdoutLogFile = Join-Path $EvidencePath "$($step.EvidenceSubdir)/$($step.Name).stdout.log"
 
     try {
         # 2026-09-02 fix: on Windows PowerShell (not PowerShell 7+), a native
@@ -1332,10 +1490,27 @@ foreach ($step in $selectedSteps) {
                     # OutFile; nothing left to tee to a separate stderr log.
                     & docker @dockerArgs 2> $stdoutFile 1> $null
                 } else {
-                    & docker @dockerArgs 1> $stdoutFile 2> $stderrFile
+                    # 2026-09-18 fix: plain "1> $stdoutFile" native-command stdout
+                    # redirection goes through PowerShell's success-output
+                    # pipeline (string objects), which Out-File then serializes
+                    # using its default encoding - "Unicode" (UTF-16LE with BOM)
+                    # on Windows PowerShell 5.1 (confirmed: this is not PS7+, see
+                    # the 2026-09-02 NativeCommandError comment above). The
+                    # "2> $stdoutFile" branch just above (cppcheck's
+                    # CaptureStderr path) does NOT go through the same pipeline
+                    # re-serialization and stayed correct UTF-8 the whole time
+                    # (confirmed live: sast-cpp/cppcheck.xml has a real
+                    # <?xml ... encoding="UTF-8"?> declaration and clean ASCII
+                    # bytes) - this "1>" path is the one that was actually
+                    # broken. Explicit -Encoding utf8 makes both paths behave
+                    # the same. Confirmed broken live 2026-09-18: the new
+                    # iac.stdout.log below (same "1>" pattern) came back as
+                    # UTF-16LE - every other character a literal 0x00 byte -
+                    # requiring iconv -f UTF-16LE to read at all.
+                    & docker @dockerArgs 2> $stderrFile | Out-File -FilePath $stdoutFile -Encoding utf8
                 }
             } else {
-                & docker @dockerArgs 2> $stderrFile
+                & docker @dockerArgs 2> $stderrFile | Out-File -FilePath $stdoutLogFile -Encoding utf8
             }
         } finally {
             $ErrorActionPreference = $prevEAP

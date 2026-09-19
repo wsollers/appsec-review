@@ -189,6 +189,28 @@ Windows PowerShell:
 
 For bounded plumbing tests, add `-StaticSteps cloc`. For a full broad static pass, omit it.
 
+## Composable Pregather Jobs
+
+The registry under `appsec-review-process/registry/job-templates/` defines bounded pregather jobs
+that can be rendered into future handoffs once `create_job_handoff.py` exists. Current job
+templates include:
+
+- `02-dev-project-discovery`
+- `02-devops-project-discovery`
+- `02-sre-operations-topology`
+- `02-doc-intelligence-ingest`
+- `02-api-collection-intelligence-ingest`
+- `02-test-intelligence-ingest`
+- `02-standards-source-ingest`
+- `02-binary-intelligence-ingest`
+
+Until job rendering is automated, use these records as the source of truth for persona, role,
+domain, tooling-profile, output-contract, required inputs, and output files. Binary intelligence
+jobs should use `audit-binary-analysis:local` through `images/audit-buildenv-common/run.*`, keep
+targets mounted read-only, and write derived evidence under `scratch/<project>-engagement/binary-intel`.
+Static binary analysis is allowed by default; runtime execution, debugger attach, Frida
+instrumentation, and networked vulnerability database updates require explicit authorization.
+
 ## EASTL Windows Validation Baseline
 
 The Windows PowerShell path was validated with:

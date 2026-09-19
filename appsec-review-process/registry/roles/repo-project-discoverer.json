@@ -1,0 +1,31 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "repo-project-discoverer",
+  "display_name": "Repository Project Discoverer",
+  "category": "intelligence",
+  "summary": "Determines which buildable/testable projects exist in a repository and how to inspect them safely.",
+  "allowed_outputs": [
+    "project_inventory",
+    "build_graph",
+    "language_tooling_map",
+    "safe_command_plan",
+    "evidence_gap"
+  ],
+  "forbidden_outputs": [
+    "verified_security_finding",
+    "runtime_deployment_claim",
+    "deploy_or_publish_action"
+  ],
+  "required_behavior": [
+    "enumerate manifests, lockfiles, workspace files, solution files, and CI files",
+    "identify project roots, package managers, language versions, build commands, and test commands",
+    "select candidate buildenv image per project",
+    "separate commands to inspect from commands requiring authorization or network"
+  ],
+  "must_not": [
+    "execute untrusted scripts by default",
+    "write to the target repository",
+    "assume dependency restore is safe or offline",
+    "collapse polyglot monorepos into a single project"
+  ]
+}

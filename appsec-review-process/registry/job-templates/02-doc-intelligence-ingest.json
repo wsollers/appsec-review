@@ -1,0 +1,52 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-doc-intelligence-ingest",
+  "display_name": "Document Intelligence Ingestion",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "functional-design-doc-consumer",
+    "role_id": "doc-intelligence-extractor",
+    "domain_id": "functional-design-docs",
+    "tooling_profile_id": "static-doc-parser",
+    "output_contract_id": "intelligence-extract"
+  },
+  "inputs": {
+    "required": [
+      "document source path",
+      "source type",
+      "redaction policy"
+    ],
+    "optional": [
+      "existing scratch/<project>-engagement/intel/INTELLIGENCE_MANIFEST.json",
+      "component map",
+      "product glossary"
+    ]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/doc-intel",
+    "files": [
+      "summary.md",
+      "facts.json",
+      "search-records.jsonl",
+      "status.json",
+      "functional-doc-summary.md",
+      "functional-doc-facts.json",
+      "architecture-facts.json",
+      "pii-flow-seeds.json",
+      "dfd-seeds.json",
+      "network-topology-seeds.json",
+      "product-abuse-seeds.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "source_lineage",
+    "task",
+    "output_contract"
+  ]
+}

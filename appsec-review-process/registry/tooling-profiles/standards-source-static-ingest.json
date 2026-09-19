@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "standards-source-static-ingest",
+  "display_name": "Standards Source Static Ingestion",
+  "mode": "static-only",
+  "required_inputs": [
+    "upstream standards source or curated local reference",
+    "standard name and version/ref",
+    "license or usage notes"
+  ],
+  "optional_inputs": [
+    "existing crosswalk",
+    "upstream tests directory",
+    "source manifest"
+  ],
+  "allowed_actions": [
+    "read upstream standard files",
+    "extract per-control records",
+    "preserve source path, URL, hash, and license metadata",
+    "build reverse indexes from controls to tests"
+  ],
+  "disallowed_actions": [
+    "rewrite upstream control meaning",
+    "drop source lineage",
+    "invent missing mappings",
+    "download licensed references without permission"
+  ],
+  "claim_limits": {
+    "compliance_verdict": "forbidden",
+    "control_extraction": "allowed",
+    "reference_mapping": "allowed_with_lineage"
+  }
+}
