@@ -13,6 +13,8 @@ param(
     [string]$Out,
 
     [string]$CompileDb = "",
+    [string]$RunId = "",
+    [string]$AttemptId = "",
     [string]$Msvc = "-",
     [string]$StaticImage = $(if ($env:STATIC_IMAGE) { $env:STATIC_IMAGE } else { "vendor-audit-toolbox:latest" }),
     [ValidateSet("auto", "bash", "powershell")]
@@ -27,6 +29,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
+if ($RunId) {
+    & python -B (Join-Path $Root 'appsec-review-process/phase1.py') pipeline-out --reserve --run-id $RunId --attempt-id $AttemptId --out ([IO.Path]::GetFullPath($Out))
+    if ($LASTEXITCODE -ne 0) { throw 'Run-owned pipeline output validation failed' }
+}
 $Target = (Resolve-Path $Target).ProviderPath
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $Out = (Resolve-Path $Out).ProviderPath
@@ -52,6 +58,7 @@ function Add-ManifestRow {
         exit_code = $ExitCode
         seconds = $Seconds
         log = $Log
+        stderr_log = Join-Path (Split-Path -Parent $Log) 'stderr.log'
     }
     if ($Note) { $row.note = $Note }
     ($row | ConvertTo-Json -Compress) | Add-Content -Path $Manifest -Encoding UTF8
@@ -67,7 +74,7 @@ function Invoke-LoggedStep {
 
         [string[]]$Arguments = @()
     )
-    $log = Join-Path $LogDir "$Name.log"
+    $log = Join-Path (Join-Path $LogDir $Name) 'stdout.log'
     Write-Host ""
     Write-Host "#### [$Name] $(Get-Date -Format o)"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -76,7 +83,7 @@ function Invoke-LoggedStep {
         $prevEap = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
         try {
-            & $FilePath @Arguments *>&1 | Tee-Object -FilePath $log
+            & python -B (Join-Path $Root 'appsec-review-process/pipeline_step.py') --logs (Join-Path $LogDir $Name) --cwd $Root -- $FilePath @Arguments
             $exitCode = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
         } finally {
             $ErrorActionPreference = $prevEap

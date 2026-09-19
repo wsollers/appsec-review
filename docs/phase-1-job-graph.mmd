@@ -1,0 +1,63 @@
+flowchart TD
+  00_intake_config["00-intake: resolve job configuration"] --> 00_intake_pre["00-intake: pre-validation"]
+  00_intake_pre --> 00_intake["00-intake: work or reuse"]
+  00_intake --> 00_intake_post["00-intake: post-validation and publish"]
+  02_repository_partition_discovery["02-repository-partition-discovery (planned; not dispatched)"]
+  00_intake_post -->|required| 02_repository_partition_discovery
+  02_dev_project_discovery["02-dev-project-discovery (planned; not dispatched)"]
+  02_repository_partition_discovery -->|required| 02_dev_project_discovery
+  02_devops_project_discovery["02-devops-project-discovery (planned; not dispatched)"]
+  02_repository_partition_discovery -->|required| 02_devops_project_discovery
+  02_sre_operations_topology["02-sre-operations-topology (planned; not dispatched)"]
+  02_repository_partition_discovery -->|required| 02_sre_operations_topology
+  02_evidence_assembly["02-evidence-assembly (planned; not dispatched)"]
+  02_dev_project_discovery -->|required| 02_evidence_assembly
+  02_devops_project_discovery -->|required| 02_evidence_assembly
+  02_sre_operations_topology -->|required| 02_evidence_assembly
+  01_component_characterization["01-component-characterization (planned; not dispatched)"]
+  02_evidence_assembly -->|required| 01_component_characterization
+  03_threat_model_dfd_stride["03-threat-model-dfd-stride (planned; not dispatched)"]
+  01_component_characterization -->|required| 03_threat_model_dfd_stride
+  04_asvs_masvs["04-asvs-masvs (planned; not dispatched)"]
+  01_component_characterization -->|required| 04_asvs_masvs
+  03_threat_model_dfd_stride -->|required| 04_asvs_masvs
+  05_native_memory["05-native-memory (planned; not dispatched)"]
+  01_component_characterization -->|required| 05_native_memory
+  06_cve_reachability["06-cve-reachability (planned; not dispatched)"]
+  01_component_characterization -->|required| 06_cve_reachability
+  13_fuzz_target_triage["13-fuzz-target-triage (planned; not dispatched)"]
+  01_component_characterization -->|required| 13_fuzz_target_triage
+  03_threat_model_dfd_stride -->|required| 13_fuzz_target_triage
+  05_native_memory -->|required| 13_fuzz_target_triage
+  06_cve_reachability -->|required| 13_fuzz_target_triage
+  15_deployment_hardening["15-deployment-hardening (planned; not dispatched)"]
+  01_component_characterization -->|required| 15_deployment_hardening
+  07_red_team_adversarial["07-red-team-adversarial (planned; not dispatched)"]
+  01_component_characterization -->|required| 07_red_team_adversarial
+  03_threat_model_dfd_stride -->|required| 07_red_team_adversarial
+  04_asvs_masvs -->|required| 07_red_team_adversarial
+  05_native_memory -->|required| 07_red_team_adversarial
+  06_cve_reachability -->|required| 07_red_team_adversarial
+  15_deployment_hardening -->|required| 07_red_team_adversarial
+  13_fuzz_target_triage -->|required| 07_red_team_adversarial
+  08_blue_team_refutation["08-blue-team-refutation (planned; not dispatched)"]
+  07_red_team_adversarial -->|required| 08_blue_team_refutation
+  01_component_characterization -->|required| 08_blue_team_refutation
+  09_independent_verification["09-independent-verification (planned; not dispatched)"]
+  07_red_team_adversarial -->|required| 09_independent_verification
+  08_blue_team_refutation -->|required| 09_independent_verification
+  11_remediation_proposal["11-remediation-proposal (planned; not dispatched)"]
+  09_independent_verification -->|required| 11_remediation_proposal
+  12_scoring_prioritization["12-scoring-prioritization (planned; not dispatched)"]
+  09_independent_verification -->|required| 12_scoring_prioritization
+  15_deployment_hardening -->|required| 12_scoring_prioritization
+  03_threat_model_dfd_stride -->|required| 12_scoring_prioritization
+  10_synthesis_report["10-synthesis-report (planned; not dispatched)"]
+  01_component_characterization -->|required| 10_synthesis_report
+  03_threat_model_dfd_stride -->|required| 10_synthesis_report
+  04_asvs_masvs -->|required| 10_synthesis_report
+  07_red_team_adversarial -->|required| 10_synthesis_report
+  08_blue_team_refutation -->|required| 10_synthesis_report
+  09_independent_verification -->|required| 10_synthesis_report
+  12_scoring_prioritization -->|required| 10_synthesis_report
+  11_remediation_proposal -->|optional| 10_synthesis_report

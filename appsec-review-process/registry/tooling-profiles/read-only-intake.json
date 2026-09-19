@@ -1,0 +1,34 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "read-only-intake",
+  "display_name": "Read-only deterministic intake",
+  "mode": "static-only",
+  "required_inputs": [
+    "target path",
+    "source identity"
+  ],
+  "optional_inputs": [
+    "explicit imported evidence"
+  ],
+  "allowed_actions": [
+    "read and hash source files",
+    "parse static manifests"
+  ],
+  "isolation": "Trusted bounded Python worker; filesystem reads only; no target code import; no Docker socket or credentials mounted into Dagster.",
+  "disallowed_actions": [
+    "execute target scripts",
+    "network target access",
+    "write target files"
+  ],
+  "claim_limits": {
+    "allowed": [
+      "intake_inventory",
+      "validation_result"
+    ],
+    "forbidden": [
+      "verified_security_finding",
+      "runtime_deployment_claim",
+      "successful_build"
+    ]
+  }
+}

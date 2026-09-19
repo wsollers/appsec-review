@@ -1,11 +1,25 @@
 # AppSec Review Process TODO
 
+## Phase 1 acceptance and durable orchestration
+
+- [x] Re-vet and implement the prompt: [A01-A16 PASS](../docs/phase-1-acceptance.md).
+- [x] Extend repo-local Dagster with configured intake/validator composition, explicit dependencies, pre/post validation, separate streams and failure recovery.
+- [x] Enforce new-run `runs/<run_id>/data/`, immutable attempts, validated reuse and explicit legacy imports. Unimplemented downstream dispatch is blocked.
+- [x] Synchronize machine graph/Mermaid and update operational docs and registry assignments.
+
 ## Registry And Job Orchestration
 
+- [x] Add a persistent Dagster run queue, per-engagement serialization, parallel preparation,
+  a validated final join and branch recovery: [workflow documentation](../docs/dagster-workflow.md).
+- Implement isolated scanner/specialist executors and resource pools before enabling heavy
+  downstream work; preparation handoffs do not execute those jobs.
+
+- Wire `02-repository-partition-discovery` before specialist discovery; validate map IDs, path scopes, overlap explanations, citations, coverage gaps, and persona routes, then expose its map in the engagement LLM index.
 - Implement `create_job_handoff.py` to render registry job templates into run-scoped handoffs.
 - Implement `validate_job_output.py` for registry output contracts, citation checks, and static/runtime claim limits.
-- Add reference-resolution checks so every job composition ID resolves to an existing persona, role, domain, tooling profile, and output contract.
-- Add schema validation to CI or a local smoke command for all registry JSON records.
+- [x] Add reference-resolution and semantic compatibility checks for all five composition IDs.
+- [x] Validate all registry JSON records locally through `qualify_phase1.py` (66 records qualified).
+- Add the registry qualification command to CI when CI orchestration is introduced.
 
 ## Binary Intelligence
 

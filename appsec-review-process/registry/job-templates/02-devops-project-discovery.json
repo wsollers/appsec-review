@@ -20,7 +20,8 @@
       "Dockerfiles",
       "IaC",
       "environment templates",
-      "build logs"
+      "build logs",
+      "project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments"
     ]
   },
   "outputs": {

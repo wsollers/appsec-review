@@ -1,0 +1,18 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "repository-partition-map",
+  "display_name": "Repository Partition Map And Specialist Routing",
+  "required_files": ["repository-partition-map.json", "repository-partition-summary.md", "status.json"],
+  "required_status_fields": ["process", "status", "budget", "persona_id", "role_id", "domain_id", "tooling_profile_id", "artifacts_read"],
+  "validation_rules": [
+    "repository-partition-map.json must satisfy repository-partition-map.schema.json",
+    "partition IDs must be unique; relationship targets must resolve within this map",
+    "path patterns must be repository-relative; forbid absolute paths and parent traversal",
+    "every partition must cite inspected source evidence and explain its routing",
+    "review persona IDs must resolve in the registry; they represent proposed review responsibility, not confirmed team ownership",
+    "shared or overlapping path scopes must be explained and assigned a coordinating primary persona",
+    "coverage must record unassigned and uninspected scope; absence claims require search evidence",
+    "deferred generated, vendored, test, or documentation scope must state a reason and rescope trigger",
+    "all claims describe declared or statically inferred structure, never observed runtime state"
+  ]
+}

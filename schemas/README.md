@@ -1,5 +1,9 @@
 # schemas
 
+`intake.schema.json` defines Phase 1 identity, scope, native applicability and planned-job output.
+The shared adapter additionally recomputes semantic expectations and validates provenance/freshness
+before accepting or reusing an intake artifact; schema validity alone is insufficient.
+
 JSON Schema for the common finding/evidence/interjob-transfer format (added 2026-09-19):
 
 - `evidence-citation.schema.json` -- the atomic citation unit (tool output, source file, upstream lane, manual diagnostic, or reference data), with an optional content hash for stale-evidence detection.
@@ -10,6 +14,7 @@ JSON Schema for the common finding/evidence/interjob-transfer format (added 2026
 
 Composable review schemas (added for the registry/worklist layer):
 
+- `repository-partition-map.schema.json` -- coarse repository areas, evidence, developer/DevOps/SRE review routes, relationships, scope dispositions, and inventory coverage gaps. Cross-record IDs, path containment, and semantic claim rules remain job-validator responsibilities.
 - `persona.schema.json` -- reusable reviewer stance, assumptions, inputs, outputs, and hard boundaries.
 - `role.schema.json` -- reusable work function such as intelligence extraction, standards validation, or platform hardening validation.
 - `domain.schema.json` -- reviewed surface, common failure modes, standards context, and evidence hints.

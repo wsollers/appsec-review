@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema",
+    "source_fingerprint",
+    "source_revision",
+    "business_goal",
+    "platforms",
+    "budget",
+    "execution_environment",
+    "permissions",
+    "scope",
+    "families",
+    "manifests",
+    "native",
+    "selected_jobs",
+    "ready_to_collect",
+    "pregather_complete",
+    "findings",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/intake/1"
+    },
+    "source_fingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_revision": {
+      "type": "string"
+    },
+    "business_goal": {
+      "type": "string"
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "budget": {
+      "enum": [
+        "probe",
+        "standard",
+        "full"
+      ]
+    },
+    "execution_environment": {
+      "type": "string"
+    },
+    "permissions": {
+      "type": "array"
+    },
+    "scope": {
+      "type": "object"
+    },
+    "families": {
+      "type": "object"
+    },
+    "manifests": {
+      "type": "array"
+    },
+    "native": {
+      "type": "object"
+    },
+    "selected_jobs": {
+      "type": "array",
+      "minItems": 1
+    },
+    "ready_to_collect": {
+      "const": true
+    },
+    "pregather_complete": {
+      "const": false
+    },
+    "findings": {
+      "type": "array"
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1
+    }
+  }
+}

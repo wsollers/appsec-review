@@ -1,0 +1,22 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "execution-validator",
+  "display_name": "Execution Validator",
+  "category": "verification",
+  "summary": "Deterministic pre/post checks of identity, configuration, schemas, hashes and semantics.",
+  "allowed_outputs": [
+    "validation_result"
+  ],
+  "forbidden_outputs": [
+    "verified_security_finding",
+    "runtime_deployment_claim",
+    "successful_build"
+  ],
+  "required_behavior": [
+    "Check full scope and source identity",
+    "Block on invalid inputs"
+  ],
+  "must_not": [
+    "execute target scripts"
+  ]
+}

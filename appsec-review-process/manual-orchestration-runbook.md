@@ -1,8 +1,39 @@
-# Manual Orchestration Runbook
+# Process runbook
 
-This runbook describes how to operate the prompt process before a full orchestrator exists.
+## Submit and monitor the current workflow
 
-## Start A Run
+Use the [complete job submission guide](../docs/dagster-launching.md). It covers service startup,
+Linux run creation/staging, CLI and UI submission, status, reattachment, retries and cancellation.
+For a staged Linux-owned run, execute these commands from the repository root on the host:
+
+```powershell
+python -B appsec-review-process/launch_job.py --run-id <run_id> --wait
+python -B appsec-review-process/review_cli.py status --run-id <run_id>
+```
+
+The default `engagement_workflow` performs intake, parallel preparation and a validated join.
+To monitor an existing submission, add `--launch-id <launch_id>` to the launch command. To recover
+after correcting a failed job, omit that option to make a new launch with validated reuse.
+Cancel server execution in Dagster; closing the initiating terminal only stops monitoring.
+
+## Stateful Phase 1 commands
+
+For new intake runs, follow [Phase 1 operations](../docs/phase-1-operations.md).
+Create/stage a Linux-owned run in the code-server, then submit `launch_job.py --run-id <run_id> --wait`.
+See [Dagster launching](../docs/dagster-launching.md). Dagster resolves configuration and executes
+the pre/work/post graph; direct `phase1.py` intake is reserved for explicit adapter diagnostics.
+All generated evidence, extracted data, builds and diagnostics belong under that run's `data/`.
+Read its recorded status/resume command after interruption; do not delete locks or mark it OK
+manually. Intake plans partition discovery before specialist collection and characterization.
+Do not run a full pregather simply because scanner output is absent during initial intake.
+
+The instructions below describe the legacy lane/scanner workflow. Shared-scratch paths are
+legacy examples; new runs use explicit hashed imports and never discover shared outputs implicitly.
+
+
+The remaining sections preserve the manual workflow for unmigrated lanes and legacy scanner runs.
+
+## Legacy manual workflow: start a run
 
 ```bash
 python3 appsec-review-process/run_process.py --start

@@ -1,24 +1,32 @@
-# Config — Intake And Recovery
+# Config — Stateful intake and recovery
 
-## Required Inputs
+Phase 1 intake uses the shared `phase1.py` adapter. Normal submission selects the Dagster
+`engagement_workflow`, which adds parallel preparation and a validated final join. The retained
+`phase1_intake` job performs intake alone. See [job submission](../../docs/dagster-launching.md).
+Acceptance is recorded separately in the run-scoped A01–A16 report; a successful intake alone
+is not implementation acceptance.
 
-- target repo path
-- engagement output directory
-- business decision being supported
-- target platform(s)
-- known scope exclusions
-- latest `job-status.md` if present
+Required inputs: target path, business goal, platforms, scope includes/excludes, budget,
+execution environment and granted permissions. `read-source` permits only the trusted static
+inventory worker. Target code, hooks, build scripts and network scanners are not executed.
 
-## Required Outputs
+Every intake records source revision, full dirty/untracked file fingerprints, unavailable
+links/submodules, all discovered language/workspace/build/deployment families, a conditional
+native compile/link-recipe plan, and specialist job routing. Choosing a primary native project
+never excludes the rest of the scope. Non-native and IaC-only targets need no compile database.
+Native build coverage remains blocked until separately collected; intake itself can pass.
 
-- recovered state summary
-- artifact inventory
-- scope assumptions
-- next-lane recommendation
-- **build-discovery note** (`build-discovery.md`) — required whenever this target does not already
-  have a fresh, documented compile-database generation strategy on record from a prior run for this
-  exact target. If a prior run's `build-discovery.md` is still current, say so explicitly in the
-  state summary and cite it (run id + path) rather than silently omitting this output. Formalized
-  2026-09-18 out of what had previously only existed as a one-off engagement-specific prompt
-  (`appsec-review-process/initial-idsoftware-game-repo-compile-and-review.md`, Phases 2–3) — see
-  `prompt.md` for the generalized steps.
+Authoritative outputs live in `runs/<run_id>/data/jobs/00-intake/whole/attempts/<attempt_id>/`:
+`evidence/source.json`, `outputs/intake.json`, `outputs/build-discovery.md`, validation results,
+separate logs, and `status.json`. The atomic `accepted.json` pointer selects validated output.
+Missing scanner artifacts are expected initially; supplied corrupt artifacts block intake.
+Post-pregather completeness is checked separately. Prior plans require explicit hashed imports.
+
+The `intake-coordinator` persona/role coordinates developer, DevOps and SRE review assignments.
+`contract-validator` / `execution-validator` performs deterministic nonrecursive pre/post checks.
+The machine graph is `job-graph.json`. Partition/specialist jobs are planned, not dispatched by
+Phase 1. The next step is `02-repository-partition-discovery`, before characterization.
+
+Workflow settings use `resources.workflow_settings.config` with `engagement_run_id` and `force`.
+UI launches require a matching `engagement_run_id` tag; the host launcher supplies it. Workflow
+state is under `data/workflows/engagement/`; intake state alone is not workflow acceptance.

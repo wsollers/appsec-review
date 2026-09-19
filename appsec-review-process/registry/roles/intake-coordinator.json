@@ -1,0 +1,22 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "intake-coordinator",
+  "display_name": "Intake Coordinator",
+  "category": "intelligence",
+  "summary": "Coordinates scope, build applicability and specialist routing.",
+  "allowed_outputs": [
+    "intake_inventory"
+  ],
+  "forbidden_outputs": [
+    "verified_security_finding",
+    "runtime_deployment_claim",
+    "successful_build"
+  ],
+  "required_behavior": [
+    "Check full scope and source identity",
+    "Block on invalid inputs"
+  ],
+  "must_not": [
+    "execute target scripts"
+  ]
+}

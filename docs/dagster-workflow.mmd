@@ -1,0 +1,12 @@
+flowchart TD
+  queue["Dagster queue: at most 2 runs; 1 per engagement"] --> workflow_config
+  workflow_config["Resolve configuration and reserve workflow generation"] --> workflow_intake
+  workflow_intake["Atomic intake: pre / Python work or reuse / post"] --> scope_check
+  workflow_intake --> native_plan_check
+  workflow_intake --> discovery_handoffs
+  scope_check["Scope preparation: pre / worker / post"] --> workflow_publish
+  native_plan_check["Native-plan preparation: pre / worker / post"] --> workflow_publish
+  discovery_handoffs["Discovery handoffs: pre / worker / post"] --> workflow_publish
+  workflow_intake --> workflow_publish
+  workflow_publish["Recheck freshness; validate all branches; publish workflow"]
+  workflow_publish --> next["Partition discovery and specialist execution remain planned"]

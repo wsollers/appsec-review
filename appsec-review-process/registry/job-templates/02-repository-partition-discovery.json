@@ -1,0 +1,24 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-repository-partition-discovery",
+  "display_name": "Repository Partition Discovery And Specialist Routing",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "repository-partition-mapper",
+    "domain_id": "repository-partitioning",
+    "tooling_profile_id": "static-repo-project-inspector",
+    "output_contract_id": "repository-partition-map"
+  },
+  "inputs": {
+    "required": ["target repository path", "repository file inventory including hidden CI/configuration paths", "language build environment image catalog"],
+    "optional": ["existing project inventory", "static evidence summary", "API definitions", "IaC and deployment manifests", "CI/CD workflows", "runbooks and service catalog", "existing component map"]
+  },
+  "outputs": {
+    "directory": "scratch/<project>-engagement/project-intel/repository-partitions",
+    "files": ["repository-partition-map.json", "repository-partition-summary.md", "status.json"]
+  },
+  "prompt_sections": ["governing_rules", "persona", "role", "domain", "tooling_profile", "buildenv_catalog", "task", "output_contract"],
+  "task_prompt": "appsec-review-process/02-evidence-pregather/repository-partition-discovery.md"
+}

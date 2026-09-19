@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "execution-validation",
+  "display_name": "execution-validation",
+  "required_files": [
+    "status.json",
+    "stdout.log",
+    "stderr.log"
+  ],
+  "required_status_fields": [
+    "status",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "dagster_run_id"
+  ],
+  "claim_types": [
+    "validation_result"
+  ],
+  "validation_rules": [
+    "Schema plus executable semantics",
+    "Exact source identity and file hashes",
+    "No successful build or verified finding claims"
+  ]
+}

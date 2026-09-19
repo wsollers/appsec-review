@@ -1,0 +1,94 @@
+name: appsec-review
+x-runtime: &runtime
+  image: appsec-review-dagster:local
+  environment:
+    DAGSTER_HOME: /opt/dagster/home
+    DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run setup first}
+    APPSEC_RUNS_ROOT: /runs
+    APPSEC_ORCHESTRATOR_ROOT: /opt/build-contract
+  volumes:
+    - dagster-storage:/var/dagster
+    - ../../appsec-review-process/runs:/runs
+    - ../../appsec-review-process:/opt/process:ro
+    - ../../schemas:/opt/schemas:ro
+    - ./definitions.py:/opt/app/definitions.py:ro
+    - ./definitions.py:/opt/build-contract/definitions.py:ro
+    - ./Dockerfile:/opt/build-contract/Dockerfile:ro
+    - ./requirements.txt:/opt/build-contract/requirements.txt:ro
+    - ./requirements.lock.txt:/opt/build-contract/requirements.lock.txt:ro
+    - ../../docs/phase-1-job-graph.mmd:/opt/docs/phase-1-job-graph.mmd:ro
+    - ./compose.yaml:/opt/build-contract/compose.yaml:ro
+    - ./dagster.yaml:/opt/dagster/home/dagster.yaml:ro
+    - ./dagster.yaml:/opt/build-contract/dagster.yaml:ro
+    - ../../targets/freeciv21:/targets/freeciv21:ro
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+services:
+  postgres:
+    image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+    environment:
+      POSTGRES_USER: appsec
+      POSTGRES_DB: appsec_dagster
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run setup first}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U appsec -d appsec_dagster"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+  code-server:
+    <<: *runtime
+    build: .
+    command: [dagster, code-server, start, -h, 0.0.0.0, -p, "4000", -f, /opt/app/definitions.py]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, dagster, api, grpc-health-check, -p, "4000"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+  webserver:
+    <<: *runtime
+    command: [dagster-webserver, -h, 0.0.0.0, -p, "3000", -w, /opt/dagster/home/workspace.yaml]
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      code-server:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/server_info', timeout=5).read()"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+  daemon:
+    <<: *runtime
+    command: [dagster-daemon, run, -w, /opt/dagster/home/workspace.yaml]
+    depends_on:
+      code-server:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, dagster-daemon, liveness-check]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 60s
+volumes:
+  postgres-data:
+  dagster-storage:

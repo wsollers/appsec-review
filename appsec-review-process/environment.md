@@ -1,5 +1,22 @@
 # Governing Environment
 
+## Stateful intake execution
+
+For new intake runs, follow [Phase 1 operations](../docs/phase-1-operations.md).
+Create/stage a Linux-owned run in the code-server, then submit `launch_job.py --run-id <run_id> --wait`.
+See [Dagster launching](../docs/dagster-launching.md). Dagster resolves configuration and executes
+`engagement_workflow` with two queued runs globally, one per engagement and up to three parallel
+preparation steps per workflow. Create/stage inside the code-server and submit from the host.
+Direct `phase1.py` intake is reserved for explicit adapter diagnostics.
+All generated evidence, extracted data, builds and diagnostics belong under that run's `data/`.
+Read its recorded status/resume command after interruption; do not delete locks or mark it OK
+manually. Intake plans partition discovery before specialist collection and characterization.
+Do not run a full pregather simply because scanner output is absent during initial intake.
+
+The instructions below describe the legacy lane/scanner workflow. Shared-scratch paths are
+legacy examples; new runs use explicit hashed imports and never discover shared outputs implicitly.
+
+
 This file defines the operating environment for the manual appsec process harness.
 
 ## Trust Boundaries

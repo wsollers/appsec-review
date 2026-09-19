@@ -1,0 +1,14 @@
+{
+  "job": "engagement_workflow",
+  "max_concurrent_steps": 3,
+  "worker_timeout_seconds": 60,
+  "retry_max_attempts": 1,
+  "branches": ["scope_check", "native_plan_check", "discovery_handoffs"],
+  "dependencies": {
+    "workflow_intake": ["workflow_config"],
+    "scope_check": ["workflow_intake"],
+    "native_plan_check": ["workflow_intake"],
+    "discovery_handoffs": ["workflow_intake"],
+    "workflow_publish": ["scope_check", "native_plan_check", "discovery_handoffs"]
+  }
+}

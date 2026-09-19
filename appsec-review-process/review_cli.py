@@ -131,7 +131,8 @@ def resolve_process(name: str) -> str:
 
 
 def run_dir(run_id: str) -> Path:
-    return RUNS / run_id
+    from execution_state import run_path
+    return run_path(run_id)
 
 
 def run_status(run_id: str) -> dict[str, Any]:
@@ -139,7 +140,12 @@ def run_status(run_id: str) -> dict[str, Any]:
 
 
 def manifest_for_run(run_id: str) -> dict[str, Any]:
-    return load_json(run_dir(run_id) / "inputs" / "artifact-manifest.json")
+    # Never downgrade a corrupt orchestrated manifest into the permissive legacy dispatcher.
+    from execution_state import read_json
+    value = read_json(run_dir(run_id) / "inputs" / "artifact-manifest.json")
+    if not isinstance(value, dict):
+        raise ValueError('artifact manifest must be an object')
+    return value
 
 
 def existing_path(p: str) -> Path | None:
@@ -264,6 +270,10 @@ def component_map_present(manifest: dict[str, Any]) -> tuple[bool, str]:
 
 def cmd_next_lane(args: argparse.Namespace) -> int:
     run_id = args.run_id
+    manifest = manifest_for_run(run_id)
+    if manifest.get('orchestration_version') == 1:
+        from phase1 import main as phase1_main
+        return phase1_main(['status', '--run-id', run_id])
     status = run_status(run_id)
     if not status:
         raise SystemExit(f"no run-status.json for run {run_id!r}; run_process.py --start first")
@@ -498,6 +508,15 @@ def cmd_status(args: argparse.Namespace) -> int:
     run_id = args.run_id or latest_run_id()
     if not run_id:
         raise SystemExit("no runs found under appsec-review-process/runs/")
+    manifest = manifest_for_run(run_id)
+    if manifest.get('orchestration_version') == 1:
+        import workflow
+        if (workflow.root(run_id)/'status.json').exists():
+            status=workflow.inspect_status(run_id)
+            print(json.dumps(status,indent=2))
+            return 0 if status['status']=='OK' else 1
+        from phase1 import main as phase1_main
+        return phase1_main(['status', '--run-id', run_id])
     status = run_status(run_id)
     if not status:
         raise SystemExit(f"no run-status.json for run {run_id!r}")
@@ -772,6 +791,14 @@ def release_run_lock(lock_dir: Path) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    if manifest_for_run(args.run_id).get('orchestration_version') == 1:
+        if resolve_process(args.lane) != '00-intake-recovery':
+            raise SystemExit('Downstream dispatch is not implemented for orchestrated runs; use the validated handoff.')
+        from phase1 import main as phase1_main
+        if args.dry_run:
+            return phase1_main(['status', '--run-id', args.run_id])
+        from launch_job import main as launch_main
+        return launch_main(['--run-id', args.run_id, '--job', 'phase1_intake', '--wait'])
     run_id = args.run_id
     lane = resolve_process(args.lane)
     status = run_status(run_id)
@@ -1014,6 +1041,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--dry-run", action="store_true", help="build the handoff and the claude argv, print them, execute nothing")
     p_run.set_defaults(func=cmd_run)
 
+    p_intake = sub.add_parser('intake', help='submit Phase 1 intake to Dagster and wait for its result')
+    p_intake.add_argument('--run-id', required=True)
+    p_intake.add_argument('--force', action='store_true')
+    p_intake.add_argument('--launch-id', help='resume monitoring an existing Dagster launch')
+    def intake_command(args):
+        from launch_job import main as launch_main
+        return launch_main(['--run-id', args.run_id, '--job', 'phase1_intake', '--wait'] + (['--force'] if args.force else [])
+                           + (['--launch-id',args.launch_id] if args.launch_id else []))
+    p_intake.set_defaults(func=intake_command)
     return ap
 
 

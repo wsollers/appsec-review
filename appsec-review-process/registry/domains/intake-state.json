@@ -1,0 +1,20 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "intake-state",
+  "display_name": "Engagement intake state",
+  "surfaces": [
+    "source identity",
+    "scope",
+    "build families",
+    "execution state"
+  ],
+  "common_failure_modes": [
+    "stale output",
+    "cross-run evidence"
+  ],
+  "preferred_standards": [],
+  "required_evidence_hints": [
+    "hashes",
+    "producer attempt IDs"
+  ]
+}

@@ -20,7 +20,8 @@
       "runbooks",
       "smoke tests",
       "monitoring and alerting config",
-      "service catalog"
+      "service catalog",
+      "project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments"
     ]
   },
   "outputs": {

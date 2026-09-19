@@ -1,0 +1,38 @@
+storage:
+  postgres:
+    postgres_db:
+      username: appsec
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      hostname: postgres
+      db_name: appsec_dagster
+      port: 5432
+compute_logs:
+  module: dagster.core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: /var/dagster/compute-logs
+local_artifact_storage:
+  module: dagster._core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: /var/dagster/artifacts
+telemetry:
+  enabled: false
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 2
+    dequeue_interval_seconds: 2
+    tag_concurrency_limits:
+      - key: engagement_run_id
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1
+run_monitoring:
+  enabled: true
+  poll_interval_seconds: 30
+  start_timeout_seconds: 120
+  cancel_timeout_seconds: 30
+  max_resume_run_attempts: 0

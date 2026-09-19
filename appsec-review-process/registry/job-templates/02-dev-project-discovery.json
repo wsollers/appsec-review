@@ -19,7 +19,8 @@
     "optional": [
       "developer docs",
       "CI workflow files",
-      "existing component map"
+      "existing component map",
+      "project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments"
     ]
   },
   "outputs": {

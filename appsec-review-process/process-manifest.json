@@ -4,7 +4,7 @@
   "default_budget": "probe",
   "budget_policy": "appsec-review-process/budget-policy.md",
   "state_root": "appsec-review-process/runs/<run_id>",
-  "artifact_policy": "canonical engagement artifacts stay under scratch/<project>-engagement; process-run notes and lane outputs stay under appsec-review-process/runs/<run_id>",
+  "artifact_policy": "New orchestrated runs own evidence, extracted files, builds, immutable attempts and logs under appsec-review-process/runs/<run_id>/data/. Legacy scratch is preserved and consumed only through explicit hashed imports into new runs.",
   "process_order": [
     "00-intake-recovery",
     "02-evidence-pregather",
@@ -105,5 +105,6 @@
       "remediation proposal status for accepted verified fixes, when requested",
       "documented limitations"
     ]
-  }
+  },
+  "legacy_artifact_policy": "canonical engagement artifacts stay under scratch/<project>-engagement; process-run notes and lane outputs stay under appsec-review-process/runs/<run_id>"
 }

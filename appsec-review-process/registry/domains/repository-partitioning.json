@@ -1,0 +1,9 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "repository-partitioning",
+  "display_name": "Repository Review Partitioning",
+  "surfaces": ["clients", "servers", "API implementations and contracts", "shared libraries", "IaC", "CI/CD", "deployment manifests", "operations and observability", "tests", "generated and vendored code", "documentation"],
+  "common_failure_modes": ["one repository treated as one application", "API contracts mistaken for deployed services", "hidden CI directories missed", "shared paths reviewed inconsistently", "operations artifacts omitted", "folder names treated as proof of ownership", "uninspected scope reported as absent"],
+  "preferred_standards": [],
+  "required_evidence_hints": ["repository file inventory", "workspace and build manifests", "API definitions and route registration", "IaC and deployment manifests", "CI workflows", "runbooks and observability configuration"]
+}

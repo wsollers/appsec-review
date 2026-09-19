@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "repository-partition-map.schema.json",
+  "title": "Repository Partition Map And Specialist Routing",
+  "type": "object",
+  "required": [
+    "schema",
+    "target",
+    "source_revision",
+    "partitions",
+    "coverage"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/repository-partition-map/0.1"
+    },
+    "target": {
+      "type": "string"
+    },
+    "source_revision": {
+      "type": "string"
+    },
+    "partitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "partition_id",
+          "name",
+          "kinds",
+          "include_paths",
+          "exclude_paths",
+          "primary_persona_id",
+          "supporting_persona_ids",
+          "routing_rationale",
+          "confidence",
+          "evidence_citations",
+          "relationships",
+          "overlap_notes",
+          "disposition",
+          "disposition_reason",
+          "rescope_trigger"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "partition_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kinds": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": [
+                "client",
+                "server",
+                "api",
+                "shared-library",
+                "iac",
+                "cicd",
+                "build-release",
+                "deployment",
+                "operations",
+                "test",
+                "generated",
+                "vendored",
+                "documentation",
+                "other",
+                "unknown"
+              ]
+            }
+          },
+          "include_paths": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude_paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "primary_persona_id": {
+            "type": "string",
+            "enum": [
+              "developer-engineer",
+              "devops-engineer",
+              "sre-engineer"
+            ]
+          },
+          "supporting_persona_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "developer-engineer",
+                "devops-engineer",
+                "sre-engineer"
+              ]
+            }
+          },
+          "routing_rationale": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "evidence_citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "evidence-citation.schema.json"
+            }
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "target_partition_id",
+                "kind",
+                "basis",
+                "evidence_citations"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "target_partition_id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "calls",
+                    "implements",
+                    "deploys",
+                    "builds",
+                    "monitors",
+                    "shares",
+                    "other"
+                  ]
+                },
+                "basis": {
+                  "type": "string",
+                  "enum": [
+                    "declared",
+                    "inferred"
+                  ]
+                },
+                "evidence_citations": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "evidence-citation.schema.json"
+                  }
+                }
+              }
+            }
+          },
+          "overlap_notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "review",
+              "deferred",
+              "unresolved"
+            ]
+          },
+          "disposition_reason": {
+            "type": "string"
+          },
+          "rescope_trigger": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "inventory_scope",
+        "unassigned_paths",
+        "uninspected_scope",
+        "budget_limitations",
+        "category_checks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "inventory_scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "unassigned_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uninspected_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "budget_limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "category_checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "category",
+              "result",
+              "search_scope",
+              "evidence_citations"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "result": {
+                "type": "string",
+                "enum": [
+                  "found",
+                  "not-found",
+                  "uninspected"
+                ]
+              },
+              "search_scope": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence_citations": {
+                "type": "array",
+                "items": {
+                  "$ref": "evidence-citation.schema.json"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

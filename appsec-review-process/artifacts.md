@@ -1,8 +1,25 @@
 # Artifact Contract
 
+## New orchestrated runs
+
+Evidence, extracted files, builds, attempts, validation results and logs belong under
+`runs/<run_id>/data/`. `phase1.py` owns stateful intake publication, reuse and recovery.
+Submission requests live in `data/orchestration/launches/<launch_id>/`; workflow state and
+aggregate acceptance live in `data/workflows/engagement/`. Parallel preparation attempts live in
+`data/jobs/00-workflow-preparation/<branch>/attempts/<attempt_id>/`. See the
+[submission guide's output table](../docs/dagster-launching.md#4-check-status-and-results).
+The root `run-status.json` retains the intake/lane view, not the whole-workflow verdict.
+See [operations](../docs/phase-1-operations.md) and [data contract](../docs/run-data-and-job-execution.md).
+`inputs/artifact-manifest.json` contains scope/source identity, selected job plans, build-discovery
+provenance, accepted hashes and producer attempt IDs. Restaging preserves history and invalidates
+stale derived references. `outputs/` is a compatibility surface, never authoritative discovery.
+Missing scanner outputs are expected before pregather; corrupt supplied inputs always fail.
+The layouts below are preserved legacy evidence formats. Import them explicitly into a new run;
+never move or delete old scratch automatically.
+
 This file defines where process artifacts live and which artifacts are required before each lane.
 
-## Canonical Evidence
+## Legacy scanner evidence layout
 
 Canonical scanner/evidence output lives under:
 

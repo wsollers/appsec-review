@@ -6,6 +6,8 @@
 set -euo pipefail
 
 PROJECT=""
+RUN_ID=""
+ATTEMPT_ID=""
 TARGET=""
 OUT=""
 COMPILE_DB=""
@@ -56,6 +58,8 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --project) PROJECT="$2"; shift 2;;
+    --run-id) RUN_ID="$2"; shift 2;;
+    --attempt-id) ATTEMPT_ID="$2"; shift 2;;
     --target) TARGET="$2"; shift 2;;
     --out) OUT="$2"; shift 2;;
     --compile-db) COMPILE_DB="$2"; shift 2;;
@@ -75,6 +79,9 @@ done
 [[ -n "$PROJECT" && -n "$TARGET" && -n "$OUT" ]] || { usage; exit 2; }
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+if [[ -n "$RUN_ID" ]]; then
+  python3 -B "$ROOT/appsec-review-process/phase1.py" pipeline-out --reserve --run-id "$RUN_ID" --attempt-id "$ATTEMPT_ID" --out "$(realpath -m "$OUT")"
+fi
 TARGET=$(realpath "$TARGET")
 OUT=$(mkdir -p "$OUT" && cd "$OUT" && pwd)
 STATIC_EVIDENCE="$OUT/static-evidence"
@@ -91,18 +98,18 @@ json_escape() {
 
 run_step() {
   local name="$1"; shift
-  local log="$LOG_DIR/$name.log"
+  local log="$LOG_DIR/$name/stdout.log"
   echo
   echo "#### [$name] $(date -Is)"
   local start end rc
   start=$(date +%s)
   set +e
-  "$@" > >(tee "$log") 2>&1
+  python3 -B "$ROOT/appsec-review-process/pipeline_step.py" --logs "$LOG_DIR/$name" --cwd "$ROOT" -- "$@"
   rc=$?
   set -e
   end=$(date +%s)
-  printf '{"step":%s,"exit_code":%s,"seconds":%s,"log":%s}\n' \
-    "$(json_escape "$name")" "$rc" "$((end-start))" "$(json_escape "$log")" >> "$MANIFEST"
+  printf '{"step":%s,"exit_code":%s,"seconds":%s,"log":%s,"stderr_log":%s}\n' \
+    "$(json_escape "$name")" "$rc" "$((end-start))" "$(json_escape "$log")" "$(json_escape "$LOG_DIR/$name/stderr.log")" >> "$MANIFEST"
   return "$rc"
 }
 

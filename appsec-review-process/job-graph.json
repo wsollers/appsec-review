@@ -1,0 +1,432 @@
+{
+  "version": 1,
+  "validator_template": "00-validation",
+  "jobs": {
+    "00-intake": {
+      "lane": "00-intake-recovery",
+      "contract": "intake",
+      "template": "00-intake",
+      "implemented": true,
+      "namespace": "00-intake",
+      "dependencies": []
+    },
+    "02-repository-partition-discovery": {
+      "lane": "02-evidence-pregather",
+      "contract": "repository-partition-map",
+      "template": "02-repository-partition-discovery",
+      "implemented": false,
+      "namespace": "02-repository-partition-discovery",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-dev-project-discovery": {
+      "lane": "02-evidence-pregather",
+      "contract": "project-discovery",
+      "template": "02-dev-project-discovery",
+      "implemented": false,
+      "namespace": "02-dev-project-discovery",
+      "dependencies": [
+        {
+          "job": "02-repository-partition-discovery",
+          "kind": "required",
+          "contract": "repository-partition-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-devops-project-discovery": {
+      "lane": "02-evidence-pregather",
+      "contract": "project-discovery",
+      "template": "02-devops-project-discovery",
+      "implemented": false,
+      "namespace": "02-devops-project-discovery",
+      "dependencies": [
+        {
+          "job": "02-repository-partition-discovery",
+          "kind": "required",
+          "contract": "repository-partition-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-sre-operations-topology": {
+      "lane": "02-evidence-pregather",
+      "contract": "operations-topology",
+      "template": "02-sre-operations-topology",
+      "implemented": false,
+      "namespace": "02-sre-operations-topology",
+      "dependencies": [
+        {
+          "job": "02-repository-partition-discovery",
+          "kind": "required",
+          "contract": "repository-partition-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "02-evidence-assembly": {
+      "lane": "02-evidence-pregather",
+      "contract": "pregather",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-evidence-assembly",
+      "dependencies": [
+        {
+          "job": "02-dev-project-discovery",
+          "kind": "required",
+          "contract": "project-discovery",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        },
+        {
+          "job": "02-devops-project-discovery",
+          "kind": "required",
+          "contract": "project-discovery",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        },
+        {
+          "job": "02-sre-operations-topology",
+          "kind": "required",
+          "contract": "operations-topology",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        }
+      ]
+    },
+    "01-component-characterization": {
+      "lane": "01-component-characterization",
+      "contract": "component-map",
+      "template": null,
+      "implemented": false,
+      "namespace": "01-component-characterization",
+      "dependencies": [
+        {
+          "job": "02-evidence-assembly",
+          "kind": "required",
+          "contract": "pregather",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "03-threat-model-dfd-stride": {
+      "lane": "03-threat-model-dfd-stride",
+      "contract": "03-threat-model-dfd-stride",
+      "template": null,
+      "implemented": false,
+      "namespace": "03-threat-model-dfd-stride",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "04-asvs-masvs": {
+      "lane": "04-asvs-masvs",
+      "contract": "04-asvs-masvs",
+      "template": null,
+      "implemented": false,
+      "namespace": "04-asvs-masvs",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-dfd-stride",
+          "kind": "required",
+          "contract": "03-threat-model-dfd-stride",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "05-native-memory": {
+      "lane": "05-native-memory",
+      "contract": "05-native-memory",
+      "template": null,
+      "implemented": false,
+      "namespace": "05-native-memory",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "06-cve-reachability": {
+      "lane": "06-cve-reachability",
+      "contract": "06-cve-reachability",
+      "template": null,
+      "implemented": false,
+      "namespace": "06-cve-reachability",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "13-fuzz-target-triage": {
+      "lane": "13-fuzz-target-triage",
+      "contract": "13-fuzz-target-triage",
+      "template": null,
+      "implemented": false,
+      "namespace": "13-fuzz-target-triage",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-dfd-stride",
+          "kind": "required",
+          "contract": "03-threat-model-dfd-stride",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "05-native-memory",
+          "kind": "required",
+          "contract": "05-native-memory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "06-cve-reachability",
+          "kind": "required",
+          "contract": "06-cve-reachability",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "15-deployment-hardening": {
+      "lane": "15-deployment-hardening",
+      "contract": "15-deployment-hardening",
+      "template": null,
+      "implemented": false,
+      "namespace": "15-deployment-hardening",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "07-red-team-adversarial": {
+      "lane": "07-red-team-adversarial",
+      "contract": "07-red-team-adversarial",
+      "template": null,
+      "implemented": false,
+      "namespace": "07-red-team-adversarial",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-dfd-stride",
+          "kind": "required",
+          "contract": "03-threat-model-dfd-stride",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "04-asvs-masvs",
+          "kind": "required",
+          "contract": "04-asvs-masvs",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "05-native-memory",
+          "kind": "required",
+          "contract": "05-native-memory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "06-cve-reachability",
+          "kind": "required",
+          "contract": "06-cve-reachability",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "15-deployment-hardening",
+          "kind": "required",
+          "contract": "15-deployment-hardening",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "13-fuzz-target-triage",
+          "kind": "required",
+          "contract": "13-fuzz-target-triage",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "08-blue-team-refutation": {
+      "lane": "08-blue-team-refutation",
+      "contract": "08-blue-team-refutation",
+      "template": null,
+      "implemented": false,
+      "namespace": "08-blue-team-refutation",
+      "dependencies": [
+        {
+          "job": "07-red-team-adversarial",
+          "kind": "required",
+          "contract": "07-red-team-adversarial",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "09-independent-verification": {
+      "lane": "09-independent-verification",
+      "contract": "09-independent-verification",
+      "template": null,
+      "implemented": false,
+      "namespace": "09-independent-verification",
+      "dependencies": [
+        {
+          "job": "07-red-team-adversarial",
+          "kind": "required",
+          "contract": "07-red-team-adversarial",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "08-blue-team-refutation",
+          "kind": "required",
+          "contract": "08-blue-team-refutation",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "11-remediation-proposal": {
+      "lane": "11-remediation-proposal",
+      "contract": "11-remediation-proposal",
+      "template": null,
+      "implemented": false,
+      "namespace": "11-remediation-proposal",
+      "dependencies": [
+        {
+          "job": "09-independent-verification",
+          "kind": "required",
+          "contract": "09-independent-verification",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "12-scoring-prioritization": {
+      "lane": "12-scoring-prioritization",
+      "contract": "12-scoring-prioritization",
+      "template": null,
+      "implemented": false,
+      "namespace": "12-scoring-prioritization",
+      "dependencies": [
+        {
+          "job": "09-independent-verification",
+          "kind": "required",
+          "contract": "09-independent-verification",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "15-deployment-hardening",
+          "kind": "required",
+          "contract": "15-deployment-hardening",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-dfd-stride",
+          "kind": "required",
+          "contract": "03-threat-model-dfd-stride",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
+    "10-synthesis-report": {
+      "lane": "10-synthesis-report",
+      "contract": "10-synthesis-report",
+      "template": null,
+      "implemented": false,
+      "namespace": "10-synthesis-report",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-dfd-stride",
+          "kind": "required",
+          "contract": "03-threat-model-dfd-stride",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "04-asvs-masvs",
+          "kind": "required",
+          "contract": "04-asvs-masvs",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "07-red-team-adversarial",
+          "kind": "required",
+          "contract": "07-red-team-adversarial",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "08-blue-team-refutation",
+          "kind": "required",
+          "contract": "08-blue-team-refutation",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "09-independent-verification",
+          "kind": "required",
+          "contract": "09-independent-verification",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "12-scoring-prioritization",
+          "kind": "required",
+          "contract": "12-scoring-prioritization",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "11-remediation-proposal",
+          "kind": "optional",
+          "enabled": false,
+          "enabled_when": "remediation_requested",
+          "contract": "11-remediation-proposal",
+          "allowed_skip_reasons": [
+            "not-requested"
+          ]
+        }
+      ]
+    }
+  }
+}

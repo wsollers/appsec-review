@@ -1,0 +1,51 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "00-validation",
+  "display_name": "00-validation",
+  "process": "00-intake-recovery",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "contract-validator",
+    "role_id": "execution-validator",
+    "domain_id": "intake-state",
+    "tooling_profile_id": "read-only-intake",
+    "output_contract_id": "execution-validation"
+  },
+  "inputs": {
+    "required": [
+      "target path",
+      "source identity",
+      "scope",
+      "permissions"
+    ],
+    "optional": [
+      "hashed imports"
+    ]
+  },
+  "outputs": {
+    "directory": "data/jobs/00-validation/whole/attempts/<attempt_id>",
+    "files": [
+      "status.json",
+      "stdout.log",
+      "stderr.log"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 120,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "all engagements",
+  "permissions": [
+    "read-source"
+  ],
+  "coordinator": "intake-coordinator"
+}

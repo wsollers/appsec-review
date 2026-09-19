@@ -107,8 +107,20 @@ def main() -> int:
     args = ap.parse_args()
 
     process = resolve_process(args.process)
-    run_dir = ROOT / "runs" / args.run_id
-    manifest = load_json(run_dir / "inputs" / "artifact-manifest.json")
+    from execution_state import run_path, data_path, atomic_bytes, beneath
+    run_dir = run_path(args.run_id)
+    from execution_state import read_json
+    manifest = read_json(run_dir / "inputs" / "artifact-manifest.json")
+    if manifest.get('orchestration_version') == 1:
+        if process not in ('00-intake-recovery','02-evidence-pregather'):
+            raise SystemExit('Downstream handoff dispatch is planned, not implemented; first consume the validated partition-discovery handoff.')
+        from phase1 import handoff
+        import uuid
+        text = handoff(args.run_id)
+        out = beneath(data_path(args.run_id), Path(args.out).absolute()) if args.out else data_path(args.run_id, 'handoffs', uuid.uuid4().hex + '.md')
+        atomic_bytes(out, text.encode())
+        print(json.dumps({'handoff': str(out), 'process': process, 'budget': args.budget or 'probe'}))
+        return 0
     run_status = load_json(run_dir / "run-status.json")
     budget = args.budget or str(run_status.get("default_budget") or "probe")
     target = manifest.get("target", {}).get("repo_path", "")
@@ -135,4 +147,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

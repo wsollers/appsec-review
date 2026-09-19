@@ -50,6 +50,21 @@ def main() -> int:
     args = ap.parse_args()
 
     process = resolve_process(args.process)
+    from execution_state import run_path, read_json
+    manifest = read_json(run_path(args.run_id) / 'inputs/artifact-manifest.json')
+    if manifest.get('orchestration_version') == 1:
+        from phase1 import accepted, validate_supplied, config_for
+        try:
+            if process == '00-intake-recovery':
+                if not accepted(args.run_id):
+                    raise ValueError('no accepted intake')
+            elif process == '02-evidence-pregather':
+                validate_supplied(args.run_id, config_for(args.run_id), 'pregather')
+            else:
+                raise ValueError('downstream lane adapter is not implemented for orchestrated runs')
+            print(json.dumps({'status':'OK','process':process})); return 0
+        except Exception as exc:
+            print(json.dumps({'status':'FAILED','process':process,'error':str(exc)})); return 1
     out_dir = ROOT / "runs" / args.run_id / "outputs" / process
     result_md = out_dir / "result.md"
     status_json = out_dir / "status.json"

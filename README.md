@@ -8,7 +8,30 @@ evidence jobs with a tracked prompt/process harness under `appsec-review-process
 Design authority: `docs/design-v3.md` (exported from the Google Doc on 2026-09-11; the Doc
 remains the editing surface until this repo takes over — see `docs/decisions/ADR-0004`).
 
+## Submit a job
+
+Follow the [job submission guide](docs/dagster-launching.md) to create and stage a Linux-owned
+engagement, submit from the host, inspect results, reconnect, recover or cancel. For a staged run:
+
+```powershell
+python -B appsec-review-process/launch_job.py --run-id <run_id> --wait
+python -B appsec-review-process/review_cli.py status --run-id <run_id>
+```
+
+The default is `engagement_workflow`: intake, parallel scope/native-plan/handoff preparation,
+then a validated final join. Use `--job phase1_intake` only when requesting intake alone.
+
 ## Layout
+
+Phase 1 stateful intake is [accepted through A01-A16](docs/phase-1-acceptance.md).
+Use the [Dagster launcher](docs/dagster-launching.md) to submit staged intake to the running service.
+The default [engagement workflow](docs/dagster-workflow.md) queues concurrent engagements and runs
+independent preparation steps in separate processes, with a validated final join.
+Dagster resolves configuration and owns the pre/work/post transitions; Python performs the bounded
+work. The shared adapter provides immutable attempts, freshness-checked reuse, explicit
+pre/work/post gates and run-owned `data/`. Freeciv21 qualification covered intake and recovery;
+downstream collection and review dispatch remain planned. The scratch-based scanner workflows
+below are legacy workflows, with explicit imports required for new orchestrated runs.
 
 | Path | Contents |
 |---|---|
@@ -32,9 +55,12 @@ remains the editing surface until this repo takes over — see `docs/decisions/A
 
 ## Current Architecture
 
-The repo has two layers.
+Dagster is the normal orchestration layer. It queues jobs, serializes submissions for the same
+engagement, runs independent preparation steps in parallel and records failures/recovery. The
+[current workflow](docs/dagster-workflow.md) implements intake and preparation; downstream scanner
+and specialist execution remains planned.
 
-The deterministic evidence layer is run by:
+The separate legacy deterministic evidence layer is run by:
 
 - `pipeline/engagement_job.sh` on Bash/WSL/Linux
 - `pipeline/engagement_job.ps1` on Windows PowerShell/Docker
@@ -46,8 +72,8 @@ The LLM process layer is run from `appsec-review-process/`. It starts with `init
 evidence into an ignored `runs/<run_id>/` directory, creates lane handoffs, records failures and
 resume points, and validates lane outputs.
 
-See `docs/appsec-review-architecture-and-jobs-2026-09-16.md` for the current job and prompt
-architecture.
+See `docs/appsec-review-architecture-and-jobs-2026-09-16.md` for the historical scanner/prompt
+architecture and the current guides above for Dagster submission.
 
 ## Operating assumption
 
@@ -68,7 +94,7 @@ shape, but it is slower for heavy `ir-facts` and CodeQL work.
 6. Regenerate assemble/correlation/deep-confirmation/retrieval/LLM input after adding evidence.
 7. Run `appsec-review-process` probe lanes before full LLM review.
 
-## WSL-local target workflow
+## Legacy WSL-local scanner workflow
 
 For real runs on Windows/WSL, use a repo checkout on the WSL ext4 filesystem, not under
 `/mnt/c` or `/mnt/f`. Keep cloned targets under the ignored repo-local `targets/` directory
@@ -93,7 +119,7 @@ bash pipeline/engagement_job.sh \
 cat scratch/eastl-engagement/job-status.md
 ```
 
-## Windows PowerShell + Docker Workflow
+## Legacy Windows PowerShell + Docker scanner workflow
 
 The Windows runner supports WSL UNC targets and writes the same output shape:
 

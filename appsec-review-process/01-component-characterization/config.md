@@ -10,6 +10,15 @@
 - target source tree
 - `taxonomy.md`
 
+## Optional Partition Map
+
+If available, first consume
+`project-intel/repository-partitions/repository-partition-map.json` from the engagement output.
+Use its coarse areas and developer/DevOps/SRE routes as initial scope. Refine them into the
+functional/security components below, retaining source partition IDs in the mapping or evidence
+and explaining splits, merges, or corrections. Missing partition discovery is an explicit gap,
+not a blocker for existing engagements.
+
 ## Required Outputs
 
 - `component-purpose-map.json`

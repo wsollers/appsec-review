@@ -1,5 +1,12 @@
 # Composable Review Implementation Plan
 
+Engagement Phase 1 modernization is separately specified in
+[`phase-1-implementation-prompt.md`](phase-1-implementation-prompt.md). It adds Dagster execution,
+run-owned `data/`, explicit validation jobs, idempotency and acceptance gates. The numbered registry
+phases below describe the older implementation breakdown, not engagement lifecycle phase numbers.
+Engagement Phase 1 is [ACCEPTED through A01-A16](../docs/phase-1-acceptance.md).
+Use the [operations guide](../docs/phase-1-operations.md); downstream dispatch remains planned.
+
 This plan consolidates the persona, intelligence, composable-template, and standards-checklist
 proposals into a repo structure that extends the current lane process without replacing it.
 
@@ -12,8 +19,8 @@ lane + persona + role + domain + tooling profile + output contract + evidence bu
 ```
 
 Tracked records live in `appsec-review-process/registry/`. Engagement-specific worklists and
-derived intelligence stay under `scratch/<project>-engagement/`, while ignored run outputs stay
-under `appsec-review-process/runs/<run_id>/`.
+derived intelligence for new runs stay under `appsec-review-process/runs/<run_id>/data/`.
+Shared `scratch/<project>-engagement/` remains legacy data and requires explicit import.
 
 ## Phase 1: Registry And Schemas
 
@@ -93,6 +100,7 @@ Wire jobs into existing lanes without changing lane semantics:
 
 ## Initial Dispatchable Jobs
 
+- `02-repository-partition-discovery` (coarse scope and developer/DevOps/SRE routing before specialist discovery)
 - `02-standards-source-ingest`
 - `04-owasp-validation-worklist`
 - `15-stig-srg-validation-worklist`

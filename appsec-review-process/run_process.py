@@ -75,7 +75,8 @@ def resolve_process(name: str) -> str:
 
 
 def run_dir(run_id: str) -> Path:
-    return RUNS / run_id
+    from execution_state import run_path
+    return run_path(run_id)
 
 
 def status_path(run_id: str) -> Path:
@@ -114,6 +115,9 @@ def append_event(run_id: str, event: dict[str, Any]) -> None:
 def init_run(run_id: str) -> dict[str, Any]:
     names = process_names()
     rdir = run_dir(run_id)
+    if (rdir / 'run-status.json').exists():
+        raise ValueError('run already exists; initialization cannot reset history')
+    (rdir / 'data').mkdir(parents=True, exist_ok=True)
     (rdir / "inputs").mkdir(parents=True, exist_ok=True)
     (rdir / "outputs").mkdir(parents=True, exist_ok=True)
     template = ROOT / "templates" / "artifact-manifest.template.json"
@@ -205,6 +209,10 @@ def update_run_for_process(run_id: str, process: str, state: str, message: str =
 
 
 def mark_process(run_id: str, process: str, state: str, message: str = "", budget: str = "") -> dict[str, Any]:
+    from execution_state import read_json
+    manifest = read_json(run_dir(run_id) / 'inputs/artifact-manifest.json')
+    if manifest.get('orchestration_version') == 1:
+        raise ValueError('orchestrated run state is owned by phase1.py; manual status changes are forbidden')
     run_data = load_json(status_path(run_id))
     selected_budget = budget or str(run_data.get("default_budget") or "probe")
     payload = {

@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "intake",
+  "display_name": "intake",
+  "required_files": [
+    "outputs/intake.json",
+    "outputs/build-discovery.md",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "dagster_run_id"
+  ],
+  "claim_types": [
+    "intake_inventory"
+  ],
+  "validation_rules": [
+    "Schema plus executable semantics",
+    "Exact source identity and file hashes",
+    "No successful build or verified finding claims"
+  ]
+}

@@ -9,6 +9,21 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 
 ## Layout
 
+Phase 1 intake modernization is specified in
+[`phase-1-implementation-prompt.md`](phase-1-implementation-prompt.md), with explicit acceptance
+gates and prompt vetting. See the [job-flow diagram](../docs/engagement-job-flow.md),
+[run-owned data contract](../docs/run-data-and-job-execution.md), and
+[Dagster runner](../orchestrator/dagster/README.md). Phase 1 intake is
+[accepted through A01-A16](../docs/phase-1-acceptance.md); use the
+[operations guide](../docs/phase-1-operations.md) for new runs and recovery.
+The normal CLI submits to the service with `launch_job.py --run-id <run_id> --wait`;
+[Dagster launching](../docs/dagster-launching.md) explains configuration, transitions and recovery.
+It selects `engagement_workflow`, including parallel preparation and the final join.
+Create/stage inside the code-server, submit from the host, then use `review_cli.py status`.
+The guide includes a complete Freeciv21 example and Dagster UI config/tag instructions.
+The existing shared-scratch examples below describe legacy behavior. Downstream discovery,
+collection and review jobs remain planned; their presence in the graph does not dispatch them.
+
 | Path | Purpose |
 |---|---|
 | `initiate.md` | Start/recovery prompt for the whole process. |

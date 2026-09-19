@@ -46,8 +46,9 @@ scope and boundaries fit. Create only the records needed for a distinct review c
   version for each type; it is not a path or a `$schema` declaration.
 - Job `composition.output_contract_id` resolves to an output contract's `contract_id`.
   All five composition references must identify existing records in their respective directories.
-- Keep reusable definitions here. Put engagement intelligence/worklists under
-  `scratch/<project>-engagement/` and run state under `appsec-review-process/runs/<run_id>/`.
+- Keep reusable definitions here. Put new-run intelligence/worklists under
+  `appsec-review-process/runs/<run_id>/data/`; control state belongs at the run root.
+  Shared `scratch/<project>-engagement/` is legacy and requires explicit import.
   Do not commit target data, raw secrets, or engagement conclusions into registry definitions.
 
 ## Evidence and trust boundaries
@@ -191,7 +192,7 @@ File: `tooling-profiles/example-static-manifest-inspector.json`
   "mode": "static-only",
   "required_inputs": ["target repository mounted read-only", "manifest inventory"],
   "optional_inputs": ["developer docs"],
-  "allowed_actions": ["search and parse manifests as data", "write derived inventory to engagement scratch"],
+  "allowed_actions": ["search and parse manifests as data", "write derived inventory to the owning run data directory"],
   "disallowed_actions": [
     "execute target scripts or dependency restore",
     "access the network",
@@ -279,7 +280,7 @@ File: `job-templates/02-example-project-inventory.json`
     "optional": ["developer docs"]
   },
   "outputs": {
-    "directory": "scratch/<project>-engagement/project-intel/example-project-inventory",
+    "directory": "runs/<run_id>/data/jobs/<job_id>/<partition_id>/attempts/<attempt_id>/output",
     "files": ["project-inventory.json", "summary.md", "status.json"]
   },
   "prompt_sections": [
