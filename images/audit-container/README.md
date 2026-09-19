@@ -1,7 +1,7 @@
 # audit-container
 
 Dockerfile linting and container-image/base-image inventory. Split out of `audit-static` on
-2026-09-17 (MIGRATION.md item 7). Runs the orchestrator's `dockerfile-lint` step (Hadolint, via
+2026-09-17 ([migration](../../docs/migration.md) item 7). Runs the orchestrator's `dockerfile-lint` step (Hadolint, via
 `/opt/scripts/run-dockerfile-lint.sh`) and backs `docker-base-images` (plain `find`/grep, no extra
 tool needed). Also carries `trivy` for future `trivy image`/`trivy fs` steps against an actually
 built image — not yet wired to an orchestrator step.

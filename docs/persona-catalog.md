@@ -3,7 +3,7 @@
 ## Purpose
 
 This catalog defines reusable personas for the AppSec review process. It complements
-`PERSONA-POOL-PROPOSAL.md`: the proposal defines the composable model, while this file lists the
+[`persona-pool-proposal.md`](persona-pool-proposal.md): the proposal defines the composable model, while this file lists the
 initial persona library.
 
 Personas are grouped by the kind of value they provide:

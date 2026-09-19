@@ -1,7 +1,7 @@
 # audit-iac
 
 Infrastructure-as-Code policy scanning: Terraform, Kubernetes manifests, Helm charts, Kustomize.
-Split out of `audit-static` on 2026-09-17 (MIGRATION.md item 7). Runs the orchestrator's `iac`
+Split out of `audit-static` on 2026-09-17 ([migration](../../docs/migration.md) item 7). Runs the orchestrator's `iac`
 and `iac-k8s` steps (`checkov`, `tfsec`, `trivy config`, `kube-linter`).
 
 Container-image/Dockerfile scanning is a separate image, `audit-container` — this image never

@@ -48,12 +48,12 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | Path | Contents |
 |---|---|
 | `docs/` | Design doc, review notes, ADRs, migration notes |
-| `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `MIGRATION.md` |
+| `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `docs/migration.md` |
 | `images/audit-native/` | Pinned native-analysis image for clang-tidy/cppcheck, compile feasibility, IR emit/link, `ir-facts`, and CSA/CTU. Runs only inside the hostile-build boundary. |
 | `images/audit-codeql/` | CodeQL bundle (pinned), offline; pre-engagement security-extended suites per language; license gate (ADR-0006) |
 | `images/audit-iac/` | Terraform/Kubernetes/Helm/Kustomize policy scanning (checkov, tfsec, trivy config, kube-linter) — split out of `audit-static` 2026-09-17 |
 | `images/audit-container/` | Dockerfile linting + base-image inventory (Hadolint, docker-base-images) — split out of `audit-static` 2026-09-17 |
-| `images/audit-report/` | LaTeX -> PDF report build, adapted from the LRA governance project's standalone LaTeX image; report format/styleguide still undecided (see TODO) |
+| `images/audit-report/` | LaTeX -> PDF report build, adapted from the LRA governance project's standalone LaTeX image; report format/styleguide still undecided (see `appsec-review-process/TODO.md`) |
 | `images/mythos-orchestrator/` | Planned; empty except README |
 | `orchestrator/` | Python: ledger writer + hash chain, contract validator, artifact registry, run-state regeneration |
 | `scripts/` | Existing toolbox scripts (PowerShell + Python + sh), copied as-is |
@@ -65,10 +65,17 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | `targets/` | Ignored local target checkouts, such as EASTL, kept out of git |
 | `scratch/` | Ignored local run outputs, databases, bitcode, logs, and LLM packages |
 
-The persona catalog and intelligence/job catalog live under
-[`docs/persona-catalog.md`](docs/persona-catalog.md) and
-[`docs/intelligence-sources-and-jobs.md`](docs/intelligence-sources-and-jobs.md). The root files
-with those names are compatibility pointers.
+Top-level process docs now live under `docs/`:
+
+- [`docs/migration.md`](docs/migration.md)
+- [`docs/persona-catalog.md`](docs/persona-catalog.md)
+- [`docs/persona-pool-proposal.md`](docs/persona-pool-proposal.md)
+- [`docs/composable-review-template-proposal.md`](docs/composable-review-template-proposal.md)
+- [`docs/intelligence-sources-and-jobs.md`](docs/intelligence-sources-and-jobs.md)
+- [`docs/standards-checklist-validation-proposal.md`](docs/standards-checklist-validation-proposal.md)
+- [`docs/critical-findings-sarif-job.md`](docs/critical-findings-sarif-job.md)
+
+The active process TODO list is [`appsec-review-process/TODO.md`](appsec-review-process/TODO.md).
 
 ## Current Architecture
 
