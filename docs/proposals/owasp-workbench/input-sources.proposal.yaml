@@ -1,0 +1,385 @@
+schema: appsec-review/owasp-workbench-input-sources-proposal/1.2
+proposal_only: true
+status: not_registered_not_runnable
+
+comparative_reference:
+  location_as_supplied: <OWASP_REPO_URL>
+  inspected_revision: null
+  adopted_idea: partition a checklist into small control/test units and assign bounded work
+  authority: comparative_only
+  constraints:
+    - do not treat the external repository as governing process
+    - do not copy its structure or text without an approved source and license decision
+    - do not claim a specific upstream revision was inspected while the supplied location is a placeholder
+
+selection_gate:
+  authority: named engagement lead
+  required_before_applicability: true
+  missing_decision_status: selection_not_approved
+  required_fields:
+    - selection_id
+    - standard_family
+    - edition_or_version
+    - immutable_ref
+    - source_uri_or_approved_local_path
+    - content_hash
+    - license_and_usage_terms
+    - extraction_identity
+    - retrieved_at
+    - enabled_scope
+    - profile_or_level
+    - approver
+    - approved_at
+  rules:
+    - crosswalks and test catalogs are pinned independently from control catalogs
+    - repository shape and business criticality cannot infer a profile or level
+    - a version mismatch or unresolved successor mapping is a visible selection gap
+    - optional family selection is explicit and never inherited from an earlier engagement
+    - current is resolved only when an immutable snapshot is deliberately published
+    - moving branches, latest URLs, and live APIs are forbidden assessment inputs
+  approved_snapshot_set_checked_2026_09_19:
+    - family: owasp_asvs
+      edition: 5.0.0
+      upstream: https://github.com/OWASP/ASVS
+      immutable_ref: v5.0.0_release
+      commit: 5cf9b032440be53ce345ab3c130fda46ba1ce7a2
+      purpose: web, API, and server application controls
+      remaining_human_decision: target level/profile and tailoring policy
+    - family: owasp_masvs
+      edition: 2.1.0
+      upstream: https://github.com/OWASP/masvs
+      immutable_ref: v2.1.0
+      commit: 8e133d09f4140518ed04cc254b18be9ff4990ffc
+      purpose: mobile application controls
+      remaining_human_decision: supported mobile platforms in engagement scope
+    - family: owasp_mastg
+      edition: 2.0.0
+      upstream: https://github.com/OWASP/mastg
+      immutable_ref: v2.0.0
+      commit: 990472dbcffe126f5556045d60270c4ffdfdde72
+      purpose: control-linked mobile test guidance
+      compatibility_rule: preserve explicit MASVS links and record unmapped or incompatible tests as gaps
+    - family: owasp_top_10
+      edition: 2025
+      upstream: https://github.com/OWASP/Top10
+      immutable_ref: 66ebc4798d2ca72973967a20264bdeb70dcf0a13
+      commit: 66ebc4798d2ca72973967a20264bdeb70dcf0a13
+      purpose: general application risk context and routing only
+      remaining_human_decision: component applicability
+      cannot_substitute_for: ASVS or MASVS control evidence
+    - family: owasp_api_security_top_10
+      edition: 2023
+      upstream: https://github.com/OWASP/API-Security
+      immutable_ref: e85ddfa5a936d4656840ac250c039c7057e66b0d
+      commit: e85ddfa5a936d4656840ac250c039c7057e66b0d
+      purpose: risk-category context and routing only
+      remaining_human_decision: component applicability
+      cannot_substitute_for: ASVS control evidence
+    - family: owasp_llm_or_agent_guidance
+      edition: 2026
+      upstream: https://github.com/GenAI-Security-Project/GenAI-LLM-Top10
+      immutable_ref: 9253e38ade58e959b531c0c5c9a4842272c9cd0e
+      commit: 9253e38ade58e959b531c0c5c9a4842272c9cd0e
+      purpose: controls or guidance for classified LLM, agent, RAG, or tool-use components
+      remaining_human_decision: whether qualifying components exist
+    - family: opencre
+      edition: snapshot-2026-09-19
+      upstream: https://github.com/OWASP/OpenCRE
+      source_commit: fbacf559d320358259009a255e7a62a7eb691f24
+      immutable_ref: dated export manifest plus raw and normalized content hashes
+      purpose: crosswalk navigation and deduplication metadata
+      cannot_supply:
+        - target behavior proof
+        - exploitability
+        - impact
+        - severity
+
+snapshot_storage:
+  root: data
+  reference_layout:
+    owasp: data/reference/owasp/<source>/<edition>/<snapshot_id>/
+    opencre: data/reference/opencre/<snapshot_id>/
+  required_snapshot_files:
+    - manifest.json
+    - LICENSE-or-usage.txt
+    - raw/
+    - normalized/
+  manifest_fields:
+    - source_uri
+    - edition_or_version
+    - immutable_ref_and_resolved_commit
+    - retrieved_at
+    - raw_file_hashes
+    - normalized_file_hashes
+    - license_and_usage_terms
+    - extraction_tool_identity
+    - raw_to_normalized_lineage
+    - record_counts
+    - validation_result
+  rules:
+    - snapshots are immutable and content addressed
+    - a changed upstream creates a sibling snapshot, never an in-place update
+    - large raw files may use Git LFS or an approved artifact store while the manifest remains repository-visible
+    - each engagement copies the exact snapshot manifest and hashes into its run-owned data lineage
+    - a running engagement never follows a newer current pointer
+
+nvd_feed:
+  role: vulnerability enrichment only
+  source: NIST NVD JSON and API 2.0
+  storage_root: data/feeds/nvd
+  proposal_only: true
+  execution:
+    mode: asynchronous network-enabled publisher
+    proposed_default_interval: PT2H
+    bootstrap: official JSON 2.0 yearly feeds
+    incremental: official recent/modified feed or bounded API 2.0 modification windows
+    repair: API 2.0 backfill when validation detects a cursor or coverage gap
+  concurrency:
+    scheduler_singleton_key: nvd-reference-feed-sync
+    writer_lock: data/feeds/nvd/locks/sync.lock
+    required_lock_fields:
+      - feed_id
+      - owner_host_and_worker_identity
+      - process_or_execution_id
+      - attempt_id
+      - acquired_at
+      - heartbeat_at
+      - lease_expires_at
+      - input_cursor
+    rules:
+      - only one writer may synchronize or publish at a time
+      - contenders wait or exit with a bounded timeout
+      - workers never delete or break the lock
+      - stale recovery requires expired lease and proof the owner is terminal or unreachable
+      - preserve abandoned attempts and write a recovery receipt
+  publication:
+    staging: data/feeds/nvd/staging/<attempt_id>/
+    immutable_snapshots: data/feeds/nvd/snapshots/<snapshot_id>/
+    current_pointer: data/feeds/nvd/current.json
+    state: data/feeds/nvd/state.json
+    atomicity: current.json advances only after validation while the writer lock is held
+  validation:
+    - transport metadata and content length where supplied
+    - decompression and JSON/API schema
+    - file and normalized content hashes
+    - CVE identity uniqueness
+    - record counts
+    - modification-window and cursor continuity
+    - source/feed schema identity
+  run_pinning:
+    - snapshot_id
+    - manifest_hash
+    - feed_or_api_schema
+    - coverage_window
+    - last_successful_modification_cursor
+    - age_at_run_start
+  failure_rule: >-
+    Leave the prior current pointer intact and record the newer failed attempt. If a run requires
+    fresher data, report or block on staleness instead of describing the older snapshot as current.
+  secret_rule: NVD API keys are external secrets and never stored beneath data/
+  claim_limit: >-
+    NVD records do not prove product identity, affected version, reachability, exploitability,
+    severity for the target, or a finding.
+
+input_sources:
+  - id: standards-source-ingest
+    class: raw_reference
+    required: true
+    acceptance:
+      - accepted run-owned artifact or explicit hash-checked import
+      - approved selection_id matches source family, version, ref, and hash
+      - source and license lineage is complete
+    use:
+      - pinned control records and proof obligations
+      - linked test records
+      - crosswalk records
+      - source version, hash, license, and extraction provenance
+    claim_limit: reference material only; not target behavior proof
+
+  - id: pinned-nvd-snapshot
+    class: raw_reference_enrichment
+    required: false
+    acceptance:
+      - immutable snapshot exists beneath data/feeds/nvd/snapshots
+      - manifest and normalized artifact hashes validate
+      - run records snapshot age, coverage window, and modification cursor
+    use:
+      - dependency and CVE lookup
+      - affected-version leads
+      - CVSS, SSVC, CISA KEV fields, and reference context when present in the pinned NVD record
+    claim_limit: enrichment lead only; target matching, reachability, exploitability, and finding status require separate evidence
+
+  - id: component-purpose-map
+    class: derived_intelligence
+    required: true
+    acceptance:
+      - accepted producer pointer
+      - component evidence references and source snapshot match the engagement
+    use:
+      - component identity and coherent grouping
+      - component tags, liveness, platform, framework, and trust role
+      - evidence roots and rescope dependencies
+    claim_limit: descriptive classification only
+
+  - id: source-and-evidence-index
+    class: derived_locator
+    required: true
+    acceptance:
+      - accepted index pointer
+      - source tree hash matches the engagement snapshot
+      - skipped and unsupported content is accounted for
+    use:
+      - bounded evidence discovery
+      - source/config path and symbol location
+    claim_limit: index hits are locators and must be dereferenced to canonical evidence
+
+  - id: canonical-source-and-config
+    class: raw_evidence
+    required: true
+    use:
+      - static source proof obligations
+      - declared configuration proof obligations
+    claim_limit: source and static config cannot establish deployed or runtime state
+
+  - id: threat-workbench-output
+    class: derived_intelligence
+    required: false
+    use:
+      - DFD elements and flows
+      - trust boundaries, data classes, and PII flows
+      - abuse scenarios and verification hints
+    claim_limit: threat hypotheses and model facts only; not verified findings
+
+  - id: api-collection-intelligence
+    class: derived_intelligence
+    required: false
+    use:
+      - endpoint inventory and auth hints
+      - example payload/data-class hints
+      - API test coverage and missing negative tests
+    claim_limit: collection intent or test behavior only; requests are not executed by this workbench
+
+  - id: doc-intelligence
+    class: derived_intelligence
+    required: false
+    use:
+      - product requirements, roles, and permissions
+      - documented controls, privacy requirements, and abuse constraints
+    claim_limit: documented intent unless the control is document/process-only
+
+  - id: test-intelligence
+    class: derived_intelligence
+    required: false
+    use:
+      - unit, integration, acceptance, security, smoke, and load coverage
+      - test-to-component, route, and control mappings
+      - missing negative tests and follow-up candidates
+    claim_limit: tests require results and environment context; mocks/fixtures do not prove production behavior
+
+  - id: supplied-test-results
+    class: raw_evidence
+    required: false
+    use:
+      - test_evidence proof obligations when definitions, results, and environment identity align
+    claim_limit: only the observed test scope and environment
+
+  - id: source-sast-and-scanner-leads
+    class: raw_or_derived_evidence
+    required: false
+    use:
+      - candidate weak areas
+      - tool-provided mappings
+      - coverage and source-completeness gaps
+    claim_limit: scanner presence or absence cannot alone satisfy or fail a control
+
+  - id: mobile-intelligence
+    class: raw_and_derived_intelligence
+    required: false
+    use:
+      - Android/iOS applicability
+      - permissions, storage, network, and platform-interaction hints
+      - MASVS/MASTG test routing
+    claim_limit: static mobile evidence only unless accepted dynamic results are separately supplied
+
+  - id: built-artifact-evidence
+    class: raw_evidence
+    required: false
+    use:
+      - image, binary, package, manifest, and compiled-artifact proof obligations
+    claim_limit: artifact state only; no automatic runtime or source-equivalence claim
+
+  - id: deployment-and-iac-evidence
+    class: raw_and_derived_evidence
+    required: false
+    use:
+      - security header, ingress, TLS, proxy, API gateway, identity, and network context
+    claim_limit: declared or static configuration only; not live effective state
+
+  - id: supplied-runtime-or-manual-evidence
+    class: raw_evidence
+    required: false
+    acceptance:
+      - explicit scope and environment identity
+      - authorization and producer identity
+      - capture time, lineage, and redaction state
+    use:
+      - dynamic_runtime or manual_inspection proof obligations
+    claim_limit: exact observed scope only; must not be generalized to production without matching evidence
+
+lineage_required_for_derived_intelligence:
+  - producer_job_and_attempt
+  - accepted_pointer
+  - source_artifact_paths_and_hashes
+  - derivation_status
+  - source_snapshot
+  - freshness
+  - redaction_status
+  - caveats
+
+evidence_modes:
+  - document_or_process
+  - static_source
+  - static_config
+  - built_artifact
+  - test_evidence
+  - dynamic_runtime
+  - manual_inspection
+
+evidence_sufficiency:
+  citation_fields:
+    - canonical_artifact_and_location
+    - hash_or_accepted_producer_pointer
+    - observed_fact
+    - evidence_mode
+    - freshness
+    - covered_scope
+  rules:
+    - evaluate every mandatory proof obligation, not artifact counts
+    - preserve counterevidence and contradictions
+    - documentation proves intent except for document/process-only controls
+    - absence of a scanner result is not positive evidence
+    - missing evidence alone cannot produce not_satisfied
+    - static-only evidence cannot satisfy dynamic, deployed, runtime, live-state, or manual obligations
+    - composite controls retain one result but expose clause-level proof obligations
+
+applicability_statuses:
+  applicable: evidence shows the control governs the component
+  conditional: applicability depends on a recorded unresolved condition
+  not_applicable: adequate positive evidence supports exclusion
+  cannot_determine: evidence is insufficient or contradictory
+  out_of_scope: approved engagement scope excludes the target
+
+assessment_statuses:
+  satisfied: all mandatory obligations have admissible evidence and no material contradiction
+  partially_satisfied: some obligations are supported and others are missing, narrow, or contradicted
+  not_satisfied: admissible evidence demonstrates a required property is absent or contrary
+  cannot_verify: evidence or capability is insufficient and no ready authorized follow-up applies
+  dynamic_test_required: a specified runtime test is needed but not yet authorized or executed
+  human_decision_required: a policy, legal, risk, scope, or control-owner decision is needed
+  not_assessed: no valid result exists because the assigned cell did not complete validly
+
+rendering_rules:
+  - not_applicable is rendered from applicability, not used as an assessment shortcut
+  - out_of_scope is reported separately from not_applicable
+  - conditional and cannot_determine create coverage gaps
+  - every selected control-target row remains visible through final join

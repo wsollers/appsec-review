@@ -10,7 +10,8 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-from dagster import Definitions, Failure, job, op, resource, in_process_executor, MetadataValue, RetryPolicy
+from dagster import (DefaultScheduleStatus, Definitions, Failure, job, op, resource,
+                     in_process_executor, MetadataValue, RetryPolicy, ScheduleDefinition)
 
 
 def write_json(path, value):
@@ -120,6 +121,7 @@ def orchestration_smoke():
 sys.path.insert(0, '/opt/process')
 from phase1 import Session, sync_state, invalidate
 from execution_state import atomic_json, data_path, digest, event, now, Blocked, emergency
+from nvd_feed import sync as sync_nvd
 
 
 def transition(context, name, work):
@@ -210,7 +212,35 @@ def phase1_intake():
     intake_post_validation(intake_work(intake_pre_validation(intake_config())))
 
 
+@op
+def nvd_sync_work(context):
+    """Publish one immutable NVD snapshot outside every engagement run."""
+    result = sync_nvd(coordinator_id=context.run_id)
+    context.add_output_metadata({"snapshot_id": result["snapshot_id"],
+                                 "cursor": result["cursor"]})
+    return result["snapshot_id"]
+
+
+@job(tags={"nvd_feed_id": "nvd"}, executor_def=in_process_executor,
+     op_retry_policy=RetryPolicy(max_retries=0))
+def nvd_reference_sync():
+    nvd_sync_work()
+
+
+nvd_reference_schedule = ScheduleDefinition(
+    name="nvd_reference_schedule",
+    job=nvd_reference_sync,
+    cron_schedule="0 */2 * * *",
+    execution_timezone="UTC",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+
+
 from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
 
-defs = Definitions(jobs=[orchestration_smoke, phase1_intake, engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, full_review],
+defs = Definitions(jobs=[orchestration_smoke, phase1_intake, nvd_reference_sync,
+                         engagement_workflow, build_discovery, build_execution,
+                         evidence_index, critical_findings_sarif, ossf_scorecard,
+                         repository_partition_discovery, full_review],
+                   schedules=[nvd_reference_schedule],
                    sensors=[reconcile_workflow_failure, reconcile_workflow_cancellation])

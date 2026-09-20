@@ -1,0 +1,72 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-e48ca4caa6619973",
+  "family": "owasp_asvs",
+  "edition": "5.0.0",
+  "upstream": {
+    "url": "https://github.com/OWASP/ASVS",
+    "immutable_ref": "v5.0.0_release",
+    "resolved_commit": "5cf9b032440be53ce345ab3c130fda46ba1ce7a2",
+    "tag_object": null
+  },
+  "retrieved_at": "2026-09-20T01:58:17Z",
+  "license": {
+    "identifier": "CC-BY-SA-4.0",
+    "source_path": "LICENSE.md",
+    "sha256": "0bdfb0201d1803634f268cdff0993b8349d2c70e956a06dbb667c8dd65254ec5"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/5.0/docs_en/OWASP_Application_Security_Verification_Standard_5.0.0_en.flat.json",
+      "sha256": "1b22016e913f8e4050d786361d105881e9e47558f32c105d70eb3f563d719d6b",
+      "bytes": 165979
+    },
+    {
+      "path": "raw/5.0/mappings/mapping_v4.0.3_to_v5.0.0.yml",
+      "sha256": "6aef43ba53d0c332c87128991ea91e786ad5858073326a2cf12894ba05357919",
+      "bytes": 16711
+    },
+    {
+      "path": "raw/5.0/mappings/mapping_v5.0.0_to_v4.0.3.yml",
+      "sha256": "57893ef46230c4e5c3c303b72a4fe438b58f970e53beaa9007b947cbdc801c37",
+      "bytes": 19402
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "33ba0b556fdd1652dfbbdbe254694a2e7ca8064823b2abb19a98c2a4d88c1cd2",
+      "bytes": 507545
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/5.0/docs_en/OWASP_Application_Security_Verification_Standard_5.0.0_en.flat.json",
+        "raw/5.0/mappings/mapping_v4.0.3_to_v5.0.0.yml",
+        "raw/5.0/mappings/mapping_v5.0.0_to_v4.0.3.yml"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 345,
+    "raw_files": 3,
+    "normalized_files": 1
+  },
+  "content_digest": "cfc1bb0609a50660d5a7e1ad6a804e13c4fe5c2241cd301f5259f7a561674a7a",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}

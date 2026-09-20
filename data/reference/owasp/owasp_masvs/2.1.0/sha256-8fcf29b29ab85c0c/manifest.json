@@ -1,0 +1,198 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-8fcf29b29ab85c0c",
+  "family": "owasp_masvs",
+  "edition": "2.1.0",
+  "upstream": {
+    "url": "https://github.com/OWASP/masvs",
+    "immutable_ref": "v2.1.0",
+    "resolved_commit": "8e133d09f4140518ed04cc254b18be9ff4990ffc",
+    "tag_object": "1de2913fe799137ac4695eabaae633da693070cd"
+  },
+  "retrieved_at": "2026-09-20T01:58:17Z",
+  "license": {
+    "identifier": "CC-BY-SA-4.0",
+    "source_path": "License.md",
+    "sha256": "ee2655b3ba3a6386f53335a95f704bda0c7c35db3a0c6f8da0556f0233b0d37b"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/controls/MASVS-AUTH-1.md",
+      "sha256": "79dc9bb251fe5c928cff177b3e34061a0bdd6ca66b7b3f3a776b3e1df563854b",
+      "bytes": 474
+    },
+    {
+      "path": "raw/controls/MASVS-AUTH-2.md",
+      "sha256": "64d8f4cb179b34bf0c1912074369f2a6588e9cfaadbcbbf1a3764f9d23c6ffd5",
+      "bytes": 385
+    },
+    {
+      "path": "raw/controls/MASVS-AUTH-3.md",
+      "sha256": "6ea2d131f6a7cf243cbfb12a85a5af69dcab21c3e8b4b6b119eb543f4aca5c3c",
+      "bytes": 361
+    },
+    {
+      "path": "raw/controls/MASVS-CODE-1.md",
+      "sha256": "0b3c3bb30cf7492f526fe664f877ff45d63a6913b7866d459217cc6ec75b2cae",
+      "bytes": 392
+    },
+    {
+      "path": "raw/controls/MASVS-CODE-2.md",
+      "sha256": "90c5049cdb071b5e61f6fcc036eab73dd00aa5dd088441ddeac95aa747739591",
+      "bytes": 319
+    },
+    {
+      "path": "raw/controls/MASVS-CODE-3.md",
+      "sha256": "f793be2f565204748b0d38b76ff1e0bd1a31559b83b89aabc51b5b8c766dca34",
+      "bytes": 498
+    },
+    {
+      "path": "raw/controls/MASVS-CODE-4.md",
+      "sha256": "8ce89c5460385471972807e9367b8f709ef8ffe4eaecdc0756780fc992768088",
+      "bytes": 546
+    },
+    {
+      "path": "raw/controls/MASVS-CRYPTO-1.md",
+      "sha256": "b901c6c3b94bfc08be68be4850ea0251588740ed322d2dbd8e42155cc53a0e72",
+      "bytes": 456
+    },
+    {
+      "path": "raw/controls/MASVS-CRYPTO-2.md",
+      "sha256": "9cd29533f861fb7bf05ee2e28455388a3a3f58367153345572ae71d7553fcbea",
+      "bytes": 338
+    },
+    {
+      "path": "raw/controls/MASVS-NETWORK-1.md",
+      "sha256": "229d0e206d5b27c8475b70d6ff7aaa0cc4636c845dc9d27eee6321a0ddf71ec1",
+      "bytes": 603
+    },
+    {
+      "path": "raw/controls/MASVS-NETWORK-2.md",
+      "sha256": "cd7872711fe996cca381c290dcd30ac1bbf20f9767622241dc651d7a66708b0d",
+      "bytes": 366
+    },
+    {
+      "path": "raw/controls/MASVS-PLATFORM-1.md",
+      "sha256": "0ca2fbc08d7bc0291f9500dabf6330029ad0fec1d78cf2c243cc5eec675e31e9",
+      "bytes": 371
+    },
+    {
+      "path": "raw/controls/MASVS-PLATFORM-2.md",
+      "sha256": "f5f9b59350a12f8da8737403646ac9b79da3258a9f9a2d63a825f1b5f11d7c58",
+      "bytes": 361
+    },
+    {
+      "path": "raw/controls/MASVS-PLATFORM-3.md",
+      "sha256": "f0517156eeb6291e4bbee682e24c7cdaf6e93d3481be6aebd54424500340c024",
+      "bytes": 468
+    },
+    {
+      "path": "raw/controls/MASVS-PRIVACY-1.md",
+      "sha256": "461ff6883e6daee7c155a472bd62bbf1935eb1a44571dc63c6d9671089519b6f",
+      "bytes": 1023
+    },
+    {
+      "path": "raw/controls/MASVS-PRIVACY-2.md",
+      "sha256": "e6f3f495414a027282d9320b7c70e94ffa1a45317013df9879e8edbbef5e6d1e",
+      "bytes": 742
+    },
+    {
+      "path": "raw/controls/MASVS-PRIVACY-3.md",
+      "sha256": "9d53c9458aec2b1c851852c6eb6baaeb32a59ab3e18b1dbc613df57105d3bc62",
+      "bytes": 447
+    },
+    {
+      "path": "raw/controls/MASVS-PRIVACY-4.md",
+      "sha256": "26fc3f723bc17ef7e88acdcbb59e47d43560b025afb889dc0b91e880ec373694",
+      "bytes": 455
+    },
+    {
+      "path": "raw/controls/MASVS-RESILIENCE-1.md",
+      "sha256": "c092783e82263e8567918db6bdeff07ca5510247682179360e86b2ea4bd8f85c",
+      "bytes": 546
+    },
+    {
+      "path": "raw/controls/MASVS-RESILIENCE-2.md",
+      "sha256": "18fc92de181a4b477074e1ef3c9cb1c8efcbafec1d1cc4456988702922ffcbc7",
+      "bytes": 507
+    },
+    {
+      "path": "raw/controls/MASVS-RESILIENCE-3.md",
+      "sha256": "fd36df24a8cff7df83de6ebcf4f1da422b1480f05bc9a02266433d099ccd735c",
+      "bytes": 376
+    },
+    {
+      "path": "raw/controls/MASVS-RESILIENCE-4.md",
+      "sha256": "86f47a46aefe477214991ae20c7b1cbb798ff6389740b033520b6d319412ceee",
+      "bytes": 521
+    },
+    {
+      "path": "raw/controls/MASVS-STORAGE-1.md",
+      "sha256": "b75b69ff4e0352893a29e396bc97a490729871dd8e8aa1545a62d4003cf21636",
+      "bytes": 598
+    },
+    {
+      "path": "raw/controls/MASVS-STORAGE-2.md",
+      "sha256": "fc6b138e7eb800e461bdcc0f46d1912466d25deaa8f5c5939f3d07a0c13ce5f2",
+      "bytes": 410
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "a6488895f5f137ddcc918682ac54c35f192b156a94106ae2640cbd233e27320d",
+      "bytes": 38112
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/controls/MASVS-AUTH-1.md",
+        "raw/controls/MASVS-AUTH-2.md",
+        "raw/controls/MASVS-AUTH-3.md",
+        "raw/controls/MASVS-CODE-1.md",
+        "raw/controls/MASVS-CODE-2.md",
+        "raw/controls/MASVS-CODE-3.md",
+        "raw/controls/MASVS-CODE-4.md",
+        "raw/controls/MASVS-CRYPTO-1.md",
+        "raw/controls/MASVS-CRYPTO-2.md",
+        "raw/controls/MASVS-NETWORK-1.md",
+        "raw/controls/MASVS-NETWORK-2.md",
+        "raw/controls/MASVS-PLATFORM-1.md",
+        "raw/controls/MASVS-PLATFORM-2.md",
+        "raw/controls/MASVS-PLATFORM-3.md",
+        "raw/controls/MASVS-PRIVACY-1.md",
+        "raw/controls/MASVS-PRIVACY-2.md",
+        "raw/controls/MASVS-PRIVACY-3.md",
+        "raw/controls/MASVS-PRIVACY-4.md",
+        "raw/controls/MASVS-RESILIENCE-1.md",
+        "raw/controls/MASVS-RESILIENCE-2.md",
+        "raw/controls/MASVS-RESILIENCE-3.md",
+        "raw/controls/MASVS-RESILIENCE-4.md",
+        "raw/controls/MASVS-STORAGE-1.md",
+        "raw/controls/MASVS-STORAGE-2.md"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 24,
+    "raw_files": 24,
+    "normalized_files": 1
+  },
+  "content_digest": "a52475839c80254f430a628708b6f8806f3ea65d0e1101ba151137e7bbbcbdf6",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}

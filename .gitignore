@@ -3,6 +3,15 @@
 /scratch/
 /targets/
 /runs/
+# Mutable NVD feed state is published locally and never committed. The feed
+# contract and operator README remain tracked under data/feeds/nvd/.
+/data/feeds/nvd/blobs/
+/data/feeds/nvd/staging/
+/data/feeds/nvd/snapshots/
+/data/feeds/nvd/locks/
+/data/feeds/nvd/current.json
+/data/feeds/nvd/state.json
+/data/feeds/nvd/events.jsonl
 *.jsonl
 !schemas/**/*.jsonl
 # licensed inputs (MSVC headers/libs) are mounted, never committed

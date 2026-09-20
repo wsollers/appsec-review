@@ -1,0 +1,114 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-34ea423fcbab6e26",
+  "family": "owasp_api_security_top_10",
+  "edition": "2023",
+  "upstream": {
+    "url": "https://github.com/OWASP/API-Security",
+    "immutable_ref": "e85ddfa5a936d4656840ac250c039c7057e66b0d",
+    "resolved_commit": "e85ddfa5a936d4656840ac250c039c7057e66b0d",
+    "tag_object": null
+  },
+  "retrieved_at": "2026-09-20T01:58:17Z",
+  "license": {
+    "identifier": "CC-BY-SA-4.0",
+    "source_path": "LICENSE",
+    "sha256": "21acfab67e7a3a2de3f76dd9bae49a0f91a95d925d6cfbe34748f51b4ab768d6"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/editions/2023/en/0xa1-broken-object-level-authorization.md",
+      "sha256": "a2b99eb8cd150abfc66c2563f0f508a63cc7bdfe80cbd12f4f9022a2bcdd9387",
+      "bytes": 5448
+    },
+    {
+      "path": "raw/editions/2023/en/0xa2-broken-authentication.md",
+      "sha256": "1754de78cfdd0ce314ad97a88a0339d02482ad2300abb97f80f842207d3a9134",
+      "bytes": 6073
+    },
+    {
+      "path": "raw/editions/2023/en/0xa3-broken-object-property-level-authorization.md",
+      "sha256": "ac4bc8f23f60da2d418c5d91880be2e71ac8a4de7046b80bffc9e803aaa4b663",
+      "bytes": 6055
+    },
+    {
+      "path": "raw/editions/2023/en/0xa4-unrestricted-resource-consumption.md",
+      "sha256": "cdfe5aed3be8860b283eba5670479d430cde0d8dd89bf3e4d620c9c8c0562870",
+      "bytes": 7620
+    },
+    {
+      "path": "raw/editions/2023/en/0xa5-broken-function-level-authorization.md",
+      "sha256": "02d67c04fe2f211f835a9495931094ae28155002f636233b9bbb70da20b03be2",
+      "bytes": 4958
+    },
+    {
+      "path": "raw/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows.md",
+      "sha256": "285b49385a7e198fa0d2344e421c516e80ae73ee09dc63a011706ceb14d1e501",
+      "bytes": 5237
+    },
+    {
+      "path": "raw/editions/2023/en/0xa7-server-side-request-forgery.md",
+      "sha256": "1f9478a8fecc32dd41e2f98d7597a9cf7fe8d5fb291e3e25b71ab3370c6b26c5",
+      "bytes": 5979
+    },
+    {
+      "path": "raw/editions/2023/en/0xa8-security-misconfiguration.md",
+      "sha256": "9d97b2e7770fe9206cd6a36af4a7a3febd422d1b65deea3cad081b0193b612cc",
+      "bytes": 6654
+    },
+    {
+      "path": "raw/editions/2023/en/0xa9-improper-inventory-management.md",
+      "sha256": "5603c5edd807a18e139f5bbf3fe8e5ccc343f00307ec196e092b7375fd1b472d",
+      "bytes": 6226
+    },
+    {
+      "path": "raw/editions/2023/en/0xaa-unsafe-consumption-of-apis.md",
+      "sha256": "b04618eb27b94d4c782bfc7a83759e188a7d2977c183c4dcbde44eb2847234f0",
+      "bytes": 5097
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "6dace6807c3f5b24e8825638c0c1535f78c434be576cb7f071915fecfeb4b24e",
+      "bytes": 65740
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/editions/2023/en/0xa1-broken-object-level-authorization.md",
+        "raw/editions/2023/en/0xa2-broken-authentication.md",
+        "raw/editions/2023/en/0xa3-broken-object-property-level-authorization.md",
+        "raw/editions/2023/en/0xa4-unrestricted-resource-consumption.md",
+        "raw/editions/2023/en/0xa5-broken-function-level-authorization.md",
+        "raw/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows.md",
+        "raw/editions/2023/en/0xa7-server-side-request-forgery.md",
+        "raw/editions/2023/en/0xa8-security-misconfiguration.md",
+        "raw/editions/2023/en/0xa9-improper-inventory-management.md",
+        "raw/editions/2023/en/0xaa-unsafe-consumption-of-apis.md"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 10,
+    "raw_files": 10,
+    "normalized_files": 1
+  },
+  "content_digest": "baacfe3e06b0b0e779c1e565415a7d8b245ba7760b02c8c0db5f57f7b67985a4",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}

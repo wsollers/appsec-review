@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/nvd-current-pointer.schema.json",
+  "title": "NVD last-good snapshot pointer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "feed_id", "snapshot_id", "manifest_sha256", "published_at", "cursor"],
+  "properties": {
+    "schema": {"const": "appsec-review/nvd-current-pointer/1"},
+    "feed_id": {"const": "nvd"},
+    "snapshot_id": {"type": "string", "pattern": "^sha256-[0-9a-f]{16}$"},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "cursor": {"type": "string", "format": "date-time"}
+  }
+}

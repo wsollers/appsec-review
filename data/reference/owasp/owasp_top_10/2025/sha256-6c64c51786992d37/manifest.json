@@ -1,0 +1,114 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-6c64c51786992d37",
+  "family": "owasp_top_10",
+  "edition": "2025",
+  "upstream": {
+    "url": "https://github.com/OWASP/Top10",
+    "immutable_ref": "66ebc4798d2ca72973967a20264bdeb70dcf0a13",
+    "resolved_commit": "66ebc4798d2ca72973967a20264bdeb70dcf0a13",
+    "tag_object": null
+  },
+  "retrieved_at": "2026-09-20T01:58:17Z",
+  "license": {
+    "identifier": "CC-BY-SA-4.0",
+    "source_path": "LICENSE",
+    "sha256": "a61b317150a3edde2a3aff16a8e0a558f6cbc9bef22d173dce74d339a65faf2b"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/2025/docs/en/A01_2025-Broken_Access_Control.md",
+      "sha256": "39240e8c01b2c303074eb69e825abc90326b6ac00e010cf91c430b4a390fbf89",
+      "bytes": 10607
+    },
+    {
+      "path": "raw/2025/docs/en/A02_2025-Security_Misconfiguration.md",
+      "sha256": "dfd0da8bc14ed6cf7ad2c5eed028079156d49667f8e043462b022c96cab87ab2",
+      "bytes": 8227
+    },
+    {
+      "path": "raw/2025/docs/en/A03_2025-Software_Supply_Chain_Failures.md",
+      "sha256": "49c5a4fd91eeee44227228cc36547d5b245fdbabb3922ef8a18848c1bd81115d",
+      "bytes": 12108
+    },
+    {
+      "path": "raw/2025/docs/en/A04_2025-Cryptographic_Failures.md",
+      "sha256": "de7747186b75570965756e70f792022cb809dd6af927cf2ccee885279bf20711",
+      "bytes": 13431
+    },
+    {
+      "path": "raw/2025/docs/en/A05_2025-Injection.md",
+      "sha256": "18c83785e886401797b2dbb3054d38f405086ece9b6ba95cd02b79a438b4f626",
+      "bytes": 12322
+    },
+    {
+      "path": "raw/2025/docs/en/A06_2025-Insecure_Design.md",
+      "sha256": "a5687e27c0640cd3da1dd87b921aa5eb55334abf1b7b3a76b442a04d0592b0f8",
+      "bytes": 12930
+    },
+    {
+      "path": "raw/2025/docs/en/A07_2025-Authentication_Failures.md",
+      "sha256": "0f0660ee4b253be5d6d030c7d0edc1e873217cd9312da23d52e184bdeff86886",
+      "bytes": 11497
+    },
+    {
+      "path": "raw/2025/docs/en/A08_2025-Software_or_Data_Integrity_Failures.md",
+      "sha256": "5bd30c7c2534a04329f3af5f1d2cba6430b6610877d57e33228e13ef77a7f204",
+      "bytes": 8101
+    },
+    {
+      "path": "raw/2025/docs/en/A09_2025-Security_Logging_and_Alerting_Failures.md",
+      "sha256": "2774f5155166f75be96210c01a015274e36d7fa35d35a499382cc6d2dc9309d3",
+      "bytes": 9164
+    },
+    {
+      "path": "raw/2025/docs/en/A10_2025-Mishandling_of_Exceptional_Conditions.md",
+      "sha256": "a79c96370176626c017a6148f5ea203bd257d4de033f30ea78670aca30492004",
+      "bytes": 11230
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "d19af3eb13d99262875c3a3e673dfb920cfe95804ce874587413c75730c71619",
+      "bytes": 116763
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/2025/docs/en/A01_2025-Broken_Access_Control.md",
+        "raw/2025/docs/en/A02_2025-Security_Misconfiguration.md",
+        "raw/2025/docs/en/A03_2025-Software_Supply_Chain_Failures.md",
+        "raw/2025/docs/en/A04_2025-Cryptographic_Failures.md",
+        "raw/2025/docs/en/A05_2025-Injection.md",
+        "raw/2025/docs/en/A06_2025-Insecure_Design.md",
+        "raw/2025/docs/en/A07_2025-Authentication_Failures.md",
+        "raw/2025/docs/en/A08_2025-Software_or_Data_Integrity_Failures.md",
+        "raw/2025/docs/en/A09_2025-Security_Logging_and_Alerting_Failures.md",
+        "raw/2025/docs/en/A10_2025-Mishandling_of_Exceptional_Conditions.md"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 10,
+    "raw_files": 10,
+    "normalized_files": 1
+  },
+  "content_digest": "82bacb2d00eef0b2e9eebda1d1b2948b880ff95310a30fa1c0d6da38e3baaa5f",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}

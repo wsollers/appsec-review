@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-source-citation.schema.json",
+  "title": "OWASP Snapshot Source Citation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["snapshot_id", "raw_path", "raw_sha256"],
+  "properties": {
+    "snapshot_id": {"type": "string", "pattern": "^sha256-[0-9a-f]{16}$"},
+    "raw_path": {"type": "string"},
+    "raw_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "raw_row": {"type": ["integer", "null"]}
+  }
+}

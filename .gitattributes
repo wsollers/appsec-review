@@ -3,3 +3,10 @@
 Dockerfile text eol=lf
 **/Dockerfile text eol=lf
 *.ps1 text eol=crlf
+# Content-addressed reference snapshots must retain their exact bytes on every
+# platform. Raw upstream material is intentionally opaque to Git's text diff,
+# including upstream whitespace that would otherwise trip `git diff --check`.
+data/reference/owasp/** -text
+data/reference/opencre/** -text
+data/reference/owasp/**/raw/** -diff
+data/reference/opencre/**/raw/** -diff

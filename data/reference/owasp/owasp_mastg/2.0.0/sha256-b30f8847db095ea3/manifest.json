@@ -1,0 +1,1806 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-b30f8847db095ea3",
+  "family": "owasp_mastg",
+  "edition": "2.0.0",
+  "upstream": {
+    "url": "https://github.com/OWASP/mastg",
+    "immutable_ref": "v2.0.0",
+    "resolved_commit": "990472dbcffe126f5556045d60270c4ffdfdde72",
+    "tag_object": null
+  },
+  "retrieved_at": "2026-09-20T01:58:17Z",
+  "license": {
+    "identifier": "CC-BY-SA-4.0",
+    "source_path": "License.md",
+    "sha256": "728807b87d6e252fec29b434aced6c668ed1b2dba963bba90d94d6772ea24b30"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/tests/android/MASVS-AUTH/MASTG-TEST-0017.md",
+      "sha256": "26ec59bcf4035aff2a964dcc9a78079091dca85cc15f627cb56455452263775a",
+      "bytes": 887
+    },
+    {
+      "path": "raw/tests/android/MASVS-AUTH/MASTG-TEST-0018.md",
+      "sha256": "0f2483760e6ff20dd95367ec89df3edc9bd54af1ccdc508ca0e36b6b76322065",
+      "bytes": 1847
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0002.md",
+      "sha256": "f6747e968c4f98254846904701e65fd1f7a42533c7f047d4923ff2545f9b33a0",
+      "bytes": 1773
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0025.md",
+      "sha256": "027a441b20eb6cfb2fb23df0aa4a24f6ebf5e6a6f636a025300c63410a6beba6",
+      "bytes": 4670
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0026.md",
+      "sha256": "f948e14c993e374ecc59cc8db88f1a0c5015ce7d69924f690b615db9ccb2bd07",
+      "bytes": 7510
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0027.md",
+      "sha256": "eb1e9bdf5f84616bdbd44ea0914263db3ebe18b8a72850b24cc524eddf601bff",
+      "bytes": 3943
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0034.md",
+      "sha256": "160e86e24689b298350c895eba14da1f73f19b890203327e2bc699ac8c23bdc2",
+      "bytes": 5651
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0036.md",
+      "sha256": "f9b7d13617c0d50e4fd25b9c0cab98ce9b93a866b654c2f5b770c204e1779189",
+      "bytes": 4098
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0042.md",
+      "sha256": "d2e11d99b91770bcd02cae329514feb407ede94aa987912dffaa2d137ad7b43a",
+      "bytes": 3851
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0043.md",
+      "sha256": "0335b87167700e2f8f646346fe7240e95f53a67cec21fd693c9c7930a795ef8a",
+      "bytes": 2308
+    },
+    {
+      "path": "raw/tests/android/MASVS-CODE/MASTG-TEST-0044.md",
+      "sha256": "7ded80f8f1a9e834462306c60a6e7f34df586eb12a99e5a22b44f6399af67d9d",
+      "bytes": 1048
+    },
+    {
+      "path": "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0013.md",
+      "sha256": "a721f8397de5151ebbe809ba778563b563514ac97eee740c4f53a7422d2da3ea",
+      "bytes": 2616
+    },
+    {
+      "path": "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0014.md",
+      "sha256": "5bdb459dc37bb91219052f482ef87d8401223c89855a032755ef09749d9e602a",
+      "bytes": 2252
+    },
+    {
+      "path": "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0015.md",
+      "sha256": "365aa309a403f3a4f8f85ccfe1ce50c16d1f38d74f763fab93e569290bd918c0",
+      "bytes": 2206
+    },
+    {
+      "path": "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0016.md",
+      "sha256": "d47deedee0c91f59bb7c7609f3a231c3477f760ab9f42254f2d0c126dfe1aa0e",
+      "bytes": 2747
+    },
+    {
+      "path": "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0019.md",
+      "sha256": "3e3691efb7caca7cba81714096345770a46d06110c48e930a81b94d1b9a5ce6c",
+      "bytes": 4335
+    },
+    {
+      "path": "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0020.md",
+      "sha256": "122f6e8fa384b573e886b6d06cb82688ae2e942b5e2d0161a6655eaf34724b67",
+      "bytes": 507
+    },
+    {
+      "path": "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0021.md",
+      "sha256": "188ef1ff23b8840701111b72073fb27e747fa933d46dc06e7d2e85eb825f02d5",
+      "bytes": 10702
+    },
+    {
+      "path": "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0022.md",
+      "sha256": "0c126c40f1f7c181315717f1c4b11928ba938b96ac7584f5387224ccd765213b",
+      "bytes": 9459
+    },
+    {
+      "path": "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0023.md",
+      "sha256": "fdb267e75622764482fac805dfbb546e3130d3265a313b6682331bc3506399c9",
+      "bytes": 2511
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0007.md",
+      "sha256": "5e74f06878d55172dcd76eb794bb37f67d86b629abc9b545638ffc4f68723b54",
+      "bytes": 12530
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0008.md",
+      "sha256": "3e51238a8575a584f68b05b1c31ea1a322a6ceae8b5d9ec53444d17d7d358272",
+      "bytes": 2572
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0010.md",
+      "sha256": "56b3c4f6f0e52bcd826a548bc3d3a113cabed343c56faf58267c62c457da2ce6",
+      "bytes": 2346
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0024.md",
+      "sha256": "50ec14ba239efc7fbc7f94fba5f67ab91c174aa7d0b2e6aed69f0f655fd1ba5a",
+      "bytes": 12692
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0028.md",
+      "sha256": "d95a8d484dfbb37dd2c4f46bc9de30afbd547d9aa6ead08351a80c67d5ee601a",
+      "bytes": 17320
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0029.md",
+      "sha256": "5d96c61043adf32275b114d06c89d04a7732062c66fc248f284b90c488f68bae",
+      "bytes": 23832
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0030.md",
+      "sha256": "6f8e2cde1aee5d1ada5b401ee9376a9dc07326932ff99f074058e61a7b4d1944",
+      "bytes": 3823
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0031.md",
+      "sha256": "6a77f97f49ae2630775b534f7833f3cafab55f1ae148d50f0968dc4367ae13e9",
+      "bytes": 4204
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0032.md",
+      "sha256": "08cb8f4486bef848175123d066c1b608680e9315b3c2fb46fe7f87356bf76a1d",
+      "bytes": 4456
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0033.md",
+      "sha256": "ebfec10fc4a7f6d35c06bbfaed86c030774b57a7f090300559f6b773ea436e5b",
+      "bytes": 3877
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0035.md",
+      "sha256": "8eb1b3219a89baeebad638194937b79710b46ffc946c4a03b7add588932969d4",
+      "bytes": 4178
+    },
+    {
+      "path": "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0037.md",
+      "sha256": "d433573149447264021ebc9633885d5e7b95285ac2c30a854196b96c3664a0b4",
+      "bytes": 5534
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0038.md",
+      "sha256": "62a50ff5ba2cf61e493aeaf7fde9a2311dc37d404c760ba380e78513c6e8b490",
+      "bytes": 4138
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0039.md",
+      "sha256": "75486ab923af35f38dcb77351a36e2b4e0390a699c6ff3117db0904d55a06d7f",
+      "bytes": 3980
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0040.md",
+      "sha256": "6d696fab21a1c4d565d56da7653ebacb1ecb828f11b3901fab993d6b595cc21c",
+      "bytes": 1493
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0041.md",
+      "sha256": "6e80b73b1939204440e33b55fca31f24d59e14757f0a652f6cee88081040aca3",
+      "bytes": 1323
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0045.md",
+      "sha256": "845c6a248780749227258ef71c1692aa1a3b946c7bc2e4f2f0f446159a6d076f",
+      "bytes": 2723
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0046.md",
+      "sha256": "3d2014ca5f0c1be9e740b9b1e171254d2b5f1e6fa2f8a0fa235a2a27d3cd1636",
+      "bytes": 3742
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0047.md",
+      "sha256": "16ce1a4e42544ac394e606beead558372ce281a2ed05b5ce82b06a143ef15f68",
+      "bytes": 2464
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0048.md",
+      "sha256": "c14c105b4b8c1ee3cf2c9c7f775c6015607980691a254ea7350590551859e5e7",
+      "bytes": 1863
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0049.md",
+      "sha256": "3011388c21d17e2116bd03dddd3058eeb94d8f53d80607fe7f5086b6e2587c53",
+      "bytes": 1433
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0050.md",
+      "sha256": "308db5f5f5d6088edc09093212793b329ecba944b095c5b0e0e86e0fb455fba7",
+      "bytes": 885
+    },
+    {
+      "path": "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0051.md",
+      "sha256": "9181327ace2e396cc54449deb5eed517113269974b5d3cffe3f4474fd500ec6e",
+      "bytes": 2979
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0001.md",
+      "sha256": "007fce5f6608033abf12fcd8e0bcc5c2ca8c4910d830289ad32b96d11bc48f22",
+      "bytes": 8890
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0003.md",
+      "sha256": "702a5fc4d5fa558caa1c3cedae766df15c15d3b93f82e8aada9e2ccce66c3354",
+      "bytes": 5669
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0004.md",
+      "sha256": "3dafa69eed95aab82b90e158d19d2cf4458bd0d147191dd8af6db25a859f4b92",
+      "bytes": 1608
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0005.md",
+      "sha256": "96d9cd02c1722c0c208a0f56882f653a446d061f945a9f5ad711722ca8743214",
+      "bytes": 1191
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0006.md",
+      "sha256": "86be03ad4dd1affc9ac7f32b230960babbb1e93fba7edb5ad7769e5b48d7681f",
+      "bytes": 3263
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0009.md",
+      "sha256": "a5218d0dbfa64906a797f2c794c73eb076a43bc92dca4470cfacea59da10e739",
+      "bytes": 5322
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0011.md",
+      "sha256": "b15aa3d8ec17a49e8c32194c16e7bc5c8965b8c743fe1066fc8603d62c4707a4",
+      "bytes": 19238
+    },
+    {
+      "path": "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0012.md",
+      "sha256": "506b7f02db3d3bb4b5aa39a625f421809df6ff168005be9af78655b37bc44be9",
+      "bytes": 1785
+    },
+    {
+      "path": "raw/tests/ios/MASVS-AUTH/MASTG-TEST-0064.md",
+      "sha256": "c3e61c0481fc50547986c0d4934b7f1dcf7c9ce4fed470791a752819341ace54",
+      "bytes": 4984
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CODE/MASTG-TEST-0079.md",
+      "sha256": "a9e2c2d6335df7059cbc8aa062f5fe4748609790aa3927a494a770dd1a0aac5e",
+      "bytes": 2268
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CODE/MASTG-TEST-0080.md",
+      "sha256": "084c8f528da263432210896459cc5cc6027ea7192cfdf460e3f9b9a3eb4b4c63",
+      "bytes": 1777
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CODE/MASTG-TEST-0085.md",
+      "sha256": "9e973ad3fcf33cdc502f1ecfe04fbf33e1aaad26202df62ab4a47e686209b58f",
+      "bytes": 9282
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CODE/MASTG-TEST-0086.md",
+      "sha256": "a8bce17baf675ea024f28bb5ad032e4bfc9a6098f4a8f438f4039009a4950a49",
+      "bytes": 2538
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CODE/MASTG-TEST-0087.md",
+      "sha256": "743ab74d42af8f284d63c0d6ea9d1e7426f4b9fb212755386342854c97a32f4a",
+      "bytes": 3160
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CRYPTO/MASTG-TEST-0061.md",
+      "sha256": "ebd2d547ba3a6f63241521b76e07835b90c2d81130e5004f30d424d6ee56cca0",
+      "bytes": 4385
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CRYPTO/MASTG-TEST-0062.md",
+      "sha256": "ab87db803e724d24c19d26f323f2b2fc3ad3f66f852ba2d0c06924210d0ae58f",
+      "bytes": 2095
+    },
+    {
+      "path": "raw/tests/ios/MASVS-CRYPTO/MASTG-TEST-0063.md",
+      "sha256": "12304c3fe309646cb77b692e52a57bf29497b942bcb92fd3c974e873bf0e5467",
+      "bytes": 1606
+    },
+    {
+      "path": "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0065.md",
+      "sha256": "b7a314500f488af83c3ca1dc120ef47aaa65bf1df0035df12cd4545b8985408a",
+      "bytes": 7000
+    },
+    {
+      "path": "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0066.md",
+      "sha256": "4d3f1cd4169be269b454dcb8a3223d42d2105ddd6f0812401a780594a157df57",
+      "bytes": 1586
+    },
+    {
+      "path": "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0067.md",
+      "sha256": "876982b225178e1bd8c7f9b645017dc4c4d1618982b0d53e1f2c6e8861a3650b",
+      "bytes": 3628
+    },
+    {
+      "path": "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0068.md",
+      "sha256": "ebe3e16d94423de7ae18175014310ab01eecfd8726634d9f82bd0fed504a401a",
+      "bytes": 5499
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0056.md",
+      "sha256": "2928aa30abfc7b3540b297146087fa30589d86f36df286e60b1d19a3dcc24886",
+      "bytes": 1761
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0057.md",
+      "sha256": "f042d1784955a5d7b1fc4978e8dea61975041a9f7afa5f647fa243e68b94d14e",
+      "bytes": 1433
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0059.md",
+      "sha256": "a6fbd5761971e10f6cd169f6df3f5ded318f38bba2c0aacd1c22500a7d457202",
+      "bytes": 3128
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0069.md",
+      "sha256": "f288a3b87e0a3c820598b8ede80bcef8fa3ab305bb9a7d03020ff0aea0d8cd28",
+      "bytes": 13364
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0070.md",
+      "sha256": "ba4c0fac43f8d20a8e678933a213e8068e11bb594dbd766522f1b59f45ce7947",
+      "bytes": 28438
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0071.md",
+      "sha256": "091bafc03dcb47d8807de02f91a91f9b1932e6c34fc4ed8ecd8385db59eae84c",
+      "bytes": 15711
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0072.md",
+      "sha256": "d0f1f5f749654865aea41931067c39a4532baf2d2e3bcf42a4345f9c5ec52840",
+      "bytes": 9539
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0073.md",
+      "sha256": "a463291e7ddd54765809d90f34fb3a4089d0e084764e80e25821347beb2fb967",
+      "bytes": 2805
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0075.md",
+      "sha256": "54797d5d5e621e03584f8de1ee12860b70cbf7db7d0fa61f9974825dc4e3859b",
+      "bytes": 34634
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0076.md",
+      "sha256": "70b9ffff27a4609a8c30ba8d047790d92b1004a0e120317f71035ac990a29bae",
+      "bytes": 11864
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0077.md",
+      "sha256": "06f0af8ed9a28a719b566c720456b4833f2bb74dde4c67159cca7165d6f7a0ad",
+      "bytes": 15214
+    },
+    {
+      "path": "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0078.md",
+      "sha256": "9bdd74e2025214f406f7f4a17823a94809a80d287565cf6fc8a999170848c740",
+      "bytes": 6379
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0081.md",
+      "sha256": "1cd1b73f1e2dd26e533ade8388b5f5822c649c94230da3ca108512a1f7f812d6",
+      "bytes": 2228
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0082.md",
+      "sha256": "c6c144a0878a17e4d9985e24297b6649918f81b952a7088d145d968a3b702c91",
+      "bytes": 1312
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0083.md",
+      "sha256": "63b8f607e5cd0c2703d26e86a0da1d8589c88bd19161e26aff91e7e9711d1332",
+      "bytes": 1666
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0084.md",
+      "sha256": "e761609f6fa651f80e136d7a9a9667e8ec85183c931382eacee8f87ee2b62b61",
+      "bytes": 4168
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0088.md",
+      "sha256": "c883007c5674b32a6eb6649e924a53f12bd453f02f5e5eec157c55342cd13c52",
+      "bytes": 1362
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0089.md",
+      "sha256": "1ed85a39e2fb5aa8955dd9e71a2b0801bd93746adfe58c6b65e89b1205ea667d",
+      "bytes": 1320
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0090.md",
+      "sha256": "abb26120d554980fd88d961340059279ce50ec049fc12a0178b5e708f9848879",
+      "bytes": 1813
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0091.md",
+      "sha256": "769fa60d5981ca5e7977ac2beeb791fa44c8946b5d579bf00dfbec7594ca6f8d",
+      "bytes": 1237
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0092.md",
+      "sha256": "4499aff1a65dc6933661ed18217b4ea3232da2dc2ae08ecdabf9140861b771f4",
+      "bytes": 1177
+    },
+    {
+      "path": "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0093.md",
+      "sha256": "237a18c03f76cad4b855e993af0d6b6ab81bac21165ffb7d7eed6c2b045f00d8",
+      "bytes": 983
+    },
+    {
+      "path": "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0052.md",
+      "sha256": "a6716d6fb3f3f4b5ee12a3413482b11b545725a393985acf65244de457e1035b",
+      "bytes": 16760
+    },
+    {
+      "path": "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0053.md",
+      "sha256": "c16d63e2cafc169832a80bf2c9c83c6df77279cbdb83564a39c5c2a3d4cd08a1",
+      "bytes": 1276
+    },
+    {
+      "path": "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0054.md",
+      "sha256": "7e2c7fe3a06965109933b131a5608437ebe58b929b105516e22739ccb5c2892d",
+      "bytes": 2291
+    },
+    {
+      "path": "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0055.md",
+      "sha256": "d97694df97ac77f116b209be593714023ae0ad3785dab167d0d831ac21134cd0",
+      "bytes": 2393
+    },
+    {
+      "path": "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0058.md",
+      "sha256": "6293464cb0a5bf7ab94fb15708bf92ae45e070d415a02f1b9d2fa710834cd6f1",
+      "bytes": 11509
+    },
+    {
+      "path": "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0060.md",
+      "sha256": "d7a1076c93ee93fd0916db05829f9e085d837efb83dec310bee586731143d4f7",
+      "bytes": 3802
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0326.md",
+      "sha256": "473e2064dd18c0251deb7a49a97529622662e4b9f760407a926067d38b4c1704",
+      "bytes": 2707
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0327.md",
+      "sha256": "759d0611be8334f3796568ed3d47459aa38c13153f5a9ad6b6b021dc29bd9a1d",
+      "bytes": 3058
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0328.md",
+      "sha256": "e71767434a2ce54542c4e2929f1613b599501d9421217193b2ec45ca37d87e06",
+      "bytes": 1553
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0329.md",
+      "sha256": "726aedf912a837710b4d113dbb96f5026c951732fcffff5dd418fa796504b9a3",
+      "bytes": 2187
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0330.md",
+      "sha256": "51ba3d0da661cfc57c1d8cced54ae49cee8568cf63f54e0b1503d2f7cffd6f78",
+      "bytes": 2933
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0222.md",
+      "sha256": "f0828f854ad5f6b555cf9fd0967a9c67303eace55f7ccbe313d09910e2f81040",
+      "bytes": 1498
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0223.md",
+      "sha256": "9521ebb1e0e045acaaca1ff23348c6c8b987cb8a876446729bf86fc1f6efa9ca",
+      "bytes": 3489
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0245.md",
+      "sha256": "978cda2e64a16ad235a6301027dd2f0a571eddfff092583ddfe0574b605c6264",
+      "bytes": 1438
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0272.md",
+      "sha256": "a633b59fb9bf5e609e35f335f53e563582fb53717f720d1545992c61ddd23c1b",
+      "bytes": 621
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0274.md",
+      "sha256": "596c674c4716c0fe66fae1c0dd7de728c8c35372c8e83b8a07852817ba77adcd",
+      "bytes": 780
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0337.md",
+      "sha256": "e2aadad3e2d025704ff5d85c5876cd0a2b1921a56d59045d71d4e481afe08b61",
+      "bytes": 1344
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0339.md",
+      "sha256": "fc0e2845a1daaed813ef70bbeb541c6c8f3eda86536667ff9730f13d26400b84",
+      "bytes": 1122
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0372.md",
+      "sha256": "30d9ce0d77e3d26017a9eb082f4a81ae3407541bdbc4ceb2b9b5c2bd7dd77a30",
+      "bytes": 3613
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0374.md",
+      "sha256": "b7336a05c93d0b6e4a1610c6f83fb83218b0c4b9b5a7ad7f1da29e55450cc95f",
+      "bytes": 3800
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0375.md",
+      "sha256": "b1fef4c3f43aaf6c0c584b6016426753c9090c7c4b91ca9f6456432334d61899",
+      "bytes": 3755
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0382.md",
+      "sha256": "35614326d5507f7dae2e577364d2be280e9454edd7d86fc17b734684c2d56608",
+      "bytes": 3139
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0392.md",
+      "sha256": "af222dd97f84ff4a11cdfbb2a301a74bf4537d5d30f99af02a6930f4612d96c8",
+      "bytes": 3364
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0398.md",
+      "sha256": "d6aeee8ce4972ca28ff51b39601552217c1b6b9ffbff250c6a145b016daf228b",
+      "bytes": 3410
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0399.md",
+      "sha256": "fdfc1236f697aa085e1b16b6cfdf5557db4a56893b2ac77c269defd462fd099a",
+      "bytes": 2504
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0400.md",
+      "sha256": "898a7123fd2fe680511d3158bb32a39432256862c906d32551b46cfc8df98932",
+      "bytes": 2223
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0204.md",
+      "sha256": "e2b1941a86682ef63dbbd2a82729c9f2d113284d68025d00f66710208341dea3",
+      "bytes": 2274
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0205.md",
+      "sha256": "141ad08a99be4a3366c5502a91c074ec96d4a34f45bc93e2149430cd0087aee8",
+      "bytes": 1380
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0208.md",
+      "sha256": "4f038d55fec4eec2fab42e422d0131f831c4a567e3d40466a06219b7dfb9e73d",
+      "bytes": 2079
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0212.md",
+      "sha256": "d57847c5003a638bbd460dd57778aec5095d3d89acc11c905be01bfacda76a71",
+      "bytes": 1003
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0221.md",
+      "sha256": "65bb21c8c9c328dac4a69d48fc2453c56f5edda4e54abf54cb9c81e51495e00e",
+      "bytes": 3572
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0232.md",
+      "sha256": "24551becf134ed4021c45e2c6c593d590c84008f93c6098e8fb38ca329539b6f",
+      "bytes": 4068
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0307.md",
+      "sha256": "b6b5f9ad86ea4fb82f259e47c1f800bb63face1ec58b7d6b05dd1c920aceab05",
+      "bytes": 3307
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0308.md",
+      "sha256": "584d08465b42e5ffc35ddecdaf165c4b355dab8af17919a40b1e8304cf1baae6",
+      "bytes": 1886
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0309.md",
+      "sha256": "c31d86657ca951219ee293a4e2028224b28389c739d7298e8ed06799100e1774",
+      "bytes": 599
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0310.md",
+      "sha256": "5b9598c18ea590c0065dcc1acef3389fad7f4d58573a55f74f7da103a08e62be",
+      "bytes": 602
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0312.md",
+      "sha256": "25112142f7f5be337db3875c66333843c4c128dbac2c0a5dc58b832351bf3609",
+      "bytes": 2155
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0350.md",
+      "sha256": "c82e74efa62fd0334042b0e97d26f332358133d36fdef3a73e9a541ae31c7b56",
+      "bytes": 1415
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0217.md",
+      "sha256": "186326ce4fa6c60bdee3a33920ad271eeaa3be881fbef3e3db414d470e5803e2",
+      "bytes": 2366
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0218.md",
+      "sha256": "1b8971b6598b5574aca9f64bce2cfb02c569ff13b19d393e70c4793fd7062beb",
+      "bytes": 1438
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0233.md",
+      "sha256": "be7e34e852d0a5c1fe254838d3d72a2e36fdeaf17fb7dea46e319bb03425998b",
+      "bytes": 2548
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0234.md",
+      "sha256": "0afeb2455c5497c8226d9969fa615bc882a578db8957c8853486128c4d8e8f1c",
+      "bytes": 1822
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0235.md",
+      "sha256": "5b1f33d5ac234f23d2b6d02b2e16a7f99a7579ace650029957d7c8fbdf2d9dea",
+      "bytes": 2299
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0236.md",
+      "sha256": "58dccaf814b35f8fb064e280f8c82a5fb37dadbfe8ab14ec504e5e0907761ad6",
+      "bytes": 2298
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0237.md",
+      "sha256": "fbc063e1208f68e3bafb252597e87b126c25fee9964d12c64e071b96a4c08352",
+      "bytes": 379
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0238.md",
+      "sha256": "3348b5f635d5eb7a2ecd6f0e2b654c86d42e7882379b8e7aa0e7ad29f8faef3c",
+      "bytes": 588
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0239.md",
+      "sha256": "0d5e664d60d14282598d83a56f52930a8d3e15963d931e4371feba027ca4f583",
+      "bytes": 305
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0242.md",
+      "sha256": "2ceaa8adf4b41b70fe2e4432a05b279dccdb5a48fdc3070ea466179afbc867de",
+      "bytes": 1296
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0243.md",
+      "sha256": "cc4f7d4420f4e131db37c7d97d00cdf6bb2fd017629051c91b5a59fb24711470",
+      "bytes": 1722
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0244.md",
+      "sha256": "e715a1022f79ea6c067a0bfab568bdba1a6b4a8f5851b62b92a5bcafa617dbff",
+      "bytes": 1951
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0282.md",
+      "sha256": "87a806b0c9cbe4d12a23783fd2633208d63e6eca4d914923c7ac6d927c10978b",
+      "bytes": 2901
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0283.md",
+      "sha256": "27f9c5436319c931a1a21d3413d088e4d42e9768b4676e9676813163489cc1a9",
+      "bytes": 2002
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0284.md",
+      "sha256": "89579dc3f4f674fe8714569c76d5fce353aec2c59b8ecbdfee6526c2d563a7d8",
+      "bytes": 3022
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0285.md",
+      "sha256": "25a2f13041b10bbe9c84c7a10a1f8a9b9a78b0f586a935631746608372180342",
+      "bytes": 1281
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0286.md",
+      "sha256": "8d81f8382581c5e32cc9fee57f4b385ac30349fade180de82f71e353a4b4063c",
+      "bytes": 1838
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0295.md",
+      "sha256": "5b3a9be6f2d1ff3c82cba9abf589740382f223248ffd9c070bd1e18f4a3eb53b",
+      "bytes": 1131
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0250.md",
+      "sha256": "abec4f5b44bf4e01e62db2f2ff271b6d4878bd37990daf2ab61c2e99fbe7636e",
+      "bytes": 4284
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0251.md",
+      "sha256": "4ad7fb92869014921ec33265302bf8960f8dd65160e5ad2c38bacbdcb8baccb4",
+      "bytes": 2349
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0252.md",
+      "sha256": "85274c23610dbe147c97f5e2b5a7b420fc709a51e71af2d047c2ebb4cc84c2ea",
+      "bytes": 5130
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0253.md",
+      "sha256": "17316caf05a910a9474548c7950914d8e89902e08159d19063d7f9ef0bdc45d6",
+      "bytes": 2933
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0258.md",
+      "sha256": "365191fac6ef7b1d7177e87b87c278c81a5a1964c5614345ea0c4dd739792694",
+      "bytes": 1696
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0289.md",
+      "sha256": "87c9bc73b111607877e9d7427444600dcc73cd0d60d6215b1dade97a85ac3e3b",
+      "bytes": 1751
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0291.md",
+      "sha256": "03bb257a9d741d91ae49668251874a2b1ea20ef536794773e8303ced862b1049",
+      "bytes": 1662
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0292.md",
+      "sha256": "d64245d0d4100678351b3171023ba3207f3d25d1c1746652f0565977732e1261",
+      "bytes": 429
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0293.md",
+      "sha256": "c26ea3da6a2caae30ad88af91551b7274ef09e788b89d2db0e16217e1c85a809",
+      "bytes": 434
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0294.md",
+      "sha256": "5ceb63e2aaa83a52dd86e3c0fbbfd01c91da9861db20905d1e69105ee8643808",
+      "bytes": 435
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0315.md",
+      "sha256": "eb54db91734466a68cff067cd0463ea95687fedfb1db16d0c426d03acaeb704c",
+      "bytes": 3190
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0316.md",
+      "sha256": "4b599a45bbe41768a7734c2db0458c03c313d2753ef7bf3493c2202630cbd77e",
+      "bytes": 2666
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0320.md",
+      "sha256": "636dc90a1d163da3c487040ffbdbc691e3a15336c94e60a4cae59471feb1c54a",
+      "bytes": 4157
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0334.md",
+      "sha256": "4cfeb3427166035543ee16b1d652d8d411a71ea1f5ee26a107bd046b2bbc1d95",
+      "bytes": 3132
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0340.md",
+      "sha256": "c29312807d4f3ad0c98c7696ece55673f18afd226badd63509ba1f86a3e77e74",
+      "bytes": 3123
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0355.md",
+      "sha256": "c4bd0ba18b9d23e7f42673bb8c6ac48501ac2534e056b33adda646a3314618b6",
+      "bytes": 2229
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0356.md",
+      "sha256": "7e1a58dcece292e8cb85203180375ab9afced436818599c4c3e1f0da7f45f7b7",
+      "bytes": 1761
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0357.md",
+      "sha256": "7f812d7db24572d0a5d094f6d987b300efb5de5208fa939858d4832101db6f60",
+      "bytes": 1763
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0364.md",
+      "sha256": "035a54def7beb2886ec6d1b9b8cfe46cbca751bd4c3fcdb70a5e87ad5e50e7b5",
+      "bytes": 3061
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0365.md",
+      "sha256": "14396f7ee5fbe60696415e21f86cfcb117a7eba3a18a16e32ab233f9d0184898",
+      "bytes": 3265
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0366.md",
+      "sha256": "fe7f922941198b3e5cffc7ac4f8d1d0f7430601788233265d7e7e48491c04fd8",
+      "bytes": 3342
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0381.md",
+      "sha256": "3f7568259e22d91d7cb59ff24760aace51208d1fec3c6614c520f2664d1b2841",
+      "bytes": 3550
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0393.md",
+      "sha256": "0ebac056492df59b2f71f8b3f21755f17e33b2951246f8e20f43b6ca71bea202",
+      "bytes": 3315
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0394.md",
+      "sha256": "bf1e0d3432aed094857a75a46e3364a7d6c03cbe1aa5daff2a49dbb968504cb0",
+      "bytes": 3378
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0206.md",
+      "sha256": "0e7af20d6aee3ac2d6271cc7c272e5d90f934f09ad73c3798d8c7099b9cde4aa",
+      "bytes": 2144
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0254.md",
+      "sha256": "bbb44c9f320e0bc188977db8d07d2d38e709202f7652406d8ad47a0678ebacec",
+      "bytes": 1959
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0255.md",
+      "sha256": "7bd79d2c54566d4629999f25db02679dc6dec4b8694339ab8c8a95a818bd3a47",
+      "bytes": 279
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0256.md",
+      "sha256": "c06ef4b17ce38bd7146e68391a27eb1088ef2c17023c39b56ee0d3f52949e069",
+      "bytes": 447
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0257.md",
+      "sha256": "4ec14df5d01434469768a5f01ff7932c7616bf66bb6d92d603e8ed2853dd4f80",
+      "bytes": 353
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0318.md",
+      "sha256": "5f07ca15a95e7443581cd97742e91b55646dc64e322450e0fda4fe99b18e9881",
+      "bytes": 1895
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0319.md",
+      "sha256": "b76a9e3e8a5a5e59a2118f12be85c41b85293986e45636419cdd53abc7a45a44",
+      "bytes": 1026
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0224.md",
+      "sha256": "3e60f525b545768e1ee916eb0ddde87186f26aad5c651dafcdcd34aa31550cfe",
+      "bytes": 1563
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0225.md",
+      "sha256": "d1a01776f4ff97d6791c12bb0e6f7abdff18163d11dc48938ae4b16ce23dd65c",
+      "bytes": 1012
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0226.md",
+      "sha256": "367e59f99928715a35ec61b48134bc226cdd9ecad90d6879311daf603b712dda",
+      "bytes": 1485
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0227.md",
+      "sha256": "9b7b2fce52a34bb2cb70eec7558510eb0ba4eb77cb981d9573b0f74348672f31",
+      "bytes": 1519
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0247.md",
+      "sha256": "db1b5a3e65e5314ce1768012615deccdbd0cd394a611004161364219c892e6e6",
+      "bytes": 2347
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0249.md",
+      "sha256": "df8d0c65236fffdebb552774514b52684add33699bd4a8954f25a3475c70cef4",
+      "bytes": 911
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0263.md",
+      "sha256": "edc5f2f0b5bab12d462154db337f14bd11823af31847ea3ed260d7d584c434f2",
+      "bytes": 991
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0264.md",
+      "sha256": "442603750edc4664adf06bf736cf4fd46f07798e61cf59f0d91b5c63f04447ff",
+      "bytes": 1070
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0265.md",
+      "sha256": "ba48d19082121f2192e36d60e85f3e7623c695158109a35ee65a4f8adaf67e62",
+      "bytes": 741
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0288.md",
+      "sha256": "cbef087c7962cbd8395c5e8f57f613c0997ea9487ff084741db00cd989c91cee",
+      "bytes": 924
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0324.md",
+      "sha256": "211210c8f94226ef9713be79530be1f4d9d8a412e8e34f6923293aff60ac2058",
+      "bytes": 2280
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0325.md",
+      "sha256": "a80a644ad3c3fa87443de4adc47d56e160a0514c8ebb23bd28a905cc64ec857a",
+      "bytes": 3617
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0338.md",
+      "sha256": "19eb2611d14ae96563a4b42efd294f69c79b02677b16523eedacdcd4c6686f44",
+      "bytes": 4119
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0341.md",
+      "sha256": "b6633b424e9ca315b58b78846a4ade44f6217c0064d945048c81a6532d805e4f",
+      "bytes": 3340
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0351.md",
+      "sha256": "ba893a37e3d1cc29ac67735a01ff66d60752d7178bd21dd53c5b8b5d086c6d07",
+      "bytes": 2975
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0352.md",
+      "sha256": "6ea966ef31808c12043d5f7a037ec11666ab5405d092663323d87c712bcc11ab",
+      "bytes": 3607
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0353.md",
+      "sha256": "ed43cc6a82f5e0770c2f125e775631025469815b8d1bc609b4fdd4022cd8aaa6",
+      "bytes": 4177
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0368.md",
+      "sha256": "0c9ef7fb460b2eef3ae7274b1a66318468f5610dbd4ea90f04b5dc802f6d9d69",
+      "bytes": 2911
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0369.md",
+      "sha256": "6f08c43450f8d67358092ab9524fe594c3f736f53b1905726d870a9026bb4a92",
+      "bytes": 2967
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0200.md",
+      "sha256": "9237957dae2f018ac22829a236592597f7bd3767cd828acc0ce90390118bd780",
+      "bytes": 1509
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0201.md",
+      "sha256": "565d84208e3d60a4fc0bf4fc223104d3ac86c62c4cac445154efe64d50a6dde7",
+      "bytes": 2221
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0202.md",
+      "sha256": "a26f8212e2f5bd54a4641cdaf74114de6f235ff5ecd77f9f3408b85c76dad74e",
+      "bytes": 2717
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0203.md",
+      "sha256": "467ed3e8eee7456225ea2b3e1d755898780351851c9a2ef8402a1e0042453fcf",
+      "bytes": 1446
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0207.md",
+      "sha256": "ae0b084d9e245a0c8a3db97024631d0d121f076e2ec35f8edf8fb221a036ce3a",
+      "bytes": 1933
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0216.md",
+      "sha256": "99b8de001fad04c31359d1895c80fd4d960fa5efa3223e3c75b6f96eadd7a547",
+      "bytes": 1237
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0231.md",
+      "sha256": "2e3cacf8677008ff135cdbce9641b1707aaf1a4e0f757d2c9036f1fe01e28209",
+      "bytes": 850
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0262.md",
+      "sha256": "b01d573be7da219f76fa7a0973cd31f7b015f661e2ec0cdad0d559bb11a5c673",
+      "bytes": 3451
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0287.md",
+      "sha256": "d3ea97a503fac7018ebb65d93d40468a09b2f1a65b72ad77d6cf55b0b0f30952",
+      "bytes": 3277
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0304.md",
+      "sha256": "db12d667b68d024ff5a94ed9de943c0d6db6aeee05fd38d15e0910f834b48525",
+      "bytes": 571
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0305.md",
+      "sha256": "32c8a748a32987ce486ab16c1e26366d14c29d8b74058999f6012df178d8956c",
+      "bytes": 502
+    },
+    {
+      "path": "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0306.md",
+      "sha256": "f300782b9dbed37bfbd019f9185a2782093d4f74c24684d618822f8e623c9963",
+      "bytes": 499
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0266.md",
+      "sha256": "6206f4e125757a28a27dcc321e85c13fbb57e6a1c1d8c6325920e7b06e093dbf",
+      "bytes": 2193
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0267.md",
+      "sha256": "833c92a184ec953df25863050b2c07ed7a5bdcfc585b4c729c4f7f30e063fdfe",
+      "bytes": 1415
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0268.md",
+      "sha256": "cb215b7c79feb1cc48131511fb48ce8136f185c6535a728049dfd96883ed144f",
+      "bytes": 2569
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0269.md",
+      "sha256": "c9a636e61c47210bb41d595ab90ca954d649250d430038e083b66f90cd53f6f1",
+      "bytes": 1187
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0270.md",
+      "sha256": "71770d74b4384d321bb344d1524876bd9215c90816e386a01a17beb6d1294cde",
+      "bytes": 1772
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0271.md",
+      "sha256": "5749f7bdf0d14fced59f89fe3e852759418eebf2ed505062d86f463d294f4365",
+      "bytes": 1127
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0228.md",
+      "sha256": "1d37f8cf09d30fe43aa7720ab313cb3aaa8b74e72c291d5316aeb9daeb90ea1f",
+      "bytes": 1222
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0229.md",
+      "sha256": "1df273bc1f174be8e933f5d736ddd8af86df3fec99b7e0bb5bdcef2e90b72cd1",
+      "bytes": 3924
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0230.md",
+      "sha256": "975414d8657f6755846e22a42b3b3a2067d0fc8aae23a76dc0e766cedb8139fe",
+      "bytes": 2194
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0273.md",
+      "sha256": "d48e826d045df73471c51e14e647190230ecd2f03099b3a831a1a51ff2f64d03",
+      "bytes": 1038
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0275.md",
+      "sha256": "e5efbed8f5f9fc549b043f6722cf6e373e4b6558e774a6180b02996784b8382e",
+      "bytes": 901
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0383.md",
+      "sha256": "45d4e96497c7b1d8d301bf209983bf306036ddb5fa12d38d7a6d27efca2fd35a",
+      "bytes": 3460
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0384.md",
+      "sha256": "447ae68c02ac841495b787fe7850f9518818913b3f91c99d056576a64a1eb2f4",
+      "bytes": 3295
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0386.md",
+      "sha256": "35fd81adc04f19c5fc397785763d5bbaed06f3f7f873639c7b18fa63ef2a2c2a",
+      "bytes": 3039
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0209.md",
+      "sha256": "1806fe574fe9748a41f03c1fa448643fab71a795a6ae47d52318149d5657a4b6",
+      "bytes": 2255
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0210.md",
+      "sha256": "5a0332effadbc498efcfd65f8eee2779d7138c43dd2df554a595d9a2ba8c87c3",
+      "bytes": 3700
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0211.md",
+      "sha256": "523914eef883db9939430dbfb4f384edd3f1696828b523be099ddf40471a6ce9",
+      "bytes": 2654
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0213.md",
+      "sha256": "622a1f1f87b26c1bd9eb40b7c2f574ef110d269b35d4eb8eb7bf8e59aa9b8c68",
+      "bytes": 2919
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0214.md",
+      "sha256": "ce56b25d4c6c0d2ff0b065c3ed6ba12b356efdac0167464dc187e20cb3ec450c",
+      "bytes": 2419
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0311.md",
+      "sha256": "5856841bd150f45cbdc0d602ce4a4072aa77449fc5dd484a03ff6aad61489fc8",
+      "bytes": 1553
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0317.md",
+      "sha256": "14a09a16b8c849666374382749ffac0189b940161309b3a8d1a52ef2ac054cbc",
+      "bytes": 2237
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0349.md",
+      "sha256": "e3c582baa25c2d57deb0118792112579e476a39c8875080e727140824e9e1c09",
+      "bytes": 1517
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0321.md",
+      "sha256": "7f1296a98640e6047bb473597f39832a7695945032a090900986acf5ba8736bd",
+      "bytes": 1487
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0322.md",
+      "sha256": "8325c75eda261be17878b0860548d33383f4500572f8f0b9367c71e0ffad11d0",
+      "bytes": 3426
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0323.md",
+      "sha256": "3ee2a92a48bdeafdb18607d0bcc58fb67260eb84152a8895f668358f783521f8",
+      "bytes": 2488
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0342.md",
+      "sha256": "027dcac650d4582cbc17879e0e3bdfcd36ba2cdca3ca4f01d8347c83ba0bcc16",
+      "bytes": 3892
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0343.md",
+      "sha256": "f970024e8d40a671254534937bf369ed5c2a90c58b386465ca8213ac98fe463d",
+      "bytes": 2390
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0344.md",
+      "sha256": "55ac9cc37bd7cf2a0d88fa13c5fd6d0edc39a9d881db723e3424098e0f6e92a4",
+      "bytes": 2634
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0345.md",
+      "sha256": "f810f45d4d942cb54b36bef80c55ea8db18f7c1debcbf8cb53b8a2436bfd4729",
+      "bytes": 2227
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0348.md",
+      "sha256": "53b5630012a44f3426c3ae538d687059d897eb04da7170926195d9902aab63e6",
+      "bytes": 1434
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0385.md",
+      "sha256": "095c334b9d5e5f046a3544fe09d0e838c52dda028b75079063d520f6912306f3",
+      "bytes": 4154
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0396.md",
+      "sha256": "291339d195b430aef4fce68e372ac83054271ecafc03decacbd019186effacc1",
+      "bytes": 4481
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0397.md",
+      "sha256": "a800640fe7b5c6d767364b55ae974783655a426cf666fb460cf9de69856b1afd",
+      "bytes": 4143
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0276.md",
+      "sha256": "c8c22685118fdd8b34218c56b7d28deb2a309c0cb447a70e5893f28a20694877",
+      "bytes": 1874
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0277.md",
+      "sha256": "2e73c11abcf7b6b3d59fad40629e19bff3953918d1ac1815f6aaa85931e2c9a7",
+      "bytes": 1359
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0278.md",
+      "sha256": "98c47b85c5606fda7b6c5c5fa4db031579711c933ec65f899283cef18da7a412",
+      "bytes": 1618
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0279.md",
+      "sha256": "67b10509350748254411cf9c1d0a7b50d107623a0f68e7da0d56477d5326b998",
+      "bytes": 1414
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0280.md",
+      "sha256": "7c01c45c2156404b7c9bac8c529fbad71e55c23f8cf5ad58b91a1dc3106e88af",
+      "bytes": 1449
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0290.md",
+      "sha256": "d053da558d762cbe6acd1ee8321ccd77a8cd5b6a71bfe77775e05954bde36237",
+      "bytes": 1540
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0331.md",
+      "sha256": "ba22e8b56e629f76d4c174fdc18ece1d087bcbe41fdc77f87ede232cdf4eb2ec",
+      "bytes": 1006
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0332.md",
+      "sha256": "50ead567ba46dcb43588686423d1c37ac62069a5222fc29492eb0bbb285a3009",
+      "bytes": 2624
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0333.md",
+      "sha256": "0714457dc6a589f4397988b3dbb4327bfb87b45dfa7c3e368d525b649337b4c7",
+      "bytes": 1780
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0335.md",
+      "sha256": "d86e1f1afa447635b319111eedbf195b7462e669912265af458a60062fa4f180",
+      "bytes": 4098
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0336.md",
+      "sha256": "3564e4453b521b1159cc86b6e5965e72572172a90fd74a08b8bb9addbf906822",
+      "bytes": 3541
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0346.md",
+      "sha256": "2b63d5313b3598a4593f89d2f27296cecbc221be12cacb73e88377296c346437",
+      "bytes": 3198
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0347.md",
+      "sha256": "2cb24c1780b4ac860dd9f5076f073b1fb722fe47860cb8def5cc56fdda9ea29e",
+      "bytes": 2903
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0370.md",
+      "sha256": "a5d978b998fceccf5c6075e3d2239c333ba4e63090ed3e291b1c02d8112bbf7b",
+      "bytes": 2166
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0371.md",
+      "sha256": "d124e3c9b2c3e45b0465678b513334fd46cd5fff3630d9e0cdda09b19349dabf",
+      "bytes": 2205
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0376.md",
+      "sha256": "657b12d42b2cfde47a5b6111df20b0f06c15a2b3f4f885c8b4d9a669ac5c0976",
+      "bytes": 2834
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0377.md",
+      "sha256": "e95167e22614ef2b55b52e399fcae78ccecdf88e1d83c974ef480e8a0a7ef14b",
+      "bytes": 2436
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0378.md",
+      "sha256": "59fd299e9b205883839e0c3f8eb15eed658f9feb693f8dbbc4761b35a26744bb",
+      "bytes": 1806
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0379.md",
+      "sha256": "82a3f6b220b0a19baa1521fd75cb170c0dbd88cddc5500989f472a8f9e975c31",
+      "bytes": 2703
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0380.md",
+      "sha256": "a0269b53b97ce19ec86f87693e29a65dcce7bdc102d7b2155144ed9278793146",
+      "bytes": 2584
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0389.md",
+      "sha256": "f6f93d66477e9206ec72ea2ee9e0f6eb4cd06e9e0df68e99e6ab797515c211e2",
+      "bytes": 2742
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0390.md",
+      "sha256": "561b7062fadac1bf9060884fe2176e90df3dac32289b8332123b4144298a324f",
+      "bytes": 3161
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0395.md",
+      "sha256": "cbbef074225ef865e1fdccf06263439585e126f6c2c3df58298687f6a0cf0986",
+      "bytes": 3694
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0281.md",
+      "sha256": "0128eedf449fdd5706b3948bd2aa95ca6a43fa716ef3e6054fdd7bbe231dceec",
+      "bytes": 3374
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0360.md",
+      "sha256": "d821db0424a7d7fb30c27d2680ab5a7bcc41bb761416615d2437db40a231662e",
+      "bytes": 5659
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0361.md",
+      "sha256": "57dc3e2fac3259f5ad238e0dd3ef60035820562efb30509cb727820ac5f6c661",
+      "bytes": 3985
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0362.md",
+      "sha256": "d7719d852eb120391ecd1b64149631cdcbbe69639cf00f46e5b596aba972c3b2",
+      "bytes": 6047
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0363.md",
+      "sha256": "c0155d40ce71e0c1d5f61604c5bcca82c497af2f83907b0d8343c4d00afb7dde",
+      "bytes": 3752
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0219.md",
+      "sha256": "9a6bac76acfb2aae9c720f6af0d5107b90737bb68bee133ea42c930544d716fc",
+      "bytes": 3093
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0220.md",
+      "sha256": "f0f416882476da6d9b4e1e68510efd5e34e2393c648b3144fa80fe61c1f1f6cd",
+      "bytes": 1852
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0240.md",
+      "sha256": "79befefb1f3a2690b391c414895c00883a501dc28c225e831861537dd4b8a62b",
+      "bytes": 1511
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0241.md",
+      "sha256": "e8f96ccfb26e28b10ac7018bbe9cef2968a745113758f671cd70b589e95eb718",
+      "bytes": 1797
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0246.md",
+      "sha256": "af26d191a0e0c86b1b0fcc1f5ff2ff253867a07d2e3e7cddbf2ddd7161857c38",
+      "bytes": 1190
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0248.md",
+      "sha256": "962e1b7c04284548bb91e7b95f3a5aa81a0995c830f570065e8daf8d26d8293f",
+      "bytes": 1813
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0261.md",
+      "sha256": "119bd336880a7d7d09a63f11ed29678e84ae37ab991ff2c57dad54c2a976628e",
+      "bytes": 817
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0354.md",
+      "sha256": "05277c34d4c79314291105e0da485f5e8a654fce8e25e3fb641aebbc27f7afa5",
+      "bytes": 4474
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0358.md",
+      "sha256": "eb6b818921027adc25133e195ddbc2cd6eec92f51321b72cdbaeb4872a96b173",
+      "bytes": 2926
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0359.md",
+      "sha256": "f689d02e2e4fd4294a1c91ea6c0b830a4bed6b7113e9deabf29e92fc2e07fad8",
+      "bytes": 2642
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0367.md",
+      "sha256": "837cfa54bda28f0b254edf93750f53f16187c6f05ea1f99a5f66185d223426ec",
+      "bytes": 1985
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0387.md",
+      "sha256": "9667e6490dbf3e05d9a712aa2a16b5360a5ad41c8b7b2e6e606bd5bd37580761",
+      "bytes": 4347
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0391.md",
+      "sha256": "a3283b1df3cb09fdea291e9f2397cd2e0f0d49c9a842fc8eb519fa6cac8d231e",
+      "bytes": 3491
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0401.md",
+      "sha256": "09d64fab8c339a403f98becd6cde1bf69b34bf2f73c166376b4d5337b611af3b",
+      "bytes": 3613
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0402.md",
+      "sha256": "9d5f883139eddaf6094b5f09ec8a6a64a7b3d5592b232111a30db48a57ef34a9",
+      "bytes": 4603
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0215.md",
+      "sha256": "7dc2b1f8e6448f75e3b4eeba4f316d5431eb9ec78615578ed6f154d4db68eb6d",
+      "bytes": 2099
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0296.md",
+      "sha256": "2e774828d8772cd812de0bb5e5344e3bef0451de77e6d57a70d125360a9219e9",
+      "bytes": 1256
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0297.md",
+      "sha256": "40a72ed9635bd217bec72df711b96fb446840b8fabec6e310f9145c33f6b1828",
+      "bytes": 1440
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0298.md",
+      "sha256": "9ca7f1a01599633720e8b172e138e763242f92a8d8c08d13fff1ae91060bf289",
+      "bytes": 1036
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0299.md",
+      "sha256": "5ea0055b050e5f8e2f85fb787c238981d0f9fdd5b6c3f897fb23341a21899a7b",
+      "bytes": 2021
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0300.md",
+      "sha256": "ea75602fb34536a6f80271c8522fbb39432db7ad4f35cdb71c2abd2cff2db9c6",
+      "bytes": 1399
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0301.md",
+      "sha256": "e414b9e927c4fbbb3754455f51b288e9b7373741cbab6b1827f29c8bf7d008eb",
+      "bytes": 2061
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0302.md",
+      "sha256": "ed139e1077b04fcb9d4bb1107ce4826c0167ab79a0fb2584c1899ff08914b3ec",
+      "bytes": 2788
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0303.md",
+      "sha256": "26ebfcd12a4f684d105d95d829355723162eb788790e323af8d0cd1b9ab4734c",
+      "bytes": 3968
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0313.md",
+      "sha256": "e03fbfc355840b4bbe98f9b47470a651e73b09ed5814d0844ef4823e289851ff",
+      "bytes": 3166
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0314.md",
+      "sha256": "8e2102afb3760a860c2b11dae5f94aac319289613e93ceef65b82ef99ea62aeb",
+      "bytes": 2277
+    },
+    {
+      "path": "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0388.md",
+      "sha256": "3b648180224563df8542b3a573ebe9619eb23a1f6269176447f46f9c3742c050",
+      "bytes": 3451
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "3def29c45e59c633ceafd10e395d30bbfc03656b77be8c8ae4440a3ee703f0af",
+      "bytes": 232568
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/tests/android/MASVS-AUTH/MASTG-TEST-0017.md",
+        "raw/tests/android/MASVS-AUTH/MASTG-TEST-0018.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0002.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0025.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0026.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0027.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0034.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0036.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0042.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0043.md",
+        "raw/tests/android/MASVS-CODE/MASTG-TEST-0044.md",
+        "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0013.md",
+        "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0014.md",
+        "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0015.md",
+        "raw/tests/android/MASVS-CRYPTO/MASTG-TEST-0016.md",
+        "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0019.md",
+        "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0020.md",
+        "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0021.md",
+        "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0022.md",
+        "raw/tests/android/MASVS-NETWORK/MASTG-TEST-0023.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0007.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0008.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0010.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0024.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0028.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0029.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0030.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0031.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0032.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0033.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0035.md",
+        "raw/tests/android/MASVS-PLATFORM/MASTG-TEST-0037.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0038.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0039.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0040.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0041.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0045.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0046.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0047.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0048.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0049.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0050.md",
+        "raw/tests/android/MASVS-RESILIENCE/MASTG-TEST-0051.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0001.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0003.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0004.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0005.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0006.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0009.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0011.md",
+        "raw/tests/android/MASVS-STORAGE/MASTG-TEST-0012.md",
+        "raw/tests/ios/MASVS-AUTH/MASTG-TEST-0064.md",
+        "raw/tests/ios/MASVS-CODE/MASTG-TEST-0079.md",
+        "raw/tests/ios/MASVS-CODE/MASTG-TEST-0080.md",
+        "raw/tests/ios/MASVS-CODE/MASTG-TEST-0085.md",
+        "raw/tests/ios/MASVS-CODE/MASTG-TEST-0086.md",
+        "raw/tests/ios/MASVS-CODE/MASTG-TEST-0087.md",
+        "raw/tests/ios/MASVS-CRYPTO/MASTG-TEST-0061.md",
+        "raw/tests/ios/MASVS-CRYPTO/MASTG-TEST-0062.md",
+        "raw/tests/ios/MASVS-CRYPTO/MASTG-TEST-0063.md",
+        "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0065.md",
+        "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0066.md",
+        "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0067.md",
+        "raw/tests/ios/MASVS-NETWORK/MASTG-TEST-0068.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0056.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0057.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0059.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0069.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0070.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0071.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0072.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0073.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0075.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0076.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0077.md",
+        "raw/tests/ios/MASVS-PLATFORM/MASTG-TEST-0078.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0081.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0082.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0083.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0084.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0088.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0089.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0090.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0091.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0092.md",
+        "raw/tests/ios/MASVS-RESILIENCE/MASTG-TEST-0093.md",
+        "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0052.md",
+        "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0053.md",
+        "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0054.md",
+        "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0055.md",
+        "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0058.md",
+        "raw/tests/ios/MASVS-STORAGE/MASTG-TEST-0060.md",
+        "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0326.md",
+        "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0327.md",
+        "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0328.md",
+        "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0329.md",
+        "raw/tests-beta/android/MASVS-AUTH/MASTG-TEST-0330.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0222.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0223.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0245.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0272.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0274.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0337.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0339.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0372.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0374.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0375.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0382.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0392.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0398.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0399.md",
+        "raw/tests-beta/android/MASVS-CODE/MASTG-TEST-0400.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0204.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0205.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0208.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0212.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0221.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0232.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0307.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0308.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0309.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0310.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0312.md",
+        "raw/tests-beta/android/MASVS-CRYPTO/MASTG-TEST-0350.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0217.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0218.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0233.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0234.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0235.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0236.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0237.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0238.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0239.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0242.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0243.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0244.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0282.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0283.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0284.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0285.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0286.md",
+        "raw/tests-beta/android/MASVS-NETWORK/MASTG-TEST-0295.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0250.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0251.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0252.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0253.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0258.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0289.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0291.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0292.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0293.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0294.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0315.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0316.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0320.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0334.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0340.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0355.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0356.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0357.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0364.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0365.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0366.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0381.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0393.md",
+        "raw/tests-beta/android/MASVS-PLATFORM/MASTG-TEST-0394.md",
+        "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0206.md",
+        "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0254.md",
+        "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0255.md",
+        "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0256.md",
+        "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0257.md",
+        "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0318.md",
+        "raw/tests-beta/android/MASVS-PRIVACY/MASTG-TEST-0319.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0224.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0225.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0226.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0227.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0247.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0249.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0263.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0264.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0265.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0288.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0324.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0325.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0338.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0341.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0351.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0352.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0353.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0368.md",
+        "raw/tests-beta/android/MASVS-RESILIENCE/MASTG-TEST-0369.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0200.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0201.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0202.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0203.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0207.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0216.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0231.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0262.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0287.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0304.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0305.md",
+        "raw/tests-beta/android/MASVS-STORAGE/MASTG-TEST-0306.md",
+        "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0266.md",
+        "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0267.md",
+        "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0268.md",
+        "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0269.md",
+        "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0270.md",
+        "raw/tests-beta/ios/MASVS-AUTH/MASTG-TEST-0271.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0228.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0229.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0230.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0273.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0275.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0383.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0384.md",
+        "raw/tests-beta/ios/MASVS-CODE/MASTG-TEST-0386.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0209.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0210.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0211.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0213.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0214.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0311.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0317.md",
+        "raw/tests-beta/ios/MASVS-CRYPTO/MASTG-TEST-0349.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0321.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0322.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0323.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0342.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0343.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0344.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0345.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0348.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0385.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0396.md",
+        "raw/tests-beta/ios/MASVS-NETWORK/MASTG-TEST-0397.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0276.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0277.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0278.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0279.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0280.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0290.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0331.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0332.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0333.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0335.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0336.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0346.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0347.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0370.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0371.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0376.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0377.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0378.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0379.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0380.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0389.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0390.md",
+        "raw/tests-beta/ios/MASVS-PLATFORM/MASTG-TEST-0395.md",
+        "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0281.md",
+        "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0360.md",
+        "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0361.md",
+        "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0362.md",
+        "raw/tests-beta/ios/MASVS-PRIVACY/MASTG-TEST-0363.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0219.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0220.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0240.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0241.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0246.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0248.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0261.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0354.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0358.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0359.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0367.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0387.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0391.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0401.md",
+        "raw/tests-beta/ios/MASVS-RESILIENCE/MASTG-TEST-0402.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0215.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0296.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0297.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0298.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0299.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0300.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0301.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0302.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0303.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0313.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0314.md",
+        "raw/tests-beta/ios/MASVS-STORAGE/MASTG-TEST-0388.md"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 292,
+    "raw_files": 292,
+    "normalized_files": 1
+  },
+  "content_digest": "0c050f4411d4393ae64f3fbd7fa245e0b8973514e0f979a598a299159377869a",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}
