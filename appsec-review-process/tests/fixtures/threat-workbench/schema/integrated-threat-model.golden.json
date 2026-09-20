@@ -354,7 +354,31 @@
           "verification_item_ids": []
         }
       ],
-      "originating_workcell_id": "attack-tree-builder"
+      "originating_workcell_id": "attack-tree-builder",
+      "evidence_class": "WEAK_INFERENCE",
+      "confidence": "low",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-test-intelligence-ingest",
+          "attempt_id": "att-test-0001",
+          "path": "data/jobs/02-test-intelligence-ingest/whole/attempts/att-test-0001/outputs/facts.json",
+          "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        },
+        {
+          "source_class": "derived",
+          "producer": "02-doc-intelligence-ingest",
+          "attempt_id": "att-doc-0001",
+          "path": "data/jobs/02-doc-intelligence-ingest/whole/attempts/att-doc-0001/outputs/facts.json",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ]
     }
   ],
   "stride_hypotheses": [
@@ -440,7 +464,20 @@
       "status": "open",
       "originating_workcell_id": "deployment-topology-mapper",
       "intercom_record_id": "ic-0002",
-      "citations": []
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-devops-project-discovery",
+          "attempt_id": "att-devops-0001",
+          "path": "data/jobs/02-devops-project-discovery/whole/attempts/att-devops-0001/outputs/project-inventory.json",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "evidence_class": "WEAK_INFERENCE",
+      "confidence": "low"
     }
   ],
   "gaps": [
@@ -452,7 +489,21 @@
         "dc-credential"
       ],
       "originating_workcell_id": "pii-user-data-mapper",
-      "intercom_record_id": null
+      "intercom_record_id": null,
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-evidence-assembly",
+          "attempt_id": "att-asm-0001",
+          "path": "data/jobs/02-evidence-assembly/whole/attempts/att-asm-0001/outputs/intel-manifest.json",
+          "sha256": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ]
     },
     {
       "gap_id": "gap-repudiation-unresolved",
@@ -462,7 +513,21 @@
         "flow-login"
       ],
       "originating_workcell_id": "stride-enumerator",
-      "intercom_record_id": "ic-0001"
+      "intercom_record_id": "ic-0001",
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-evidence-assembly",
+          "attempt_id": "att-asm-0001",
+          "path": "data/jobs/02-evidence-assembly/whole/attempts/att-asm-0001/outputs/intel-manifest.json",
+          "sha256": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ]
     }
   ],
   "rescope_triggers": [

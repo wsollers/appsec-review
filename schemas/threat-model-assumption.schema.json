@@ -9,6 +9,8 @@
     "statement",
     "affected_record_ids",
     "status",
+    "confidence",
+    "evidence_class",
     "originating_workcell_id",
     "intercom_record_id",
     "citations"
@@ -54,9 +56,28 @@
     },
     "citations": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "$ref": "threat-model-citation.schema.json"
       }
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
     }
-  }
+  },
+  "description": "An assumption cites the evidence that prompted it (for example the manifest or doc fact it interprets). evidence_class caps its confidence like any other record."
 }

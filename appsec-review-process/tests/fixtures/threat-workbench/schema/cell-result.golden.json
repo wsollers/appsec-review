@@ -100,7 +100,21 @@
           "flow-login"
         ],
         "originating_workcell_id": "stride-enumerator",
-        "intercom_record_id": "ic-0001"
+        "intercom_record_id": "ic-0001",
+        "evidence_class": "DIRECT_EVIDENCE",
+        "confidence": "high",
+        "citations": [
+          {
+            "source_class": "derived",
+            "producer": "02-evidence-assembly",
+            "attempt_id": "att-asm-0001",
+            "path": "data/jobs/02-evidence-assembly/whole/attempts/att-asm-0001/outputs/intel-manifest.json",
+            "sha256": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+            "line_range": null,
+            "index_record_id": null,
+            "note": null
+          }
+        ]
       }
     ]
   },

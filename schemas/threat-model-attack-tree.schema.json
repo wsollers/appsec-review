@@ -6,6 +6,9 @@
   "required": [
     "tree_id",
     "objective",
+    "citations",
+    "confidence",
+    "evidence_class",
     "root_node_id",
     "nodes",
     "originating_workcell_id"
@@ -100,6 +103,31 @@
           }
         }
       }
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
     }
-  }
+  },
+  "description": "Tree-level citations, evidence_class and confidence describe the objective's grounding. Node-level citations may be empty for AND/OR nodes and unresolved/assumption leaves; a leaf with leaf_support evidence must carry citations (lane-validator rule, conditional and not expressible here)."
 }

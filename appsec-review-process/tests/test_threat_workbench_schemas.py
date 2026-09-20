@@ -254,6 +254,58 @@ class ThreatWorkbenchSchemaTests(unittest.TestCase):
         model["job_id"] = "03-threat-model"
         self.assertRejected(model, MODEL, "job_id", "expected const")
 
+    # provenance is unavoidable on every record family (PR 4 review finding)
+
+    def test_every_record_family_requires_citations_evidence_class_and_confidence(self):
+        for name in RECORD_SCHEMAS:
+            if name == "threat-model-citation.schema.json":
+                continue
+            schema = self.store.load(name)
+            for field in ("citations", "evidence_class", "confidence"):
+                self.assertIn(field, schema["required"], f"{name} does not require {field}")
+            self.assertEqual(schema["properties"]["citations"].get("minItems"), 1, f"{name} allows empty citations")
+
+    def test_rejects_assumption_without_provenance(self):
+        for field in ("citations", "evidence_class", "confidence"):
+            model = self.mutated_model()
+            del model["assumptions"][0][field]
+            self.assertRejected(model, MODEL, "assumptions[0]", f"missing required property '{field}'")
+        model = self.mutated_model()
+        model["assumptions"][0]["citations"] = []
+        self.assertRejected(model, MODEL, "assumptions[0].citations", "minItems is 1")
+
+    def test_rejects_gap_without_provenance(self):
+        for field in ("citations", "evidence_class", "confidence"):
+            model = self.mutated_model()
+            del model["gaps"][0][field]
+            self.assertRejected(model, MODEL, "gaps[0]", f"missing required property '{field}'")
+        model = self.mutated_model()
+        model["gaps"][0]["citations"] = []
+        self.assertRejected(model, MODEL, "gaps[0].citations", "minItems is 1")
+
+    def test_rejects_attack_tree_without_provenance(self):
+        for field in ("citations", "evidence_class", "confidence"):
+            model = self.mutated_model()
+            del model["attack_trees"][0][field]
+            self.assertRejected(model, MODEL, "attack_trees[0]", f"missing required property '{field}'")
+        model = self.mutated_model()
+        model["attack_trees"][0]["citations"] = []
+        self.assertRejected(model, MODEL, "attack_trees[0].citations", "minItems is 1")
+
+    def test_attack_tree_node_citations_may_be_empty_for_non_evidence_nodes(self):
+        # Conditional rule (leaf_support == evidence => citations) belongs to T08; structurally an
+        # OR node and an unresolved leaf carry no citations, as in the golden.
+        tree = self.model["attack_trees"][0]
+        self.assertEqual(tree["nodes"][0]["kind"], "OR")
+        self.assertEqual(tree["nodes"][0]["citations"], [])
+        self.assertEqual(tree["nodes"][2]["leaf_support"], "unresolved")
+        self.assertEqual(tree["nodes"][2]["citations"], [])
+
+    def test_cell_rejects_gap_without_provenance(self):
+        cell = deepcopy(self.cell)
+        del cell["model_delta"]["gaps"][0]["citations"]
+        self.assertRejected(cell, CELL, "model_delta.gaps[0]", "missing required property 'citations'")
+
     def test_rejects_unknown_gap_kind(self):
         model = self.mutated_model()
         model["gaps"][0]["kind"] = "todo"
