@@ -1,0 +1,101 @@
+schema: appsec-review/owasp-workbench-workcells-proposal/1.0
+proposal_only: true
+status: not_registered_not_runnable
+
+workcells:
+  - id: owasp-applicability-gate
+    persona: owasp-validator
+    role: Select applicable OWASP families, profiles, controls, and component scopes from accepted intel.
+    inputs:
+      - component-purpose-map
+      - standards-source-ingest
+      - threat-workbench-output
+      - api-collection-intelligence
+      - doc-intelligence
+      - mobile-intelligence
+    outputs:
+      - owasp-applicability-model.json
+      - applicable-controls.json
+      - applicability-gaps.json
+    must_not:
+      - select controls without source lineage
+      - mark not_applicable without evidence
+      - infer profile or level without recorded policy
+
+  - id: owasp-control-batcher
+    persona: standards-worklist-builder
+    role: Batch applicable controls into bounded work items by component, domain, evidence mode, and validator profile.
+    inputs:
+      - owasp-applicability-model.json
+      - component-purpose-map
+      - standards-source-ingest
+    outputs:
+      - owasp-validation-worklist.json
+      - batch-summary.md
+    must_not:
+      - create huge all-controls prompts
+      - mix unrelated evidence modes in one work item
+
+  - id: asvs-validator-cell
+    persona: owasp-validator
+    role: Assess ASVS worklist slices against cited source/config/doc/test evidence.
+    inputs:
+      - owasp-validation-worklist.json
+      - source-and-evidence-index
+      - doc-intelligence
+      - test-intelligence
+      - source-sast-and-scanner-leads
+    outputs:
+      - control-assessment-result.json
+      - dynamic-test-requests.json
+      - candidate-verification-routes.json
+    must_not:
+      - discover arbitrary findings
+      - treat absence of scanner findings as satisfaction
+      - mark documentation intent as implementation proof
+
+  - id: masvs-mastg-validator-cell
+    persona: owasp-validator
+    role: Assess MASVS controls and linked MASTG tests for mobile component worklist slices.
+    inputs:
+      - owasp-validation-worklist.json
+      - mobile-intelligence
+      - source-and-evidence-index
+      - test-intelligence
+    outputs:
+      - control-assessment-result.json
+      - mastg-test-followups.json
+    must_not:
+      - claim dynamic MASTG tests passed from static evidence
+      - assess non-mobile components as MASVS targets
+
+  - id: api-top10-context-cell
+    persona: api-contract-abuser
+    role: Map API Top 10 risk categories to applicable API components as context and routing hints.
+    inputs:
+      - api-collection-intelligence
+      - threat-workbench-output
+      - owasp-applicability-model.json
+    outputs:
+      - api-risk-context.json
+      - candidate-verification-routes.json
+    must_not:
+      - substitute API Top 10 categories for ASVS control evidence
+      - publish verified findings
+
+  - id: owasp-join-integrator
+    persona: standards-mapping-auditor
+    role: Join validator outputs into a single control-status matrix and gap model.
+    inputs:
+      - all-terminal-validator-results
+      - owasp-applicability-model.json
+      - owasp-validation-worklist.json
+    outputs:
+      - owasp-control-status-matrix.json
+      - owasp-dynamic-test-requests.json
+      - owasp-coverage-gaps.json
+      - owasp-workbench-summary.md
+    must_not:
+      - hide failed or skipped validator cells
+      - turn not_satisfied controls into verified findings
+

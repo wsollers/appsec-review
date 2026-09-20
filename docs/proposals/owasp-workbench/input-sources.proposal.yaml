@@ -1,0 +1,108 @@
+schema: appsec-review/owasp-workbench-input-sources-proposal/1.0
+proposal_only: true
+status: not_registered_not_runnable
+
+input_sources:
+  - id: component-purpose-map
+    required: true
+    use:
+      - component identity
+      - component tags
+      - liveness
+      - platform and framework hints
+    claim_limit: descriptive classification only
+
+  - id: threat-workbench-output
+    required: false
+    use:
+      - DFD elements and flows
+      - trust boundaries
+      - data classes and PII flows
+      - abuse scenarios
+      - verification worklist hints
+    claim_limit: threat hypotheses and model facts only; not verified findings
+
+  - id: standards-source-ingest
+    required: true
+    use:
+      - pinned ASVS/MASVS/MASTG/API/LLM control records
+      - OpenCRE crosswalk records
+      - source version, hash, and license metadata
+    claim_limit: reference material only; not target behavior proof
+
+  - id: api-collection-intelligence
+    required: false
+    use:
+      - endpoint inventory
+      - auth hints
+      - example payloads and data classes
+      - API test coverage
+    claim_limit: API collection intent/test behavior only
+
+  - id: doc-intelligence
+    required: false
+    use:
+      - product requirements
+      - roles and permissions
+      - documented controls
+      - privacy and abuse requirements
+    claim_limit: documented intent unless source/config/test evidence corroborates
+
+  - id: test-intelligence
+    required: false
+    use:
+      - unit/integration/acceptance/security/load coverage
+      - tested controls
+      - missing negative tests
+      - candidate verification requests
+    claim_limit: test evidence; mocks and fixtures require caveats
+
+  - id: source-and-evidence-index
+    required: true
+    use:
+      - cited source lookup
+      - source paths for relevant controls
+      - control evidence dereference
+    claim_limit: search hits are locators, not authority
+
+  - id: source-sast-and-scanner-leads
+    required: false
+    use:
+      - candidate weak areas
+      - rule mappings where present
+      - coverage gaps
+    claim_limit: scanner leads do not satisfy or fail controls alone
+
+  - id: mobile-intelligence
+    required: false
+    use:
+      - Android/iOS applicability
+      - mobile permissions
+      - local storage and network config hints
+      - MASTG test routing
+    claim_limit: static mobile evidence only unless dynamic testing is authorized
+
+  - id: deployment-and-iac-evidence
+    required: false
+    use:
+      - security headers and ingress hints
+      - TLS/proxy/API gateway controls
+      - identity and network context
+    claim_limit: declared/static configuration only; not live runtime state
+
+applicability_statuses:
+  - applicable
+  - not_applicable
+  - conditional
+  - cannot_determine
+  - out_of_scope
+
+control_statuses:
+  - satisfied
+  - partially_satisfied
+  - not_satisfied
+  - not_applicable
+  - cannot_verify
+  - dynamic_test_required
+  - human_decision_required
+
