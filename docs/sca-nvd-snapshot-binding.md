@@ -57,6 +57,8 @@ with `verify()` on a tampered blob. For the same reason the module does not impo
 ```python
 resolve_snapshot(data_root, *, max_age: timedelta, now: datetime) -> Resolution
 fingerprint_component(identity: dict) -> str
+verify_identity(identity: dict, data_root, *, max_age: timedelta, now: datetime) -> Resolution
+identity_consistency_errors(identity: dict) -> list[str]
 ```
 
 `data_root` is the NVD publication root (the directory holding `current.json`). All three
@@ -68,7 +70,29 @@ not outcomes.
 `Resolution` is frozen: `outcome`, `reason`, `detail`, `identity`, `fingerprint_component`,
 `gaps`, `pointer_reads`. Its constructor refuses contradictory states: `identity` and
 `fingerprint_component` are non-`None` **if and only if** the outcome is `OK` or `OK_WITH_GAPS`,
-so a caller cannot proceed by accident on a refused snapshot.
+so a caller cannot proceed by accident on a refused snapshot. It also refuses a
+`fingerprint_component` that was not computed from that `identity`, and an `identity` whose
+`freshness` contradicts the outcome. After construction the `identity` is **read-only at every
+depth** (mutating it raises `TypeError`), so the record a worker publishes cannot drift from the
+component it already fingerprinted. `copy.deepcopy(resolution.identity)` gives an ordinary editable
+`dict`; `json.dumps(resolution.identity)` works directly.
+
+### A persisted identity is a cache, never an authority
+
+`freshness` enters the input fingerprint, so it is not a free label. `fingerprint_component` and
+`identity_consistency_errors` bind the derived fields: `freshness` must follow from `age_seconds`
+and `max_age_seconds`, `age_seconds` must equal `evaluated_at - cursor`, neither timestamp may be
+later than `evaluated_at`, and `snapshot_id` must be in `chain_snapshot_ids`. A stale record
+relabelled `fresh` is rejected.
+
+That catches an independently edited record. It cannot authenticate one: whoever can rewrite
+`vulnerability-database-identity.json` can edit `evaluated_at`, `age_seconds` and `freshness`
+together and the record agrees with itself (a test pins this). So a consumer of a **persisted**
+record uses `verify_identity`. `data_root`, `max_age` and `now` are required; it re-resolves and
+re-verifies the snapshot from bytes, accepts the record only if every snapshot-bound field equals
+the fresh one, and returns the **fresh** `Resolution`. Freshness, age and the fingerprint
+component are always taken from that, never from the record. A test asserts every schema field is
+either snapshot-bound (compared) or re-derived (ignored), so a new field cannot slip between.
 
 ## Outcomes
 
@@ -160,7 +184,8 @@ by the SCA job as `outputs/vulnerability-database-identity.json`.
 
 ## Fingerprint component
 
-`fingerprint_component(identity)` validates the record against its schema and returns canonical
+`fingerprint_component(identity)` validates the record against its schema and its cross-field
+consistency rules (above) and returns canonical
 JSON of: component version, `database_kind`, `feed_schema`, `snapshot_id`, `manifest_sha256`,
 `content_sha256`, `match_basis`, `freshness`.
 
@@ -207,8 +232,11 @@ any `now` and any `max_age` that does not flip the classification.
 - Call `resolve_snapshot` once in preflight with the run's approved `max_age` and the attempt's
   clock. Map `outcome` to the envelope status; copy `reason`/`detail` into the blocker or failure,
   and `gaps` into the envelope's gaps for `OK_WITH_GAPS`.
-- Put `fingerprint_component` in the job's input fingerprint; write `identity` verbatim to
-  `outputs/vulnerability-database-identity.json`.
+- Put `Resolution.fingerprint_component` in the job's input fingerprint; write
+  `Resolution.identity` verbatim to `outputs/vulnerability-database-identity.json`. Take both from
+  the same `Resolution`; never recompute the component from a record read back from disk.
+- Anything that later reads a persisted identity (reuse admission, a downstream consumer, status)
+  calls `verify_identity` with the data root and the current `now`; it does not trust the file.
 - The matcher must read only blobs reachable from the verified chain (`chain_snapshot_ids`),
   never "whatever is in `blobs/`", and should re-resolve if it needs the file list.
 - Every match record carries `match_basis: cpe`; components without a CPE mapping are coverage

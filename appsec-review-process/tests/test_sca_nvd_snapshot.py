@@ -858,5 +858,115 @@ class PublisherParityTests(Base):
         self.assertEqual(self.resolve().outcome, "FAILED")
 
 
+
+class IdentityBindingTests(Base):
+    """A returned or persisted identity record is not an authority. `freshness` enters the input
+    fingerprint, so it must be bound to the numbers it is derived from, the identity inside a
+    Resolution must not be editable after the component was computed, and a record read back from
+    disk is only accepted by re-verifying the snapshot."""
+
+    STALE_NOW = T0 + timedelta(days=30)
+
+    def setUp(self):
+        super().setUp()
+        self.publish_chain()
+        self.fresh = self.resolve()
+        self.stale = self.resolve(now=self.STALE_NOW)
+        self.assertEqual((self.fresh.outcome, self.stale.outcome), ("OK", "OK_WITH_GAPS"))
+
+    def copy(self, resolution):
+        import copy
+        return copy.deepcopy(resolution.identity)
+
+    def test_stale_identity_relabelled_fresh_cannot_obtain_the_fresh_component(self):
+        forged = self.copy(self.stale)
+        forged["freshness"] = "fresh"
+        with self.assertRaisesRegex(ValueError, "freshness must be 'stale'"):
+            binding.fingerprint_component(forged)
+
+    def test_each_derived_field_is_bound_to_what_it_is_derived_from(self):
+        cases = {
+            "freshness": ("fresh", "freshness must be 'stale'"),
+            "age_seconds": (1, "age_seconds must equal evaluated_at minus cursor"),
+            "max_age_seconds": (10 ** 9, "freshness must be 'fresh'"),
+            "evaluated_at": ("2026-09-19T12:00:01.000Z", "age_seconds must equal|must not be later"),
+            "cursor": ("2026-10-19T00:00:00.000Z", "age_seconds must equal|must not be later"),
+            "snapshot_id": ("sha256-0123456789abcdef", "snapshot_id must appear in chain_snapshot_ids"),
+        }
+        for field, (value, message) in cases.items():
+            forged = self.copy(self.stale)
+            self.assertNotEqual(forged[field], value, field)
+            forged[field] = value
+            with self.assertRaisesRegex(ValueError, message, msg=field):
+                binding.fingerprint_component(forged)
+
+    def test_consistently_forged_age_is_self_consistent_and_that_is_why_verify_identity_exists(self):
+        # Edit evaluated_at, age_seconds and freshness together: the record now agrees with itself.
+        forged = self.copy(self.stale)
+        forged.update(evaluated_at=self.fresh.identity["evaluated_at"], age_seconds=self.fresh.identity["age_seconds"],
+                      max_age_seconds=self.fresh.identity["max_age_seconds"], freshness="fresh")
+        self.assertEqual(binding.identity_consistency_errors(forged), [])
+        self.assertEqual(binding.fingerprint_component(forged), self.fresh.fingerprint_component)
+        # ...so a consumer of a PERSISTED record must go through verify_identity, which ignores the
+        # record's own freshness and re-derives it at the caller's `now`.
+        verified = binding.verify_identity(forged, self.root, max_age=MAX_AGE, now=self.STALE_NOW)
+        self.assertEqual((verified.outcome, verified.identity["freshness"]), ("OK_WITH_GAPS", "stale"))
+        self.assertEqual(verified.fingerprint_component, self.stale.fingerprint_component)
+
+    def test_identity_inside_a_resolution_is_read_only_at_every_depth(self):
+        for mutate in (lambda i: i.__setitem__("freshness", "fresh"), lambda i: i.update(freshness="fresh"),
+                       lambda i: i.pop("freshness"), lambda i: i["limitations"].append("x"),
+                       lambda i: i["chain_snapshot_ids"].clear(), lambda i: i.__delitem__("snapshot_id")):
+            with self.assertRaisesRegex(TypeError, "read-only"):
+                mutate(self.stale.identity)
+        self.assertEqual(self.stale.identity["freshness"], "stale")
+        self.assertEqual(binding.fingerprint_component(self.stale.identity), self.stale.fingerprint_component)
+
+    def test_a_copy_is_an_ordinary_editable_json_document(self):
+        duplicate = self.copy(self.fresh)
+        self.assertIs(type(duplicate), dict)
+        self.assertIs(type(duplicate["limitations"]), list)
+        duplicate["limitations"].append("edited copy")
+        self.assertEqual(json.loads(json.dumps(self.fresh.identity)), json.loads(json.dumps(self.copy(self.fresh))))
+        self.assertEqual(binding.validate_document(self.fresh.identity, binding.IDENTITY_SCHEMA_FILE), [])
+
+    def test_resolution_refuses_a_component_that_is_not_its_identitys(self):
+        with self.assertRaisesRegex(ValueError, "does not belong to this identity"):
+            binding.Resolution("OK", "VERIFIED_FRESH", "x", self.copy(self.fresh), self.stale.fingerprint_component, (), 1)
+        with self.assertRaisesRegex(ValueError, "freshness contradicts the outcome"):
+            binding.Resolution("OK", "VERIFIED_FRESH", "x", self.copy(self.stale), self.stale.fingerprint_component, (), 1)
+
+    def test_verify_identity_has_no_optional_inputs(self):
+        record = self.copy(self.fresh)
+        for kwargs in ({}, {"max_age": MAX_AGE}, {"now": NOW}):
+            with self.assertRaises(TypeError):
+                binding.verify_identity(record, self.root, **kwargs)
+        with self.assertRaises(TypeError):
+            binding.verify_identity(record, max_age=MAX_AGE, now=NOW)
+
+    def test_verify_identity_rejects_a_record_for_any_other_snapshot_content(self):
+        for field, value in (("snapshot_id", None), ("manifest_sha256", "0" * 64), ("content_sha256", "1" * 64),
+                             ("file_count", 99), ("total_bytes", 1), ("retrieved_at", "2026-01-01T00:00:00.000Z")):
+            record = self.copy(self.fresh)
+            if field == "snapshot_id":      # keep it self-consistent so only verify_identity can object
+                value = record["chain_snapshot_ids"][-1] if record["chain_snapshot_ids"][-1] != record["snapshot_id"] else record["chain_snapshot_ids"][0]
+            self.assertNotEqual(record[field], value, field)
+            record[field] = value
+            with self.assertRaisesRegex(binding.IdentityMismatch, f"'{field}' does not match the verified snapshot", msg=field):
+                binding.verify_identity(record, self.root, max_age=MAX_AGE, now=NOW)
+
+    def test_verify_identity_fails_closed_when_the_snapshot_no_longer_verifies(self):
+        record = self.copy(self.fresh)
+        s_blob_tampered_same_size(self.root)
+        with self.assertRaisesRegex(binding.IdentityMismatch, "does not verify now: BLOB_HASH_MISMATCH"):
+            binding.verify_identity(record, self.root, max_age=MAX_AGE, now=NOW)
+
+    def test_every_identity_field_is_either_snapshot_bound_or_rederived(self):
+        schema = binding._STORE.load(binding.IDENTITY_SCHEMA_FILE)
+        rederived = {"evaluated_at", "age_seconds", "max_age_seconds", "freshness"}
+        self.assertEqual(set(binding._SNAPSHOT_BOUND_FIELDS) | rederived, set(schema["properties"]))
+        self.assertEqual(set(binding._SNAPSHOT_BOUND_FIELDS) & rederived, set())
+
+
 if __name__ == "__main__":
     unittest.main()

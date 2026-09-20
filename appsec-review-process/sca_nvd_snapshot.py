@@ -84,6 +84,47 @@ class _Stop(Exception):
         self.reason, self.detail = reason, detail
 
 
+class _Frozen:
+    """Mixin: every mutator raises. A copy (copy.deepcopy) is an ordinary mutable structure."""
+    def _refuse(self, *args, **kwargs):
+        raise TypeError("the identity record inside a Resolution is read-only; deep-copy it to edit a copy")
+
+
+class _FrozenDict(_Frozen, dict):
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _Frozen._refuse
+
+    def __deepcopy__(self, memo):
+        return {key: _thaw(value) for key, value in self.items()}
+
+
+class _FrozenList(_Frozen, list):
+    __setitem__ = __delitem__ = __iadd__ = __imul__ = _Frozen._refuse
+    append = extend = insert = pop = remove = clear = sort = reverse = _Frozen._refuse
+
+    def __deepcopy__(self, memo):
+        return [_thaw(value) for value in self]
+
+
+def _freeze(value):
+    if isinstance(value, dict):
+        return _FrozenDict({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return _FrozenList(_freeze(item) for item in value)
+    return value
+
+
+def _thaw(value):
+    if isinstance(value, dict):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_thaw(item) for item in value]
+    return value
+
+
+class IdentityMismatch(ValueError):
+    """A persisted identity record does not describe the snapshot that is on disk now."""
+
+
 @dataclass(frozen=True)
 class Resolution:
     """Outcome of one resolve. `identity` and `fingerprint_component` are non-None if and only if
@@ -104,6 +145,14 @@ class Resolution:
             raise ValueError("identity and fingerprint_component are returned only for OK and OK_WITH_GAPS")
         if (self.outcome == OK_WITH_GAPS) != bool(self.gaps):
             raise ValueError("a named gap is recorded for OK_WITH_GAPS and only for OK_WITH_GAPS")
+        if usable:
+            # The identity a worker publishes and the component it fingerprints must be the same
+            # statement. Bind them here, then make the identity read-only so they stay bound.
+            if fingerprint_component(self.identity) != self.fingerprint_component:
+                raise ValueError("fingerprint_component does not belong to this identity record")
+            if (self.identity["freshness"] == "stale") != (self.outcome == OK_WITH_GAPS):
+                raise ValueError("identity freshness contradicts the outcome")
+            object.__setattr__(self, "identity", _freeze(self.identity))
 
     @property
     def usable(self):
@@ -402,6 +451,9 @@ def fingerprint_component(identity):
     errors = validate_document(identity, IDENTITY_SCHEMA_FILE, _STORE) if isinstance(identity, dict) else ["identity must be an object"]
     if errors:
         raise ValueError(f"identity record violates {IDENTITY_SCHEMA_FILE}: {errors[0]}")
+    errors = identity_consistency_errors(identity)
+    if errors:
+        raise ValueError(f"identity record is inconsistent: {errors[0]}")
     return _canonical({
         "component": "vulnerability-database-identity/1",
         "database_kind": identity["database_kind"],
@@ -412,6 +464,62 @@ def fingerprint_component(identity):
         "match_basis": identity["match_basis"],
         "freshness": identity["freshness"],
     })
+
+
+def identity_consistency_errors(identity):
+    """Fields of an identity record that must agree with each other. `freshness` enters the input
+    fingerprint, so it may not be a free label: it is a function of `age_seconds` and
+    `max_age_seconds`, and `age_seconds` is a function of `evaluated_at` and `cursor`. This catches
+    an independently edited record. It cannot authenticate one: see `verify_identity`."""
+    errors = []
+    try:
+        evaluated, cursor, retrieved = (_utc(identity[name], name) for name in ("evaluated_at", "cursor", "retrieved_at"))
+    except ValueError as exc:
+        return [str(exc)]
+    if cursor > evaluated or retrieved > evaluated:
+        errors.append("cursor and retrieved_at must not be later than evaluated_at")
+    if identity["age_seconds"] != int((evaluated - cursor).total_seconds()):
+        errors.append("age_seconds must equal evaluated_at minus cursor")
+    if identity["max_age_seconds"] <= 0:
+        errors.append("max_age_seconds must be greater than zero")
+    expected = "stale" if identity["age_seconds"] > identity["max_age_seconds"] else "fresh"
+    if identity["freshness"] != expected:
+        errors.append(f"freshness must be {expected!r} for age_seconds {identity['age_seconds']} "
+                      f"and max_age_seconds {identity['max_age_seconds']}")
+    if identity["snapshot_id"] not in identity["chain_snapshot_ids"]:
+        errors.append("snapshot_id must appear in chain_snapshot_ids")
+    return errors
+
+
+# What a persisted identity asserts about the bytes on disk. Everything else in the record is a
+# function of the caller's `now` and `max_age` and is re-derived, never compared.
+_SNAPSHOT_BOUND_FIELDS = ("schema", "database_kind", "feed_id", "feed_schema", "publisher",
+                          "publisher_manifest_schema", "snapshot_id", "snapshot_mode", "parent_snapshot_id",
+                          "chain_snapshot_ids", "manifest_sha256", "content_sha256", "retrieved_at", "cursor",
+                          "file_count", "total_bytes", "match_basis", "limitations")
+
+
+def verify_identity(identity, data_root, *, max_age, now):
+    """Check a PERSISTED identity record against the snapshot on disk and return a fresh Resolution.
+
+    A persisted `vulnerability-database-identity.json` is a cache, never an authority: whoever can
+    rewrite it can make it self-consistent. So this does not trust it. `data_root`, `max_age` and
+    `now` are required; the snapshot is resolved and re-verified from bytes, and the record is
+    accepted only if every snapshot-bound field equals the fresh one. Freshness, age and the
+    fingerprint component are taken from the fresh Resolution that is returned, never from the
+    record. Raises IdentityMismatch otherwise.
+    """
+    errors = validate_document(identity, IDENTITY_SCHEMA_FILE, _STORE) if isinstance(identity, dict) else ["identity must be an object"]
+    errors = errors or identity_consistency_errors(identity)
+    if errors:
+        raise IdentityMismatch(f"persisted identity record is invalid: {errors[0]}")
+    fresh = resolve_snapshot(data_root, max_age=max_age, now=now)
+    if not fresh.usable:
+        raise IdentityMismatch(f"the snapshot on disk does not verify now: {fresh.reason}")
+    for name in _SNAPSHOT_BOUND_FIELDS:
+        if _thaw(identity[name]) != _thaw(fresh.identity[name]):
+            raise IdentityMismatch(f"persisted identity field {name!r} does not match the verified snapshot")
+    return fresh
 
 
 def _stopped(stop, reads):
