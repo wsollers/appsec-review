@@ -579,13 +579,10 @@ def schema_strings(node):
 # ---- contracts and schemas ---------------------------------------------------------------------------
 
 class ContractDeclarationTests(unittest.TestCase):
-    # What this slice adds to the ADR fixture's required_artifacts, and why.
-    ADDED_FILES = {
-        SBOM: {contracts.RECEIPT_FILE},                                   # G9 receipt, as V04/V07 do for every contract
-        SCA: {contracts.RECEIPT_FILE, contracts.SCA_GAPS_FILE},           # M5: the per-component list "by reference"
-        LICENSE: {contracts.RECEIPT_FILE},
-        LIFECYCLE: {contracts.RECEIPT_FILE, contracts.TOOL_RESULTS_FILE},  # V03's coverage rules need the instance
-    }
+    # Nothing: the PR 23 review reconciled the fixture and the ADR with the registry records, so a
+    # contract's required_files ARE the fixture's required_artifacts. Kept as an explicit empty pin so
+    # that a future divergence has to be written down here rather than appear silently.
+    ADDED_FILES = {SBOM: set(), SCA: set(), LICENSE: set(), LIFECYCLE: set()}
 
     @classmethod
     def setUpClass(cls):
@@ -620,6 +617,48 @@ class ContractDeclarationTests(unittest.TestCase):
                 self.assertTrue((REPO / "schemas" / record["result_schema"]["schema_file"]).is_file())
                 self.assertEqual([tool["tool_id"] for tool in node["tool_instances"]], [TOOLS[contract_id]])
                 self.assertEqual(node["worker_kind"], EXECUTORS[contract_id])
+
+    def test_the_accepted_adr_names_the_same_files_edges_and_data_sources_as_the_contracts(self):
+        """PR 23 review [P1]: the accepted ADR said one thing and the registry another. The ADR's
+        contract table, node table and permission table are read here, not trusted."""
+        adr = (REPO / "docs" / "decisions" / "ADR-0010-vendor-prepass-decomposition.md").read_text(encoding="utf-8")
+        rows = [[cell.strip() for cell in line.strip().strip("|").split("|")]
+                for line in adr.replace("\r\n", "\n").split("\n") if line.startswith("| `")]
+        for contract_id in contracts.CONTRACT_POLICIES:
+            with self.subTest(contract=contract_id):
+                listed = [row for row in rows if row[0] == f"`{contract_id}`" and "json" in row[1]]
+                self.assertEqual(len(listed), 1)
+                named = {f"{contracts.OUTPUTS_DIR}/{name}" for name in re.findall(r"`([^`]+)`", listed[0][1])}
+                required = set(self.contract(contract_id)["required_files"]) - {"manifest.json", "status.json"}
+                self.assertEqual(named, required)
+        nodes = {row[0].strip("`"): row for row in rows if len(row) == 6 and row[1] in ("producer", "deterministic transform")}
+        by_job = {node["proposed_job_id"]: node for node in self.proposal.values()}
+        step_map = json.loads((PROPOSAL.parent / "legacy-step-map.proposal.json").read_text(encoding="utf-8"))
+
+        def step_dependencies(node, found):
+            if isinstance(node, dict):
+                if "legacy_step" in node and isinstance(node.get("dependencies"), list):
+                    found.setdefault(node.get("proposed_job_id"), []).append(sorted(node["dependencies"]))
+                for value in node.values():
+                    step_dependencies(value, found)
+            elif isinstance(node, list):
+                for value in node:
+                    step_dependencies(value, found)
+            return found
+        from_steps = step_dependencies(step_map, {})
+        for policy in contracts.CONTRACT_POLICIES.values():
+            job = policy["job_id"]
+            with self.subTest(job=job):
+                in_adr = sorted(re.findall(r"`([^`]+)`", nodes[job][2]))
+                self.assertEqual(in_adr, sorted(edge["job"] for edge in by_job[job]["dependencies"]))
+                for listed in from_steps.get(job, []):
+                    self.assertEqual(listed, in_adr)
+        self.assertEqual(sorted(re.findall(r"`([^`]+)`", nodes["02-license-scan"][2])), ["00-intake", "02-sbom-inventory"])
+        permission = [row for row in rows if row[0] == "`02-sca-vulnerability-match`" and len(row) == 8]
+        self.assertEqual(len(permission), 1)
+        self.assertIn("Grype", permission[0][2])
+        self.assertIn("OSV", permission[0][2])
+        self.assertNotIn("reads the published NVD", permission[0][2])
 
     def test_every_artifact_the_threat_workbench_is_promised_is_a_required_file(self):
         text = PRODUCERS.read_text(encoding="utf-8").replace("\r\n", "\n")

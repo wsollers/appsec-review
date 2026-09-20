@@ -354,6 +354,7 @@
         "status.json",
         "outputs/sbom.cdx.json",
         "outputs/sbom-manifest.json",
+        "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
         "outputs/coverage.json"
       ],
@@ -437,9 +438,11 @@
         "status.json",
         "outputs/sca-vulnerability-match.json",
         "outputs/vulnerability-database-identities.json",
+        "outputs/sca-coverage-gaps.json",
+        "outputs/coverage-gap-summary.json",
+        "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
-        "outputs/coverage.json",
-        "outputs/coverage-gap-summary.json"
+        "outputs/coverage.json"
       ],
       "proposed_claim_class": {
         "claim_class_id": "known_vulnerability_match_lead",
@@ -525,6 +528,7 @@
         "manifest.json",
         "status.json",
         "outputs/license-inventory.json",
+        "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
         "outputs/coverage.json"
       ],
@@ -548,6 +552,12 @@
           "job": "00-intake",
           "kind": "required",
           "contract": "intake",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
           "allowed_skip_reasons": []
         }
       ],
@@ -583,7 +593,8 @@
       "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
-        "vendored-component-inferred is labelled 'not declared in any manifest, inferred from bundled license/copyright evidence' and never promoted to a definitive SBOM component (design-v3 L1)"
+        "vendored-component-inferred is labelled 'not declared in any manifest, inferred from bundled license/copyright evidence' and never promoted to a definitive SBOM component (design-v3 L1)",
+        "DECIDED 2026-09-20 (PR #23 review, option A): depends on 02-sbom-inventory. Every license record's component_ref resolves into the accepted SBOM, which is what lets the verifier refuse a vendored-component-inferred record that points at a declared component. scancode therefore starts after syft instead of in parallel with it."
       ],
       "adopted": true
     },
@@ -610,6 +621,8 @@
         "status.json",
         "outputs/dependency-lifecycle.json",
         "outputs/reference-table-identity.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
         "outputs/coverage.json"
       ],
       "proposed_claim_class": {

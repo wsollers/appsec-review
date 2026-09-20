@@ -851,7 +851,8 @@
       "disposition": "migrate_to_proposed_job",
       "proposed_job_id": "02-license-scan",
       "dependencies": [
-        "00-intake"
+        "00-intake",
+        "02-sbom-inventory"
       ],
       "consumers": [
         "02-evidence-assembly"

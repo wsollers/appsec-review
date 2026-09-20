@@ -52,12 +52,11 @@ values, so they are reduced to `aggregate:<v03-error-name>` plus caller-declared
   `specVersion`, `serialNumber`, `version`, `metadata`, `components` and `dependencies`, requires flat
   components, and applies the forbidden-claim-word check to every property name in the file. V11's
   normalizer must flatten syft's output and strip anything else before publishing.
-- The ADR's contract table still says `vulnerability-database-identity.json` (singular, no gap
-  summary); the fixtures PR #20 updated say `vulnerability-database-identities.json` and
-  `coverage-gap-summary.json`. The fixtures were followed.
-- `02-license-scan` has no graph edge from `02-sbom-inventory` in the ADR, yet this contract binds
-  the licence inventory to an SBOM (task requirement; the lifecycle transform needs the join). V02
-  must either add that edge or the binding must move into the lifecycle transform.
+- ADR-0010 was reconciled with these contracts in the PR #23 review (see its revision note): the
+  contract table lists exactly the registry's required files, the permission table names the Grype DB
+  mirror and the OSV snapshot as SCA's data, and `02-license-scan` depends on `02-sbom-inventory`
+  (owner decision, option A) because every licence record's `component_ref` resolves into the
+  accepted SBOM. `ContractDeclarationTests` reads the ADR and both fixtures and fails on drift.
 
 ## Not duplicated from `06-cve-reachability`
 

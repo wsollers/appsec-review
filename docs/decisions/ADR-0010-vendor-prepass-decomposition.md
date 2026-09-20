@@ -312,7 +312,7 @@ edge; two existing nodes receive the remaining active steps.
 | `02-container-image-inventory` | producer | `00-intake` | `container-image-inventory` | `not-applicable-no-matching-inputs`† | `iac-container-deployment-evidence` |
 | `02-sbom-inventory` | producer | `00-intake` | `sbom-inventory` | none | `sbom-sca-license-lifecycle` |
 | `02-sca-vulnerability-match` | producer | `02-sbom-inventory` | `sca-vulnerability-match` | none | `sbom-sca-license-lifecycle` |
-| `02-license-scan` | producer | `00-intake` | `license-inventory` | none | `sbom-sca-license-lifecycle` |
+| `02-license-scan` | producer | `00-intake`, `02-sbom-inventory` | `license-inventory` | none | `sbom-sca-license-lifecycle` |
 | `02-dependency-lifecycle` | deterministic transform | `02-sbom-inventory`, `02-license-scan` | `dependency-lifecycle` | none | `sbom-sca-license-lifecycle` |
 | `02-binary-hardening` | producer | `00-intake` | `binary-hardening` | `not-applicable-no-matching-inputs`† | — (not an M01-gated family) |
 | `02-mobile-sast` | producer (carries its applicability probe) | `00-intake` | `mobile-sast` | `not-applicable-no-matching-inputs`† | `mobile-source-intelligence` |
@@ -321,9 +321,11 @@ edge; two existing nodes receive the remaining active steps.
 † New skip reason; a shared-surface change to `worker-result-contract.json` (gate G5).
 
 Dependency order: `00-intake` → {`02-secrets-inventory`, `02-iac-config-scan`,
-`02-container-image-inventory`, `02-sbom-inventory`, `02-license-scan`, `02-binary-hardening`,
-`02-mobile-sast`} in parallel → `02-sca-vulnerability-match` (after SBOM) and
-`02-dependency-lifecycle` (`wait_all` over SBOM and license) → `02-evidence-assembly`. There is no
+`02-container-image-inventory`, `02-sbom-inventory`, `02-binary-hardening`, `02-mobile-sast`} in
+parallel → `02-sca-vulnerability-match` and `02-license-scan` (each after SBOM) →
+`02-dependency-lifecycle` (`wait_all` over SBOM and license) → `02-evidence-assembly`. The license
+scan waits for the SBOM because every license record's `component_ref` resolves into the accepted
+SBOM (decided 2026-09-20, PR #23 review). There is no
 aggregator node other than the existing assembly; per-node aggregation of tool instances is a
 deterministic step inside each node, not a graph node. A `SKIPPED` dependency edge inside this set
 is never allowed: `02-sbom-inventory` and `02-license-scan` are always applicable, so their
@@ -354,10 +356,10 @@ runtime-state]`. Assertion IDs match the schema pattern `^[a-z0-9][a-z0-9-]*$`.
 | `secrets-inventory` | `secrets-inventory.redacted.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `secret_exposure_lead` | `candidate-secret-location`, `credential-store-file-present`, `private-key-header-present`, `redaction-applied`, `scan-coverage-gap` |
 | `iac-config-evidence` | `iac-config-evidence.json`, `base-image-inventory.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `declared_configuration_evidence` | `declared-configuration-rule-hit`, `declared-base-image-reference`, `declared-exposure-lead`, `scan-coverage-gap` |
 | `container-image-inventory` | `container-image-inventory.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `supplied_image_static_evidence` | `image-layer-package-inventory`, `image-configuration-property`, `image-hardening-rule-hit`, `scan-coverage-gap` |
-| `sbom-inventory` | `sbom.cdx.json`, `sbom-manifest.json`, `tool-results.json`, `coverage.json` | `dependency_inventory_evidence` | `declared-component-present`, `component-version-unknown`, `inventory-coverage-gap` |
-| `sca-vulnerability-match` | `sca-vulnerability-match.json`, `vulnerability-database-identity.json`, `tool-results.json`, `coverage.json` | `known_vulnerability_match_lead` | `advisory-matches-declared-version`, `database-snapshot-identity`, `match-coverage-gap` |
-| `license-inventory` | `license-inventory.json`, `tool-results.json`, `coverage.json` | `license_detection_evidence` | `license-text-detected`, `copyright-statement-detected`, `vendored-component-inferred`, `scan-coverage-gap` |
-| `dependency-lifecycle` | `dependency-lifecycle.json`, `reference-table-identity.json`, `coverage.json` | `dependency_lifecycle_evidence` | `reference-table-eol-match`, `lifecycle-unknown`, `license-field-resurfaced` |
+| `sbom-inventory` | `sbom.cdx.json`, `sbom-manifest.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `dependency_inventory_evidence` | `declared-component-present`, `component-version-unknown`, `inventory-coverage-gap` |
+| `sca-vulnerability-match` | `sca-vulnerability-match.json`, `vulnerability-database-identities.json`, `sca-coverage-gaps.json`, `coverage-gap-summary.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `known_vulnerability_match_lead` | `advisory-matches-declared-version`, `database-snapshot-identity`, `match-coverage-gap` |
+| `license-inventory` | `license-inventory.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `license_detection_evidence` | `license-text-detected`, `copyright-statement-detected`, `vendored-component-inferred`, `scan-coverage-gap` |
+| `dependency-lifecycle` | `dependency-lifecycle.json`, `reference-table-identity.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `dependency_lifecycle_evidence` | `reference-table-eol-match`, `lifecycle-unknown`, `license-field-resurfaced` |
 | `binary-hardening` | `binary-hardening.json`, `binskim.sarif`, `tool-results.json`, `coverage.json` | `binary_hardening_property_evidence` | `static-hardening-property-observed`, `static-hardening-rule-hit`, `binary-format-unsupported`, `scan-coverage-gap` |
 | `mobile-sast` | `mobile-applicability.json`, `mobile-sast.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `mobile_static_lead` | `mobile-platform-marker-present`, `mobile-rule-hit`, `scan-coverage-gap` |
 
@@ -410,7 +412,7 @@ not used: these nodes answer no contracted question. A node whose every tool ins
 | `02-iac-config-scan` | no | none — policy bundles baked into the image, updates disabled | no | no | no | no | no |
 | `02-container-image-inventory` | no (no container start) | none — no registry pull | no | no | no | no | no |
 | `02-sbom-inventory` | no | none | no | no | no | **no** (G4) | no |
-| `02-sca-vulnerability-match` | no | **none** — reads the published NVD snapshot under `/data` (G3) | no | no | no | no | no |
+| `02-sca-vulnerability-match` | no | **none** — reads the mirrored Grype vendor database and the OSV snapshot published under `/data` (M1/M2; not the NVD snapshot) | no | no | no | no | no |
 | `02-license-scan` | no | none | no | no | no | no | no |
 | `02-dependency-lifecycle` | no | none | no | no | no | no | no |
 | `02-binary-hardening` | no | none — no symbol server | no | no | no | no | no |
@@ -569,3 +571,16 @@ snapshot); and match records carry `purl` or `cpe`, not `cpe` only. M4 replaces 
 and the code never disagree. Task table: V09 marked done, V11 now also blocked on V16–V18, V16–V18
 added. The options packet PR #11 merged without these decisions because a push was rejected
 unnoticed; PR #20 records them.
+
+2026-09-20 (PR #23 review): the ADR is reconciled with the V05 contracts, which had been published
+beside three statements here that said otherwise. (1) **Topology decision by the owner, option A:**
+`02-license-scan` now depends on `02-sbom-inventory` as well as `00-intake`, because license records
+carry a `component_ref` into the accepted SBOM; the node table, the dependency order and the fixture
+change together. (2) The contract table's SBOM-family rows now list exactly the files the registry
+records require: `vulnerability-database-identities.json` (plural, M1/M2), `sca-coverage-gaps.json`
+and `coverage-gap-summary.json` (M5), a `redaction-receipt.json` on all four (G9), and
+`tool-results.json` on `dependency-lifecycle`. (3) The permission table no longer says SCA reads
+the NVD snapshot; it reads the Grype DB mirror and the OSV snapshot (M1/M2). Items (2) and (3) were
+left stale by PR #20, which recorded M1–M5 in the decision table but not in these two tables. A test
+in `test_sbom_family_contracts.py` now reads this file and fails if the tables and the registry
+disagree again.
