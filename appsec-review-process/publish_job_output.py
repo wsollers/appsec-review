@@ -39,7 +39,7 @@ def coordinate_worker_lifecycle(
     Input derivation and payload production remain explicit worker callbacks. This coordinator owns
     only lock-scoped reuse, interrupted-attempt recovery/allocation, and terminal exception routing.
     It always re-raises the original callback exception so Dagster observes the same failure or
-    cancellation type. Exactly the two explicitly adopted callers use this function.
+    cancellation type. Exactly the three explicitly adopted callers use this function.
     """
     base = Path(base)
     allocation: dict[str, Any] | None = None

@@ -93,25 +93,27 @@ certify them.
 accepted pointer only for the newest `CURRENT` envelope. Attempt allocation first writes a
 non-current `PENDING` pointer, so invalid, corrupt, stale, canceled, blocked, or failed newer work
 cannot fall back to an older accepted result. This boundary is adopted only by
-`02-ossf-scorecard` and supplied `02-repository-partition-discovery`; historical attempts remain
-untouched. Those two adopted paths also use the same collision-safe allocator and terminal
-non-current recorder. Allocation persists inputs and `RUNNING` status before moving the
+`02-ossf-scorecard`, supplied `02-repository-partition-discovery`, and
+`10-critical-findings-sarif`; historical attempts remain untouched. Those three adopted paths also
+use the same collision-safe allocator and terminal non-current recorder. Allocation persists
+inputs and `RUNNING` status before moving the
 `PENDING`/`latest.json` view, recovers an abandoned pending attempt to an immutable `FAILED`
 envelope before replacement, and retries bounded UUID collisions. `BLOCKED`, `FAILED`, and
 `CANCELED` results are hashed, newest-attempt checked, and recorded without rewriting a durable
-candidate envelope that failed validation. For the same two paths, a common coordinator now owns
+candidate envelope that failed validation. For the same three paths, a common coordinator now owns
 the per-job lock, reusable admission, interrupted-attempt recovery/allocation, and terminal
 exception routing. Preflight blockers, post-allocation work/validation failures, and
 `KeyboardInterrupt` become `BLOCKED`, `FAILED`, and `CANCELED` respectively, and the original
 exception is re-raised so Dagster failure behavior is unchanged. Execution, timeout, child cleanup,
 streams, logs, and payload production otherwise remain worker-local; this is not yet a general
-worker controller. Scorecard is the one bounded exception: it uses the versioned argv-only
+worker controller. Scorecard and the critical-findings SARIF transform are the bounded exceptions:
+they use the versioned argv-only
 `deterministic_child.py` sub-contract with a fixed executable/prefix, explicit environment,
 one-MiB retained limits for each diagnostic stream, timeout/cancellation recording, and complete
 Windows Job Object or POSIX process-session cleanup. Repository partition discovery has no child
 process and is deliberately not routed through it. No other worker inherits this behavior yet.
 
-The same two paths use common success and reuse transitions. Reuse requires a common accepted
+The same three paths use common success and reuse transitions. Reuse requires a common accepted
 pointer with the expected run, job, input fingerprint and newest-attempt identity, then rechecks
 the immutable attempt tree, envelope hash and full output contract. A corrupt matching pointer
 fails closed; it is not silently converted into a cache miss. Final `OK`, `OK_WITH_GAPS`, and

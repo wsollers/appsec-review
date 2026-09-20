@@ -53,6 +53,7 @@ runs/<run_id>/data/jobs/10-critical-findings-sarif/whole/
     command.json
     manifest.json
     post.json
+    result.json
     status.json
     outputs/critical-findings.sarif
     logs/stdout.log
@@ -60,11 +61,42 @@ runs/<run_id>/data/jobs/10-critical-findings-sarif/whole/
     logs/events.jsonl
 ```
 
-The input record captures the source hash, finding count, registry composition, timeout, worker
-hash, Python/PyYAML versions, executable and runtime image label. The bounded worker is launched as
-an argument array with a restricted environment. Post-validation checks input freshness, worker
-freshness, the SARIF envelope and result count, then records source/output hashes before publishing
-`accepted.json`. A failed newer attempt blocks an older success.
+The input record captures the source hash, finding count, registry composition, timeout, output
+contract, worker kind, the hashes of the worker and of every shared runtime module it depends on,
+Python/PyYAML versions, executable, runtime image label and the pinned child-execution contract.
+Post-validation checks input freshness, worker freshness, the SARIF envelope and result count, then
+records source/output hashes before publishing `accepted.json`. A failed newer attempt blocks an
+older success.
+
+## Common runtime adoption
+
+Since Workstream B Batch 9 this worker no longer owns its own lifecycle. It uses the same boundary
+as `02-ossf-scorecard`:
+
+- `publish_job_output.py` owns the per-job lock, reusable admission, interrupted-attempt recovery,
+  collision-safe attempt allocation and terminal exception routing. Preflight blockers become
+  `BLOCKED`, post-allocation failures `FAILED`, and `KeyboardInterrupt` `CANCELED`, with the
+  original exception re-raised so Dagster behavior is unchanged.
+- `result.json` is the immutable v1.0 worker-result envelope (`worker_result.py`). `accepted.json`
+  is the common accepted pointer; pre-migration pointers stay integrity-readable but are never
+  reused as current.
+- `validate_job_output.py` is read-only. The `critical-findings-sarif` contract now declares
+  `outputs/critical-findings.sarif` as its single result artifact, validated against
+  `schemas/critical-findings-sarif.schema.json`. Finding-count agreement with the immutable
+  validated input and the manifest hash checks remain local to the worker.
+- The contract deliberately declares no `claim_class`. The three trusted claim-class policies limit
+  their outputs to evidence and reject finding/severity promotion; this contract republishes an
+  upstream verification decision as SARIF, so that policy does not apply to it. It still cannot
+  verify, create or upgrade a finding — the strict fixed-input boundary is what prevents that.
+- The bounded conversion child runs under `appsec-review/deterministic-child/1.0`: one absolute
+  executable with a fixed argv prefix, no shell, an explicit environment, an in-attempt log root, a
+  timeout and one-MiB retained limits per diagnostic stream, with complete child-tree cleanup on
+  every exit path. Timeout, child loss and log-write failure all fail closed; retained-log
+  truncation alone is bounded diagnostics and does not invalidate a successful conversion.
+
+The conversion itself is unchanged. The Markdown format, strict validation, SARIF mapping and the
+standalone `critical_findings_sarif` Dagster job are identical; the job is still not bound to
+synthesis.
 
 ## Markdown finding format
 
@@ -130,11 +162,22 @@ will be added only with that upstream skip contract.
 
 ## Qualification
 
-Focused tests cover strict parsing, semantic compatibility with the deleted legacy converter,
-registry composition, immutable reuse, force, tamper rejection, newer-attempt failure, and source
-races. A live qualification stages the same fixture into a Linux-owned run, submits the registered
-Dagster job, validates accepted output and immutable reuse, and records service output under the
-qualification run.
+Focused tests cover strict parsing, a golden conversion document, registry composition, the
+common-envelope success/reuse/force/tamper path, contract-declared result validation, preflight
+`BLOCKED`, work `FAILED`, cancellation `CANCELED`, deterministic-child fault mapping, retained-log
+truncation, pending-publication recovery, interrupted-attempt recovery, no fallback after a newer
+failure, and the Windows/Linux line-ending and child-environment paths. Generic allocation,
+publication and child-runner behavior is qualified once in `tests/test_worker_adoption.py` and
+`tests/test_deterministic_child.py`.
+
+`appsec-review-process/qualify_sarif_adoption.py` is the bounded live sequence for this worker:
+success, immutable reuse, pending-publication recovery, interrupted-attempt recovery, a newer
+failure that blocks the older success, and a fresh recovery attempt. It must be run because the
+migration changes this worker's executable identity, and its report belongs under the owning
+ignored qualification run.
+
+The 2026-09-19 qualification below predates the common-runtime adoption and certifies only the
+pre-migration implementation.
 
 The 2026-09-19 qualification passed in run `20260919T170944Z-6cf0e5` using service image
 `sha256:4e6f79b3ef9df020ceaa1a86a2d1d469fb6c2224f38f4e0fdcec6cd80dd15513`. Dagster run

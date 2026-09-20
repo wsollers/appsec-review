@@ -45,26 +45,27 @@ isolation, provenance, rendezvous, and recovery contracts are implemented and qu
 prompt, contract, and bounded run-owned input hashes. `publish_job_output.py` is the separate
 atomic publication boundary: it consumes the read-only validator, requires the candidate to remain
 the newest attempt, and never exposes an older success after a newer attempt starts or fails. For
-the two adopted workers it also owns bounded collision-safe attempt allocation and durable
+the three adopted workers it also owns bounded collision-safe attempt allocation and durable
 non-current completion. Inputs and transient status are persisted before the fail-closed `PENDING`
 and `latest.json` transition; a later allocation converts abandoned pending work into an immutable
 `FAILED` envelope before replacement. `BLOCKED`, `FAILED`, and `CANCELED` recording rechecks the
 newest attempt and preserves any already-durable candidate envelope. A common coordinator owns the
-per-job lock and the reuse/recovery/allocation/terminal-exception sequence for those same two
+per-job lock and the reuse/recovery/allocation/terminal-exception sequence for those same three
 workers. It maps preflight, work, and cancellation outcomes without swallowing the original
 exception or double-writing an already-terminal attempt. Worker execution, timeout, process
 cleanup, streams, payload construction, and contract-specific validation otherwise remain local to
 each worker.
 
-`deterministic_child.py` is the first bounded execution sub-contract. Only `02-ossf-scorecard`
-adopts `appsec-review/deterministic-child/1.0`: an absolute executable and fixed argv prefix, no
-shell executable or shell string, an explicit environment, an in-attempt log root, a timeout, and
-per-stream retained-byte limits. It drains stdout and stderr concurrently after a process gate,
+`deterministic_child.py` is the first bounded execution sub-contract. `02-ossf-scorecard` and
+`10-critical-findings-sarif` adopt `appsec-review/deterministic-child/1.0`: an absolute executable
+and fixed argv prefix, no shell executable or shell string, an explicit environment, an in-attempt
+log root, a timeout, and per-stream retained-byte limits. It drains stdout and stderr concurrently after a process gate,
 records observed/written/dropped byte counts, and always closes the Windows Job Object or POSIX
 process session so descendants cannot escape on normal exit, timeout, cancellation, stream failure,
 or child loss. `KeyboardInterrupt` and `SystemExit` retain their type after cleanup. This is not a
-pinned-container, persona, pool, or general worker-controller adapter, and it has not been applied
-to repository-partition discovery or any other worker.
+pinned-container, persona, pool, or general worker-controller adapter. Supplied
+repository-partition discovery has no child process and is deliberately not routed through it, and
+no other worker has been migrated to it.
 
 For those adopted paths, reusable-candidate admission is also common. The accepted pointer must
 match the run, job, fingerprint, status and newest attempt; its immutable tree and envelope hashes
@@ -84,5 +85,9 @@ recovery are qualified for
 `02-repository-partition-discovery`. Scorecard's deterministic-child behavior is additionally
 fault-qualified on Windows and Linux for timeout, cancellation, simultaneous stream pressure,
 retained-log truncation, child loss, and log-write failure, plus one live successful API ingest.
+`10-critical-findings-sarif` adopted the same boundary in Batch 9 and is focus-qualified for
+semantic parity, common publication/reuse/recovery, contract-declared result validation, and
+deterministic-child fault mapping; its bounded live Dagster sequence
+(`qualify_sarif_adoption.py`) passed in owner run `20260920T003602Z-41cea7`.
 Migration of all other workers remains later Workstream B work; historical attempts are not
 rewritten.
