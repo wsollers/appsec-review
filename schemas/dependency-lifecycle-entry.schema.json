@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dependency-lifecycle-entry.schema.json",
+  "title": "One component lifecycle entry",
+  "description": "status 'supported' or 'end-of-life' exists only with the citing table_row that says so; a component with no row is 'unknown' with table_row null. resurfaced_licenses repeats, by record id, what the bound licence inventory says for this component and adds nothing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "entry_id",
+    "component_ref",
+    "assertion",
+    "status",
+    "table_row",
+    "resurfaced_licenses"
+  ],
+  "properties": {
+    "entry_id": {
+      "type": "string",
+      "pattern": "^DL-[0-9]{6}\\Z"
+    },
+    "component_ref": {
+      "type": "string",
+      "pattern": "^SC-[0-9]{6}\\Z"
+    },
+    "assertion": {
+      "type": "string",
+      "enum": [
+        "reference-table-eol-match",
+        "lifecycle-unknown"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "supported",
+        "end-of-life",
+        "unknown"
+      ]
+    },
+    "table_row": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "row_id",
+        "cycle",
+        "status",
+        "eol_date"
+      ],
+      "properties": {
+        "row_id": {
+          "type": "string",
+          "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+        },
+        "cycle": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~:!-]{0,95}\\Z"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "supported",
+            "end-of-life"
+          ]
+        },
+        "eol_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\Z"
+        }
+      }
+    },
+    "resurfaced_licenses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assertion",
+          "record_ref",
+          "license_expression"
+        ],
+        "properties": {
+          "assertion": {
+            "const": "license-field-resurfaced"
+          },
+          "record_ref": {
+            "type": "string",
+            "pattern": "^LI-[0-9]{6}\\Z"
+          },
+          "license_expression": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9(][A-Za-z0-9.+() -]{0,255}\\Z"
+          }
+        }
+      }
+    }
+  }
+}

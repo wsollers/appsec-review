@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sbom-inventory.schema.json",
+  "title": "SBOM inventory manifest (outputs/sbom-manifest.json)",
+  "description": "Result document of contract sbom-inventory (ADR-0010 V05, G4 = A: manifests and lockfiles only, no package restore). The normalized component inventory; binds the CycloneDX document outputs/sbom.cdx.json by sha256, size and spec version. Closed; every declared property is required, nullable where optional. It asserts presence in a declaration, never use, reachability or vulnerability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "redactor",
+    "generated_at",
+    "sbom_document",
+    "components"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/sbom-inventory/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "job_id": {
+      "const": "02-sbom-inventory"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "redactor": {
+      "description": "Must equal the redactor block of outputs/redaction-receipt.json in the same attempt.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module_version",
+        "ruleset_sha256"
+      ],
+      "properties": {
+        "name": {
+          "const": "appsec-review-process/evidence_redaction"
+        },
+        "module_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\Z"
+        },
+        "ruleset_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "sbom_document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "bom_format",
+        "spec_version"
+      ],
+      "properties": {
+        "path": {
+          "const": "outputs/sbom.cdx.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "bytes": {
+          "type": "integer"
+        },
+        "bom_format": {
+          "const": "CycloneDX"
+        },
+        "spec_version": {
+          "type": "string",
+          "enum": [
+            "1.4",
+            "1.5",
+            "1.6"
+          ]
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "sbom-inventory-component.schema.json"
+      }
+    }
+  }
+}

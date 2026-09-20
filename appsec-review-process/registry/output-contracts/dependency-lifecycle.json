@@ -1,0 +1,56 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "dependency-lifecycle",
+  "display_name": "Dependency Lifecycle Against An Offline Reference Table",
+  "required_files": [
+    "manifest.json",
+    "status.json",
+    "outputs/dependency-lifecycle.json",
+    "outputs/reference-table-identity.json",
+    "outputs/redaction-receipt.json",
+    "outputs/tool-results.json",
+    "outputs/coverage.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "run_id",
+    "attempt_id"
+  ],
+  "result_schema": {
+    "artifact": "outputs/dependency-lifecycle.json",
+    "schema_file": "dependency-lifecycle.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "dependency_lifecycle_evidence",
+    "allowed_assertions": [
+      "reference-table-eol-match",
+      "lifecycle-unknown",
+      "license-field-resurfaced"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "outputs/dependency-lifecycle.json must satisfy dependency-lifecycle.schema.json; cross-record rules and the on-disk bindings are sbom_family_contracts.verify_lifecycle_attempt",
+    "reference-table identity is mandatory: table id, version, sha256 and as-of date must equal what the CALLER expects in the result, in outputs/reference-table-identity.json and in the transform's reference-table data identity; the table's bytes are re-hashed before they are parsed and its id, version, as-of date and row count are re-read from them",
+    "status is re-derived from the table and the SBOM: supported or end-of-life may ONLY come from the longest-cycle table row that matches the component's ecosystem, name and version and says so, cited as table_row; a component with no matching row is unknown with table_row null. Absence from the table is never supported, and a matching row can never be hidden as unknown",
+    "table age follows ADR-0010 M4: no default limit, max_age is a required argument (NO_AGE_LIMIT says so explicitly), and a table older than a limit the job set is FAILED",
+    "exactly one entry per component of the bound SBOM, in SBOM order; coverage.json names one unmapped-components gap exactly when unknown entries exist, with their count",
+    "resurfaced_licenses repeats exactly the licence-text records the bound licence inventory holds for that component and adds nothing",
+    "the transform is bound to both inputs: sbom_binding and license_binding must equal the caller's expected attempts and sha256s, the upstream bytes are re-hashed before they are parsed, and the licence inventory must itself be bound to the same SBOM",
+    "lifecycle status is a reference-table fact as of the table's as-of date; it is not a vulnerability, a reachability statement or a recommendation",
+    "tool-results.json and coverage.json must satisfy tool_instance_shapes.validate_node_aggregate with no probe receipt: this node is always applicable and SKIPPED is never a permitted status",
+    "outputs/redaction-receipt.json is required and must verify with evidence_redaction.verify_receipt against the outputs/ directory under the policy and limits the consumer demands, BEFORE any published document is parsed; if it does not verify nothing else is read and only the receipt's errors are reported",
+    "the receipt must list every other outputs/ contract file as published (unchanged or redacted, never withheld) and the bytes validated must hash to the receipt's published_sha256; every published document's redactor block must equal the receipt's",
+    "status.json carries exactly status, run_id and attempt_id plus, optionally, job_id and dagster_run_id; every one is bound to a caller-supplied fact (node status, expected header, the contract's job id, expected_dagster_run_id) and nothing from it is ever quoted",
+    "manifest.json is exactly {schema: appsec-review/attempt-manifest/1, contract_id, outputs[{path, sha256}]}, sorted, naming exactly the regular files beneath outputs/ with the sha256 of their bytes",
+    "run_id, job_id, attempt_id and source_snapshot_sha256 must equal the caller's expected header in every published document",
+    "every record's tool_id must resolve to a tool instance with a validated output in tool-results.json, its citation must name one of that instance's listed outputs with the same attempt id and sha256, and a tool cannot be cited for more records than its result_record_count",
+    "no error message quotes a value read from the attempt; messages name files, fields, ordinal record ids and what the caller expected",
+    "a clean or empty result is not evidence of absence; the result cannot promote a lead to a finding, a severity, or an observed runtime state",
+    "latest failed attempt blocks older accepted output"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "license-inventory.schema.json",
+  "title": "Licence inventory (outputs/license-inventory.json)",
+  "description": "Result document of contract license-inventory (ADR-0010 V05). Bound to the SBOM it was computed against; every non-null component_ref resolves into that SBOM.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "redactor",
+    "sbom_binding",
+    "records"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/license-inventory/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "job_id": {
+      "const": "02-license-scan"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "redactor": {
+      "description": "Must equal the redactor block of outputs/redaction-receipt.json in the same attempt.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module_version",
+        "ruleset_sha256"
+      ],
+      "properties": {
+        "name": {
+          "const": "appsec-review-process/evidence_redaction"
+        },
+        "module_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\Z"
+        },
+        "ruleset_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "sbom_binding": {
+      "$ref": "sbom-inventory-upstream-binding.schema.json"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "license-inventory-record.schema.json"
+      }
+    }
+  }
+}

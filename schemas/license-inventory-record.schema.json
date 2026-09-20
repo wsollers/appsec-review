@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "license-inventory-record.schema.json",
+  "title": "One licence detection record",
+  "description": "A licence expression (or a closed 'unknown' / 'no-assertion' state) and the SOURCE of that claim: declared in a manifest, or found in a file, with the file's sha256. No matched text, holder name, score, category, obligation, compatibility or any other legal conclusion can be represented.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "assertion",
+    "component_ref",
+    "license_expression",
+    "expression_state",
+    "claim_source",
+    "tool_id",
+    "citation"
+  ],
+  "properties": {
+    "record_id": {
+      "type": "string",
+      "pattern": "^LI-[0-9]{6}\\Z"
+    },
+    "assertion": {
+      "type": "string",
+      "enum": [
+        "license-text-detected",
+        "copyright-statement-detected",
+        "vendored-component-inferred"
+      ]
+    },
+    "component_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^SC-[0-9]{6}\\Z"
+    },
+    "license_expression": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Za-z0-9(][A-Za-z0-9.+() -]{0,255}\\Z"
+    },
+    "expression_state": {
+      "type": "string",
+      "enum": [
+        "spdx-expression",
+        "unknown",
+        "no-assertion"
+      ]
+    },
+    "claim_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "sha256",
+        "start_line",
+        "end_line"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "declared-in-manifest",
+            "found-in-file"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "start_line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "end_line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "citation": {
+      "$ref": "sbom-inventory-citation.schema.json"
+    }
+  }
+}

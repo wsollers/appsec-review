@@ -1,0 +1,57 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "sbom-inventory",
+  "display_name": "SBOM Component Inventory (Manifests And Lockfiles Only)",
+  "required_files": [
+    "manifest.json",
+    "status.json",
+    "outputs/sbom.cdx.json",
+    "outputs/sbom-manifest.json",
+    "outputs/redaction-receipt.json",
+    "outputs/tool-results.json",
+    "outputs/coverage.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "run_id",
+    "attempt_id"
+  ],
+  "result_schema": {
+    "artifact": "outputs/sbom-manifest.json",
+    "schema_file": "sbom-inventory.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "dependency_inventory_evidence",
+    "allowed_assertions": [
+      "declared-component-present",
+      "component-version-unknown",
+      "inventory-coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "outputs/sbom-manifest.json must satisfy sbom-inventory.schema.json; cross-record rules and the on-disk bindings are sbom_family_contracts.verify_sbom_attempt",
+    "outputs/sbom.cdx.json is bound by sha256, size and CycloneDX spec version in the manifest, and its components must be the same (name, version, purl) multiset as the manifest's: two projections of one inventory always agree",
+    "outputs/sbom.cdx.json is a published claim surface: only the top-level members $schema, bomFormat, specVersion, serialNumber, version, metadata, components and dependencies are allowed (no vulnerabilities/VEX, annotations or other section), components are flat (no nested components list), and no property name anywhere in it may contain a forbidden claim word",
+    "each component has name, version (nullable), purl (nullable), cpe (nullable), a closed ecosystem, and the source file that produced it with the sha256 of its bytes; the file is re-hashed in the source snapshot and one file has one spelling (identity is device and inode, not the string)",
+    "declaration is a closed enum: declared or inferred-vendored. source.evidence_kind is re-derived from the basename of source.path against a pinned table of manifest and lockfile names per ecosystem, and declaration is re-derived from evidence_kind, so an inferred vendored component can never be promoted to a declared one",
+    "assertion follows from the record: declared with a version is declared-component-present, declared without one is component-version-unknown, inferred-vendored is inventory-coverage-gap",
+    "when purl is present its type must equal the ecosystem and its name and version must agree with the component's",
+    "no package restore (ADR-0010 G4 = A): inventory comes from checked-in manifests and lockfiles only; unresolved transitive dependencies and unsupported ecosystems are coverage gaps",
+    "presence in a declaration is not use, reachability or vulnerability; no licence, supplier, description or other free-text field exists",
+    "tool-results.json and coverage.json must satisfy tool_instance_shapes.validate_node_aggregate with no probe receipt: this node is always applicable and SKIPPED is never a permitted status",
+    "outputs/redaction-receipt.json is required and must verify with evidence_redaction.verify_receipt against the outputs/ directory under the policy and limits the consumer demands, BEFORE any published document is parsed; if it does not verify nothing else is read and only the receipt's errors are reported",
+    "the receipt must list every other outputs/ contract file as published (unchanged or redacted, never withheld) and the bytes validated must hash to the receipt's published_sha256; every published document's redactor block must equal the receipt's",
+    "status.json carries exactly status, run_id and attempt_id plus, optionally, job_id and dagster_run_id; every one is bound to a caller-supplied fact (node status, expected header, the contract's job id, expected_dagster_run_id) and nothing from it is ever quoted",
+    "manifest.json is exactly {schema: appsec-review/attempt-manifest/1, contract_id, outputs[{path, sha256}]}, sorted, naming exactly the regular files beneath outputs/ with the sha256 of their bytes",
+    "run_id, job_id, attempt_id and source_snapshot_sha256 must equal the caller's expected header in every published document",
+    "every record's tool_id must resolve to a tool instance with a validated output in tool-results.json, its citation must name one of that instance's listed outputs with the same attempt id and sha256, and a tool cannot be cited for more records than its result_record_count",
+    "no error message quotes a value read from the attempt; messages name files, fields, ordinal record ids and what the caller expected",
+    "a clean or empty result is not evidence of absence; the result cannot promote a lead to a finding, a severity, or an observed runtime state",
+    "latest failed attempt blocks older accepted output"
+  ]
+}
