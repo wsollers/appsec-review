@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mobile-sast-rule-hit.schema.json",
+  "title": "One mobile static rule hit",
+  "description": "Sibling sub-shape of mobile-sast.schema.json. A lead only.",
+  "type": "object",
+  "required": [
+    "hit_id",
+    "tool_id",
+    "platform",
+    "rule_id",
+    "category",
+    "file_path",
+    "file_sha256",
+    "line"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "hit_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "platform": {
+      "type": "string",
+      "enum": [
+        "android",
+        "ios"
+      ]
+    },
+    "rule_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "improper-credential-usage",
+        "inadequate-supply-chain-security",
+        "insecure-authentication-authorization",
+        "insufficient-input-output-validation",
+        "insecure-communication",
+        "inadequate-privacy-controls",
+        "insufficient-binary-protections",
+        "security-misconfiguration",
+        "insecure-data-storage",
+        "insufficient-cryptography",
+        "other-mobile-rule"
+      ]
+    },
+    "file_path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z",
+      "description": "Normalized path relative to the source snapshot root."
+    },
+    "file_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z",
+      "description": "Hash of the cited source file; re-derived from the file by verify_attempt."
+    },
+    "line": {
+      "type": "integer",
+      "description": "1-based; must not exceed the cited file's line count."
+    }
+  }
+}

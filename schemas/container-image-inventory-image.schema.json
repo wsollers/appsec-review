@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "container-image-inventory-image.schema.json",
+  "title": "One supplied container image archive",
+  "description": "Sibling sub-shape of container-image-inventory.schema.json (schema_validate.py resolves $ref by filename).",
+  "type": "object",
+  "required": [
+    "image_id",
+    "tool_id",
+    "source",
+    "archive_format",
+    "inspection",
+    "image_manifest_digest",
+    "layers",
+    "config",
+    "packages",
+    "hardening_rule_hits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "image_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z",
+      "description": "The archive-inventory tool instance that read this archive; resolves in tool-results.json."
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "kind",
+        "archive_path",
+        "archive_sha256",
+        "archive_bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "supplied-archive"
+          ],
+          "description": "Closed on purpose: a supplied archive is the only producible source."
+        },
+        "archive_path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z",
+          "description": "Normalized path of the archive, relative to the run's staged inputs root."
+        },
+        "archive_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z",
+          "description": "Hash of the archive bytes; re-derived from the file by verify_attempt."
+        },
+        "archive_bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "archive_format": {
+      "type": "string",
+      "enum": [
+        "oci-layout",
+        "docker-save",
+        "unsupported"
+      ]
+    },
+    "inspection": {
+      "type": "string",
+      "enum": [
+        "inspected",
+        "not-inspected"
+      ],
+      "description": "not-inspected exactly when coverage.json lists the archive as unsupported or not analyzed."
+    },
+    "image_manifest_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}\\Z",
+      "description": "Digest of the image manifest stored INSIDE the archive; never resolved against a registry."
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "layer_index",
+          "layer_digest",
+          "layer_bytes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "layer_index": {
+            "type": "integer"
+          },
+          "layer_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}\\Z"
+          },
+          "layer_bytes": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "config": {
+      "$ref": "container-image-inventory-config.schema.json"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool_id",
+          "layer_index",
+          "ecosystem",
+          "name",
+          "version"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+          },
+          "layer_index": {
+            "type": "integer",
+            "description": "Must name a listed layer."
+          },
+          "ecosystem": {
+            "type": "string",
+            "enum": [
+              "apk",
+              "deb",
+              "rpm",
+              "npm",
+              "pypi",
+              "maven",
+              "gem",
+              "golang",
+              "nuget",
+              "cargo",
+              "other"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._+:/~-]{0,199}\\Z"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~:-]{0,127}\\Z"
+          }
+        }
+      }
+    },
+    "hardening_rule_hits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool_id",
+          "rule_id",
+          "category"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+          },
+          "rule_id": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "no-user-declared",
+              "root-user-declared",
+              "sensitive-port-declared",
+              "setuid-file-present",
+              "package-manager-cache-present",
+              "healthcheck-not-declared",
+              "credential-named-env-declared",
+              "other-declared-configuration"
+            ]
+          }
+        }
+      },
+      "description": "Static rule hits over the archive. A lead, never a finding; carries no message and no level."
+    }
+  }
+}

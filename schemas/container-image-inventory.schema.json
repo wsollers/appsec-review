@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "container-image-inventory.schema.json",
+  "title": "Container image inventory (ADR-0010 G8 = A, task V07)",
+  "description": "Static facts read from container image ARCHIVES supplied as run inputs. The only image source this schema can represent is a supplied archive file named by a run-relative path and its sha256: there is no field for a registry, a pull, a resolved tag, a container id, a start time or any other runtime observation, so a registry pull or a container start cannot be recorded, let alone implied. An image reference in a manifest is not an input. Cross-record rules live in appsec-review-process/container_mobile_binary_contracts.py.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "images"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/container-image-inventory/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "job_id": {
+      "const": "02-container-image-inventory",
+      "description": "The one node that may publish this result."
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z",
+      "description": "The node attempt; equals tool-results.json, coverage.json and the probe receipt."
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "$ref": "container-image-inventory-image.schema.json"
+      },
+      "description": "One record per supplied archive. Empty exactly when the node is SKIPPED."
+    }
+  }
+}

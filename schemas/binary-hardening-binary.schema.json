@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "binary-hardening-binary.schema.json",
+  "title": "One supplied binary",
+  "description": "Sibling sub-shape of binary-hardening.schema.json.",
+  "type": "object",
+  "required": [
+    "binary_id",
+    "tool_id",
+    "path",
+    "sha256",
+    "bytes",
+    "format",
+    "checks",
+    "rule_hits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "binary_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z",
+      "description": "Normalized path relative to the source snapshot root."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z",
+      "description": "Hash of the binary's bytes; re-derived from the file by verify_attempt."
+    },
+    "bytes": {
+      "type": "integer"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "pe",
+        "elf",
+        "macho",
+        "unsupported"
+      ]
+    },
+    "checks": {
+      "description": "One closed verdict per mitigation. `present`/`absent` are static properties of the file, not statements about a running process.",
+      "type": "object",
+      "required": [
+        "position_independent",
+        "non_executable_data",
+        "stack_protector",
+        "relro",
+        "fortify_source",
+        "control_flow_guard",
+        "safe_seh",
+        "high_entropy_aslr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "position_independent": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        },
+        "non_executable_data": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        },
+        "stack_protector": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        },
+        "relro": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        },
+        "fortify_source": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        },
+        "control_flow_guard": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        },
+        "safe_seh": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        },
+        "high_entropy_aslr": {
+          "type": "string",
+          "enum": [
+            "present",
+            "absent",
+            "not-applicable-for-format",
+            "not-assessed"
+          ]
+        }
+      }
+    },
+    "rule_hits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "check"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+          },
+          "check": {
+            "type": "string",
+            "enum": [
+              "position_independent",
+              "non_executable_data",
+              "stack_protector",
+              "relro",
+              "fortify_source",
+              "control_flow_guard",
+              "safe_seh",
+              "high_entropy_aslr",
+              "other"
+            ]
+          }
+        }
+      },
+      "description": "Tool rule ids that fired for this binary. No message and no level."
+    }
+  }
+}
