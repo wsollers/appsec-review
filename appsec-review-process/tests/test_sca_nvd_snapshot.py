@@ -391,6 +391,31 @@ SCENARIOS = {
 }
 
 
+def _can_create_symlinks():
+    """Probed once. A normal Windows account lacks SeCreateSymbolicLinkPrivilege (WinError 1314)
+    unless the shell is elevated or Developer Mode is on; the suite must pass there too."""
+    with tempfile.TemporaryDirectory() as directory:
+        base = Path(directory)
+        (base / "target-file").write_bytes(b"x")
+        (base / "target-dir").mkdir()
+        try:
+            (base / "file-link").symlink_to(base / "target-file")
+            (base / "dir-link").symlink_to(base / "target-dir", target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return False
+        return (base / "file-link").is_symlink() and (base / "dir-link").is_symlink()
+
+
+SYMLINKS_AVAILABLE = _can_create_symlinks()
+NO_SYMLINKS = ("this account cannot create symbolic links, so the link-REJECTION paths are not exercised here; "
+               "they run wherever links can be created (every POSIX host, which a test below enforces)")
+# Scenarios whose setup needs a symbolic link. Everything else runs everywhere.
+LINK_SCENARIOS = frozenset(name for name, (mutate, _, _) in SCENARIOS.items()
+                           if mutate in (s_blob_symlink, s_snapshot_dir_symlink, s_pointer_symlink))
+RUNNABLE_SCENARIOS = {name: entry for name, entry in SCENARIOS.items()
+                      if SYMLINKS_AVAILABLE or name not in LINK_SCENARIOS}
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -562,7 +587,7 @@ class ScenarioTests(Base):
 def _scenario_test(name):
     def test(self):
         self.run_scenario(name)
-    return test
+    return unittest.skipUnless(SYMLINKS_AVAILABLE, NO_SYMLINKS)(test) if name in LINK_SCENARIOS else test
 
 
 for _name in SCENARIOS:
@@ -717,7 +742,7 @@ class FingerprintTests(Base):
 class InvariantTests(Base):
     def sweep(self):
         """Yields (name, Resolution) for every scenario plus the usable states."""
-        for name, (mutate, _, _) in SCENARIOS.items():
+        for name, (mutate, _, _) in RUNNABLE_SCENARIOS.items():
             self.tearDown()
             self.setUp()
             self.publish_chain()
@@ -803,7 +828,7 @@ class NoNetworkTests(Base):
             raise AssertionError("the NVD snapshot binding opened a socket")
 
         roots = []
-        for name, (mutate, outcome, reason) in SCENARIOS.items():
+        for name, (mutate, outcome, reason) in RUNNABLE_SCENARIOS.items():
             directory = Path(self.temporary.name) / name / "data" / "nvd"
             publisher = Publisher(directory)
             publisher.sync(T0)
@@ -835,12 +860,8 @@ class PublisherParityTests(Base):
         self.publisher.sync(T0)
         self.assertEqual(self.resolve().identity["publisher_manifest_schema"], nvd_feed.SCHEMA)
 
-    def test_beneath_agrees_with_execution_state(self):
-        self.publisher.sync(T0)
-        link = self.root / "link"
-        link.symlink_to(self.root / "blobs", target_is_directory=True)
-        for candidate in (self.root / "blobs" / "x", self.root / ".." / "x", Path("/etc/passwd"),
-                          link / "x", self.root, self.root / "snapshots" / ".." / ".." / "y"):
+    def assert_beneath_parity(self, candidates):
+        for candidate in candidates:
             outcomes = []
             for function in (binding.beneath, execution_state.beneath):
                 try:
@@ -848,6 +869,18 @@ class PublisherParityTests(Base):
                 except ValueError as exc:
                     outcomes.append("ValueError: " + str(exc))
             self.assertEqual(outcomes[0], outcomes[1], candidate)
+
+    def test_beneath_agrees_with_execution_state(self):
+        self.publisher.sync(T0)
+        self.assert_beneath_parity((self.root / "blobs" / "x", self.root / ".." / "x", Path("/etc/passwd"),
+                                    self.root, self.root / "snapshots" / ".." / ".." / "y"))
+
+    @unittest.skipUnless(SYMLINKS_AVAILABLE, NO_SYMLINKS)
+    def test_beneath_agrees_with_execution_state_through_a_link(self):
+        self.publisher.sync(T0)
+        link = self.root / "link"
+        link.symlink_to(self.root / "blobs", target_is_directory=True)
+        self.assert_beneath_parity((link / "x", link))
 
     def test_binding_agrees_with_publisher_verify_on_the_states_both_check(self):
         self.publish_chain()
@@ -966,6 +999,43 @@ class IdentityBindingTests(Base):
         rederived = {"evaluated_at", "age_seconds", "max_age_seconds", "freshness"}
         self.assertEqual(set(binding._SNAPSHOT_BOUND_FIELDS) | rederived, set(schema["properties"]))
         self.assertEqual(set(binding._SNAPSHOT_BOUND_FIELDS) & rederived, set())
+
+
+
+class PortabilityTests(unittest.TestCase):
+    """The link-dependent cases may skip on a Windows account without the symlink privilege. That
+    must never become a way for the link-rejection paths to go untested unnoticed."""
+
+    def test_link_scenarios_are_exactly_the_three_that_build_a_link(self):
+        self.assertEqual(LINK_SCENARIOS, {"blob_symlink", "snapshot_dir_symlink", "pointer_symlink"})
+        self.assertTrue(LINK_SCENARIOS <= set(SCENARIOS))
+
+    def test_posix_hosts_can_never_skip_the_link_cases(self):
+        if os.name == "posix":
+            self.assertTrue(SYMLINKS_AVAILABLE, "a POSIX host that cannot create symlinks would silently skip "
+                                                "the UNSAFE_PATH link-rejection tests")
+            self.assertEqual(set(RUNNABLE_SCENARIOS), set(SCENARIOS))
+
+    def test_only_link_scenarios_are_ever_left_out(self):
+        self.assertEqual(set(SCENARIOS) - set(RUNNABLE_SCENARIOS), set() if SYMLINKS_AVAILABLE else set(LINK_SCENARIOS))
+
+    def test_no_test_creates_a_link_outside_a_guard(self):
+        """Every symlink_to call in this file sits in a link scenario, the capability probe, or a
+        test decorated with skipUnless(SYMLINKS_AVAILABLE)."""
+        tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+        guarded = {"s_blob_symlink", "s_snapshot_dir_symlink", "s_pointer_symlink", "_can_create_symlinks"}
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            calls = [c for c in ast.walk(node) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)
+                     and c.func.attr in ("symlink_to", "symlink")]
+            if not calls or node.name in guarded:
+                continue
+            decorated = any("SYMLINKS_AVAILABLE" in ast.unparse(d) for d in node.decorator_list)
+            if not decorated:
+                offenders.append(node.name)
+        self.assertEqual(offenders, [])
 
 
 if __name__ == "__main__":
