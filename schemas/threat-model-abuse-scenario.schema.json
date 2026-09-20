@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-abuse-scenario.schema.json",
+  "title": "Threat-model abuse scenario",
+  "type": "object",
+  "required": [
+    "scenario_id",
+    "attacker_objective",
+    "actor",
+    "capability",
+    "target_element_ids",
+    "target_data_class_ids",
+    "harm",
+    "preconditions",
+    "missing_controls",
+    "evidence_class",
+    "confidence",
+    "citations",
+    "originating_workcell_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "attacker_objective": {
+      "type": "string"
+    },
+    "actor": {
+      "type": "string"
+    },
+    "capability": {
+      "type": "string"
+    },
+    "target_element_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "target_data_class_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "harm": {
+      "type": "string"
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_controls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

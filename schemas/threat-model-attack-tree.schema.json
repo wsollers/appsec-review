@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-attack-tree.schema.json",
+  "title": "Threat-model attack tree",
+  "type": "object",
+  "required": [
+    "tree_id",
+    "objective",
+    "root_node_id",
+    "nodes",
+    "originating_workcell_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tree_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "root_node_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "node_id",
+          "kind",
+          "label",
+          "child_node_ids",
+          "prerequisites",
+          "leaf_support",
+          "citations",
+          "verification_item_ids"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "AND",
+              "OR",
+              "leaf"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "child_node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          },
+          "prerequisites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "leaf_support": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "evidence",
+              "assumption",
+              "unresolved",
+              null
+            ],
+            "description": "Required non-null for kind leaf; null for AND/OR. A leaf with leaf_support evidence must carry citations (lane validator)."
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "threat-model-citation.schema.json"
+            }
+          },
+          "verification_item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

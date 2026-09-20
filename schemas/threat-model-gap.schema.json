@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-gap.schema.json",
+  "title": "Threat-model coverage gap",
+  "type": "object",
+  "required": [
+    "gap_id",
+    "kind",
+    "statement",
+    "affected_record_ids",
+    "originating_workcell_id",
+    "intercom_record_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "gap_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "missing_evidence",
+        "unmodeled_component",
+        "omitted_workcell",
+        "failed_workcell",
+        "unresolved_intercom",
+        "missing_source",
+        "m01_gated_source_absent",
+        "wave_4_omitted"
+      ]
+    },
+    "statement": {
+      "type": "string"
+    },
+    "affected_record_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "intercom_record_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

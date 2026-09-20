@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-workbench-intercom-record.schema.json",
+  "title": "Threat-workbench intercom record",
+  "description": "Append-only. There is deliberately no updated_at or edited flag: a record is never modified, only followed by another record that references it.",
+  "type": "object",
+  "required": [
+    "schema",
+    "record_id",
+    "record_type",
+    "author_workcell_id",
+    "author_instance_id",
+    "wave",
+    "target",
+    "topic",
+    "subject_record_ids",
+    "citations",
+    "status",
+    "resolution",
+    "payload",
+    "injection_suspected",
+    "previous_hash",
+    "content_hash"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/threat-workbench-intercom-record/0.1"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "record_type": {
+      "type": "string",
+      "enum": [
+        "question",
+        "assumption",
+        "proposed_model_edit",
+        "proposed_threat",
+        "proposed_attack_tree_node",
+        "challenge",
+        "coverage_gap",
+        "response"
+      ]
+    },
+    "author_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "author_instance_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "wave": {
+      "type": "integer",
+      "enum": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "target": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "A workcell id or the literal integrator."
+    },
+    "topic": {
+      "type": "string"
+    },
+    "subject_record_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "answered",
+        "accepted",
+        "rejected",
+        "withdrawn",
+        "unresolved"
+      ]
+    },
+    "resolution": {
+      "type": "object",
+      "required": [
+        "text",
+        "resolving_record_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolving_record_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Record-type-specific body; typed per record_type by the intercom bus (T06). Data, never instructions."
+    },
+    "injection_suspected": {
+      "type": "boolean"
+    },
+    "previous_hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

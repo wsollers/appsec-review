@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-workbench-cell-result.schema.json",
+  "title": "Threat-workbench cell result",
+  "description": "One persona workcell instance's terminal contribution. Written under the instance's private root; read only through the wave manifest.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "workcell_id",
+    "instance_id",
+    "wave",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "prompt_hash",
+    "model_identity_hash",
+    "budget_class",
+    "terminal_status",
+    "started_at",
+    "finished_at",
+    "summary",
+    "inputs_read",
+    "model_delta",
+    "intercom_record_ids",
+    "gaps",
+    "cause"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/threat-workbench-cell-result/0.1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "job_id": {
+      "const": "03-threat-model-dfd-stride"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "instance_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "wave": {
+      "type": "integer",
+      "enum": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "persona_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "role_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "domain_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "tooling_profile_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "prompt_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "model_identity_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "budget_class": {
+      "type": "string",
+      "enum": [
+        "probe",
+        "standard",
+        "deep"
+      ]
+    },
+    "terminal_status": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED",
+        "UNRESOLVED"
+      ]
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "finished_at": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "inputs_read": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    },
+    "model_delta": {
+      "type": "object",
+      "required": [
+        "elements",
+        "flows",
+        "trust_boundaries",
+        "data_classes",
+        "deployment_zones",
+        "abuse_scenarios",
+        "attack_trees",
+        "stride_hypotheses",
+        "stride_coverage",
+        "assumptions",
+        "gaps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-element.schema.json"
+          }
+        },
+        "flows": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-flow.schema.json"
+          }
+        },
+        "trust_boundaries": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-trust-boundary.schema.json"
+          }
+        },
+        "data_classes": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-data-class.schema.json"
+          }
+        },
+        "deployment_zones": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-deployment-zone.schema.json"
+          }
+        },
+        "abuse_scenarios": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-abuse-scenario.schema.json"
+          }
+        },
+        "attack_trees": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-attack-tree.schema.json"
+          }
+        },
+        "stride_hypotheses": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-stride-hypothesis.schema.json"
+          }
+        },
+        "stride_coverage": {
+          "type": "array",
+          "description": "One entry per boundary-crossing flow; the completeness invariant (ADR-0008) requires all six decisions.",
+          "items": {
+            "type": "object",
+            "required": [
+              "flow_id",
+              "decisions"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "flow_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "decisions": {
+                "type": "object",
+                "required": [
+                  "spoofing",
+                  "tampering",
+                  "repudiation",
+                  "information_disclosure",
+                  "denial_of_service",
+                  "elevation_of_privilege"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "spoofing": {
+                    "type": "string",
+                    "enum": [
+                      "hypothesis",
+                      "not_applicable",
+                      "unresolved"
+                    ]
+                  },
+                  "tampering": {
+                    "type": "string",
+                    "enum": [
+                      "hypothesis",
+                      "not_applicable",
+                      "unresolved"
+                    ]
+                  },
+                  "repudiation": {
+                    "type": "string",
+                    "enum": [
+                      "hypothesis",
+                      "not_applicable",
+                      "unresolved"
+                    ]
+                  },
+                  "information_disclosure": {
+                    "type": "string",
+                    "enum": [
+                      "hypothesis",
+                      "not_applicable",
+                      "unresolved"
+                    ]
+                  },
+                  "denial_of_service": {
+                    "type": "string",
+                    "enum": [
+                      "hypothesis",
+                      "not_applicable",
+                      "unresolved"
+                    ]
+                  },
+                  "elevation_of_privilege": {
+                    "type": "string",
+                    "enum": [
+                      "hypothesis",
+                      "not_applicable",
+                      "unresolved"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-assumption.schema.json"
+          }
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "$ref": "threat-model-gap.schema.json"
+          }
+        }
+      }
+    },
+    "intercom_record_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-gap.schema.json"
+      }
+    },
+    "cause": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

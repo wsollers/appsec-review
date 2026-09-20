@@ -1,0 +1,416 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "integrated-threat-model.schema.json",
+  "title": "Integrated threat model",
+  "description": "ADR-0008 canonical model. DFD records are the substrate; overlays reference DFD ids. No field may carry verified status, final severity, runtime exposure, compliance verdict, intent or remediation status.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot",
+    "component_map_attempt_id",
+    "budget_class",
+    "elements",
+    "flows",
+    "trust_boundaries",
+    "data_classes",
+    "deployment_zones",
+    "abuse_scenarios",
+    "attack_trees",
+    "stride_hypotheses",
+    "stride_coverage",
+    "assumptions",
+    "gaps",
+    "rescope_triggers",
+    "coverage",
+    "dissent"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/integrated-threat-model/0.1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "job_id": {
+      "const": "03-threat-model-dfd-stride"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "source_snapshot": {
+      "type": "string"
+    },
+    "component_map_attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "budget_class": {
+      "type": "string",
+      "enum": [
+        "probe",
+        "standard",
+        "deep"
+      ]
+    },
+    "elements": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-element.schema.json"
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-flow.schema.json"
+      }
+    },
+    "trust_boundaries": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-trust-boundary.schema.json"
+      }
+    },
+    "data_classes": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-data-class.schema.json"
+      }
+    },
+    "deployment_zones": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-deployment-zone.schema.json"
+      }
+    },
+    "abuse_scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-abuse-scenario.schema.json"
+      }
+    },
+    "attack_trees": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-attack-tree.schema.json"
+      }
+    },
+    "stride_hypotheses": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-stride-hypothesis.schema.json"
+      }
+    },
+    "stride_coverage": {
+      "type": "array",
+      "description": "One entry per boundary-crossing flow; the completeness invariant (ADR-0008) requires all six decisions.",
+      "items": {
+        "type": "object",
+        "required": [
+          "flow_id",
+          "decisions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "flow_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "decisions": {
+            "type": "object",
+            "required": [
+              "spoofing",
+              "tampering",
+              "repudiation",
+              "information_disclosure",
+              "denial_of_service",
+              "elevation_of_privilege"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "spoofing": {
+                "type": "string",
+                "enum": [
+                  "hypothesis",
+                  "not_applicable",
+                  "unresolved"
+                ]
+              },
+              "tampering": {
+                "type": "string",
+                "enum": [
+                  "hypothesis",
+                  "not_applicable",
+                  "unresolved"
+                ]
+              },
+              "repudiation": {
+                "type": "string",
+                "enum": [
+                  "hypothesis",
+                  "not_applicable",
+                  "unresolved"
+                ]
+              },
+              "information_disclosure": {
+                "type": "string",
+                "enum": [
+                  "hypothesis",
+                  "not_applicable",
+                  "unresolved"
+                ]
+              },
+              "denial_of_service": {
+                "type": "string",
+                "enum": [
+                  "hypothesis",
+                  "not_applicable",
+                  "unresolved"
+                ]
+              },
+              "elevation_of_privilege": {
+                "type": "string",
+                "enum": [
+                  "hypothesis",
+                  "not_applicable",
+                  "unresolved"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-assumption.schema.json"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-gap.schema.json"
+      }
+    },
+    "rescope_triggers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "trigger_id",
+          "kind",
+          "statement",
+          "affected_record_ids"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "trigger_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component_without_evidence",
+              "sensitive_data_without_store",
+              "boundary_crossing_follow_on_required",
+              "observed_exposure_demanded",
+              "trait_without_specialist"
+            ]
+          },
+          "statement": {
+            "type": "string"
+          },
+          "affected_record_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "unmodeled_components",
+        "workcells",
+        "wave_4"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "unmodeled_components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "component_id",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "component_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "workcells": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "workcell_id",
+              "instance_id",
+              "wave",
+              "selection",
+              "omission_reason",
+              "terminal_status",
+              "persona_id",
+              "prompt_hash",
+              "model_identity_hash"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "workcell_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "instance_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+              },
+              "wave": {
+                "type": [
+                  "integer",
+                  "string"
+                ],
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  "join"
+                ]
+              },
+              "selection": {
+                "type": "string",
+                "enum": [
+                  "selected",
+                  "omitted"
+                ]
+              },
+              "omission_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "terminal_status": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "OK",
+                  "OK_WITH_GAPS",
+                  "SKIPPED",
+                  "BLOCKED",
+                  "FAILED",
+                  "CANCELED",
+                  "UNRESOLVED",
+                  null
+                ]
+              },
+              "persona_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "prompt_hash": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "model_identity_hash": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "wave_4": {
+          "type": "string",
+          "enum": [
+            "executed",
+            "omitted_budget",
+            "omitted_no_challenges"
+          ]
+        }
+      }
+    },
+    "dissent": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "challenge_record_id",
+          "response_record_id",
+          "subject_record_ids",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "challenge_record_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "response_record_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "subject_record_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unresolved",
+              "withdrawn",
+              "amended"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

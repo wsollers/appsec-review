@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-assumption.schema.json",
+  "title": "Threat-model assumption",
+  "type": "object",
+  "required": [
+    "assumption_id",
+    "topic",
+    "statement",
+    "affected_record_ids",
+    "status",
+    "originating_workcell_id",
+    "intercom_record_id",
+    "citations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "assumption_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "topic": {
+      "type": "string"
+    },
+    "statement": {
+      "type": "string"
+    },
+    "affected_record_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "accepted",
+        "rejected",
+        "unresolved"
+      ]
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "intercom_record_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    }
+  }
+}

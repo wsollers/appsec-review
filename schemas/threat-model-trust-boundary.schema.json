@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-trust-boundary.schema.json",
+  "title": "Threat-model trust boundary",
+  "type": "object",
+  "required": [
+    "boundary_id",
+    "kind",
+    "reason",
+    "evidence_class",
+    "confidence",
+    "citations",
+    "originating_workcell_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "boundary_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "network",
+        "process",
+        "privilege",
+        "tenant",
+        "organization",
+        "device",
+        "build_release",
+        "third_party",
+        "model_tool"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}
