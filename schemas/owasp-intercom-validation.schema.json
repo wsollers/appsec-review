@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-intercom-validation.schema.json",
+  "title": "T08 append validation", "type": "object", "additionalProperties": false,
+  "required": ["schema", "status", "run_id", "batch_id", "handoff_id", "candidate_path", "candidate_sha256", "checks", "errors"],
+  "properties": {"schema": {"const": "appsec-review/owasp-intercom-validation/1.0"}, "status": {"enum": ["PASS", "INVALID", "BLOCKED"]}, "run_id": {"type": "string"}, "batch_id": {"type": "string"}, "handoff_id": {"type": "string"}, "candidate_path": {"type": "string"}, "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "checks": {"type": "array", "items": {"type": "string"}}, "errors": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["error_type", "message"], "properties": {"error_type": {"type": "string"}, "message": {"type": "string"}}}}}
+}

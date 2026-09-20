@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-intercom-ledger.schema.json",
+  "title": "T08 immutable ledger", "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "batch_id", "handoff_id", "sequence", "head_message_id", "head_message_hash", "previous_attempt_id", "previous_ledger_path", "previous_ledger_sha256", "messages"],
+  "properties": {"schema": {"const": "appsec-review/owasp-intercom-ledger/1.0"}, "run_id": {"type": "string"}, "selection_id": {"type": "string"}, "batch_id": {"type": "string"}, "handoff_id": {"type": "string"}, "sequence": {"type": "integer", "minimum": 1}, "head_message_id": {"type": "string"}, "head_message_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "previous_attempt_id": {"type": ["string", "null"]}, "previous_ledger_path": {"type": ["string", "null"]}, "previous_ledger_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}, "messages": {"type": "array", "minItems": 1, "items": {"$ref": "owasp-intercom-message.schema.json"}}}
+}
