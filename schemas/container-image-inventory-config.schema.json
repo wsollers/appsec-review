@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "container-image-inventory-config.schema.json",
+  "title": "Declared image configuration",
+  "description": "What the image config blob inside the archive DECLARES. Null when the archive was not inspected. Environment variable NAMES only: values are secrets-prone and have no field. Entrypoint and command are recorded as the executable plus an argument count, because arguments routinely embed credentials.",
+  "type": [
+    "object",
+    "null"
+  ],
+  "required": [
+    "config_digest",
+    "architecture",
+    "os",
+    "declared_user",
+    "declared_entrypoint_executable",
+    "declared_entrypoint_argument_count",
+    "declared_command_executable",
+    "declared_command_argument_count",
+    "declared_ports",
+    "declared_env_names"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "config_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "architecture": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,31}\\Z"
+    },
+    "os": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,31}\\Z"
+    },
+    "declared_user": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,63})?\\Z"
+    },
+    "declared_entrypoint_executable": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/?[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z"
+    },
+    "declared_entrypoint_argument_count": {
+      "type": "integer"
+    },
+    "declared_command_executable": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^/?[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z"
+    },
+    "declared_command_argument_count": {
+      "type": "integer"
+    },
+    "declared_ports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "port",
+          "protocol",
+          "exposure_label"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "port": {
+            "type": "integer"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp",
+              "sctp"
+            ]
+          },
+          "exposure_label": {
+            "type": "string",
+            "enum": [
+              "DECLARED_EXPOSURE",
+              "OBSERVED_EXPOSURE"
+            ],
+            "description": "OBSERVED_EXPOSURE is schema-valid on purpose so the contract validator rejects it by name: an archive cannot show a listening port."
+          }
+        }
+      }
+    },
+    "declared_env_names": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,127}\\Z"
+      },
+      "description": "Names only. '=' is outside the pattern, so NAME=value cannot be recorded."
+    }
+  }
+}

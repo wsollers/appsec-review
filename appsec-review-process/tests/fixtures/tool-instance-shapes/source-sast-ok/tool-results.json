@@ -663,7 +663,7 @@
     },
     {
       "tool_id": "joern-c2cpg",
-      "attempt_id": "joern-c2cpg-attempt-0001",
+      "attempt_id": "joern-cpg-attempt-0001",
       "terminal_status": "OK",
       "skip_reason": null,
       "cause_code": null,

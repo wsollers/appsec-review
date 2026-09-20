@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-intercom-citation.schema.json",
+  "title": "T08 canonical citation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["citation_id", "input_id", "artifact_path", "artifact_sha256", "locator", "observed_fact", "canonical"],
+  "properties": {
+    "citation_id": {"type": "string", "minLength": 1},
+    "input_id": {"type": "string", "minLength": 1},
+    "artifact_path": {"type": "string", "minLength": 1},
+    "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "locator": {"type": "string", "minLength": 1},
+    "observed_fact": {"type": "string", "minLength": 1},
+    "canonical": {"const": true}
+  }
+}

@@ -12,9 +12,9 @@ default, disabled dynamic execution with an inert launcher contract, and stale N
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
 publisher. T03 accepted-intel lane-in, T04 applicability modeling, T05 deterministic batching,
-T06 validator handoff contracts, and T07 validator-result validation are implemented as standalone
-offline foundations. T08–T13 remain dependency ordered and later reporting/promotion work remains
-gated by the narrower T01 decisions.
+T06 validator handoff contracts, T07 validator-result validation, and T08 structured intercom are
+implemented as standalone offline foundations. T09–T13 remain dependency ordered and later
+reporting/promotion work remains gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
 
@@ -313,7 +313,7 @@ supplied accepted artifacts, join batches or mixed-mode fragments, implement str
 authorize dynamic/manual execution, or promote findings. `04-owasp-validation-worklist` and
 `04-asvs-masvs` remain non-runnable proposals.
 
-## T08 — Structured Intercom
+## T08 — Structured Intercom — IMPLEMENTED FOUNDATION
 
 Define append-only workcell communication artifacts for evidence locators, applicability or
 component-classification challenges, assistance request/response, duplicate/crosswalk notices,
@@ -323,6 +323,26 @@ Messages must identify sender/recipient, selection/batch/control/component, clai
 citations, requested action, response link, time, and producer. Prove messages cannot directly alter
 selection, applicability, or status; recipients must issue their own cited result. Reject uncited
 free-form conclusions, raw secrets, and circular message chains presented as corroboration.
+
+Implemented by `appsec-review-process/owasp_intercom.py` and the closed T08 schemas documented in
+`schemas/README.md`. The standalone offline worker consumes one exact newest accepted T06 handoff
+and one explicitly supplied untrusted candidate message. A T07 reference is optional for pre-result
+communication; when present, its exact newest accepted pointer, result path, result hash, and result
+identity are revalidated. The worker enforces exact lineage and subject identities, sender and
+recipient roles, compatible assistance links, acyclic backward references, current-decision
+retention for challenges, crosswalk routing-only semantics, dissent visibility, citation/locator
+separation, derived-output lineage, and inert dynamic-test proposals.
+
+Each locked append pins the prior accepted attempt and ledger hash, prior message head identity/hash,
+and expected next sequence. It publishes a complete immutable ledger snapshot plus deterministic
+JSONL. Stale heads, skipped sequences, conflicting IDs, rewritten or discontinuous history, and
+lost-update races fail closed. Exact replay is reusable only after full revalidation. Rejected or
+blocked attempts retain their receipt and never replace the last accepted ledger.
+
+T08 treats messages and referenced artifacts as untrusted data and messages as neither evidence nor
+authority. It rejects prohibited claims, authority expansion, secrets, undeclared tool/action use,
+and dynamic/manual execution. It does not dispatch, execute, inspect the target, resolve challenges,
+join results, implement T09, or activate registry/graph/parity/generated-view surfaces. T09 is next.
 
 ## T09 — Dynamic And Manual Test Requests
 

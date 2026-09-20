@@ -1,0 +1,91 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "job_id": "02-container-image-inventory",
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/tool-results/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tool_instances": [
+    {
+      "argv": [
+        "oci-archive-inventory",
+        "--offline",
+        "/in"
+      ],
+      "attempt_id": "oci-archive-inventory-attempt-0001",
+      "cause_code": "partial-input-coverage",
+      "exit": {
+        "exit_code": 0,
+        "exit_meaning": "clean",
+        "findings_exit_codes": [],
+        "nonzero_exit_on_findings": false,
+        "timed_out": false
+      },
+      "identity": {
+        "data_identities": [],
+        "executable_sha256": null,
+        "executor_kind": "pinned_container",
+        "image_digest": "sha256:0132d7a369ce5566fe97b07100e19221bf403fa1fb8756ce36e8ac90b97f2c53",
+        "image_repository": "registry.internal.example:5000/appsec/audit-static",
+        "redactor": null,
+        "tool_name": "oci-archive-inventory",
+        "tool_version": "1.2.3"
+      },
+      "outputs": [
+        {
+          "bytes": 25,
+          "media_type": "application/json",
+          "path": "outputs/oci-archive-inventory.json",
+          "role": "raw-tool-output",
+          "sha256": "sha256:312bc81a6c862710a49bc48125df8529755e4ce5d14e79f9e99d5dcb9c59cdf5",
+          "validated_against": "oci-image-layout-1.0",
+          "validation": "format-validated"
+        }
+      ],
+      "result_record_count": 2,
+      "skip_reason": null,
+      "terminal_status": "OK_WITH_GAPS",
+      "tool_id": "oci-archive-inventory"
+    },
+    {
+      "argv": [
+        "image-package-and-config-inspection",
+        "--offline",
+        "/in"
+      ],
+      "attempt_id": "image-package-and-config-inspection-attempt-0001",
+      "cause_code": "partial-input-coverage",
+      "exit": {
+        "exit_code": 0,
+        "exit_meaning": "clean",
+        "findings_exit_codes": [],
+        "nonzero_exit_on_findings": false,
+        "timed_out": false
+      },
+      "identity": {
+        "data_identities": [],
+        "executable_sha256": null,
+        "executor_kind": "pinned_container",
+        "image_digest": "sha256:231c527368b23d0d88e816e8447e34b216ec369705e8a57a51fccc0837f9396f",
+        "image_repository": "registry.internal.example:5000/appsec/audit-static",
+        "redactor": null,
+        "tool_name": "image-package-and-config-inspection",
+        "tool_version": "1.2.3"
+      },
+      "outputs": [
+        {
+          "bytes": 25,
+          "media_type": "application/json",
+          "path": "outputs/image-package-and-config-inspection.json",
+          "role": "raw-tool-output",
+          "sha256": "sha256:3116a07e4f0b650c06cc718dd68625504961f8b0e8bb09bb0864e16999e9b49a",
+          "validated_against": "package-listing-1.0",
+          "validation": "format-validated"
+        }
+      ],
+      "result_record_count": 4,
+      "skip_reason": null,
+      "terminal_status": "OK_WITH_GAPS",
+      "tool_id": "image-package-and-config-inspection"
+    }
+  ]
+}

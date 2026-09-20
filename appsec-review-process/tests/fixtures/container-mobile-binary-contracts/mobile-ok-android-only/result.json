@@ -1,0 +1,51 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "job_id": "02-mobile-sast",
+  "platforms": [
+    {
+      "marker_present": true,
+      "platform": "android",
+      "tool_id": "mobsfscan-android"
+    },
+    {
+      "marker_present": false,
+      "platform": "ios",
+      "tool_id": "mobsfscan-ios"
+    }
+  ],
+  "rule_hits": [
+    {
+      "category": "insecure-data-storage",
+      "file_path": "app/src/main/kotlin/Login.kt",
+      "file_sha256": "sha256:efd7a016f7114219c37298459c2ad96177fc87363a18ecbc26f3efbf2b092299",
+      "hit_id": "hit-0001",
+      "line": 7,
+      "platform": "android",
+      "rule_id": "android_logging",
+      "tool_id": "mobsfscan-android"
+    },
+    {
+      "category": "insecure-data-storage",
+      "file_path": "app/src/main/kotlin/Login.kt",
+      "file_sha256": "sha256:efd7a016f7114219c37298459c2ad96177fc87363a18ecbc26f3efbf2b092299",
+      "hit_id": "hit-0002",
+      "line": 12,
+      "platform": "android",
+      "rule_id": "android_logging",
+      "tool_id": "mobsfscan-android"
+    },
+    {
+      "category": "insecure-data-storage",
+      "file_path": "app/src/main/kotlin/Store.kt",
+      "file_sha256": "sha256:8c5cc51894afbb1c9ca9997ce7a7b40206af9f8515cfdf2685b0500d9d429d6c",
+      "hit_id": "hit-0003",
+      "line": 3,
+      "platform": "android",
+      "rule_id": "android_logging",
+      "tool_id": "mobsfscan-android"
+    }
+  ],
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/mobile-sast/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112"
+}

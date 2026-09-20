@@ -209,3 +209,21 @@ remaining human gates.
   request-drafting only; manual observation, validator dispatch, control assessment, findings,
   registry/graph/parity changes, and report promotion remain inactive. T06 handoff/tool contracts
   are next.
+
+## Implementation checkpoint — T06 through T08 offline boundaries — 2026-09-20
+
+- T06 publishes immutable, deterministic, non-dispatchable validator handoffs with exact T03–T05
+  lineage, closed tool/action contracts, hashes, and inert dynamic-request authoring.
+- T07 validates supplied candidate assessment results against one exact newest T06 member, enforces
+  exact fragment/obligation coverage and evidence sufficiency, and publishes immutable batch results.
+- T08 validates supplied structured-intercom candidates against one exact newest T06 handoff and,
+  when referenced, the exact newest T07 pointer/result/hash. Pre-result messages need no T07.
+- T08 publishes locked immutable ledger snapshots and deterministic JSONL with pinned prior
+  attempt/ledger/head/sequence state. Rejected/blocked attempts do not replace the accepted ledger;
+  exact replay requires complete revalidation.
+- Intercom is communication/provenance only. Challenges are proposals, locators are hints,
+  crosswalk notices are routing metadata, dissent cannot replace a result, assistance cannot
+  transfer authority, and inert dynamic candidates cannot authorize execution.
+- No Dagster, lifecycle graph, registry, parity manifest, generated view, persona dispatch, target
+  inspection, result join, T09 lifecycle, dynamic/manual execution, finding, or `TODO.md` surface
+  was activated. T09 is the next dependency-ordered task.

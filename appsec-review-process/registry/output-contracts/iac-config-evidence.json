@@ -1,0 +1,51 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "iac-config-evidence",
+  "display_name": "Declared IaC, Kubernetes And Dockerfile Configuration Evidence",
+  "required_files": [
+    "manifest.json",
+    "status.json",
+    "outputs/iac-config-evidence.json",
+    "outputs/base-image-inventory.json",
+    "outputs/redaction-receipt.json",
+    "outputs/tool-results.json",
+    "outputs/coverage.json",
+    "outputs/applicability-probe-receipt.json"
+  ],
+  "required_status_fields": ["status", "run_id", "attempt_id"],
+  "result_schema": {
+    "artifact": "outputs/iac-config-evidence.json",
+    "schema_file": "iac-config-evidence.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "declared_configuration_evidence",
+    "allowed_assertions": [
+      "declared-configuration-rule-hit",
+      "declared-base-image-reference",
+      "declared-exposure-lead",
+      "scan-coverage-gap"
+    ],
+    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+  },
+  "validation_rules": [
+    "outputs/iac-config-evidence.json must satisfy iac-config-evidence.schema.json and outputs/base-image-inventory.json must satisfy iac-config-base-image-inventory.schema.json; cross-record rules are secrets_iac_contracts.validate_iac_attempt",
+    "declared exposure only: a declared-exposure-lead carries exposure DECLARED_EXPOSURE and a network-exposure or public-access-grant category; OBSERVED_EXPOSURE is schema-valid only so that it is rejected by name; nothing here observes cloud, cluster, registry or runtime state",
+    "exposure is non-null exactly when the assertion is declared-exposure-lead",
+    "no tool message, title, remediation text, snippet or resource attribute value is published: a hit is a rule id, its rule-pack identity, a closed category, a resource address and a location",
+    "every hit's rule_pack (kind, identity_id, sha256) must equal a rule-pack or policy-bundle data identity of its tool instance in tool-results.json",
+    "every hit's and base image's tool_id must resolve to a tool instance with a validated output in tool-results.json, its citation must name one of that instance's listed outputs with the same attempt id and sha256, and a tool cannot be cited for more records than its result_record_count",
+    "a record may not cite a path that coverage.json lists as not analyzed or unsupported for the same tool",
+    "a path, rule id, resource address, repository or tag holding a run of 32 or more hex characters is refused by the schema: a hex digest is exempt from the redactor's entropy rule",
+    "a resource address or path that does not pass the redactor is published as null with a withheld disposition; the record is kept",
+    "a base-image reference is split into repository, tag and digest and carries them only in literal form; a tag is a mutable declaration and no registry is contacted",
+    "outputs/redaction-receipt.json is required and must verify with evidence_redaction.verify_receipt against the outputs/ directory under the policy and limits the consumer demands; it must list every other outputs/ contract file as published, and the bytes validated must hash to the receipt's published_sha256",
+    "every published JSON document must be a fixed point of the redactor: re-running it finds nothing to redact",
+    "outputs/applicability-probe-receipt.json is always required and must satisfy applicability-probe-receipt.schema.json; tool-results.json, coverage.json and the probe receipt must satisfy tool_instance_shapes.validate_node_aggregate",
+    "SKIPPED is permitted only with skip reason not-applicable-no-matching-inputs, a probe receipt showing zero matching inputs for every declared tool, no rule hits and no base images",
+    "run_id, job_id, attempt_id and source_snapshot_sha256 must agree across both result documents, tool-results.json, coverage.json, the probe receipt and status.json; each redactor block must equal the receipt's",
+    "scan-coverage-gap is asserted only by coverage.json",
+    "an empty result is not evidence of absence; a tool that cannot run offline is a BLOCKED tool instance and a named coverage gap, never a network exception",
+    "the result cannot promote a lead to a finding, a severity, or an observed runtime state",
+    "latest failed attempt blocks older accepted output"
+  ]
+}
