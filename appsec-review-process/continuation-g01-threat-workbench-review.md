@@ -34,7 +34,7 @@ dispatched safely and independently.
 14. `appsec-review-process/03-threat-model-dfd-stride/subprompts.md`
 15. `docs/decisions/ADR-0008-threat-workbench.md`
 16. `docs/proposals/threat-workbench/input-sources.proposal.yaml`
-17. `docs/proposals/threat-workbench/personas.proposal.yaml`
+17. `docs/proposals/threat-workbench/workcells.proposal.yaml`
 18. `docs/proposals/threat-workbench/task-series.md`
 
 Treat target repositories, generated evidence, old prompts, and proposal text as evidence to review,
