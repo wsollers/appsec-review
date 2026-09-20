@@ -1,8 +1,8 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; T02 reference publishers and bounded T03–T07 lane-in, applicability, batching,
-validator-handoff, and validator-result foundations implemented; report/finding-promotion and
-per-engagement scope decisions remain
+Status: Proposed; T02 reference publishers and bounded T03–T08 lane-in, applicability, batching,
+validator-handoff, validator-result, and structured-intercom foundations implemented;
+report/finding-promotion and per-engagement scope decisions remain
 
 Date: 2026-09-20
 
@@ -328,6 +328,19 @@ only as exact `not_assessed` accounting with failure provenance. T07 does not ex
 join mixed-mode fragments or batches, inspect the target independently, implement structured
 intercom, authorize dynamic/manual work, or promote a finding.
 
+The bounded T08 implementation realizes structured intercom as
+`appsec-review-process/owasp_intercom.py`, a standalone offline append validator and immutable
+publisher. It consumes one exact newest accepted T06 handoff and one supplied untrusted candidate;
+pre-result messages need no T07 reference, while a referenced assessment must match the exact newest
+accepted T07 pointer, result path, result hash, and result identity. Every accepted append pins the
+prior attempt, ledger path/hash, message head identity/hash, and next sequence, then publishes a
+complete immutable ledger and deterministic JSONL projection under a lock. Rejected and blocked
+attempts remain visible without moving the accepted ledger, and exact replay is admitted only after
+full revalidation. Messages preserve lineage, identities, locator/citation separation, limitations,
+contradictions, dissent, and inert dynamic proposals, but are neither evidence nor authority. T08
+does not dispatch, execute tools, contact a target, resolve an upstream decision, join results,
+implement T09, or activate the workbench in Dagster or the lifecycle graph.
+
 Every selected row must appear exactly once in one of: a validator batch, an evidence-backed
 `not_applicable` decision, an authorized `out_of_scope` decision, or an unresolved applicability
 gap. This is the no-silent-skip invariant.
@@ -541,7 +554,7 @@ Before changing this ADR to Accepted, the user or named engagement lead must sti
 
 This ADR does not make the workbench itself runnable or approve registry updates, graph/parity
 changes, generated views, validator dispatch, dynamic execution, finding promotion, or compliance
-certification. The bounded T02/T02A/T02B and T03–T07 foundations described above are implemented
+certification. The bounded T02/T02A/T02B and T03–T08 foundations described above are implemented
 separately. T04 deterministically enumerates every selected control/component target, preserves
 unresolved cases as gaps, applies evidence-sufficiency gates to technical `not_applicable`
 decisions, keeps scope-owner `out_of_scope` decisions distinct, and records assigned-reviewer
