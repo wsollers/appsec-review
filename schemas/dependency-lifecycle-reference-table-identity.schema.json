@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dependency-lifecycle-reference-table-identity.schema.json",
+  "title": "Reference-table identity (outputs/reference-table-identity.json)",
+  "description": "Identity of the table the transform read: id, version, sha256 and as-of date, each bound to what the caller expects and to the table's bytes. Age fields follow ADR-0010 M4.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "table_id",
+    "version",
+    "sha256",
+    "as_of",
+    "row_count",
+    "evaluated_at",
+    "age_seconds",
+    "max_age_seconds",
+    "age_policy"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/dependency-lifecycle-reference-table-identity/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "job_id": {
+      "const": "02-dependency-lifecycle"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "table_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~-]{0,63}\\Z"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "as_of": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\Z"
+    },
+    "row_count": {
+      "type": "integer"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "age_seconds": {
+      "type": "integer"
+    },
+    "max_age_seconds": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "age_policy": {
+      "type": "string",
+      "enum": [
+        "no-limit",
+        "within-limit"
+      ]
+    }
+  }
+}

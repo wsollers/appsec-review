@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sbom-inventory-upstream-binding.schema.json",
+  "title": "Binding to an upstream accepted attempt (SBOM family)",
+  "description": "Which accepted upstream document a result was computed from. sbom_family_contracts.py pins job_id and path per use, re-hashes the upstream bytes and compares them with this block AND with the identity the caller supplies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_id",
+    "attempt_id",
+    "path",
+    "sha256"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "enum": [
+        "02-sbom-inventory",
+        "02-license-scan"
+      ]
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "path": {
+      "type": "string",
+      "enum": [
+        "outputs/sbom-manifest.json",
+        "outputs/license-inventory.json"
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}

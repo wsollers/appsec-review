@@ -227,3 +227,28 @@ remaining human gates.
 - No Dagster, lifecycle graph, registry, parity manifest, generated view, persona dispatch, target
   inspection, result join, T09 lifecycle, dynamic/manual execution, finding, or `TODO.md` surface
   was activated. T09 is the next dependency-ordered task.
+
+## Implementation checkpoint — T09 dynamic/manual request lifecycle — 2026-09-20
+
+- Implemented the standalone offline T09 request validator and immutable lifecycle ledger with
+  closed publication, request-version, transition-authority, ledger, validation, and disabled-
+  execution receipt schemas.
+- Each request preserves exact T03–T06 lineage and proof-obligation identity. Optional T07 results
+  and T08 messages are independently pinned and revalidated, but remain neither evidence nor
+  transition authority.
+- Deterministic request identity protects control, component, environment, identity/data, safety,
+  and required-authority dimensions. Compatible exact requests deduplicate; cross-batch sources
+  retain independent result authority.
+- Baseline publication is limited to inert proposed, owner-canceled, and policy-blocked states.
+  Authorized, executed, ingested, or reassessed records require a separately supplied exact state
+  artifact from its newest accepted run-owned producer and still do not mean T09
+  authorized/performed work or changed T07.
+- Manual-observation requests are blocked. Execute/launch operations write only an immutable
+  `dynamic_execution_disabled` receipt recording no contact, mutation, execution, or observation.
+- Request versions and publication attempts are append-only and hash chained. Stale heads, skipped
+  or reversed transitions, rewritten history, conflicting protected identities, circular T09
+  authority, lost updates, secrets, unnecessary personal data, and prompt-injected scope/permission
+  expansion fail closed without replacing accepted state.
+- No Dagster, lifecycle graph, registry, parity manifest, generated view, persona dispatch, target
+  access, assessment update, result join, finding promotion, or `TODO.md` surface was activated.
+  T10 dispatch, wait-all, and failure accounting is next and remains dependency-gated.

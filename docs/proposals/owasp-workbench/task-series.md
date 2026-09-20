@@ -12,8 +12,9 @@ default, disabled dynamic execution with an inert launcher contract, and stale N
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
 publisher. T03 accepted-intel lane-in, T04 applicability modeling, T05 deterministic batching,
-T06 validator handoff contracts, T07 validator-result validation, and T08 structured intercom are
-implemented as standalone offline foundations. T09–T13 remain dependency ordered and later
+T06 validator handoff contracts, T07 validator-result validation, T08 structured intercom, and T09
+dynamic/manual request lifecycle validation are implemented as standalone offline foundations.
+T10–T13 remain dependency ordered and later
 reporting/promotion work remains gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
@@ -344,7 +345,7 @@ authority. It rejects prohibited claims, authority expansion, secrets, undeclare
 and dynamic/manual execution. It does not dispatch, execute, inspect the target, resolve challenges,
 join results, implement T09, or activate registry/graph/parity/generated-view surfaces. T09 is next.
 
-## T09 — Dynamic And Manual Test Requests
+## T09 — Dynamic And Manual Test Requests — IMPLEMENTED FOUNDATION
 
 Define `owasp-dynamic-test-requests.json` with:
 
@@ -363,6 +364,38 @@ Retain a launcher/handoff boundary, but configure it `disabled`: it may validate
 persist queue artifacts only. An execute/launch request emits `dynamic_execution_disabled` and
 must not contact or mutate a target. Enabling execution is a separate future policy,
 implementation, and qualification task.
+
+Implemented by `appsec-review-process/owasp_dynamic_requests.py` and the closed T09 schemas
+documented in `schemas/README.md`. The standalone offline worker:
+
+- consumes one or more exact newest accepted T06 handoffs and preserves their T03–T06 selection,
+  applicability, worklist, batch, fragment, control, component, and proof-obligation lineage;
+- independently validates optional exact newest T07 results and T08 ledgers/messages without
+  treating either as evidence, transition authority, or permission;
+- validates an explicitly supplied, hash-pinned request candidate containing the insufficiency,
+  environment, prerequisite, identity/data, least-privilege, safety, observation/criteria,
+  capture/redaction, owner, reassessment/re-verification, limitation, contradiction, unresolved,
+  dissent, crosswalk, prior-version, and acknowledgement fields required by this task;
+- deterministically deduplicates only identical protected control/component/environment/identity/
+  data/safety/authority dimensions and preserves independent per-batch result authority;
+- publishes locked, append-only request-version ledger snapshots with exact prior accepted
+  identity/hash, transition authority, state and attempt hash chains; stale heads, skipped/reversed
+  transitions, rewritten history, conflicting identities, circular T09 authority, and lost updates
+  fail closed;
+- permits baseline publication only for inert `proposed`, owner-canceled `canceled`, and
+  policy-blocked `blocked` states. `authorized`, `executed`, `ingested`, and `reassessed` require a
+  separately supplied exact state artifact published by its newest accepted run-owned producer;
+  recording that external artifact never means T09 granted permission, performed work, accepted
+  evidence, or changed a T07 assessment;
+- forces manual-observation requests to `blocked`, rejects secrets and unnecessary personal data,
+  and treats crosswalks only as navigation metadata; and
+- writes an immutable `dynamic_execution_disabled` no-contact/no-mutation receipt for every
+  `execute` or `launch` operation without reading a target or invoking a tool.
+
+T09 is not registered or dispatched and does not authorize or execute dynamic/manual work, ingest
+runtime evidence into an assessment, join results, resolve applicability/component challenges, or
+promote findings, severity, exploitability, compliance, remediation, or runtime claims. T10
+dispatch/wait-all/failure accounting is next and remains blocked on its persona/pool foundations.
 
 ## T10 — Dispatch, Wait-All, And Failure Accounting
 
