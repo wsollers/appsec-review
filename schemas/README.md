@@ -28,6 +28,15 @@ Composable review schemas (added for the registry/worklist layer):
 - `job-template.schema.json` -- dispatchable lane job composition.
 - `standard-control.schema.json` -- per-control standard record with upstream source lineage.
 - `standards-worklist.schema.json` -- per-component or per-platform checklist work items.
+- `reference-source-lock.schema.json`, `reference-snapshot-manifest.schema.json`, and
+  `reference-snapshot-file.schema.json` -- immutable OWASP/OpenCRE source selection, file hashes,
+  license identity, extraction lineage, counts, and offline validation receipts.
+- `standard-selection.schema.json` -- named engagement approval and exact snapshot/profile pinning.
+- `owasp-control-record.schema.json`, `owasp-test-record.schema.json`, and
+  `owasp-context-record.schema.json` -- assignable ASVS/MASVS controls, MASTG tests, and Top 10
+  routing context without implying a target verdict.
+- `opencre-crosswalk-record.schema.json` and `owasp-source-citation.schema.json` -- OpenCRE
+  navigation/deduplication records and exact raw snapshot citations. Crosswalks are not proof.
 - `component-tag-cloud.schema.json` -- component tags used to route standards and persona work.
 - `intelligence-payload.schema.json` -- scrubbed doc/test/API intelligence facts with source lineage.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.

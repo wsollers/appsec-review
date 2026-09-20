@@ -1,0 +1,111 @@
+{
+  "schema": "appsec-review/reference-source-lock/1.0",
+  "captured_for": "OWASP control workbench foundation",
+  "sources": [
+    {
+      "family": "owasp_asvs",
+      "edition": "5.0.0",
+      "source_kind": "asvs_flat_json",
+      "upstream_url": "https://github.com/OWASP/ASVS",
+      "immutable_ref": "v5.0.0_release",
+      "resolved_commit": "5cf9b032440be53ce345ab3c130fda46ba1ce7a2",
+      "tag_object": null,
+      "license_identifier": "CC-BY-SA-4.0",
+      "license_path": "LICENSE.md",
+      "raw_includes": [
+        "5.0/docs_en/OWASP_Application_Security_Verification_Standard_5.0.0_en.flat.json",
+        "5.0/mappings/mapping_v5.0.0_to_v4.0.3.yml",
+        "5.0/mappings/mapping_v4.0.3_to_v5.0.0.yml"
+      ],
+      "expected_record_count": 345
+    },
+    {
+      "family": "owasp_masvs",
+      "edition": "2.1.0",
+      "source_kind": "masvs_markdown",
+      "upstream_url": "https://github.com/OWASP/masvs",
+      "immutable_ref": "v2.1.0",
+      "resolved_commit": "8e133d09f4140518ed04cc254b18be9ff4990ffc",
+      "tag_object": "1de2913fe799137ac4695eabaae633da693070cd",
+      "license_identifier": "CC-BY-SA-4.0",
+      "license_path": "License.md",
+      "raw_includes": ["controls/*.md"],
+      "expected_record_count": 24
+    },
+    {
+      "family": "owasp_mastg",
+      "edition": "2.0.0",
+      "source_kind": "mastg_markdown",
+      "upstream_url": "https://github.com/OWASP/mastg",
+      "immutable_ref": "v2.0.0",
+      "resolved_commit": "990472dbcffe126f5556045d60270c4ffdfdde72",
+      "tag_object": null,
+      "license_identifier": "CC-BY-SA-4.0",
+      "license_path": "License.md",
+      "raw_includes": [
+        "tests/*/MASVS-*/MASTG-TEST-*.md",
+        "tests-beta/*/MASVS-*/MASTG-TEST-*.md"
+      ],
+      "expected_record_count": 292
+    },
+    {
+      "family": "owasp_top_10",
+      "edition": "2025",
+      "source_kind": "context_markdown",
+      "upstream_url": "https://github.com/OWASP/Top10",
+      "immutable_ref": "66ebc4798d2ca72973967a20264bdeb70dcf0a13",
+      "resolved_commit": "66ebc4798d2ca72973967a20264bdeb70dcf0a13",
+      "tag_object": null,
+      "license_identifier": "CC-BY-SA-4.0",
+      "license_path": "LICENSE",
+      "raw_includes": ["2025/docs/en/A*_2025-*.md"],
+      "expected_record_count": 10
+    },
+    {
+      "family": "owasp_api_security_top_10",
+      "edition": "2023",
+      "source_kind": "context_markdown",
+      "upstream_url": "https://github.com/OWASP/API-Security",
+      "immutable_ref": "e85ddfa5a936d4656840ac250c039c7057e66b0d",
+      "resolved_commit": "e85ddfa5a936d4656840ac250c039c7057e66b0d",
+      "tag_object": null,
+      "license_identifier": "CC-BY-SA-4.0",
+      "license_path": "LICENSE",
+      "raw_includes": ["editions/2023/en/0xa*.md"],
+      "expected_record_count": 10
+    },
+    {
+      "family": "owasp_llm_top_10",
+      "edition": "2026",
+      "source_kind": "context_markdown",
+      "upstream_url": "https://github.com/GenAI-Security-Project/GenAI-LLM-Top10",
+      "immutable_ref": "9253e38ade58e959b531c0c5c9a4842272c9cd0e",
+      "resolved_commit": "9253e38ade58e959b531c0c5c9a4842272c9cd0e",
+      "tag_object": null,
+      "license_identifier": "CC-BY-SA-4.0",
+      "license_path": "README.md",
+      "raw_includes": [
+        "2026/final/LLM[0-9][0-9]_*.md",
+        "2026/final/mappings/*.json"
+      ],
+      "expected_record_count": 10
+    },
+    {
+      "family": "opencre",
+      "edition": "snapshot-2026-09-19",
+      "source_kind": "opencre_csv",
+      "upstream_url": "https://github.com/OWASP/OpenCRE",
+      "immutable_ref": "fbacf559d320358259009a255e7a62a7eb691f24+dated-api-export",
+      "resolved_commit": "fbacf559d320358259009a255e7a62a7eb691f24",
+      "tag_object": null,
+      "license_identifier": "Apache-2.0",
+      "license_path": "LICENSE",
+      "raw_includes": [
+        "application/utils/cres_csv_export.py",
+        "opencre-export-2026-09-19.csv"
+      ],
+      "expected_record_count": 522,
+      "generated_inputs": ["opencre-export-2026-09-19.csv"]
+    }
+  ]
+}

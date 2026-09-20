@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "standard-selection.schema.json",
+  "title": "Approved Standards Selection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "selection_id", "engagement_id", "selections", "approver", "approved_at"],
+  "properties": {
+    "schema": {"const": "appsec-review/standard-selection/1.0"},
+    "selection_id": {"type": "string"},
+    "engagement_id": {"type": "string"},
+    "selections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family", "snapshot_id", "manifest_sha256", "edition", "enabled_scope", "profile_or_level"],
+        "properties": {
+          "family": {"type": "string"},
+          "snapshot_id": {"type": "string"},
+          "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "edition": {"type": "string"},
+          "enabled_scope": {"type": "array", "items": {"type": "string"}},
+          "profile_or_level": {"type": ["string", "null"]},
+          "tailoring": {"type": "array", "items": {"type": "object"}}
+        }
+      }
+    },
+    "approver": {"type": "string"},
+    "approved_at": {"type": "string"}
+  }
+}

@@ -1,0 +1,632 @@
+{
+  "schema": "appsec-review/reference-catalog/1.0",
+  "family": "owasp_masvs",
+  "edition": "2.1.0",
+  "snapshot_id": "sha256-8fcf29b29ab85c0c",
+  "records": [
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-AUTH-1",
+      "title": "The app uses secure authentication and authorization protocols and follows the relevant best practices.",
+      "text": "Most apps connecting to a remote endpoint require user authentication and also enforce some kind of authorization. While the enforcement of these mechanisms must be on the remote endpoint, the apps also have to ensure that it follows all the relevant best practices to ensure a secure use of the involved protocols.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-AUTH-1:1",
+          "text": "Most apps connecting to a remote endpoint require user authentication and also enforce some kind of authorization. While the enforcement of these mechanisms must be on the remote endpoint, the apps also have to ensure that it follows all the relevant best practices to ensure a secure use of the involved protocols.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-AUTH-1.md",
+        "raw_sha256": "79dc9bb251fe5c928cff177b3e34061a0bdd6ca66b7b3f3a776b3e1df563854b"
+      },
+      "group": {
+        "category": "MASVS-AUTH"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-AUTH-2",
+      "title": "The app performs local authentication securely according to the platform best practices.",
+      "text": "Many apps allow users to authenticate via biometrics or a local PIN code. These authentication mechanisms need to be correctly implemented. Additionally, some apps might not have a remote endpoint, and rely fully on local app authentication.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-AUTH-2:1",
+          "text": "Many apps allow users to authenticate via biometrics or a local PIN code. These authentication mechanisms need to be correctly implemented. Additionally, some apps might not have a remote endpoint, and rely fully on local app authentication.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-AUTH-2.md",
+        "raw_sha256": "64d8f4cb179b34bf0c1912074369f2a6588e9cfaadbcbbf1a3764f9d23c6ffd5"
+      },
+      "group": {
+        "category": "MASVS-AUTH"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-AUTH-3",
+      "title": "The app secures sensitive operations with additional authentication.",
+      "text": "Some additional form of authentication is often desirable for sensitive actions inside the app. This can be done in different ways (biometric, pin, MFA code generator, email, deep links, etc) and they all need to be implemented securely.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-AUTH-3:1",
+          "text": "Some additional form of authentication is often desirable for sensitive actions inside the app. This can be done in different ways (biometric, pin, MFA code generator, email, deep links, etc) and they all need to be implemented securely.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-AUTH-3.md",
+        "raw_sha256": "6ea2d131f6a7cf243cbfb12a85a5af69dcab21c3e8b4b6b119eb543f4aca5c3c"
+      },
+      "group": {
+        "category": "MASVS-AUTH"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-CODE-1",
+      "title": "The app requires an up-to-date platform version.",
+      "text": "Every release of the mobile OS includes security patches and new security features. By supporting older versions, apps stay vulnerable to well-known threats. This control ensures that the app is running on an up-to-date platform version so that users have the latest security protections.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-CODE-1:1",
+          "text": "Every release of the mobile OS includes security patches and new security features. By supporting older versions, apps stay vulnerable to well-known threats. This control ensures that the app is running on an up-to-date platform version so that users have the latest security protections.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-CODE-1.md",
+        "raw_sha256": "0b3c3bb30cf7492f526fe664f877ff45d63a6913b7866d459217cc6ec75b2cae"
+      },
+      "group": {
+        "category": "MASVS-CODE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-CODE-2",
+      "title": "The app has a mechanism for enforcing app updates.",
+      "text": "Sometimes critical vulnerabilities are discovered in the app when it is already in production. This control ensures that there is a mechanism to force the users to update the app before they can continue using it.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-CODE-2:1",
+          "text": "Sometimes critical vulnerabilities are discovered in the app when it is already in production. This control ensures that there is a mechanism to force the users to update the app before they can continue using it.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-CODE-2.md",
+        "raw_sha256": "90c5049cdb071b5e61f6fcc036eab73dd00aa5dd088441ddeac95aa747739591"
+      },
+      "group": {
+        "category": "MASVS-CODE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-CODE-3",
+      "title": "The app only uses software components without known vulnerabilities.",
+      "text": "To be truly secure, a full whitebox assessment should have been performed on all app components. However, as it usually happens with e.g. for third-party components this is not always feasible and not typically part of a penetration test. This control covers \"low-hanging fruit\" cases, such as those that can be detected just by scanning libraries for known vulnerabilities.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-CODE-3:1",
+          "text": "To be truly secure, a full whitebox assessment should have been performed on all app components. However, as it usually happens with e.g. for third-party components this is not always feasible and not typically part of a penetration test. This control covers \"low-hanging fruit\" cases, such as those that can be detected just by scanning libraries for known vulnerabilities.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-CODE-3.md",
+        "raw_sha256": "f793be2f565204748b0d38b76ff1e0bd1a31559b83b89aabc51b5b8c766dca34"
+      },
+      "group": {
+        "category": "MASVS-CODE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-CODE-4",
+      "title": "The app validates and sanitizes all untrusted inputs.",
+      "text": "Apps have many data entry points including the UI, IPC, the network, the file system, etc. This incoming data might have been inadvertently modified by untrusted actors and may lead to bypass of critical security checks as well as classical injection attacks such as SQL injection, XSS or insecure deserialization. This control ensures that this data is treated as untrusted input and is properly verified and sanitized before it's used.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-CODE-4:1",
+          "text": "Apps have many data entry points including the UI, IPC, the network, the file system, etc. This incoming data might have been inadvertently modified by untrusted actors and may lead to bypass of critical security checks as well as classical injection attacks such as SQL injection, XSS or insecure deserialization. This control ensures that this data is treated as untrusted input and is properly verified and sanitized before it's used.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-CODE-4.md",
+        "raw_sha256": "8ce89c5460385471972807e9367b8f709ef8ffe4eaecdc0756780fc992768088"
+      },
+      "group": {
+        "category": "MASVS-CODE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-CRYPTO-1",
+      "title": "The app employs current strong cryptography and uses it according to industry best practices.",
+      "text": "Cryptography plays an especially important role in securing the user's data - even more so in a mobile environment, where attackers having physical access to the user's device is a likely scenario. This control covers general cryptography best practices, which are typically defined in external standards.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-CRYPTO-1:1",
+          "text": "Cryptography plays an especially important role in securing the user's data - even more so in a mobile environment, where attackers having physical access to the user's device is a likely scenario. This control covers general cryptography best practices, which are typically defined in external standards.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-CRYPTO-1.md",
+        "raw_sha256": "b901c6c3b94bfc08be68be4850ea0251588740ed322d2dbd8e42155cc53a0e72"
+      },
+      "group": {
+        "category": "MASVS-CRYPTO"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-CRYPTO-2",
+      "title": "The app performs key management according to industry best practices.",
+      "text": "Even the strongest cryptography would be compromised by poor key management. This control covers the management of cryptographic keys throughout their lifecycle, including key generation, storage and protection.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-CRYPTO-2:1",
+          "text": "Even the strongest cryptography would be compromised by poor key management. This control covers the management of cryptographic keys throughout their lifecycle, including key generation, storage and protection.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-CRYPTO-2.md",
+        "raw_sha256": "9cd29533f861fb7bf05ee2e28455388a3a3f58367153345572ae71d7553fcbea"
+      },
+      "group": {
+        "category": "MASVS-CRYPTO"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-NETWORK-1",
+      "title": "The app secures all network traffic according to the current best practices.",
+      "text": "Ensuring data privacy and integrity of any data in transit is critical for any app that communicates over the network. This is typically done by encrypting data and authenticating the remote endpoint, as TLS does. However, there are many ways for a developer to disable the platform secure defaults, or bypass them completely by using low-level APIs or third-party libraries. This control ensures that the app is in fact setting up secure connections in any situation.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-NETWORK-1:1",
+          "text": "Ensuring data privacy and integrity of any data in transit is critical for any app that communicates over the network. This is typically done by encrypting data and authenticating the remote endpoint, as TLS does. However, there are many ways for a developer to disable the platform secure defaults, or bypass them completely by using low-level APIs or third-party libraries. This control ensures that the app is in fact setting up secure connections in any situation.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-NETWORK-1.md",
+        "raw_sha256": "229d0e206d5b27c8475b70d6ff7aaa0cc4636c845dc9d27eee6321a0ddf71ec1"
+      },
+      "group": {
+        "category": "MASVS-NETWORK"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-NETWORK-2",
+      "title": "The app performs identity pinning for all remote endpoints under the developer's control.",
+      "text": "Instead of trusting all the default root CAs of the framework or device, this control will make sure that only very specific CAs are trusted. This practice is typically called certificate pinning or public key pinning.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-NETWORK-2:1",
+          "text": "Instead of trusting all the default root CAs of the framework or device, this control will make sure that only very specific CAs are trusted. This practice is typically called certificate pinning or public key pinning.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-NETWORK-2.md",
+        "raw_sha256": "cd7872711fe996cca381c290dcd30ac1bbf20f9767622241dc651d7a66708b0d"
+      },
+      "group": {
+        "category": "MASVS-NETWORK"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-PLATFORM-1",
+      "title": "The app uses IPC mechanisms securely.",
+      "text": "Apps typically use platform provided IPC mechanisms to intentionally expose data or functionality. Both installed apps and the user are able to interact with the app in many different ways. This control ensures that all interactions involving IPC mechanisms happen securely.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-PLATFORM-1:1",
+          "text": "Apps typically use platform provided IPC mechanisms to intentionally expose data or functionality. Both installed apps and the user are able to interact with the app in many different ways. This control ensures that all interactions involving IPC mechanisms happen securely.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-PLATFORM-1.md",
+        "raw_sha256": "0ca2fbc08d7bc0291f9500dabf6330029ad0fec1d78cf2c243cc5eec675e31e9"
+      },
+      "group": {
+        "category": "MASVS-PLATFORM"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-PLATFORM-2",
+      "title": "The app uses WebViews securely.",
+      "text": "WebViews are typically used by apps that have a need for increased control over the UI. This control ensures that WebViews are configured securely to prevent sensitive data leakage as well as sensitive functionality exposure (e.g. via JavaScript bridges to native code).",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-PLATFORM-2:1",
+          "text": "WebViews are typically used by apps that have a need for increased control over the UI. This control ensures that WebViews are configured securely to prevent sensitive data leakage as well as sensitive functionality exposure (e.g. via JavaScript bridges to native code).",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-PLATFORM-2.md",
+        "raw_sha256": "f5f9b59350a12f8da8737403646ac9b79da3258a9f9a2d63a825f1b5f11d7c58"
+      },
+      "group": {
+        "category": "MASVS-PLATFORM"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-PLATFORM-3",
+      "title": "The app uses the user interface securely.",
+      "text": "Sensitive data has to be displayed in the UI in many situations (e.g. passwords, credit card details, OTP codes in notifications). This control ensures that this data doesn't end up being unintentionally leaked due to platform mechanisms such as auto-generated screenshots or accidentally disclosed via e.g. shoulder surfing or sharing the device with another person.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-PLATFORM-3:1",
+          "text": "Sensitive data has to be displayed in the UI in many situations (e.g. passwords, credit card details, OTP codes in notifications). This control ensures that this data doesn't end up being unintentionally leaked due to platform mechanisms such as auto-generated screenshots or accidentally disclosed via e.g. shoulder surfing or sharing the device with another person.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-PLATFORM-3.md",
+        "raw_sha256": "f0517156eeb6291e4bbee682e24c7cdaf6e93d3481be6aebd54424500340c024"
+      },
+      "group": {
+        "category": "MASVS-PLATFORM"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-PRIVACY-1",
+      "title": "The app minimizes access to sensitive data and resources.",
+      "text": "Apps should only request access to the data they absolutely need for their functionality and always with informed consent from the user. This control ensures that apps practice data minimization and restricts access control, reducing the potential impact of data breaches or leaks.\n\nFurthermore, apps should share data with third parties only when necessary, and this should include enforcing that third-party SDKs operate based on user consent, not by default or without it. Apps should prevent third-party SDKs from ignoring consent signals or from collecting data before consent is confirmed.\n\nAdditionally, apps should be aware of the 'supply chain' of SDKs they incorporate, ensuring that no data is unnecessarily passed down their chain of dependencies. This end-to-end responsibility for data aligns with recent SBOM regulatory requirements, making apps more accountable for their data practices.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-PRIVACY-1:1",
+          "text": "Apps should only request access to the data they absolutely need for their functionality and always with informed consent from the user. This control ensures that apps practice data minimization and restricts access control, reducing the potential impact of data breaches or leaks.\n\nFurthermore, apps should share data with third parties only when necessary, and this should include enforcing that third-party SDKs operate based on user consent, not by default or without it. Apps should prevent third-party SDKs from ignoring consent signals or from collecting data before consent is confirmed.\n\nAdditionally, apps should be aware of the 'supply chain' of SDKs they incorporate, ensuring that no data is unnecessarily passed down their chain of dependencies. This end-to-end responsibility for data aligns with recent SBOM regulatory requirements, making apps more accountable for their data practices.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-PRIVACY-1.md",
+        "raw_sha256": "461ff6883e6daee7c155a472bd62bbf1935eb1a44571dc63c6d9671089519b6f"
+      },
+      "group": {
+        "category": "MASVS-PRIVACY"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-PRIVACY-2",
+      "title": "The app prevents identification of the user.",
+      "text": "Protecting user identity is crucial. This control emphasizes the use of unlinkability techniques like data abstraction, anonymization and pseudonymization to prevent user identification and tracking.\n\nAnother key aspect addressed by this control is to establish technical barriers when employing complex 'fingerprint-like' signals (e.g. device IDs, IP addresses, behavioral patterns) for specific purposes. For instance, a fingerprint used for fraud detection should be isolated and not repurposed for audience measurement in an analytics SDK. This ensures that each data stream serves its intended function without risking user privacy.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-PRIVACY-2:1",
+          "text": "Protecting user identity is crucial. This control emphasizes the use of unlinkability techniques like data abstraction, anonymization and pseudonymization to prevent user identification and tracking.\n\nAnother key aspect addressed by this control is to establish technical barriers when employing complex 'fingerprint-like' signals (e.g. device IDs, IP addresses, behavioral patterns) for specific purposes. For instance, a fingerprint used for fraud detection should be isolated and not repurposed for audience measurement in an analytics SDK. This ensures that each data stream serves its intended function without risking user privacy.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-PRIVACY-2.md",
+        "raw_sha256": "e6f3f495414a027282d9320b7c70e94ffa1a45317013df9879e8edbbef5e6d1e"
+      },
+      "group": {
+        "category": "MASVS-PRIVACY"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-PRIVACY-3",
+      "title": "The app is transparent about data collection and usage.",
+      "text": "Users have the right to know how their data is being used. This control ensures that apps provide clear information about data collection, storage, and sharing practices, including any behavior a user wouldn't reasonably expect, such as background data collection. Apps should also adhere to platform guidelines on data declarations.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-PRIVACY-3:1",
+          "text": "Users have the right to know how their data is being used. This control ensures that apps provide clear information about data collection, storage, and sharing practices, including any behavior a user wouldn't reasonably expect, such as background data collection. Apps should also adhere to platform guidelines on data declarations.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-PRIVACY-3.md",
+        "raw_sha256": "9d53c9458aec2b1c851852c6eb6baaeb32a59ab3e18b1dbc613df57105d3bc62"
+      },
+      "group": {
+        "category": "MASVS-PRIVACY"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-PRIVACY-4",
+      "title": "The app offers user control over their data.",
+      "text": "Users should have control over their data. This control ensures that apps provide mechanisms for users to manage, delete, and modify their data, and change privacy settings as needed (e.g. to revoke consent). Additionally, apps should re-prompt for consent and update their transparency disclosures when they require more data than initially specified.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-PRIVACY-4:1",
+          "text": "Users should have control over their data. This control ensures that apps provide mechanisms for users to manage, delete, and modify their data, and change privacy settings as needed (e.g. to revoke consent). Additionally, apps should re-prompt for consent and update their transparency disclosures when they require more data than initially specified.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-PRIVACY-4.md",
+        "raw_sha256": "26fc3f723bc17ef7e88acdcbb59e47d43560b025afb889dc0b91e880ec373694"
+      },
+      "group": {
+        "category": "MASVS-PRIVACY"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-RESILIENCE-1",
+      "title": "The app validates the integrity of the platform.",
+      "text": "Running on a platform that has been tampered with can be very dangerous for apps, as this may disable certain security features, putting the data of the app at risk. Trusting the platform is essential for many of the MASVS controls relying on the platform being secure (e.g. secure storage, biometrics, sandboxing, etc.). This control tries to validate that the OS has not been compromised and its security features can thus be trusted.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-RESILIENCE-1:1",
+          "text": "Running on a platform that has been tampered with can be very dangerous for apps, as this may disable certain security features, putting the data of the app at risk. Trusting the platform is essential for many of the MASVS controls relying on the platform being secure (e.g. secure storage, biometrics, sandboxing, etc.). This control tries to validate that the OS has not been compromised and its security features can thus be trusted.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-RESILIENCE-1.md",
+        "raw_sha256": "c092783e82263e8567918db6bdeff07ca5510247682179360e86b2ea4bd8f85c"
+      },
+      "group": {
+        "category": "MASVS-RESILIENCE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-RESILIENCE-2",
+      "title": "The app implements anti-tampering mechanisms.",
+      "text": "Apps run on a user-controlled device, and without proper protections it's relatively easy to run a modified version locally (e.g. to cheat in a game, or enable premium features without paying), or upload a backdoored version of it to third-party app stores. This control tries to ensure the integrity of the app's intended functionality by preventing modifications to the original code and resources.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-RESILIENCE-2:1",
+          "text": "Apps run on a user-controlled device, and without proper protections it's relatively easy to run a modified version locally (e.g. to cheat in a game, or enable premium features without paying), or upload a backdoored version of it to third-party app stores. This control tries to ensure the integrity of the app's intended functionality by preventing modifications to the original code and resources.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-RESILIENCE-2.md",
+        "raw_sha256": "18fc92de181a4b477074e1ef3c9cb1c8efcbafec1d1cc4456988702922ffcbc7"
+      },
+      "group": {
+        "category": "MASVS-RESILIENCE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-RESILIENCE-3",
+      "title": "The app implements anti-static analysis mechanisms.",
+      "text": "Understanding the internals of an app is typically the first step towards tampering with it (either dynamically, or statically). This control tries to impede comprehension by making it as difficult as possible to figure out how an app works using static analysis.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-RESILIENCE-3:1",
+          "text": "Understanding the internals of an app is typically the first step towards tampering with it (either dynamically, or statically). This control tries to impede comprehension by making it as difficult as possible to figure out how an app works using static analysis.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-RESILIENCE-3.md",
+        "raw_sha256": "fd36df24a8cff7df83de6ebcf4f1da422b1480f05bc9a02266433d099ccd735c"
+      },
+      "group": {
+        "category": "MASVS-RESILIENCE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-RESILIENCE-4",
+      "title": "The app implements anti-dynamic analysis techniques.",
+      "text": "Sometimes pure static analysis is very difficult and time consuming so it typically goes hand in hand with dynamic analysis. Observing and manipulating an app during runtime makes it much easier to decipher its behavior. This control aims to make it as difficult as possible to perform dynamic analysis, as well as prevent dynamic instrumentation which could allow an attacker to modify the code at runtime.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-RESILIENCE-4:1",
+          "text": "Sometimes pure static analysis is very difficult and time consuming so it typically goes hand in hand with dynamic analysis. Observing and manipulating an app during runtime makes it much easier to decipher its behavior. This control aims to make it as difficult as possible to perform dynamic analysis, as well as prevent dynamic instrumentation which could allow an attacker to modify the code at runtime.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-RESILIENCE-4.md",
+        "raw_sha256": "86f47a46aefe477214991ae20c7b1cbb798ff6389740b033520b6d319412ceee"
+      },
+      "group": {
+        "category": "MASVS-RESILIENCE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-STORAGE-1",
+      "title": "The app securely stores sensitive data.",
+      "text": "Apps handle sensitive data coming from many sources such as the user, the backend, system services or other apps on the device and usually need to store it locally. The storage locations may be private to the app (e.g. its internal storage) or be public and therefore accessible by the user or other installed apps (e.g. public folders such as Downloads). This control ensures that any sensitive data that is intentionally stored by the app is properly protected independently of the target location.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-STORAGE-1:1",
+          "text": "Apps handle sensitive data coming from many sources such as the user, the backend, system services or other apps on the device and usually need to store it locally. The storage locations may be private to the app (e.g. its internal storage) or be public and therefore accessible by the user or other installed apps (e.g. public folders such as Downloads). This control ensures that any sensitive data that is intentionally stored by the app is properly protected independently of the target location.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-STORAGE-1.md",
+        "raw_sha256": "b75b69ff4e0352893a29e396bc97a490729871dd8e8aa1545a62d4003cf21636"
+      },
+      "group": {
+        "category": "MASVS-STORAGE"
+      }
+    },
+    {
+      "schema": "appsec-review/owasp-control-record/1.0",
+      "record_type": "control",
+      "standard_family": "owasp_masvs",
+      "standard_version": "2.1.0",
+      "control_id": "MASVS-STORAGE-2",
+      "title": "The app prevents leakage of sensitive data.",
+      "text": "There are cases when sensitive data is unintentionally stored or exposed to publicly accessible locations; typically as a side-effect of using certain APIs, system capabilities such as backups or logs. This control covers this kind of unintentional leaks where the developer actually has a way to prevent it.",
+      "profiles": [],
+      "proof_obligations": [
+        {
+          "obligation_id": "MASVS-STORAGE-2:1",
+          "text": "There are cases when sensitive data is unintentionally stored or exposed to publicly accessible locations; typically as a side-effect of using certain APIs, system capabilities such as backups or logs. This control covers this kind of unintentional leaks where the developer actually has a way to prevent it.",
+          "evidence_classification": "unclassified_requires_policy",
+          "minimum_evidence_modes": []
+        }
+      ],
+      "source": {
+        "snapshot_id": "sha256-8fcf29b29ab85c0c",
+        "raw_path": "raw/controls/MASVS-STORAGE-2.md",
+        "raw_sha256": "fc6b138e7eb800e461bdcc0f46d1912466d25deaa8f5c5939f3d07a0c13ce5f2"
+      },
+      "group": {
+        "category": "MASVS-STORAGE"
+      }
+    }
+  ]
+}

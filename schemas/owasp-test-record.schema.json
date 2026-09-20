@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-test-record.schema.json",
+  "title": "OWASP Test Reference Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "record_type", "standard_family", "standard_version", "test_id",
+    "title", "platform", "catalog_stage", "test_modes", "covers_control_ids", "source"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-test-record/1.0"},
+    "record_type": {"const": "test"},
+    "standard_family": {"const": "owasp_mastg"},
+    "standard_version": {"type": "string"},
+    "test_id": {"type": "string", "pattern": "^MASTG-TEST-[0-9]{4}$"},
+    "title": {"type": "string"},
+    "platform": {"enum": ["android", "ios", "network"]},
+    "catalog_stage": {"enum": ["stable", "beta"]},
+    "status": {"type": ["string", "null"]},
+    "profiles": {"type": "array", "items": {"type": "string"}},
+    "legacy_control_ids": {"type": "array", "items": {"type": "string"}},
+    "covers_control_ids": {"type": "array", "items": {"type": "string"}},
+    "test_modes": {"type": "array", "minItems": 1, "items": {"enum": ["static", "dynamic", "manual_or_unspecified"]}},
+    "source": {"$ref": "owasp-source-citation.schema.json"}
+  }
+}

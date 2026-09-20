@@ -1,6 +1,6 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; source-version policy approved, remaining human decisions required
+Status: Proposed; source-version policy and immutable reference foundation implemented, remaining human decisions required
 
 Date: 2026-09-20
 
@@ -174,6 +174,12 @@ At run start, the selection record copies the exact snapshot manifest and hashes
 `runs/<run_id>/data/` input lineage. Reviews read only that pinned snapshot even if a newer shared
 snapshot appears. Shared `data/reference` is curated reference input; generated target evidence and
 review output remain run-owned.
+
+The first T02/T02A implementation materialized this set under `data/reference/` with a pinned
+`source-lock.json`, raw inputs, normalized control/test/context/crosswalk catalogs, copied license
+text, content-addressed manifests, and offline hash/schema/count verification. This implements only
+the static reference foundation. It does not approve an engagement profile, make the planned
+workbench runnable, or satisfy the remaining G02 and S03 dependencies.
 
 ## Asynchronous NVD Reference Feed
 

@@ -1,12 +1,14 @@
 # OWASP Control Workbench Task Series
 
-Status: Proposal-only task packet for G02/S03. Do not mark `04-owasp-validation-worklist` or
-`04-asvs-masvs` implemented, registered, runnable, qualified, or ready from this document alone.
+Status: G02/S03 task packet. The bounded T02/T02A reference-snapshot foundation is implemented;
+do not mark `04-owasp-validation-worklist` or `04-asvs-masvs` implemented, registered, runnable,
+qualified, or ready from this document alone.
 
 The tasks are dependency ordered. The source-version and repository-root `data/` snapshot policy
-portion of T01 was approved on 2026-09-19. T02–T13 remain blocked by their applicable implementation
-foundations and the remaining T01 policy decisions. Implementation work is outside this
-documentation-only task.
+portion of T01 was approved on 2026-09-19. T02/T02A now provide initial schemas, a pinned source
+lock, immutable raw/normalized snapshots, and offline verification. The engagement selection and
+proof-obligation policy portions of T02, T02B, and T03–T13 remain blocked by their applicable
+implementation foundations and the remaining T01 policy decisions.
 
 ## T01 — Approve OWASP Selection And Policy
 
@@ -41,7 +43,7 @@ Reject records without source/version or immutable ref/hash/license/extraction m
 catalogs and crosswalks independently. Test version conflicts, retired controls, successor mappings,
 duplicate IDs, changed licenses, missing control text, and offline reuse.
 
-## T02A — Materialize Immutable Standards And OpenCRE Snapshots
+## T02A — Materialize Immutable Standards And OpenCRE Snapshots — IMPLEMENTED FOUNDATION
 
 After an implementation task is explicitly authorized, populate repository-root `data/reference/`
 with immutable source snapshots and manifests for the approved source set. Each snapshot must retain
@@ -52,8 +54,11 @@ OpenCRE has no release tag. Capture a dated public export, its exact raw/normali
 format, and the approved exporter/source commit. Never use a moving OpenCRE API response directly in
 an engagement. A source update creates a sibling snapshot; do not rewrite an existing snapshot.
 
-Test source tampering, hash mismatch, mutable-tag drift, license changes, extraction failure,
-duplicate records, incomplete exports, and run pinning after a newer snapshot is published.
+Implemented under `data/reference/` with `source-lock.json`, raw/normalized content, manifests,
+license text, and `appsec-review-process/reference_snapshots.py`. Offline verification checks schema,
+hashes, counts, identities, and normalized records. Focused tests cover the committed population,
+tampering, source-lock validation, and selection approval fields. Run pinning and newer-snapshot
+selection remain part of T03/lifecycle integration.
 
 ## T02B — Asynchronous NVD 2.0 Snapshot Publisher
 

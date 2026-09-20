@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-control-record.schema.json",
+  "title": "OWASP Control Reference Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "record_type", "standard_family", "standard_version", "control_id",
+    "title", "text", "profiles", "proof_obligations", "source"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-control-record/1.0"},
+    "record_type": {"const": "control"},
+    "standard_family": {"enum": ["owasp_asvs", "owasp_masvs"]},
+    "standard_version": {"type": "string"},
+    "control_id": {"type": "string"},
+    "title": {"type": "string"},
+    "text": {"type": "string"},
+    "group": {"type": "object"},
+    "profiles": {"type": "array", "items": {"type": "string"}},
+    "proof_obligations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["obligation_id", "text", "evidence_classification", "minimum_evidence_modes"],
+        "properties": {
+          "obligation_id": {"type": "string"},
+          "text": {"type": "string"},
+          "evidence_classification": {"enum": ["unclassified_requires_policy", "classified"]},
+          "minimum_evidence_modes": {
+            "type": "array",
+            "items": {"enum": ["document_or_process", "static_source", "static_config", "built_artifact", "test_evidence", "dynamic_runtime", "manual_inspection"]}
+          }
+        }
+      }
+    },
+    "source": {"$ref": "owasp-source-citation.schema.json"}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-context-record.schema.json",
+  "title": "OWASP Context Category Reference Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "record_type", "standard_family", "standard_version", "category_id", "title", "text", "role", "source"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-context-record/1.0"},
+    "record_type": {"const": "context_category"},
+    "standard_family": {"enum": ["owasp_top_10", "owasp_api_security_top_10", "owasp_llm_top_10"]},
+    "standard_version": {"type": "string"},
+    "category_id": {"type": "string"},
+    "title": {"type": "string"},
+    "text": {"type": "string"},
+    "role": {"const": "routing_context_only"},
+    "source": {"$ref": "owasp-source-citation.schema.json"}
+  }
+}

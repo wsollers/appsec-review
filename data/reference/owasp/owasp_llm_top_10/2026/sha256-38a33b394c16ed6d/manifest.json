@@ -1,0 +1,174 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-38a33b394c16ed6d",
+  "family": "owasp_llm_top_10",
+  "edition": "2026",
+  "upstream": {
+    "url": "https://github.com/GenAI-Security-Project/GenAI-LLM-Top10",
+    "immutable_ref": "9253e38ade58e959b531c0c5c9a4842272c9cd0e",
+    "resolved_commit": "9253e38ade58e959b531c0c5c9a4842272c9cd0e",
+    "tag_object": null
+  },
+  "retrieved_at": "2026-09-20T01:58:17Z",
+  "license": {
+    "identifier": "CC-BY-SA-4.0",
+    "source_path": "README.md",
+    "sha256": "63e4793581a83c7daa51606fdf6816912ed018d07185ba34439739ead782b3c3"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/2026/final/LLM00_Preface.md",
+      "sha256": "4a0105c84b43d5c6527fafd2ab7c2014e15f938cf55a3696089e8a6589818b3a",
+      "bytes": 6440
+    },
+    {
+      "path": "raw/2026/final/LLM01_PromptInjection.md",
+      "sha256": "c02a0ab2b65f9fc9b297bd994782f3a96c6799b3386006a915ebc6cbe36c3426",
+      "bytes": 20019
+    },
+    {
+      "path": "raw/2026/final/LLM02_SensitiveInformationDisclosure.md",
+      "sha256": "a34edaffbc3f7b5f3438a8a953e6ab71a235f9f9c61fe9fb31a92082ee0d0e12",
+      "bytes": 12288
+    },
+    {
+      "path": "raw/2026/final/LLM03_ExcessiveAgency.md",
+      "sha256": "839dc4853554af59ae043a04421123264c878272eeae5e0ac6cd117b4ac50ad0",
+      "bytes": 9510
+    },
+    {
+      "path": "raw/2026/final/LLM04_SupplyChain.md",
+      "sha256": "cc61c8be749e9bd4800588f0610bc7512650d2f89668ad0987072ed8bcdfbd69",
+      "bytes": 12836
+    },
+    {
+      "path": "raw/2026/final/LLM05_DataModelPoisoning.md",
+      "sha256": "ea3e7f7fcc065cbf250089d1534e480b066ba1bfb50e6903ec193c0e7ce68430",
+      "bytes": 10291
+    },
+    {
+      "path": "raw/2026/final/LLM06_UnboundedConsumption.md",
+      "sha256": "7432c28d8934968e57355101a17ec8989d44fb302b90205ad432472910bb71bf",
+      "bytes": 10126
+    },
+    {
+      "path": "raw/2026/final/LLM07_Misinformation.md",
+      "sha256": "45caaac8ba6d3637893675b7314fa2625d14c1037be27e2cd93707f5573f1fc3",
+      "bytes": 5175
+    },
+    {
+      "path": "raw/2026/final/LLM08_HiddenContextExposure.md",
+      "sha256": "1ff20e84e9adef1565d38612d0fc4bab1e9a2b27b03061d4b01efe988359ea19",
+      "bytes": 8741
+    },
+    {
+      "path": "raw/2026/final/LLM09_VectorAndEmbeddingWeaknesses.md",
+      "sha256": "d8966fe59032f3501036a2319b278d52ff41746eb8acf971ba21a9521032f304",
+      "bytes": 12418
+    },
+    {
+      "path": "raw/2026/final/LLM10_ImproperOutputHandling.md",
+      "sha256": "0ff3c47c8af6e64a4b2a898dd3b6b4999e2282081acc7e454aae56d19c9766e3",
+      "bytes": 6770
+    },
+    {
+      "path": "raw/2026/final/mappings/asi-2026.json",
+      "sha256": "9da4905df21259891e21006585a7caa5afb237115821781cc87ad6a6e229a34e",
+      "bytes": 3128
+    },
+    {
+      "path": "raw/2026/final/mappings/csa-aicm-v1.1.json",
+      "sha256": "03c13f10d48815d82738e3b4cbaaabc4b4f314128b04b2505573d6eaea4d01e7",
+      "bytes": 2715
+    },
+    {
+      "path": "raw/2026/final/mappings/cwe-4.20.json",
+      "sha256": "76d039120785b28f2722ac01cec0d2c1a756f9930c847d8c11ef0df544c5b102",
+      "bytes": 6340
+    },
+    {
+      "path": "raw/2026/final/mappings/dsgai-v1.0.json",
+      "sha256": "f760b3c6367447a2dc1b18118bdbc7a6079a85979e6dbb13fe71debd1741efbc",
+      "bytes": 4401
+    },
+    {
+      "path": "raw/2026/final/mappings/mitre-atlas-2026.06.json",
+      "sha256": "faec59484888bce279bdf5642d8d3970ae50219fff9e1735def6a72fb46c15d2",
+      "bytes": 2576
+    },
+    {
+      "path": "raw/2026/final/mappings/mitre-attack-v19.1.json",
+      "sha256": "a74c13f206ab1bb931c8675a3f0bb1c06e2f705833eccfc71a0b7a11d61c8ebd",
+      "bytes": 2310
+    },
+    {
+      "path": "raw/2026/final/mappings/nist-ai-600-1.json",
+      "sha256": "d8269325baf187ba5c58282735d53acaa43eb0e0577b98960d233be848852f44",
+      "bytes": 2883
+    },
+    {
+      "path": "raw/2026/final/mappings/nist-ai-rmf-1.0.json",
+      "sha256": "20a0fe158f1da08d1017596c81659db114d56960ee1c05a27bfcd606d67ed98d",
+      "bytes": 4145
+    },
+    {
+      "path": "raw/2026/final/mappings/owasp-aivss-v0.8.json",
+      "sha256": "bb14a613fad9ad3b4080ba241271acd8899af4cf9bd9b8a077e367106f6b76d6",
+      "bytes": 2303
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "43013e6fc73c121c99d31332872f8ccef7d5bcf0bf0aa545c22184fb601a4784",
+      "bytes": 113704
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/2026/final/LLM00_Preface.md",
+        "raw/2026/final/LLM01_PromptInjection.md",
+        "raw/2026/final/LLM02_SensitiveInformationDisclosure.md",
+        "raw/2026/final/LLM03_ExcessiveAgency.md",
+        "raw/2026/final/LLM04_SupplyChain.md",
+        "raw/2026/final/LLM05_DataModelPoisoning.md",
+        "raw/2026/final/LLM06_UnboundedConsumption.md",
+        "raw/2026/final/LLM07_Misinformation.md",
+        "raw/2026/final/LLM08_HiddenContextExposure.md",
+        "raw/2026/final/LLM09_VectorAndEmbeddingWeaknesses.md",
+        "raw/2026/final/LLM10_ImproperOutputHandling.md",
+        "raw/2026/final/mappings/asi-2026.json",
+        "raw/2026/final/mappings/csa-aicm-v1.1.json",
+        "raw/2026/final/mappings/cwe-4.20.json",
+        "raw/2026/final/mappings/dsgai-v1.0.json",
+        "raw/2026/final/mappings/mitre-atlas-2026.06.json",
+        "raw/2026/final/mappings/mitre-attack-v19.1.json",
+        "raw/2026/final/mappings/nist-ai-600-1.json",
+        "raw/2026/final/mappings/nist-ai-rmf-1.0.json",
+        "raw/2026/final/mappings/owasp-aivss-v0.8.json"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 10,
+    "raw_files": 20,
+    "normalized_files": 1
+  },
+  "content_digest": "5b89c50a2e8869c36adc498ce1fac848dc95db6464235823448733f79deff1a6",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}

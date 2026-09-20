@@ -1,0 +1,66 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-42bf4175932a5a36",
+  "family": "opencre",
+  "edition": "snapshot-2026-09-19",
+  "upstream": {
+    "url": "https://github.com/OWASP/OpenCRE",
+    "immutable_ref": "fbacf559d320358259009a255e7a62a7eb691f24+dated-api-export",
+    "resolved_commit": "fbacf559d320358259009a255e7a62a7eb691f24",
+    "tag_object": null
+  },
+  "retrieved_at": "2026-09-20T01:58:17Z",
+  "license": {
+    "identifier": "Apache-2.0",
+    "source_path": "LICENSE",
+    "sha256": "f4e7f373b9b996950337e8d41a4a2939c2d90b7725e9baf3d5084a22717ad328"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/application/utils/cres_csv_export.py",
+      "sha256": "1e424d2a7cbe34b39d505189fb1a59823a3a7a66427bf12a139429a8bafa2867",
+      "bytes": 16208
+    },
+    {
+      "path": "raw/opencre-export-2026-09-19.csv",
+      "sha256": "259e4e65808b846cb7683dd344c7b3365f420f58352fcdac6d2a3f0fead383be",
+      "bytes": 1746455
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "4683fc3961ef2be9244254da094da528bb3d2825eecddd75e116d1ec628fa812",
+      "bytes": 4024645
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/application/utils/cres_csv_export.py",
+        "raw/opencre-export-2026-09-19.csv"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 522,
+    "raw_files": 2,
+    "normalized_files": 1
+  },
+  "content_digest": "cdd09c69b5e7ec1d0b7102f79a5b4e344ae357508099577a079d719445b08c97",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}
