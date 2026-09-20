@@ -10,3 +10,5 @@ data/reference/owasp/** -text
 data/reference/opencre/** -text
 data/reference/owasp/**/raw/** -diff
 data/reference/opencre/**/raw/** -diff
+data/reference/owasp/**/LICENSE-or-usage.txt -diff
+data/reference/opencre/**/LICENSE-or-usage.txt -diff
