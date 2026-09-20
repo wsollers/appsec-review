@@ -12,7 +12,11 @@
     "outputs/coverage.json",
     "outputs/applicability-probe-receipt.json"
   ],
-  "required_status_fields": ["status", "run_id", "attempt_id"],
+  "required_status_fields": [
+    "status",
+    "run_id",
+    "attempt_id"
+  ],
   "result_schema": {
     "artifact": "outputs/iac-config-evidence.json",
     "schema_file": "iac-config-evidence.schema.json"
@@ -25,7 +29,11 @@
       "declared-exposure-lead",
       "scan-coverage-gap"
     ],
-    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
   },
   "validation_rules": [
     "outputs/iac-config-evidence.json must satisfy iac-config-evidence.schema.json and outputs/base-image-inventory.json must satisfy iac-config-base-image-inventory.schema.json; cross-record rules are secrets_iac_contracts.validate_iac_attempt",
@@ -46,6 +54,8 @@
     "scan-coverage-gap is asserted only by coverage.json",
     "an empty result is not evidence of absence; a tool that cannot run offline is a BLOCKED tool instance and a named coverage gap, never a network exception",
     "the result cannot promote a lead to a finding, a severity, or an observed runtime state",
-    "latest failed attempt blocks older accepted output"
+    "latest failed attempt blocks older accepted output",
+    "status.json carries only the required_status_fields plus the known runtime identifiers dagster_run_id and job_id; any other key is rejected and no value from it is ever reported",
+    "manifest.json is {schema appsec-review/attempt-manifest/1, contract_id, outputs[{path, sha256}]} naming exactly the files beneath outputs/ with the sha256 of their bytes"
   ]
 }

@@ -233,6 +233,13 @@ def citation(job_id: str, tool_id: str) -> dict:
             "path": f"{tool_id}/outputs/result.json", "sha256": sha_hex(tool_output_bytes(tool_id))}
 
 
+def manifest_document(contract_id: str, attempt: Path) -> dict:
+    """What a worker writes last: the hashes of exactly what it published under outputs/."""
+    outputs = [{"path": path.relative_to(attempt).as_posix(), "sha256": "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()}
+               for path in sorted((attempt / "outputs").rglob("*")) if path.is_file()]
+    return {"schema": contracts.MANIFEST_SCHEMA, "contract_id": contract_id, "outputs": outputs}
+
+
 class Golden:
     def __init__(self, name, contract_id, node_status, permitted, tools, results, with_probe):
         self.name, self.contract_id, self.node_status, self.permitted = name, contract_id, node_status, list(permitted)
@@ -353,8 +360,7 @@ class Attempt:
         self.root.mkdir(parents=True)
         self.receipt = redaction.redact_tree(private, self.root / "outputs", on_unhandled=POLICY, limits=LIMITS)
         (self.root / "status.json").write_bytes(dump(self.golden.status))
-        (self.root / "manifest.json").write_bytes(dump({"schema": "appsec-review/v04-test-manifest/1",
-                                                        "run_id": self.golden.header["run_id"]}))
+        (self.root / "manifest.json").write_bytes(dump(manifest_document(self.golden.contract_id, self.root)))
         for relative, data in self.golden.tool_files.items():
             target = self.tool_root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -363,7 +369,7 @@ class Attempt:
     def arguments(self, **override):
         values = {"tool_outputs_root": self.tool_root, "node_status": self.golden.node_status,
                   "declared_tool_ids": self.golden.declared, "permitted_node_statuses": self.golden.permitted,
-                  "on_unhandled": POLICY, "limits": LIMITS}
+                  "on_unhandled": POLICY, "limits": LIMITS, "expected_dagster_run_id": "dagster-run-v04"}
         values.update(override)
         return values
 
@@ -708,7 +714,8 @@ class GoldenTests(unittest.TestCase):
 # ---- required inputs ---------------------------------------------------------------------------
 
 class RequiredInputTests(unittest.TestCase):
-    KEYWORDS = ("tool_outputs_root", "node_status", "declared_tool_ids", "permitted_node_statuses", "on_unhandled", "limits")
+    KEYWORDS = ("tool_outputs_root", "node_status", "declared_tool_ids", "permitted_node_statuses", "on_unhandled", "limits",
+                "expected_dagster_run_id")
 
     def test_no_safety_input_has_a_default(self):
         for function in (contracts.validate_secrets_attempt, contracts.validate_iac_attempt):
@@ -1318,6 +1325,105 @@ class InvariantTests(unittest.TestCase):
             self.assertTrue(any(scanner.search(SECRETS[label]) for scanner in scanners), label)
         for label, value in SECRETS.items():  # and the V06 redactor really does detect each one
             self.assertTrue(redaction._merged_spans(value), label)
+
+
+
+class StatusAndManifestTests(unittest.TestCase):
+    """Carried over from the PR 19 review, where the same checks were missing. V04 already verified
+    the receipt first and already bound status.json; what it lacked was a closed key set for
+    status.json and ANY binding for manifest.json. Both files sit outside outputs/, so the receipt
+    does not cover them and nothing from them is ever quoted."""
+
+    QUIET = "hunter2-note"
+
+    def attempt(self, name="secrets-hits"):
+        return Attempt(self, GOLDENS[name])
+
+    def test_a_published_document_edited_after_sealing_reports_only_the_receipt_and_echoes_nothing(self):
+        planted = "gh" + "p_" + "".join("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"[b % 57]
+                                        for b in hashlib.sha256(b"v04-plant").digest() * 2)[:36]
+        for name in GOLDENS:
+            attempt = self.attempt(name)
+            for path in sorted((attempt.root / "outputs").glob("*.json")):
+                if path.name == contracts.RECEIPT_FILENAME if hasattr(contracts, "RECEIPT_FILENAME") else path.name == "redaction-receipt.json":
+                    continue
+                original = path.read_bytes()
+                document = json.loads(original.decode("utf-8"))
+                document["run_id"] = planted
+                path.write_bytes(dump(document))
+                errors = attempt.run()
+                with self.subTest(golden=name, file=path.name):
+                    self.assertTrue(errors)
+                    self.assertTrue(all(error.startswith("receipt-") for error in errors), errors)
+                    self.assertFalse([e for e in errors if planted in e])
+                path.write_bytes(original)
+
+    def test_status_json_accepts_only_registered_fields_and_known_runtime_identifiers(self):
+        attempt = self.attempt()
+        good = json.loads((attempt.root / "status.json").read_text(encoding="utf-8"))
+        self.assertEqual(attempt.run(), [])
+        for label, document, expected in (
+                ("the reviewer's file", {"status": "FAILED", "attacker": self.QUIET}, {"status-mismatch", "status-invalid"}),
+                ("an unregistered key", {**good, "note": self.QUIET}, {"status-invalid"}),
+                ("dagster_run_id edited alone", {**good, "dagster_run_id": "another-" + self.QUIET}, {"status-mismatch"}),
+                ("job_id for another node", {**good, "job_id": "02-" + self.QUIET}, {"status-mismatch"}),
+                ("a runtime id that is not a string", {**good, "job_id": [self.QUIET]}, {"status-mismatch"})):
+            attempt = self.attempt()
+            (attempt.root / "status.json").write_bytes(dump(document))
+            errors = attempt.run()
+            with self.subTest(case=label):
+                self.assertEqual({e.split(":", 1)[0] for e in errors}, expected, errors)
+                self.assertFalse([e for e in errors if self.QUIET in e or "attacker" in e], errors)
+
+    def test_manifest_binds_exactly_what_was_published(self):
+        for raw in (b"[]", b'"x"', b"null", b"{}", b'{"schema": 1, "schema": 2}'):
+            attempt = self.attempt()
+            (attempt.root / "manifest.json").write_bytes(raw)
+            self.assertEqual({e.split(":", 1)[0] for e in attempt.run()}, {"manifest-invalid"}, raw)
+        mutations = {
+            "wrong schema": lambda d: d.update(schema="appsec-review/v04-test-manifest/1"),
+            "another contract": lambda d: d.update(contract_id=contracts.IAC_CONTRACT_ID),
+            "extra key": lambda d: d.update(note=self.QUIET),
+            "one hash edited": lambda d: d["outputs"][0].update(sha256="sha256:" + "0" * 64),
+            "one entry dropped": lambda d: d["outputs"].pop(),
+            "an unpublished file listed": lambda d: d["outputs"].append({"path": "outputs/zz-ghost.json", "sha256": "sha256:" + "1" * 64}),
+            "alias path": lambda d: d["outputs"][0].update(path=d["outputs"][0]["path"].replace("outputs/", "outputs/./")),
+            "unsorted": lambda d: d["outputs"].reverse(),
+            "entry with an extra field": lambda d: d["outputs"][0].update(size=1),
+        }
+        for label, mutate in mutations.items():
+            attempt = self.attempt()
+            document = json.loads((attempt.root / "manifest.json").read_text(encoding="utf-8"))
+            mutate(document)
+            (attempt.root / "manifest.json").write_bytes(dump(document))
+            errors = attempt.run()
+            with self.subTest(case=label):
+                self.assertTrue(errors and {e.split(":", 1)[0] for e in errors} <= {"manifest-invalid", "manifest-mismatch"}, errors)
+                self.assertFalse([e for e in errors if self.QUIET in e], errors)
+
+    def test_invariant_no_value_written_into_the_attempt_after_sealing_reaches_an_error(self):
+        planted = "gh" + "p_" + "".join("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"[b % 57]
+                                        for b in hashlib.sha256(b"v04-invariant").digest() * 2)[:36]
+        attempt = self.attempt("iac-ok-with-gaps")
+        files = sorted(path for path in attempt.root.rglob("*") if path.is_file())
+        self.assertGreaterEqual(len(files), 7)
+        for path in files:
+            original = path.read_bytes()
+            try:
+                document = json.loads(original.decode("utf-8"))
+            except ValueError:
+                document = None
+            variants = [planted.encode(), dump({"x": planted}), dump([planted])]
+            if isinstance(document, dict):
+                variants += [dump({**document, key: planted}) for key in document]
+                variants.append(dump({**document, planted: 1}))
+            for variant in variants:
+                path.write_bytes(variant)
+                errors = attempt.run()
+                self.assertTrue(errors, f"{path.name}: tampering was accepted")
+                self.assertFalse([e for e in errors if planted in e], f"{path.name}: {errors}")
+            path.write_bytes(original)
+        self.assertEqual(attempt.run(), [])
 
 
 if __name__ == "__main__":
