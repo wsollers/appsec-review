@@ -6,22 +6,34 @@ implemented, registered, runnable,
 qualified, or ready from this document alone.
 
 The tasks are dependency ordered. The source-version and repository-root `data/` snapshot policy
-portion of T01 was approved on 2026-09-19. T02/T02A now provide initial schemas, a pinned source
+portion of T01 was approved on 2026-09-19. On 2026-09-20 the user also approved ASVS L2, justified
+assigned-reviewer applicability/rescope overrides, tunable batches with the existing bounded
+default, disabled dynamic execution with an inert launcher contract, and stale NVD use with an
+explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
-publisher. The engagement selection and proof-obligation policy portions of T02 and T03–T13 remain
-blocked by their applicable implementation foundations and the remaining T01 policy decisions.
+publisher. T03 accepted-intel lane-in is now the next bounded implementation task. T04–T13 remain
+dependency ordered and later reporting/promotion work remains gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
 
-Review `docs/decisions/ADR-0009-owasp-control-workbench.md` and record named approval for:
+Recorded policy decisions:
 
-- ASVS target level/profile and component tailoring authority;
+- ASVS 5.0.0 L2 baseline;
+- one assigned applicability reviewer may make justified, cited, append-only row overrides and
+  bounded rescope decisions inside the approved engagement scope;
+- tunable batch limits with defaults of 12 rows, five components, one primary evidence mode, and
+  one primary validator role;
+- dynamic request generation and an inert launcher contract are allowed, but dynamic execution is
+  disabled and must fail closed;
+- a structurally valid stale NVD snapshot may be used with explicit age, gap, and limitation.
+
+Still requires named approval per ADR-0009:
+
 - supported mobile platforms and component applicability for approved context families;
-- applicability override authority and bounded rescope policy;
-- evidence/status taxonomy and proposed batch limits;
-- dynamic/manual test authorization authority;
-- report denominators and finding-promotion boundary;
-- NVD freshness threshold and stale-snapshot block-versus-gap policy.
+- any departure from L2 and component-specific profile tailoring authority;
+- manual-observation authorization;
+- the remaining evidence/status policy questions;
+- report denominators and finding-promotion boundary.
 
 Approved source set: ASVS 5.0.0, MASVS 2.1.0, MASTG 2.0.0, OWASP Top 10:2025, API
 Security Top 10:2023, GenAI LLM Top 10:2026, and a dated OpenCRE export. Do not infer any remaining
@@ -119,8 +131,10 @@ Define `owasp-validation-worklist.json` and `owasp-batch-manifest.json`:
 - atomic identity is selection/family/version/profile/control/component;
 - batch in order by coherent component group, domain, evidence mode/authorization, tool/persona,
   and standard/test family;
-- proposed default maximum is 12 control-target rows, five components, one primary evidence mode,
+- default maximum is 12 control-target rows, five components, one primary evidence mode,
   and one primary validator role;
+- limits are tunable only through versioned configuration and qualification fixtures, and each
+  batch records its effective limits;
 - split composite controls into clause-level proof obligations when evidence modes differ;
 - assign every selected row exactly once or account for it as N/A, out of scope, or unresolved.
 
@@ -181,6 +195,11 @@ Define `owasp-dynamic-test-requests.json` with:
 
 Deduplicate compatible requests without losing linked controls. Prove static results cannot close a
 dynamic obligation and proposed requests cannot imply authorization or execution.
+
+Retain a launcher/handoff boundary, but configure it `disabled`: it may validate, deduplicate, and
+persist queue artifacts only. An execute/launch request emits `dynamic_execution_disabled` and
+must not contact or mutate a target. Enabling execution is a separate future policy,
+implementation, and qualification task.
 
 ## T10 — Dispatch, Wait-All, And Failure Accounting
 

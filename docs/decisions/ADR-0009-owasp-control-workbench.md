@@ -1,6 +1,7 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; source-version policy, immutable reference foundation, and NVD publisher implemented; remaining human decisions required
+Status: Proposed; source-version, ASVS L2, applicability/rescope, batching, dynamic-disable, and
+NVD staleness policies decided; report/finding-promotion and per-engagement scope decisions remain
 
 Date: 2026-09-20
 
@@ -96,12 +97,14 @@ they do not replace ASVS/MASVS control evidence. OpenCRE has no stable release t
 identity is the capture timestamp, raw export hash, API/export format, source commit, and normalized
 output hash together.
 
-The named engagement lead must still decide:
+The baseline ASVS profile is **ASVS 5.0.0 Level 2**. A selection record must state `L2`; a different
+level or component-specific profile is a new named selection decision, not an inferred reviewer
+choice. The named engagement lead must still decide:
 
-1. the ASVS target level/profile, including any component-specific tailoring;
-2. which supported mobile platforms are in engagement scope;
-3. whether API, GenAI/LLM, and general Top 10 context applies to the classified components;
-4. the applicability override, dynamic/manual authorization, and report policies listed below.
+1. which supported mobile platforms are in engagement scope;
+2. whether API, GenAI/LLM, and general Top 10 context applies to the classified components;
+3. any departure from L2 or component-specific profile tailoring; and
+4. the unresolved manual-observation and report policies listed below.
 
 No profile or level is inferred from repository shape, business criticality, or missing user input.
 An absent decision blocks affected work with `selection_not_approved`. A mixed-version crosswalk may
@@ -219,15 +222,21 @@ The T02B implementation provides this publisher as the `nvd_reference_sync` Dags
 default two-hour UTC schedule, a scheduler concurrency tag, OS advisory lock, lease/heartbeat,
 content-addressed blobs, immutable base/delta manifests, atomic last-good pointer, and offline
 chain verification. Deployment activation performs the first full bootstrap and therefore requires
-network access, storage capacity, and normal operator monitoring. The unresolved engagement
-freshness/block policy remains a selection gate; implementing the feed does not decide that policy.
+network access, storage capacity, and normal operator monitoring.
+
+A valid pinned NVD snapshot may be stale. Age is always computed and reported at lane-in, and an
+aged snapshot creates an explicit freshness gap and limitation, but age alone does not block an
+engagement and validators never describe it as current. Structural invalidity, a hash mismatch,
+broken lineage, or a missing requested snapshot still blocks the affected enrichment input. This
+policy has no freshness threshold that upgrades NVD into control or finding proof.
 
 ## Gate 3: Applicability Triage
 
 Applicability is determined for every selected `control_id x component_id` target before validation.
 Routine rules should use deterministic inventory, component tags, technology/version, DFD, route,
-data-class, dependency, and source-completeness signals first. An OWASP applicability reviewer
-handles ambiguous cases; the engagement lead owns profile/scope overrides.
+data-class, dependency, and source-completeness signals first. One assigned OWASP applicability
+reviewer may override a row-level applicability decision or initiate bounded rescope. The reviewer
+may not silently change the selected standard/profile or engagement boundary.
 
 Applicability statuses are:
 
@@ -243,10 +252,12 @@ identity, and override history. A single absence signal is insufficient. `condit
 `cannot_determine` produce gaps and may produce evidence requests. `out_of_scope` is visible in
 coverage and is never reported as technically not applicable.
 
-An override is append-only. It records the prior decision, new decision, actor, rationale, cited
-evidence, time, and affected work. A changed component classification invalidates dependent
-applicability and validation results and creates bounded rescope work; results are not silently
-rewritten.
+An override is append-only. It records the prior decision, new decision, assigned reviewer identity
+and role, rationale, cited evidence, time, affected rows, invalidated results, and bounded rescope
+work. The same reviewer may authorize the resulting rescope only within the approved engagement
+scope; expanding standards, profile, target boundary, tools, or permissions returns to the named
+selection owner. A changed component classification invalidates dependent applicability and
+validation results; results are not silently rewritten.
 
 ## Checklist Partitioning And Batching
 
@@ -264,9 +275,9 @@ Applicable and conditional rows are then batched using this ordered key:
 4. required tooling profile and validator persona;
 5. standard family/version/profile and linked test family.
 
-A proposed default batch contains no more than 12 control-target rows, five components, one primary
-evidence mode, and one primary validator role. The eventual implementation may tune those limits
-only through versioned configuration and qualification fixtures. A composite control whose clauses
+A default batch contains no more than 12 control-target rows, five components, one primary evidence
+mode, and one primary validator role. These are tunable only through versioned configuration and
+qualification fixtures; every batch records the effective values. A composite control whose clauses
 need different evidence modes is split into explicit proof obligations while retaining one joined
 control result. Unrelated domains or static and active-testing work are never combined merely to
 fill a batch.
@@ -357,8 +368,12 @@ canonical evidence in its own result. Raw secrets and uncited prose conclusions 
 
 ## Static, Dynamic, And Manual Boundary
 
-The baseline workbench is static/offline. It may inspect supplied dynamic results, but it does not
-perform active testing. A generated dynamic-test request must state:
+The baseline workbench is static/offline. Dynamic execution is disabled. It may inspect separately
+supplied, accepted dynamic results, but it does not perform active testing. A dynamic launcher
+boundary is retained so requests have a stable future handoff: in the current policy it may validate,
+deduplicate, and queue request artifacts only. Any execute/launch operation must fail closed with a
+recorded `dynamic_execution_disabled` receipt and must not contact or mutate a target. A generated
+dynamic-test request must state:
 
 - request ID and linked control/component/proof obligation;
 - why static and supplied evidence are insufficient;
@@ -369,9 +384,11 @@ perform active testing. A generated dynamic-test request must state:
 - whether manual specialist observation is required.
 
 Requests are deduplicated by environment, component, test type, and shared proof obligations. They
-remain `proposed` until authorized. Results from authorized follow-on work must be ingested as new
-run-owned evidence and routed through targeted reassessment or independent verification; a request
-or execution claim does not update a control automatically.
+remain `proposed` or `blocked` while this policy is in force; this workbench cannot authorize or
+execute them. A later policy change requires a separately approved implementation and qualification.
+Any separately supplied result must be ingested as new run-owned evidence and routed through
+targeted reassessment or independent verification; a request or execution claim does not update a
+control automatically.
 
 ## Wait-All Join And Control-Status Model
 
@@ -448,28 +465,37 @@ provenance and permits one persona's conclusion to become another's evidence.
 
 This design depends on approved standards-source ingestion, component characterization, run-owned
 intelligence, bounded persona dispatch, structured intercom, wait-all rendezvous, and typed joins.
-Until those foundations and the G02 human gates are approved, this ADR is a decision packet, not an
-implementation or readiness claim.
+Until those foundations and the remaining G02 human gates are approved, this ADR is a decision
+packet, not an implementation or readiness claim.
 
 The same general pattern can later inform DISA/NSA/CIS work, but their source, licensing,
 applicability, evidence, and precedence decisions remain a separate G03 gate.
 
 ## Required Human Decisions
 
-Before changing this ADR to Accepted, the user or named engagement lead must approve:
+Decided on 2026-09-20:
 
-- ASVS profile/level policy and authority for component-specific tailoring;
+- ASVS 5.0.0 Level 2 is the baseline profile;
+- one assigned applicability reviewer may make justified, cited, append-only row overrides and
+  bounded rescope decisions within the already approved engagement scope;
+- batch limits are tunable, with 12 control-target rows and five components as the default;
+- dynamic requests and an inert launcher/handoff contract may exist, but dynamic execution is
+  disabled and launch attempts fail closed;
+- a valid stale NVD snapshot is allowed with explicit age, freshness gap, and limitation.
+
+Before changing this ADR to Accepted, the user or named engagement lead must still approve:
+
 - component applicability for the approved Top 10 context families and mobile platforms;
-- the applicability override authority and rescope policy;
-- the evidence/status taxonomy, including the proposed batch limits;
-- who may authorize dynamic/manual follow-on work;
+- any departure from L2 and authority for component-specific profile tailoring;
+- manual-observation authorization policy;
 - whether the proposed report denominators and finding-promotion boundary meet program needs;
-- the NVD freshness threshold and whether a stale-but-valid snapshot may be used with an explicit
-  gap or must block a new engagement.
+- whether the proposed evidence/status taxonomy meets program needs beyond the batching and
+  static/dynamic boundaries decided above.
 
 ## Non-goals
 
 This ADR does not make the workbench itself runnable or approve registry updates, graph/parity
 changes, generated views, validator dispatch, dynamic execution, finding promotion, or compliance
 certification. The bounded T02/T02A/T02B foundations described above are implemented separately;
-the remaining workbench lifecycle is still gated by the named human decisions and T03-T14.
+T03 accepted-intel lane-in is the next bounded implementation task. Later lifecycle tasks remain
+subject to their dependencies and the named human decisions above.

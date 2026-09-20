@@ -128,3 +128,22 @@ remaining human gates.
   per-engagement freshness/block policy.
 - The workbench validator lifecycle remains unimplemented and blocked on the remaining T01 policy
   decisions before T03-T14 may proceed.
+
+## Policy checkpoint — 2026-09-20
+
+- Approved ASVS 5.0.0 L2 as the baseline; any departure remains a new named selection decision.
+- Authorized one assigned applicability reviewer to make justified, cited, append-only row-level
+  overrides and bounded rescope decisions within the approved engagement scope. Selection/profile,
+  target-boundary, tool, or permission expansion still returns to the selection owner.
+- Kept tunable bounded batches with defaults of 12 rows, five components, one primary evidence
+  mode, and one primary validator role; each batch must record effective versioned limits.
+- Disabled dynamic execution. The proposal retains an inert launcher/handoff boundary that can
+  validate, deduplicate, and queue request artifacts only; launch attempts fail closed without
+  contacting a target.
+- Allowed structurally valid stale NVD snapshots with explicit age, freshness gap, and limitation;
+  hash, lineage, structural, or missing-snapshot failures still block the affected input.
+- Remaining gates are per-engagement optional-family/mobile scope, departures from L2 and profile
+  tailoring, manual-observation authorization, remaining evidence/status policy, and report and
+  finding-promotion policy. The workbench remains proposal-only and non-runnable.
+- The next bounded implementation task is T03 accepted-intel lane-in; it does not require dynamic
+  execution or a finding/report promotion decision.
