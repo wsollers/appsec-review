@@ -30,7 +30,7 @@ class EvidenceTests(unittest.TestCase):
             (self.source / name).write_bytes(content)
             files[name] = {'kind': 'file', 'bytes': len(content), 'sha256': hashlib.sha256(content).hexdigest()}
         state.atomic_json(self.intake / 'evidence/source.json', {'target': str(self.source), 'files': files,
-                          'fingerprint': 'source-fingerprint', 'revision': 'fixture'})
+                          'fingerprint': hashlib.sha256(b'fixture source').hexdigest(), 'revision': 'fixture'})
         state.atomic_json(self.intake / 'outputs/intake.json', {'scope': {'excluded_paths': []}})
         state.atomic_bytes(self.intake / 'outputs/build-discovery.md', b'no build executed\n')
         self.plan = {'producers': [{'kind': 'intake', 'pointer': {'attempt_id': 'producer'}}]}
