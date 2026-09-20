@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-intercom-append-request.schema.json",
+  "title": "T08 append request", "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "batch_id", "handoff_id", "handoff", "candidate", "expected_head"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-intercom-append-request/1.0"}, "run_id": {"type": "string"}, "batch_id": {"type": "string"}, "handoff_id": {"type": "string"},
+    "handoff": {"type": "object", "additionalProperties": false, "required": ["attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "handoff_set_path", "handoff_set_sha256", "member_path", "member_sha256"], "properties": {"attempt_id": {"type": "string"}, "accepted_pointer_path": {"type": "string"}, "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "handoff_set_path": {"type": "string"}, "handoff_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "member_path": {"type": "string"}, "member_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "candidate": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "expected_head": {"type": "object", "additionalProperties": false, "required": ["previous_attempt_id", "ledger_path", "ledger_sha256", "message_id", "message_hash", "next_sequence"], "properties": {"previous_attempt_id": {"type": ["string", "null"]}, "ledger_path": {"type": ["string", "null"]}, "ledger_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}, "message_id": {"type": ["string", "null"]}, "message_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}, "next_sequence": {"type": "integer", "minimum": 1}}}
+  }
+}

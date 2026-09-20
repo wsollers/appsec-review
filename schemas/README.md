@@ -93,6 +93,14 @@ Composable review schemas (added for the registry/worklist layer):
   inert proposed T07 follow-up contracts. They
   cannot authorize or record execution, contact or mutate a target, create a finding, or assign
   severity. Manual observation remains unauthorized.
+- `owasp-intercom-append-request.schema.json`, `owasp-intercom-message.schema.json`,
+  `owasp-intercom-citation.schema.json`, `owasp-intercom-ledger.schema.json`, and
+  `owasp-intercom-validation.schema.json` -- the T08 exact-head append request, accepted message,
+  canonical citation, immutable full-ledger snapshot, and validation receipt. Cross-record
+  validation pins the newest T06 handoff and optional newest T07 result, enforces deterministic
+  message IDs and sequence/hash-chain continuity, separates locators from canonical citations, and
+  rejects authority expansion, prohibited claims, secrets, undeclared tools/actions, and
+  dynamic/manual execution. Messages are untrusted communication records, never evidence.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,
