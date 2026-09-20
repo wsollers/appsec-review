@@ -198,3 +198,24 @@ a read-only NVD snapshot consumer binding (no new publisher); SCA matching is CP
 V05/V11; `cloc`/`scc` move to a `02-evidence-index` metrics enrichment (new task V15, needs
 requalification); `02-mobile-applicability` not adopted. Integrator follow-ups (not done here):
 close M01 in `TODO.md`, V02 node/skip-reason declaration, design-v3 §4 wording.
+
+## Checkpoint — 2026-09-20 (SCA matcher options packet; awaiting human gates)
+
+Branch `claude/v05-sca-matcher-options` from `origin/main`. Documentation only.
+
+- New: `docs/proposals/vendor-prepass/sca-matcher-options.md`, status **Proposed**. It is the
+  "short options note" `task-series.md` V09 requires before V11, and a sub-decision under
+  ADR-0010 (no new ADR number). Nothing else was edited.
+- Facts read from `nvd_feed.py`: the snapshot holds whole NVD CVE 2.0 records only (yearly feeds
+  plus API delta overlays). No CPE dictionary, no CPE-match feed, no purl/ecosystem data, and no
+  reader that folds the chain into one current record per CVE. No snapshot is published in this
+  checkout, so the presence of `configurations` in real records is still to be verified by V11.
+- Options: native CPE matcher; Grype/Trivy/Dependency-Check over a locally built DB; an offline OSV
+  snapshot in addition to NVD; SBOM-only baseline; phased native-now/OSV-later. Recommendation:
+  phased. Trivy and Dependency-Check are dropped with reasons.
+- Five gates (M1–M5) are open: matcher, OSV alongside NVD, purl→CPE rule ownership, `max_age`
+  value and owner, gap presentation to the threat workbench. V05 may start on the option-invariant
+  contract rules (section C) now; V11 stays blocked on M1.
+- Follow-ups for the integrator once answered are listed in section F (ADR-0010 Decisions row,
+  `task-series.md`, `job-nodes.proposal.json` `nvd-cpe-matcher-tbd`, identity-schema
+  `match_basis` const, `Resolution` blob list, freshness-policy record).
