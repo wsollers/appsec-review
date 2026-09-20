@@ -8,8 +8,8 @@ adr: docs/decisions/ADR-0010-vendor-prepass-decomposition.md
 # the threat-workbench T03 owner replaces each `producers: []` below and changes
 # `availability: m01_gated` to `availability: transitive` (the nodes join 02-evidence-assembly and
 # reach 03-threat-model-dfd-stride through 01-component-characterization; T10 decides direct edges).
-# Values reflect the RECOMMENDED option for each gate; a different gate answer changes the IDs named
-# in `changes_if`.
+# Values are the decisions recorded in ADR-0010 on 2026-09-20; no gate remains open. Each
+# `rejected_alternatives` entry below is kept only as the record of an option that was not adopted.
 
 source_families:
   - id: iac-container-deployment-evidence
@@ -31,8 +31,8 @@ source_families:
       02-iac-config-scan SKIPPED(not-applicable-no-matching-inputs) means no declared deployment
       configuration exists in the snapshot; 02-container-image-inventory SKIPPED means no image archive
       was supplied. Either is a recorded absence, not a coverage gap. FAILED/BLOCKED is a coverage gap.
-    changes_if:
-      G1_option_A: one producer entry per tool node replaces 02-iac-config-scan
+    rejected_alternatives:
+      G1_option_A_not_adopted: one producer entry per tool node replaces 02-iac-config-scan
       G8_option_B: 02-container-image-inventory is not declared; remove its entry
     keep_interim_sources: true
 
@@ -49,8 +49,8 @@ source_families:
       outputs/redaction-receipt.json from the same CURRENT attempt. No other file from the attempt is
       readable by any workcell. Entries are location fingerprints and data-class labels; no secret
       value, and no per-value hash, is present.
-    changes_if:
-      G1_option_A: 02-secrets-gitleaks and 02-key-material-inventory replace the single producer
+    rejected_alternatives:
+      G1_option_A_not_adopted: 02-secrets-gitleaks and 02-key-material-inventory replace the single producer
 
   - id: sbom-sca-license-lifecycle
     producers:
@@ -72,8 +72,8 @@ source_families:
           - outputs/dependency-lifecycle.json
           - outputs/reference-table-identity.json
           - outputs/coverage.json
-    changes_if:
-      G2_option_B: >-
+    rejected_alternatives:
+      G2_option_B_not_adopted: >-
         no 02-* producer exists; the family cannot be filled without making 03 depend on 06, which
         ADR-0008 does not declare. The family stays m01_gated/unfilled and S02 stays blocked.
       G3_option_C: 02-sca-vulnerability-match is not declared; remove its entry
@@ -94,8 +94,8 @@ source_families:
     trait_applicability: >-
       SKIPPED(not-applicable-no-matching-inputs) carries mobile-applicability.json as its supporting
       evidence; the mobile-client-specialist cell is not selected when no platform marker is present.
-    changes_if:
-      G6_option_B: add 02-mobile-applicability (contract mobile-applicability) as a second producer
+    rejected_alternatives:
+      G6_option_B_not_adopted: add 02-mobile-applicability (contract mobile-applicability) as a second producer
     keep_interim_sources: true
 
 not_a_threat_workbench_family:

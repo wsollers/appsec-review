@@ -325,7 +325,7 @@ dependents need no skip reason.
 | `iac-container-deployment-evidence` | `02-iac-config-scan`, `02-container-image-inventory` | `iac-config-evidence`, `container-image-inventory` |
 | `secrets-and-key-inventory` | `02-secrets-inventory` | `secrets-inventory` |
 | `sbom-sca-license-lifecycle` | `02-sbom-inventory`, `02-sca-vulnerability-match`, `02-license-scan`, `02-dependency-lifecycle` | `sbom-inventory`, `sca-vulnerability-match`, `license-inventory`, `dependency-lifecycle` |
-| `mobile-source-intelligence` | `02-mobile-sast` (plus `02-mobile-applicability` under G6-B) | `mobile-sast` (`mobile-applicability`) |
+| `mobile-source-intelligence` | `02-mobile-sast` | `mobile-sast` |
 
 All become `availability: transitive` (through `02-evidence-assembly` → `01`), the same label
 ADR-0008 uses for other pregather producers. The exact follow-up edits are in

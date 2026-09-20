@@ -3,7 +3,7 @@
   "proposal_only": true,
   "status": "not_registered_not_runnable",
   "adr": "docs/decisions/ADR-0010-vendor-prepass-decomposition.md",
-  "basis": "fixture values reflect the ADR's RECOMMENDED option for each open human gate; nothing here is decided until the gates in the ADR are answered",
+  "basis": "fixture values are the decisions recorded in ADR-0010 on 2026-09-20 (see gate_decisions); no human gate remains open. Still proposal-only: nothing is registered or runnable until task V02 declares the nodes",
   "proposed_new_skip_reason": {
     "id": "not-applicable-no-matching-inputs",
     "shared_surface_change": "appsec-review-process/worker-result-contract.json",
@@ -844,7 +844,7 @@
       },
       "permission_notes": "static/offline; no capability requested",
       "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; mobsfscan rule-pack identity",
-      "applicability_rule": "RECOMMENDED (G6 option A): in-worker deterministic platform-marker probe (AndroidManifest.xml, Android Gradle plugin, Info.plist, Xcode project) written to mobile-applicability.json; per-platform applicability; bare *.java/*.kt/*.m counts are NOT a marker (legacy false-applicability lesson)",
+      "applicability_rule": "DECIDED (G6 = A): in-worker deterministic platform-marker probe (AndroidManifest.xml, Android Gradle plugin, Info.plist, Xcode project) written to mobile-applicability.json; per-platform applicability; bare *.java/*.kt/*.m counts are NOT a marker (legacy false-applicability lesson)",
       "fills_threat_workbench_source_family": [
         "mobile-source-intelligence"
       ],
@@ -927,7 +927,7 @@
       "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
-        "EXISTS ONLY UNDER G6 OPTION B. Under the recommended option A this node is not declared and 02-mobile-sast carries the probe itself.",
+        "REJECTED ALTERNATIVE (G6 option B). Gate G6 was decided A, so this node is not declared and 02-mobile-sast carries the probe itself.",
         "NOT ADOPTED: gate G6 decided A (in-worker probe); retained in this fixture for the record only"
       ],
       "adopted": false

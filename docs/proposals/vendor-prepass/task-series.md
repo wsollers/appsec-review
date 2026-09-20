@@ -54,7 +54,7 @@ M06 semantic-index disposition ────────────────�
   `docs/full-review-workflow.mmd`, `docs/design-parity-readiness.md`), `arp/TODO.md`.
 - Deliverables: the approved nodes as `implemented: false`, `template: null`, with `planned_scope`
   and `required_artifacts`; one `required` `02-evidence-assembly` edge per joining node with the
-  approved `allowed_skip_reasons`; `not-applicable-no-matching-inputs` registered (if G5-A);
+  approved `allowed_skip_reasons`; `not-applicable-no-matching-inputs` registered (G5 = A);
   parity-manifest rows with honest blockers; M01 closed and M03/M04/M05/D09 statuses refreshed.
 - Acceptance: graph validates and stays acyclic; no `02-*` node depends on `01-*` or later; node
   count matches the ADR; every new node blocks with `WORKER_NOT_IMPLEMENTED`; bounded live Dagster
