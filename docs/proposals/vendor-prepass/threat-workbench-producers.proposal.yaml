@@ -59,9 +59,13 @@ source_families:
         artifacts: [outputs/sbom.cdx.json, outputs/sbom-manifest.json, outputs/coverage.json]
       - job: 02-sca-vulnerability-match
         contract: sca-vulnerability-match
+        # ADR-0010 M1/M2/M5: Grype over a mirrored vendor DB plus an independent OSV snapshot; the
+        # workbench gets matches and an AGGREGATED gap summary, with the per-component gap list by
+        # reference in coverage.json.
         artifacts:
           - outputs/sca-vulnerability-match.json
-          - outputs/vulnerability-database-identity.json
+          - outputs/vulnerability-database-identities.json
+          - outputs/coverage-gap-summary.json
           - outputs/coverage.json
       - job: 02-license-scan
         contract: license-inventory

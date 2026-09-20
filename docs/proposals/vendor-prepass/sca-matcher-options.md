@@ -1,9 +1,46 @@
 # SCA Matcher Selection For The NVD-Keyed Offline Snapshot
 
-Status: **Proposed — awaiting human gates** (M1–M5 below). Documentation only. No matcher, worker,
-schema, contract, registry record or graph change follows from this document.
+Status: **Decided 2026-09-20** (see Decisions). Documentation only. No matcher, worker, schema,
+contract, registry record or graph change follows from this document; the outcome still has to be
+recorded in the authoritative documents in the same change: ADR-0010's Decisions table and task
+table, the task series (V05, V09, V11, new V16-V18), `job-nodes.proposal.json`,
+`threat-workbench-producers.proposal.yaml`, and the V09 binding's age policy (code, schema, doc).
 
-Date: 2026-09-20
+Date: 2026-09-20 (drafted and decided)
+
+## Decisions
+
+Recorded 2026-09-20 from the owner's answers. M1 was first answered with a question ("we have Trivy,
+can Trivy be used? or do we build a docker image with grype and syft that consumes our static NVD
+and other static sources?"), which surfaced an option this packet had under-weighted: running an
+off-the-shelf scanner offline against a **mirrored copy of its own vendor database**, rather than
+against a database built from our raw NVD mirror (B2). The gate was re-put with that option.
+
+| Gate | Decision |
+|---|---|
+| M1 Matcher | **Pinned syft + Grype image; the Grype vendor database mirrored into `/data`.** A new out-of-run publisher downloads the Grype DB archive, records its identity (vendor build timestamp, schema version, sha256) and publishes it immutably, in the same pattern as `nvd_feed.py`. The scan job runs with database auto-update disabled and no network. Grype consumes the syft SBOM natively and matches by purl/ecosystem **and** CPE. The raw NVD mirror is no longer the matcher's source; it stays for `06-cve-reachability` enrichment and as an independent cross-check. Trivy was considered and not chosen for SCA: it matches language packages from its own `trivy-db`, not from NVD, so "Trivy against our NVD mirror" detects almost nothing; against a mirrored `trivy-db` it would be viable, but Grype pairs directly with the syft SBOM. B1/B5 (native CPE matcher) is **not** adopted. |
+| M2 OSV | **Yes, and before V11: build BOTH** the Grype DB mirror publisher and an independent offline OSV snapshot publisher. The owner chose to keep OSV as a second, independent source even though the Grype DB already carries GHSA/OSV-derived ecosystem advisories. Each publisher has exactly one fixed network destination, authorized as a B11 capability outside any engagement run; no engagement-run job gains network. |
+| M3 purl→CPE rules | Answered **A (versioned rule table in the repo)** before M1 was refined. Under M1 = Grype there is no in-repo CPE matcher, so the table has **no consumer and is not built now**. The answer stands for the case where a native NVD cross-check is added later. |
+| M4 Freshness | **No age limit by default**: a job uses whatever static snapshot is present and always records its age. A job or engagement **may set a tighter `max_age`**; exceeding that limit is **`FAILED`** (not `OK_WITH_GAPS`, not `BLOCKED`). This supersedes task V09's acceptance line "snapshot older than policy => `OK_WITH_GAPS`" and changes the merged binding (section F). "No limit" must be an explicit, required argument value, never a default. |
+| M5 Gaps → workbench | **Matches plus an aggregated gap summary** (counts by ecosystem and reason; the full per-component list available by reference). |
+
+Consequences for V05 (contract) and V11 (worker):
+
+- The `sca-vulnerability-match` contract names **two possible database identities** per match: the
+  Grype vendor DB and, where used, the OSV snapshot. `match_basis` is an enum (at least `purl`,
+  `cpe`), never the constant `cpe`. Section C's rules all still hold.
+- "Known vulnerability" now rests on a **third-party aggregated database** whose contents we pin
+  and hash but do not author. The contract must carry its vendor build identity and schema version
+  in the input fingerprint, and the licence/attribution terms of the bundled data must be reviewed
+  before V11 ships (to verify).
+- Still **to verify in V11**, not asserted here: the exact Grype flags and environment for
+  no-update/no-network operation and that nothing phones home with them set; DB schema-version
+  pinning against the pinned Grype version; determinism for a fixed DB and SBOM; the OSV bulk
+  export location, format, size and per-source licence terms; CVE/GHSA alias collapsing between the
+  two sources so one advisory is not reported twice.
+- New tasks the task series needs (its owner adds them): **V16 Grype DB mirror publisher** and
+  **V17 OSV snapshot publisher**, both `BLOCKED(B11)`, both modelled on `nvd_feed.py`, both
+  prerequisites of V11; plus consumer bindings equivalent to V09 for each.
 
 This is a **sub-decision under the accepted ADR-0010**, not a new ADR. ADR-0010 Decision G3 fixed
 the data source (the NVD copy under `/data`) and recorded that "the matcher is reopened as a
@@ -167,7 +204,7 @@ V05 can start on these today; none depends on gates M1–M5.
    component; if matched, its basis says so.
 9. Stale snapshot ⇒ `OK_WITH_GAPS`; missing ⇒ `BLOCKED`; never a live fetch (V09 outcomes).
 
-## D. Recommendation
+## D. Recommendation (as drafted; superseded by the Decisions above)
 
 **Recommendation (not a decision): B5 — ship B1 now, keep the contract open for B3, and ask the
 owner separately whether B3 may be built.**
@@ -181,7 +218,7 @@ throwaway work if B3 follows. B3 is the only route to useful ecosystem coverage,
 an owner decision and needs a new networked publisher, so it must be the owner's call (M2), not a
 side effect of tool selection.
 
-## E. Human gates
+## E. Human gates (all decided 2026-09-20; see Decisions)
 
 > **Gate M1 — Matcher.** Which matcher does `02-sca-vulnerability-match` use against the NVD
 > snapshot?

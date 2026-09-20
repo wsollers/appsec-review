@@ -1,0 +1,56 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "mobile-sast",
+  "display_name": "Mobile SAST Static Leads",
+  "required_files": [
+    "manifest.json",
+    "status.json",
+    "outputs/mobile-applicability.json",
+    "outputs/mobile-sast.json",
+    "outputs/redaction-receipt.json",
+    "outputs/tool-results.json",
+    "outputs/coverage.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "attempt_id",
+    "dagster_run_id"
+  ],
+  "result_schema": {
+    "artifact": "outputs/mobile-sast.json",
+    "schema_file": "mobile-sast.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "mobile_static_lead",
+    "allowed_assertions": [
+      "mobile-platform-marker-present",
+      "mobile-rule-hit",
+      "scan-coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "outputs/mobile-applicability.json is the in-worker platform-marker probe receipt (ADR-0010 G6 = A: no separate applicability node exists); a mobile result of any status without it is rejected",
+    "platform markers are AndroidManifest.xml, the Android Gradle plugin, Info.plist and Xcode projects; bare *.java, *.kt or *.m counts are not a marker",
+    "the result names android and ios exactly once each, and marker_present equals the receipt's applicable flag for that platform's tool",
+    "a rule hit names a platform whose marker is present and that platform's tool, and cites a source file by normalized path, sha256 and line; the hash and line are checked against the source snapshot",
+    "a rule hit carries a rule id and a closed category only: no message, snippet or matched line (mobsfscan output embeds raw source lines)",
+    "each tool instance's result_record_count equals the number of rule hits attributed to it",
+    "static mobile evidence is not runtime behaviour",
+    "outputs/tool-results.json, outputs/coverage.json and the applicability probe receipt validate against tool-results, scan-coverage and applicability-probe-receipt schemas and pass tool_instance_shapes.validate_node_aggregate for the node status; every listed output matches the attempt bytes (verify_outputs_on_disk)",
+    "the applicability probe receipt is required for every node status, including SKIPPED; a SKIPPED node publishes an empty result and its receipt shows zero matching inputs for every declared tool",
+    "run_id, job_id, attempt_id and source_snapshot_sha256 agree across the result, tool-results.json, coverage.json and the probe receipt, and equal the worker envelope",
+    "every tool_id in the result resolves to a declared tool instance in tool-results.json, and records come only from an instance with a validated, hashed output",
+    "outputs/redaction-receipt.json verifies against the published outputs/ directory with evidence_redaction.verify_receipt under the consumer's policy and limits",
+    "the result is an evidence lead: it cannot promote to a finding, a severity or an observed runtime state; there is no field for running, listening, reachable, deployed, exploited or observed state",
+    "a clean or empty result is not proof of absence; zero analysed inputs is a named coverage gap, not a pass",
+    "cross-record rules are enforced by container_mobile_binary_contracts.validate_result and verify_attempt",
+    "the redaction receipt is verified against the published bytes before any published document is parsed; if it fails nothing else is inspected and no value read from the attempt is ever reported",
+    "status.json holds exactly the required_status_fields, each bound to the node status and the worker envelope",
+    "manifest.json is {schema appsec-review/attempt-manifest/1, contract_id, outputs[{path, sha256}]} naming exactly the files beneath outputs/ with the sha256 of their bytes"
+  ]
+}

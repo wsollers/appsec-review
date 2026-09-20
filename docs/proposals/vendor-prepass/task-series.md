@@ -6,7 +6,7 @@ node implemented from this document. Status tokens follow `TODO.md`: `READY`, `B
 `HUMAN_GATE`, `INTEGRATION`. IDs prefixed `V` are this series; bare IDs are `TODO.md` batches.
 
 Paths are relative to the repo root; `arp/` abbreviates `appsec-review-process/`. Task text assumes
-the ADR's recorded Decisions (G3: NVD copy under `/data`; G10: evidence-index enrichment; G6: no applicability node).
+the ADR's recorded Decisions (G3: NVD copy under `/data`; M1–M5: Grype over a mirrored vendor DB plus an OSV snapshot, no age limit by default and `FAILED` over a job-set limit; G10: evidence-index enrichment; G6: no applicability node).
 
 ## Review Pattern
 
@@ -29,7 +29,9 @@ V01 (HUMAN_GATE) ─┬─ V02 INTEGRATION: declare nodes + skip reason ─┬�
                   │                                                 ├─ V05 ─┤
                   │                                                 └─ V07 ─┤
                   ├─ V06 redactor + receipt ────────────────────────────────┤
-                  ├─ V09 NVD snapshot consumer binding ─────────────────────┤
+                  ├─ V09 NVD snapshot consumer binding (done) ──────────────┤
+B11 ── V16 Grype DB mirror publisher ─┬─ V18 Grype DB + OSV consumer bindings ──┤ (V11)
+B11 ── V17 OSV snapshot publisher ────┘                                          │
                   └─ V15 evidence-index metrics enrichment (F01) ─────────── V14
 B13 pinned-container adapter ───────────────────────────────────────────────┤
 M02 binary/mobile/container image decision ─────────────────────────────────┤
@@ -62,7 +64,7 @@ M06 semantic-index disposition ────────────────�
 - Reviewer focus: no edge from a new node to `03`/`06`/`15`; skip reasons only on the four
   conditionally applicable edges; generated views regenerated, not hand-edited.
 
-## V03 — Shared Tool-Instance Aggregate And Probe Shapes — `READY`
+## V03 — Shared Tool-Instance Aggregate And Probe Shapes — done (PR #9)
 
 - Exclusive paths: new `schemas/tool-results.schema.json`, `schemas/scan-coverage.schema.json`,
   `schemas/applicability-probe-receipt.schema.json`, `arp/tests/test_tool_instance_shapes.py`.
@@ -75,7 +77,7 @@ M06 semantic-index disposition ────────────────�
 - Reviewer focus: shapes are reusable by D09's `02-source-sast` without change; no field can hold
   a raw match line.
 
-## V04 — Secrets And IaC Contracts — `BLOCKED(V03)`
+## V04 — Secrets And IaC Contracts — in review (PR #18)
 
 - Exclusive paths: `arp/registry/output-contracts/secrets-inventory.json`,
   `arp/registry/output-contracts/iac-config-evidence.json`,
@@ -86,18 +88,31 @@ M06 semantic-index disposition ────────────────�
   a missing receipt, an `OBSERVED` exposure assertion and any forbidden promotion.
 - Reviewer focus: the inventory schema has no free-text field able to carry a match.
 
-## V05 — SBOM-Family Contracts — `BLOCKED(V03)`
+## V05 — SBOM-Family Contracts — `READY`
 
 - Exclusive paths: `arp/registry/output-contracts/{sbom-inventory,sca-vulnerability-match,
   license-inventory,dependency-lifecycle}.json`, matching `schemas/*.schema.json`, focused tests.
 - Deliverables: four contracts; component/version/source/database timestamps and hashes (M05);
   database identity mandatory for SCA; reference-table identity mandatory for lifecycle.
+- Matcher (ADR-0010 M1/M2): Grype over a mirrored Grype vendor database, with an independent OSV
+  snapshot. The `sca-vulnerability-match` contract therefore:
+  - names the database identity **per match** (`grype-db` or `osv`), each with vendor build
+    identity, schema version, snapshot id and sha256; both enter the input fingerprint;
+  - makes `match_basis` a closed enum (`purl`, `cpe`), never the constant `cpe`;
+  - records every component no source covers as an explicit coverage-gap record with a closed
+    reason, and publishes the aggregated gap summary M5 sends to the threat workbench (counts by
+    ecosystem and reason; the per-component list by reference);
+  - collapses CVE/GHSA aliases so one advisory reported by both sources is one match with two
+    citations, not two matches;
+  - states the version scheme used for range evaluation; an unparseable version is a gap, never
+    "not vulnerable".
 - Acceptance: mutations reject a reachability/exploitability assertion, a match without database
-  identity, `supported` inferred from table absence, and an inferred vendored component promoted
-  to a declared one.
+  identity, a `match_basis` outside the enum, an uncovered component with no gap record,
+  `supported` inferred from table absence, and an inferred vendored component promoted to a
+  declared one.
 - Reviewer focus: nothing duplicates `06-cve-reachability`'s contract.
 
-## V06 — Redactor And Redaction Receipt — `READY`
+## V06 — Redactor And Redaction Receipt — done (PR #10; 1.1.0 in PR #17)
 
 - Exclusive paths: new `arp/evidence_redaction.py`, `schemas/redaction-receipt.schema.json`,
   `arp/tests/test_evidence_redaction.py`, `docs/evidence-redaction.md`.
@@ -110,7 +125,7 @@ M06 semantic-index disposition ────────────────�
 - Reviewer focus: redaction happens before anything is offered to `02-evidence-index`; the module
   does not import or alter common runtime publication code (adoption happens in V10–V13).
 
-## V07 — Container, Mobile And Binary-Hardening Contracts — `BLOCKED(V03)`
+## V07 — Container, Mobile And Binary-Hardening Contracts — in review (PR #19)
 
 - Exclusive paths: `arp/registry/output-contracts/{container-image-inventory,mobile-sast,
   binary-hardening}.json`, matching schemas, focused tests.
@@ -126,25 +141,22 @@ M06 semantic-index disposition ────────────────�
 - Acceptance: every producer ID exists in `job-graph.json`; YAML parses; secrets family keeps the
   receipt requirement.
 
-## V09 — NVD Snapshot Consumer Binding — `READY`
+## V09 — NVD Snapshot Consumer Binding — done (PR #8); age policy revised by M4
 
-Decision G3: SCA matching reads the NVD copy under `/data` published by the existing `nvd_feed.py`.
-No new publisher, no network, no B11 capability.
+Decision G3 made the NVD copy under `/data` (published by `nvd_feed.py`) an offline source. M1 then
+made Grype the SCA matcher, so this binding is **no longer the matcher's source**: it serves
+`06-cve-reachability` enrichment and an independent cross-check. No network, no B11 capability.
 
-- Exclusive paths: new `arp/sca_nvd_snapshot.py` (name indicative), its tests, and
-  `docs/sca-nvd-snapshot-binding.md`. Do not edit `nvd_feed.py` or its schemas.
-- Deliverables: read-only resolver that locates the current snapshot through the
-  `nvd-current-pointer`, verifies the manifest and file hashes offline, and returns the identity
-  record (`snapshot id`, publisher, retrieval timestamp, sha256, age) that enters the SCA job's
-  input fingerprint and is published as `outputs/vulnerability-database-identity.json`.
-- Acceptance: missing pointer or snapshot => `BLOCKED`; hash mismatch or partial snapshot => fails
-  closed; snapshot older than policy => `OK_WITH_GAPS` with age recorded; a writer lease held by the
-  publisher never blocks a reader of the last-good pointer; no code path opens a socket.
-- Reviewer focus: never a silent live fetch; the binding does not select or wrap a matcher.
-- Known limitation carried into V05/V11: NVD is CPE-keyed. The contract requires `match_basis` on
-  every match and a coverage-gap record for every SBOM component with no CPE mapping. The legacy
-  `osv-scanner` cannot consume a raw NVD feed, so **matcher selection is open** and belongs to
-  V05 (contract) and V11 (worker); it needs its own short options note before V11 starts.
+- Delivered: `appsec-review-process/sca_nvd_snapshot.py`, its tests, `docs/sca-nvd-snapshot-binding.md`,
+  `schemas/vulnerability-database-identity.schema.json`.
+- Age policy (M4, supersedes the original "older than policy => `OK_WITH_GAPS`"): `max_age` is
+  required and has no default; a job passes `NO_AGE_LIMIT` unless it or the engagement configured a
+  tighter limit; a snapshot older than a limit the job set is **`FAILED`** (`SNAPSHOT_TOO_OLD`) with
+  no identity and no fingerprint component. The worker resolves in preflight before reuse admission.
+- Unchanged acceptance: missing pointer or snapshot => `BLOCKED`; hash mismatch or partial snapshot
+  => fails closed; a writer lease never blocks a reader; no code path opens a socket.
+- `match_basis: cpe` in its identity record is true of the NVD database. The SCA match-record
+  basis (`purl`, `cpe`) is V05's.
 
 ## V10 — Secrets And IaC Workers (M03) — `BLOCKED(V02,V04,V06,B13)`
 
@@ -155,11 +167,19 @@ No new publisher, no network, no B11 capability.
   and deletion of the eight mapped steps from **both** runners.
 - Reviewer focus: no `|| true`; a tool that needs network is `BLOCKED`, not excepted.
 
-## V11 — SBOM-Family Workers (M05) — `BLOCKED(V02,V05,V09,B13)`
+## V11 — SBOM-Family Workers (M05) — `BLOCKED(V02,V05,V16,V17,V18,B13)`
 
 - Exclusive paths: new worker modules/templates/profiles/tests for the four nodes.
-- Acceptance: M05's list plus missing/stale snapshot behavior, CycloneDX version pin recorded, no
-  package restore, `06-cve-reachability/config.md` repointed, four steps deleted from both runners.
+- Matcher: a pinned image carrying syft and Grype (digest-pinned per B13), reading the mirrored
+  Grype DB and the OSV snapshot through V18's bindings. Database auto-update disabled; no network.
+- To verify before relying on it (from the M1–M5 packet): the exact Grype flags/environment for
+  no-update and no-network operation and that nothing phones home with them set; DB schema-version
+  pinning against the pinned Grype version; determinism for a fixed DB and SBOM; syft's CPE/purl
+  output surviving the pinned CycloneDX version; the attribution notices the bundled data requires.
+- Acceptance: M05's list plus: a missing database => `BLOCKED`; a database older than a limit the
+  job set => `FAILED`, no limit by default (M4); both database identities in the fingerprint;
+  CycloneDX version pin recorded; no package restore; `06-cve-reachability/config.md` repointed
+  (it still names `static-evidence/sca/osv-scanner.json`); four steps deleted from both runners.
 
 ## V12 — Container, Mobile And Binary-Hardening Workers (M04) — `BLOCKED(V02,V06,V07,M02,B13)`
 
@@ -198,3 +218,42 @@ legacy `cloc` and `scc` steps.
   descriptive only (no claim class promotion); generated/vendored scope is labelled, not dropped.
 - Reviewer focus: additive and deterministic; identical snapshot => identical metrics on Windows
   and Linux; no regression in index build time beyond a recorded bound.
+
+## V16 — Grype DB Mirror Publisher — `BLOCKED(B11)`
+
+ADR-0010 M1. Out-of-run reference publisher, modelled on `nvd_feed.py`.
+
+- Exclusive paths: new publisher module, snapshot manifest/pointer/lease schemas, tests,
+  `docs/grype-db-mirror-publisher.md`. Do not edit `nvd_feed.py`.
+- Deliverables: downloads the Grype vulnerability DB archive from its one fixed destination,
+  verifies the vendor checksum, records vendor build timestamp, DB schema version and sha256, and
+  publishes it immutably with an atomic last-good pointer under `/data`.
+- Acceptance: redirect/oversize/tamper/partial-download/lease-contention fixtures; the fixed
+  destination is a B11 `fixed-network-destination` capability granted **outside any engagement
+  run**; a DB whose schema version the pinned Grype cannot read is refused at publication; licence
+  and attribution terms of the bundled data recorded.
+- Reviewer focus: no engagement-run job gains network; the archive is never executed or unpacked
+  by the publisher beyond what verification needs.
+
+## V17 — OSV Snapshot Publisher — `BLOCKED(B11)`
+
+ADR-0010 M2. Independent second source, kept although the Grype DB carries OSV-derived data.
+
+- Exclusive paths: new publisher module, snapshot schemas, tests, `docs/osv-snapshot-publisher.md`.
+- Deliverables: bulk-export download from one fixed destination, per-ecosystem files hashed,
+  immutable snapshot plus atomic pointer under `/data`.
+- Acceptance: as V16, plus per-source licence terms recorded (several OSV sources are CC-BY) and
+  export location/format/size confirmed rather than assumed.
+- Reviewer focus: one fixed destination; alias data (CVE <-> GHSA) preserved for V05's collapsing.
+
+## V18 — Grype DB And OSV Consumer Bindings — `BLOCKED(V16,V17)`
+
+- Exclusive paths: new read-only binding module(s), identity schema(s), tests, doc.
+- Deliverables: for each database, what `sca_nvd_snapshot.py` does for NVD: resolve the current
+  snapshot, re-verify every hash offline on every call, return an identity record and a fingerprint
+  component only for a usable outcome.
+- Acceptance: the same guarantees, stated as tests: every safety input required with no default;
+  `NO_AGE_LIMIT` explicit and `FAILED` over a job-set limit (M4); every trusted field re-derived
+  from bytes; a persisted identity verified by re-resolution, never trusted; identity read-only
+  after resolution; path containment and link rejection; provably no network.
+- Reviewer focus: a returned or persisted record is a cache, never an authority.

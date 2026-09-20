@@ -1,0 +1,56 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "container-image-inventory",
+  "display_name": "Supplied Container Image Archive Inventory",
+  "required_files": [
+    "manifest.json",
+    "status.json",
+    "outputs/container-image-inventory.json",
+    "outputs/container-image-applicability.json",
+    "outputs/redaction-receipt.json",
+    "outputs/tool-results.json",
+    "outputs/coverage.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "attempt_id",
+    "dagster_run_id"
+  ],
+  "result_schema": {
+    "artifact": "outputs/container-image-inventory.json",
+    "schema_file": "container-image-inventory.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "supplied_image_static_evidence",
+    "allowed_assertions": [
+      "image-layer-package-inventory",
+      "image-configuration-property",
+      "image-hardening-rule-hit",
+      "scan-coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "inputs are container image archive files supplied as run inputs and nothing else: every image names a supplied archive by normalized staged-input path, byte count and sha256, and the hash matches the staged file",
+    "static only: no image is fetched from a registry, no tag or reference is resolved, no image is built and no container is created or started; an image reference in a manifest is not an input",
+    "an archive of an unsupported format, or one coverage.json lists as unsupported or not analyzed, is not-inspected and carries no digest, layer, config, package or rule hit; coverage.json lists every such archive and its input lists are not truncated",
+    "environment variable names only are recorded, never values; entrypoint and command are recorded as an executable and an argument count",
+    "every declared port carries DECLARED_EXPOSURE; OBSERVED_EXPOSURE is rejected by name",
+    "outputs/container-image-applicability.json is the applicability probe receipt over the staged inputs",
+    "outputs/tool-results.json, outputs/coverage.json and the applicability probe receipt validate against tool-results, scan-coverage and applicability-probe-receipt schemas and pass tool_instance_shapes.validate_node_aggregate for the node status; every listed output matches the attempt bytes (verify_outputs_on_disk)",
+    "the applicability probe receipt is required for every node status, including SKIPPED; a SKIPPED node publishes an empty result and its receipt shows zero matching inputs for every declared tool",
+    "run_id, job_id, attempt_id and source_snapshot_sha256 agree across the result, tool-results.json, coverage.json and the probe receipt, and equal the worker envelope",
+    "every tool_id in the result resolves to a declared tool instance in tool-results.json, and records come only from an instance with a validated, hashed output",
+    "outputs/redaction-receipt.json verifies against the published outputs/ directory with evidence_redaction.verify_receipt under the consumer's policy and limits",
+    "the result is an evidence lead: it cannot promote to a finding, a severity or an observed runtime state; there is no field for running, listening, reachable, deployed, exploited or observed state",
+    "a clean or empty result is not proof of absence; zero analysed inputs is a named coverage gap, not a pass",
+    "cross-record rules are enforced by container_mobile_binary_contracts.validate_result and verify_attempt",
+    "the redaction receipt is verified against the published bytes before any published document is parsed; if it fails nothing else is inspected and no value read from the attempt is ever reported",
+    "status.json holds exactly the required_status_fields, each bound to the node status and the worker envelope",
+    "manifest.json is {schema appsec-review/attempt-manifest/1, contract_id, outputs[{path, sha256}]} naming exactly the files beneath outputs/ with the sha256 of their bytes"
+  ]
+}
