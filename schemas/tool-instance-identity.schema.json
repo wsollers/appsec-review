@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool-instance-identity.schema.json",
+  "title": "Tool-instance executable identity",
+  "description": "ADR-0010 'Tool and image identity'. The image is named by repository plus registry-resolved digest only; there is deliberately no tag field, so a mutable tag such as ':local' or ':latest' is unrepresentable. Which of image_* / executable_sha256 must be set for each executor_kind is enforced by tool_instance_shapes.py.",
+  "type": "object",
+  "required": [
+    "executor_kind",
+    "image_repository",
+    "image_digest",
+    "executable_sha256",
+    "tool_name",
+    "tool_version",
+    "data_identities",
+    "redactor"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "executor_kind": {
+      "type": "string",
+      "enum": [
+        "pinned_container",
+        "deterministic_python"
+      ]
+    },
+    "image_repository": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]([a-z0-9._-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]([a-z0-9._-]*[a-z0-9])?)+$",
+      "description": "registry-host[:port]/path with no tag and no digest suffix. Null for deterministic_python."
+    },
+    "image_digest": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Registry-resolved digest through the B13 adapter. Null for deterministic_python."
+    },
+    "executable_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Hash of the worker module that is the tool, for deterministic_python. Null for pinned_container."
+    },
+    "tool_name": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+    },
+    "tool_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~-]{0,63}$",
+      "description": "Version as reported by the tool itself at run time, never copied from a comment or a tag. Null only when the tool never started."
+    },
+    "data_identities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "identity_id",
+          "version",
+          "sha256"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "rule-pack",
+              "policy-bundle",
+              "vulnerability-database",
+              "reference-table"
+            ]
+          },
+          "identity_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~-]{0,63}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "description": "Rule-pack / policy-bundle / database / reference-table identities consumed by this instance, each with its sha256. Empty when the tool uses none."
+    },
+    "redactor": {
+      "description": "Publication-boundary redactor identity (ADR-0010 G9). Null until V06 lands or for a producer that is not scanner-backed.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "redactor_id",
+        "redactor_version",
+        "ruleset_sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "redactor_id": {
+          "type": "string",
+          "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+        },
+        "redactor_version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~-]{0,63}$"
+        },
+        "ruleset_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

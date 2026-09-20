@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scan-coverage.schema.json",
+  "title": "Node scan coverage (coverage.json)",
+  "description": "ADR-0010 task V03. Per-tool analyzed / not-analyzed / unsupported inputs and the node's named coverage gaps. A clean or empty result is not evidence of absence: zero analyzed inputs, a failed or blocked tool instance and unsupported inputs are each a named gap. Count and gap bindings are enforced by tool_instance_shapes.py.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "tools",
+    "gaps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/scan-coverage/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z-]{0,95}$",
+      "description": "Owning graph node. A pattern, not a const: the shape is shared by every ADR-0010 family node and by D09's 02-source-sast."
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$",
+      "description": "The NODE attempt that published this aggregate. Tool instances carry their own attempt ids."
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Intake source-snapshot identity every tool instance and the probe ran against."
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool_id",
+          "applicability",
+          "candidate_input_count",
+          "analyzed_input_count",
+          "not_analyzed_input_count",
+          "unsupported_input_count",
+          "not_analyzed_inputs",
+          "unsupported_inputs",
+          "input_lists_truncated"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+          },
+          "applicability": {
+            "type": "string",
+            "enum": [
+              "applicable",
+              "not-applicable-no-matching-inputs"
+            ]
+          },
+          "candidate_input_count": {
+            "type": "integer",
+            "description": "Inputs the applicability detectors matched for this tool."
+          },
+          "analyzed_input_count": {
+            "type": "integer"
+          },
+          "not_analyzed_input_count": {
+            "type": "integer"
+          },
+          "unsupported_input_count": {
+            "type": "integer"
+          },
+          "not_analyzed_inputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "reason_code"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}$",
+                  "description": "Repository-relative POSIX path taken from the snapshot listing, percent-encoded outside the pattern. Never tool output."
+                },
+                "reason_code": {
+                  "type": "string",
+                  "enum": [
+                    "parse-failed",
+                    "tool-instance-did-not-complete",
+                    "unresolved-dependency",
+                    "size-limit-exceeded",
+                    "time-limit-exceeded",
+                    "excluded-by-policy",
+                    "unsupported-format",
+                    "unsupported-language-version",
+                    "unsupported-ecosystem",
+                    "encrypted-or-packed"
+                  ]
+                }
+              }
+            }
+          },
+          "unsupported_inputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "reason_code"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}$",
+                  "description": "Repository-relative POSIX path taken from the snapshot listing, percent-encoded outside the pattern. Never tool output."
+                },
+                "reason_code": {
+                  "type": "string",
+                  "enum": [
+                    "parse-failed",
+                    "tool-instance-did-not-complete",
+                    "unresolved-dependency",
+                    "size-limit-exceeded",
+                    "time-limit-exceeded",
+                    "excluded-by-policy",
+                    "unsupported-format",
+                    "unsupported-language-version",
+                    "unsupported-ecosystem",
+                    "encrypted-or-packed"
+                  ]
+                }
+              }
+            }
+          },
+          "input_lists_truncated": {
+            "type": "boolean",
+            "description": "True when the two lists are bounded samples; the counts stay exact."
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "gap_id",
+          "kind",
+          "tool_id",
+          "affected_input_count"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "gap_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tool-instance-failed",
+              "tool-instance-blocked",
+              "tool-instance-canceled",
+              "tool-instance-unresolved",
+              "tool-instance-partial",
+              "inputs-not-analyzed",
+              "inputs-unsupported",
+              "zero-analyzed-inputs",
+              "stale-reference-data",
+              "unmapped-components"
+            ]
+          },
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+          },
+          "affected_input_count": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
