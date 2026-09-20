@@ -162,3 +162,39 @@ Commit the bounded result on a dedicated branch. Report:
 Do not merge to `main` or mark M01 complete in `TODO.md` until Claude's B09 branch has been reviewed
 and integrated. At that point, the integrator can update both batch statuses without creating a
 text conflict.
+
+## Checkpoint — 2026-09-19 (M01 packet drafted; awaiting human gates)
+
+Branch `claude/m01-vendor-prepass-decision` from `origin/main`. Documentation only; no executable
+identity or behavior changed.
+
+- ADR: `docs/decisions/ADR-0010-vendor-prepass-decomposition.md`, status **Proposed**. It is
+  numbered `0010`, not the `0007` this prompt names: `0007` (allocator inventory) and `0005`
+  (CTP_Nov2013) are reserved by `docs/status-2026-09-16.md` and the 2026-09-14 continuation prompts.
+- Fixtures under `docs/proposals/vendor-prepass/`: `job-nodes.proposal.json`,
+  `legacy-step-map.proposal.json`, `threat-workbench-producers.proposal.yaml`, `task-series.md`.
+  All carry `proposal_only: true` / `status: not_registered_not_runnable` and encode the ADR's
+  recommended gate answers only.
+- Counts: 37 legacy steps (identical name set in both runners), one disposition each; 9 proposed
+  nodes plus 1 option-only node; 2 existing nodes (`02-source-sast`, `02-evidence-index`) receive
+  17 steps; 4 steps retired; `evidence-scrub` retained temporarily.
+- Cross-platform discrepancies: `secrets-binary` detectors differ; `joern-parse` arguments differ;
+  the Bash runner has no `DependsOn` mechanism (`sca`, `dependency-lifecycle`, `semantic-index`);
+  `ast-grep-scan` is declared twice in PowerShell. Both runners use default Docker networking and
+  mutable `:local` image tags.
+- Ten human gates (G1–G10) are open. M01 is **not** complete until the user answers them (task V01)
+  and the integrator lands V02. `docs/script-migration-inventory.md` was deliberately left
+  unchanged because no row becomes more exact until the gates are answered.
+- Downstream owners: M03 (secrets, IaC, redactor), M05 (SBOM family, snapshot publisher), M04 with
+  M02 (container image, mobile, binary hardening), D09 (source SAST), M06 (symbol/semantic index),
+  M07 (retired steps and final runner deletion), ADR-0008 T03 (threat-workbench producer fill).
+
+## Checkpoint — 2026-09-20 gate decisions
+
+User answered G1–G10: B; A; A with the NVD copy under `/data` as the named source; A now/B later;
+A; A; A; A; A; **B**. ADR-0010 moved to Accepted with a Decisions table. Knock-on edits: V09 is now
+a read-only NVD snapshot consumer binding (no new publisher); SCA matching is CPE-keyed with
+`match_basis` and unmapped components as coverage gaps, and matcher selection is reopened for
+V05/V11; `cloc`/`scc` move to a `02-evidence-index` metrics enrichment (new task V15, needs
+requalification); `02-mobile-applicability` not adopted. Integrator follow-ups (not done here):
+close M01 in `TODO.md`, V02 node/skip-reason declaration, design-v3 §4 wording.

@@ -1,0 +1,921 @@
+{
+  "schema": "appsec-review/vendor-prepass-legacy-step-map-proposal/1.0",
+  "proposal_only": true,
+  "status": "not_registered_not_runnable",
+  "adr": "docs/decisions/ADR-0010-vendor-prepass-decomposition.md",
+  "dispositions": [
+    "migrate_to_proposed_job",
+    "consume_accepted_producer",
+    "retain_temporarily",
+    "retire_duplicate_or_unsafe"
+  ],
+  "legacy_step_count": 37,
+  "runner_wide_discrepancies": [
+    "Both runners declare the same 37 step names; no step is platform-only.",
+    "SH has no DependsOn mechanism at all (affects sca, dependency-lifecycle, semantic-index).",
+    "Both runners start containers with default Docker networking: no step is network-isolated, so sca (api.osv.dev), Semgrep registry packs, and checkov/trivy policy downloads could silently use the network.",
+    "Both runners address images by mutable local tags (audit-iac:local, audit-container:local, scancode-toolkit:local, and the ImageTag default); none is a digest."
+  ],
+  "steps": [
+    {
+      "legacy_step": "cloc",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": null,
+      "dependencies": [],
+      "consumers": [
+        "02-evidence-assembly (through the existing evidence-index edge)"
+      ],
+      "output_class": "descriptive language/size metrics inside the evidence-index manifest",
+      "claim_limit": "descriptive only; no finding, severity or runtime-state",
+      "permission_class": "none",
+      "tool_image_identity_requirement": "none: computed deterministically from the indexed snapshot; no external cloc/scc binary or container",
+      "applicability_behavior": "always applicable",
+      "migration_prerequisite": "G10 decided B; task V15 lands and 02-evidence-index is requalified",
+      "deletion_gate": "V15 requalified; callers/docs (pipeline/README.md, runbooks using '-StaticSteps cloc') repointed; step removed from both runners",
+      "owning_followup_batch": "F01 via V15",
+      "cross_platform_discrepancy": null,
+      "existing_job_id": "02-evidence-index",
+      "decision_note": "G10 = B: one evidence-index metrics enrichment replaces both cloc and scc"
+    },
+    {
+      "legacy_step": "scc",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": null,
+      "dependencies": [],
+      "consumers": [
+        "02-evidence-assembly (through the existing evidence-index edge)"
+      ],
+      "output_class": "descriptive language/size metrics inside the evidence-index manifest",
+      "claim_limit": "descriptive only; no finding, severity or runtime-state",
+      "permission_class": "none",
+      "tool_image_identity_requirement": "none: computed deterministically from the indexed snapshot; no external cloc/scc binary or container",
+      "applicability_behavior": "always applicable",
+      "migration_prerequisite": "G10 decided B; task V15 lands and 02-evidence-index is requalified",
+      "deletion_gate": "V15 requalified; callers/docs (pipeline/README.md, runbooks using '-StaticSteps cloc') repointed; step removed from both runners",
+      "owning_followup_batch": "F01 via V15",
+      "cross_platform_discrepancy": null,
+      "existing_job_id": "02-evidence-index",
+      "decision_note": "G10 = B: one evidence-index metrics enrichment replaces both cloc and scc"
+    },
+    {
+      "legacy_step": "secrets",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-secrets-inventory",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (secrets)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; gitleaks rule configuration hash; redaction rule-set hash",
+      "applicability_behavior": "always applicable; never skipped",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "secrets-binary",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-secrets-inventory",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (secrets)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; gitleaks rule configuration hash; redaction rule-set hash",
+      "applicability_behavior": "always applicable; never skipped",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": "PS1 lists .p12/.pfx/.jks/.keystore files plus a PEM private-key-header grep; SH lists files by extension only and additionally matches .pem/.key/.crt/.cer. Migrated tool takes the union."
+    },
+    {
+      "legacy_step": "sbom",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-sbom-inventory",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (sbom)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; CycloneDX spec version pinned and recorded; legacy-observed syft 1.51.1 is unverified",
+      "applicability_behavior": "always applicable; a repository with no recognised manifest yields OK_WITH_GAPS with an explicit ecosystem-coverage gap (design-v3 L1 eastl lesson), not SKIPPED",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M05",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "sca",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-sca-vulnerability-match",
+      "dependencies": [
+        "02-sbom-inventory"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (sca)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny (G3 alternative: fixed_network_destinations=[api.osv.dev])",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; vulnerability database snapshot id, publisher, retrieval timestamp, sha256 and age are part of the input fingerprint; legacy-observed osv-scanner 1.9.2 is unverified",
+      "applicability_behavior": "always applicable once the SBOM is accepted; an SBOM with zero matchable components yields OK_WITH_GAPS",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M05",
+      "cross_platform_discrepancy": "PS1 enforces DependsOn=sbom and skips with a warning; SH has no dependency guard and runs against a missing SBOM. The graph edge replaces both."
+    },
+    {
+      "legacy_step": "sast-python",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-go",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-cpp",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-owasp",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-csharp",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-golang",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-python",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-php",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-java",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-security-audit",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-multi-semgrep-terraform",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-php",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "sast-php-parse-coverage",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": null,
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "iac-checkov",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-iac-config-scan",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (iac-kubernetes-dockerfile)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
+      "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "iac-trivy",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-iac-config-scan",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (iac-kubernetes-dockerfile)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
+      "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "iac-tfsec",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-iac-config-scan",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (iac-kubernetes-dockerfile)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
+      "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "weggli-note",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "retire_duplicate_or_unsafe",
+      "proposed_job_id": null,
+      "dependencies": [],
+      "consumers": [],
+      "output_class": "none",
+      "claim_limit": "n/a",
+      "permission_class": "none",
+      "tool_image_identity_requirement": "n/a",
+      "applicability_behavior": "n/a",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20",
+      "deletion_gate": "callers/docs updated (pipeline/README.md and runbooks using '-StaticSteps cloc'); step removed from both runners",
+      "owning_followup_batch": "M07",
+      "cross_platform_discrepancy": null,
+      "retirement_reason": "writes a static usage note; produces no target evidence"
+    },
+    {
+      "legacy_step": "ast-grep-scan",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (source SAST)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": "PS1 declares the step twice (config present / absent branches); SH uses one case with the same two behaviours. Same semantics, different shape.",
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "joern-parse",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-source-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "analysis substrate (code property graph)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; unparsed or unscanned files are coverage gaps",
+      "permission_class": "static-offline-default-deny (no rule-registry network, no package restore)",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_behavior": "per-tool language/config detector recorded in coverage.json; node itself is never skipped (existing edge allows no skip reason)",
+      "migration_prerequisite": "D09 (BLOCKED on B13 and this ADR)",
+      "deletion_gate": "D09 tool instance qualified; step removed from both runners",
+      "owning_followup_batch": "D09",
+      "cross_platform_discrepancy": "PS1 passes -J-Xmx7984m and hard-coded fsh-server exclude paths; SH passes generic **/.git/**, **/node_modules/**, **/vendor/** excludes. Neither is carried over verbatim.",
+      "note": "02-source-sast is an already-declared (not yet implemented) graph node; 'accepted producer' means accepted graph declaration, not a qualified worker"
+    },
+    {
+      "legacy_step": "symbol-index",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-evidence-index",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived index",
+      "claim_limit": "an index hit is a locator, never a citation or a finding",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "owned by the implemented 02-evidence-index job",
+      "applicability_behavior": "always applicable",
+      "migration_prerequisite": "M06 parity matrix against evidence_store.py / evidence_mcp.py",
+      "deletion_gate": "M06 disposition recorded; step removed from both runners",
+      "owning_followup_batch": "M06",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "semantic-index",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "consume_accepted_producer",
+      "proposed_job_id": "02-evidence-index",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived index",
+      "claim_limit": "an index hit is a locator, never a citation or a finding",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "owned by the implemented 02-evidence-index job",
+      "applicability_behavior": "always applicable",
+      "migration_prerequisite": "M06 parity matrix against evidence_store.py / evidence_mcp.py",
+      "deletion_gate": "M06 disposition recorded; step removed from both runners",
+      "owning_followup_batch": "M06",
+      "cross_platform_discrepancy": "PS1 enforces DependsOn=symbol-index; SH has no dependency guard."
+    },
+    {
+      "legacy_step": "binskim",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-binary-hardening",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (supplied-binary-hardening)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; legacy-observed BinSkim 4.4.9.11 is unverified; symbol-server access disabled",
+      "applicability_behavior": "deterministic probe for supplied PE/ELF/Mach-O files in the source snapshot; unsupported formats are per-file coverage gaps; SKIPPED only when zero candidate binaries exist",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M04 (image pin: M02)",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M04 (image pin: M02)",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "sast-mobile-android",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-mobile-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (mobile-source)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; mobsfscan rule-pack identity",
+      "applicability_behavior": "DECIDED (G6 = A): in-worker deterministic platform-marker probe (AndroidManifest.xml, Android Gradle plugin, Info.plist, Xcode project) written to mobile-applicability.json; per-platform applicability; bare *.java/*.kt/*.m counts are NOT a marker (legacy false-applicability lesson)",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M04",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M04",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "sast-mobile-ios",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-mobile-sast",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (mobile-source)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; mobsfscan rule-pack identity",
+      "applicability_behavior": "DECIDED (G6 = A): in-worker deterministic platform-marker probe (AndroidManifest.xml, Android Gradle plugin, Info.plist, Xcode project) written to mobile-applicability.json; per-platform applicability; bare *.java/*.kt/*.m counts are NOT a marker (legacy false-applicability lesson)",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M04",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M04",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "spotbugs-note",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "retire_duplicate_or_unsafe",
+      "proposed_job_id": null,
+      "dependencies": [],
+      "consumers": [],
+      "output_class": "none",
+      "claim_limit": "n/a",
+      "permission_class": "none",
+      "tool_image_identity_requirement": "n/a",
+      "applicability_behavior": "n/a",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20",
+      "deletion_gate": "callers/docs updated (pipeline/README.md and runbooks using '-StaticSteps cloc'); step removed from both runners",
+      "owning_followup_batch": "M07",
+      "cross_platform_discrepancy": null,
+      "retirement_reason": "writes a static usage note; produces no target evidence. Real SpotBugs needs compiled JVM bytecode and no JVM build node exists: recorded as a gap, no hidden node"
+    },
+    {
+      "legacy_step": "iac-k8s",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-iac-config-scan",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (iac-kubernetes-dockerfile)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
+      "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "dockerfile-lint",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-iac-config-scan",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (iac-kubernetes-dockerfile)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
+      "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "docker-base-images",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-iac-config-scan",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (iac-kubernetes-dockerfile)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
+      "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M03",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "scancode",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-license-scan",
+      "dependencies": [
+        "00-intake"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (license)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; scancode license-index identity; legacy image tag 'scancode-toolkit:local' is mutable and unacceptable",
+      "applicability_behavior": "always applicable",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M05",
+      "cross_platform_discrepancy": null
+    },
+    {
+      "legacy_step": "dependency-lifecycle",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "migrate_to_proposed_job",
+      "proposed_job_id": "02-dependency-lifecycle",
+      "dependencies": [
+        "02-sbom-inventory",
+        "02-license-scan"
+      ],
+      "consumers": [
+        "02-evidence-assembly"
+      ],
+      "output_class": "derived tool evidence (dependency-lifecycle)",
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; offline EOL reference table identity and sha256; table coverage is partial by design",
+      "applicability_behavior": "always applicable once both inputs are accepted",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "owning_followup_batch": "M05",
+      "cross_platform_discrepancy": "PS1 enforces DependsOn=sbom; SH has no dependency guard. Neither guards the scancode input."
+    },
+    {
+      "legacy_step": "evidence-scrub",
+      "source_runners": [
+        "Invoke-VendorAuditPrePass.ps1",
+        "Invoke-VendorAuditPrePass.sh"
+      ],
+      "disposition": "retain_temporarily",
+      "proposed_job_id": null,
+      "dependencies": [
+        "all other legacy steps"
+      ],
+      "consumers": [
+        "manual evidence hand-off only"
+      ],
+      "output_class": "redacted copy of a legacy evidence tree",
+      "claim_limit": "redaction is best effort; not proof that no secret remains",
+      "permission_class": "static-offline-default-deny",
+      "tool_image_identity_requirement": "n/a until replaced",
+      "applicability_behavior": "legacy-only; never runs for run-owned Dagster output",
+      "migration_prerequisite": "BLOCKER: per-producer publication-boundary redaction + redaction receipt (task V06) adopted by every scanner-backed producer (G9)",
+      "deletion_gate": "every migrated scanner producer publishes a redaction receipt and no caller hands off a legacy evidence tree",
+      "owning_followup_batch": "M03 (redactor) then M07 (deletion)",
+      "cross_platform_discrepancy": null,
+      "note": "a whole-tree post-pass is the wrong boundary for run-owned evidence: secrets would already sit in accepted attempts and the index before the scrub runs"
+    }
+  ],
+  "gate_decisions_recorded": "2026-09-20"
+}

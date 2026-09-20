@@ -1,0 +1,105 @@
+schema: appsec-review/vendor-prepass-threat-workbench-producers-proposal/1.0
+proposal_only: true
+status: not_registered_not_runnable
+adr: docs/decisions/ADR-0010-vendor-prepass-decomposition.md
+
+# Follow-up edit list for docs/proposals/threat-workbench/input-sources.proposal.yaml.
+# M01 does NOT edit that file. After the ADR-0010 gates are answered and task V02 declares the nodes,
+# the threat-workbench T03 owner replaces each `producers: []` below and changes
+# `availability: m01_gated` to `availability: transitive` (the nodes join 02-evidence-assembly and
+# reach 03-threat-model-dfd-stride through 01-component-characterization; T10 decides direct edges).
+# Values are the decisions recorded in ADR-0010 on 2026-09-20; no gate remains open. Each
+# `rejected_alternatives` entry below is kept only as the record of an option that was not adopted.
+
+source_families:
+  - id: iac-container-deployment-evidence
+    producers:
+      - job: 02-iac-config-scan
+        contract: iac-config-evidence
+        artifacts:
+          - outputs/iac-config-evidence.json
+          - outputs/base-image-inventory.json
+          - outputs/coverage.json
+          - outputs/redaction-receipt.json
+      - job: 02-container-image-inventory
+        contract: container-image-inventory
+        artifacts:
+          - outputs/container-image-inventory.json
+          - outputs/coverage.json
+          - outputs/redaction-receipt.json
+    trait_applicability: >-
+      02-iac-config-scan SKIPPED(not-applicable-no-matching-inputs) means no declared deployment
+      configuration exists in the snapshot; 02-container-image-inventory SKIPPED means no image archive
+      was supplied. Either is a recorded absence, not a coverage gap. FAILED/BLOCKED is a coverage gap.
+    rejected_alternatives:
+      G1_option_A_not_adopted: one producer entry per tool node replaces 02-iac-config-scan
+      G8_option_B: 02-container-image-inventory is not declared; remove its entry
+    keep_interim_sources: true
+
+  - id: secrets-and-key-inventory
+    producers:
+      - job: 02-secrets-inventory
+        contract: secrets-inventory
+        artifacts:
+          - outputs/secrets-inventory.redacted.json
+          - outputs/redaction-receipt.json
+          - outputs/coverage.json
+    lane_in_requirement: >-
+      The bundle admits only outputs/secrets-inventory.redacted.json and requires a valid
+      outputs/redaction-receipt.json from the same CURRENT attempt. No other file from the attempt is
+      readable by any workcell. Entries are location fingerprints and data-class labels; no secret
+      value, and no per-value hash, is present.
+    rejected_alternatives:
+      G1_option_A_not_adopted: 02-secrets-gitleaks and 02-key-material-inventory replace the single producer
+
+  - id: sbom-sca-license-lifecycle
+    producers:
+      - job: 02-sbom-inventory
+        contract: sbom-inventory
+        artifacts: [outputs/sbom.cdx.json, outputs/sbom-manifest.json, outputs/coverage.json]
+      - job: 02-sca-vulnerability-match
+        contract: sca-vulnerability-match
+        artifacts:
+          - outputs/sca-vulnerability-match.json
+          - outputs/vulnerability-database-identity.json
+          - outputs/coverage.json
+      - job: 02-license-scan
+        contract: license-inventory
+        artifacts: [outputs/license-inventory.json, outputs/coverage.json]
+      - job: 02-dependency-lifecycle
+        contract: dependency-lifecycle
+        artifacts:
+          - outputs/dependency-lifecycle.json
+          - outputs/reference-table-identity.json
+          - outputs/coverage.json
+    rejected_alternatives:
+      G2_option_B_not_adopted: >-
+        no 02-* producer exists; the family cannot be filled without making 03 depend on 06, which
+        ADR-0008 does not declare. The family stays m01_gated/unfilled and S02 stays blocked.
+      G3_option_C: 02-sca-vulnerability-match is not declared; remove its entry
+    interim_source_note: >-
+      Once these producers exist the `cve-reachability` interim source (06, a sibling of 03 that the
+      workbench never waits for) is no longer needed to supply the component list; whether to keep it as
+      an opportunistic source is the T03 owner's call.
+
+  - id: mobile-source-intelligence
+    producers:
+      - job: 02-mobile-sast
+        contract: mobile-sast
+        artifacts:
+          - outputs/mobile-applicability.json
+          - outputs/mobile-sast.json
+          - outputs/coverage.json
+          - outputs/redaction-receipt.json
+    trait_applicability: >-
+      SKIPPED(not-applicable-no-matching-inputs) carries mobile-applicability.json as its supporting
+      evidence; the mobile-client-specialist cell is not selected when no platform marker is present.
+    rejected_alternatives:
+      G6_option_B_not_adopted: add 02-mobile-applicability (contract mobile-applicability) as a second producer
+    keep_interim_sources: true
+
+not_a_threat_workbench_family:
+  - job: 02-binary-hardening
+    reason: >-
+      No m01_gated family names supplied-binary hardening. It reaches the workbench, if at all, through
+      the existing native-build-and-binary-intelligence family; that is a T03/T10 decision, not M01's.
