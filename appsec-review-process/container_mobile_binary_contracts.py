@@ -513,7 +513,7 @@ def validate_result(
 
     for field in HEADER_FIELDS:
         if result[field] != tool_results[field]:
-            errors.append(f"header-mismatch: result.{field} {result[field]!r} differs from tool-results {tool_results[field]!r}")
+            errors.append(f"header-mismatch: result.{field} differs from tool-results.{field}")
     records = result[contract["records"]]
     if node_status == "SKIPPED" and records:
         errors.append(f"skipped-node-with-records: node is SKIPPED but the result lists {len(records)} {contract['records']}")
@@ -535,6 +535,95 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict:
     if len(keys) != len(set(keys)):
         raise ValueError("duplicate object key")
     return dict(pairs)
+
+
+STATUS_FILE = "status.json"
+MANIFEST_FILE = "manifest.json"
+_DAGSTER_RUN_ID_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,127}\Z")
+
+
+def _presence_errors(attempt_root: Path, relative: str, max_bytes: int) -> list[str]:
+    """Is the file there, inside the attempt, regular and within bounds? Its content is not read."""
+    from execution_state import beneath  # local: keeps the pure validator import-light
+
+    try:
+        path = beneath(attempt_root, attempt_root / relative)
+    except ValueError:
+        return [f"required-file-missing: {relative!r} leaves the attempt or is a linked path"]
+    if not path.is_file():
+        return [f"required-file-missing: {relative!r} is not a regular file in the attempt"]
+    if path.stat().st_size > max_bytes:
+        return [f"required-file-unreadable: {relative!r} exceeds max_file_bytes {max_bytes}"]
+    return []
+
+
+def _status_errors(attempt_root: Path, required_fields: list[str], node_status: str,
+                   expected_header: Mapping[str, str], expected_dagster_run_id: str, max_bytes: int) -> list[str]:
+    """`status.json` is a strict object holding EXACTLY the registered contract's
+    `required_status_fields`, each bound to what the caller already knows. It is outside
+    `outputs/`, so the redaction receipt says nothing about it: no value from it is ever quoted."""
+    document, found = _read_document(attempt_root, STATUS_FILE, max_bytes)
+    if found:
+        return found
+    if not isinstance(document, dict):
+        return [f"status-invalid: {STATUS_FILE} must be a JSON object"]
+    errors = []
+    missing = sorted(set(required_fields) - set(document))
+    extra = len(set(document) - set(required_fields))
+    if missing:
+        errors.append(f"status-invalid: {STATUS_FILE} lacks required field(s) {missing}")
+    if extra:
+        errors.append(f"status-invalid: {STATUS_FILE} carries {extra} field(s) the contract does not register")
+    expected = {"status": node_status, "attempt_id": expected_header["attempt_id"],
+                "run_id": expected_header["run_id"], "job_id": expected_header["job_id"],
+                "dagster_run_id": expected_dagster_run_id}
+    for field in required_fields:
+        if field not in document:
+            continue
+        if field not in expected:
+            raise ValueError(f"no binding is defined for registered status field {field!r}")
+        if not isinstance(document[field], str) or document[field] != expected[field]:
+            errors.append(f"status-mismatch: {STATUS_FILE}.{field} is not {expected[field]!r}")
+    return errors
+
+
+MANIFEST_SCHEMA = "appsec-review/attempt-manifest/1"
+
+
+def _manifest_errors(attempt_root: Path, contract_id: str, max_bytes: int) -> list[str]:
+    """`manifest.json` follows the repository's convention for worker manifests: it binds the
+    hashes of what the attempt published. It is exactly
+    `{"schema", "contract_id", "outputs": [{"path", "sha256"}, ...]}`; `outputs` is sorted by path
+    and names EXACTLY the regular files beneath `outputs/`, each with the sha256 of its bytes. It
+    is outside `outputs/`, so the receipt does not cover it: nothing from it is ever quoted."""
+    from execution_state import file_hash  # local: keeps the pure validator import-light
+
+    document, found = _read_document(attempt_root, MANIFEST_FILE, max_bytes)
+    if found:
+        return found
+    if not isinstance(document, dict) or set(document) != {"schema", "contract_id", "outputs"}:
+        return [f"manifest-invalid: {MANIFEST_FILE} must be an object with exactly schema, contract_id and outputs"]
+    if document["schema"] != MANIFEST_SCHEMA or document["contract_id"] != contract_id:
+        return [f"manifest-invalid: {MANIFEST_FILE} must carry schema {MANIFEST_SCHEMA!r} and contract_id {contract_id!r}"]
+    listed = document["outputs"]
+    if not isinstance(listed, list) or not all(
+            isinstance(entry, dict) and set(entry) == {"path", "sha256"}
+            and isinstance(entry["path"], str) and isinstance(entry["sha256"], str) for entry in listed):
+        return [f"manifest-invalid: {MANIFEST_FILE}.outputs must be a list of {{path, sha256}} records"]
+    published = attempt_root / PUBLISHED_DIR
+    actual = {path.relative_to(attempt_root).as_posix(): path for path in sorted(published.rglob("*"))
+              if path.is_file() and not path.is_symlink()}
+    paths = [entry["path"] for entry in listed]
+    errors = []
+    if any(shapes.output_path_errors(path) for path in paths) or paths != sorted(set(paths)):
+        errors.append(f"manifest-invalid: {MANIFEST_FILE}.outputs paths must be normalized, unique and sorted")
+    if set(paths) != set(actual):
+        errors.append(f"manifest-mismatch: {MANIFEST_FILE}.outputs does not name exactly the {len(actual)} file(s) beneath {PUBLISHED_DIR}/")
+    wrong = sum(1 for entry in listed if entry["path"] in actual
+                and entry["sha256"] != "sha256:" + file_hash(actual[entry["path"]]))
+    if wrong:
+        errors.append(f"manifest-mismatch: {wrong} entr{'y' if wrong == 1 else 'ies'} in {MANIFEST_FILE}.outputs do not carry the sha256 of the published bytes")
+    return errors
 
 
 def _read_document(attempt_root: Path, relative: str, max_bytes: int) -> tuple[Any, list[str]]:
@@ -619,6 +708,7 @@ def verify_attempt(
     inputs_root: Any,
     *,
     expected_header: Mapping[str, str],
+    expected_dagster_run_id: str,
     node_status: str,
     declared_tool_ids: Iterable[str],
     permitted_node_statuses: Iterable[str],
@@ -629,9 +719,18 @@ def verify_attempt(
 
     Every argument is required. Nothing parsed earlier is trusted: each required file of the
     registered contract is re-read from `attempt_root`. `expected_header` is the run_id, job_id,
-    attempt_id and source_snapshot_sha256 from the worker envelope; every document must equal it.
-    `on_unhandled` and `limits` are the redaction policy and bounds the CONSUMER demands and are
-    passed straight to `evidence_redaction.verify_receipt`.
+    attempt_id and source_snapshot_sha256 from the worker envelope, and `expected_dagster_run_id`
+    is the orchestrator run the caller is validating for. `on_unhandled` and `limits` are the
+    redaction policy and bounds the CONSUMER demands and go straight to `verify_receipt`.
+
+    ORDER IS A SAFETY PROPERTY. The redaction receipt is the proof that the published documents are
+    safe to read, so it is verified FIRST, against the published bytes, and if it fails nothing
+    else is parsed and only the receipt's own errors are returned. Before that point the published
+    documents are untrusted bytes that may hold a secret.
+
+    NO VALUE READ FROM THE ATTEMPT IS EVER ECHOED. Errors name the file and the field and may quote
+    what the CALLER expected; they never quote what a document said. `status.json` and
+    `manifest.json` sit outside `outputs/`, so the receipt does not cover them at all.
     """
     import evidence_redaction  # local: keeps validate_result import-light
 
@@ -655,33 +754,52 @@ def verify_attempt(
         if relative not in required:
             raise ValueError(f"registered contract {contract_id!r} does not require {relative!r}")
 
+    if not isinstance(expected_dagster_run_id, str) or not _DAGSTER_RUN_ID_RE.match(expected_dagster_run_id):
+        raise TypeError("expected_dagster_run_id must be the orchestrator run id the caller is validating for")
+
+    # 1. Presence only. No published document is parsed yet.
     errors: list[str] = []
-    documents: dict[str, Any] = {}
     for relative in required:
-        document, found = _read_document(attempt, relative, limits.max_file_bytes)
+        found = _presence_errors(attempt, relative, limits.max_file_bytes)
         if found and relative == contract["probe_receipt"]:
             found = [f"probe-receipt-missing: {found[0].split(': ', 1)[1]} (required for every node status, including SKIPPED)"]
         errors += found
-        documents[relative] = document
     if errors:
         return errors
 
+    # 2. The receipt, and only the receipt. It proves the published bytes are redactor-clean.
+    receipt, found = _read_document(attempt, REDACTION_RECEIPT, limits.max_file_bytes)
+    if found:
+        return found
+    try:
+        evidence_redaction.verify_receipt(receipt, attempt / PUBLISHED_DIR, on_unhandled=on_unhandled, limits=limits)
+    except evidence_redaction.ReceiptVerificationError as failure:
+        return [f"redaction-receipt: {error}" for error in failure.errors]
+
+    # 3. status.json and manifest.json: outside outputs/, never covered by the receipt, never quoted.
+    errors += _status_errors(attempt, registered["required_status_fields"], node_status,
+                             expected_header, expected_dagster_run_id, limits.max_file_bytes)
+    errors += _manifest_errors(attempt, contract_id, limits.max_file_bytes)
+
+    # 4. Only now are the published documents parsed and compared.
+    documents: dict[str, Any] = {REDACTION_RECEIPT: receipt}
+    for relative in required:
+        if relative in (REDACTION_RECEIPT, STATUS_FILE, MANIFEST_FILE):
+            continue
+        documents[relative], found = _read_document(attempt, relative, limits.max_file_bytes)
+        errors += found
+    if any(error.startswith("required-file-") for error in errors):
+        return errors
+
     result, tool_results = documents[contract["result"]], documents[TOOL_RESULTS]
-    errors += validate_result(contract_id, node_status, result, tool_results, documents[COVERAGE],
+    checked = validate_result(contract_id, node_status, result, tool_results, documents[COVERAGE],
                               documents[contract["probe_receipt"]], declared_tool_ids, permitted_node_statuses)
-    if any(error.startswith(("schema:", "env-value-present", "probe-receipt-missing")) for error in errors):
+    errors += checked
+    if any(error.startswith(("schema:", "env-value-present", "probe-receipt-missing")) for error in checked):
         return errors
     for field in HEADER_FIELDS:
         if tool_results[field] != expected_header[field]:
-            errors.append(
-                f"header-mismatch: tool-results.{field} {tool_results[field]!r} differs from the worker envelope's "
-                f"{expected_header[field]!r}"
-            )
+            errors.append(f"header-mismatch: tool-results.{field} is not the worker envelope's {expected_header[field]!r}")
     errors += shapes.verify_outputs_on_disk(tool_results, attempt)
-    try:
-        evidence_redaction.verify_receipt(documents[REDACTION_RECEIPT], attempt / PUBLISHED_DIR,
-                                          on_unhandled=on_unhandled, limits=limits)
-    except evidence_redaction.ReceiptVerificationError as failure:
-        errors += [f"redaction-receipt: {error}" for error in failure.errors]
     errors += _input_errors(contract_id, result, inputs)
     return errors

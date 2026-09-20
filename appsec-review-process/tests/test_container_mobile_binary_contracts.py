@@ -373,15 +373,32 @@ def materialize(case: dict, root: Path) -> tuple[Path, Path]:
     for relative, data in staged.items():
         (staging / Path(relative).name).write_bytes(data)
     attempt.mkdir()
-    (attempt / "manifest.json").write_bytes(dump({"files": sorted(staged)}))
-    (attempt / "status.json").write_bytes(dump({"status": case["status"]}))
+    (attempt / "status.json").write_bytes(dump(status_document(case)))
     receipt = evidence_redaction.redact_tree(staging, attempt / "outputs", on_unhandled=POLICY, limits=LIMITS)
     assert receipt["totals"]["files_redacted"] == 0, "a consistent case must be a fixed point of the redactor"
+    (attempt / "manifest.json").write_bytes(dump(manifest_document(case["contract_id"], attempt)))
     return attempt, inputs
 
 
+def manifest_document(contract_id: str, attempt: Path) -> dict:
+    """What a worker writes last: the hashes of exactly what it published under outputs/."""
+    outputs = [{"path": path.relative_to(attempt).as_posix(), "sha256": sha_bytes(path.read_bytes())}
+               for path in sorted((attempt / "outputs").rglob("*")) if path.is_file()]
+    return {"schema": contracts.MANIFEST_SCHEMA, "contract_id": contract_id, "outputs": outputs}
+
+
+DAGSTER_RUN_ID = "0f4c2b7e-dagster-run-v07"
+
+
+def status_document(case: dict) -> dict:
+    """Exactly the registered contract's required_status_fields, bound to the envelope."""
+    return {"status": case["status"], "attempt_id": header(case["contract_id"])["attempt_id"],
+            "dagster_run_id": DAGSTER_RUN_ID}
+
+
 def verify(case: dict, attempt: Path, inputs: Path, **override) -> list[str]:
-    kwargs = {"expected_header": header(case["contract_id"]), "node_status": case["status"],
+    kwargs = {"expected_header": header(case["contract_id"]), "expected_dagster_run_id": DAGSTER_RUN_ID,
+              "node_status": case["status"],
               "declared_tool_ids": case["documents"]["declared-tools"],
               "permitted_node_statuses": PERMITTED[case["contract_id"]], "on_unhandled": POLICY, "limits": LIMITS}
     kwargs.update(override)
@@ -708,7 +725,8 @@ class RequiredInputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             attempt, inputs = materialize(case, Path(tmp))
             full = {"contract_id": BINARY, "attempt_root": attempt, "inputs_root": inputs,
-                    "expected_header": header(BINARY), "node_status": case["status"],
+                    "expected_header": header(BINARY), "expected_dagster_run_id": DAGSTER_RUN_ID,
+                    "node_status": case["status"],
                     "declared_tool_ids": TOOLS[BINARY], "permitted_node_statuses": PERMITTED[BINARY],
                     "on_unhandled": POLICY, "limits": LIMITS}
             self.assertEqual(verify_attempt(**full), [])
@@ -716,7 +734,8 @@ class RequiredInputTests(unittest.TestCase):
                 with self.assertRaises(TypeError, msg=name):
                     verify_attempt(**{k: v for k, v in full.items() if k != name})
             for name, bad in (("attempt_root", None), ("inputs_root", ""), ("limits", None),
-                              ("expected_header", {"run_id": "x"})):
+                              ("expected_header", {"run_id": "x"}), ("expected_dagster_run_id", None),
+                              ("expected_dagster_run_id", ""), ("expected_dagster_run_id", "has space")):
                 with self.assertRaises(TypeError, msg=name):
                     verify_attempt(**{**full, name: bad})
 
@@ -1213,7 +1232,9 @@ class PathAndBytesTests(unittest.TestCase):
             for field, value in (("run_id", "another-run"), ("attempt_id", "node-attempt-0009"),
                                  ("source_snapshot_sha256", sha("other-snapshot"))):
                 errors = verify(case, attempt, inputs, expected_header={**header(BINARY), field: value})
-                self.assertEqual(names(errors), {"header-mismatch"}, field)
+                # status.json is bound to the envelope too, so a different attempt_id shows up twice
+                expected = {"header-mismatch", "status-mismatch"} if field == "attempt_id" else {"header-mismatch"}
+                self.assertEqual(names(errors), expected, field)
             self.assertEqual(names(verify(case, attempt, inputs, expected_header={**header(BINARY), "job_id": "02-mobile-sast"})),
                              {"header-mismatch"})
             # the wrong policy and the wrong limits are the consumer's to demand
@@ -1227,15 +1248,16 @@ class PathAndBytesTests(unittest.TestCase):
             document = json.loads(result_path.read_text(encoding="utf-8"))
             document["binaries"][3]["checks"]["relro"] = "present"
             result_path.write_bytes(dump(document))
-            found = names(verify(case, attempt, inputs))
-            self.assertLessEqual({"unsupported-format-assessed", "redaction-receipt"}, found)
+            # The receipt is verified FIRST. Once it fails nothing else is parsed, so the edited
+            # document's content is never inspected or reported (PR 19 review).
+            self.assertEqual(names(verify(case, attempt, inputs)), {"redaction-receipt"})
 
     def test_raw_tool_output_is_bound_to_the_attempt_bytes(self):
         case = GOLDENS["binary-ok-with-gaps"]()
         with tempfile.TemporaryDirectory() as tmp:
             attempt, inputs = materialize(case, Path(tmp))
             (attempt / contracts.BINSKIM_SARIF).write_bytes(dump({"version": "2.1.0", "runs": [], "extra": 1}))
-            self.assertLessEqual({"outputs-on-disk", "redaction-receipt"}, names(verify(case, attempt, inputs)))
+            self.assertEqual(names(verify(case, attempt, inputs)), {"redaction-receipt"})
             (attempt / "outputs" / "unlisted.json").write_bytes(dump({}))
             self.assertIn("redaction-receipt", names(verify(case, attempt, inputs)))
 
@@ -1250,8 +1272,16 @@ class PathAndBytesTests(unittest.TestCase):
                 self.assertEqual(names(verify(case, attempt, inputs)), {expected}, relative)
         with tempfile.TemporaryDirectory() as tmp:
             attempt, inputs = materialize(case, Path(tmp))
+            # a published document edited after sealing fails the receipt before it is ever parsed
             (attempt / contracts.CONTRACTS[CONTAINER]["result"]).write_bytes(b'{"schema": 1, "schema": 2}')
-            self.assertEqual(names(verify(case, attempt, inputs)), {"required-file-unreadable"})
+            self.assertEqual(names(verify(case, attempt, inputs)), {"redaction-receipt"})
+        for relative in ("status.json", "manifest.json"):   # outside outputs/: parsed strictly on their own
+            with tempfile.TemporaryDirectory() as tmp:
+                attempt, inputs = materialize(case, Path(tmp))
+                (attempt / relative).write_bytes(b'{"status": "OK", "status": "FAILED"}')
+                self.assertEqual(names(verify(case, attempt, inputs)), {"required-file-unreadable"}, relative)
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt, inputs = materialize(case, Path(tmp))
             self.assertEqual(names(verify(case, Path(tmp) / "absent", inputs)), {"required-file-missing"})
 
     def test_a_symlinked_input_is_rejected(self):
@@ -1323,8 +1353,169 @@ def regenerate_goldens() -> None:
                 json.dumps(case["documents"][part], indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
 
+
+class ReceiptFirstAndStatusTests(unittest.TestCase):
+    """PR 19 review. (1) The redaction receipt is the proof that the published documents are safe
+    to read, so it is verified before any of them is parsed, and no value read from the attempt is
+    ever echoed. (2) status.json is validated against the registered contract and bound to the
+    node status and the worker envelope."""
+
+    PLANT = "gh" + "p_" + "".join("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"[b % 57]
+                                  for b in hashlib.sha256(b"pr19-plant").digest() * 2)[:36]
+    QUIET = "hunter2-run-id"          # low entropy: the redactor does not see it, so the receipt stays valid
+
+    def fresh(self, case_name="binary-ok-with-gaps", mutate=None):
+        case = GOLDENS[case_name]()
+        if mutate:
+            mutate(case)
+        tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        attempt, inputs = materialize(case, tmp)
+        return case, attempt, inputs
+
+    def published_documents(self, case, attempt):
+        spec = contracts.CONTRACTS[case["contract_id"]]
+        return [attempt / spec["result"], attempt / spec["probe_receipt"], attempt / contracts.TOOL_RESULTS,
+                attempt / contracts.COVERAGE]
+
+    def test_a_value_planted_after_sealing_is_never_echoed_and_only_the_receipt_is_reported(self):
+        # The reviewer's case, for every published document and every header field.
+        for index in range(4):
+            for field in contracts.HEADER_FIELDS:
+                case, attempt, inputs = self.fresh()
+                path = self.published_documents(case, attempt)[index]
+                document = json.loads(path.read_text(encoding="utf-8"))
+                document[field] = self.PLANT
+                path.write_bytes(dump(document))
+                errors = verify(case, attempt, inputs)
+                with self.subTest(document=path.name, field=field):
+                    self.assertEqual(names(errors), {"redaction-receipt"})
+                    self.assertFalse([e for e in errors if self.PLANT in e], "a planted value reached an error message")
+
+    def test_nothing_is_parsed_once_the_receipt_fails(self):
+        # Make a published document unparseable AND break the receipt: only the receipt is reported.
+        case, attempt, inputs = self.fresh()
+        self.published_documents(case, attempt)[0].write_bytes(b"{ this is not json " + self.PLANT.encode())
+        errors = verify(case, attempt, inputs)
+        self.assertEqual(names(errors), {"redaction-receipt"})
+        self.assertFalse([e for e in errors if self.PLANT in e])
+
+    def test_a_sealed_but_wrong_header_is_reported_without_quoting_the_document(self):
+        # A worker that published the wrong run id and sealed it honestly: the receipt is VALID, so
+        # the comparison does run. It may quote what the caller expected, never what the file said.
+        def wrong_run(case):
+            for name in ("result", "tool-results", "coverage", "probe-receipt"):
+                case["documents"][name]["run_id"] = self.QUIET
+        case, attempt, inputs = self.fresh(mutate=wrong_run)
+        errors = verify(case, attempt, inputs)
+        self.assertIn("header-mismatch", names(errors))
+        self.assertFalse([e for e in errors if self.QUIET in e], errors)
+        self.assertTrue(any(header(BINARY)["run_id"] in e for e in errors), "the expected value may be quoted")
+
+    def test_in_memory_header_mismatch_does_not_quote_either_document(self):
+        case = GOLDENS["binary-ok-with-gaps"]()
+        case["documents"]["result"]["run_id"] = self.QUIET
+        errors = check(case)
+        self.assertIn("header-mismatch", names(errors))
+        self.assertFalse([e for e in errors if e.startswith("header-mismatch: result.") and self.QUIET in e], errors)
+
+    def test_the_reviewers_status_json_is_rejected(self):
+        case, attempt, inputs = self.fresh()
+        (attempt / "status.json").write_bytes(dump({"status": "FAILED", "attacker": self.PLANT}))
+        errors = verify(case, attempt, inputs)
+        self.assertEqual(names(errors), {"status-invalid", "status-mismatch"})
+        self.assertFalse([e for e in errors if self.PLANT in e or "attacker" in e or "FAILED" in e], errors)
+
+    def test_each_status_field_is_required_bound_and_never_quoted(self):
+        good = status_document(GOLDENS["binary-ok-with-gaps"]())
+        self.assertEqual(sorted(good), sorted(json.loads(
+            (contracts.REGISTRY_CONTRACTS / f"{BINARY}.json").read_text(encoding="utf-8"))["required_status_fields"]))
+        cases = {
+            "status missing": ({k: v for k, v in good.items() if k != "status"}, {"status-invalid"}),
+            "attempt_id missing": ({k: v for k, v in good.items() if k != "attempt_id"}, {"status-invalid"}),
+            "dagster_run_id missing": ({k: v for k, v in good.items() if k != "dagster_run_id"}, {"status-invalid"}),
+            "status edited alone": ({**good, "status": "OK"}, {"status-mismatch"}),
+            "attempt_id edited alone": ({**good, "attempt_id": self.QUIET}, {"status-mismatch"}),
+            "dagster_run_id edited alone": ({**good, "dagster_run_id": self.QUIET}, {"status-mismatch"}),
+            "status not a string": ({**good, "status": ["OK_WITH_GAPS"]}, {"status-mismatch"}),
+            "unregistered extra field": ({**good, "note": self.QUIET}, {"status-invalid"}),
+            "empty object": ({}, {"status-invalid"}),
+        }
+        for label, (document, expected) in cases.items():
+            case, attempt, inputs = self.fresh()
+            (attempt / "status.json").write_bytes(dump(document))
+            errors = verify(case, attempt, inputs)
+            with self.subTest(case=label):
+                self.assertEqual(names(errors), expected, errors)
+                self.assertFalse([e for e in errors if self.QUIET in e], errors)
+        for label, raw in (("a list", b"[]"), ("a string", b'"OK_WITH_GAPS"'), ("null", b"null")):
+            case, attempt, inputs = self.fresh()
+            (attempt / "status.json").write_bytes(raw)
+            self.assertEqual(names(verify(case, attempt, inputs)), {"status-invalid"}, label)
+
+    def test_status_is_bound_to_the_callers_facts_not_to_the_file(self):
+        case, attempt, inputs = self.fresh()
+        self.assertEqual(verify(case, attempt, inputs), [])
+        self.assertIn("status-mismatch", names(verify(case, attempt, inputs, expected_dagster_run_id="another-dagster-run")))
+        self.assertIn("status-mismatch", names(verify(case, attempt, inputs, node_status="OK")))
+
+    def test_status_holds_for_every_contract_and_status(self):
+        for name in GOLDENS:
+            case, attempt, inputs = self.fresh(name)
+            self.assertEqual(verify(case, attempt, inputs), [], name)
+            (attempt / "status.json").write_bytes(dump({"status": case["status"]}))   # the pre-review golden
+            self.assertEqual(names(verify(case, attempt, inputs)), {"status-invalid"}, name)
+
+    def test_manifest_binds_exactly_what_was_published(self):
+        for raw in (b"[]", b'"x"', b"null", b"{}"):
+            case, attempt, inputs = self.fresh()
+            (attempt / "manifest.json").write_bytes(raw)
+            self.assertEqual(names(verify(case, attempt, inputs)), {"manifest-invalid"})
+        good = None
+        mutations = {
+            "wrong schema": lambda d: d.update(schema="appsec-review/attempt-manifest/0"),
+            "another contract": lambda d: d.update(contract_id=MOBILE),
+            "extra key": lambda d: d.update(note=self.QUIET),
+            "one hash edited": lambda d: d["outputs"][0].update(sha256="sha256:" + "0" * 64),
+            "one entry dropped": lambda d: d["outputs"].pop(),
+            "an unpublished file listed": lambda d: d["outputs"].append({"path": "outputs/zz-ghost.json", "sha256": "sha256:" + "1" * 64}),
+            "alias path": lambda d: d["outputs"][0].update(path=d["outputs"][0]["path"].replace("outputs/", "outputs/./")),
+            "unsorted": lambda d: d["outputs"].reverse(),
+            "entry with an extra field": lambda d: d["outputs"][0].update(size=1),
+        }
+        for label, mutate in mutations.items():
+            case, attempt, inputs = self.fresh()
+            document = json.loads((attempt / "manifest.json").read_text(encoding="utf-8"))
+            mutate(document)
+            (attempt / "manifest.json").write_bytes(dump(document))
+            errors = verify(case, attempt, inputs)
+            with self.subTest(case=label):
+                self.assertTrue(names(errors) <= {"manifest-invalid", "manifest-mismatch"} and errors, errors)
+                self.assertFalse([e for e in errors if self.QUIET in e], errors)
+
+    def test_invariant_no_value_written_into_the_attempt_after_sealing_reaches_an_error(self):
+        """Every file of the attempt, tampered one at a time with a planted value in every position
+        a JSON document offers at its top level: no error message may contain it."""
+        case, attempt, inputs = self.fresh()
+        files = sorted(path for path in attempt.rglob("*") if path.is_file())
+        self.assertGreaterEqual(len(files), 7)
+        for path in files:
+            original = path.read_bytes()
+            try:
+                document = json.loads(original.decode("utf-8"))
+            except ValueError:
+                document = None
+            variants = [self.PLANT.encode(), dump({"x": self.PLANT}), dump([self.PLANT])]
+            if isinstance(document, dict):
+                variants += [dump({**document, key: self.PLANT}) for key in document]
+                variants.append(dump({**document, self.PLANT: 1}))
+            for variant in variants:
+                path.write_bytes(variant)
+                errors = verify(case, attempt, inputs)
+                self.assertTrue(errors, f"{path.name}: tampering was accepted")
+                self.assertFalse([e for e in errors if self.PLANT in e], f"{path.name}: {errors}")
+            path.write_bytes(original)
+        self.assertEqual(verify(case, attempt, inputs), [])
+
+
 if __name__ == "__main__":
-    if "--regenerate-goldens" in sys.argv:
-        regenerate_goldens()
-        sys.exit(0)
     unittest.main()
