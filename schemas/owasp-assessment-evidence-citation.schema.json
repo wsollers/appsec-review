@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-assessment-evidence-citation.schema.json",
+  "title": "Canonical evidence or counterevidence citation for an OWASP obligation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["citation_id", "input_id", "source_kind", "artifact_path", "artifact_sha256", "accepted_pointer", "locator", "observed_fact", "evidence_mode", "freshness", "covered_scope", "limitations", "canonical_dereference_id", "test_context", "derived_output_id", "affirmative_contrary_evidence"],
+  "properties": {
+    "citation_id": {"type": "string"},
+    "input_id": {"type": "string"},
+    "source_kind": {"enum": ["canonical_evidence", "document", "test_evidence", "scanner", "locator", "derived_output", "crosswalk", "nvd_enrichment"]},
+    "artifact_path": {"type": "string"},
+    "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "accepted_pointer": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["path", "sha256", "job_id", "attempt_id"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "job_id": {"type": "string"},
+        "attempt_id": {"type": "string"}
+      }
+    },
+    "locator": {"type": "string"},
+    "observed_fact": {"type": "string"},
+    "evidence_mode": {"enum": ["document_or_process", "static_source", "static_config", "built_artifact", "test_evidence", "dynamic_runtime", "manual_inspection"]},
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "assessed_at"],
+      "properties": {
+        "status": {"enum": ["current", "stale_accepted", "not_time_sensitive"]},
+        "assessed_at": {"type": "string"}
+      }
+    },
+    "covered_scope": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "canonical_dereference_id": {"type": ["string", "null"]},
+    "test_context": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["test_definition", "test_result", "environment_identity", "production_equivalence", "production_equivalence_limitations", "mocks_used"],
+      "properties": {
+        "test_definition": {"type": "string"},
+        "test_result": {"type": "string"},
+        "environment_identity": {"type": "string"},
+        "production_equivalence": {"enum": ["equivalent", "not_equivalent", "unknown"]},
+        "production_equivalence_limitations": {"type": "array", "items": {"type": "string"}},
+        "mocks_used": {"type": "boolean"}
+      }
+    },
+    "derived_output_id": {"type": ["string", "null"]},
+    "affirmative_contrary_evidence": {"type": "boolean"}
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-crosswalk-lineage.schema.json",
+  "title": "Pinned OpenCRE navigation lineage for one OWASP control",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "cre_leaf_id", "snapshot_id", "source_record_hash", "standard", "section_id", "version", "link_type"],
+  "properties": {
+    "record_id": {"type": "string"},
+    "cre_leaf_id": {"type": "string"},
+    "snapshot_id": {"type": "string"},
+    "source_record_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "standard": {"type": "string"},
+    "section_id": {"type": "string"},
+    "version": {"type": "string"},
+    "link_type": {"type": "string"}
+  }
+}

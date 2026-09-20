@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-citation.schema.json",
+  "title": "OWASP applicability evidence citation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["input_id", "artifact_path", "sha256", "locator", "observed_fact"],
+  "properties": {
+    "input_id": {"type": "string"},
+    "artifact_path": {"type": "string"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "locator": {"type": "string"},
+    "observed_fact": {"type": "string"}
+  }
+}

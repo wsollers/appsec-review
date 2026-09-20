@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-decision.schema.json",
+  "title": "OWASP control/component applicability decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "rationale", "signals", "citations", "source_completeness", "conditional_expression"],
+  "properties": {
+    "status": {"enum": ["applicable", "conditional", "not_applicable", "cannot_determine"]},
+    "rationale": {"type": "string"},
+    "signals": {"type": "array", "items": {"$ref": "owasp-applicability-signal.schema.json"}},
+    "citations": {"type": "array", "items": {"$ref": "owasp-applicability-citation.schema.json"}},
+    "source_completeness": {"enum": ["adequate", "partial", "unknown"]},
+    "conditional_expression": {"type": ["string", "null"]}
+  }
+}

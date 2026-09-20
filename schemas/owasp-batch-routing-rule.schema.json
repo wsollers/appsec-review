@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-batch-routing-rule.schema.json",
+  "title": "Deterministic OWASP proof-obligation routing rule",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["route_id", "selector", "primary_evidence_mode", "authorization_boundary", "tooling_profile_id", "validator_role", "linked_test_ids"],
+  "properties": {
+    "route_id": {"type": "string"},
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["standard_family", "obligation_ids", "control_ids", "domain_ids", "all_controls", "component_ids", "all_components"],
+      "properties": {
+        "standard_family": {"enum": ["owasp_asvs", "owasp_masvs"]},
+        "obligation_ids": {"type": "array", "items": {"type": "string"}},
+        "control_ids": {"type": "array", "items": {"type": "string"}},
+        "domain_ids": {"type": "array", "items": {"type": "string"}},
+        "all_controls": {"type": "boolean"},
+        "component_ids": {"type": "array", "items": {"type": "string"}},
+        "all_components": {"type": "boolean"}
+      }
+    },
+    "primary_evidence_mode": {"enum": ["document_or_process", "static_source", "static_config", "built_artifact", "test_evidence", "dynamic_runtime", "manual_inspection"]},
+    "authorization_boundary": {"enum": ["static_offline", "dynamic_request_only"]},
+    "tooling_profile_id": {"type": "string"},
+    "validator_role": {"type": "string"},
+    "linked_test_ids": {"type": "array", "items": {"type": "string"}}
+  }
+}

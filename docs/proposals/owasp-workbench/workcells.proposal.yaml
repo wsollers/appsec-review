@@ -1,4 +1,4 @@
-schema: appsec-review/owasp-workbench-workcells-proposal/1.2
+schema: appsec-review/owasp-workbench-workcells-proposal/1.3
 proposal_only: true
 status: not_registered_not_runnable
 
@@ -73,11 +73,15 @@ partitioning:
     - primary evidence mode and authorization boundary
     - tooling profile and validator persona
     - standard family, version/profile, and linked test family
-  proposed_default_limits:
+  default_limits:
     max_control_target_rows: 12
     max_components: 5
     max_primary_evidence_modes: 1
     max_primary_validator_roles: 1
+  tuning:
+    configuration: versioned
+    qualification_fixtures_required: true
+    record_effective_limits_per_batch: true
   split_rules:
     - split composite controls into proof obligations when clauses require different evidence modes
     - never combine active/dynamic work with static assessment work
@@ -121,6 +125,17 @@ tool_boundaries:
     - live cloud, cluster, daemon, or production queries
     - changes to target state
   rule: the workbench may generate a request but cannot expand its own authority
+
+dynamic_launcher_boundary:
+  mode: disabled
+  allowed_operations:
+    - validate_request
+    - deduplicate_request
+    - persist_queue_artifact
+  execute_operation: fail_closed
+  blocked_receipt_status: dynamic_execution_disabled
+  target_contact_or_mutation: forbidden
+  enablement_rule: requires a separate named policy decision, implementation task, and qualification
 
 intercom_contract:
   format: append-only structured artifacts
@@ -220,6 +235,17 @@ workcells:
       - applicable-controls.json
       - applicability-gaps.json
       - applicability-overrides.jsonl
+    override_and_rescope_authority:
+      actor: one assigned applicability reviewer
+      allowed: row-level applicability override and bounded rescope within approved engagement scope
+      required_record:
+        - reviewer identity and role
+        - prior and new decision
+        - rationale and canonical citations
+        - decision time
+        - affected rows and invalidated results
+        - bounded rescope work
+      escalation: changes to standard, profile, target boundary, tools, or permissions return to selection owner
     must_not:
       - select controls without source lineage
       - mark not_applicable from one absence signal
@@ -354,6 +380,22 @@ workcells:
       - execute the request
       - imply authorization
       - update a control status from a proposed request
+
+  - id: dynamic-test-launcher
+    role: Validate and persist a stable future handoff without launching dynamic work.
+    policy_mode: disabled
+    inputs:
+      - owasp-dynamic-test-requests.prejoin.json
+      - engagement permissions
+    outputs:
+      - dynamic-launch-receipts.json
+    allowed_results:
+      - queued_request_artifact
+      - dynamic_execution_disabled
+    must_not:
+      - contact a target or environment
+      - execute a test, tool, request, or command
+      - imply authorization or observed runtime behavior
 
   - id: owasp-join-integrator
     persona: standards-mapping-auditor

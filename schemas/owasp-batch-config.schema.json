@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-batch-config.schema.json",
+  "title": "Versioned OWASP batch limits",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "config_id", "version", "qualification_fixture_id", "limits", "dynamic_execution", "manual_observation"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-batch-config/1.0"},
+    "config_id": {"type": "string"},
+    "version": {"type": "string"},
+    "qualification_fixture_id": {"type": "string"},
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_control_target_rows", "max_components", "max_primary_evidence_modes", "max_primary_validator_roles"],
+      "properties": {
+        "max_control_target_rows": {"type": "integer"},
+        "max_components": {"type": "integer"},
+        "max_primary_evidence_modes": {"const": 1},
+        "max_primary_validator_roles": {"const": 1}
+      }
+    },
+    "dynamic_execution": {"const": false},
+    "manual_observation": {"const": false}
+  }
+}

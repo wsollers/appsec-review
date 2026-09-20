@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dynamic-test-candidate-set.schema.json",
+  "title": "T07 inert proposed dynamic-test candidate set",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "batch_id", "authorization", "execution", "candidates"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-dynamic-test-candidate-set/1.0"},
+    "run_id": {"type": "string"}, "batch_id": {"type": "string"},
+    "authorization": {"const": "not_authorized"}, "execution": {"const": "not_executed"},
+    "candidates": {"type": "array", "items": {"$ref": "owasp-dynamic-test-candidate.schema.json"}}
+  }
+}

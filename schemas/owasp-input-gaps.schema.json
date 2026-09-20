@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-input-gaps.schema.json",
+  "title": "OWASP workbench lane-in gaps",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-input-gaps/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "gaps": {"type": "array", "items": {"type": "object"}}
+  }
+}
