@@ -219,3 +219,16 @@ Branch `claude/v05-sca-matcher-options` from `origin/main`. Documentation only.
 - Follow-ups for the integrator once answered are listed in section F (ADR-0010 Decisions row,
   `task-series.md`, `job-nodes.proposal.json` `nvd-cpe-matcher-tbd`, identity-schema
   `match_basis` const, `Resolution` blob list, freshness-policy record).
+
+## Checkpoint — 2026-09-20 SCA matcher gates decided
+
+Owner answered M1-M5 of `docs/proposals/vendor-prepass/sca-matcher-options.md`: **M1** pinned syft +
+Grype image with the Grype vendor DB mirrored into `/data` (native CPE matcher not adopted; Trivy
+considered and not chosen for SCA); **M2** build both the Grype DB mirror publisher and an
+independent OSV snapshot publisher before V11; **M3** rule table in the repo, but it has no
+consumer under M1 = Grype and is not built now; **M4** no age limit by default, a job may set a
+tighter `max_age`, exceeding it is `FAILED` (supersedes V09's `OK_WITH_GAPS`); **M5** matches plus
+an aggregated gap summary to the threat workbench. Not done here: ADR-0010 Decisions row, task
+series V05/V09/V11 text plus new V16/V17 publisher tasks, `job-nodes.proposal.json`, the
+`match_basis` const in the V09 identity schema, and the V09 binding change for M4.
+
