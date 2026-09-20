@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-dynamic-request-publication.schema.json",
+  "title": "T09 request publication or disabled execution operation", "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "operation", "candidate", "expected_head"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-dynamic-request-publication/1.0"},
+    "run_id": {"type": "string"}, "operation": {"enum": ["publish", "execute", "launch"]},
+    "candidate": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "expected_head": {"type": "object", "additionalProperties": false, "required": ["previous_attempt_id", "ledger_path", "ledger_sha256", "version", "state", "version_hash", "next_version"], "properties": {
+      "previous_attempt_id": {"type": ["string", "null"]}, "ledger_path": {"type": ["string", "null"]},
+      "ledger_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}, "version": {"type": ["integer", "null"], "minimum": 1},
+      "state": {"type": ["string", "null"]}, "version_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+      "next_version": {"type": "integer", "minimum": 1}
+    }}
+  }
+}
