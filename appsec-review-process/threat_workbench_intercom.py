@@ -38,6 +38,10 @@ RECORD_TYPES = ("question", "assumption", "proposed_model_edit", "proposed_threa
                 "proposed_attack_tree_node", "challenge", "coverage_gap", "response")
 OPEN_STATUS = "open"
 RESOLVING_STATUSES = frozenset({"answered", "accepted", "rejected", "withdrawn"})
+WITHDRAWN_STATUS = "withdrawn"
+# A response settles its challenge only by conceding it (accepted -> the record is amended) or by
+# withdrawing the challenged record. "rejected", "answered" and "unresolved" leave the dissent open.
+CHALLENGE_SETTLING_RESPONSE_STATUSES = frozenset({"accepted", "withdrawn"})
 INTEGRATOR_AUTHORS = frozenset({"integrator", "integrator-join"})
 CHALLENGE_WAVE = 3
 RESPONSE_WAVE = 4
@@ -242,6 +246,8 @@ class IntercomTranscript:
             if len(challenges) != 1:
                 raise IntercomError(f"{rid}: a response names exactly one existing challenge in subject_record_ids")
             challenge = challenges[0]
+            if _withdrawal_of(challenge, existing) is not None:
+                raise IntercomError(f"{rid}: {challenge['record_id']} was withdrawn by its author; there is nothing to respond to")
             # Re-derive ownership rather than trusting the challenge's own target field.
             owners = self._owners(rid, challenge["subject_record_ids"], by_id, model_record_authors)
             if owners != {author}:
@@ -275,8 +281,16 @@ class IntercomTranscript:
 
     @staticmethod
     def _check_resolution(record: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> None:
-        """resolves_record_id is a backward pointer. Self, forward and unknown references are
-        rejected here so the transcript can never contain one."""
+        """resolves_record_id is a backward pointer, and resolving is an authority, not a courtesy.
+
+        - self, forward and unknown references are rejected, so the transcript never holds one;
+        - the resolved record must be named in subject_record_ids (no silent side effects);
+        - a record is resolved once; the first resolver stands;
+        - the TARGET of a record may answer, accept or reject it; its AUTHOR may only withdraw it.
+          An author "accepting" its own open record would let one party close a disagreement alone;
+        - a challenge is settled only by a response from the challenged owner that concedes it, or
+          by its author withdrawing it. No other record type can clear a challenge.
+        """
         rid = record["record_id"]
         resolved_id = record["resolution"]["resolves_record_id"]
         if resolved_id is None:
@@ -286,12 +300,52 @@ class IntercomTranscript:
         resolved = by_id.get(resolved_id)
         if resolved is None:
             raise IntercomError(f"{rid}: resolves_record_id {resolved_id!r} is not an earlier record in this transcript")
+        if resolved_id not in record["subject_record_ids"]:
+            raise IntercomError(f"{rid}: a record must name {resolved_id!r} in subject_record_ids to resolve it")
         if record["status"] not in RESOLVING_STATUSES:
             raise IntercomError(f"{rid}: a record with status {record['status']!r} does not resolve anything")
-        if record["author_workcell_id"] not in (resolved["target"], resolved["author_workcell_id"]):
+        earlier = next((r["record_id"] for r in by_id.values()
+                        if r["resolution"]["resolves_record_id"] == resolved_id), None)
+        if earlier is not None:
+            raise IntercomError(f"{rid}: {resolved_id} was already resolved by {earlier}")
+        author = record["author_workcell_id"]
+        is_target = author == resolved["target"]
+        is_author = author == resolved["author_workcell_id"]
+        if not (is_target or is_author):
             raise IntercomError(
                 f"{rid}: {resolved_id} may be resolved only by its target {resolved['target']!r} "
                 f"or withdrawn by its author {resolved['author_workcell_id']!r}")
+        if not is_target and record["status"] != WITHDRAWN_STATUS:
+            raise IntercomError(
+                f"{rid}: {author!r} authored {resolved_id} and may only withdraw it; "
+                f"status {record['status']!r} belongs to its target {resolved['target']!r}")
+        if resolved["record_type"] == "challenge" and is_target:
+            if record["record_type"] != "response":
+                raise IntercomError(f"{rid}: a challenge is settled only by a response from the challenged owner")
+            if record["status"] not in CHALLENGE_SETTLING_RESPONSE_STATUSES:
+                raise IntercomError(
+                    f"{rid}: a response with status {record['status']!r} leaves {resolved_id} open; "
+                    f"only {sorted(CHALLENGE_SETTLING_RESPONSE_STATUSES)} settle a challenge")
+
+
+def _may_resolve(resolver: dict[str, Any], resolved: dict[str, Any]) -> bool:
+    """The authority rule append() enforces, restated for records that did not pass through it:
+    the target may resolve; the author may only withdraw."""
+    author = resolver["author_workcell_id"]
+    if author == resolved["target"]:
+        return True
+    return author == resolved["author_workcell_id"] and resolver["status"] == WITHDRAWN_STATUS
+
+
+def _withdrawal_of(challenge: dict[str, Any], records: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
+    """The record, if any, by which a challenge's own author withdrew it."""
+    for record in records:
+        if (record["resolution"]["resolves_record_id"] == challenge["record_id"]
+                and record["author_workcell_id"] == challenge["author_workcell_id"]
+                and record["status"] == WITHDRAWN_STATUS
+                and record["record_id"] != challenge["record_id"]):
+            return record
+    return None
 
 
 # ---- projections -------------------------------------------------------------------------------
@@ -349,8 +403,10 @@ def sweep(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
     naming it in ``resolution.resolves_record_id``; each id exactly once, in append order.
     ``invalid_resolutions``: self or forward references. ``append`` rejects these, so one can only
     come from records that did not pass through the bus; it is reported and never honoured.
-    ``dissent``: one entry per challenge, in the integrated model's dissent shape, using the first
-    later response that names the challenge.
+    ``dissent``: one entry per challenge, in the integrated model's dissent shape. A challenge's
+    outcome is derived once -- its author's withdrawal, else the first later response naming it --
+    and that single outcome decides both its dissent status and whether it is in ``unresolved``.
+    ``withdrawals``: which record withdrew which challenge (the dissent shape has no field for it).
     """
     ordered = chain_order(records)
     position = {r["record_id"]: index for index, r in enumerate(ordered)}
@@ -366,29 +422,47 @@ def sweep(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
             invalid.append({"record_id": record["record_id"], "reason": "forward_or_unknown_reference"})
         elif record["status"] not in RESOLVING_STATUSES:
             invalid.append({"record_id": record["record_id"], "reason": "non_resolving_status"})
+        elif not _may_resolve(record, ordered[position[target]]):
+            invalid.append({"record_id": record["record_id"], "reason": "unauthorized_resolver"})
         else:
             resolved_by.setdefault(target, record["record_id"])
-    unresolved = [r["record_id"] for r in ordered
-                  if r["status"] == OPEN_STATUS and r["record_id"] not in resolved_by]
-    dissent = []
+    # One derivation of each challenge's outcome feeds BOTH projections, so "unresolved" and
+    # "dissent" can never disagree about a challenge.
+    dissent, withdrawals, open_challenges = [], [], set()
     for index, challenge in enumerate(ordered):
         if challenge["record_type"] != "challenge":
             continue
-        answer = next((r for r in ordered[index + 1:] if r["record_type"] == "response"
-                       and challenge["record_id"] in r["subject_record_ids"]), None)
-        if answer is None:
-            status = "unresolved"
-        elif answer["status"] == "withdrawn":
+        later = ordered[index + 1:]
+        withdrawal = _withdrawal_of(challenge, later)
+        answer = None if withdrawal else next(
+            (r for r in later if r["record_type"] == "response"
+             and challenge["record_id"] in r["subject_record_ids"]), None)
+        if withdrawal is not None:
             status = "withdrawn"
-        elif answer["status"] == "accepted":
+            withdrawals.append({"challenge_record_id": challenge["record_id"],
+                                "withdrawn_by_record_id": withdrawal["record_id"]})
+        elif answer is not None and answer["status"] == WITHDRAWN_STATUS:
+            status = "withdrawn"
+        elif answer is not None and answer["status"] == "accepted":
             status = "amended"
         else:
             status = "unresolved"
+            open_challenges.add(challenge["record_id"])
         dissent.append({
             "challenge_record_id": challenge["record_id"],
             "response_record_id": answer["record_id"] if answer else None,
             "subject_record_ids": list(challenge["subject_record_ids"]),
             "status": status,
         })
+    unresolved = []
+    for record in ordered:
+        if record["status"] != OPEN_STATUS:
+            continue
+        if record["record_type"] == "challenge":
+            if record["record_id"] in open_challenges:
+                unresolved.append(record["record_id"])
+        elif record["record_id"] not in resolved_by:
+            unresolved.append(record["record_id"])
     return {"unresolved": unresolved, "invalid_resolutions": invalid, "dissent": dissent,
+            "withdrawals": withdrawals,
             "quarantined": [r["record_id"] for r in quarantined(ordered)]}

@@ -56,10 +56,12 @@ class IntercomTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def replay(self, upto=None):
+    def replay(self, upto=None, start=0):
+        """Appends golden records [start:upto] in wave order, continuing from the transcript's tail."""
         stored = []
-        previous = None
-        for record in self.sequence[:upto]:
+        existing = self.transcript.records()
+        previous = existing[-1]["content_hash"] if existing else None
+        for record in self.sequence[start:upto]:
             candidate = unhashed(record)
             candidate["previous_hash"] = previous
             stored.append(self.put(candidate))
@@ -318,15 +320,15 @@ class IntercomTests(unittest.TestCase):
         self.assertEqual(result["dissent"], model["dissent"])
 
     def test_open_record_appears_exactly_once_and_resolution_removes_it(self):
-        stored = self.replay()
-        resolver = self.next_record(
-            record_id="ic-0005", wave=4, record_type="response", author_workcell_id="stride-enumerator",
-            target="challenge-refutation-cell", subject_record_ids=["ic-0003"], status="accepted",
-            resolution={"text": "answered the audit-log question via the mapper's wave-1 flow list", "resolves_record_id": "ic-0001"},
-            payload={"response": "resolved"})
-        # A second response to the same challenge is still a valid response; it resolves ic-0001.
-        stored.append(self.put(resolver))
-        result = sweep(stored)
+        # ic-0001 is stride-enumerator's question TO architecture-dfd-mapper. Its target answers it.
+        self.replay(2)
+        self.put(self.next_record(
+            record_id="ic-answer", wave=2, record_type="assumption", author_workcell_id="architecture-dfd-mapper",
+            target="stride-enumerator", subject_record_ids=["ic-0001"], status="answered",
+            resolution={"text": "login events go to el-audit-log", "resolves_record_id": "ic-0001"},
+            payload={"assumption": "audit store exists"}))
+        self.replay(start=2)
+        result = sweep(self.transcript.records())
         self.assertEqual(result["unresolved"], ["ic-0002", "ic-0003"])
         for record_id in result["unresolved"]:
             self.assertEqual(result["unresolved"].count(record_id), 1)
@@ -408,15 +410,15 @@ class IntercomTests(unittest.TestCase):
 
     def test_only_target_or_author_may_resolve_and_only_with_a_resolving_status(self):
         self.replay(2)   # ic-0001: question by stride-enumerator addressed to architecture-dfd-mapper
-        stranger = self.next_record(wave=2, author_workcell_id="deployment-topology-mapper", record_type="assumption",
+        stranger = self.next_record(wave=2, author_workcell_id="deployment-topology-mapper", record_type="assumption", subject_record_ids=["ic-0001"],
                                     status="accepted", resolution={"text": "n/a", "resolves_record_id": "ic-0001"})
         with self.assertRaisesRegex(IntercomError, "may be resolved only by its target"):
             self.put(stranger)
-        still_open = self.next_record(wave=2, author_workcell_id="architecture-dfd-mapper", record_type="assumption",
+        still_open = self.next_record(wave=2, author_workcell_id="architecture-dfd-mapper", record_type="assumption", subject_record_ids=["ic-0001"],
                                       status="open", resolution={"text": "n/a", "resolves_record_id": "ic-0001"})
         with self.assertRaisesRegex(IntercomError, "does not resolve anything"):
             self.put(still_open)
-        answered = self.next_record(wave=2, author_workcell_id="architecture-dfd-mapper", record_type="assumption",
+        answered = self.next_record(wave=2, author_workcell_id="architecture-dfd-mapper", record_type="assumption", subject_record_ids=["ic-0001"],
                                     status="answered", resolution={"text": "audit store is el-audit-log", "resolves_record_id": "ic-0001"})
         stored = self.put(answered)
         self.assertNotIn("ic-0001", sweep(self.transcript.records())["unresolved"])
@@ -461,6 +463,133 @@ class IntercomTests(unittest.TestCase):
         stored = self.replay()
         with self.assertRaisesRegex(IntercomTamperError, "not reachable from the start of the chain"):
             sweep(stored[:1] + stored[2:])
+
+
+    # ---- PR 5 review round 2: resolving is an authority; an author may only withdraw ------------
+
+    def by_challenger(self, status, **overrides):
+        """A wave-3 coverage_gap from the challenger that tries to resolve its own challenge."""
+        record = self.next_record(
+            record_id=f"ic-hide-{status}", wave=3, record_type="coverage_gap",
+            author_workcell_id="challenge-refutation-cell", target="integrator", subject_record_ids=["ic-0003"],
+            citations=[], status=status, resolution={"text": None, "resolves_record_id": "ic-0003"},
+            payload={"note": "n/a"})
+        record.update(overrides)
+        return record
+
+    def assert_views_agree(self, records):
+        result = sweep(records)
+        for entry in result["dissent"]:
+            in_unresolved = entry["challenge_record_id"] in result["unresolved"]
+            self.assertEqual(in_unresolved, entry["status"] == "unresolved",
+                             f"unresolved and dissent disagree about {entry['challenge_record_id']}: {result}")
+        return result
+
+    def test_challenger_cannot_clear_its_own_challenge(self):
+        # Reviewer's mutation: status accepted, no response anywhere. Same for every non-withdrawal status.
+        self.replay(3)
+        for status in ("accepted", "answered", "rejected"):
+            with self.assertRaisesRegex(IntercomError, "may only withdraw it"):
+                self.put(self.by_challenger(status))
+        result = self.assert_views_agree(self.transcript.records())
+        self.assertIn("ic-0003", result["unresolved"])
+        self.assertEqual(result["dissent"][0]["status"], "unresolved")
+
+    def test_author_may_only_withdraw_any_record_not_just_challenges(self):
+        self.replay(2)   # ic-0001 is stride-enumerator's own question
+        own = dict(wave=2, record_type="question", author_workcell_id="stride-enumerator",
+                   target="architecture-dfd-mapper", subject_record_ids=["ic-0001"], payload={"question": "n/a"})
+        for status in ("accepted", "answered", "rejected"):
+            with self.assertRaisesRegex(IntercomError, "may only withdraw it"):
+                self.put(self.next_record(status=status, resolution={"text": None, "resolves_record_id": "ic-0001"}, **own))
+        self.put(self.next_record(status="withdrawn", resolution={"text": "asked in error", "resolves_record_id": "ic-0001"}, **own))
+        self.assertNotIn("ic-0001", sweep(self.transcript.records())["unresolved"])
+
+    def test_challenger_withdrawal_is_reported_consistently(self):
+        self.replay(3)
+        self.put(self.by_challenger("withdrawn"))
+        result = self.assert_views_agree(self.transcript.records())
+        self.assertNotIn("ic-0003", result["unresolved"])
+        self.assertEqual(result["dissent"], [{"challenge_record_id": "ic-0003", "response_record_id": None,
+                                              "subject_record_ids": ["thr-login-spoofing"], "status": "withdrawn"}])
+        self.assertEqual(result["withdrawals"], [{"challenge_record_id": "ic-0003",
+                                                  "withdrawn_by_record_id": "ic-hide-withdrawn"}])
+
+    def test_no_response_to_a_withdrawn_challenge(self):
+        self.replay(3)
+        self.put(self.by_challenger("withdrawn"))
+        response = unhashed(self.sequence[3])
+        response["previous_hash"] = self.transcript.records()[-1]["content_hash"]
+        with self.assertRaisesRegex(IntercomError, "was withdrawn by its author"):
+            self.put(response)
+
+    def test_only_a_response_from_the_owner_settles_a_challenge(self):
+        self.replay(3)
+        response = unhashed(self.sequence[3])
+        response["previous_hash"] = self.transcript.records()[-1]["content_hash"]
+        for status in ("rejected", "answered"):
+            attempt = dict(deepcopy(response), status=status, resolution={"text": "no", "resolves_record_id": "ic-0003"})
+            with self.assertRaisesRegex(IntercomError, "leaves ic-0003 open"):
+                self.put(attempt)
+        conceded = dict(deepcopy(response), status="accepted",
+                        resolution={"text": "lockout control found; hypothesis amended", "resolves_record_id": "ic-0003"})
+        self.put(conceded)
+        result = self.assert_views_agree(self.transcript.records())
+        self.assertEqual(result["dissent"][0]["status"], "amended")
+        self.assertNotIn("ic-0003", result["unresolved"])
+
+    def test_views_agree_whether_or_not_the_response_sets_the_pointer(self):
+        # The outcome is derived once from the response status, so an accepted response settles the
+        # challenge in BOTH views even if it left resolves_record_id null, and an unresolved response
+        # settles it in neither.
+        for status, expected in (("accepted", "amended"), ("withdrawn", "withdrawn"),
+                                 ("unresolved", "unresolved"), ("rejected", "unresolved")):
+            with tempfile.TemporaryDirectory() as directory:
+                self.transcript = IntercomTranscript(Path(directory) / "t.jsonl", write_policy=WRITE_POLICY)
+                self.replay(3)
+                response = unhashed(self.sequence[3])
+                response.update(status=status, previous_hash=self.transcript.records()[-1]["content_hash"])
+                self.put(response)
+                result = self.assert_views_agree(self.transcript.records())
+                self.assertEqual(result["dissent"][0]["status"], expected, status)
+        self.assert_views_agree(self.replay_fresh())
+
+    def replay_fresh(self):
+        self.transcript = IntercomTranscript(self.base / "fresh.jsonl", write_policy=WRITE_POLICY)
+        return self.replay()
+
+    def test_resolution_must_name_its_subject_and_happens_once(self):
+        self.replay(2)
+        answer = dict(wave=2, record_type="assumption", author_workcell_id="architecture-dfd-mapper",
+                      target="stride-enumerator", status="answered", payload={"assumption": "n/a"},
+                      resolution={"text": "see el-audit-log", "resolves_record_id": "ic-0001"})
+        with self.assertRaisesRegex(IntercomError, "must name 'ic-0001' in subject_record_ids"):
+            self.put(self.next_record(subject_record_ids=["flow-login"], **answer))
+        self.put(self.next_record(record_id="ic-first", subject_record_ids=["ic-0001"], **answer))
+        with self.assertRaisesRegex(IntercomError, "already resolved by ic-first"):
+            self.put(self.next_record(record_id="ic-second", subject_record_ids=["ic-0001"], **answer))
+
+    def test_sweep_does_not_honour_a_challenger_clearing_outside_the_bus(self):
+        # The same mutation, but in records that never passed through append().
+        records = [unhashed(r) for r in self.sequence[:3]]
+        records.append(unhashed(self.by_challenger("accepted")))
+        result = self.assert_views_agree(self.rechain(records))
+        self.assertIn("ic-0003", result["unresolved"])
+
+
+    def test_sweep_does_not_honour_an_unauthorized_resolver_outside_the_bus(self):
+        records = [unhashed(r) for r in self.sequence[:2]]          # ic-0002, then the question ic-0001
+        for author, status, honoured in (("deployment-topology-mapper", "accepted", False),   # a stranger
+                                         ("stride-enumerator", "accepted", False),            # its author, not withdrawing
+                                         ("stride-enumerator", "withdrawn", True),
+                                         ("architecture-dfd-mapper", "answered", True)):      # its target
+            closer = unhashed(self.next_record(record_id="ic-closer", wave=2, author_workcell_id=author, status=status,
+                                               subject_record_ids=["ic-0001"],
+                                               resolution={"text": None, "resolves_record_id": "ic-0001"}))
+            result = sweep(self.rechain(deepcopy(records) + [closer]))
+            self.assertEqual("ic-0001" not in result["unresolved"], honoured, (author, status))
+            self.assertEqual(result["invalid_resolutions"],
+                             [] if honoured else [{"record_id": "ic-closer", "reason": "unauthorized_resolver"}])
 
 
 if __name__ == "__main__":
