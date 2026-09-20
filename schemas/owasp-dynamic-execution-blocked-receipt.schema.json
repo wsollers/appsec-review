@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dynamic-execution-blocked-receipt.schema.json",
+  "title": "Fail-closed dynamic execution receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "receipt_id", "run_id", "selection_id", "batch_id", "operation", "result", "target_contacted", "target_mutated", "reason", "batch_manifest_sha256"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-dynamic-execution-blocked-receipt/1.0"},
+    "receipt_id": {"type": "string"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "batch_id": {"type": "string"},
+    "operation": {"enum": ["execute", "launch"]},
+    "result": {"const": "dynamic_execution_disabled"},
+    "target_contacted": {"const": false},
+    "target_mutated": {"const": false},
+    "reason": {"type": "string"},
+    "batch_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

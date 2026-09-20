@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-control-assessment-result.schema.json",
+  "title": "Accepted offline OWASP batch control-assessment result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "result_id", "candidate_id", "run_id", "selection_id", "handoff_identity", "applicability_identity", "worklist_identity", "batch_identity", "hashes", "producer", "validator", "terminal", "budget", "tool_profile_id", "tool_usage", "derived_outputs", "fragment_results", "dynamic_test_candidates", "candidate_verification_routes", "intercom", "dissent", "unresolved_conditions", "evidence_gaps", "boundary_acknowledgements", "reported_claims", "claim_limits"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-control-assessment-result/1.0"},
+    "result_id": {"type": "string"}, "candidate_id": {"type": "string"},
+    "run_id": {"type": "string"}, "selection_id": {"type": "string"},
+    "handoff_identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["handoff_id", "job_id", "attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "handoff_set_path", "handoff_set_sha256", "member_path", "member_sha256"],
+      "properties": {
+        "handoff_id": {"type": "string"}, "job_id": {"type": "string"}, "attempt_id": {"type": "string"},
+        "accepted_pointer_path": {"type": "string"}, "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "handoff_set_path": {"type": "string"}, "handoff_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "member_path": {"type": "string"}, "member_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }, "applicability_identity": {"type": "object"},
+    "worklist_identity": {"type": "object"}, "batch_identity": {"type": "object"},
+    "hashes": {"type": "object"},
+    "producer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["producer_id", "producer_kind", "produced_at"],
+      "properties": {"producer_id": {"type": "string"}, "producer_kind": {"enum": ["validator", "external_validator"]}, "produced_at": {"type": "string"}}
+    },
+    "validator": {
+      "type": "object", "additionalProperties": false,
+      "required": ["primary_role", "specialist_participants"],
+      "properties": {
+        "primary_role": {"type": "string"},
+        "specialist_participants": {"type": "array", "items": {
+          "type": "object", "additionalProperties": false, "required": ["participant_id", "role"],
+          "properties": {"participant_id": {"type": "string"}, "role": {"type": "string"}}
+        }}
+      }
+    },
+    "terminal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "started_at", "ended_at", "failure"],
+      "properties": {
+        "state": {"enum": ["OK", "OK_WITH_GAPS", "BLOCKED", "FAILED", "CANCELED", "TIMED_OUT", "INVALID"]},
+        "started_at": {"type": "string"}, "ended_at": {"type": "string"},
+        "failure": {"type": ["object", "null"], "additionalProperties": false,
+          "required": ["code", "message", "stage"],
+          "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "stage": {"type": "string"}}}
+      }
+    },
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "max_output_lines", "timeout_seconds", "output_lines", "elapsed_seconds", "timed_out"],
+      "properties": {
+        "name": {"enum": ["probe", "standard", "full"]}, "max_output_lines": {"type": "integer"},
+        "timeout_seconds": {"type": "integer"}, "output_lines": {"type": "integer"},
+        "elapsed_seconds": {"type": "number"}, "timed_out": {"type": "boolean"}
+      }
+    }, "tool_profile_id": {"type": "string"},
+    "tool_usage": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["tool_id", "actions", "purpose", "derived_output_ids"],
+      "properties": {"tool_id": {"type": "string"}, "actions": {"type": "array", "minItems": 1, "items": {"type": "string"}}, "purpose": {"type": "string"}, "derived_output_ids": {"type": "array", "items": {"type": "string"}}}
+    }},
+    "derived_outputs": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["output_id", "artifact", "producer_tool_id", "producer_action", "source_lineage", "limitations"],
+      "properties": {
+        "output_id": {"type": "string"}, "artifact": {"$ref": "owasp-run-artifact-ref.schema.json"},
+        "producer_tool_id": {"type": "string"}, "producer_action": {"type": "string"},
+        "source_lineage": {"type": "array", "minItems": 1, "items": {
+          "type": "object", "additionalProperties": false, "required": ["input_id", "artifact_path", "artifact_sha256"],
+          "properties": {"input_id": {"type": "string"}, "artifact_path": {"type": "string"}, "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+        }},
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      }
+    }},
+    "fragment_results": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["fragment_id", "assignment_id", "target_id", "control_id", "component_id", "final_control_status_authority", "assessment_status", "final_control_status", "rationale", "proof_obligation_results"],
+        "properties": {
+          "fragment_id": {"type": "string"}, "assignment_id": {"type": "string"},
+          "target_id": {"type": "string"}, "control_id": {"type": "string"},
+          "component_id": {"type": "string"},
+          "final_control_status_authority": {"enum": ["control_result", "obligation_fragment_only"]},
+          "assessment_status": {"enum": ["satisfied", "partially_satisfied", "not_satisfied", "cannot_verify", "dynamic_test_required", "human_decision_required", "not_assessed"]},
+          "final_control_status": {"type": ["string", "null"], "enum": ["satisfied", "partially_satisfied", "not_satisfied", "cannot_verify", "dynamic_test_required", "human_decision_required", "not_assessed", null]},
+          "rationale": {"type": "string"},
+          "proof_obligation_results": {"type": "array", "minItems": 1, "items": {"$ref": "owasp-proof-obligation-result.schema.json"}}
+        }
+      }
+    },
+    "dynamic_test_candidates": {"type": "array", "items": {"$ref": "owasp-dynamic-test-candidate.schema.json"}},
+    "candidate_verification_routes": {"type": "array", "items": {"$ref": "owasp-candidate-verification-route.schema.json"}},
+    "intercom": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "contract_state", "implemented", "messages_consumed", "messages_emitted"],
+      "properties": {
+        "path": {"type": "string"}, "contract_state": {"const": "declared_for_future_T08_only"},
+        "implemented": {"const": false}, "messages_consumed": {"const": 0}, "messages_emitted": {"const": 0}
+      }
+    },
+    "dissent": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["dissent_id", "participant_id", "role", "summary", "citation_ids", "resolved"],
+      "properties": {"dissent_id": {"type": "string"}, "participant_id": {"type": "string"}, "role": {"type": "string"}, "summary": {"type": "string"}, "citation_ids": {"type": "array", "items": {"type": "string"}}, "resolved": {"type": "boolean"}}
+    }},
+    "unresolved_conditions": {"type": "array", "items": {"type": "string"}},
+    "evidence_gaps": {"type": "array", "items": {"type": "string"}},
+    "boundary_acknowledgements": {
+      "type": "object", "additionalProperties": false,
+      "required": ["trust_boundary_acknowledged", "prohibited_claims_acknowledged", "dynamic_execution_authorized", "dynamic_execution_performed", "manual_observation_performed", "target_contacted", "target_mutated", "secrets_included", "personal_data_minimized"],
+      "properties": {
+        "trust_boundary_acknowledged": {"const": true}, "prohibited_claims_acknowledged": {"const": true},
+        "dynamic_execution_authorized": {"const": false}, "dynamic_execution_performed": {"const": false},
+        "manual_observation_performed": {"const": false}, "target_contacted": {"const": false},
+        "target_mutated": {"const": false}, "secrets_included": {"const": false}, "personal_data_minimized": {"const": true}
+      }
+    },
+    "reported_claims": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false, "required": ["claim_class", "summary", "evidence_citation_ids"],
+      "properties": {"claim_class": {"enum": ["control_assessment", "evidence_gap", "proposed_followup", "observed_fact"]}, "summary": {"type": "string"}, "evidence_citation_ids": {"type": "array", "items": {"type": "string"}}}
+    }},
+    "claim_limits": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

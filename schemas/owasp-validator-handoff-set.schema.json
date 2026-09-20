@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-validator-handoff-set.schema.json",
+  "title": "Complete OWASP batch to handoff accounting",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "batching_attempt_id", "batch_count", "handoff_count", "handoffs", "coverage", "dispatch_state", "dynamic_execution", "manual_observation"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-validator-handoff-set/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "batching_attempt_id": {"type": "string"},
+    "batch_count": {"type": "integer"},
+    "handoff_count": {"type": "integer"},
+    "handoffs": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["ordinal", "batch_id", "handoff_id", "path", "sha256", "handoff_mode", "dispatch_ready", "execution_authorized"],
+        "properties": {
+          "ordinal": {"type": "integer"}, "batch_id": {"type": "string"},
+          "handoff_id": {"type": "string"}, "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "handoff_mode": {"enum": ["validator_contract_only", "request_authoring_only"]},
+          "dispatch_ready": {"const": false}, "execution_authorized": {"const": false}
+        }
+      }
+    },
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["batch_ids", "fragment_ids", "control_target_ids", "exact_batch_to_handoff"],
+      "properties": {
+        "batch_ids": {"type": "array", "items": {"type": "string"}},
+        "fragment_ids": {"type": "array", "items": {"type": "string"}},
+        "control_target_ids": {"type": "array", "items": {"type": "string"}},
+        "exact_batch_to_handoff": {"const": true}
+      }
+    },
+    "dispatch_state": {"const": "not_dispatched"},
+    "dynamic_execution": {"const": false},
+    "manual_observation": {"const": false}
+  }
+}

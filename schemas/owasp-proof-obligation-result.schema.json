@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-proof-obligation-result.schema.json",
+  "title": "Evidence-sufficiency result for one assigned OWASP proof obligation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["obligation_id", "mandatory", "outcome", "rationale", "evidence_citations", "counterevidence_citations", "contradictions", "evidence_gaps", "unresolved_conditions", "dynamic_candidate_ids", "verification_route_ids"],
+  "properties": {
+    "obligation_id": {"type": "string"},
+    "mandatory": {"const": true},
+    "outcome": {"enum": ["satisfied", "partially_satisfied", "not_satisfied", "cannot_verify", "dynamic_test_required", "human_decision_required", "not_assessed"]},
+    "rationale": {"type": "string"},
+    "evidence_citations": {"type": "array", "items": {"$ref": "owasp-assessment-evidence-citation.schema.json"}},
+    "counterevidence_citations": {"type": "array", "items": {"$ref": "owasp-assessment-evidence-citation.schema.json"}},
+    "contradictions": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["contradiction_id", "citation_ids", "summary", "material", "resolved", "resolution"],
+        "properties": {
+          "contradiction_id": {"type": "string"},
+          "citation_ids": {"type": "array", "minItems": 2, "items": {"type": "string"}},
+          "summary": {"type": "string"}, "material": {"type": "boolean"},
+          "resolved": {"type": "boolean"}, "resolution": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "evidence_gaps": {"type": "array", "items": {"type": "string"}},
+    "unresolved_conditions": {"type": "array", "items": {"type": "string"}},
+    "dynamic_candidate_ids": {"type": "array", "items": {"type": "string"}},
+    "verification_route_ids": {"type": "array", "items": {"type": "string"}}
+  }
+}

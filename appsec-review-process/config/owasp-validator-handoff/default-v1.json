@@ -1,0 +1,67 @@
+{
+  "schema": "appsec-review/owasp-validator-handoff-config/1.0",
+  "config_id": "owasp-validator-handoff-default",
+  "version": "1.0.0",
+  "prompt_path": "appsec-review-process/config/owasp-validator-handoff/validator-instructions-v1.txt",
+  "tooling_profiles": [
+    {
+      "profile_id": "read-only-source",
+      "allowed_tools": [
+        {"tool_id": "accepted-evidence-lookup", "actions": ["read_accepted_pointer", "read_accepted_artifact"]},
+        {"tool_id": "canonical-source-config-retrieval", "actions": ["read_source", "read_config"]},
+        {"tool_id": "standards-test-lookup", "actions": ["read_control", "read_test", "read_crosswalk"]},
+        {"tool_id": "locator-search", "actions": ["search_locator", "dereference_canonical_artifact"]},
+        {"tool_id": "existing-artifact-inspection", "actions": ["inspect_scanner_artifact", "inspect_test_artifact"]},
+        {"tool_id": "bounded-local-parser", "actions": ["parse_declared_files", "preserve_derived_output"]},
+        {"tool_id": "bounded-static-analysis", "actions": ["analyze_declared_files", "preserve_derived_output"]}
+      ]
+    },
+    {
+      "profile_id": "request-drafting-only",
+      "allowed_tools": [
+        {"tool_id": "accepted-evidence-lookup", "actions": ["read_accepted_pointer", "read_accepted_artifact"]},
+        {"tool_id": "standards-test-lookup", "actions": ["read_control", "read_test", "read_crosswalk"]},
+        {"tool_id": "request-artifact-author", "actions": ["draft_inert_dynamic_request"]}
+      ]
+    }
+  ],
+  "eligible_specialists": {
+    "owasp-validator": [
+      "auth-session-specialist",
+      "api-contract-abuser",
+      "data-storage-records-reviewer",
+      "observability-forensics-reviewer",
+      "mobile-platform-attacker",
+      "llm-agent-abuse-reviewer"
+    ],
+    "dynamic-test-request-author": ["qa-negative-test-designer"]
+  },
+  "prohibited_tools": [
+    "network-client", "endpoint-client", "device-or-emulator", "dast", "fuzzer",
+    "debugger", "ptrace", "frida", "instrumentation", "live-cloud-client",
+    "cluster-client", "daemon-client", "production-client", "target-writer"
+  ],
+  "prohibited_actions": [
+    "network_access", "endpoint_request", "device_execution", "emulator_execution",
+    "dast", "fuzzing", "debugger_attach", "ptrace", "frida", "instrumentation",
+    "live_cloud_query", "live_cluster_query", "live_daemon_query", "production_query",
+    "target_mutation", "secret_output", "profile_expansion", "scope_expansion",
+    "permission_expansion", "tool_expansion"
+  ],
+  "prohibited_claim_classes": [
+    "finding", "vulnerability_verdict", "severity", "exploitability", "compliance",
+    "certification", "remediation_state", "unobserved_runtime_behavior"
+  ],
+  "budgets": {
+    "probe": {"max_output_lines": 1000, "timeout_seconds": 900},
+    "standard": {"max_output_lines": 350, "timeout_seconds": 1800},
+    "full": {"max_output_lines": 800, "timeout_seconds": 3600}
+  },
+  "terminal_results": ["OK", "OK_WITH_GAPS", "BLOCKED", "FAILED", "CANCELED", "TIMED_OUT", "INVALID"],
+  "failure_semantics": [
+    "Fail closed when an input, source, tool, permission, output, or lineage check fails.",
+    "Preserve failed, canceled, timed-out, skipped, and invalid work for later wait-all accounting.",
+    "Never fall back to an older result after newer required work fails.",
+    "A terminal worker result does not establish evidence sufficiency or a control status by itself."
+  ]
+}

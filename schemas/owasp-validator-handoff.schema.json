@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-validator-handoff.schema.json",
+  "title": "Immutable offline OWASP validator handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "handoff_id", "run_identity", "selection_identity", "applicability_identity", "worklist_identity", "batch_identity", "handoff_mode", "dispatch_ready", "execution_authorized", "assigned_fragments", "source_identities", "components", "accepted_inputs", "roles", "tool_contract", "evidence_contract", "authorization_boundaries", "prohibited_claim_classes", "expected_outputs", "budget", "terminal_semantics", "trust_boundary_instruction", "prompt_contract", "hashes"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-validator-handoff/1.0"},
+    "handoff_id": {"type": "string"},
+    "run_identity": {
+      "type": "object", "additionalProperties": false, "required": ["run_id"],
+      "properties": {"run_id": {"type": "string"}}
+    },
+    "selection_identity": {"type": "object"},
+    "applicability_identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["job_id", "attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "input_fingerprint", "model_path", "model_sha256"],
+      "properties": {
+        "job_id": {"type": "string"}, "attempt_id": {"type": "string"},
+        "accepted_pointer_path": {"type": "string"}, "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "input_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "model_path": {"type": "string"}, "model_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "worklist_identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["job_id", "attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "input_fingerprint", "worklist_path", "worklist_sha256", "batch_manifest_path", "batch_manifest_sha256", "summary_path", "summary_sha256"],
+      "properties": {
+        "job_id": {"type": "string"}, "attempt_id": {"type": "string"},
+        "accepted_pointer_path": {"type": "string"}, "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "input_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "worklist_path": {"type": "string"}, "worklist_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "batch_manifest_path": {"type": "string"}, "batch_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "summary_path": {"type": "string"}, "summary_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "batch_identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["batch_id", "ordinal", "component_group_id", "trust_role", "domain_id", "primary_evidence_mode", "authorization_boundary", "tooling_profile_id", "validator_role", "standard_family", "standard_version", "profile_or_level", "linked_test_family", "effective_limits", "control_target_count", "component_count"],
+      "properties": {
+        "batch_id": {"type": "string"}, "ordinal": {"type": "integer"},
+        "component_group_id": {"type": "string"}, "trust_role": {"type": "string"},
+        "domain_id": {"type": "string"}, "primary_evidence_mode": {"type": "string"},
+        "authorization_boundary": {"enum": ["static_offline", "dynamic_request_only"]},
+        "tooling_profile_id": {"type": "string"}, "validator_role": {"type": "string"},
+        "standard_family": {"type": "string"}, "standard_version": {"type": "string"},
+        "profile_or_level": {"type": ["string", "null"]}, "linked_test_family": {"type": ["string", "null"]},
+        "effective_limits": {"type": "object"}, "control_target_count": {"type": "integer"},
+        "component_count": {"type": "integer"}
+      }
+    },
+    "handoff_mode": {"enum": ["validator_contract_only", "request_authoring_only"]},
+    "dispatch_ready": {"const": false},
+    "execution_authorized": {"const": false},
+    "assigned_fragments": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "source_identities": {"type": "object"},
+    "components": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "accepted_inputs": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "roles": {
+      "type": "object", "additionalProperties": false,
+      "required": ["primary_validator_role", "eligible_specialist_roles"],
+      "properties": {
+        "primary_validator_role": {"type": "string"},
+        "eligible_specialist_roles": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "tool_contract": {
+      "type": "object", "additionalProperties": false,
+      "required": ["profile_id", "allowed_tools", "prohibited_tools", "prohibited_actions", "undeclared_tools_and_actions", "bounded_local_output_rule"],
+      "properties": {
+        "profile_id": {"type": "string"},
+        "allowed_tools": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["tool_id", "actions"],
+            "properties": {"tool_id": {"type": "string"}, "actions": {"type": "array", "minItems": 1, "items": {"type": "string"}}}
+          }
+        },
+        "prohibited_tools": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "prohibited_actions": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "undeclared_tools_and_actions": {"const": "prohibited"},
+        "bounded_local_output_rule": {"type": "string"}
+      }
+    },
+    "evidence_contract": {"type": "object"},
+    "authorization_boundaries": {
+      "type": "object", "additionalProperties": false,
+      "required": ["declared", "static_inspection", "dynamic_execution", "manual_observation", "network_access", "target_mutation", "dynamic_rule"],
+      "properties": {
+        "declared": {"enum": ["static_offline", "dynamic_request_only"]},
+        "static_inspection": {"const": true}, "dynamic_execution": {"const": false},
+        "manual_observation": {"const": false}, "network_access": {"const": false},
+        "target_mutation": {"const": false}, "dynamic_rule": {"type": "string"}
+      }
+    },
+    "prohibited_claim_classes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "expected_outputs": {"type": "object"},
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "max_output_lines", "timeout_seconds"],
+      "properties": {
+        "name": {"enum": ["probe", "standard", "full"]},
+        "max_output_lines": {"type": "integer"}, "timeout_seconds": {"type": "integer"}
+      }
+    },
+    "terminal_semantics": {"type": "object"},
+    "trust_boundary_instruction": {"type": "string"},
+    "prompt_contract": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256", "text"],
+      "properties": {"path": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "text": {"type": "string"}}
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_sha256", "config_sha256", "prompt_sha256", "composition_sha256"],
+      "properties": {
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "config_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "prompt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "composition_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
