@@ -177,3 +177,10 @@ compositions vs personas) zero problems; `validate_design_parity.py` 42 jobs / 1
 
 Open human gates: ADR-0008 "Human Gates" 1–7. Recommended next task: T01.
 
+## Checkpoint — 2026-09-20 gate decisions
+
+User answered all seven gates: C; A1; wave 4 ships budget-gated; bare persona IDs; M01 before
+S02; `probe` 1 / `standard` 2 / `deep` 3 concurrent cells; static only. ADR-0008 status moved to
+Accepted with a Decisions table; task series T01 closed, T02 `READY`, T03/T10 gain `M01`.
+Integrator follow-ups (not done here): close G01 and add `M01` to S02 in `TODO.md`.
+

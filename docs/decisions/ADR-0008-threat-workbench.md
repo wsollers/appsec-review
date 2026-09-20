@@ -1,12 +1,27 @@
 # ADR-0008: Threat Workbench Subworkflow
 
-Status: Proposed — options and recommendation for the G01 human gate. Not approved. No worker,
-schema, registry record, graph edge, or readiness claim follows from this document.
+Status: Accepted 2026-09-20 (see Decisions). This closes the G01 design gate only. No worker,
+schema, registry record, graph edge, or readiness claim follows from this document; S02 remains
+blocked on its prerequisites.
 
-Date: 2026-09-20 (drafted); 2026-09-20 (review refinement, see Revision Notes)
+Date: 2026-09-20 (drafted); 2026-09-20 (review refinement and gate decisions, see Revision Notes)
 
-Backlog: `TODO.md` G01 (`HUMAN_GATE`), S02 (`BLOCKED(G01 user-approved ADR, F03, B14)`).
-Companion packet: `docs/proposals/threat-workbench/`.
+Backlog: `TODO.md` G01 (`HUMAN_GATE`, now decided), S02 (`BLOCKED(G01, F03, B14, M01)` — M01
+added by Decision 5). Companion packet: `docs/proposals/threat-workbench/`.
+
+## Decisions
+
+Recorded 2026-09-20 from the user's answers to the seven gates below.
+
+| Gate | Decision |
+|---|---|
+| 1 Architecture | **Option C.** Fan-out of personas and roles that work concurrently and exchange information through typed artifacts, joined into one canonical model. |
+| 2 Approval | **A1, mechanical acceptance.** T08 lane validator plus the common contract validator accept the attempt; all five consumers proceed. Disagreements travel as `unresolved-dissent` records and `contested` verification items. No per-run human gate. |
+| 3 Wave 4 | **Ship it, budget-gated.** One response round; omitted under `probe`, recorded as a coverage gap. |
+| 4 Persona IDs | **Bare IDs**, matching the existing registry. Applies to `03/07/08/09`. |
+| 5 M01 sources | **M01 must land first.** Secrets, IaC/Kubernetes/Dockerfile SAST, container inventory, SBOM/SCA/license/lifecycle and mobile SAST get graph nodes and contracts before S02 is implemented. Their bundle entries become real producers at that point; trait-based applicability still decides whether a given run needs them. |
+| 6 Budgets | **Set now:** concurrent persona cells `probe` 1, `standard` 2, `deep` 3. Enforced through the B15 persona/LLM pool, never a local constant; B15 may revise with measurement. |
+| 7 Static only | **Confirmed.** `OBSERVED_EXPOSURE`, live cloud state and dynamic testing are out of scope; live-state needs are emitted as follow-up requests only. |
 
 ## Context
 
@@ -62,9 +77,9 @@ more budget per run.
 Free-form persona chat was rejected under every option: the process needs durable, auditable
 artifacts.
 
-## Recommended Decision
+## Decision
 
-Adopt Option C, subject to the human gates in the section of that name.
+Option C is adopted (Decision 1). The remainder of this document describes it.
 
 ```text
 accepted component map (+ transitive pregather, evidence index)
@@ -98,8 +113,12 @@ workbench "pooled and communicative" without hidden state: the only channel betw
 hashed, append-only artifact produced by a terminal attempt.
 
 Wave 4 exists so that a challenge can receive an answer from its author. It is bounded to one round
-and is skipped (recorded as a coverage gap, not a `SKIPPED` status) when the budget class does not
-allow it. Whether wave 4 ships in the initial implementation is a human gate.
+and is skipped (recorded as a coverage gap, not a `SKIPPED` status) under the `probe` budget class.
+It ships in the initial implementation (Decision 3).
+
+Concurrency inside a wave is bounded by the B15 persona/LLM pool using the budget-class defaults in
+Decision 6 (`probe` 1, `standard` 2, `deep` 3 concurrent cells). The runner never hard-codes a
+concurrency constant.
 
 ## Canonical Model
 
@@ -174,9 +193,11 @@ source there is labelled with its graph availability:
 - `transitive`: reachable through `02-evidence-assembly`; the bundle may read it, and T10 records
   whether to promote it to a declared edge;
 - `m01_gated`: secrets, IaC/Kubernetes/Dockerfile SAST, container inventory, SBOM/SCA/license,
-  lifecycle and mobile SAST have **no graph node** until the M01 decision batch declares them. The
-  bundle treats them as optional; their absence is a coverage gap, never fabricated content. The
-  workbench must not name them as producers in any runtime record until M01 lands.
+  lifecycle and mobile SAST have **no graph node** until the M01 decision batch declares them. Per
+  Decision 5, M01 lands before S02 is implemented; T03 then replaces the placeholder producers
+  with the declared node IDs. Whether a given run needs one of these families is decided by target
+  trait; a trait-applicable family whose producer did not run is a coverage gap, never fabricated
+  content. Until M01 lands, no runtime record may name these producers.
 
 The bundle distinguishes `raw`, `derived`, `accepted_lane`, `persona` and `reference` classes and
 carries the redaction receipt of the secrets/key inventory when one exists.
@@ -339,34 +360,31 @@ different model family from the cell it challenges; no cell verifies its own cla
 
 ## Approval and Disagreement (G1 decision 5)
 
-Options for who approves the model before consumers use it:
+Options considered for who approves the model before consumers use it:
 
 - **A1 — mechanical acceptance.** The T08 validator plus the common contract validator accept the
   attempt; consumers proceed. Fastest; disagreements travel as `unresolved-dissent` records.
 - **A2 — supplied human decision gate.** A `supplied_human_decision` attempt must accept the
   workbench output before `10-synthesis-report` consumes it; `04/07/12/13` may proceed on
-  mechanical acceptance. Adds a human step per run on the synthesis path only.
+  mechanical acceptance.
 - **A3 — human gate for everything.** Blocks all five consumers until a human accepts.
 
-Recommendation: A2. Disagreements produce **both** an unresolved-risk record and, where the
-challenged record is a threat, a targeted verification item flagged `contested`. Neither side is
-dropped.
+**Decided: A1** (Decision 2). Acceptance is mechanical. Disagreements produce **both** an
+unresolved-risk record and, where the challenged record is a threat, a targeted verification item
+flagged `contested`. Neither side is dropped; `08-blue-team-refutation` and
+`09-independent-verification` are where contested items are settled. A human may still reject an
+accepted attempt by forcing a new run; that is the existing rerun path, not a lane gate.
 
-## Human Gates (decide before S02 can leave BLOCKED)
+## Human Gates (all decided 2026-09-20; see Decisions)
 
-1. Option C (composed workbench) versus A or B.
-2. Approval model A1/A2/A3.
-3. Ship wave 4 (one response round) in the initial implementation, or defer it and accept that
-   challenges are unanswered until `08-blue-team-refutation`?
-4. Persona ID convention. `design-v3.md` §5.5 leaves lane-scoped persona naming open. This packet
-   proposes bare IDs (`architecture-trust-boundary-modeler`, …) matching the existing registry
-   style; the alternative is a `tm-` prefix. Decide once for `03/07/08/09`.
-5. Are the five M01-gated source families acceptable as optional-with-gap for the first
-   qualification, or must M01 land first?
-6. Budget classes: the default cell concurrency and per-cell token budget for `probe`/`standard`/
-   `deep`, given the current three-step executor cap and the unassigned persona/LLM pool (B15).
-7. Confirm that `OBSERVED_EXPOSURE`, live cloud state and dynamic testing remain out of scope for
-   this lane and are emitted only as follow-up requests.
+1. Option C (composed workbench) versus A or B. — **C.**
+2. Approval model A1/A2/A3. — **A1.**
+3. Ship wave 4 (one response round) in the initial implementation? — **Yes, budget-gated.**
+4. Persona ID convention (`design-v3.md` §5.5 open item). — **Bare IDs.**
+5. M01-gated source families: optional-with-gap for first qualification, or M01 first? — **M01
+   first.**
+6. Budget classes for concurrent cells. — **`probe` 1, `standard` 2, `deep` 3.**
+7. `OBSERVED_EXPOSURE`, live cloud state and dynamic testing out of scope. — **Confirmed.**
 
 ## Golden and Mutation Fixture Plan
 
@@ -427,11 +445,12 @@ threats) and consumes this workbench's accepted output through `04-asvs-masvs`'s
 
 ## Consequences
 
-This decision depends on B11 (permission capabilities), B14 (persona adapter), B15 (persona/LLM
-pool), C01 (pool schema and expansion), C02 (`wait_all`), C03 (typed merge) and F03
-(`01-component-characterization` worker). Until those exist, the ADR remains a design gate and task
-packet, not an implementation claim. The current three-step executor cap cannot run the standard
-pool; cell concurrency is bounded by B15 and the budget class, not by this ADR.
+Implementation depends on B11 (permission capabilities), B14 (persona adapter), B15 (persona/LLM
+pool), C01 (pool schema and expansion), C02 (`wait_all`), C03 (typed merge), F03
+(`01-component-characterization` worker) and, per Decision 5, M01 (vendor-prepass graph nodes).
+Until those exist, this ADR is an accepted design and task packet, not an implementation claim.
+The current three-step executor cap cannot run the standard pool; cell concurrency is bounded by
+B15 using the Decision 6 defaults.
 
 The workbench produces more artifacts than the current lane, but those artifacts are directly
 useful to OWASP applicability, red-team, verification, fuzz triage, scoring, and synthesis.
@@ -453,3 +472,7 @@ replaced the flat persona record with schema-conformant compositions; added the 
 native/parser, mobile, cloud control-plane and supply-chain specialist cells from the persona pool
 proposal's L3 integration note; added completeness/rescope rules, approval options and the fixture
 plan; marked M01-gated sources.
+
+2026-09-20 gate decisions: all seven gates answered (see Decisions); status moved to Accepted;
+approval changed from the recommended A2 to A1; M01 added as an S02 prerequisite; budget-class
+concurrency defaults recorded.

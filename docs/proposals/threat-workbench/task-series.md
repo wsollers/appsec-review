@@ -1,8 +1,9 @@
 # Threat Workbench Task Series
 
-Status: proposal-only task packet for G01/S02. Do not mark `03-threat-model-dfd-stride` implemented
-from this document alone. Status tokens follow `TODO.md`: `READY`, `BLOCKED(<ids>)`, `HUMAN_GATE`,
-`INTEGRATION`. IDs prefixed `T` are this series; bare IDs are `TODO.md` batches.
+Status: task packet for S02 under the accepted ADR-0008 (gates decided 2026-09-20). Do not mark
+`03-threat-model-dfd-stride` implemented from this document alone. Status tokens follow `TODO.md`:
+`READY`, `BLOCKED(<ids>)`, `HUMAN_GATE`, `INTEGRATION`. IDs prefixed `T` are this series; bare IDs
+are `TODO.md` batches.
 
 ## Review Pattern
 
@@ -38,23 +39,22 @@ C03 typed merge ─────────────────────�
                                                               T08 validator
                                                               T09 fixtures
 F03 component-characterization worker ──────────────────────── T10 INTEGRATION
-M01 vendor-prepass decision ──(optional sources only)───────── T10
+M01 vendor-prepass graph nodes (Decision 5: hard prerequisite) ─ T03 producer IDs, T10
 ```
 
-## T01 — Approve Threat Workbench ADR — `HUMAN_GATE`
+## T01 — Approve Threat Workbench ADR — `HUMAN_GATE` → done 2026-09-20
 
 Owner: user, with one Codex and one Claude review pass on the packet.
 
-Deliver: answers to the seven questions in ADR-0008 "Human Gates", recorded in the ADR under a
-`Decisions` section with date; ADR status moves to `Accepted` or `Rejected`.
+Delivered: all seven gates answered and recorded in ADR-0008 "Decisions"; status `Accepted`.
+Outcomes that bind later tasks: Option C; approval A1 (mechanical); wave 4 ships budget-gated;
+bare persona IDs; M01 before S02; concurrency `probe` 1 / `standard` 2 / `deep` 3 via B15; static
+only.
 
-Acceptance: every gate has an answer or an explicit deferral; no runtime or registry implementation
-is claimed; `TODO.md` G01 may then be closed by the integrator (not by this task).
+Remaining for the integrator (not this task): close `TODO.md` G01 and add `M01` to S02's
+`BLOCKED(...)` list.
 
-Reviewer focus: static/offline boundaries; hypotheses never become findings; enough output for
-OWASP/DISA/red-team/verification; the `15-deployment-hardening` cycle hazard stays recorded.
-
-## T02 — Schemas For Integrated Model, Cell Result, Intercom — `BLOCKED(T01)`
+## T02 — Schemas For Integrated Model, Cell Result, Intercom — `READY`
 
 Owner: implementation agent A. Reviewer: agent B.
 
@@ -89,7 +89,11 @@ Reviewer focus: every flow has source, destination, data class, evidence, confid
 fields; every threat has proof obligations, `minimum_verification` and downstream owner; intercom
 records cannot be edited in place (no `updated_at`, only follow-up records).
 
-## T03 — Output Contract And Claim Class — `BLOCKED(T02)`
+## T03 — Output Contract And Claim Class — `BLOCKED(T02, M01)`
+
+M01 dependency: the lane-in bundle's `m01_gated` sources must be rewritten with the node IDs and
+contract IDs M01 declares before this contract's `validation_rules` can name them. T03 may start
+its draft before M01 lands but cannot be accepted until the placeholders are gone.
 
 Owner: agent B. Reviewer: agent A.
 
@@ -158,7 +162,8 @@ Deliver:
   `data/jobs/03-threat-model-dfd-stride/whole/attempts/<attempt_id>/cells/<wave>/<instance_id>/`;
 - per-wave `wait_all` via C02; the frozen wave manifest (T02 schema) is the only input to the next
   wave;
-- budget-class gating of wave 4;
+- budget-class gating of wave 4 (`probe` omits it) and concurrent-cell limits `probe` 1 /
+  `standard` 2 / `deep` 3 requested from the B15 pool, per ADR Decisions 3 and 6;
 - interrupted/failure/cancel handling mapped to the ADR status table; a `FAILED`/`BLOCKED`
   always-selected cell fails the job; a trait cell failure degrades to `OK_WITH_GAPS`;
 - cell concurrency bounded by the B15 persona/LLM pool, never by a local constant.
@@ -266,7 +271,7 @@ stubbed persona adapters in under the focused-suite budget.
 Reviewer focus: small enough to maintain, rich enough to exercise every cell and both wave-4
 branches.
 
-## T10 — Lifecycle Integration — `INTEGRATION`, `BLOCKED(T01–T09, F03, B11, B14, B15, C01–C03)`
+## T10 — Lifecycle Integration — `INTEGRATION`, `BLOCKED(T02–T09, F03, M01, B11, B14, B15, C01–C03)`
 
 Owner: integrator only.
 
@@ -300,12 +305,14 @@ Recorded here because the review batch could not edit the owning files.
 - **F03 — design-v3 §5.3/§22.8 L6A placement.** The graph runs the threat model after full
   pregather; design-v3 says "immediately after intake". Record the graph as authoritative in
   design-v3 or open a decision to move `03` earlier (which would starve it of intelligence).
-- **F04 — persona ID convention across `03/07/08/09`.** `design-v3.md` §5.5 open item; decided at
-  T01 gate 4 and applied to the persona-pool proposal.
+- **F04 — persona ID convention across `03/07/08/09`.** Decided 2026-09-20: bare IDs. Record the
+  decision in `design-v3.md` §5.5 and the persona-pool proposal.
 - **F05 — persona-pool proposal path drift.** `docs/persona-pool-proposal.md` names
   `appsec-review-process/personas/*.yaml`; the registry is `appsec-review-process/registry/*.json`.
-- **F06 — M01 vendor-prepass decision.** The four `m01_gated` source families need graph nodes and
-  contracts before they can be required inputs anywhere.
+- **F06 — M01 vendor-prepass decision.** Now a hard S02 prerequisite (ADR Decision 5). The
+  integrator adds `M01` to S02's `BLOCKED(...)` in `TODO.md`; M01's batch should name the four
+  `m01_gated` families in `input-sources.proposal.yaml` as consumers so the node/contract IDs come
+  back to T03.
 - **F07 — ADR numbering coordination.** G01 minted 0008 and G02 minted 0009 on separate branches;
   0005 and 0007 are unused. G03 should claim its number in `TODO.md` before drafting.
 - **F08 — OWASP carry-over.** ADR-0009 should adopt the reusable abstractions listed in ADR-0008

@@ -8,8 +8,14 @@ adr: docs/decisions/ADR-0008-threat-workbench.md
 # (appsec-review/persona/0.1). Roles, domains and tooling profiles reference existing registry
 # records where one fits and name proposed new records otherwise. Nothing here is registered.
 #
-# Persona ID convention is an open human gate (ADR-0008 gate 4). IDs below are bare, matching the
-# existing registry style; `lineage` names the nearest persona-catalog entry for traceability.
+# Persona ID convention decided 2026-09-20 (ADR-0008 Decision 4): bare IDs, matching the existing
+# registry style. `lineage` names the nearest persona-catalog entry for traceability.
+
+budget_classes:
+  # ADR-0008 Decision 6. Requested from the B15 persona/LLM pool; never a local constant.
+  probe:    { concurrent_cells: 1, wave_4: omitted }
+  standard: { concurrent_cells: 2, wave_4: enabled }
+  deep:     { concurrent_cells: 3, wave_4: enabled }
 
 terminal_statuses:
   # Exact worker-result-envelope v1.0 terminal set. Cells use all seven.
@@ -554,7 +560,7 @@ workcells:
 
   - workcell_id: response-round
     wave: 4
-    selection: budget-gated (ADR gate 3); when omitted, all challenges remain open and become unresolved-dissent
+    selection: budget-gated (ADR Decision 3; omitted under probe); when omitted, all challenges remain open and become unresolved-dissent
     composition: re-invocation of the challenged wave-1/wave-2 workcell's own composition with the challenge records as additional input
     required_inputs: [wave-3 manifest, own prior cell-result.json]
     optional_inputs: []

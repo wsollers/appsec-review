@@ -7,7 +7,9 @@ adr: docs/decisions/ADR-0008-threat-workbench.md
 # `availability` is one of:
 #   declared_edge  - already a declared dependency of 03-threat-model-dfd-stride
 #   transitive     - reachable through 02-evidence-assembly; T10 decides whether to declare an edge
-#   m01_gated      - NO graph node exists; blocked on TODO M01. Optional only. Absence => coverage gap.
+#   m01_gated      - NO graph node exists yet. ADR-0008 Decision 5: M01 lands before S02; T03 then
+#                    replaces `producers: []` with the declared node IDs. Applicability per run is
+#                    trait-driven; a trait-applicable family whose producer did not run => coverage gap.
 # `contract` and `artifacts` are the producer's registered output-contract id and its required files
 # where a contract file exists; `artifacts: unspecified` means the graph node names no contract file.
 # Feeds use exact workcell_ids from workcells.proposal.yaml, or `all-workcells` / `integrator-join`.
@@ -293,7 +295,7 @@ sources:
       - CIS control numbers are never recalled from model memory
       - mapping is not proof of target behavior
 
-  # ---- M01-gated: no graph node exists. Optional. Absence => coverage gap. ----
+  # ---- M01-gated: no graph node exists yet; producers filled by T03 after M01 (ADR Decision 5). ----
 
   - id: iac-container-deployment-evidence
     class: derived
@@ -363,7 +365,7 @@ lane_in_bundle:
     - component-purpose-map
     - evidence-index
     - pregather-intel-manifest
-  optional_with_gap: everything else
+  optional_with_gap: everything else, subject to trait applicability once M01 declares the gated producers
   freshness:
     - every source attempt must be CURRENT for the same source snapshot recorded by pregather-intel-manifest
     - a SUPERSEDED or NOT_ACCEPTED producer attempt blocks lane-in (BLOCKED), it is not silently replaced
