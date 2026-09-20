@@ -7,7 +7,8 @@ redaction receipt and to the bytes on disk cannot be written in the JSON-Schema 
 
     contract_declaration_errors(contract) -> list[str]
     validate_secrets_attempt(attempt_root, *, tool_outputs_root, node_status, declared_tool_ids,
-                             permitted_node_statuses, on_unhandled, limits) -> list[str]
+                             permitted_node_statuses, on_unhandled, limits,
+                             expected_dagster_run_id) -> list[str]
     validate_iac_attempt(attempt_root, *, <the same keywords>) -> list[str]
 
 Every argument is required and none has a default. `declared_tool_ids` and
@@ -73,6 +74,9 @@ CAN_SKIP = ("OK", "OK_WITH_GAPS", "SKIPPED", "BLOCKED", "FAILED", "CANCELED")
 EXPOSURE_CATEGORIES = ("network-exposure", "public-access-grant")
 PUBLISHED_DISPOSITIONS = ("unchanged", "redacted")
 STATUS_FIELDS = ("status", "run_id", "attempt_id")
+STATUS_OPTIONAL_FIELDS = ("dagster_run_id", "job_id")
+_RUNTIME_ID_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,127}\Z")
+MANIFEST_SCHEMA = "appsec-review/attempt-manifest/1"
 
 
 def _policy(**fields: Any) -> MappingProxyType:
@@ -366,13 +370,50 @@ def _check_arguments(attempt_root: Any, tool_outputs_root: Any, node_status: Any
         raise TypeError("limits must be an evidence_redaction.Limits instance")
 
 
+def _manifest_errors(data: bytes, contract_id: str, attempt: Path) -> list[str]:
+    """`manifest.json` follows the repository's convention for worker manifests: it binds the
+    hashes of what the attempt published. It is exactly
+    `{"schema", "contract_id", "outputs": [{"path", "sha256"}, ...]}`; `outputs` is sorted by path
+    and names EXACTLY the regular files beneath `outputs/`, each with the sha256 of its bytes. It
+    is outside `outputs/`, so the receipt does not cover it: nothing from it is ever quoted."""
+    try:
+        document = _parse(data)
+    except (ValueError, RecursionError):
+        return ["manifest-invalid: manifest.json is not strict UTF-8 JSON with unique keys"]
+    if not isinstance(document, dict) or set(document) != {"schema", "contract_id", "outputs"}:
+        return ["manifest-invalid: manifest.json must be an object with exactly schema, contract_id and outputs"]
+    if document["schema"] != MANIFEST_SCHEMA or document["contract_id"] != contract_id:
+        return [f"manifest-invalid: manifest.json must carry schema {MANIFEST_SCHEMA!r} and contract_id {contract_id!r}"]
+    listed = document["outputs"]
+    if not isinstance(listed, list) or not all(
+            isinstance(entry, dict) and set(entry) == {"path", "sha256"}
+            and isinstance(entry["path"], str) and isinstance(entry["sha256"], str) for entry in listed):
+        return ["manifest-invalid: manifest.json outputs must be a list of {path, sha256} records"]
+    actual = {path.relative_to(attempt).as_posix(): path for path in sorted((attempt / OUTPUTS_DIR).rglob("*"))
+              if path.is_file() and not path.is_symlink()}
+    paths = [entry["path"] for entry in listed]
+    errors = []
+    if any(output_path_errors(path) for path in paths) or paths != sorted(set(paths)):
+        errors.append("manifest-invalid: manifest.json outputs paths must be normalized, unique and sorted")
+    if set(paths) != set(actual):
+        errors.append(f"manifest-mismatch: manifest.json outputs does not name exactly the {len(actual)} file(s) beneath {OUTPUTS_DIR}/")
+    wrong = sum(1 for entry in listed if entry["path"] in actual
+                and entry["sha256"] != "sha256:" + hashlib.sha256(actual[entry["path"]].read_bytes()).hexdigest())
+    if wrong:
+        errors.append(f"manifest-mismatch: {wrong} manifest.json outputs entr{'y' if wrong == 1 else 'ies'} do not carry the sha256 of the published bytes")
+    return errors
+
+
 def _validate_attempt(contract_id: str, attempt_root: Any, tool_outputs_root: Any, node_status: str,
                       declared_tool_ids: Iterable[str], permitted_node_statuses: Iterable[str],
-                      on_unhandled: str, limits: Limits) -> list[str]:
+                      on_unhandled: str, limits: Limits,
+        expected_dagster_run_id: str) -> list[str]:
     _check_arguments(attempt_root, tool_outputs_root, node_status, declared_tool_ids, permitted_node_statuses,
                      on_unhandled, limits)
     policy = CONTRACT_POLICIES[contract_id]
     declared, permitted = list(declared_tool_ids), list(permitted_node_statuses)
+    if not isinstance(expected_dagster_run_id, str) or not _RUNTIME_ID_RE.match(expected_dagster_run_id):
+        raise TypeError("expected_dagster_run_id must be the orchestrator run id the caller is validating for")
     attempt = Path(attempt_root).absolute()
     if not attempt.is_dir():
         return ["attempt-root: attempt_root is not a directory"]
@@ -465,6 +506,19 @@ def _validate_attempt(contract_id: str, attempt_root: Any, tool_outputs_root: An
             if field not in status or status[field] != expected[field]:
                 source = "the node_status argument" if field == "status" else "tool-results.json"
                 errors.append(f"status-mismatch: status.json {field} must equal {source}")
+        # status.json is outside outputs/, so the receipt says nothing about it. It may carry only
+        # the registered fields plus the closed set of runtime identifiers; anything else is
+        # counted, never named or quoted.
+        unknown = [key for key in status if key not in STATUS_FIELDS and key not in STATUS_OPTIONAL_FIELDS]
+        if unknown:
+            errors.append(f"status-invalid: status.json carries {len(unknown)} field(s) that are neither registered nor a known runtime identifier")
+        # A known runtime identifier is optional, but when present it is BOUND, not merely
+        # well-formed: an unbound field is an editable one.
+        bound = {"dagster_run_id": expected_dagster_run_id, "job_id": policy["job_id"]}
+        for field in STATUS_OPTIONAL_FIELDS:
+            if field in status and status[field] != bound[field]:
+                errors.append(f"status-mismatch: status.json {field} is not {bound[field]!r}")
+    errors += _manifest_errors(raw["manifest.json"], contract_id, attempt)
 
     instances: dict[str, dict] = {}
     for instance in tool_results["tool_instances"]:
@@ -493,15 +547,17 @@ def _validate_attempt(contract_id: str, attempt_root: Any, tool_outputs_root: An
 
 def validate_secrets_attempt(attempt_root: Any, *, tool_outputs_root: Any, node_status: str,
                              declared_tool_ids: Iterable[str], permitted_node_statuses: Iterable[str],
-                             on_unhandled: str, limits: Limits) -> list[str]:
+                             on_unhandled: str, limits: Limits,
+        expected_dagster_run_id: str) -> list[str]:
     """Validate one `02-secrets-inventory` attempt directory against contract `secrets-inventory`."""
     return _validate_attempt(SECRETS_CONTRACT_ID, attempt_root, tool_outputs_root, node_status, declared_tool_ids,
-                             permitted_node_statuses, on_unhandled, limits)
+                             permitted_node_statuses, on_unhandled, limits, expected_dagster_run_id)
 
 
 def validate_iac_attempt(attempt_root: Any, *, tool_outputs_root: Any, node_status: str,
                          declared_tool_ids: Iterable[str], permitted_node_statuses: Iterable[str],
-                         on_unhandled: str, limits: Limits) -> list[str]:
+                         on_unhandled: str, limits: Limits,
+        expected_dagster_run_id: str) -> list[str]:
     """Validate one `02-iac-config-scan` attempt directory against contract `iac-config-evidence`."""
     return _validate_attempt(IAC_CONTRACT_ID, attempt_root, tool_outputs_root, node_status, declared_tool_ids,
-                             permitted_node_statuses, on_unhandled, limits)
+                             permitted_node_statuses, on_unhandled, limits, expected_dagster_run_id)
