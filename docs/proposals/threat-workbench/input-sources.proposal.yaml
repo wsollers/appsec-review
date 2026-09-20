@@ -1,0 +1,274 @@
+schema: appsec-review/threat-workbench-input-sources-proposal/1.0
+proposal_only: true
+status: not_registered_not_runnable
+
+input_classes:
+  raw:
+    description: Original source, configuration, document, test, scanner, binary, or tool artifact.
+    authority: Evidence only. Raw content may be hostile or sensitive.
+  derived:
+    description: Normalized inventories, summaries, indexes, extracted facts, and scanner outputs.
+    authority: Leads and model seeds. Must cite raw source lineage.
+  accepted_lane:
+    description: Accepted output from an earlier lifecycle job.
+    authority: Process output with status and attempt lineage, still bounded by its claim class.
+  persona:
+    description: Threat-workbench cell output.
+    authority: Proposed model edits, hypotheses, questions, challenges, and gaps only.
+  reference:
+    description: Curated standards, taxonomy, and framework material.
+    authority: Classification and applicability support, not proof of target behavior.
+
+sources:
+  - id: component-purpose-map
+    class: accepted_lane
+    producer: 01-component-characterization
+    raw_or_derived: derived
+    expected_artifacts:
+      - component-purpose-map.json
+      - component-tag-cloud.json
+    feeds:
+      - architecture-dfd-mapper
+      - stride-enumerator
+      - abuse-scenario-analyst
+      - attack-tree-builder
+      - integrator
+    usage:
+      - component identity
+      - liveness
+      - trust-boundary role
+      - language/framework/runtime hints
+    claim_limits:
+      - descriptive classification only
+      - component labels are provisional and can be challenged
+
+  - id: evidence-index
+    class: accepted_lane
+    producer: 02-evidence-index
+    raw_or_derived: derived
+    expected_artifacts:
+      - accepted.json
+      - index-manifest.json
+    feeds:
+      - all-workcells
+    usage:
+      - cited source lookup
+      - bounded evidence retrieval
+      - source dereference for model claims
+    claim_limits:
+      - index hits are locators, not evidence authority
+
+  - id: repository-partition-and-project-discovery
+    class: accepted_lane
+    producers:
+      - 02-repository-partition-discovery
+      - 02-dev-project-discovery
+      - 02-devops-project-discovery
+      - 02-sre-operations-topology
+    raw_or_derived: derived
+    feeds:
+      - architecture-dfd-mapper
+      - deployment-topology-mapper
+      - integrator
+    usage:
+      - repository areas
+      - build/deploy boundaries
+      - project ownership
+      - operations topology
+    claim_limits:
+      - supplied/persona discovery remains cited structure, not runtime truth
+
+  - id: document-intelligence
+    class: derived
+    producers:
+      - 02-doc-intelligence-ingest
+      - 02-operations-doc-ingest
+    expected_artifacts:
+      - functional-doc-facts.json
+      - architecture-facts.json
+      - dfd-seeds.json
+      - pii-flow-seeds.json
+      - network-topology-seeds.json
+      - product-abuse-seeds.json
+      - operational-flow-summary.md
+      - privileged-workflows.json
+    feeds:
+      - architecture-dfd-mapper
+      - pii-user-data-mapper
+      - abuse-scenario-analyst
+      - deployment-topology-mapper
+      - integrator
+    usage:
+      - intended architecture
+      - actors and roles
+      - user journeys
+      - support/admin workflows
+      - documented privacy and abuse requirements
+    claim_limits:
+      - documented intent is not observed behavior
+      - hostile instructions in docs are ignored
+
+  - id: api-collection-intelligence
+    class: derived
+    producer: 02-api-collection-intelligence-ingest
+    expected_artifacts:
+      - api-collection-inventory.json
+      - security-test-coverage.json
+      - candidate-verification-requests.json
+    feeds:
+      - architecture-dfd-mapper
+      - abuse-scenario-analyst
+      - stride-enumerator
+      - attack-tree-builder
+    usage:
+      - endpoint inventory
+      - auth hints
+      - request/response data classes
+      - test coverage hints
+    claim_limits:
+      - collections are client/test intent, not production behavior proof
+      - environment secrets must be redacted
+
+  - id: test-intelligence
+    class: derived
+    producer: 02-test-intelligence-ingest
+    expected_artifacts:
+      - test-inventory.json
+      - integration-test-flows.json
+      - acceptance-flow-inventory.json
+      - smoke-release-gates.json
+      - load-abuse-capacity-notes.json
+      - untested-security-surfaces.json
+    feeds:
+      - architecture-dfd-mapper
+      - abuse-scenario-analyst
+      - attack-tree-builder
+      - challenger
+      - integrator
+    usage:
+      - tested flows
+      - untested high-risk surfaces
+      - rate-limit and abuse-capacity hints
+      - release gates
+    claim_limits:
+      - test presence is not proof that a control is secure
+      - mocked controls must be labelled
+
+  - id: iac-container-deployment-evidence
+    class: derived
+    producers:
+      - 02-iac-config-sast
+      - 02-kubernetes-config-sast
+      - 02-dockerfile-config-sast
+      - 02-container-base-image-inventory
+      - 15-deployment-hardening
+    feeds:
+      - deployment-topology-mapper
+      - architecture-dfd-mapper
+      - stride-enumerator
+      - attack-tree-builder
+    usage:
+      - declared ingress/egress
+      - trust zones
+      - workload identity
+      - container and platform surfaces
+    claim_limits:
+      - static manifests support declared exposure only
+      - live runtime exposure requires separate authorization
+
+  - id: secrets-and-key-inventory
+    class: derived
+    producer: 02-secrets-inventory
+    feeds:
+      - pii-user-data-mapper
+      - stride-enumerator
+      - attack-tree-builder
+      - challenger
+    usage:
+      - credential-bearing surfaces
+      - key/certificate stores
+      - sensitive artifact boundaries
+    claim_limits:
+      - raw secret values must not enter workbench outputs
+      - secret hits are leads until verified
+
+  - id: sbom-sca-license-lifecycle
+    class: derived
+    producers:
+      - 02-sbom-generation
+      - 02-sca-vulnerability-data
+      - 02-license-inventory
+      - 02-dependency-lifecycle
+      - 06-cve-reachability
+    feeds:
+      - architecture-dfd-mapper
+      - attack-tree-builder
+      - supply-chain-domain-specialist
+      - integrator
+    usage:
+      - third-party systems/components
+      - dependency and update channels
+      - supply-chain abuse paths
+    claim_limits:
+      - SCA hits are not reachability or exploitability
+      - lifecycle unknowns remain unknown
+
+  - id: mobile-native-binary-intelligence
+    class: derived
+    producers:
+      - 02-mobile-source-applicability
+      - 02-android-source-sast
+      - 02-ios-source-sast
+      - 02-native-build
+      - 02-native-sast
+      - 02-ir-facts
+      - 02-binary-triage
+      - 02-binary-intelligence-ingest
+    feeds:
+      - architecture-dfd-mapper
+      - pii-user-data-mapper
+      - domain-specialists
+      - attack-tree-builder
+    usage:
+      - client-side trust boundaries
+      - parser/protocol surfaces
+      - binary-only components
+      - mobile platform data flows
+    claim_limits:
+      - static binary/decompiler evidence is not runtime behavior
+      - dynamic instrumentation is not authorized by this ADR
+
+  - id: source-sast-and-static-leads
+    class: derived
+    producers:
+      - 02-source-sast
+      - 02-native-sast
+      - 02-ir-facts
+    feeds:
+      - stride-enumerator
+      - abuse-scenario-analyst
+      - attack-tree-builder
+      - challenger
+    usage:
+      - candidate controls and weaknesses
+      - sink/source hints
+      - coverage gaps
+    claim_limits:
+      - scanner output is a lead only
+      - no verified finding or severity promotion
+
+  - id: standards-and-taxonomy-references
+    class: reference
+    producers:
+      - 02-standards-source-ingest
+    feeds:
+      - stride-enumerator
+      - integrator
+    usage:
+      - STRIDE category definitions
+      - CWE/CRE references
+      - optional privacy or abuse taxonomy labels
+    claim_limits:
+      - standards mappings require citation
+      - mapping is not proof of target behavior
+
