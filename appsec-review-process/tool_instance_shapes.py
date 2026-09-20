@@ -427,7 +427,10 @@ def validate_node_aggregate(
     store = store or SchemaStore()
     if isinstance(declared_tool_ids, (str, bytes)) or isinstance(permitted_node_statuses, (str, bytes)):
         raise TypeError("declared_tool_ids and permitted_node_statuses must be collections, not strings")
-    declared = set(declared_tool_ids)
+    declared_list = list(declared_tool_ids)
+    declared = set(declared_list)
+    if len(declared) != len(declared_list):
+        raise ValueError("declared_tool_ids names a tool more than once")
     permitted = set(permitted_node_statuses)
     if not declared:
         raise ValueError("declared_tool_ids must name at least one tool")
@@ -529,4 +532,51 @@ def validate_node_aggregate(
             )
         if coverage["gaps"]:
             errors.append("node-skipped-with-gaps: a SKIPPED node analyzed nothing and cannot name coverage gaps")
+    return errors
+
+
+def verify_outputs_on_disk(tool_results: dict, attempt_root) -> list[str]:
+    """Bind every listed output to the bytes in the attempt.
+
+    `validate_node_aggregate` checks that the three documents agree with each other. It cannot know
+    whether an output's `sha256`, `bytes` or even its existence is true: those are statements about
+    files. A worker (V10-V13) therefore calls this too, before publication, with the attempt root it
+    owns. `attempt_root` is required; there is no mode that skips the files.
+
+    Every output path must stay inside the attempt, be a regular non-linked file, have exactly the
+    listed size and hash, and be listed by one tool instance only.
+    """
+    from execution_state import beneath, file_hash  # local: keeps the pure validator import-light
+
+    if attempt_root is None or isinstance(attempt_root, (bytes, bool)) or not str(attempt_root):
+        raise TypeError("attempt_root must be the attempt directory that owns these outputs")
+    errors = [f"schema:tool-results: {e}" for e in validate_document(tool_results, TOOL_RESULTS_SCHEMA, SchemaStore())]
+    if errors:
+        return errors
+    root = Path(attempt_root)
+    if not root.is_dir():
+        return [f"outputs-on-disk: attempt root {str(root)!r} is not a directory"]
+    owners: dict[str, str] = {}
+    for instance in tool_results["tool_instances"]:
+        tool_id = instance["tool_id"]
+        for output in instance["outputs"]:
+            relative = output["path"]
+            if relative in owners and owners[relative] != tool_id:
+                errors.append(f"outputs-on-disk: {relative!r} is listed by both {owners[relative]!r} and {tool_id!r}")
+                continue
+            owners[relative] = tool_id
+            try:
+                path = beneath(root, root / relative)
+            except ValueError:
+                errors.append(f"outputs-on-disk: {tool_id}: {relative!r} leaves the attempt or is a linked path")
+                continue
+            if not path.is_file():
+                errors.append(f"outputs-on-disk: {tool_id}: {relative!r} is listed but is not a regular file in the attempt")
+                continue
+            size = path.stat().st_size
+            if size != output["bytes"]:
+                errors.append(f"outputs-on-disk: {tool_id}: {relative!r} is {size} bytes, listed as {output['bytes']}")
+            actual = "sha256:" + file_hash(path)
+            if actual != output["sha256"]:
+                errors.append(f"outputs-on-disk: {tool_id}: {relative!r} does not have the listed sha256")
     return errors

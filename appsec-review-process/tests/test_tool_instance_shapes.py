@@ -952,5 +952,90 @@ class StructuralMutationTests(unittest.TestCase):
         self.rejected(coverage, COVERAGE, "not in enum")
 
 
+
+class OutputsOnDiskTests(unittest.TestCase):
+    """The aggregate validator proves the documents agree with each other; this proves the listed
+    hashes and sizes are true of the files. Both are needed before a worker publishes."""
+
+    def setUp(self):
+        import copy, hashlib, tempfile
+        self.copy, self.hashlib = copy, hashlib
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name) / "attempt"
+        self.root.mkdir()
+        golden = Path(__file__).resolve().parent / "fixtures" / "tool-instance-shapes" / "iac-ok-with-gaps" / "tool-results.json"
+        self.results = json.loads(golden.read_text(encoding="utf-8"))
+        for index, instance in enumerate(self.results["tool_instances"]):
+            for number, output in enumerate(instance["outputs"]):
+                data = f"synthetic output {index}.{number}\n".encode()
+                target = self.root / output["path"]
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+                output["bytes"] = len(data)
+                output["sha256"] = "sha256:" + hashlib.sha256(data).hexdigest()
+        self.first = next(o for i in self.results["tool_instances"] for o in i["outputs"])
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def check(self, results=None, root=None):
+        return shapes.verify_outputs_on_disk(results or self.results, self.root if root is None else root)
+
+    def test_true_statements_about_the_files_verify(self):
+        self.assertEqual(self.check(), [])
+
+    def test_attempt_root_is_required(self):
+        with self.assertRaises(TypeError):
+            shapes.verify_outputs_on_disk(self.results)
+        for bad in (None, "", b"x"):
+            with self.assertRaises(TypeError):
+                shapes.verify_outputs_on_disk(self.results, bad)
+        self.assertIn("is not a directory", self.check(root=self.root / "missing")[0])
+
+    def test_listed_hash_edited_alone_is_rejected(self):
+        self.first["sha256"] = "sha256:" + "0" * 64
+        self.assertTrue(any("does not have the listed sha256" in e for e in self.check()))
+
+    def test_listed_size_edited_alone_is_rejected(self):
+        self.first["bytes"] += 1
+        self.assertTrue(any("bytes, listed as" in e for e in self.check()))
+
+    def test_file_changed_after_listing_is_rejected(self):
+        (self.root / self.first["path"]).write_bytes(b"replaced after the hash was recorded\n")
+        self.assertTrue(any("listed sha256" in e or "listed as" in e for e in self.check()))
+
+    def test_listed_but_missing_file_is_rejected(self):
+        (self.root / self.first["path"]).unlink()
+        self.assertTrue(any("is not a regular file in the attempt" in e for e in self.check()))
+
+    def test_linked_output_is_rejected(self):
+        target = self.root / self.first["path"]
+        outside = Path(self.temporary.name) / "outside.json"
+        outside.write_bytes(target.read_bytes())
+        target.unlink()
+        try:
+            target.symlink_to(outside)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks unavailable on this platform")
+        self.assertTrue(any("leaves the attempt or is a linked path" in e for e in self.check()))
+
+    def test_one_file_cannot_be_claimed_by_two_tools(self):
+        instances = [i for i in self.results["tool_instances"] if i["outputs"]]
+        if len(instances) < 2:
+            self.skipTest("golden has fewer than two instances with outputs")
+        instances[1]["outputs"][0] = self.copy.deepcopy(instances[0]["outputs"][0])
+        self.assertTrue(any("is listed by both" in e for e in self.check()))
+
+    def test_malformed_tool_results_are_reported_not_walked(self):
+        del self.results["tool_instances"][0]["outputs"]
+        self.assertTrue(self.check()[0].startswith("schema:tool-results:"))
+
+
+class DeclaredToolsTests(unittest.TestCase):
+    def test_a_tool_declared_twice_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "more than once"):
+            shapes.validate_node_aggregate("OK", {}, {}, None, ["bandit", "bandit"], ["OK"])
+
+
 if __name__ == "__main__":
     unittest.main()

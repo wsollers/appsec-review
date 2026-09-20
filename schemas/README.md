@@ -96,7 +96,12 @@ field. The cross-record rules live in `appsec-review-process/tool_instance_shape
 (`validate_node_aggregate`, every input required): a node cannot be `OK` with a non-`OK` instance or
 any gap, cannot be `OK_WITH_GAPS` without a validated hashed output and a named gap for every
 non-`OK` instance, cannot be `SKIPPED` without a receipt showing zero inputs for every declared
-tool, and tool ids must agree across the node's declared tools and all three documents.
+tool, and tool ids must agree across the node's declared tools and all three documents. That proves the documents
+agree with each other; it cannot prove an output's `sha256`, `bytes` or existence, which are
+statements about files. `verify_outputs_on_disk(tool_results, attempt_root)` (attempt root required)
+binds them: every listed output stays inside the attempt, is a regular non-linked file with exactly
+the listed size and hash, and is claimed by one tool instance only. A worker calls both before
+publication.
 
 Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
 engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --
