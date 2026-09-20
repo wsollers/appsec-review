@@ -128,13 +128,22 @@ def materialize(template: str) -> str:
     return _PLACEHOLDER.sub(substitute, template)
 
 
+def load_template(data: bytes) -> str:
+    """A tracked fixture is a TEMPLATE, not redactor input. Git may hand it to us with CRLF line
+    endings (`core.autocrlf=true`, the common Windows setting), so the newline convention of a
+    template is normalized to LF here and the redactor's input never depends on how the repository
+    was checked out. Byte-for-byte preservation of CRLF, LF and a BOM is proven separately with
+    inputs GENERATED at test time (see test_crlf_and_lf_are_each_preserved_byte_for_byte...)."""
+    return data.decode("utf-8").replace("\r\n", "\n")
+
+
 def fixture_case(name: str):
     def build(source: Path) -> None:
         for path in sorted((FIXTURES / name).rglob("*")):
             if path.is_file():
                 target = source / path.relative_to(FIXTURES / name)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(materialize(path.read_bytes().decode("utf-8")).encode("utf-8"))
+                target.write_bytes(materialize(load_template(path.read_bytes())).encode("utf-8"))
     return build
 
 
@@ -1043,6 +1052,60 @@ class SchemaAndGoldenTests(RedactionTestCase):
             if name in ("AWS_KEY", "GITHUB_TOKEN", "PEM_RSA", "JWT"):
                 self.assertTrue(any(scanner.search(value) for scanner in scanners), name)
 
+
+
+class CheckoutIndependenceTests(unittest.TestCase):
+    """PR 10 review: the suite must pass on a standard Windows checkout, where Git converts the
+    tracked templates to CRLF, without weakening the explicit byte-preservation checks."""
+
+    def templates(self):
+        return [path for path in sorted(FIXTURES.rglob("*")) if path.is_file() and path.name != "README.md"]
+
+    def test_a_crlf_checkout_of_every_template_loads_to_the_same_input(self):
+        self.assertGreaterEqual(len(self.templates()), 15)
+        for path in self.templates():
+            with self.subTest(template=path.relative_to(FIXTURES).as_posix()):
+                as_lf = path.read_bytes().replace(b"\r\n", b"\n")
+                as_crlf = as_lf.replace(b"\n", b"\r\n")
+                self.assertNotIn(b"\r", as_lf, "a tracked template must not carry a bare CR of its own")
+                self.assertEqual(load_template(as_crlf), load_template(as_lf))
+                self.assertNotIn("\r", load_template(as_crlf))
+
+    def test_a_crlf_checkout_produces_the_same_published_bytes_and_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            receipts = {}
+            for label, convert in (("lf", lambda data: data), ("crlf", lambda data: data.replace(b"\n", b"\r\n"))):
+                source, published = base / label / "source", base / label / "published"
+                for path in self.templates():
+                    target = source / path.relative_to(FIXTURES)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    checked_out = convert(path.read_bytes().replace(b"\r\n", b"\n"))
+                    target.write_bytes(materialize(load_template(checked_out)).encode("utf-8"))
+                receipts[label] = er.redact_tree(source, published, on_unhandled="withhold", limits=LIMITS)
+            self.assertEqual(receipts["crlf"], receipts["lf"])
+            self.assertEqual(tree(base / "crlf" / "published"), tree(base / "lf" / "published"))
+
+    def test_byte_preservation_is_still_proven_with_generated_not_tracked_inputs(self):
+        # The guarantee the reviewer asked to keep: CRLF and LF inputs are each preserved exactly.
+        with tempfile.TemporaryDirectory() as directory:
+            source, published = Path(directory) / "s", Path(directory) / "p"
+            write(source, "crlf.log", b"first\r\napi_key=" + PLANTS["HUMAN_PASSWORD"].encode() + b"\r\nlast\r\n")
+            write(source, "lf.log", b"first\napi_key=" + PLANTS["HUMAN_PASSWORD"].encode() + b"\nlast\n")
+            er.redact_tree(source, published, on_unhandled="refuse", limits=LIMITS)
+            self.assertEqual((published / "crlf.log").read_bytes(), b"first\r\napi_key=[REDACTED:named-secret:1]\r\nlast\r\n")
+            self.assertEqual((published / "lf.log").read_bytes(), b"first\napi_key=[REDACTED:named-secret:1]\nlast\n")
+
+    def test_templates_are_pinned_to_lf_in_gitattributes(self):
+        import subprocess
+        sample = self.templates()[0]
+        try:
+            result = subprocess.run(["git", "check-attr", "eol", "text", "--", str(sample)], cwd=str(ROOT.parent),
+                                    capture_output=True, text=True, timeout=30, check=True)
+        except (OSError, subprocess.SubprocessError):
+            self.skipTest("git is not available or this is not a work tree")
+        self.assertIn("eol: lf", result.stdout)
+        self.assertIn("text: set", result.stdout)
 
 
 class VerificationProbeTests(unittest.TestCase):
