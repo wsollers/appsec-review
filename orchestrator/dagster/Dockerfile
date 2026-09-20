@@ -5,4 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git=1:2.47.3-0+
 COPY requirements.txt requirements.lock.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -c requirements.lock.txt && pip check
 COPY dagster.yaml workspace.yaml /opt/dagster/home/
+# The runtime may be started as the operator's uid (compose `user:`), which has no passwd entry and
+# owns nothing in the image. A named volume takes its mode from this directory when first created.
+RUN mkdir -p /var/dagster && chmod 1777 /var/dagster /opt/dagster/home
 COPY definitions.py /opt/app/
