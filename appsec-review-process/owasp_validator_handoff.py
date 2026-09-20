@@ -252,8 +252,9 @@ def _load_config(reference: dict[str, Any]) -> tuple[dict[str, Any], str, str, s
     prompt_path = beneath(REPO_ROOT, REPO_ROOT.joinpath(*prompt_ref.parts))
     if prompt_path.parent.absolute() != CONFIG_ROOT.absolute() or not prompt_path.is_file():
         raise ValueError("handoff prompt must be directly under the tracked handoff config directory")
-    prompt_text = prompt_path.read_text(encoding="utf-8")
-    prompt_sha256 = hashlib.sha256(prompt_path.read_bytes()).hexdigest()
+    prompt_bytes = prompt_path.read_bytes()
+    prompt_text = prompt_bytes.decode("utf-8")
+    prompt_sha256 = hashlib.sha256(prompt_bytes).hexdigest()
     return config, config_digest, prompt_text, prompt_sha256
 
 

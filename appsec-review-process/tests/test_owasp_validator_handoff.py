@@ -8,6 +8,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 PROCESS = Path(__file__).resolve().parents[1]
@@ -219,6 +220,26 @@ class OwaspValidatorHandoffTests(unittest.TestCase):
     def output(self, result, name):
         return (self.data / "jobs" / owasp_validator_handoff.JOB_ID / "whole" / "attempts" /
                 result["attempt_id"] / "outputs" / name)
+
+    def test_prompt_contract_text_and_hash_use_identical_lf_or_crlf_bytes(self):
+        repo_root = Path(self.temporary.name) / "prompt-repo"
+        config_root = repo_root / "appsec-review-process" / "config" / "owasp-validator-handoff"
+        config_path = config_root / "default-v1.json"
+        prompt_path = config_root / "validator-instructions-v1.txt"
+        write_json(config_path, self.handoff_config)
+        reference = {
+            "path": config_path.relative_to(repo_root).as_posix(),
+            "config_digest": execution_state.digest(self.handoff_config),
+        }
+        with (mock.patch.object(owasp_validator_handoff, "REPO_ROOT", repo_root),
+              mock.patch.object(owasp_validator_handoff, "CONFIG_ROOT", config_root)):
+            for prompt_bytes in (b"first line\nsecond line\n", b"first line\r\nsecond line\r\n"):
+                with self.subTest(line_ending=repr(prompt_bytes)):
+                    prompt_path.write_bytes(prompt_bytes)
+                    _, _, prompt_text, prompt_sha256 = owasp_validator_handoff._load_config(reference)
+                    self.assertEqual(prompt_text.encode("utf-8"), prompt_bytes)
+                    self.assertEqual(hashlib.sha256(prompt_text.encode()).hexdigest(), prompt_sha256)
+                    self.assertEqual(hashlib.sha256(prompt_bytes).hexdigest(), prompt_sha256)
 
     def test_deterministic_ids_order_and_exact_batch_coverage(self):
         _, request_path, *_ = self.publish_upstream(count=13)
