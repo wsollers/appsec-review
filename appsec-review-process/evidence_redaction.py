@@ -34,7 +34,7 @@ from typing import Any, Iterator
 from execution_state import atomic_bytes, beneath, digest
 from schema_validate import validate_document
 
-MODULE_VERSION = "1.0.0"
+MODULE_VERSION = "1.1.0"
 REDACTOR_NAME = "appsec-review-process/evidence_redaction"
 RECEIPT_SCHEMA = "redaction-receipt.schema.json"
 RECEIPT_FILENAME = "redaction-receipt.json"
@@ -140,7 +140,23 @@ RULESET: dict[str, Any] = {
         "whole_run_min_length": 40,
         "whole_run_min_entropy": 4.5,
         "exempt_hex_digest_lengths": [32, 40, 56, 64, 96, 128],
-        "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake", "public-pem-body", "ssh-public-key"],
+        # An identifier such as `source_snapshot_sha256` is words plus the NAME of an algorithm or
+        # format. Without this, the redactor rewrote the structural keys of this repository's own
+        # evidence documents (tool-results, coverage, probe receipts, wave manifests), which made
+        # them schema-invalid and unpublishable. The list is closed and only ever applies to a
+        # PIECE of an identifier that is otherwise made of plain words (see _wordy); a string that
+        # merely contains one of these tokens is still judged on its entropy.
+        "wordy_technical_pieces": ["base16", "base32", "base58", "base64", "blake2b", "blake2s", "blake3", "crc32",
+                                   "ed25519", "hmac", "ipv4", "ipv6", "md5", "oauth2", "p256", "p384", "p521",
+                                   "rsa2048", "rsa4096", "sha1", "sha224", "sha256", "sha384", "sha512", "sha3",
+                                   "utf8", "utf16", "x509"],
+        "wordy_min_plain_words": 2,
+        "wordy_counter_max_length": 8,
+        # `20260919T123919Z-0b9e70`: this repository's run-id shape (UTC stamp plus a short hex
+        # suffix). About a third of real run ids were being flagged, which mangled the header of
+        # every published document. The suffix carries at most 48 bits and is an identifier.
+        "exempt_patterns": {"utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9a-f]{4,12})?\Z"},
+        "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake", "utc-stamp-id", "public-pem-body", "ssh-public-key"],
     },
     "json_extensions": [".json", ".sarif"],
     "text_extensions": [".csv", ".err", ".jsonl", ".log", ".md", ".ndjson", ".out", ".tsv", ".txt", ".xml", ".yaml", ".yml"],
@@ -183,6 +199,8 @@ _ALNUM_RE = re.compile(r"[A-Za-z0-9]")
 _PRIORITY = {kind: index for index, kind in enumerate(KINDS)}
 _LITERALS = frozenset(RULESET["unquoted_literals"])
 _ENTROPY = RULESET["entropy"]
+_TECHNICAL_PIECES = frozenset(RULESET["entropy"]["wordy_technical_pieces"])
+_EXEMPT_PATTERN_RES = tuple(re.compile(pattern) for _, pattern in sorted(RULESET["entropy"]["exempt_patterns"].items()))
 
 
 class RedactionError(ValueError):
@@ -368,10 +386,19 @@ def _public_material_spans(text: str) -> list[tuple[int, int]]:
 
 
 def _wordy(run: str) -> bool:
+    """A kebab/snake identifier made of plain words. Besides words, a piece may be the closed-list
+    NAME of an algorithm or format (`sha256`), or a short digit counter (`0001`); anything else is
+    "odd" and stays tightly bounded. At least two plain words are always required, so a string
+    built only from technical tokens and counters is not an identifier."""
     pieces = [piece for piece in re.split(r"[-_]", run) if piece]
     if len(pieces) < 3:
         return False
-    odd = [piece for piece in pieces if not (piece.isalpha() and (piece.islower() or piece.isupper() or piece.istitle()))]
+    words = [piece for piece in pieces if piece.isalpha() and (piece.islower() or piece.isupper() or piece.istitle())]
+    if len(words) < _ENTROPY["wordy_min_plain_words"]:
+        return False
+    odd = [piece for piece in pieces if piece not in words
+           and piece.lower() not in _TECHNICAL_PIECES
+           and not (piece.isdigit() and len(piece) <= _ENTROPY["wordy_counter_max_length"])]
     return all(len(piece) <= 4 for piece in odd) and len(odd) * 3 <= len(pieces)
 
 
@@ -379,6 +406,8 @@ def _exempt(run: str) -> bool:
     if run.isdigit() or _UUID_RE.match(run):
         return True
     if _HEX_RE.match(run) and len(run) in _ENTROPY["exempt_hex_digest_lengths"]:
+        return True
+    if any(pattern.match(run) for pattern in _EXEMPT_PATTERN_RES):
         return True
     return _wordy(run)
 

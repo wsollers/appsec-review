@@ -1,0 +1,50 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "job_id": "02-binary-hardening",
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/tool-results/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tool_instances": [
+    {
+      "argv": [
+        "binskim",
+        "--offline",
+        "/in"
+      ],
+      "attempt_id": "binskim-attempt-0001",
+      "cause_code": "partial-input-coverage",
+      "exit": {
+        "exit_code": 0,
+        "exit_meaning": "clean",
+        "findings_exit_codes": [],
+        "nonzero_exit_on_findings": false,
+        "timed_out": false
+      },
+      "identity": {
+        "data_identities": [],
+        "executable_sha256": null,
+        "executor_kind": "pinned_container",
+        "image_digest": "sha256:8aaac4f98abb30389b851686fce2e0b33d6480a1d78397905095a26fe9416925",
+        "image_repository": "registry.internal.example:5000/appsec/audit-static",
+        "redactor": null,
+        "tool_name": "binskim",
+        "tool_version": "1.2.3"
+      },
+      "outputs": [
+        {
+          "bytes": 39,
+          "media_type": "application/json",
+          "path": "outputs/binskim.sarif",
+          "role": "raw-tool-output",
+          "sha256": "sha256:0bace1216b66ba31977886418f5f360c423111937f5a530ed2a7535c192ac4ad",
+          "validated_against": "sarif-2.1.0",
+          "validation": "format-validated"
+        }
+      ],
+      "result_record_count": 5,
+      "skip_reason": null,
+      "terminal_status": "OK_WITH_GAPS",
+      "tool_id": "binskim"
+    }
+  ]
+}

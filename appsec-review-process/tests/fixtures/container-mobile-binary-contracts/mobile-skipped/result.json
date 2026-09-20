@@ -1,0 +1,20 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "job_id": "02-mobile-sast",
+  "platforms": [
+    {
+      "marker_present": false,
+      "platform": "android",
+      "tool_id": "mobsfscan-android"
+    },
+    {
+      "marker_present": false,
+      "platform": "ios",
+      "tool_id": "mobsfscan-ios"
+    }
+  ],
+  "rule_hits": [],
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/mobile-sast/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112"
+}

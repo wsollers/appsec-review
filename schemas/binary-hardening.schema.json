@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "binary-hardening.schema.json",
+  "title": "Supplied-binary hardening properties (ADR-0010 G7 = A, task V07)",
+  "description": "Static hardening properties of binaries SUPPLIED in the source snapshot, from 02-binary-hardening. There is deliberately no overall pass/secure/score field at any level: a roll-up is a severity-like promotion. A binary of an unsupported format carries not-assessed for every check.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "binaries"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/binary-hardening/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "job_id": {
+      "const": "02-binary-hardening",
+      "description": "The one node that may publish this result."
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z",
+      "description": "The node attempt; equals tool-results.json, coverage.json and the probe receipt."
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "binaries": {
+      "type": "array",
+      "items": {
+        "$ref": "binary-hardening-binary.schema.json"
+      }
+    }
+  }
+}

@@ -1054,6 +1054,105 @@ class SchemaAndGoldenTests(RedactionTestCase):
 
 
 
+class OwnDocumentsTests(unittest.TestCase):
+    """The redactor sits on the publication path of this repository's OWN evidence documents
+    (tool-results, coverage, probe receipts, wave manifests, ...). It must not rewrite their
+    structure. V04 and V07 each found that it did: the key `source_snapshot_sha256` was classed as
+    a high-entropy token, and about a third of real run ids were too. Nothing here may loosen
+    detection of an actual secret, so every relaxation is paired with a must-still-flag case."""
+
+    REPO = ROOT.parent
+
+    @staticmethod
+    def flagged(text: str) -> bool:
+        return bool(list(er._entropy_spans(text)))
+
+    def property_names(self):
+        names = set()
+
+        def walk(node):
+            if isinstance(node, dict):
+                if isinstance(node.get("properties"), dict):
+                    names.update(node["properties"])
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+        for path in sorted((self.REPO / "schemas").glob("*.schema.json")):
+            walk(json.loads(path.read_text(encoding="utf-8")))
+        return names
+
+    def test_no_schema_property_name_in_the_repository_is_an_entropy_hit(self):
+        names = self.property_names()
+        self.assertGreater(len(names), 300)
+        self.assertEqual(sorted(name for name in names if self.flagged(name)), [])
+
+    def test_structural_hash_keys_are_identifiers_not_secrets(self):
+        for key in ("source_snapshot_sha256", "intercom_records_sha256", "previous_wave_manifest_sha256",
+                    "cell_result_sha256", "definition_sha256", "requirement_sha256", "content_sha256",
+                    "manifest_sha256", "receipt_sha256", "published_sha256", "ruleset_sha256"):
+            with self.subTest(key=key):
+                self.assertFalse(self.flagged(key))
+
+    def test_run_ids_in_the_repository_format_are_never_flagged(self):
+        import random
+        generator = random.Random(20260920)
+        for _ in range(2000):
+            run_id = (f"2026{generator.randint(1, 12):02d}{generator.randint(1, 28):02d}T{generator.randint(0, 23):02d}"
+                      f"{generator.randint(0, 59):02d}{generator.randint(0, 59):02d}Z-{generator.getrandbits(24):06x}")
+            self.assertFalse(self.flagged(run_id), run_id)
+        self.assertFalse(self.flagged("20260919T123919Z-0b9e70"))
+
+    def test_every_relaxation_still_flags_a_secret_that_merely_resembles_it(self):
+        secret = stream("own-docs-secret", ALNUM, 40)
+        hexish = stream("own-docs-hex", "0123456789abcdef", 24)
+        cases = {
+            "random only": secret,
+            "technical token as a prefix": "sha256_" + secret[:32],
+            "random around a technical token": secret[:14] + "_sha256_" + secret[14:28],
+            "two plain words then a long random piece": "alpha_bravo_" + secret[:28],
+            "a run id followed by a secret": "20260919T123919Z-0b9e70" + secret[:24],
+            "run-id shape with a long hex tail": "20260919T123919Z-" + hexish,
+        }
+        for label, value in cases.items():
+            with self.subTest(case=label):
+                self.assertTrue(self.flagged(value), value)
+        # not identifiers: technical tokens and counters alone, or an over-long counter
+        self.assertFalse(er._wordy("sha256-md5-base64-sha512-x509"))
+        self.assertFalse(er._wordy("alpha_bravo_1234567890123"))
+        self.assertTrue(er._wordy("source_snapshot_sha256"))
+        self.assertTrue(er._wordy("semgrep-security-audit-attempt-0001"))
+
+    def test_own_evidence_documents_pass_through_unchanged(self):
+        fixtures = ROOT / "tests" / "fixtures"
+        # Evidence documents a producer publishes. Permission fixtures are run INPUTS whose
+        # `credential_ref` is secret-named on purpose; they never pass through the redactor.
+        evidence_dirs = ("tool-instance-shapes", "threat-workbench")
+        documents = [path for path in sorted(fixtures.rglob("*.json"))
+                     if any(name in path.parts for name in evidence_dirs) and path.name != "declared-tools.json"]
+        self.assertGreaterEqual(len(documents), 12)
+        with tempfile.TemporaryDirectory() as directory:
+            source, published = Path(directory) / "source", Path(directory) / "published"
+            for index, path in enumerate(documents):
+                target = source / f"{index:03d}" / path.name
+                target.parent.mkdir(parents=True)
+                target.write_bytes(path.read_bytes().replace(b"\r\n", b"\n"))
+            limits = er.Limits(max_file_bytes=4_000_000, max_line_length=200_000, max_files=400,
+                               max_total_bytes=40_000_000, max_json_depth=64, max_path_length=400)
+            receipt = er.redact_tree(source, published, on_unhandled="refuse", limits=limits)
+        changed = {record["path"]: {kind: count for kind, count in record["redactions"].items() if count}
+                   for record in receipt["files"] if record["disposition"] != "unchanged"}
+        self.assertEqual(changed, {}, "the redactor rewrote one of this repository's own evidence documents")
+
+    def test_the_relaxation_lives_in_the_ruleset_and_moved_the_version(self):
+        for key in ("wordy_technical_pieces", "wordy_min_plain_words", "wordy_counter_max_length", "exempt_patterns"):
+            changed = deepcopy(er.RULESET)
+            changed["entropy"].pop(key)
+            self.assertNotEqual(er.digest({"module_version": er.MODULE_VERSION, "ruleset": changed}), er.RULESET_SHA256, key)
+        self.assertEqual(er.MODULE_VERSION, "1.1.0")
+
+
 class CheckoutIndependenceTests(unittest.TestCase):
     """PR 10 review: the suite must pass on a standard Windows checkout, where Git converts the
     tracked templates to CRLF, without weakening the explicit byte-preservation checks."""
@@ -1211,11 +1310,11 @@ class VerificationProbeTests(unittest.TestCase):
 
 # Produced by running the redactor over fixtures/evidence-redaction/sarif-snippets, then pinned.
 GOLDEN = {
-    "ruleset_sha256": "48604e025dcea35947043c9f2a6acc4b1c67c3d1ad45a16eafd3bf556015ab79",
+    "ruleset_sha256": "4f180f5abeb92829a7ff02d4d9eb560f86dc72fe5897bcc9748b5a783d4fa651",
     "sarif_published_sha256": "bbf1eac71274b50cd3e39a71ff1d0979803ab1ad4d60329a153be848a253e93b",
     "sarif_redactions": {"private-key-block": 0, "named-secret": 8, "url-credential": 0, "bearer-token": 0,
                          "provider-token": 1, "jwt": 0, "high-entropy": 1, "fingerprint": 2},
-    "sarif_receipt_sha256": "230efa3c6304bfe97323f987efe000b168a1580eb218e6cdb77c5b36cba230c8",
+    "sarif_receipt_sha256": "9563aca5f463b7f6b83693744ca7da055838f1f1f9495c83fd5aa09282b198e1",
 }
 
 

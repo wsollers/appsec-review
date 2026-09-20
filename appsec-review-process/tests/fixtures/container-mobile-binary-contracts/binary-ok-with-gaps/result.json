@@ -1,0 +1,109 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "binaries": [
+    {
+      "binary_id": "bin-0d08b3190792",
+      "bytes": 131,
+      "checks": {
+        "control_flow_guard": "present",
+        "fortify_source": "not-applicable-for-format",
+        "high_entropy_aslr": "present",
+        "non_executable_data": "absent",
+        "position_independent": "present",
+        "relro": "not-applicable-for-format",
+        "safe_seh": "present",
+        "stack_protector": "absent"
+      },
+      "format": "pe",
+      "path": "vendor/win/agent.dll",
+      "rule_hits": [
+        {
+          "check": "control_flow_guard",
+          "rule_id": "BA2008"
+        }
+      ],
+      "sha256": "sha256:6331944e7f00ca214b51137303e9a6911db1c127e3180a8cfb8e51f2c42e3bec",
+      "tool_id": "binskim"
+    },
+    {
+      "binary_id": "bin-8b33c4f1ce76",
+      "bytes": 133,
+      "checks": {
+        "control_flow_guard": "not-applicable-for-format",
+        "fortify_source": "absent",
+        "high_entropy_aslr": "not-applicable-for-format",
+        "non_executable_data": "absent",
+        "position_independent": "present",
+        "relro": "absent",
+        "safe_seh": "not-applicable-for-format",
+        "stack_protector": "absent"
+      },
+      "format": "elf",
+      "path": "vendor/linux/libcodec.so",
+      "rule_hits": [],
+      "sha256": "sha256:de468a39a2a4e8814a5ab2e514f91ba552e4991a3830d7902b1ed50cc6c871e5",
+      "tool_id": "binskim"
+    },
+    {
+      "binary_id": "bin-b91b60a9c3e3",
+      "bytes": 133,
+      "checks": {
+        "control_flow_guard": "not-applicable-for-format",
+        "fortify_source": "not-applicable-for-format",
+        "high_entropy_aslr": "not-applicable-for-format",
+        "non_executable_data": "absent",
+        "position_independent": "present",
+        "relro": "not-applicable-for-format",
+        "safe_seh": "not-applicable-for-format",
+        "stack_protector": "absent"
+      },
+      "format": "macho",
+      "path": "vendor/mac/libui.dylib",
+      "rule_hits": [],
+      "sha256": "sha256:9e833b01b150b286c36d31094701a31a2b5f83e2de42f04a8922f46d9eec1159",
+      "tool_id": "binskim"
+    },
+    {
+      "binary_id": "bin-74c6447c2713",
+      "bytes": 134,
+      "checks": {
+        "control_flow_guard": "not-assessed",
+        "fortify_source": "not-assessed",
+        "high_entropy_aslr": "not-assessed",
+        "non_executable_data": "not-assessed",
+        "position_independent": "not-assessed",
+        "relro": "not-assessed",
+        "safe_seh": "not-assessed",
+        "stack_protector": "not-assessed"
+      },
+      "format": "unsupported",
+      "path": "vendor/fw/boot.bin",
+      "rule_hits": [],
+      "sha256": "sha256:849d67c12c2a5dd0f5c3dd7a6076108fbce2dc93b0bc49a161cc91e6a1aead30",
+      "tool_id": "binskim"
+    },
+    {
+      "binary_id": "bin-3b8043098595",
+      "bytes": 133,
+      "checks": {
+        "control_flow_guard": "not-assessed",
+        "fortify_source": "not-assessed",
+        "high_entropy_aslr": "not-assessed",
+        "non_executable_data": "not-assessed",
+        "position_independent": "not-assessed",
+        "relro": "not-assessed",
+        "safe_seh": "not-assessed",
+        "stack_protector": "not-assessed"
+      },
+      "format": "elf",
+      "path": "vendor/linux/packed.so",
+      "rule_hits": [],
+      "sha256": "sha256:0d86de5c412db9f638e4732ea0993fe9fa1188d67416bcd4158087f07eb03d6e",
+      "tool_id": "binskim"
+    }
+  ],
+  "job_id": "02-binary-hardening",
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/binary-hardening/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112"
+}

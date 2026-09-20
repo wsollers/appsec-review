@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mobile-sast.schema.json",
+  "title": "Mobile SAST static leads (ADR-0010 G6 = A, task V07)",
+  "description": "Static mobile rule hits from 02-mobile-sast. The node carries its own platform-marker probe (G6 = A); its receipt is outputs/mobile-applicability.json and is a required file of the contract. A rule hit is a rule id, a closed category and a hashed source location: there is no message, snippet or other free text because mobsfscan output embeds raw matched source lines (G9).",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "platforms",
+    "rule_hits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/mobile-sast/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "job_id": {
+      "const": "02-mobile-sast",
+      "description": "The one node that may publish this result."
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z",
+      "description": "The node attempt; equals tool-results.json, coverage.json and the probe receipt."
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "platform",
+          "tool_id",
+          "marker_present"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "android",
+              "ios"
+            ]
+          },
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+          },
+          "marker_present": {
+            "type": "boolean",
+            "description": "Equals the probe receipt's `applicable` for tool_id."
+          }
+        }
+      },
+      "description": "Exactly one entry per platform."
+    },
+    "rule_hits": {
+      "type": "array",
+      "items": {
+        "$ref": "mobile-sast-rule-hit.schema.json"
+      }
+    }
+  }
+}
