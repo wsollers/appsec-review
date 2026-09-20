@@ -12,6 +12,7 @@ JSON Schema for the common finding/evidence/interjob-transfer format (added 2026
 - `handoff-transfer.schema.json` -- what create_handoff.py should validate before naming an upstream artifact as available in a ## Upstream Outputs section (the "validate on read" half of the schema-validator wiring).
 - `worker-result-envelope.schema.json` -- the versioned terminal result shared by deterministic, container, persona, pool, controller, and supplied-decision workers. Cross-field skip, gap, retry, acceptance, and supersession rules are enforced by `worker_result.py`; `validate_job_output.py` adds run/job ownership, input freshness, in-attempt artifact hashes, registry-required files, and exact-edge skip authorization.
 - `ossf-scorecard-results.schema.json` -- normalized published-results ingestion records. Contract-specific validation additionally ties records to staged requests and raw response hashes.
+- `critical-findings-sarif.schema.json` -- the exact SARIF 2.1.0 document emitted by `critical_findings_sarif.py`, a standalone registered format-transform job and deliberately not a `full_review` graph node (`docs/critical-findings-sarif-job.md`). Identity, level, location and structure are pinned; free-text copied verbatim from the validated finding document is intentionally unconstrained. Conversion success is never proof that a finding was verified.
 - `verdict-taxonomies.json` -- not a JSON Schema itself, a curated registry of named verdict vocabularies (adversarial-verdict, static-hardening, memory-safety-disposition, cve-reachability) that finding.classification is checked against, keyed by finding.classification_taxonomy. Different lane families genuinely need different verdict language; this keeps that real difference structured instead of forcing one global enum or letting each lane's prose drift independently.
 
 Composable review schemas (added for the registry/worklist layer):
@@ -176,6 +177,77 @@ the listed size and hash, and is listed exactly once. Output paths must be norma
 inode, else the resolved path), so an alias, a hard link or a different-case name cannot give one
 file two owners. A worker calls both before
 publication.
+
+Vendor pre-pass result contracts (ADR-0010 tasks V04, V07 and V05, added 2026-09-20; schemas,
+contract records and pure validator modules only -- no worker emits them, no graph node is declared
+(V02) and `validate_job_output.py` has no claim-class policy or dispatch entry for any of the nine
+contracts yet, so the shared validator does not accept them today). Every contract requires
+`manifest.json`, `status.json`, `outputs/tool-results.json` and `outputs/coverage.json` (the V03
+shapes above); V04 and V07 also require `outputs/redaction-receipt.json` (V06). All declare the three
+`forbidden_promotions` `finding`, `severity` and `runtime-state`. All objects are closed and every
+string is a const, an enum or a `\Z`-anchored pattern: there is no message, snippet, value or
+free-text property.
+
+- `secrets-inventory.schema.json` (+ `-entry`) -- `outputs/secrets-inventory.redacted.json`, claim
+  class `secret_exposure_lead`. Entries are location fingerprints: tool, rule id, a closed
+  `data_class` label (not `secret_kind` -- the redactor redacts the value under any secret-ish key
+  name), confidence, path and line range, citation. No property exists for a value, a fragment, a
+  per-value hash, a length, a column or line text. The node is always applicable, so `SKIPPED` is
+  never a permitted status.
+- `iac-config-evidence.schema.json` (+ `iac-config-rule-hit`, `iac-config-base-image-inventory`) --
+  `outputs/iac-config-evidence.json` and `outputs/base-image-inventory.json`, claim class
+  `declared_configuration_evidence`; also requires `outputs/applicability-probe-receipt.json`.
+  Records are `rule_hits` (rule, closed category, resource address), not findings and not tool
+  messages, which embed resource values; base images are `FROM` references as declared, split into
+  closed fields. `OBSERVED_EXPOSURE` is schema-valid on purpose so the validator rejects it by name.
+- `container-image-inventory.schema.json` (+ `-image`, `-config`) -- G8 = A, claim class
+  `supplied_image_static_evidence`, probe receipt `outputs/container-image-applicability.json`. The
+  only representable image source is a supplied archive (staged path plus sha256): there is no
+  registry, pull, container-id or runtime property. Environment variable names only, never values;
+  entrypoint and command are an executable plus an argument count.
+- `mobile-sast.schema.json` (+ `-rule-hit`) -- G6 = A, claim class `mobile_static_lead`. The node
+  carries its own platform-marker probe; its receipt `outputs/mobile-applicability.json` is a
+  required file for every status including `SKIPPED`. A hit is a rule id, a closed category and a
+  hashed source location.
+- `binary-hardening.schema.json` (+ `-binary`) -- G7 = A, claim class
+  `binary_hardening_property_evidence`, probe receipt `outputs/binary-hardening-applicability.json`.
+  Closed format enum (`pe`, `elf`, `macho`, `unsupported`) and one closed verdict per mitigation
+  (`present`, `absent`, `not-applicable-for-format`, `not-assessed`). There is deliberately no
+  roll-up field and no `pass` value; verdicts are static properties of a supplied file, not
+  statements about a built artifact or a running process.
+- `sbom-inventory.schema.json` (+ `-component`, `-citation`, `-upstream-binding`),
+  `sca-vulnerability-match.schema.json` (+ `-record`, `-database`, `-database-identities`,
+  `-coverage-gaps`, `-gap-summary`), `license-inventory.schema.json` (+ `-record`) and
+  `dependency-lifecycle.schema.json` (+ `-entry`, `-reference-table-identity`, `-reference-table`)
+  -- the V05 SBOM-family contracts (ADR-0010 M1-M5; see `docs/sbom-family-contracts.md`). No
+  severity, score, reachability, exploitability, fix or legal-conclusion property exists. An SCA
+  match carries the database identity per citation, `match_basis` is `purl | cpe`, aliases are
+  collapsed, and every SBOM component is either `evaluated` or a record in `sca-coverage-gaps.json`
+  with a closed reason; `coverage-gap-summary.json` is the M5 aggregate. Age fields follow M4.
+  Lifecycle `supported`/`end-of-life` exists only with the citing `table_row`.
+  `02-license-scan` depends on `02-sbom-inventory`.
+
+Receipt-first verification, cross-document header and status agreement, id resolution, caller
+bindings, on-disk re-derivation (hashes, sizes, binary format from leading bytes) and sanitized
+error text live in `appsec-review-process/secrets_iac_contracts.py`,
+`container_mobile_binary_contracts.py` and `sbom_family_contracts.py`, which compose V03's
+`validate_node_aggregate` / `verify_outputs_on_disk` and V06's `verify_receipt`; none of it is
+expressible here. Known limit: `rule_id`, resource addresses and image repository/tag fields can
+hold a short identifier-shaped string, so rule ids must come from a pinned rule pack, never from a
+target's own tool configuration.
+
+Evidence-index metrics (ADR-0010 G10 = B, task V15; consumed by `02-evidence-index`, see
+`docs/evidence-index-metrics.md`):
+
+- `evidence-index-metrics.schema.json` -- the `metrics` member of an `02-evidence-index`
+  `manifest.json`, not a separate file: aggregate file, byte and line counts of the indexed
+  snapshot by closed scope, closed language and content class, with `overall`, `by_scope` and
+  `by_language` verified as projections of `groups`. Closed objects, every property required; no
+  per-file record, path, timestamp, host path, tool version or duration. `descriptive_only` is the
+  literal `true`: metrics are not evidence of coverage or analysis and introduce no claim class. The
+  contract declares the member under the additive `member_schemas` key with `metrics_sha256` as its
+  digest over one canonical byte form; projection, digest and snapshot binding are
+  `evidence_store.check_metrics` responsibilities.
 
 Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
 engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --
