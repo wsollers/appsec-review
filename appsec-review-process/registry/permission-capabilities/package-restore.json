@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/permission-capability/1.0",
+  "capability_id": "package-restore",
+  "kind": "package-restore",
+  "version": "1.0",
+  "display_name": "Package restore",
+  "description": "Restore dependencies for one ecosystem from exactly one fixed registry endpoint.",
+  "required_parameters": [
+    "ecosystem",
+    "scheme",
+    "host",
+    "port"
+  ],
+  "default_decision": "DENY",
+  "allowed_requirement_origins": [
+    "registry",
+    "operator",
+    "staged-run-config"
+  ],
+  "allowed_grant_origins": [
+    "operator",
+    "staged-run-config"
+  ],
+  "boundary_notes": [
+    "Install scripts that execute target code additionally require target-execution.",
+    "Private registries additionally require credential-use."
+  ]
+}

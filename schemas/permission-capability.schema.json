@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "permission-capability.schema.json",
+  "title": "Permission capability definition",
+  "description": "Versioned registry record defining one requestable capability kind: which typed parameters it requires and its default decision (always DENY).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "capability_id",
+    "kind",
+    "version",
+    "display_name",
+    "description",
+    "required_parameters",
+    "default_decision",
+    "allowed_requirement_origins",
+    "allowed_grant_origins",
+    "boundary_notes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/permission-capability/1.0"
+    },
+    "capability_id": {
+      "type": "string",
+      "enum": [
+        "target-execution",
+        "fixed-network-destination",
+        "dynamic-testing",
+        "debugger-ptrace",
+        "credential-use",
+        "package-restore",
+        "target-mutation"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "target-execution",
+        "fixed-network-destination",
+        "dynamic-testing",
+        "debugger-ptrace",
+        "credential-use",
+        "package-restore",
+        "target-mutation"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}$"
+    },
+    "display_name": {
+      "type": "string",
+      "pattern": "^\\S"
+    },
+    "description": {
+      "type": "string",
+      "pattern": "^\\S"
+    },
+    "required_parameters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "scheme",
+          "host",
+          "port",
+          "command_profile_id",
+          "target_path",
+          "technique",
+          "attach_mode",
+          "credential_ref",
+          "credential_scope",
+          "ecosystem",
+          "mutation_mode"
+        ]
+      }
+    },
+    "default_decision": {
+      "const": "DENY"
+    },
+    "allowed_requirement_origins": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "registry",
+          "operator",
+          "staged-run-config"
+        ]
+      }
+    },
+    "allowed_grant_origins": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "operator",
+          "staged-run-config"
+        ]
+      }
+    },
+    "boundary_notes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^\\S"
+      }
+    }
+  }
+}

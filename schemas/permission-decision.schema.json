@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "permission-decision.schema.json",
+  "title": "Permission decision record",
+  "description": "Deterministic result of evaluating (requirement, grants, context). GRANTED carries the exact capability set; DENIED carries an empty set and named reasons. fingerprint_material.sha256 is the value an integrator adds to the job input fingerprint. No field can carry a credential value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "decision",
+    "run_id",
+    "job_id",
+    "source_snapshot_sha256",
+    "evaluated_at",
+    "valid_until",
+    "inputs",
+    "reasons",
+    "capabilities",
+    "grants_applied",
+    "fingerprint_material",
+    "decision_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/permission-decision/1.0"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "GRANTED",
+        "DENIED"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "valid_until": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement_sha256",
+        "grants_sha256",
+        "definitions_sha256"
+      ],
+      "properties": {
+        "requirement_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "grants_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "definitions_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "subject",
+          "capability_key",
+          "grant_id",
+          "detail"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_RECORD",
+              "SECRET_MATERIAL",
+              "CONTEXT_MISMATCH",
+              "UNKNOWN_CAPABILITY",
+              "WIDENED_REQUIREMENT",
+              "WIDENED_GRANT",
+              "TARGET_CONTROLLED",
+              "MISSING_GRANT",
+              "STALE_GRANT",
+              "CONFLICTING_GRANTS",
+              "EXPLICIT_DENY"
+            ]
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.$*\\[\\]-]{1,200}$"
+          },
+          "capability_key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "version",
+          "definition_sha256",
+          "parameters"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "target-execution",
+              "fixed-network-destination",
+              "dynamic-testing",
+              "debugger-ptrace",
+              "credential-use",
+              "package-restore",
+              "target-mutation"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}$"
+          },
+          "definition_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "parameters": {
+            "$ref": "permission-capability-parameters.schema.json"
+          }
+        }
+      }
+    },
+    "grants_applied": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grant_id",
+          "expires_at"
+        ],
+        "properties": {
+          "grant_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+          },
+          "expires_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+          }
+        }
+      }
+    },
+    "fingerprint_material": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "decision",
+        "capabilities",
+        "sha256"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/permission-fingerprint/1.0"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "GRANTED",
+            "DENIED"
+          ]
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "version",
+              "definition_sha256",
+              "parameters"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "target-execution",
+                  "fixed-network-destination",
+                  "dynamic-testing",
+                  "debugger-ptrace",
+                  "credential-use",
+                  "package-restore",
+                  "target-mutation"
+                ]
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}$"
+              },
+              "definition_sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "parameters": {
+                "$ref": "permission-capability-parameters.schema.json"
+              }
+            }
+          }
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "decision_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Integrity hash over every other field. Detects corruption and independent edits of valid_until, grants_applied and the binding, which the capability fingerprint deliberately does not cover. Not an authenticator: require_granted re-derives from the hashed inputs instead of trusting this record."
+    }
+  }
+}

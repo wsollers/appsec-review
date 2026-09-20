@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "permission-decision-ui.schema.json",
+  "title": "UI-safe permission decision projection",
+  "description": "Operator/UI projection of a decision record: codes, kinds and non-sensitive parameters only. Credential reference ids, authority names and free-text detail are omitted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "decision",
+    "run_id",
+    "job_id",
+    "evaluated_at",
+    "valid_until",
+    "reasons",
+    "capabilities",
+    "fingerprint_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/permission-decision-ui/1.0"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "GRANTED",
+        "DENIED"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+    },
+    "evaluated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "valid_until": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "capability_kind",
+          "grant_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVALID_RECORD",
+              "SECRET_MATERIAL",
+              "CONTEXT_MISMATCH",
+              "UNKNOWN_CAPABILITY",
+              "WIDENED_REQUIREMENT",
+              "WIDENED_GRANT",
+              "TARGET_CONTROLLED",
+              "MISSING_GRANT",
+              "STALE_GRANT",
+              "CONFLICTING_GRANTS",
+              "EXPLICIT_DENY"
+            ]
+          },
+          "capability_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "target-execution",
+              "fixed-network-destination",
+              "dynamic-testing",
+              "debugger-ptrace",
+              "credential-use",
+              "package-restore",
+              "target-mutation",
+              null
+            ]
+          },
+          "grant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "version",
+          "summary"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "target-execution",
+              "fixed-network-destination",
+              "dynamic-testing",
+              "debugger-ptrace",
+              "credential-use",
+              "package-restore",
+              "target-mutation"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}$"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

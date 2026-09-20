@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/permission-capability/1.0",
+  "capability_id": "debugger-ptrace",
+  "kind": "debugger-ptrace",
+  "version": "1.0",
+  "display_name": "Debugger / ptrace attach",
+  "description": "Attach a debugger or ptrace to a child of one registry-resolved command profile.",
+  "required_parameters": [
+    "attach_mode",
+    "command_profile_id"
+  ],
+  "default_decision": "DENY",
+  "allowed_requirement_origins": [
+    "registry",
+    "operator",
+    "staged-run-config"
+  ],
+  "allowed_grant_origins": [
+    "operator",
+    "staged-run-config"
+  ],
+  "boundary_notes": [
+    "Attach is limited to children of the named profile; attaching to arbitrary host processes is not expressible."
+  ]
+}

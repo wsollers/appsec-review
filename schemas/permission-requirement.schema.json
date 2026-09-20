@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "permission-requirement.schema.json",
+  "title": "Job permission requirement",
+  "description": "The exact capabilities one lifecycle job requires. An empty list means the job needs nothing beyond the default-deny baseline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "job_id",
+    "capabilities"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/permission-requirement/1.0"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "permission-capability-entry.schema.json"
+      }
+    }
+  }
+}

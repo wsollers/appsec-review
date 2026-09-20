@@ -1,0 +1,132 @@
+{
+  "schema": "appsec-review/permission-requirement/1.0",
+  "job_id": "07-test-execution",
+  "capabilities": [
+    {
+      "kind": "fixed-network-destination",
+      "version": "1.0",
+      "parameters": {
+        "scheme": "https",
+        "host": "api.scorecard.dev",
+        "port": 443,
+        "command_profile_id": null,
+        "target_path": null,
+        "technique": null,
+        "attach_mode": null,
+        "credential_ref": null,
+        "credential_scope": null,
+        "ecosystem": null,
+        "mutation_mode": null
+      },
+      "origin": "registry"
+    },
+    {
+      "kind": "package-restore",
+      "version": "1.0",
+      "parameters": {
+        "scheme": "https",
+        "host": "registry.npmjs.org",
+        "port": 443,
+        "command_profile_id": null,
+        "target_path": null,
+        "technique": null,
+        "attach_mode": null,
+        "credential_ref": null,
+        "credential_scope": null,
+        "ecosystem": "npm",
+        "mutation_mode": null
+      },
+      "origin": "registry"
+    },
+    {
+      "kind": "credential-use",
+      "version": "1.0",
+      "parameters": {
+        "scheme": null,
+        "host": null,
+        "port": null,
+        "command_profile_id": null,
+        "target_path": null,
+        "technique": null,
+        "attach_mode": null,
+        "credential_ref": "cred:npm-readonly",
+        "credential_scope": "read-only-package-pull",
+        "ecosystem": null,
+        "mutation_mode": null
+      },
+      "origin": "registry"
+    },
+    {
+      "kind": "target-execution",
+      "version": "1.0",
+      "parameters": {
+        "scheme": null,
+        "host": null,
+        "port": null,
+        "command_profile_id": "npm-test",
+        "target_path": "packages/api",
+        "technique": null,
+        "attach_mode": null,
+        "credential_ref": null,
+        "credential_scope": null,
+        "ecosystem": null,
+        "mutation_mode": null
+      },
+      "origin": "registry"
+    },
+    {
+      "kind": "dynamic-testing",
+      "version": "1.0",
+      "parameters": {
+        "scheme": null,
+        "host": null,
+        "port": null,
+        "command_profile_id": null,
+        "target_path": "packages/api",
+        "technique": "test-suite",
+        "attach_mode": null,
+        "credential_ref": null,
+        "credential_scope": null,
+        "ecosystem": null,
+        "mutation_mode": null
+      },
+      "origin": "registry"
+    },
+    {
+      "kind": "debugger-ptrace",
+      "version": "1.0",
+      "parameters": {
+        "scheme": null,
+        "host": null,
+        "port": null,
+        "command_profile_id": "npm-test",
+        "target_path": null,
+        "technique": null,
+        "attach_mode": "ptrace-child",
+        "credential_ref": null,
+        "credential_scope": null,
+        "ecosystem": null,
+        "mutation_mode": null
+      },
+      "origin": "registry"
+    },
+    {
+      "kind": "target-mutation",
+      "version": "1.0",
+      "parameters": {
+        "scheme": null,
+        "host": null,
+        "port": null,
+        "command_profile_id": null,
+        "target_path": "packages/api",
+        "technique": null,
+        "attach_mode": null,
+        "credential_ref": null,
+        "credential_scope": null,
+        "ecosystem": null,
+        "mutation_mode": "run-owned-copy"
+      },
+      "origin": "registry"
+    }
+  ]
+}

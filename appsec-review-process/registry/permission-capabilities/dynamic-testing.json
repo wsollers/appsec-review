@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/permission-capability/1.0",
+  "capability_id": "dynamic-testing",
+  "kind": "dynamic-testing",
+  "version": "1.0",
+  "display_name": "Dynamic testing",
+  "description": "Run one named dynamic technique against a run-owned build of one target subtree.",
+  "required_parameters": [
+    "technique",
+    "target_path"
+  ],
+  "default_decision": "DENY",
+  "allowed_requirement_origins": [
+    "registry",
+    "operator",
+    "staged-run-config"
+  ],
+  "allowed_grant_origins": [
+    "operator",
+    "staged-run-config"
+  ],
+  "boundary_notes": [
+    "Requires a separate target-execution capability for the process it drives.",
+    "Never authorizes testing of a live or third-party deployment."
+  ]
+}
