@@ -111,3 +111,20 @@ remaining human gates.
   approved context families/mobile platforms, applicability override and rescope authority,
   evidence/status and batch policy, dynamic/manual authorization, report/finding-promotion policy,
   and NVD freshness/block-versus-gap policy.
+
+## Implementation checkpoint — immutable references and NVD publisher — 2026-09-19
+
+- Materialized and verified the approved OWASP/OpenCRE source set under `data/reference/` as
+  content-addressed raw and normalized snapshots with exact source lock, hashes, counts, license
+  lineage, and offline validation.
+- Implemented the NVD JSON/API 2.0 publisher under `data/feeds/nvd/`: yearly-feed bootstrap,
+  bounded last-modified API deltas, content-addressed blobs, immutable manifest chains, atomic
+  last-good publication, and failed-attempt retention.
+- Added a default two-hour UTC Dagster schedule, scheduler singleton tag, OS advisory writer lock,
+  visible lease/heartbeat, and expired-lease recovery receipt. The API key remains an external
+  deployment secret.
+- NVD remains enrichment only. The publisher does not establish product matching, reachability,
+  exploitability, severity, findings, or compliance, and it does not decide the outstanding
+  per-engagement freshness/block policy.
+- The workbench validator lifecycle remains unimplemented and blocked on the remaining T01 policy
+  decisions before T03-T14 may proceed.

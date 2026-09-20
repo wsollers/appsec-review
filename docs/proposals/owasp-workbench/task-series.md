@@ -1,14 +1,15 @@
 # OWASP Control Workbench Task Series
 
-Status: G02/S03 task packet. The bounded T02/T02A reference-snapshot foundation is implemented;
-do not mark `04-owasp-validation-worklist` or `04-asvs-masvs` implemented, registered, runnable,
+Status: G02/S03 task packet. The bounded T02/T02A reference-snapshot foundation and T02B NVD
+publisher are implemented; do not mark `04-owasp-validation-worklist` or `04-asvs-masvs`
+implemented, registered, runnable,
 qualified, or ready from this document alone.
 
 The tasks are dependency ordered. The source-version and repository-root `data/` snapshot policy
 portion of T01 was approved on 2026-09-19. T02/T02A now provide initial schemas, a pinned source
-lock, immutable raw/normalized snapshots, and offline verification. The engagement selection and
-proof-obligation policy portions of T02, T02B, and T03–T13 remain blocked by their applicable
-implementation foundations and the remaining T01 policy decisions.
+lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
+publisher. The engagement selection and proof-obligation policy portions of T02 and T03–T13 remain
+blocked by their applicable implementation foundations and the remaining T01 policy decisions.
 
 ## T01 — Approve OWASP Selection And Policy
 
@@ -60,10 +61,10 @@ hashes, counts, identities, and normalized records. Focused tests cover the comm
 tampering, source-lock validation, and selection approval fields. Run pinning and newer-snapshot
 selection remain part of T03/lifecycle integration.
 
-## T02B — Asynchronous NVD 2.0 Snapshot Publisher
+## T02B — Asynchronous NVD 2.0 Snapshot Publisher — IMPLEMENTED FOUNDATION
 
-Implement only in a later runtime task. Create a separately authorized network-enabled publisher
-under `data/feeds/nvd/`:
+The authorized runtime task created a separately network-enabled publisher under
+`data/feeds/nvd/`:
 
 - bootstrap from official JSON 2.0 yearly feeds;
 - refresh from official recent/modified feed or bounded API 2.0 modification windows;
@@ -80,6 +81,11 @@ stale-lock recovery, cursor gaps, partial downloads, decompression/schema/hash/c
 pointer publication, newer failed attempts, stale-snapshot policy, and run immutability while a new
 snapshot publishes. NVD output is enrichment, not affected-version, reachability, exploitability,
 severity, or finding proof.
+
+Implemented by `appsec-review-process/nvd_feed.py` and the `nvd_reference_sync` Dagster job. Focused
+tests cover base/delta publication, schema and chain verification, last-good preservation after a
+failed refresh, blob tamper rejection, and fresh-lease non-stealing. Engagement snapshot pinning and
+the approved freshness/block policy remain lifecycle work rather than feed-publisher behavior.
 
 ## T03 — Accepted Intel Lane-In
 

@@ -6,11 +6,14 @@ x-runtime: &runtime
     DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run setup first}
     APPSEC_RUNS_ROOT: /runs
     APPSEC_ORCHESTRATOR_ROOT: /opt/build-contract
+    APPSEC_NVD_ROOT: /data/feeds/nvd
+    NVD_API_KEY: ${NVD_API_KEY:-}
   volumes:
     - dagster-storage:/var/dagster
     - ../../appsec-review-process/runs:/runs
     - ../../appsec-review-process:/opt/process:ro
     - ../../schemas:/opt/schemas:ro
+    - ../../data/feeds/nvd:/data/feeds/nvd
     - ./definitions.py:/opt/app/definitions.py:ro
     - ./definitions.py:/opt/build-contract/definitions.py:ro
     - ./Dockerfile:/opt/build-contract/Dockerfile:ro

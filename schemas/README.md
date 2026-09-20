@@ -32,6 +32,9 @@ Composable review schemas (added for the registry/worklist layer):
   `reference-snapshot-file.schema.json` -- immutable OWASP/OpenCRE source selection, file hashes,
   license identity, extraction lineage, counts, and offline validation receipts.
 - `standard-selection.schema.json` -- named engagement approval and exact snapshot/profile pinning.
+- `nvd-snapshot-manifest.schema.json`, `nvd-current-pointer.schema.json`, and
+  `nvd-writer-lease.schema.json` -- immutable NVD JSON 2.0 lineage, atomic last-good publication,
+  and singleton writer diagnostics.
 - `owasp-control-record.schema.json`, `owasp-test-record.schema.json`, and
   `owasp-context-record.schema.json` -- assignable ASVS/MASVS controls, MASTG tests, and Top 10
   routing context without implying a target verdict.

@@ -1,6 +1,6 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; source-version policy and immutable reference foundation implemented, remaining human decisions required
+Status: Proposed; source-version policy, immutable reference foundation, and NVD publisher implemented; remaining human decisions required
 
 Date: 2026-09-20
 
@@ -214,6 +214,13 @@ Every engagement pins the accepted NVD snapshot ID, manifest hash, feed/API sche
 last successful modification cursor, and age at run start. The snapshot is immutable for that run.
 Optional future feeds such as CISA KEV or OSV must use separate source identities and joins; they may
 enrich NVD but cannot silently overwrite NVD fields or become vulnerability proof.
+
+The T02B implementation provides this publisher as the `nvd_reference_sync` Dagster job with a
+default two-hour UTC schedule, a scheduler concurrency tag, OS advisory lock, lease/heartbeat,
+content-addressed blobs, immutable base/delta manifests, atomic last-good pointer, and offline
+chain verification. Deployment activation performs the first full bootstrap and therefore requires
+network access, storage capacity, and normal operator monitoring. The unresolved engagement
+freshness/block policy remains a selection gate; implementing the feed does not decide that policy.
 
 ## Gate 3: Applicability Triage
 
@@ -462,5 +469,7 @@ Before changing this ADR to Accepted, the user or named engagement lead must app
 
 ## Non-goals
 
-This ADR does not implement standards ingestion, schemas, registry updates, workers, graph/parity
-changes, generated views, validators, tests, dynamic execution, or compliance certification.
+This ADR does not make the workbench itself runnable or approve registry updates, graph/parity
+changes, generated views, validator dispatch, dynamic execution, finding promotion, or compliance
+certification. The bounded T02/T02A/T02B foundations described above are implemented separately;
+the remaining workbench lifecycle is still gated by the named human decisions and T03-T14.

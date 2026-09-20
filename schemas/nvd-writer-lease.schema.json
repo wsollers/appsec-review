@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/nvd-writer-lease.schema.json",
+  "title": "NVD writer lease and heartbeat",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "feed_id", "status", "owner", "attempt_id", "input_cursor", "heartbeat_at", "lease_expires_at"],
+  "properties": {
+    "schema": {"const": "appsec-review/nvd-writer-lease/1"},
+    "feed_id": {"const": "nvd"},
+    "status": {"enum": ["RUNNING", "COMPLETE", "FAILED"]},
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "process_id", "coordinator_id"],
+      "properties": {
+        "host": {"type": "string", "minLength": 1},
+        "process_id": {"type": "integer", "minimum": 1},
+        "coordinator_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "attempt_id": {"type": "string", "minLength": 1},
+    "input_cursor": {"type": ["string", "null"], "format": "date-time"},
+    "heartbeat_at": {"type": "string", "format": "date-time"},
+    "lease_expires_at": {"type": "string", "format": "date-time"}
+  }
+}
