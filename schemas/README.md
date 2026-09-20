@@ -101,6 +101,18 @@ Composable review schemas (added for the registry/worklist layer):
   message IDs and sequence/hash-chain continuity, separates locators from canonical citations, and
   rejects authority expansion, prohibited claims, secrets, undeclared tools/actions, and
   dynamic/manual execution. Messages are untrusted communication records, never evidence.
+- `owasp-dynamic-request-publication.schema.json`, `owasp-dynamic-manual-request.schema.json`,
+  `owasp-dynamic-request-transition.schema.json`, `owasp-dynamic-request-ledger.schema.json`,
+  `owasp-dynamic-request-validation.schema.json`, and
+  `owasp-dynamic-execution-disabled-receipt.schema.json` -- the T09 offline request operation,
+  accepted lifecycle version, separately supplied external-state authority shape, immutable
+  version ledger, validation receipt, and fail-closed execute/launch receipt. Cross-record
+  validation binds exact independently checked T06/T07/T08 lineage, protected deduplication
+  dimensions, proof-obligation identities, prior accepted version/hash, legal transition and
+  explicit authority. The baseline itself publishes only proposed, canceled, or blocked state;
+  manual observation is always blocked. Other states require an exact artifact from a newest
+  accepted external producer but do not
+  mean T09 authorized or performed work, accepted evidence, changed T07, or contacted a target.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,

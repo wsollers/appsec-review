@@ -1,7 +1,7 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; T02 reference publishers and bounded T03–T08 lane-in, applicability, batching,
-validator-handoff, validator-result, and structured-intercom foundations implemented;
+Status: Proposed; T02 reference publishers and bounded T03–T09 lane-in, applicability, batching,
+validator-handoff, validator-result, structured-intercom, and request-lifecycle foundations implemented;
 report/finding-promotion and per-engagement scope decisions remain
 
 Date: 2026-09-20
@@ -442,12 +442,26 @@ dynamic-test request must state:
 - evidence to capture, redaction requirements, owner, and re-entry path;
 - whether manual specialist observation is required.
 
-Requests are deduplicated by environment, component, test type, and shared proof obligations. They
-remain `proposed` or `blocked` while this policy is in force; this workbench cannot authorize or
-execute them. A later policy change requires a separately approved implementation and qualification.
+Requests are deduplicated only when their controls, components, environment, identities, data,
+safety constraints, and required authorities are compatible. The standalone baseline can publish
+only inert `proposed`, owner-canceled `canceled`, and policy-blocked `blocked` states. A separately
+supplied exact authority/state artifact from its newest accepted run-owned producer may establish
+an `authorized`, `executed`, `ingested`, or `reassessed` lifecycle record, but T09 never grants that
+authority, performs the
+activity, accepts the artifact as control evidence, or changes an assessment. Manual-observation
+requests remain blocked. A later execution-policy change still requires a separately approved
+implementation and qualification.
 Any separately supplied result must be ingested as new run-owned evidence and routed through
 targeted reassessment or independent verification; a request or execution claim does not update a
 control automatically.
+
+The bounded T09 implementation is `appsec-review-process/owasp_dynamic_requests.py`. It validates
+exact T06 lineage and optional independently pinned T07/T08 references, deterministic protected
+deduplication dimensions, explicit lifecycle authority, and append-only version/attempt hash chains.
+T07 assessments and T08 messages cannot authorize a transition. Execute/launch operations publish
+only a deterministic `dynamic_execution_disabled` receipt recording no contact, mutation,
+execution, or manual observation. The worker is standalone and offline; it is not a launcher,
+evidence ingester, reassessor, result joiner, or finding promoter.
 
 ## Wait-All Join And Control-Status Model
 
@@ -554,7 +568,7 @@ Before changing this ADR to Accepted, the user or named engagement lead must sti
 
 This ADR does not make the workbench itself runnable or approve registry updates, graph/parity
 changes, generated views, validator dispatch, dynamic execution, finding promotion, or compliance
-certification. The bounded T02/T02A/T02B and T03–T08 foundations described above are implemented
+certification. The bounded T02/T02A/T02B and T03–T09 foundations described above are implemented
 separately. T04 deterministically enumerates every selected control/component target, preserves
 unresolved cases as gaps, applies evidence-sufficiency gates to technical `not_applicable`
 decisions, keeps scope-owner `out_of_scope` decisions distinct, and records assigned-reviewer
@@ -562,5 +576,7 @@ overrides as an append-only chain with bounded rescope actions. T05 accounts for
 creates bounded, deterministic, non-dispatchable work batches without assessing them. T06 validator
 handoff and tool contracts are implemented as an offline, non-dispatching foundation. T07 validates
 only explicitly supplied candidate results and publishes evidence-sufficient batch assessments; it
-does not dispatch validators, join control fragments, or create findings. Later lifecycle tasks
-remain subject to their dependencies and the named human decisions above.
+does not dispatch validators, join control fragments, or create findings. T08 adds communication
+provenance without evidence or authority, and T09 adds only the fail-closed offline request ledger
+described above. Later lifecycle tasks remain subject to their dependencies and the named human
+decisions above.

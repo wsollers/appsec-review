@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-dynamic-execution-disabled-receipt.schema.json",
+  "title": "T09 fail-closed execute/launch receipt", "type": "object", "additionalProperties": false,
+  "required": ["schema", "receipt_id", "run_id", "operation", "candidate_path", "candidate_sha256", "result", "target_contacted", "target_mutated", "manual_observation_performed", "dynamic_execution_performed", "reason"],
+  "properties": {"schema": {"const": "appsec-review/owasp-dynamic-execution-disabled-receipt/1.0"}, "receipt_id": {"type": "string"}, "run_id": {"type": "string"}, "operation": {"enum": ["execute", "launch"]}, "candidate_path": {"type": "string"}, "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "result": {"const": "dynamic_execution_disabled"}, "target_contacted": {"const": false}, "target_mutated": {"const": false}, "manual_observation_performed": {"const": false}, "dynamic_execution_performed": {"const": false}, "reason": {"type": "string"}}
+}

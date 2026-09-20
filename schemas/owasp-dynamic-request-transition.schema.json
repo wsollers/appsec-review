@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-dynamic-request-transition.schema.json",
+  "title": "Separately supplied T09 lifecycle-state artifact", "type": "object", "additionalProperties": false,
+  "required": ["schema", "artifact_id", "artifact_kind", "authority_id", "producer_job_id", "producer_attempt_id", "run_id", "request_id", "from_state", "to_state", "issued_at", "scope", "t09_authorized_or_performed", "external_claim_requires_reverification", "secrets_included", "personal_data_minimized"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-dynamic-request-transition-authority/1.0"},
+    "artifact_id": {"type": "string"}, "artifact_kind": {"enum": ["authorization", "execution_result", "ingestion_receipt", "reassessment_result"]},
+    "authority_id": {"type": "string"}, "producer_job_id": {"type": "string"}, "producer_attempt_id": {"type": "string"}, "run_id": {"type": "string"}, "request_id": {"type": "string"},
+    "from_state": {"type": ["string", "null"]}, "to_state": {"enum": ["authorized", "executed", "ingested", "reassessed"]},
+    "issued_at": {"type": "string"}, "scope": {"type": "object"},
+    "t09_authorized_or_performed": {"const": false}, "external_claim_requires_reverification": {"const": true},
+    "secrets_included": {"const": false}, "personal_data_minimized": {"const": true}
+  }
+}
