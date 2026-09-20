@@ -87,3 +87,27 @@ remaining human gates.
   ASVS profile/level and tailoring authority, enabled optional families, applicability override and
   rescope authority, evidence/status and batch policy, dynamic/manual authorization authority, and
   report/finding-promotion policy before implementation.
+
+## Final checkpoint — source snapshots and NVD feed decision — 2026-09-19
+
+- User approved the current stable source policy and repository-root `data/` snapshot layout.
+- Pinned for the first materialization task: ASVS 5.0.0, MASVS 2.1.0, MASTG 2.0.0, OWASP Top
+  10:2025, API Security Top 10:2023, GenAI LLM Top 10:2026, and a dated/hash-addressed OpenCRE
+  export. Exact upstream tags/commits are recorded in ADR-0009 and the input-sources proposal.
+- Defined immutable `data/reference/` snapshots with raw/normalized content, license/usage text,
+  hashes, extraction lineage, counts, and validation receipts. Engagements copy and pin the exact
+  manifest into run-owned data and never follow a moving upstream or shared pointer.
+- Defined proposal-only NVD JSON/API 2.0 asynchronous synchronization beneath `data/feeds/nvd/`:
+  scheduler singleton plus exclusive lease/heartbeat writer lock, attempt staging, immutable
+  snapshots, atomic `current.json` publication, coordinator-only stale-lock recovery, explicit
+  staleness, and per-run snapshot pinning. NVD remains enrichment rather than target-match,
+  reachability, exploitability, severity, or finding proof.
+- No reference payloads or runtime downloader were added because this branch remains constrained to
+  the documentation/proposal-only allowed files. Materializing `data/reference/` and implementing
+  the NVD publisher are explicit follow-on implementation tasks T02A and T02B.
+- Verification passed: proposal YAML load, design-parity validation, Phase 1 contract
+  qualification, and `git diff --check`.
+- Remaining decisions: ASVS profile/level and tailoring authority, component applicability for
+  approved context families/mobile platforms, applicability override and rescope authority,
+  evidence/status and batch policy, dynamic/manual authorization, report/finding-promotion policy,
+  and NVD freshness/block-versus-gap policy.

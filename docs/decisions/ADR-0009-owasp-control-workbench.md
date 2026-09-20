@@ -1,6 +1,6 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; human decision required before implementation
+Status: Proposed; source-version policy approved, remaining human decisions required
 
 Date: 2026-09-20
 
@@ -72,17 +72,36 @@ The initial families that may be selected are:
 - OWASP LLM/agent guidance only for components classified as LLM, agent, RAG, or tool-use systems;
 - OpenCRE crosswalks as navigation and deduplication metadata only.
 
-The recommended starting selection is the version already named by `docs/design-v3.md`—ASVS
-5.0.0—plus current, mutually compatible MASVS/MASTG snapshots when mobile is in scope. This is a
-recommendation, not approval. The user or named engagement lead must still decide:
+The user approved a static-current policy on 2026-09-19: take the current stable edition of each
+supported OWASP source and the current OpenCRE data, materialize immutable snapshots under the
+repository-root `data/` tree, and make every engagement pin those snapshot IDs. "Current" is
+resolved only when a new snapshot is deliberately created; a moving branch, `latest` URL, or live
+API is never read during control assessment.
 
-1. the exact ASVS edition and target level/profile, including any component-specific tailoring;
-2. the exact MASVS and MASTG refs and supported mobile platforms;
-3. the exact API Top 10 edition and whether it is enabled as context;
-4. the exact LLM/agent guidance artifact/ref and whether qualifying components exist;
-5. the exact OpenCRE snapshot and whether its license permits the proposed storage mode;
-6. whether authorized source content is vendored, cached locally, or represented by identifiers,
-   hashes, and retrieval instructions.
+The initial snapshot set is:
+
+| Source | Selected edition/ref | Upstream identity checked 2026-09-19 | Workbench role |
+|---|---|---|---|
+| OWASP ASVS | 5.0.0 | tag `v5.0.0_release`, commit `5cf9b032440be53ce345ab3c130fda46ba1ce7a2` | application controls |
+| OWASP MASVS | 2.1.0 | tag `v2.1.0`, commit `8e133d09f4140518ed04cc254b18be9ff4990ffc` | mobile controls |
+| OWASP MASTG | 2.0.0 | tag `v2.0.0`, commit `990472dbcffe126f5556045d60270c4ffdfdde72` | mobile test guidance |
+| OWASP Top 10 | 2025 | `OWASP/Top10` commit `66ebc4798d2ca72973967a20264bdeb70dcf0a13` | awareness/routing context |
+| OWASP API Security Top 10 | 2023 | `OWASP/API-Security` commit `e85ddfa5a936d4656840ac250c039c7057e66b0d` | API risk context |
+| OWASP GenAI LLM Top 10 | 2026 | `GenAI-Security-Project/GenAI-LLM-Top10` commit `9253e38ade58e959b531c0c5c9a4842272c9cd0e` | LLM/agent risk context |
+| OpenCRE | dated 2026-09-19 export | `OWASP/OpenCRE` commit `fbacf559d320358259009a255e7a62a7eb691f24` plus export hash | crosswalk navigation/deduplication |
+
+ASVS uses the stable 5.0.0 release, not the upstream `latest` bleeding-edge release. Top 10 sources
+are awareness/routing context unless their own selected records define explicit proof obligations;
+they do not replace ASVS/MASVS control evidence. OpenCRE has no stable release tag, so its snapshot
+identity is the capture timestamp, raw export hash, API/export format, source commit, and normalized
+output hash together.
+
+The named engagement lead must still decide:
+
+1. the ASVS target level/profile, including any component-specific tailoring;
+2. which supported mobile platforms are in engagement scope;
+3. whether API, GenAI/LLM, and general Top 10 context applies to the classified components;
+4. the applicability override, dynamic/manual authorization, and report policies listed below.
 
 No profile or level is inferred from repository shape, business criticality, or missing user input.
 An absent decision blocks affected work with `selection_not_approved`. A mixed-version crosswalk may
@@ -116,6 +135,79 @@ Minimum lane-in checks are:
 
 Missing optional intel is recorded. Missing required lineage or a stale/mismatched source snapshot
 blocks the affected control targets rather than falling back to memory or legacy scratch output.
+
+## Static Reference Snapshot Layout
+
+Approved reference material is stored beneath repository-root `data/`, distinct from mutable
+engagement output:
+
+```text
+data/
+  reference/
+    owasp/<source>/<edition>/<snapshot_id>/
+      manifest.json
+      LICENSE-or-usage.txt
+      raw/
+      normalized/
+    opencre/<snapshot_id>/
+      manifest.json
+      LICENSE-or-usage.txt
+      raw/
+      normalized/
+  feeds/
+    nvd/
+      snapshots/<snapshot_id>/
+      staging/<attempt_id>/
+      current.json
+      state.json
+      locks/
+```
+
+Each standards/OpenCRE snapshot is immutable and contains source URLs, edition/ref and resolved
+commit when applicable, retrieval time, every file hash, license/usage metadata, extraction tool
+identity, raw-to-normalized lineage, record counts, and validation result. A new upstream version
+creates a sibling snapshot; it never mutates an existing one. Repository policy may use Git LFS or
+an approved artifact store for large raw files, but `data/reference/.../manifest.json` and the
+content-addressed identity remain repository-visible.
+
+At run start, the selection record copies the exact snapshot manifest and hashes into the run-owned
+`runs/<run_id>/data/` input lineage. Reviews read only that pinned snapshot even if a newer shared
+snapshot appears. Shared `data/reference` is curated reference input; generated target evidence and
+review output remain run-owned.
+
+## Asynchronous NVD Reference Feed
+
+Use NVD JSON/API 2.0 as the primary live vulnerability enrichment feed. It is not an OWASP control
+source and does not determine control satisfaction. NVD records can support dependency/CVE lookup
+and prioritization context, but product matching, affected-version interpretation, reachability,
+exploitability, and finding verification remain separate proof obligations.
+
+The NVD synchronizer is a separately authorized, network-enabled asynchronous publisher. It does
+not run inside a validator cell or block a workbench batch already pinned to a valid snapshot. The
+proposed default is a scheduled refresh every two hours, configurable without changing snapshot
+semantics. Initial bootstrap consumes official JSON 2.0 yearly feeds; subsequent runs consume the
+official recent/modified feed or bounded API 2.0 modification windows, with API repair/backfill when
+feed validation detects a gap. An NVD API key is an external secret and is never stored in `data/`.
+
+Only one writer may synchronize NVD at a time. The implementation requires both a scheduler-level
+singleton/concurrency key and an exclusive writer lock under `data/feeds/nvd/locks/`. The lock
+record includes feed ID, owner/host/process or worker identity, attempt ID, acquired time,
+heartbeat, lease expiry, and intended input cursor. Contenders exit or wait with a bounded timeout;
+they never delete the lock. Stale-lock recovery is performed only by the common coordinator after
+the recorded lease expires and the owning execution is proven terminal or unreachable, preserving
+the abandoned attempt and recovery receipt.
+
+Each refresh writes only to `staging/<attempt_id>/`, validates transport metadata, schema, record
+counts, CVE identities, time window/cursor continuity, decompression, and content hashes, then
+publishes a new immutable `snapshots/<snapshot_id>/`. `current.json` advances atomically only after
+validation while the writer lock is held. Failure leaves the prior pointer intact and records the
+newer failed attempt; a run requiring fresher data must report/block on staleness rather than
+silently claim that the older snapshot is current.
+
+Every engagement pins the accepted NVD snapshot ID, manifest hash, feed/API schema, coverage window,
+last successful modification cursor, and age at run start. The snapshot is immutable for that run.
+Optional future feeds such as CISA KEV or OSV must use separate source identities and joins; they may
+enrich NVD but cannot silently overwrite NVD fields or become vulnerability proof.
 
 ## Gate 3: Applicability Triage
 
@@ -353,13 +445,14 @@ applicability, evidence, and precedence decisions remain a separate G03 gate.
 
 Before changing this ADR to Accepted, the user or named engagement lead must approve:
 
-- the exact standard/test/crosswalk versions and storage/license plan;
 - ASVS profile/level policy and authority for component-specific tailoring;
-- enabled optional families and their role (control set versus context only);
+- component applicability for the approved Top 10 context families and mobile platforms;
 - the applicability override authority and rescope policy;
 - the evidence/status taxonomy, including the proposed batch limits;
 - who may authorize dynamic/manual follow-on work;
-- whether the proposed report denominators and finding-promotion boundary meet program needs.
+- whether the proposed report denominators and finding-promotion boundary meet program needs;
+- the NVD freshness threshold and whether a stale-but-valid snapshot may be used with an explicit
+  gap or must block a new engagement.
 
 ## Non-goals
 

@@ -3,26 +3,26 @@
 Status: Proposal-only task packet for G02/S03. Do not mark `04-owasp-validation-worklist` or
 `04-asvs-masvs` implemented, registered, runnable, qualified, or ready from this document alone.
 
-The tasks are dependency ordered. T01 is a human gate; T02–T13 remain blocked until its relevant
-decisions are approved. Implementation work is outside this documentation-only task.
+The tasks are dependency ordered. The source-version and repository-root `data/` snapshot policy
+portion of T01 was approved on 2026-09-19. T02–T13 remain blocked by their applicable implementation
+foundations and the remaining T01 policy decisions. Implementation work is outside this
+documentation-only task.
 
 ## T01 — Approve OWASP Selection And Policy
 
 Review `docs/decisions/ADR-0009-owasp-control-workbench.md` and record named approval for:
 
-- exact ASVS edition and target level/profile, including component tailoring authority;
-- exact MASVS and MASTG refs and platform compatibility;
-- exact API Top 10 edition and its context-only role;
-- exact optional LLM/agent guidance source/ref and applicability threshold;
-- exact OpenCRE snapshot and context/deduplication-only role;
-- source storage and license policy;
+- ASVS target level/profile and component tailoring authority;
+- supported mobile platforms and component applicability for approved context families;
 - applicability override authority and bounded rescope policy;
 - evidence/status taxonomy and proposed batch limits;
 - dynamic/manual test authorization authority;
-- report denominators and finding-promotion boundary.
+- report denominators and finding-promotion boundary;
+- NVD freshness threshold and stale-snapshot block-versus-gap policy.
 
-Do not infer any unanswered selection from `docs/design-v3.md`, the current registry, or model
-knowledge. The ASVS 5.0.0 mention is a recommendation requiring approval.
+Approved source set: ASVS 5.0.0, MASVS 2.1.0, MASTG 2.0.0, OWASP Top 10:2025, API
+Security Top 10:2023, GenAI LLM Top 10:2026, and a dated OpenCRE export. Do not infer any remaining
+profile, applicability, or authorization decision from the repository or model knowledge.
 
 ## T02 — Standards Source And Selection Records
 
@@ -32,13 +32,49 @@ Define proposal-derived implementation schemas and fixtures for:
 - ASVS controls and proof obligations;
 - MASVS controls;
 - MASTG tests and reverse links;
+- OWASP Top 10 2025 context categories;
 - API Top 10 context categories;
-- optional LLM/agent guidance;
+- GenAI LLM Top 10 2026 context categories;
 - OpenCRE mappings.
 
 Reject records without source/version or immutable ref/hash/license/extraction metadata. Pin test
 catalogs and crosswalks independently. Test version conflicts, retired controls, successor mappings,
 duplicate IDs, changed licenses, missing control text, and offline reuse.
+
+## T02A — Materialize Immutable Standards And OpenCRE Snapshots
+
+After an implementation task is explicitly authorized, populate repository-root `data/reference/`
+with immutable source snapshots and manifests for the approved source set. Each snapshot must retain
+raw material, normalized records, license/usage text, resolved tag/commit, retrieval time, hashes,
+extractor identity, raw-to-normalized lineage, counts, and validation results.
+
+OpenCRE has no release tag. Capture a dated public export, its exact raw/normalized hashes, API/export
+format, and the approved exporter/source commit. Never use a moving OpenCRE API response directly in
+an engagement. A source update creates a sibling snapshot; do not rewrite an existing snapshot.
+
+Test source tampering, hash mismatch, mutable-tag drift, license changes, extraction failure,
+duplicate records, incomplete exports, and run pinning after a newer snapshot is published.
+
+## T02B — Asynchronous NVD 2.0 Snapshot Publisher
+
+Implement only in a later runtime task. Create a separately authorized network-enabled publisher
+under `data/feeds/nvd/`:
+
+- bootstrap from official JSON 2.0 yearly feeds;
+- refresh from official recent/modified feed or bounded API 2.0 modification windows;
+- run asynchronously on a proposed two-hour default schedule;
+- use a scheduler singleton key and exclusive lease/heartbeat writer lock;
+- write to attempt staging, validate completely, publish an immutable snapshot, then atomically
+  advance `current.json` while holding the lock;
+- keep the prior pointer on failure while preserving the failed newer attempt;
+- pin one validated NVD snapshot into each engagement at run start;
+- keep API keys in the secret provider, never beneath `data/`.
+
+Test concurrent writers, bounded wait, timeout, worker loss, heartbeat/lease expiry, coordinator-only
+stale-lock recovery, cursor gaps, partial downloads, decompression/schema/hash/count failures, atomic
+pointer publication, newer failed attempts, stale-snapshot policy, and run immutability while a new
+snapshot publishes. NVD output is enrichment, not affected-version, reachability, exploitability,
+severity, or finding proof.
 
 ## T03 — Accepted Intel Lane-In
 
@@ -194,7 +230,7 @@ and removing required evidence lowers or invalidates the result.
 
 ## T14 — Lifecycle Integration
 
-Integrator-only after T01–T13 are approved and qualified:
+Integrator-only after T01–T13 (including T02A/T02B where required) are approved and qualified:
 
 - registry/persona/role/domain/tooling/output-contract composition;
 - standards source ingestion and schema binding;

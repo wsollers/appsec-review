@@ -1,4 +1,4 @@
-schema: appsec-review/owasp-workbench-workcells-proposal/1.1
+schema: appsec-review/owasp-workbench-workcells-proposal/1.2
 proposal_only: true
 status: not_registered_not_runnable
 
@@ -13,6 +13,40 @@ flow:
   - wait_for_all_expected_cells
   - audit_and_join_without_status_upgrade
   - publish_matrix_gaps_test_requests_and_summary
+
+reference_publishers:
+  - id: static-standards-snapshot-publisher
+    execution: deliberate version-update job, not per-engagement live lookup
+    destination: data/reference
+    sources:
+      - OWASP ASVS 5.0.0
+      - OWASP MASVS 2.1.0
+      - OWASP MASTG 2.0.0
+      - OWASP Top 10 2025
+      - OWASP API Security Top 10 2023
+      - OWASP GenAI LLM Top 10 2026
+      - OpenCRE dated export
+    publication: immutable snapshot plus atomic catalog pointer after validation
+    rule: validator cells read only the snapshot pinned by the engagement
+
+  - id: nvd-reference-feed-sync
+    execution: separately authorized asynchronous network-enabled job
+    destination: data/feeds/nvd
+    schedule_default: PT2H
+    bootstrap: official NVD JSON 2.0 yearly feeds
+    incremental: official recent/modified feed or bounded API 2.0 modification windows
+    concurrency:
+      scheduler_singleton_key: nvd-reference-feed-sync
+      exclusive_writer_lock: data/feeds/nvd/locks/sync.lock
+      bounded_wait: true
+      worker_lock_deletion: forbidden
+      stale_recovery: common coordinator only after lease expiry and owner-terminal proof
+    write_path: data/feeds/nvd/staging/<attempt_id>/
+    publish_path: data/feeds/nvd/snapshots/<snapshot_id>/
+    pointer: data/feeds/nvd/current.json
+    publication_rule: validate completely, publish immutable snapshot, then atomically advance pointer under lock
+    failure_rule: retain prior pointer, preserve failed attempt, and expose staleness
+    workbench_boundary: NVD enrichment cannot produce control status or finding claims
 
 partitioning:
   atomic_identity:
@@ -156,6 +190,7 @@ workcells:
       - source-and-evidence-index
       - intelligence-manifest
       - available raw evidence and accepted derived intelligence
+      - pinned NVD snapshot when dependency/CVE enrichment is requested
     outputs:
       - owasp-input-manifest.json
       - input-gaps.json

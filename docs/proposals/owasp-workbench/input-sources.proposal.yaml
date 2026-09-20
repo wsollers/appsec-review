@@ -1,4 +1,4 @@
-schema: appsec-review/owasp-workbench-input-sources-proposal/1.1
+schema: appsec-review/owasp-workbench-input-sources-proposal/1.2
 proposal_only: true
 status: not_registered_not_runnable
 
@@ -35,32 +35,151 @@ selection_gate:
     - repository shape and business criticality cannot infer a profile or level
     - a version mismatch or unresolved successor mapping is a visible selection gap
     - optional family selection is explicit and never inherited from an earlier engagement
-  family_options:
+    - current is resolved only when an immutable snapshot is deliberately published
+    - moving branches, latest URLs, and live APIs are forbidden assessment inputs
+  approved_snapshot_set_checked_2026_09_19:
     - family: owasp_asvs
+      edition: 5.0.0
+      upstream: https://github.com/OWASP/ASVS
+      immutable_ref: v5.0.0_release
+      commit: 5cf9b032440be53ce345ab3c130fda46ba1ce7a2
       purpose: web, API, and server application controls
-      recommendation: consider ASVS 5.0.0 because docs/design-v3.md names it
-      required_human_decision: exact edition and target level/profile, including tailoring policy
+      remaining_human_decision: target level/profile and tailoring policy
     - family: owasp_masvs
+      edition: 2.1.0
+      upstream: https://github.com/OWASP/masvs
+      immutable_ref: v2.1.0
+      commit: 8e133d09f4140518ed04cc254b18be9ff4990ffc
       purpose: mobile application controls
-      required_human_decision: exact version/ref and supported mobile platforms
+      remaining_human_decision: supported mobile platforms in engagement scope
     - family: owasp_mastg
+      edition: 2.0.0
+      upstream: https://github.com/OWASP/mastg
+      immutable_ref: v2.0.0
+      commit: 990472dbcffe126f5556045d60270c4ffdfdde72
       purpose: control-linked mobile test guidance
-      required_human_decision: exact ref and compatibility with the selected MASVS snapshot
+      compatibility_rule: preserve explicit MASVS links and record unmapped or incompatible tests as gaps
+    - family: owasp_top_10
+      edition: 2025
+      upstream: https://github.com/OWASP/Top10
+      immutable_ref: 66ebc4798d2ca72973967a20264bdeb70dcf0a13
+      commit: 66ebc4798d2ca72973967a20264bdeb70dcf0a13
+      purpose: general application risk context and routing only
+      remaining_human_decision: component applicability
+      cannot_substitute_for: ASVS or MASVS control evidence
     - family: owasp_api_security_top_10
+      edition: 2023
+      upstream: https://github.com/OWASP/API-Security
+      immutable_ref: e85ddfa5a936d4656840ac250c039c7057e66b0d
+      commit: e85ddfa5a936d4656840ac250c039c7057e66b0d
       purpose: risk-category context and routing only
-      required_human_decision: exact edition and whether context is enabled
+      remaining_human_decision: component applicability
       cannot_substitute_for: ASVS control evidence
     - family: owasp_llm_or_agent_guidance
+      edition: 2026
+      upstream: https://github.com/GenAI-Security-Project/GenAI-LLM-Top10
+      immutable_ref: 9253e38ade58e959b531c0c5c9a4842272c9cd0e
+      commit: 9253e38ade58e959b531c0c5c9a4842272c9cd0e
       purpose: controls or guidance for classified LLM, agent, RAG, or tool-use components
-      required_human_decision: exact artifact/ref and whether qualifying components exist
+      remaining_human_decision: whether qualifying components exist
     - family: opencre
+      edition: snapshot-2026-09-19
+      upstream: https://github.com/OWASP/OpenCRE
+      source_commit: fbacf559d320358259009a255e7a62a7eb691f24
+      immutable_ref: dated export manifest plus raw and normalized content hashes
       purpose: crosswalk navigation and deduplication metadata
-      required_human_decision: exact snapshot and permitted storage mode
       cannot_supply:
         - target behavior proof
         - exploitability
         - impact
         - severity
+
+snapshot_storage:
+  root: data
+  reference_layout:
+    owasp: data/reference/owasp/<source>/<edition>/<snapshot_id>/
+    opencre: data/reference/opencre/<snapshot_id>/
+  required_snapshot_files:
+    - manifest.json
+    - LICENSE-or-usage.txt
+    - raw/
+    - normalized/
+  manifest_fields:
+    - source_uri
+    - edition_or_version
+    - immutable_ref_and_resolved_commit
+    - retrieved_at
+    - raw_file_hashes
+    - normalized_file_hashes
+    - license_and_usage_terms
+    - extraction_tool_identity
+    - raw_to_normalized_lineage
+    - record_counts
+    - validation_result
+  rules:
+    - snapshots are immutable and content addressed
+    - a changed upstream creates a sibling snapshot, never an in-place update
+    - large raw files may use Git LFS or an approved artifact store while the manifest remains repository-visible
+    - each engagement copies the exact snapshot manifest and hashes into its run-owned data lineage
+    - a running engagement never follows a newer current pointer
+
+nvd_feed:
+  role: vulnerability enrichment only
+  source: NIST NVD JSON and API 2.0
+  storage_root: data/feeds/nvd
+  proposal_only: true
+  execution:
+    mode: asynchronous network-enabled publisher
+    proposed_default_interval: PT2H
+    bootstrap: official JSON 2.0 yearly feeds
+    incremental: official recent/modified feed or bounded API 2.0 modification windows
+    repair: API 2.0 backfill when validation detects a cursor or coverage gap
+  concurrency:
+    scheduler_singleton_key: nvd-reference-feed-sync
+    writer_lock: data/feeds/nvd/locks/sync.lock
+    required_lock_fields:
+      - feed_id
+      - owner_host_and_worker_identity
+      - process_or_execution_id
+      - attempt_id
+      - acquired_at
+      - heartbeat_at
+      - lease_expires_at
+      - input_cursor
+    rules:
+      - only one writer may synchronize or publish at a time
+      - contenders wait or exit with a bounded timeout
+      - workers never delete or break the lock
+      - stale recovery requires expired lease and proof the owner is terminal or unreachable
+      - preserve abandoned attempts and write a recovery receipt
+  publication:
+    staging: data/feeds/nvd/staging/<attempt_id>/
+    immutable_snapshots: data/feeds/nvd/snapshots/<snapshot_id>/
+    current_pointer: data/feeds/nvd/current.json
+    state: data/feeds/nvd/state.json
+    atomicity: current.json advances only after validation while the writer lock is held
+  validation:
+    - transport metadata and content length where supplied
+    - decompression and JSON/API schema
+    - file and normalized content hashes
+    - CVE identity uniqueness
+    - record counts
+    - modification-window and cursor continuity
+    - source/feed schema identity
+  run_pinning:
+    - snapshot_id
+    - manifest_hash
+    - feed_or_api_schema
+    - coverage_window
+    - last_successful_modification_cursor
+    - age_at_run_start
+  failure_rule: >-
+    Leave the prior current pointer intact and record the newer failed attempt. If a run requires
+    fresher data, report or block on staleness instead of describing the older snapshot as current.
+  secret_rule: NVD API keys are external secrets and never stored beneath data/
+  claim_limit: >-
+    NVD records do not prove product identity, affected version, reachability, exploitability,
+    severity for the target, or a finding.
 
 input_sources:
   - id: standards-source-ingest
@@ -76,6 +195,19 @@ input_sources:
       - crosswalk records
       - source version, hash, license, and extraction provenance
     claim_limit: reference material only; not target behavior proof
+
+  - id: pinned-nvd-snapshot
+    class: raw_reference_enrichment
+    required: false
+    acceptance:
+      - immutable snapshot exists beneath data/feeds/nvd/snapshots
+      - manifest and normalized artifact hashes validate
+      - run records snapshot age, coverage window, and modification cursor
+    use:
+      - dependency and CVE lookup
+      - affected-version leads
+      - CVSS, SSVC, CISA KEV fields, and reference context when present in the pinned NVD record
+    claim_limit: enrichment lead only; target matching, reachability, exploitability, and finding status require separate evidence
 
   - id: component-purpose-map
     class: derived_intelligence
