@@ -11,7 +11,7 @@ assigned-reviewer applicability/rescope overrides, tunable batches with the exis
 default, disabled dynamic execution with an inert launcher contract, and stale NVD use with an
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
-publisher. T03 accepted-intel lane-in is now the next bounded implementation task. T04–T13 remain
+publisher. T03 accepted-intel lane-in is implemented as a standalone offline foundation. T04–T13 remain
 dependency ordered and later reporting/promotion work remains gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
@@ -99,7 +99,7 @@ tests cover base/delta publication, schema and chain verification, last-good pre
 failed refresh, blob tamper rejection, and fresh-lease non-stealing. Engagement snapshot pinning and
 the approved freshness/block policy remain lifecycle work rather than feed-publisher behavior.
 
-## T03 — Accepted Intel Lane-In
+## T03 — Accepted Intel Lane-In — IMPLEMENTED FOUNDATION
 
 Define the input manifest that separates raw evidence from derived intelligence and records:
 
@@ -111,6 +111,28 @@ Define the input manifest that separates raw evidence from derived intelligence 
 
 Reject stale indexes, unexplained derived facts, implicit legacy scratch discovery, and missing
 lineage. Prove search hits are dereferenced before supporting a status.
+
+Implemented by `appsec-review-process/owasp_lane_in.py` and the four `owasp-*lane-in/input*`
+schemas documented in `schemas/README.md`. The worker:
+
+- consumes an explicit `runs/<run_id>/inputs/owasp-lane-in-request.json`;
+- verifies ASVS L2 selection and embeds exact approved selection/reference manifests;
+- accepts only hash-checked import receipts or accepted producer attempts and rechecks them before
+  publishing an immutable attempt;
+- keeps derived intelligence and indexes locator-only, rejecting stale indexes and unexplained
+  derivations;
+- pins and verifies an optional NVD manifest/blob chain, recording stale age as a non-blocking gap;
+- rejects dynamic execution, manual observation, network, and target-mutation permissions;
+- publishes `owasp-input-manifest.json` and `input-gaps.json` beneath the run-owned job attempt.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_lane_in.py --run-id <run_id>
+```
+
+This is not a registered graph job and does not make `04-owasp-validation-worklist` or
+`04-asvs-masvs` runnable. T04 applicability modeling is next.
 
 ## T04 — Applicability Model
 

@@ -147,3 +147,19 @@ remaining human gates.
   finding-promotion policy. The workbench remains proposal-only and non-runnable.
 - The next bounded implementation task is T03 accepted-intel lane-in; it does not require dynamic
   execution or a finding/report promotion decision.
+
+## Implementation checkpoint — T03 accepted-intel lane-in — 2026-09-20
+
+- Implemented the standalone offline lane-in worker and closed schemas for its request, run-owned
+  artifact references, accepted input manifest, and gap output.
+- The worker verifies ASVS L2 selection and exact OWASP/OpenCRE snapshot bytes; embeds the approved
+  selection and manifests; accepts only hash-checked imports or accepted producer attempts; and
+  rechecks upstream identity before atomic publication.
+- Derived intelligence cannot be canonical evidence. Search/index artifacts are locator-only and
+  stale indexes fail closed. Missing lineage, tampered artifacts/pointers, and non-L2 ASVS fail.
+- Optional NVD input verifies the pinned manifest/blob chain. Valid stale NVD is retained with age,
+  limitation, and `nvd-stale-accepted` gap.
+- Dynamic execution, manual observation, network access, and target mutation remain disabled. No
+  validator, dynamic launcher, registry/graph/parity surface, or generated view was activated.
+- T04 applicability modeling is the next bounded implementation task. Reporting/finding promotion
+  remains gated.

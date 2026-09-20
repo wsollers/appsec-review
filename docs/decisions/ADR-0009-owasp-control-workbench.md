@@ -1,7 +1,7 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; source-version, ASVS L2, applicability/rescope, batching, dynamic-disable, and
-NVD staleness policies decided; report/finding-promotion and per-engagement scope decisions remain
+Status: Proposed; T02 reference publishers and bounded T03 accepted-intel lane-in implemented;
+report/finding-promotion and per-engagement scope decisions remain
 
 Date: 2026-09-20
 
@@ -138,6 +138,19 @@ Minimum lane-in checks are:
 
 Missing optional intel is recorded. Missing required lineage or a stale/mismatched source snapshot
 blocks the affected control targets rather than falling back to memory or legacy scratch output.
+
+The bounded T03 implementation is `appsec-review-process/owasp_lane_in.py`, with request, artifact,
+accepted-manifest, and gap schemas under `schemas/`. It consumes one explicit run-owned request,
+verifies selected immutable reference bytes and ASVS L2, admits only hash-checked imports or accepted
+producer attempts, rechecks upstream identity before publication, and writes immutable attempts under
+`runs/<run_id>/data/jobs/04-owasp-intel-lane-in/whole/`. Derived intelligence retains source hashes
+and cannot be canonical evidence; indexes are locator-only and stale indexes fail closed. A pinned,
+structurally valid stale NVD snapshot is accepted with age and a freshness gap. Dynamic execution,
+manual observation, network access, and target mutation permissions are rejected by this baseline.
+
+T03 is not registered in Dagster or the lifecycle graph and does not dispatch a validator. Its
+accepted pointer proves only that the declared input package passed lane-in checks, not that a
+control was applicable, assessed, satisfied, or promoted to a finding.
 
 ## Static Reference Snapshot Layout
 
@@ -496,6 +509,6 @@ Before changing this ADR to Accepted, the user or named engagement lead must sti
 
 This ADR does not make the workbench itself runnable or approve registry updates, graph/parity
 changes, generated views, validator dispatch, dynamic execution, finding promotion, or compliance
-certification. The bounded T02/T02A/T02B foundations described above are implemented separately;
-T03 accepted-intel lane-in is the next bounded implementation task. Later lifecycle tasks remain
-subject to their dependencies and the named human decisions above.
+certification. The bounded T02/T02A/T02B and T03 foundations described above are implemented
+separately; T04 applicability modeling is the next bounded implementation task. Later lifecycle
+tasks remain subject to their dependencies and the named human decisions above.

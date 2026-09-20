@@ -42,6 +42,11 @@ Composable review schemas (added for the registry/worklist layer):
   navigation/deduplication records and exact raw snapshot citations. Crosswalks are not proof.
 - `component-tag-cloud.schema.json` -- component tags used to route standards and persona work.
 - `intelligence-payload.schema.json` -- scrubbed doc/test/API intelligence facts with source lineage.
+- `owasp-intel-lane-in-request.schema.json`, `owasp-run-artifact-ref.schema.json`,
+  `owasp-input-manifest.schema.json`, and `owasp-input-gaps.schema.json` -- the T03 OWASP workbench admission request, hash-pinned
+  run-owned artifact references, and accepted raw/derived intelligence manifest. The contract is
+  static/offline, rejects dynamic/network/mutation permissions, treats indexes as locators, and
+  records stale-but-valid NVD as a gap rather than control or finding proof.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,
