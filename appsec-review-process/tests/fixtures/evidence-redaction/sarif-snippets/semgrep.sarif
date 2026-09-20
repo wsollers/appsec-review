@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "example-sast",
+          "rules": [
+            {
+              "id": "generic.secrets.hardcoded-password"
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "commandLine": "example-sast --config rules --api-token @@BEARER@@ --db-password @@SHORT_PASSWORD@@ src",
+          "arguments": [
+            "example-sast",
+            "--db-password",
+            "@@ARG_PASSWORD@@",
+            "--jobs",
+            "4"
+          ],
+          "environmentVariables": {
+            "BUILD_FLAVOR": "@@ENV_SECRET@@",
+            "SAST_TOKEN": "@@GITHUB_TOKEN@@"
+          }
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "generic.secrets.hardcoded-password",
+          "level": "error",
+          "message": {
+            "text": "Hardcoded login: password = '@@HUMAN_PASSWORD@@' reaches the connection"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/example/v2/controllers/UserAccountController.java"
+                },
+                "region": {
+                  "startLine": 41,
+                  "snippet": {
+                    "text": "String password = \"@@HUMAN_PASSWORD@@\";\nString id = \"@@AWS_KEY@@\";"
+                  }
+                }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "message": {
+                          "text": "tainted value @@BLOB@@ flows to sink"
+                        },
+                        "physicalLocation": {
+                          "region": {
+                            "snippet": {
+                              "text": "connect(\"svc\", \"pw\", token=\"@@SK_KEY@@\")"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "fingerprints": {
+            "matchBasedId/v1": "@@FINGERPRINT@@"
+          },
+          "partialFingerprints": {
+            "primaryLocationLineHash": "@@FINGERPRINT@@:1"
+          }
+        }
+      ]
+    }
+  ]
+}

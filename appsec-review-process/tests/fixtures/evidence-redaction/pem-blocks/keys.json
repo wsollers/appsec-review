@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "rule": "private-key",
+      "excerpt": "@@PEM_RSA:json@@"
+    },
+    {
+      "rule": "truncated-key",
+      "excerpt": "@@PEM_TRUNCATED:json@@"
+    },
+    {
+      "rule": "certificate",
+      "excerpt": "@@PUBLIC_CERT:json@@"
+    }
+  ]
+}

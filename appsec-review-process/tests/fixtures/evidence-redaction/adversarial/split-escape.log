@@ -1,0 +1,1 @@
+event {"excerpt": "id @@AWS_KEY:uescape@@ here"} and {"k": "@@GITHUB_TOKEN:uescape@@"}

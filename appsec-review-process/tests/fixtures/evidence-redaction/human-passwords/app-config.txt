@@ -1,0 +1,12 @@
+# legacy regression class: low entropy, human memorable
+$db_password = "@@HUMAN_PASSWORD@@";
+admin_pwd='@@SHORT_PASSWORD@@'
+passphrase: "@@SPACED_PASSWORD@@"
+password: str = "@@SHORT_PASSWORD@@"
+if (request.password == "@@HUMAN_PASSWORD@@") { grant(); }
+builder.password("@@HUMAN_PASSWORD@@").build();
+SMTP_PASS=@@SHORT_PASSWORD@@
+mysql --user app --password @@SHORT_PASSWORD@@ --host db.example.invalid
+jdbc url postgres://svc-user:@@URL_PASSWORD@@@db.example.invalid:5432/app
+username = "alice"
+timeout = "30"

@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "redaction-receipt.schema.json",
+  "title": "Redaction receipt (ADR-0010 G9-A, task V06)",
+  "description": "Written by appsec-review-process/evidence_redaction.py as redaction-receipt.json, last, into the directory it describes. Closed objects; every declared property is required, nullable where optional. By design there is no property that can carry a matched value, a fragment of one, a per-value hash, a value length or the surrounding line text, and no timestamp. receipt_sha256 is an integrity check, not an authenticator: verify_receipt() re-derives every claim about published bytes from those bytes. Cross-field rules (disposition consistency, totals, ordering, exact file set, fixed-point re-run) are evidence_redaction.verify_receipt responsibilities, not expressible here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_type",
+    "redactor",
+    "policy",
+    "limits",
+    "files",
+    "totals",
+    "unredacted_file_in_published_set",
+    "receipt_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "receipt_type": {
+      "const": "redaction-receipt"
+    },
+    "redactor": {
+      "description": "Redactor identity: module version plus the digest of the ruleset that decides what is redacted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module_version",
+        "ruleset_sha256"
+      ],
+      "properties": {
+        "name": {
+          "const": "appsec-review-process/evidence_redaction"
+        },
+        "module_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "ruleset_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "policy": {
+      "description": "The required fail-closed policy the producer chose. Neither value copies an unhandled file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "on_unhandled"
+      ],
+      "properties": {
+        "on_unhandled": {
+          "type": "string",
+          "enum": [
+            "refuse",
+            "withhold"
+          ]
+        }
+      }
+    },
+    "limits": {
+      "description": "Bounds in force. Over-limit input is withheld, never passed through.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_file_bytes",
+        "max_line_length",
+        "max_files",
+        "max_total_bytes",
+        "max_json_depth",
+        "max_path_length"
+      ],
+      "properties": {
+        "max_file_bytes": {
+          "type": "integer"
+        },
+        "max_line_length": {
+          "type": "integer"
+        },
+        "max_files": {
+          "type": "integer"
+        },
+        "max_total_bytes": {
+          "type": "integer"
+        },
+        "max_json_depth": {
+          "type": "integer"
+        },
+        "max_path_length": {
+          "type": "integer"
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "disposition",
+          "withheld_reason",
+          "parser_mode",
+          "source_sha256",
+          "published_sha256",
+          "published_bytes",
+          "redactions",
+          "preexisting_markers"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^[^\\\\\\u0000-\\u001f]+$",
+            "description": "Normalized relative posix path that itself passed the redactor, or [WITHHELD-PATH:<n>] when the real path could not be published."
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "unchanged",
+              "redacted",
+              "withheld"
+            ]
+          },
+          "withheld_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "binary-content",
+              "file-size-limit",
+              "internal-error",
+              "json-depth-limit",
+              "line-length-limit",
+              "not-converged",
+              "not-regular-file",
+              "not-utf8",
+              "read-error",
+              "reserved-name",
+              "symlink",
+              "total-bytes-limit",
+              "unsafe-path",
+              "unstable-output",
+              "unsupported-type",
+              null
+            ]
+          },
+          "parser_mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "json",
+              "sarif",
+              "text",
+              "fallback-text",
+              null
+            ]
+          },
+          "source_sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "Non-null only for an unchanged file, where it equals published_sha256. A source hash of a redacted or withheld file would be an offline oracle for the removed value."
+          },
+          "published_sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "published_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "redactions": {
+            "description": "Redactions made by this run, by kind. Counts only.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "private-key-block",
+              "named-secret",
+              "url-credential",
+              "bearer-token",
+              "provider-token",
+              "jwt",
+              "high-entropy",
+              "fingerprint"
+            ],
+            "properties": {
+              "private-key-block": {
+                "type": "integer"
+              },
+              "named-secret": {
+                "type": "integer"
+              },
+              "url-credential": {
+                "type": "integer"
+              },
+              "bearer-token": {
+                "type": "integer"
+              },
+              "provider-token": {
+                "type": "integer"
+              },
+              "jwt": {
+                "type": "integer"
+              },
+              "high-entropy": {
+                "type": "integer"
+              },
+              "fingerprint": {
+                "type": "integer"
+              }
+            }
+          },
+          "preexisting_markers": {
+            "type": "integer",
+            "description": "Marker-shaped strings already present in the input and left untouched."
+          }
+        }
+      }
+    },
+    "totals": {
+      "description": "Must equal the sums of the per-file records.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files_total",
+        "files_unchanged",
+        "files_redacted",
+        "files_withheld",
+        "published_bytes",
+        "redactions",
+        "redactions_total",
+        "preexisting_markers"
+      ],
+      "properties": {
+        "files_total": {
+          "type": "integer"
+        },
+        "files_unchanged": {
+          "type": "integer"
+        },
+        "files_redacted": {
+          "type": "integer"
+        },
+        "files_withheld": {
+          "type": "integer"
+        },
+        "published_bytes": {
+          "type": "integer"
+        },
+        "redactions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "private-key-block",
+            "named-secret",
+            "url-credential",
+            "bearer-token",
+            "provider-token",
+            "jwt",
+            "high-entropy",
+            "fingerprint"
+          ],
+          "properties": {
+            "private-key-block": {
+              "type": "integer"
+            },
+            "named-secret": {
+              "type": "integer"
+            },
+            "url-credential": {
+              "type": "integer"
+            },
+            "bearer-token": {
+              "type": "integer"
+            },
+            "provider-token": {
+              "type": "integer"
+            },
+            "jwt": {
+              "type": "integer"
+            },
+            "high-entropy": {
+              "type": "integer"
+            },
+            "fingerprint": {
+              "type": "integer"
+            }
+          }
+        },
+        "redactions_total": {
+          "type": "integer"
+        },
+        "preexisting_markers": {
+          "type": "integer"
+        }
+      }
+    },
+    "unredacted_file_in_published_set": {
+      "const": false,
+      "description": "The ADR statement. verify_receipt() proves it by re-running the redactor over every published file."
+    },
+    "receipt_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "execution_state.digest of every other field."
+    }
+  }
+}

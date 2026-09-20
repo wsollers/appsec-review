@@ -1,0 +1,1 @@
+log line with an escaped block: "@@PEM_RSA:json@@" and more text

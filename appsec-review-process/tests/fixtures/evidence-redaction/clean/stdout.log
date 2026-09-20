@@ -1,0 +1,2 @@
+scan ok
+rule python-lang-security-audit-dangerous-subprocess-use-v2 loaded
