@@ -191,6 +191,18 @@ def _exit_errors(tool_id: str, instance: dict) -> list[str]:
     return errors
 
 
+def output_path_errors(path: str) -> list[str]:
+    """An output path is ONE spelling of one file: relative, '/'-separated, with no '.', '..' or
+    empty segment. Aliases such as `a/./b`, `a//b`, `a/x/../b` and `./a/b` all reach the same file
+    as `a/b`; allowing them would let two records name one file without looking alike."""
+    segments = path.split("/")
+    if ".." in segments:
+        return [f"output path {path!r} leaves the attempt"]
+    if path.startswith("/") or any(segment in ("", ".") for segment in segments):
+        return [f"output path {path!r} is not normalized (no '.', empty or leading-slash segments)"]
+    return []
+
+
 def _output_errors(tool_id: str, instance: dict) -> list[str]:
     errors = []
     status = instance["terminal_status"]
@@ -199,8 +211,7 @@ def _output_errors(tool_id: str, instance: dict) -> list[str]:
     if len(paths) != len(set(paths)):
         errors.append(f"instance-output: {tool_id}: two outputs share one path")
     for output in outputs:
-        if ".." in output["path"].split("/"):
-            errors.append(f"instance-output: {tool_id}: output path {output['path']!r} leaves the attempt")
+        errors.extend(f"instance-output: {tool_id}: {error}" for error in output_path_errors(output["path"]))
         if not _nonneg(output["bytes"]):
             errors.append(f"instance-output: {tool_id}: output {output['path']!r} has a negative byte count")
         if (output["validation"] in VALIDATED) != (output["validated_against"] is not None):
@@ -543,9 +554,13 @@ def verify_outputs_on_disk(tool_results: dict, attempt_root) -> list[str]:
     files. A worker (V10-V13) therefore calls this too, before publication, with the attempt root it
     owns. `attempt_root` is required; there is no mode that skips the files.
 
-    Every output path must stay inside the attempt, be a regular non-linked file, have exactly the
-    listed size and hash, and be listed by one tool instance only.
+    Every output path must be normalized, stay inside the attempt, be a regular non-linked file,
+    have exactly the listed size and hash, and name a file that is listed exactly once. "The same
+    file" is decided by the file, not by the string: ownership is keyed on the file's identity
+    (device and inode, falling back to the resolved path), so an alias, a hard link, or a
+    different-case name on a case-insensitive filesystem cannot give one file two owners.
     """
+    import os
     from execution_state import beneath, file_hash  # local: keeps the pure validator import-light
 
     if attempt_root is None or isinstance(attempt_root, (bytes, bool)) or not str(attempt_root):
@@ -556,15 +571,15 @@ def verify_outputs_on_disk(tool_results: dict, attempt_root) -> list[str]:
     root = Path(attempt_root)
     if not root.is_dir():
         return [f"outputs-on-disk: attempt root {str(root)!r} is not a directory"]
-    owners: dict[str, str] = {}
+    owners: dict[Any, tuple[str, str]] = {}
     for instance in tool_results["tool_instances"]:
         tool_id = instance["tool_id"]
         for output in instance["outputs"]:
             relative = output["path"]
-            if relative in owners and owners[relative] != tool_id:
-                errors.append(f"outputs-on-disk: {relative!r} is listed by both {owners[relative]!r} and {tool_id!r}")
+            malformed = output_path_errors(relative)
+            if malformed:
+                errors.extend(f"outputs-on-disk: {tool_id}: {error}" for error in malformed)
                 continue
-            owners[relative] = tool_id
             try:
                 path = beneath(root, root / relative)
             except ValueError:
@@ -573,7 +588,18 @@ def verify_outputs_on_disk(tool_results: dict, attempt_root) -> list[str]:
             if not path.is_file():
                 errors.append(f"outputs-on-disk: {tool_id}: {relative!r} is listed but is not a regular file in the attempt")
                 continue
-            size = path.stat().st_size
+            status = path.stat()
+            identity = (status.st_dev, status.st_ino) if status.st_ino else os.path.normcase(str(path.resolve()))
+            if identity in owners:
+                other_tool, other_path = owners[identity]
+                if other_tool != tool_id:
+                    errors.append(f"outputs-on-disk: {relative!r} is listed by both {other_tool!r} and {tool_id!r}"
+                                  + ("" if other_path == relative else f" (as {other_path!r})"))
+                else:
+                    errors.append(f"outputs-on-disk: {tool_id}: {relative!r} and {other_path!r} are the same file listed twice")
+                continue
+            owners[identity] = (tool_id, relative)
+            size = status.st_size
             if size != output["bytes"]:
                 errors.append(f"outputs-on-disk: {tool_id}: {relative!r} is {size} bytes, listed as {output['bytes']}")
             actual = "sha256:" + file_hash(path)

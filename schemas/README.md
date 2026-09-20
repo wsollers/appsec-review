@@ -100,7 +100,10 @@ tool, and tool ids must agree across the node's declared tools and all three doc
 agree with each other; it cannot prove an output's `sha256`, `bytes` or existence, which are
 statements about files. `verify_outputs_on_disk(tool_results, attempt_root)` (attempt root required)
 binds them: every listed output stays inside the attempt, is a regular non-linked file with exactly
-the listed size and hash, and is claimed by one tool instance only. A worker calls both before
+the listed size and hash, and is listed exactly once. Output paths must be normalized (no `.`,
+`..`, empty or leading-slash segments), and ownership is keyed on the file's identity (device and
+inode, else the resolved path), so an alias, a hard link or a different-case name cannot give one
+file two owners. A worker calls both before
 publication.
 
 Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset

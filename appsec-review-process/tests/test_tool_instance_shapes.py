@@ -13,6 +13,7 @@ from copy import deepcopy
 import hashlib
 import itertools
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -1025,6 +1026,70 @@ class OutputsOnDiskTests(unittest.TestCase):
             self.skipTest("golden has fewer than two instances with outputs")
         instances[1]["outputs"][0] = self.copy.deepcopy(instances[0]["outputs"][0])
         self.assertTrue(any("is listed by both" in e for e in self.check()))
+
+    # ---- PR 9 review: one file, one owner, however the path is spelled ------------------------
+
+    ALIASES = ("shared/./result.json", "shared//result.json", "shared/x/../result.json", "./shared/result.json",
+               "shared/result.json/", "/shared/result.json")
+
+    def two_owners(self, first_path, second_path, same_tool=False):
+        data = b"one shared file\n"
+        (self.root / "shared" / "x").mkdir(parents=True, exist_ok=True)
+        (self.root / "shared" / "result.json").write_bytes(data)
+        results = self.copy.deepcopy(self.results)
+        owners = [i for i in results["tool_instances"] if i["outputs"]][:2]
+        template = owners[0]["outputs"][0]
+        for instance in results["tool_instances"]:
+            instance["outputs"] = []
+        listed = dict(template, bytes=len(data), sha256="sha256:" + self.hashlib.sha256(data).hexdigest())
+        if same_tool:
+            owners[0]["outputs"] = [dict(listed, path=first_path), dict(listed, path=second_path)]
+        else:
+            owners[0]["outputs"] = [dict(listed, path=first_path)]
+            owners[1]["outputs"] = [dict(listed, path=second_path)]
+        return results
+
+    def test_an_alias_cannot_give_one_file_a_second_owner(self):
+        for alias in self.ALIASES:
+            with self.subTest(alias=alias):
+                errors = self.check(self.two_owners("shared/result.json", alias))
+                self.assertTrue(errors, f"{alias!r} let two tool instances own one file")
+                self.assertTrue(any("not normalized" in e or "leaves the attempt" in e or "schema:tool-results" in e
+                                    for e in errors), errors)
+
+    def test_aggregate_validator_refuses_a_non_normalized_output_path(self):
+        for alias in self.ALIASES:
+            with self.subTest(alias=alias):
+                self.assertTrue(shapes.output_path_errors(alias) or alias.startswith("/") or alias.endswith("/"), alias)
+        self.assertEqual(shapes.output_path_errors("shared/result.json"), [])
+        self.assertEqual(shapes.output_path_errors("a.b/c-d/e_f.json"), [])
+        self.assertIn("leaves the attempt", shapes.output_path_errors("shared/x/../result.json")[0])
+        self.assertIn("not normalized", shapes.output_path_errors("shared/./result.json")[0])
+        self.assertIn("not normalized", shapes.output_path_errors("shared//result.json")[0])
+        self.assertIn("not normalized", shapes.output_path_errors("./shared/result.json")[0])
+
+    def test_ownership_is_decided_by_the_file_not_the_string(self):
+        # Two normalized, different-looking names for ONE file: a hard link. String keys cannot see it.
+        results = self.two_owners("shared/result.json", "shared/alias.json")
+        try:
+            os.link(self.root / "shared" / "result.json", self.root / "shared" / "alias.json")
+        except (OSError, NotImplementedError, AttributeError):
+            self.skipTest("hard links unavailable on this platform or filesystem")
+        errors = self.check(results)
+        self.assertTrue(any("is listed by both" in e and "(as 'shared/result.json')" in e for e in errors), errors)
+
+    def test_one_tool_cannot_list_the_same_file_twice_under_two_names(self):
+        results = self.two_owners("shared/result.json", "shared/alias.json", same_tool=True)
+        try:
+            os.link(self.root / "shared" / "result.json", self.root / "shared" / "alias.json")
+        except (OSError, NotImplementedError, AttributeError):
+            self.skipTest("hard links unavailable on this platform or filesystem")
+        self.assertTrue(any("are the same file listed twice" in e for e in self.check(results)))
+
+    def test_two_different_files_with_identical_content_are_two_owners_not_a_conflict(self):
+        results = self.two_owners("shared/result.json", "shared/other.json")
+        (self.root / "shared" / "other.json").write_bytes(b"one shared file\n")
+        self.assertEqual(self.check(results), [])
 
     def test_malformed_tool_results_are_reported_not_walked(self):
         del self.results["tool_instances"][0]["outputs"]
