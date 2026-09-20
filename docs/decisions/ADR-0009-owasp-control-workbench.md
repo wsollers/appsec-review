@@ -1,7 +1,7 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; T02 reference publishers and bounded T03–T05 lane-in, applicability, and batching
-foundations implemented; report/finding-promotion and per-engagement scope decisions remain
+Status: Proposed; T02 reference publishers and bounded T03–T06 lane-in, applicability, batching,
+and validator-handoff foundations implemented; report/finding-promotion and per-engagement scope decisions remain
 
 Date: 2026-09-20
 
@@ -302,8 +302,18 @@ accounting assignment per T04 target. Applicable and conditional targets receive
 obligations; technical N/A, scope exclusions, and unresolved applicability remain explicit
 non-batch dispositions. Mixed-mode obligations may occupy separate fragments, but none may issue a
 final control status until a later join. Every generated batch is marked non-dispatchable and
-execution-unauthorized until T06 is implemented. Dynamic-runtime routing is request-drafting only,
+execution-unauthorized; T06 handoff construction does not change those flags. Dynamic-runtime routing is request-drafting only,
 and manual observation remains blocked.
+
+The bounded T06 implementation realizes the handoff/tool boundary as another standalone offline
+worker. It re-verifies the accepted T05/T04/T03 chain and pinned references, emits one immutable,
+deterministic, non-dispatchable handoff per batch, declares exact baseline tools/actions and future
+result/intercom paths, and records source/config/prompt/composition hashes. Dynamic batches are
+request-authoring-only. Explicit dynamic execute/launch requests create a
+`dynamic_execution_disabled` receipt recording that no target was contacted or mutated. Manual
+inspection, undeclared tools, permission expansion, and secret-bearing output fail closed. T06 does
+not dispatch or execute a validator, assess a control, or implement the future intercom/result
+contracts it names.
 
 Every selected row must appear exactly once in one of: a validator batch, an evidence-backed
 `not_applicable` decision, an authorized `out_of_scope` decision, or an unresolved applicability
@@ -519,12 +529,13 @@ Before changing this ADR to Accepted, the user or named engagement lead must sti
 
 This ADR does not make the workbench itself runnable or approve registry updates, graph/parity
 changes, generated views, validator dispatch, dynamic execution, finding promotion, or compliance
-certification. The bounded T02/T02A/T02B and T03–T05 foundations described above are implemented
+certification. The bounded T02/T02A/T02B and T03–T06 foundations described above are implemented
 separately. T04 deterministically enumerates every selected control/component target, preserves
 unresolved cases as gaps, applies evidence-sufficiency gates to technical `not_applicable`
 decisions, keeps scope-owner `out_of_scope` decisions distinct, and records assigned-reviewer
 overrides as an append-only chain with bounded rescope actions. It does not assess control
 satisfaction or create findings. T05 accounts for those rows and creates bounded, deterministic,
 non-dispatchable work batches without assessing them. T06 validator handoff and tool contracts are
-the next bounded implementation task; later lifecycle tasks remain subject to their dependencies
+implemented as an offline, non-dispatching foundation; T07 validator results and evidence
+sufficiency are the next bounded implementation task. Later lifecycle tasks remain subject to their dependencies
 and the named human decisions above.

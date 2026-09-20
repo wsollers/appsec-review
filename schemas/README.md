@@ -68,6 +68,17 @@ Composable review schemas (added for the registry/worklist layer):
   bounded batch fragments. Cross-record validation enforces catalog hashes, pinned MASTG links,
   ordered routing specificity, limits, domain/evidence/tool/persona separation, mixed-mode joins,
   and the no-silent-skip invariant. Every T05 batch remains non-dispatchable and execution-disabled.
+- `owasp-validator-handoff-request.schema.json`, `owasp-validator-handoff-config.schema.json`,
+  `owasp-validator-handoff.schema.json`, and `owasp-validator-handoff-set.schema.json` -- the T06
+  exact T05 input reference, versioned closed tool policy, one immutable non-dispatching handoff per
+  batch, and complete batch-to-handoff accounting. Handoffs carry accepted T03/T04/T05 lineage,
+  source/config/prompt/composition hashes, exact fragments and proof obligations, component evidence
+  roots, allowed/prohibited tools and actions, authorization/claim boundaries, future result/intercom
+  paths, and failure semantics. Static contracts do not authorize dispatch; dynamic contracts are
+  inert request-authoring only, and manual observation remains blocked.
+- `owasp-dynamic-execution-blocked-receipt.schema.json` -- the T06 fail-closed receipt for an
+  explicit execute/launch request against a dynamic request-only batch. It records
+  `dynamic_execution_disabled` and that no target contact or mutation occurred; it is not a launcher.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,

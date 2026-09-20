@@ -11,8 +11,8 @@ assigned-reviewer applicability/rescope overrides, tunable batches with the exis
 default, disabled dynamic execution with an inert launcher contract, and stale NVD use with an
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
-publisher. T03 accepted-intel lane-in, T04 applicability modeling, and T05 deterministic batching
-are implemented as standalone offline foundations. T06–T13 remain dependency ordered and later reporting/promotion work remains
+publisher. T03 accepted-intel lane-in, T04 applicability modeling, T05 deterministic batching, and
+T06 validator handoff contracts are implemented as standalone offline foundations. T07–T13 remain dependency ordered and later reporting/promotion work remains
 gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
@@ -222,9 +222,9 @@ python -B appsec-review-process/owasp_batching.py --run-id <run_id>
 
 All batches are `dispatch_ready: false` and `execution_authorized: false`. Dynamic-runtime routing
 is limited to request drafting, manual observation remains blocked, and no control assessment or
-finding is produced. T06 validator handoff and tool contracts are next.
+finding is produced. T06 consumes these batches without changing those flags.
 
-## T06 — Validator Handoff And Tool Contract
+## T06 — Validator Handoff And Tool Contract — IMPLEMENTED FOUNDATION
 
 Define a handoff containing selection/batch/control/component identity, proof obligations, evidence
 roots, accepted inputs, tool permissions, prohibited claims, output paths, budget, timeout, and
@@ -237,6 +237,34 @@ the baseline workbench.
 
 Test prompt-injected standard/target/intel text, undeclared tool requests, secret-bearing output,
 stale source, and attempts to widen authorization.
+
+Implemented by `appsec-review-process/owasp_validator_handoff.py`, a tracked versioned handoff
+configuration and instruction contract under `appsec-review-process/config/owasp-validator-handoff/`,
+and the closed T06 schemas documented in `schemas/README.md`. The worker:
+
+- consumes and re-verifies the exact accepted T05 pointer, three-artifact publication, worklist,
+  batch manifest, and complete batch-to-proof-obligation coverage;
+- follows the accepted T05 attempt back through T04 and T03, rechecking source snapshots,
+  component identities/evidence roots, accepted raw/derived input lineage, and authorization;
+- emits one deterministic immutable JSON handoff per batch plus a complete handoff set and summary;
+- pins exact standard/control/test/OpenCRE identities and source, config, prompt, and composition
+  hashes in every handoff;
+- resolves only declared baseline tooling profiles, exact allowed actions, eligible roles, budgets,
+  timeouts, terminal semantics, future output paths, and future structured-intercom paths;
+- preserves prompt-injected source/intelligence text as untrusted data and rejects undeclared tools,
+  secret-bearing output, stale/tampered sources, manual inspection, or permission expansion;
+- emits dynamic batches only as inert request-authoring contracts and records
+  `dynamic_execution_disabled` no-contact/no-mutation receipts for explicit execute/launch requests.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_validator_handoff.py --run-id <run_id>
+```
+
+Every handoff remains non-dispatchable and execution-unauthorized. This implementation does not
+register a worker, dispatch a persona, execute a validator, assess a control, implement structured
+intercom, or make either OWASP lane runnable. T07 validator result and evidence sufficiency is next.
 
 ## T07 — Validator Output And Evidence Sufficiency
 
