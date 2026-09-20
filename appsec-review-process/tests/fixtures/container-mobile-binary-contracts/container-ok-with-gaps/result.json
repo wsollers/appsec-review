@@ -1,0 +1,164 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "images": [
+    {
+      "archive_format": "oci-layout",
+      "config": {
+        "architecture": "amd64",
+        "config_digest": "sha256:c39002e60a554828373d95aaca250206b568b86dac4e894c993c5a9d545613c5",
+        "declared_command_argument_count": 0,
+        "declared_command_executable": null,
+        "declared_entrypoint_argument_count": 2,
+        "declared_entrypoint_executable": "/usr/local/bin/entry",
+        "declared_env_names": [
+          "PATH",
+          "APP_MODE"
+        ],
+        "declared_ports": [
+          {
+            "exposure_label": "DECLARED_EXPOSURE",
+            "port": 8443,
+            "protocol": "tcp"
+          }
+        ],
+        "declared_user": null,
+        "os": "linux"
+      },
+      "hardening_rule_hits": [
+        {
+          "category": "no-user-declared",
+          "rule_id": "IMG-0001",
+          "tool_id": "image-package-and-config-inspection"
+        }
+      ],
+      "image_id": "img-55d4cfabf905",
+      "image_manifest_digest": "sha256:4d45435e1007ce399fece35629e0798b8abd4997c157720630ee5111b0b09943",
+      "inspection": "inspected",
+      "layers": [
+        {
+          "layer_bytes": 1000,
+          "layer_digest": "sha256:d40f136c6c5368e30855dcc2e53d5dedae118156bd4f26035799ee8401082a83",
+          "layer_index": 0
+        },
+        {
+          "layer_bytes": 1001,
+          "layer_digest": "sha256:788ff4a67fc21b6149d84d441df8a21917bb0abd4b5226c9b4a6cfdde52f3a1e",
+          "layer_index": 1
+        }
+      ],
+      "packages": [
+        {
+          "ecosystem": "deb",
+          "layer_index": 1,
+          "name": "openssl",
+          "tool_id": "image-package-and-config-inspection",
+          "version": "3.0.13-1"
+        },
+        {
+          "ecosystem": "deb",
+          "layer_index": 0,
+          "name": "libc6",
+          "tool_id": "image-package-and-config-inspection",
+          "version": null
+        }
+      ],
+      "source": {
+        "archive_bytes": 134,
+        "archive_path": "images/api.oci.tar",
+        "archive_sha256": "sha256:902bb817915bdcfa02b230b02a2399ad90b79ed1a8de6a90e66d0a3b98a850f7",
+        "kind": "supplied-archive"
+      },
+      "tool_id": "oci-archive-inventory"
+    },
+    {
+      "archive_format": "docker-save",
+      "config": {
+        "architecture": "amd64",
+        "config_digest": "sha256:790eb71a9764b19135aefebd89a59618a631fee481ca5db0dd9d0924f229ee7c",
+        "declared_command_argument_count": 0,
+        "declared_command_executable": null,
+        "declared_entrypoint_argument_count": 2,
+        "declared_entrypoint_executable": "/usr/local/bin/entry",
+        "declared_env_names": [
+          "PATH",
+          "APP_MODE"
+        ],
+        "declared_ports": [
+          {
+            "exposure_label": "DECLARED_EXPOSURE",
+            "port": 8443,
+            "protocol": "tcp"
+          }
+        ],
+        "declared_user": null,
+        "os": "linux"
+      },
+      "hardening_rule_hits": [
+        {
+          "category": "no-user-declared",
+          "rule_id": "IMG-0001",
+          "tool_id": "image-package-and-config-inspection"
+        }
+      ],
+      "image_id": "img-8c25659e43af",
+      "image_manifest_digest": "sha256:93ca4c5a74f07e914d54c2c313379a99ed8c906963b5b95fe653f1467cd71884",
+      "inspection": "inspected",
+      "layers": [
+        {
+          "layer_bytes": 1000,
+          "layer_digest": "sha256:ca8fdae6107367ef94e92ba2f25d6702dc4b12c9bdbff2b7b6e6588017de618b",
+          "layer_index": 0
+        },
+        {
+          "layer_bytes": 1001,
+          "layer_digest": "sha256:171518c1ade2d31e6b580ab41181d90ae1bb22be3de161ee7e62d1f466033cdd",
+          "layer_index": 1
+        }
+      ],
+      "packages": [
+        {
+          "ecosystem": "deb",
+          "layer_index": 1,
+          "name": "openssl",
+          "tool_id": "image-package-and-config-inspection",
+          "version": "3.0.13-1"
+        },
+        {
+          "ecosystem": "deb",
+          "layer_index": 0,
+          "name": "libc6",
+          "tool_id": "image-package-and-config-inspection",
+          "version": null
+        }
+      ],
+      "source": {
+        "archive_bytes": 134,
+        "archive_path": "images/worker.tar",
+        "archive_sha256": "sha256:f0354140f6093a1b81b7ac4bee2ea609b0b2b4c71a85e313fea677ac8b87d27f",
+        "kind": "supplied-archive"
+      },
+      "tool_id": "oci-archive-inventory"
+    },
+    {
+      "archive_format": "unsupported",
+      "config": null,
+      "hardening_rule_hits": [],
+      "image_id": "img-36e442d657de",
+      "image_manifest_digest": null,
+      "inspection": "not-inspected",
+      "layers": [],
+      "packages": [],
+      "source": {
+        "archive_bytes": 134,
+        "archive_path": "images/legacy.aci",
+        "archive_sha256": "sha256:725993a3e792559d01ed1d1a5529b2298dc1b31bbe51c1801932bbafb09ed2f4",
+        "kind": "supplied-archive"
+      },
+      "tool_id": "oci-archive-inventory"
+    }
+  ],
+  "job_id": "02-container-image-inventory",
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/container-image-inventory/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112"
+}

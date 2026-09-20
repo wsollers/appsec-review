@@ -1,0 +1,34 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "files_examined_count": 45,
+  "job_id": "02-binary-hardening",
+  "node_applicable": true,
+  "probe": {
+    "probe_id": "binary-hardening-probe",
+    "probe_sha256": "sha256:fc2471a006595159cdc9784a6100a6baf454aba76b189f77218d51bea10e55bd",
+    "probe_version": "1.0.0"
+  },
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/applicability-probe-receipt/1.0",
+  "skip_reason": null,
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tools": [
+    {
+      "applicable": true,
+      "detectors": [
+        {
+          "detector_id": "binskim-detector",
+          "matching_input_count": 5,
+          "patterns_searched": [
+            "**/*.dll",
+            "**/*.exe",
+            "**/*.so",
+            "**/*.dylib"
+          ]
+        }
+      ],
+      "matching_input_count": 5,
+      "tool_id": "binskim"
+    }
+  ]
+}

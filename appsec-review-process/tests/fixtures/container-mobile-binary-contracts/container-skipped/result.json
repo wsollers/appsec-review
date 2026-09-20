@@ -1,0 +1,8 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "images": [],
+  "job_id": "02-container-image-inventory",
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/container-image-inventory/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112"
+}

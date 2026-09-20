@@ -1,0 +1,32 @@
+{
+  "attempt_id": "node-attempt-0001",
+  "gaps": [],
+  "job_id": "02-mobile-sast",
+  "run_id": "20260920T120000Z-v07abc",
+  "schema": "appsec-review/scan-coverage/1.0",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tools": [
+    {
+      "analyzed_input_count": 0,
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "input_lists_truncated": false,
+      "not_analyzed_input_count": 0,
+      "not_analyzed_inputs": [],
+      "tool_id": "mobsfscan-android",
+      "unsupported_input_count": 0,
+      "unsupported_inputs": []
+    },
+    {
+      "analyzed_input_count": 0,
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "input_lists_truncated": false,
+      "not_analyzed_input_count": 0,
+      "not_analyzed_inputs": [],
+      "tool_id": "mobsfscan-ios",
+      "unsupported_input_count": 0,
+      "unsupported_inputs": []
+    }
+  ]
+}

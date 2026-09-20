@@ -1,0 +1,55 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "binary-hardening",
+  "display_name": "Supplied Binary Hardening Properties",
+  "required_files": [
+    "manifest.json",
+    "status.json",
+    "outputs/binary-hardening.json",
+    "outputs/binary-hardening-applicability.json",
+    "outputs/redaction-receipt.json",
+    "outputs/tool-results.json",
+    "outputs/coverage.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "attempt_id",
+    "dagster_run_id"
+  ],
+  "result_schema": {
+    "artifact": "outputs/binary-hardening.json",
+    "schema_file": "binary-hardening.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "binary_hardening_property_evidence",
+    "allowed_assertions": [
+      "static-hardening-property-observed",
+      "static-hardening-rule-hit",
+      "binary-format-unsupported",
+      "scan-coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "covers binaries supplied in the source snapshot only; every binary is named by normalized path, byte count and sha256, and the hash matches the snapshot file",
+    "a binary of format unsupported, or one coverage.json lists as unsupported or not analyzed, carries not-assessed for every check and no rule hit; it can never carry present or absent",
+    "a binary is listed in coverage.json as unsupported or not analyzed exactly when every one of its checks is not-assessed; a format-unsupported binary is listed under unsupported_inputs with reason unsupported-format; coverage input lists are not truncated",
+    "a check that does not exist for the binary's format is not-applicable-for-format or not-assessed; a check that does exist is never not-applicable-for-format",
+    "there is no overall pass, secure, score or grade field for a binary or for the node",
+    "a tool instance that produced output lists outputs/binskim.sarif as its format-validated raw-tool-output; a SKIPPED node publishes no SARIF",
+    "static only: no target execution, no debugger or ptrace, no symbol-server access; not a CVE scanner",
+    "outputs/binary-hardening-applicability.json is the applicability probe receipt; SKIPPED only when zero candidate binaries exist",
+    "outputs/tool-results.json, outputs/coverage.json and the applicability probe receipt validate against tool-results, scan-coverage and applicability-probe-receipt schemas and pass tool_instance_shapes.validate_node_aggregate for the node status; every listed output matches the attempt bytes (verify_outputs_on_disk)",
+    "the applicability probe receipt is required for every node status, including SKIPPED; a SKIPPED node publishes an empty result and its receipt shows zero matching inputs for every declared tool",
+    "run_id, job_id, attempt_id and source_snapshot_sha256 agree across the result, tool-results.json, coverage.json and the probe receipt, and equal the worker envelope",
+    "every tool_id in the result resolves to a declared tool instance in tool-results.json, and records come only from an instance with a validated, hashed output",
+    "outputs/redaction-receipt.json verifies against the published outputs/ directory with evidence_redaction.verify_receipt under the consumer's policy and limits",
+    "the result is an evidence lead: it cannot promote to a finding, a severity or an observed runtime state; there is no field for running, listening, reachable, deployed, exploited or observed state",
+    "a clean or empty result is not proof of absence; zero analysed inputs is a named coverage gap, not a pass",
+    "cross-record rules are enforced by container_mobile_binary_contracts.validate_result and verify_attempt"
+  ]
+}
