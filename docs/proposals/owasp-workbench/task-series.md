@@ -11,8 +11,9 @@ assigned-reviewer applicability/rescope overrides, tunable batches with the exis
 default, disabled dynamic execution with an inert launcher contract, and stale NVD use with an
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
-publisher. T03 accepted-intel lane-in, T04 applicability modeling, T05 deterministic batching, and
-T06 validator handoff contracts are implemented as standalone offline foundations. T07–T13 remain dependency ordered and later reporting/promotion work remains
+publisher. T03 accepted-intel lane-in, T04 applicability modeling, T05 deterministic batching,
+T06 validator handoff contracts, and T07 validator-result validation are implemented as standalone
+offline foundations. T08–T13 remain dependency ordered and later reporting/promotion work remains
 gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
@@ -266,7 +267,7 @@ Every handoff remains non-dispatchable and execution-unauthorized. This implemen
 register a worker, dispatch a persona, execute a validator, assess a control, implement structured
 intercom, or make either OWASP lane runnable. T07 validator result and evidence sufficiency is next.
 
-## T07 — Validator Output And Evidence Sufficiency
+## T07 — Validator Output And Evidence Sufficiency — IMPLEMENTED FOUNDATION
 
 Define `control-assessment-result.json` with one result per assigned control target:
 
@@ -280,6 +281,37 @@ Define `control-assessment-result.json` with one result per assigned control tar
 Reject verified findings, severity, exploitability, compliance/certification, remediation status,
 or runtime claims unsupported by matching dynamic evidence. Missing evidence cannot become
 `not_satisfied`; documentation proves only intent except for document/process controls.
+
+Implemented by `appsec-review-process/owasp_validator_result.py` and the closed T07 schemas
+documented in `schemas/README.md`. The standalone worker:
+
+- consumes one exact newest accepted T06 pointer, handoff set, member path, and member hash plus one
+  explicit hash-pinned candidate result beneath the owning run;
+- preserves run, selection, T04 applicability, T05 worklist/batch, T06 handoff, source/config/prompt/
+  composition hashes, producer, validator/specialist, tool, budget, timeout, and failure identities;
+- requires every assigned fragment and mandatory proof obligation exactly once in T06 order, rejects
+  missing/duplicate/extra identities, and preserves `final_control_status_authority` without joining;
+- verifies canonical artifact bytes or accepted producer pointers, evidence/counterevidence facts,
+  modes, freshness, covered scope, limitations, contradictions, dissent, gaps, and unresolved state;
+- treats locators, derived intelligence, scanners, documents, tests, crosswalks, stale NVD context,
+  and static/runtime/manual evidence according to the approved sufficiency rules;
+- rejects undeclared tools/actions and requires preserved source lineage for declared bounded parser
+  or static-analysis output;
+- accepts failure/cancellation/timeout/invalid terminal work only as `not_assessed` with failure
+  provenance, and records rejected/blocked newer attempts without falling back to an older result;
+- emits the immutable `control-assessment-result.json`, `result-validation.json`,
+  `result-summary.md`, inert proposed dynamic-test candidates, and candidate-only verification routes.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_validator_result.py --run-id <run_id>
+```
+
+T07 does not register a worker, dispatch a persona, execute a validator, inspect a target beyond
+supplied accepted artifacts, join batches or mixed-mode fragments, implement structured intercom,
+authorize dynamic/manual execution, or promote findings. `04-owasp-validation-worklist` and
+`04-asvs-masvs` remain non-runnable proposals.
 
 ## T08 — Structured Intercom
 

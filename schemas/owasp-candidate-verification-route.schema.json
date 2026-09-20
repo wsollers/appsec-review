@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-candidate-verification-route.schema.json",
+  "title": "Non-finding candidate verification route from an OWASP assessment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["route_id", "fragment_id", "target_id", "control_id", "component_id", "obligation_ids", "hypothesis", "evidence_citation_ids", "recommended_role", "next_step", "promotion_state", "finding_created", "severity_assigned", "execution_authorized"],
+  "properties": {
+    "route_id": {"type": "string"}, "fragment_id": {"type": "string"},
+    "target_id": {"type": "string"}, "control_id": {"type": "string"},
+    "component_id": {"type": "string"},
+    "obligation_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "hypothesis": {"type": "string"},
+    "evidence_citation_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "recommended_role": {"type": "string"}, "next_step": {"type": "string"},
+    "promotion_state": {"const": "candidate_only"}, "finding_created": {"const": false},
+    "severity_assigned": {"const": false}, "execution_authorized": {"const": false}
+  }
+}

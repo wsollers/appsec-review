@@ -79,6 +79,20 @@ Composable review schemas (added for the registry/worklist layer):
 - `owasp-dynamic-execution-blocked-receipt.schema.json` -- the T06 fail-closed receipt for an
   explicit execute/launch request against a dynamic request-only batch. It records
   `dynamic_execution_disabled` and that no target contact or mutation occurred; it is not a launcher.
+- `owasp-control-assessment-request.schema.json`, `owasp-control-assessment-result.schema.json`,
+  `owasp-proof-obligation-result.schema.json`, and
+  `owasp-assessment-evidence-citation.schema.json`, plus
+  `owasp-control-assessment-validation.schema.json` -- the T07 exact T06-member request, immutable
+  accepted batch result, per-obligation outcomes, and canonical evidence/counterevidence records.
+  Cross-record validation enforces exact fragment/target/component/control/obligation coverage,
+  newest accepted handoff identity, evidence-mode sufficiency, canonical dereference, freshness,
+  test-environment limits, contradictions, terminal-state mapping, closed tool/action use, and
+  parser/static-analysis lineage. Schema validity alone does not make candidate evidence sufficient.
+- `owasp-dynamic-test-candidate.schema.json` and
+  `owasp-candidate-verification-route.schema.json` with their corresponding `*-set` schemas --
+  inert proposed T07 follow-up contracts. They
+  cannot authorize or record execution, contact or mutate a target, create a finding, or assign
+  severity. Manual observation remains unauthorized.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,
