@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-model.schema.json",
+  "title": "Complete OWASP control/component applicability model",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "input_fingerprint", "generated_at", "assigned_reviewer", "counts", "rows", "claim_limits"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-applicability-model/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "input_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "generated_at": {"type": "string"},
+    "assigned_reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer_id", "role"],
+      "properties": {"reviewer_id": {"type": "string"}, "role": {"const": "owasp-applicability-reviewer"}}
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selected_controls", "components", "control_targets", "applicable", "conditional", "not_applicable", "cannot_determine", "out_of_scope"],
+      "properties": {
+        "selected_controls": {"type": "integer"},
+        "components": {"type": "integer"},
+        "control_targets": {"type": "integer"},
+        "applicable": {"type": "integer"},
+        "conditional": {"type": "integer"},
+        "not_applicable": {"type": "integer"},
+        "cannot_determine": {"type": "integer"},
+        "out_of_scope": {"type": "integer"}
+      }
+    },
+    "rows": {"type": "array", "minItems": 1, "items": {"$ref": "owasp-applicability-row.schema.json"}},
+    "claim_limits": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

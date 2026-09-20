@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-gaps.schema.json",
+  "title": "OWASP applicability gaps",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-applicability-gaps/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gap_id", "target_id", "kind", "summary"],
+        "properties": {
+          "gap_id": {"type": "string"},
+          "target_id": {"type": "string"},
+          "kind": {"enum": ["conditional_applicability", "cannot_determine", "rule_conflict", "rescope_required"]},
+          "summary": {"type": "string"}
+        }
+      }
+    }
+  }
+}

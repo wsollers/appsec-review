@@ -47,6 +47,17 @@ Composable review schemas (added for the registry/worklist layer):
   run-owned artifact references, and accepted raw/derived intelligence manifest. The contract is
   static/offline, rejects dynamic/network/mutation permissions, treats indexes as locators, and
   records stale-but-valid NVD as a gap rather than control or finding proof.
+- `owasp-applicability-request.schema.json`, `owasp-applicability-citation.schema.json`,
+  `owasp-applicability-signal.schema.json`, `owasp-applicability-decision.schema.json`, and
+  `owasp-applicability-override.schema.json` -- the T04 request and closed decision primitives.
+  They require typed positive signals, canonical citations, named authority, and an append-only
+  assigned-reviewer override chain; absence is deliberately not a signal type.
+- `owasp-applicability-row.schema.json`, `owasp-applicability-model.schema.json`,
+  `owasp-applicable-controls.schema.json`, and `owasp-applicability-gaps.schema.json` -- the complete
+  selected-control/component applicability matrix, its dispatch-eligible projection, and unresolved
+  gaps. Cross-record validation enforces full Cartesian coverage, technical-N/A sufficiency,
+  scope-owner-only `out_of_scope`, override continuity, bounded rescope actions, and exact T03
+  lineage. These artifacts do not assess control satisfaction or establish findings.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,

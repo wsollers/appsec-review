@@ -1,7 +1,7 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; T02 reference publishers and bounded T03 accepted-intel lane-in implemented;
-report/finding-promotion and per-engagement scope decisions remain
+Status: Proposed; T02 reference publishers, bounded T03 accepted-intel lane-in, and bounded T04
+applicability modeling implemented; report/finding-promotion and per-engagement scope decisions remain
 
 Date: 2026-09-20
 
@@ -509,6 +509,11 @@ Before changing this ADR to Accepted, the user or named engagement lead must sti
 
 This ADR does not make the workbench itself runnable or approve registry updates, graph/parity
 changes, generated views, validator dispatch, dynamic execution, finding promotion, or compliance
-certification. The bounded T02/T02A/T02B and T03 foundations described above are implemented
-separately; T04 applicability modeling is the next bounded implementation task. Later lifecycle
-tasks remain subject to their dependencies and the named human decisions above.
+certification. The bounded T02/T02A/T02B, T03, and T04 foundations described above are implemented
+separately. T04 deterministically enumerates every selected control/component target, preserves
+unresolved cases as gaps, applies evidence-sufficiency gates to technical `not_applicable`
+decisions, keeps scope-owner `out_of_scope` decisions distinct, and records assigned-reviewer
+overrides as an append-only chain with bounded rescope actions. It does not assess control
+satisfaction or create findings. T05 control partitioning and batching is the next bounded
+implementation task; later lifecycle tasks remain subject to their dependencies and the named
+human decisions above.

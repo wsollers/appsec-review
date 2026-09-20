@@ -11,8 +11,9 @@ assigned-reviewer applicability/rescope overrides, tunable batches with the exis
 default, disabled dynamic execution with an inert launcher contract, and stale NVD use with an
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
-publisher. T03 accepted-intel lane-in is implemented as a standalone offline foundation. T04–T13 remain
-dependency ordered and later reporting/promotion work remains gated by the narrower T01 decisions.
+publisher. T03 accepted-intel lane-in and T04 applicability modeling are implemented as standalone
+offline foundations. T05–T13 remain dependency ordered and later reporting/promotion work remains
+gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
 
@@ -132,9 +133,9 @@ python -B appsec-review-process/owasp_lane_in.py --run-id <run_id>
 ```
 
 This is not a registered graph job and does not make `04-owasp-validation-worklist` or
-`04-asvs-masvs` runnable. T04 applicability modeling is next.
+`04-asvs-masvs` runnable. T04 applicability modeling consumes this accepted manifest.
 
-## T04 — Applicability Model
+## T04 — Applicability Model — IMPLEMENTED FOUNDATION
 
 Define `owasp-applicability-model.json` with one row per selected control/component target:
 
@@ -145,6 +146,35 @@ Define `owasp-applicability-model.json` with one row per selected control/compon
 
 Prove `not_applicable` cannot be derived from a single absence signal, `out_of_scope` is not
 technical N/A, and ambiguous cases remain visible gaps.
+
+Implemented by `appsec-review-process/owasp_applicability.py` and the closed T04 applicability
+schemas documented in `schemas/README.md`. The worker:
+
+- consumes an explicit `runs/<run_id>/inputs/owasp-applicability-request.json` and verifies the
+  accepted T03 pointer, manifest, and selected reference snapshots again before publication;
+- enumerates the full selected-control by component matrix itself, so a caller cannot silently
+  omit a target;
+- applies deterministic exact-control, domain, then all-controls rules; equal-specificity conflicts
+  become `cannot_determine` gaps rather than an inferred decision;
+- requires cited positive presence for `applicable`, an explicit unresolved expression for
+  `conditional`, and cited positive exclusion plus adequate canonical evidence for technical
+  `not_applicable`;
+- reserves `out_of_scope` for the T03 selection approver's component-scope authority and never
+  treats it as technical N/A;
+- permits only the assigned applicability reviewer to add justified, cited, append-only overrides,
+  with prior-status continuity and bounded rescope actions for invalidated decisions;
+- publishes the complete model, applicable-control projection, visible gaps, and exact override
+  chain as one immutable attempt, while making no control-satisfaction, finding, severity,
+  exploitability, certification, or runtime claim.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_applicability.py --run-id <run_id>
+```
+
+This is not a registered graph job and does not dispatch validators or launch dynamic work. T05
+control partitioning and deterministic batching is next.
 
 ## T05 — Control Partitioning And Batch Worklist
 

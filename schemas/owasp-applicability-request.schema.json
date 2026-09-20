@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-request.schema.json",
+  "title": "OWASP applicability model request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "input_manifest", "assigned_reviewer", "components", "rules", "overrides"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-applicability-request/1.0"},
+    "run_id": {"type": "string"},
+    "input_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "manifest_path", "manifest_sha256"],
+      "properties": {
+        "attempt_id": {"type": "string"},
+        "accepted_pointer_path": {"type": "string"},
+        "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "manifest_path": {"type": "string"},
+        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "assigned_reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer_id", "role"],
+      "properties": {"reviewer_id": {"type": "string"}, "role": {"const": "owasp-applicability-reviewer"}}
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component_id", "name", "classification_hash", "input_ids", "scope_status", "scope_authority"],
+        "properties": {
+          "component_id": {"type": "string"},
+          "name": {"type": "string"},
+          "classification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "input_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "scope_status": {"enum": ["in_scope", "out_of_scope"]},
+          "scope_authority": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["actor", "rationale", "decided_at"],
+            "properties": {
+              "actor": {"type": "string"},
+              "rationale": {"type": "string"},
+              "decided_at": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "component_id", "selector", "decision"],
+        "properties": {
+          "rule_id": {"type": "string"},
+          "component_id": {"type": "string"},
+          "selector": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["standard_family", "control_ids", "domain_ids", "all_controls"],
+            "properties": {
+              "standard_family": {"type": "string"},
+              "control_ids": {"type": "array", "items": {"type": "string"}},
+              "domain_ids": {"type": "array", "items": {"type": "string"}},
+              "all_controls": {"type": "boolean"}
+            }
+          },
+          "decision": {"$ref": "owasp-applicability-decision.schema.json"}
+        }
+      }
+    },
+    "overrides": {"type": "array", "items": {"$ref": "owasp-applicability-override.schema.json"}}
+  }
+}

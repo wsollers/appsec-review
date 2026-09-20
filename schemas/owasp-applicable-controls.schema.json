@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicable-controls.schema.json",
+  "title": "Applicable and conditional OWASP targets",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "rows"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-applicable-controls/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "rows": {"type": "array", "items": {"$ref": "owasp-applicability-row.schema.json"}}
+  }
+}

@@ -163,3 +163,25 @@ remaining human gates.
   validator, dynamic launcher, registry/graph/parity surface, or generated view was activated.
 - T04 applicability modeling is the next bounded implementation task. Reporting/finding promotion
   remains gated.
+
+## Implementation checkpoint — T04 applicability model — 2026-09-20
+
+- Implemented a standalone offline applicability worker and closed schemas for its request,
+  citations, signals, decisions, override chain, complete matrix, applicable-control projection,
+  and visible gaps.
+- The worker verifies the accepted T03 pointer and artifact plus the exact selected ASVS/MASVS
+  reference snapshots, then independently enumerates every selected control/component target.
+  Caller-supplied target omission cannot reduce the matrix.
+- Deterministic rules use exact-control, domain, then all-controls precedence. Missing or conflicting
+  rules remain `cannot_determine`; no result is silently dropped.
+- Technical `not_applicable` requires cited positive exclusion and adequate canonical evidence.
+  `out_of_scope` is a distinct selection-owner decision. The signal vocabulary intentionally has no
+  generic absence signal.
+- Only the assigned applicability reviewer may add justified, cited, append-only row overrides.
+  Invalidated prior decisions require bounded rescope actions, and override chains must preserve
+  prior-status continuity.
+- Outputs are published together as a locked immutable attempt and rechecked before publication.
+  The worker makes no control-satisfaction, finding, severity, exploitability, certification, or
+  runtime claim.
+- No validator dispatch, batching, dynamic launcher, registry/graph/parity surface, generated view,
+  or report promotion was activated. T05 control partitioning and batching is next.
