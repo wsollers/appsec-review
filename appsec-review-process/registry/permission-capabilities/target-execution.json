@@ -1,0 +1,26 @@
+{
+  "schema": "appsec-review/permission-capability/1.0",
+  "capability_id": "target-execution",
+  "kind": "target-execution",
+  "version": "1.0",
+  "display_name": "Target code execution",
+  "description": "Run one registry-resolved command profile whose process executes target-controlled code, confined to one repository-relative working subtree.",
+  "required_parameters": [
+    "command_profile_id",
+    "target_path"
+  ],
+  "default_decision": "DENY",
+  "allowed_requirement_origins": [
+    "registry",
+    "operator",
+    "staged-run-config"
+  ],
+  "allowed_grant_origins": [
+    "operator",
+    "staged-run-config"
+  ],
+  "boundary_notes": [
+    "The command profile id resolves through the trusted registry; argv is never taken from this record or from the target.",
+    "Does not imply network, credentials, debugger attach or target mutation."
+  ]
+}

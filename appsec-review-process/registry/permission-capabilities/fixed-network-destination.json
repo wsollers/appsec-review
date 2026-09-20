@@ -1,0 +1,27 @@
+{
+  "schema": "appsec-review/permission-capability/1.0",
+  "capability_id": "fixed-network-destination",
+  "kind": "fixed-network-destination",
+  "version": "1.0",
+  "display_name": "Fixed network destination",
+  "description": "Open connections to exactly one scheme, host and port.",
+  "required_parameters": [
+    "scheme",
+    "host",
+    "port"
+  ],
+  "default_decision": "DENY",
+  "allowed_requirement_origins": [
+    "registry",
+    "operator",
+    "staged-run-config"
+  ],
+  "allowed_grant_origins": [
+    "operator",
+    "staged-run-config"
+  ],
+  "boundary_notes": [
+    "No wildcard, suffix, CIDR, port range or redirect-following is expressible.",
+    "Does not authorize sending credentials or target content."
+  ]
+}

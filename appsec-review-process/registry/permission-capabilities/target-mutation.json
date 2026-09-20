@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/permission-capability/1.0",
+  "capability_id": "target-mutation",
+  "kind": "target-mutation",
+  "version": "1.0",
+  "display_name": "Target mutation",
+  "description": "Write beneath one repository-relative subtree of the run-owned writable copy of the target.",
+  "required_parameters": [
+    "mutation_mode",
+    "target_path"
+  ],
+  "default_decision": "DENY",
+  "allowed_requirement_origins": [
+    "registry",
+    "operator",
+    "staged-run-config"
+  ],
+  "allowed_grant_origins": [
+    "operator",
+    "staged-run-config"
+  ],
+  "boundary_notes": [
+    "The immutable source snapshot is never writable; only run-owned-copy is expressible."
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "permission-capability-parameters.schema.json",
+  "title": "Permission capability parameters",
+  "description": "Closed, typed parameter set shared by every capability kind. Every field is required and nullable; the capability definition for a kind names exactly which fields must be non-null and permission_capabilities.py rejects any other non-null field. No field can carry a wildcard, a range, or a credential value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scheme",
+    "host",
+    "port",
+    "command_profile_id",
+    "target_path",
+    "technique",
+    "attach_mode",
+    "credential_ref",
+    "credential_scope",
+    "ecosystem",
+    "mutation_mode"
+  ],
+  "properties": {
+    "scheme": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "https",
+        "http",
+        null
+      ]
+    },
+    "host": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+    },
+    "port": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "command_profile_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
+    },
+    "target_path": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(?:\\.|[A-Za-z0-9_][A-Za-z0-9._-]*(?:/[A-Za-z0-9_][A-Za-z0-9._-]*)*)$"
+    },
+    "technique": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "test-suite",
+        "fuzzing",
+        "sanitizer-run",
+        "dast-probe",
+        null
+      ]
+    },
+    "attach_mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "ptrace-child",
+        "debugger-child",
+        null
+      ]
+    },
+    "credential_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^cred:[a-z0-9][a-z0-9-]{0,39}$"
+    },
+    "credential_scope": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "read-only-package-pull",
+        "read-only-source-fetch",
+        "read-only-api",
+        null
+      ]
+    },
+    "ecosystem": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "npm",
+        "pypi",
+        "maven",
+        "nuget",
+        "cargo",
+        "go",
+        "rubygems",
+        "conan",
+        "vcpkg",
+        null
+      ]
+    },
+    "mutation_mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "run-owned-copy",
+        null
+      ]
+    }
+  }
+}

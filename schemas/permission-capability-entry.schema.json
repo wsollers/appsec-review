@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "permission-capability-entry.schema.json",
+  "title": "Permission capability entry",
+  "description": "One exact capability instance inside a requirement or a grant. kind/version are deliberately not an enum so an unknown kind reaches the evaluator and is rejected by name (UNKNOWN_CAPABILITY). origin deliberately admits target-controlled values so the evaluator can reject them by name (TARGET_CONTROLLED).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "version",
+    "parameters",
+    "origin"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}$"
+    },
+    "parameters": {
+      "$ref": "permission-capability-parameters.schema.json"
+    },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "operator",
+        "staged-run-config",
+        "registry",
+        "target-repository",
+        "target-evidence",
+        "worker-output",
+        "unknown"
+      ]
+    }
+  }
+}

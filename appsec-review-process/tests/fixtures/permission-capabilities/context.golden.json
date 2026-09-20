@@ -1,0 +1,7 @@
+{
+  "run_id": "20260919T000000Z-abc123",
+  "job_id": "07-test-execution",
+  "source_snapshot_sha256": "sha256:abababababababababababababababababababababababababababababababab",
+  "now": "2026-09-20T12:00:00Z",
+  "registry_ceiling": null
+}

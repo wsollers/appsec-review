@@ -55,6 +55,17 @@ registry record or validator is implemented by these files):
 
 Cross-record id resolution, the completeness invariant, index-only citation rejection and claim-limit checks are lane-validator responsibilities, not expressible here.
 
+Permission-capability schemas (backlog batch B11; model and validator only -- no worker, launcher,
+graph, manifest or handoff consumes them yet, see `docs/permission-capabilities.md`):
+
+- `permission-capability.schema.json` -- versioned capability *definition* (closed kind enum: target execution, fixed network destination, dynamic testing, debugger/ptrace, credential use, package restore, target mutation), its required typed parameters and `default_decision: DENY`. Records live in `appsec-review-process/registry/permission-capabilities/`.
+- `permission-capability-parameters.schema.json` and `permission-capability-entry.schema.json` -- the closed, all-nullable exact parameter set (one scheme/host/port, one repository-relative path, a `cred:` reference id and never a value) and one capability instance with its required `origin`. `kind` and `origin` deliberately admit unknown and target-controlled values so `permission_capabilities.py` can reject them by name.
+- `permission-requirement.schema.json` -- the exact capabilities one job requires.
+- `permission-grant.schema.json` -- an ALLOW or DENY from a named human authority with issue/expiry timestamps, bound to one run and source snapshot (optionally one job).
+- `permission-decision.schema.json` and `permission-decision-ui.schema.json` -- the GRANTED/DENIED decision with named reasons, the exact capability set and `fingerprint_material`, and its UI-safe projection.
+
+Wildcard/widening detection, origin trust, staleness, conflict resolution, per-kind parameter exactness and secret rejection are `permission_capabilities.py` responsibilities, not expressible here.
+
 Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
 engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --
 plus the classification/classification_taxonomy cross-check against verdict-taxonomies.json that
