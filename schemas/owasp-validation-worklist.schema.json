@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-validation-worklist.schema.json",
+  "title": "Complete OWASP validation worklist accounting",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "applicability_fingerprint", "batch_config", "counts", "assignments", "claim_limits"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-validation-worklist/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "applicability_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "batch_config": {"type": "object"},
+    "counts": {"type": "object"},
+    "assignments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["assignment_id", "target_id", "standard_family", "standard_version", "profile_or_level", "control_id", "component_id", "domain_id", "applicability_status", "disposition", "batch_ids", "proof_obligations", "crosswalk_lineage", "join_required", "source_row_hash"],
+        "properties": {
+          "assignment_id": {"type": "string"},
+          "target_id": {"type": "string"},
+          "standard_family": {"type": "string"},
+          "standard_version": {"type": "string"},
+          "profile_or_level": {"type": ["string", "null"]},
+          "control_id": {"type": "string"},
+          "component_id": {"type": "string"},
+          "domain_id": {"type": "string"},
+          "applicability_status": {"enum": ["applicable", "conditional", "not_applicable", "cannot_determine", "out_of_scope"]},
+          "disposition": {"enum": ["validator_assignment", "not_applicable_accounted", "out_of_scope_accounted", "unresolved_applicability_gap"]},
+          "batch_ids": {"type": "array", "items": {"type": "string"}},
+          "proof_obligations": {"type": "array", "items": {"$ref": "owasp-batch-proof-obligation.schema.json"}},
+          "crosswalk_lineage": {"type": "array", "items": {"$ref": "owasp-crosswalk-lineage.schema.json"}},
+          "join_required": {"type": "boolean"},
+          "source_row_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "claim_limits": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-batch-request.schema.json",
+  "title": "OWASP control batching request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "applicability", "batch_config", "component_contexts", "routing_rules"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-batch-request/1.0"},
+    "run_id": {"type": "string"},
+    "applicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "model_path", "model_sha256"],
+      "properties": {
+        "attempt_id": {"type": "string"},
+        "accepted_pointer_path": {"type": "string"},
+        "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "model_path": {"type": "string"},
+        "model_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "batch_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "config_digest"],
+      "properties": {
+        "path": {"type": "string"},
+        "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "component_contexts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component_id", "component_group_id", "trust_role", "evidence_root_input_ids"],
+        "properties": {
+          "component_id": {"type": "string"},
+          "component_group_id": {"type": "string"},
+          "trust_role": {"type": "string"},
+          "evidence_root_input_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "routing_rules": {"type": "array", "minItems": 1, "items": {"$ref": "owasp-batch-routing-rule.schema.json"}}
+  }
+}

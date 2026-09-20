@@ -1,0 +1,21 @@
+{
+  "schema": "appsec-review/owasp-batch-qualification-fixture/1.0",
+  "fixture_id": "owasp-batching-default-v1",
+  "config_id": "owasp-batching-default",
+  "config_version": "1.0.0",
+  "config_digest": "4d57bbb01cace19594884c774b41e146149be88ec33560bef613f15191fe3b12",
+  "qualified_boundaries": {
+    "max_control_target_rows": 12,
+    "max_components": 5,
+    "max_primary_evidence_modes": 1,
+    "max_primary_validator_roles": 1
+  },
+  "required_cases": [
+    "deterministic_order_and_ids",
+    "row_limit_split",
+    "component_limit_split",
+    "domain_and_authorization_separation",
+    "composite_obligation_split_and_join",
+    "no_silent_skip"
+  ]
+}

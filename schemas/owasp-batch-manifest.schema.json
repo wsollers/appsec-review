@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-batch-manifest.schema.json",
+  "title": "Deterministic OWASP validation batch manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "applicability_fingerprint", "batch_config", "batch_count", "batches", "dispatch_state", "dynamic_execution"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-batch-manifest/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "applicability_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "batch_config": {"type": "object"},
+    "batch_count": {"type": "integer"},
+    "batches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["batch_id", "ordinal", "component_group_id", "trust_role", "domain_id", "primary_evidence_mode", "authorization_boundary", "tooling_profile_id", "validator_role", "standard_family", "standard_version", "profile_or_level", "linked_test_family", "effective_limits", "control_target_count", "component_count", "fragments", "dispatch_ready", "execution_authorized"],
+        "properties": {
+          "batch_id": {"type": "string"},
+          "ordinal": {"type": "integer"},
+          "component_group_id": {"type": "string"},
+          "trust_role": {"type": "string"},
+          "domain_id": {"type": "string"},
+          "primary_evidence_mode": {"type": "string"},
+          "authorization_boundary": {"type": "string"},
+          "tooling_profile_id": {"type": "string"},
+          "validator_role": {"type": "string"},
+          "standard_family": {"type": "string"},
+          "standard_version": {"type": "string"},
+          "profile_or_level": {"type": ["string", "null"]},
+          "linked_test_family": {"type": ["string", "null"]},
+          "effective_limits": {"type": "object"},
+          "control_target_count": {"type": "integer"},
+          "component_count": {"type": "integer"},
+          "fragments": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["fragment_id", "assignment_id", "target_id", "control_id", "component_id", "applicability_status", "proof_obligations", "crosswalk_lineage", "final_control_status_authority"],
+              "properties": {
+                "fragment_id": {"type": "string"},
+                "assignment_id": {"type": "string"},
+                "target_id": {"type": "string"},
+                "control_id": {"type": "string"},
+                "component_id": {"type": "string"},
+                "applicability_status": {"enum": ["applicable", "conditional"]},
+                "proof_obligations": {"type": "array", "minItems": 1, "items": {"$ref": "owasp-batch-proof-obligation.schema.json"}},
+                "crosswalk_lineage": {"type": "array", "items": {"$ref": "owasp-crosswalk-lineage.schema.json"}},
+                "final_control_status_authority": {"enum": ["control_result", "obligation_fragment_only"]}
+              }
+            }
+          },
+          "dispatch_ready": {"const": false},
+          "execution_authorized": {"const": false}
+        }
+      }
+    },
+    "dispatch_state": {"const": "handoff_not_implemented"},
+    "dynamic_execution": {"const": false}
+  }
+}
