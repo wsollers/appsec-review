@@ -46,6 +46,12 @@ values, so they are reduced to `aggregate:<v03-error-name>` plus caller-declared
   file `outputs/sbom.cdx.json`. CycloneDX cannot be expressed as a closed, every-property-required
   schema in the supported subset. The CycloneDX file is bound by sha256, size and spec version and
   must project to the same `(name, version, purl)` multiset as the manifest.
+  Because the CycloneDX file is itself published, it is also a claim surface: CycloneDX can carry VEX
+  (`vulnerabilities[].analysis.state: not_affected`), ratings and nested components, none of which the
+  projection sees. The verifier therefore allows only the top-level members `$schema`, `bomFormat`,
+  `specVersion`, `serialNumber`, `version`, `metadata`, `components` and `dependencies`, requires flat
+  components, and applies the forbidden-claim-word check to every property name in the file. V11's
+  normalizer must flatten syft's output and strip anything else before publishing.
 - The ADR's contract table still says `vulnerability-database-identity.json` (singular, no gap
   summary); the fixtures PR #20 updated say `vulnerability-database-identities.json` and
   `coverage-gap-summary.json`. The fixtures were followed.
@@ -71,3 +77,8 @@ taxonomy, and lifecycle status is `supported | end-of-life | unknown`, a referen
 - Matches cannot be re-derived without the databases. They are bound to the cited tool output's
   hash; whether Grype really reported them is V11's normalizer's proof.
 - Reference-table matching is exact `(ecosystem, name)` plus longest dotted-prefix `cycle`.
+- A licence expression is checked for the SHAPE of an SPDX expression (identifiers joined by
+  `AND` / `OR` / `WITH`, balanced parentheses), not against the SPDX licence list: `MIT compliant`
+  is rejected, a single made-up identifier is not.
+- A file at the attempt root that no contract names (beside `status.json`, `manifest.json` and
+  `outputs/`) is ignored, not rejected; everything beneath `outputs/` is bound.

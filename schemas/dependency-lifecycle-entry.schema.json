@@ -97,7 +97,7 @@
               "string",
               "null"
             ],
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9.+() -]{0,255}\\Z"
+            "pattern": "^[A-Za-z0-9(][A-Za-z0-9.+() -]{0,255}\\Z"
           }
         }
       }

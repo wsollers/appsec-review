@@ -111,6 +111,9 @@ DATABASE_BLOCK_FIELDS = ("vendor_build", "schema_version", "snapshot_id", "sha25
 UPSTREAM_FIELDS = ("attempt_id", "sha256")
 TABLE_FIELDS = ("table_id", "version", "sha256", "as_of")
 MATCH_BASES = ("purl", "cpe")
+CDX_TOP_LEVEL_KEYS = frozenset({"$schema", "bomFormat", "specVersion", "serialNumber", "version", "metadata", "components",
+                                "dependencies"})
+_SPDX_OPERATORS = frozenset({"AND", "OR", "WITH"})
 GAP_REASONS = ("version-unknown", "no-package-identifier", "ecosystem-not-covered", "version-unparseable",
                "matcher-did-not-complete")
 UNMAPPED_GAP_KIND = "unmapped-components"
@@ -307,6 +310,33 @@ def lifecycle_row_for(component: Mapping[str, Any], rows: Iterable[Mapping[str, 
             if best is None or len(row["cycle"]) > len(best["cycle"]):
                 best = row
     return best
+
+
+def spdx_expression_shape_ok(expression: str) -> bool:
+    """Shape of an SPDX licence expression: identifiers joined by AND / OR / WITH, with balanced
+    parentheses. It does not know the SPDX licence list, so it cannot say an identifier is real; it
+    does refuse two identifiers side by side, which is how prose ('Apache-2.0 compliant', 'MIT
+    approved for use') gets into a field whose character class has to allow spaces."""
+    tokens = re.findall(r"[()]|[^\s()]+", expression)
+    depth, want_operand = 0, True
+    for token in tokens:
+        if token == "(":
+            if not want_operand:
+                return False
+            depth += 1
+        elif token == ")":
+            if want_operand or depth == 0:
+                return False
+            depth -= 1
+        elif token.upper() in _SPDX_OPERATORS:
+            if want_operand or token not in _SPDX_OPERATORS:
+                return False
+            want_operand = True
+        else:
+            if not want_operand:
+                return False
+            want_operand = False
+    return bool(tokens) and depth == 0 and not want_operand
 
 
 def canonical_advisory_id(aliases: Iterable[str]) -> str:
@@ -867,6 +897,26 @@ def _cdx_errors(raw: bytes, manifest: dict) -> list[str]:
         return errors + [f"sbom-document-invalid: {SBOM_CDX_FILE} must be a CycloneDX object whose specVersion is the manifest's "
                          "spec_version and whose components is a list of objects"]
 
+    # The CycloneDX file is published, so it is a claim surface too. CycloneDX can carry VEX
+    # (vulnerabilities[].analysis.state = not_affected), ratings and nested components; none of those
+    # is visible to the projection below, so they are refused here rather than left to a consumer.
+    if set(cdx) - CDX_TOP_LEVEL_KEYS:
+        errors.append(f"sbom-document-surface: {SBOM_CDX_FILE} may carry only these top-level members: "
+                      f"{', '.join(sorted(CDX_TOP_LEVEL_KEYS))}; a vulnerabilities, annotations or any other section is "
+                      "not an inventory and is not checked against the manifest")
+    stack = list(listed)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if "components" in node:
+                errors.append(f"sbom-document-surface: {SBOM_CDX_FILE} components must be flat; a nested components list "
+                              "is outside the (name, version, purl) projection")
+                break
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    errors += forbidden_claim_errors(SBOM_CDX_FILE, cdx)
+
     def projection(items, keys):
         return sorted(json.dumps([item.get(key) for key in keys]) for item in items)
 
@@ -1106,6 +1156,10 @@ def _license_errors(records: list[dict], sbom: dict) -> list[str]:
         if (record["expression_state"] == "spdx-expression") != (record["license_expression"] is not None):
             errors.append(f"expression-state-mismatch: {label}: license_expression must be set exactly when expression_state "
                           "is 'spdx-expression'")
+        if record["license_expression"] is not None and not spdx_expression_shape_ok(record["license_expression"]):
+            errors.append(f"license-expression-shape: {label}: license_expression must be licence identifiers joined by "
+                          "AND, OR or WITH with balanced parentheses; two identifiers side by side is prose, and this "
+                          "contract records no legal conclusion")
         if assertion == "copyright-statement-detected" and record["expression_state"] != "no-assertion":
             errors.append(f"expression-state-mismatch: {label}: a copyright statement asserts no licence; expression_state must "
                           "be 'no-assertion'")

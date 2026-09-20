@@ -36,6 +36,7 @@
   "validation_rules": [
     "outputs/license-inventory.json must satisfy license-inventory.schema.json; cross-record rules and the on-disk bindings are sbom_family_contracts.verify_license_attempt",
     "each record carries a licence expression or a closed state (spdx-expression, unknown, no-assertion) and the SOURCE of the claim: declared-in-manifest or found-in-file, with path, sha256 and line span; the file is re-hashed in the source snapshot and a line span must lie inside it",
+    "a licence expression has the SHAPE of an SPDX expression: identifiers joined by AND, OR or WITH with balanced parentheses; two identifiers side by side is prose and is rejected (the identifiers themselves are not checked against the SPDX licence list)",
     "declared-in-manifest needs a recognised manifest file and a declared SBOM component; copyright-statement-detected carries no expression and no holder text",
     "vendored-component-inferred means 'not declared in any manifest, inferred from bundled licence or copyright evidence': it is found-in-file, and its component_ref is null or an inferred-vendored SBOM component, never a declared one",
     "the inventory is bound to the SBOM it was computed against: sbom_binding must equal the caller's expected SBOM attempt and sha256, the SBOM bytes are re-hashed before they are parsed, and every non-null component_ref resolves into it",

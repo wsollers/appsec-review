@@ -1973,5 +1973,60 @@ class CrossSliceTests(unittest.TestCase):
         self.assertEqual(source.count(".open("), 1)  # the one bounded binary read
 
 
+class CoordinatorProbeRegressionTests(unittest.TestCase):
+    """Holes the coordinator's resealed-mutation probes found after the slice was green. Each mutation
+    is a well-formed, correctly sealed attempt from a dishonest producer, so only the semantic layer
+    can refuse it. The suite missed them because it treated sbom.cdx.json as bytes to bind, not as a
+    published claim surface, and tested license_expression only for its state, never its content."""
+
+    def test_the_cyclonedx_file_cannot_carry_vex_or_any_section_outside_the_inventory(self):
+        def vex(cdx):
+            cdx["vulnerabilities"] = [{"id": "CVE-2021-44228", "analysis": {"state": "not_affected"}}]
+        self.assertEqual(names(mutated(self, SBOM, edit(contracts.SBOM_CDX_FILE, vex))), {"sbom-document-surface"})
+
+        def rated_vex(cdx):
+            cdx["vulnerabilities"] = [{"id": "CVE-2021-44228", "ratings": [{"severity": "low"}], "affects": []}]
+        self.assertEqual(names(mutated(self, SBOM, edit(contracts.SBOM_CDX_FILE, rated_vex))),
+                         {"sbom-document-surface", "forbidden-claim"})
+        for section in ("annotations", "services", "formulation"):
+            with self.subTest(section=section):
+                errors = mutated(self, SBOM, edit(contracts.SBOM_CDX_FILE, lambda cdx, s=section: cdx.__setitem__(s, [])))
+                self.assertEqual(names(errors), {"sbom-document-surface"})
+
+    def test_a_component_nested_inside_a_cyclonedx_component_is_refused(self):
+        def nest(cdx):
+            cdx["components"][0]["components"] = [{"type": "library", "name": "hidden", "version": "1"}]
+        self.assertEqual(names(mutated(self, SBOM, edit(contracts.SBOM_CDX_FILE, nest))), {"sbom-document-surface"})
+
+        def nest_deeper(cdx):
+            cdx["components"][0]["pedigree"] = {"ancestors": [{"components": []}]}
+        self.assertEqual(names(mutated(self, SBOM, edit(contracts.SBOM_CDX_FILE, nest_deeper))), {"sbom-document-surface"})
+
+    def test_a_rating_inside_a_cyclonedx_component_is_a_forbidden_claim(self):
+        def rate(cdx):
+            cdx["components"][0]["properties"] = [{"name": "x", "severity": "high"}]
+        self.assertEqual(names(mutated(self, SBOM, edit(contracts.SBOM_CDX_FILE, rate))), {"forbidden-claim"})
+
+    def test_a_license_expression_is_identifiers_and_operators_never_prose(self):
+        for expression in ("Apache-2.0 compliant", "MIT approved for use", "MIT OR", "(MIT", "MIT)", "MIT and BSD-3-Clause"):
+            with self.subTest(expression=expression):
+                errors = mutated(self, LICENSE, edit(contracts.LICENSE_RESULT_FILE,
+                                                     lambda doc, e=expression: doc["records"][0].__setitem__("license_expression", e)))
+                self.assertEqual(names(errors), {"license-expression-shape"})
+        for expression in ("MIT", "MIT OR Apache-2.0", "(MIT OR Apache-2.0) AND BSD-3-Clause",
+                           "GPL-2.0-only WITH Classpath-exception-2.0"):
+            with self.subTest(expression=expression):
+                self.assertTrue(contracts.spdx_expression_shape_ok(expression))
+                errors = mutated(self, LICENSE, edit(contracts.LICENSE_RESULT_FILE,
+                                                     lambda doc, e=expression: doc["records"][0].__setitem__("license_expression", e)))
+                self.assertEqual(errors, [])
+
+    def test_an_end_of_life_row_cannot_be_republished_as_supported(self):
+        def flip(doc):
+            entry = next(item for item in doc["entries"] if item["table_row"] and item["table_row"]["status"] == "end-of-life")
+            entry["table_row"]["status"] = entry["status"] = "supported"
+        self.assertTrue(mutated(self, LIFECYCLE, edit(contracts.LIFECYCLE_RESULT_FILE, flip)))
+
+
 if __name__ == "__main__":
     unittest.main()
