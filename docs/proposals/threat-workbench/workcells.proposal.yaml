@@ -1,0 +1,605 @@
+schema: appsec-review/threat-workbench-workcells-proposal/1.1
+proposal_only: true
+status: not_registered_not_runnable
+adr: docs/decisions/ADR-0008-threat-workbench.md
+
+# A workcell is a COMPOSITION, mirroring registry/job-templates: persona + role + domain + tooling
+# profile + cell output contract. Personas below conform to schemas/persona.schema.json
+# (appsec-review/persona/0.1). Roles, domains and tooling profiles reference existing registry
+# records where one fits and name proposed new records otherwise. Nothing here is registered.
+#
+# Persona ID convention is an open human gate (ADR-0008 gate 4). IDs below are bare, matching the
+# existing registry style; `lineage` names the nearest persona-catalog entry for traceability.
+
+terminal_statuses:
+  # Exact worker-result-envelope v1.0 terminal set. Cells use all seven.
+  - OK
+  - OK_WITH_GAPS
+  - SKIPPED        # cell-level only, when the selector omitted a trait cell; never surfaces as the job status
+  - BLOCKED
+  - FAILED
+  - CANCELED
+  - UNRESOLVED     # bounded work done but the cell could not answer its contracted question
+
+workcell_contract:
+  required_fields:
+    - workcell_id
+    - wave
+    - selection            # always | trait:[...]
+    - composition          # persona_id, role_id, domain_id, tooling_profile_id, output_contract_id
+    - required_inputs      # source ids from input-sources.proposal.yaml or earlier workcell ids
+    - optional_inputs
+    - intercom_reads       # record types this cell may read from the previous-wave manifest
+    - intercom_writes      # record types this cell may author
+    - outputs              # record kinds contributed to the integrated model
+    - proof_obligations
+    - must_not
+  invocation: B14 persona request (fixed outer lane prompt, persona prompt, exact readable paths, private output root, budget, recorded model identity, prohibited claims)
+  isolation: a cell reads only the frozen lane-in bundle and the previous-wave manifest; never another cell's private root
+  cell_output_contract: threat-workbench-cell-result (proposed; one result artifact cell-result.json against schemas/threat-workbench-cell-result.schema.json plus intercom-records.jsonl and status.json)
+
+shared_tooling_profile:
+  tooling_profile_id: threat-model-static-evidence   # proposed new record
+  mode: static-only
+  required_inputs: [lane-in bundle manifest]
+  optional_inputs: [previous-wave manifest]
+  allowed_actions:
+    - read bundle artifacts by exact path
+    - dereference evidence-index hits to source files
+    - write cell-result.json and intercom-records.jsonl under the private root
+  disallowed_actions:
+    - execute target code, builds, containers, cloud or network calls
+    - read outside the bundle or previous-wave manifest
+    - modify any input
+  claim_limits:
+    finding: forbidden
+    severity: forbidden
+    runtime-state: forbidden
+    compliance_status: forbidden
+    malicious_intent: forbidden
+    remediation_status: forbidden
+    candidate_threat: allowed
+    declared_exposure: allowed
+    modeled_structure: allowed
+
+personas:
+  - schema: appsec-review/persona/0.1
+    persona_id: architecture-trust-boundary-modeler
+    display_name: Architecture And Trust-Boundary Modeler
+    category: domain-specialist
+    lineage: architecture-doc-summarizer; persona-pool-proposal "API trust-boundary modeler"
+    primary_failure_mode_caught: Architecture is asserted from repo layout or docs alone and unknown flows are drawn as confident edges.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Model what the evidence supports; mark everything else unknown with a question.
+      do_not_assume: [runtime topology, undocumented integrations, that documentation matches code]
+    required_inputs: [component-purpose-map, evidence-index, repository-partition-and-project-discovery]
+    outputs: [proposed_model_edits, dfd_seed_graph, questions, assumptions]
+    must_not:
+      - collapse unknown architecture into a confident flow
+      - infer runtime state from static-only evidence
+      - publish verified findings
+
+  - schema: appsec-review/persona/0.1
+    persona_id: privacy-and-user-data-modeler
+    display_name: Privacy And User-Data Flow Modeler
+    category: domain-specialist
+    lineage: pii-flow-mapper; privacy-abuse-reviewer
+    primary_failure_mode_caught: PII, credentials, telemetry and logs are treated as one undifferentiated "data" class, or raw values leak into outputs.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Every field that names a person, device, credential or payment is sensitive until shown otherwise.
+      do_not_assume: [legal compliance status, that a retention policy is enforced]
+    required_inputs: [component-purpose-map, evidence-index]
+    outputs: [data_inventory, pii_flow_edges, privacy_abuse_seeds, gaps]
+    must_not:
+      - reproduce raw personal data or secret values
+      - claim legal or regulatory compliance status
+      - turn a privacy concern into a verified finding
+
+  - schema: appsec-review/persona/0.1
+    persona_id: deployment-and-zone-modeler
+    display_name: Deployment Zone And Exposure Modeler
+    category: domain-specialist
+    lineage: network-topology-doc-consumer; kubernetes-workload-hardening-reviewer
+    primary_failure_mode_caught: Static manifests are read as live topology; declared and observed exposure are conflated.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Manifests describe intent. Label every exposure DECLARED_EXPOSURE.
+      do_not_assume: [live cloud state, that a manifest is deployed, network policy enforcement]
+    required_inputs: [component-purpose-map, repository-partition-and-project-discovery]
+    outputs: [deployment_zones, topology_edges, exposure_assumptions, followup_live_state_requests]
+    must_not:
+      - claim live cloud state or OBSERVED_EXPOSURE
+      - execute target infrastructure or cloud APIs
+      - apply host or runtime assumptions to static manifests without caveat
+
+  - schema: appsec-review/persona/0.1
+    persona_id: abuse-case-and-attacker-objective-analyst
+    display_name: Abuse Case And Attacker Objective Analyst
+    category: attacker
+    lineage: business-logic-abuse-reviewer; privacy-abuse-reviewer
+    primary_failure_mode_caught: Threat models list technical STRIDE items but miss business-logic and user-harm abuse that needs no vulnerability.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Assume a motivated user of the product with normal access; ask what they gain.
+      do_not_assume: [exploitability, product features not in evidence]
+    required_inputs: [component-purpose-map, document-intelligence, wave-1 manifest]
+    outputs: [proposed_abuse_scenarios, attacker_objectives, business_harm_notes, questions]
+    must_not:
+      - claim exploitability
+      - invent product features not supported by evidence
+      - treat a plausible abuse story as a verified vulnerability
+
+  - schema: appsec-review/persona/0.1
+    persona_id: stride-threat-enumerator
+    display_name: STRIDE Threat Enumerator
+    category: verifier
+    lineage: none in catalog
+    primary_failure_mode_caught: STRIDE is applied unevenly, skipped for boring flows, or its category count is read as severity.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Enumerate every modeled element and every boundary-crossing flow; a category that does not apply is recorded as not-applicable with a reason.
+      do_not_assume: [that a control exists because a test or doc mentions it]
+    required_inputs: [wave-1 manifest, standards-and-taxonomy-references]
+    outputs: [stride_hypotheses, stride_coverage_matrix, verification_work_items]
+    must_not:
+      - assign final severity
+      - mark a threat verified
+      - use STRIDE category count as severity
+      - cite a STRIDE or CWE definition without a reference citation
+
+  - schema: appsec-review/persona/0.1
+    persona_id: attack-tree-and-chain-builder
+    display_name: Attack Tree And Chain Builder
+    category: attacker
+    lineage: none in catalog
+    primary_failure_mode_caught: Attack chains are narrated end to end with synthetic links that have no evidence.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Every leaf is evidence, assumption or unresolved; an AND node is only as strong as its weakest leaf.
+      do_not_assume: [complete chains, that a lead from a scanner is a working primitive]
+    required_inputs: [wave-1 manifest, proposed_abuse_scenarios, stride_hypotheses]
+    outputs: [attack_trees, chain_gaps, verification_work_items]
+    must_not:
+      - claim complete exploit chains without verified leaves
+      - let synthetic links masquerade as evidence
+      - invent factual predicates absent from cited evidence (design-v3 15.2)
+
+  - schema: appsec-review/persona/0.1
+    persona_id: target-trait-domain-selector
+    display_name: Target-Trait Domain Selector
+    category: evidence-ingestion
+    lineage: design-parity-completion-plan Workstream E deterministic selector
+    primary_failure_mode_caught: Every specialist runs on every target, or applicability is inferred from repository name.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Select the smallest specialist set the cited traits justify; record omissions and their reason.
+      do_not_assume: [applicability from names, that an absent trait means absence of the surface]
+    required_inputs: [component-purpose-map, lane-in bundle manifest]
+    outputs: [selected_domain_workcells, omitted_workcells]
+    must_not:
+      - run every persona by default
+      - infer applicability from repo name alone
+      - select a cell whose required inputs are absent (record a gap instead)
+
+  - schema: appsec-review/persona/0.1
+    persona_id: supply-chain-threat-specialist
+    display_name: Supply-Chain Threat Specialist
+    category: domain-specialist
+    lineage: supply-chain-evidence-curator (registry); dependency/update-channel personas in catalog
+    primary_failure_mode_caught: Third-party and build/release paths are missing from the DFD, or SCA hits are treated as reachable exploits.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Build, release and dependency channels are trust boundaries.
+      do_not_assume: [reachability, exploitability, that a lockfile pins what runs]
+    required_inputs: [wave-1 manifest, open-source-posture]
+    outputs: [proposed_model_edits, proposed_threats, verification_work_items]
+    must_not:
+      - promote an SCA or Scorecard record to a finding
+      - claim a dependency is reachable without 06-cve-reachability evidence
+
+  - schema: appsec-review/persona/0.1
+    persona_id: agent-tool-boundary-modeler
+    display_name: Agent And Tool Trust-Boundary Modeler
+    category: domain-specialist
+    lineage: persona-pool-proposal L3 "agent/tool trust-boundary modeler"
+    primary_failure_mode_caught: LLM/agent/MCP/tool-use surfaces are modeled as ordinary services, hiding prompt-injection and tool-permission boundaries.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Model prompts, retrieved content, tool calls and tool results as flows with their own boundaries and data classes.
+      do_not_assume: [that a model refuses, that a tool permission list is enforced]
+    required_inputs: [wave-1 manifest]
+    outputs: [proposed_model_edits, proposed_threats, questions]
+    must_not:
+      - claim an injection is exploitable
+      - test any live model or tool endpoint
+
+  - schema: appsec-review/persona/0.1
+    persona_id: native-parser-input-modeler
+    display_name: Native And Parser Input Modeler
+    category: domain-specialist
+    lineage: persona-pool-proposal L3 "native/parser input modeler"; reverse-engineer (registry)
+    primary_failure_mode_caught: Wire-format, file-format and native parser boundaries are absent from the DFD, so 05/13 receive no targets.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Every parser of untrusted bytes is a boundary; name the format and the entry point.
+      do_not_assume: [memory safety, that fuzzing exists]
+    required_inputs: [wave-1 manifest, native-build-and-binary-intelligence]
+    outputs: [proposed_model_edits, proposed_threats, verification_work_items]
+    must_not:
+      - claim memory corruption without 05-native-memory evidence
+      - run binaries or fuzzers
+
+  - schema: appsec-review/persona/0.1
+    persona_id: mobile-client-boundary-modeler
+    display_name: Mobile Client Boundary Modeler
+    category: domain-specialist
+    lineage: mobile personas in catalog
+    primary_failure_mode_caught: Mobile clients are modeled as trusted; on-device storage, IPC and platform permissions are missing from PII flows.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: The device and its user are outside the trust boundary of the backend.
+      do_not_assume: [platform protections are configured, that certificate pinning exists]
+    required_inputs: [wave-1 manifest]
+    outputs: [proposed_model_edits, pii_flow_edges, proposed_threats]
+    must_not:
+      - claim MASVS compliance
+      - instrument or run an app
+
+  - schema: appsec-review/persona/0.1
+    persona_id: cloud-control-plane-modeler
+    display_name: Cloud Control-Plane Boundary Modeler
+    category: domain-specialist
+    lineage: cloud-initial-access-operator; kubernetes-workload-hardening-reviewer
+    primary_failure_mode_caught: Admin, CI/CD and cluster control-plane paths are omitted, so privilege boundaries are invisible.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Control planes are elements with their own actors and flows; declared IAM is intent.
+      do_not_assume: [live IAM state, that policies are attached]
+    required_inputs: [wave-1 manifest]
+    outputs: [proposed_model_edits, deployment_zones, proposed_threats, followup_live_state_requests]
+    must_not:
+      - claim OBSERVED_EXPOSURE or live IAM state
+      - call cloud or cluster APIs
+
+  - schema: appsec-review/persona/0.1
+    persona_id: threat-model-defensive-skeptic
+    display_name: Threat-Model Defensive Skeptic
+    category: defender
+    lineage: defensive-skeptic
+    primary_failure_mode_caught: Confident model elements, threats and trees survive on one weak citation.
+    best_used_in_lanes: [03-threat-model-dfd-stride]
+    assumptions:
+      posture: Every claim must survive a search for counterevidence; downgrade rather than delete.
+      do_not_assume: [that a weak citation means the claim is wrong when other evidence supports it]
+    required_inputs: [wave-1 manifest, wave-2 manifest, test-intelligence]
+    outputs: [challenges, confidence_adjustments, unresolved_disagreements]
+    must_not:
+      - delete dissent silently
+      - mark a threat verified or refuted (refutation is 08's job; this cell challenges)
+      - refute a claim merely because one citation is weak if other evidence supports it
+      - be the same persona or model family as the cell it challenges
+
+workcells:
+  - workcell_id: domain-specialist-router
+    wave: 1
+    selection: always
+    composition:
+      persona_id: target-trait-domain-selector
+      role_id: workcell-selector            # proposed new role
+      domain_id: repo-project-discovery     # existing
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [component-purpose-map, lane-in bundle manifest]
+    optional_inputs: [repository-partition-and-project-discovery, native-build-and-binary-intelligence, open-source-posture]
+    intercom_reads: []
+    intercom_writes: [coverage_gap]
+    outputs: [selected_domain_workcells, omitted_workcells]
+    proof_obligations:
+      - every selected workcell has a cited target trait (component tag, file, manifest)
+      - every omitted trait cell has a reason
+    must_not:
+      - run every persona by default
+      - infer applicability from repo name alone
+
+  - workcell_id: architecture-dfd-mapper
+    wave: 1
+    selection: always
+    composition:
+      persona_id: architecture-trust-boundary-modeler
+      role_id: dfd-modeler                  # proposed new role
+      domain_id: repository-partitioning    # existing; a threat-model domain record is a T04 deliverable
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [component-purpose-map, evidence-index, repository-partition-and-project-discovery]
+    optional_inputs: [document-intelligence, api-collection-intelligence, test-intelligence, native-build-and-binary-intelligence]
+    intercom_reads: []
+    intercom_writes: [question, assumption, proposed_model_edit, coverage_gap]
+    outputs: [elements, flows, trust_boundaries]
+    proof_obligations:
+      - every flow cites at least one dereferenced source or derived intelligence record
+      - every trust boundary names its reason and evidence
+      - every live in-scope component is modeled or listed unmodeled with a reason
+    must_not:
+      - collapse unknown architecture into a confident flow
+      - infer runtime state from static-only evidence
+
+  - workcell_id: pii-user-data-mapper
+    wave: 1
+    selection: always
+    composition:
+      persona_id: privacy-and-user-data-modeler
+      role_id: data-flow-modeler            # proposed new role
+      domain_id: repository-partitioning
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [component-purpose-map, evidence-index]
+    optional_inputs: [document-intelligence, api-collection-intelligence, test-intelligence, secrets-and-key-inventory, mobile-source-intelligence]
+    intercom_reads: []
+    intercom_writes: [question, assumption, proposed_model_edit, coverage_gap]
+    outputs: [data_classes, flows(data-class annotations), privacy_abuse_seeds]
+    proof_obligations:
+      - sensitive data labels cite source fields, schemas, docs, or API/test examples
+      - every raw value is redacted or replaced by a data-class label
+      - every pii/credential/secret/payment/regulated class names at least one owning store or a gap
+    must_not:
+      - reproduce raw personal data or secret values
+      - claim legal compliance status
+
+  - workcell_id: deployment-topology-mapper
+    wave: 1
+    selection: always when any deployment evidence exists; otherwise omitted with gap
+    composition:
+      persona_id: deployment-and-zone-modeler
+      role_id: operations-topology-mapper   # existing
+      domain_id: operations-topology        # existing
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [component-purpose-map, repository-partition-and-project-discovery]
+    optional_inputs: [document-intelligence, iac-container-deployment-evidence, native-build-and-binary-intelligence]
+    intercom_reads: []
+    intercom_writes: [question, assumption, proposed_model_edit, coverage_gap]
+    outputs: [deployment_zones, flows(zone annotations), exposure_assumptions, followup_live_state_requests]
+    proof_obligations:
+      - every exposure label states DECLARED_EXPOSURE and its evidence class
+      - every live-state need is a follow-up request, not a claim
+    must_not:
+      - claim live cloud state
+      - execute target infrastructure or cloud APIs
+
+  - workcell_id: stride-enumerator
+    wave: 2
+    selection: always
+    composition:
+      persona_id: stride-threat-enumerator
+      role_id: threat-enumerator            # proposed new role
+      domain_id: repository-partitioning
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [wave-1 manifest, standards-and-taxonomy-references]
+    optional_inputs: [source-sast-and-static-leads, test-intelligence, secrets-and-key-inventory, api-collection-intelligence]
+    intercom_reads: [question, assumption, proposed_model_edit, coverage_gap]
+    intercom_writes: [proposed_threat, question, coverage_gap]
+    outputs: [stride_hypotheses, stride_coverage_matrix, verification_work_items]
+    proof_obligations:
+      - every STRIDE hypothesis cites an element or flow id and at least one citation
+      - every boundary-crossing flow has six category decisions (hypothesis, not-applicable+reason, or unresolved)
+      - unknown attributes become gaps, not confident threats
+    must_not:
+      - assign final severity
+      - mark a threat verified
+      - use STRIDE category count as severity
+
+  - workcell_id: abuse-scenario-analyst
+    wave: 2
+    selection: always
+    composition:
+      persona_id: abuse-case-and-attacker-objective-analyst
+      role_id: abuse-modeler                # proposed new role
+      domain_id: functional-design-docs     # existing
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [component-purpose-map, document-intelligence, wave-1 manifest]
+    optional_inputs: [api-collection-intelligence, test-intelligence, source-sast-and-static-leads]
+    intercom_reads: [question, assumption, proposed_model_edit]
+    intercom_writes: [proposed_threat, question, assumption]
+    outputs: [abuse_scenarios, attacker_objectives, business_harm_notes]
+    proof_obligations:
+      - every scenario names actor, objective, harmed asset/user, and a cited flow or workflow id
+    must_not:
+      - claim exploitability
+      - invent product features not supported by evidence
+
+  - workcell_id: attack-tree-builder
+    wave: 2
+    selection: always
+    composition:
+      persona_id: attack-tree-and-chain-builder
+      role_id: attack-modeler               # proposed new role
+      domain_id: repository-partitioning
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    # NOTE: consumes stride_hypotheses and abuse_scenarios from the SAME wave. Under wait_all it
+    # cannot; it therefore builds trees from wave-1 model + its own objective seeds and links to
+    # wave-2 threats by id at JOIN time (integrator resolves). If gate 3 (wave 4) is approved, the
+    # response round may re-invoke this cell with wave-2 records. Alternative: move to a wave 2b.
+    required_inputs: [wave-1 manifest]
+    optional_inputs: [source-sast-and-static-leads, native-build-and-binary-intelligence, cve-reachability, sbom-sca-license-lifecycle]
+    intercom_reads: [proposed_model_edit, assumption]
+    intercom_writes: [proposed_attack_tree_node, question, coverage_gap]
+    outputs: [attack_trees, chain_gaps, verification_work_items]
+    proof_obligations:
+      - every leaf is evidence-backed, assumption-backed, or explicitly unresolved
+      - every AND node lists its prerequisites
+    must_not:
+      - claim complete exploit chains without verified leaves
+      - let synthetic links masquerade as evidence
+
+  - workcell_id: supply-chain-specialist
+    wave: 2
+    selection: "trait: third-party components, package manifests, or open-source-posture present"
+    composition:
+      persona_id: supply-chain-threat-specialist
+      role_id: threat-enumerator
+      domain_id: open-source-project-posture   # existing
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [wave-1 manifest]
+    optional_inputs: [open-source-posture, cve-reachability, sbom-sca-license-lifecycle]
+    intercom_reads: [proposed_model_edit]
+    intercom_writes: [proposed_model_edit, proposed_threat, coverage_gap]
+    outputs: [elements(third-party, build/release), flows, stride_hypotheses, verification_work_items]
+    proof_obligations:
+      - every third-party element cites a manifest, lockfile, SBOM or Scorecard record
+    must_not:
+      - promote an SCA or Scorecard record to a finding
+
+  - workcell_id: agent-tool-boundary-specialist
+    wave: 2
+    selection: "trait: component tags for LLM, agent, MCP, tool-use, prompt, retrieval"
+    composition:
+      persona_id: agent-tool-boundary-modeler
+      role_id: dfd-modeler
+      domain_id: repository-partitioning
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [wave-1 manifest]
+    optional_inputs: [document-intelligence, api-collection-intelligence, source-sast-and-static-leads]
+    intercom_reads: [proposed_model_edit]
+    intercom_writes: [proposed_model_edit, proposed_threat, question]
+    outputs: [elements, flows, trust_boundaries, stride_hypotheses]
+    proof_obligations:
+      - every prompt/tool flow cites the code or config that constructs it
+    must_not:
+      - claim an injection is exploitable
+
+  - workcell_id: native-parser-input-specialist
+    wave: 2
+    selection: "trait: native, parser, wire-format, file-format, or binary-only components"
+    composition:
+      persona_id: native-parser-input-modeler
+      role_id: dfd-modeler
+      domain_id: binary-artifact-analysis      # existing
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [wave-1 manifest, native-build-and-binary-intelligence]
+    optional_inputs: [source-sast-and-static-leads]
+    intercom_reads: [proposed_model_edit]
+    intercom_writes: [proposed_model_edit, proposed_threat, coverage_gap]
+    outputs: [elements(parser entry points), flows, stride_hypotheses, verification_work_items(for 05/13)]
+    proof_obligations:
+      - every parser boundary names format and entry point with a citation
+    must_not:
+      - claim memory corruption
+
+  - workcell_id: mobile-client-specialist
+    wave: 2
+    selection: "trait: Android or iOS client components"
+    composition:
+      persona_id: mobile-client-boundary-modeler
+      role_id: dfd-modeler
+      domain_id: repository-partitioning
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [wave-1 manifest]
+    optional_inputs: [mobile-source-intelligence, native-build-and-binary-intelligence]
+    intercom_reads: [proposed_model_edit]
+    intercom_writes: [proposed_model_edit, proposed_threat]
+    outputs: [elements, flows(data-class annotations), stride_hypotheses]
+    proof_obligations:
+      - every on-device store or IPC flow cites manifest, code or doc evidence
+    must_not:
+      - claim MASVS compliance
+
+  - workcell_id: cloud-control-plane-specialist
+    wave: 2
+    selection: "trait: Kubernetes, IaC, CI/CD, or cloud control-plane manifests"
+    composition:
+      persona_id: cloud-control-plane-modeler
+      role_id: operations-topology-mapper
+      domain_id: operations-topology
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [wave-1 manifest]
+    optional_inputs: [iac-container-deployment-evidence, repository-partition-and-project-discovery]
+    intercom_reads: [proposed_model_edit, assumption]
+    intercom_writes: [proposed_model_edit, proposed_threat, question]
+    outputs: [elements(control planes), deployment_zones, flows, stride_hypotheses, followup_live_state_requests]
+    proof_obligations:
+      - every control-plane actor and flow cites a manifest or pipeline definition
+    must_not:
+      - claim OBSERVED_EXPOSURE
+
+  - workcell_id: challenge-refutation-cell
+    wave: 3
+    selection: always
+    composition:
+      persona_id: threat-model-defensive-skeptic
+      role_id: challenger                   # proposed new role
+      domain_id: repository-partitioning
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: threat-workbench-cell-result
+    required_inputs: [wave-1 manifest, wave-2 manifest]
+    optional_inputs: [test-intelligence, source-sast-and-static-leads, evidence-index, secrets-and-key-inventory]
+    intercom_reads: [question, assumption, proposed_model_edit, proposed_threat, proposed_attack_tree_node, coverage_gap]
+    intercom_writes: [challenge, coverage_gap]
+    outputs: [challenges, confidence_adjustments, unresolved_disagreements]
+    proof_obligations:
+      - every challenge names the challenged record_id and cites counterevidence or the missing evidence demanded
+    must_not:
+      - delete dissent silently
+      - mark a threat verified
+      - share persona or model family with the challenged cell
+
+  - workcell_id: response-round
+    wave: 4
+    selection: budget-gated (ADR gate 3); when omitted, all challenges remain open and become unresolved-dissent
+    composition: re-invocation of the challenged wave-1/wave-2 workcell's own composition with the challenge records as additional input
+    required_inputs: [wave-3 manifest, own prior cell-result.json]
+    optional_inputs: []
+    intercom_reads: [challenge]
+    intercom_writes: [response]
+    outputs: [confidence_adjustments, withdrawn_records, amended_records]
+    proof_obligations:
+      - a response only addresses challenges targeting records this cell authored
+    must_not:
+      - author new threats or elements in the response round
+
+  - workcell_id: integrator-join
+    wave: join
+    selection: always
+    worker_kind: join_controller            # NOT a persona invocation; deterministic merge + generation
+    composition:
+      persona_id: null
+      role_id: threat-model-integrator      # proposed new role
+      domain_id: repository-partitioning
+      tooling_profile_id: threat-model-static-evidence
+      output_contract_id: 03-threat-model-dfd-stride   # the lifecycle contract (T03)
+    required_inputs: [all wave manifests with every expected instance terminal]
+    optional_inputs: [standards-and-taxonomy-references]
+    intercom_reads: [all]
+    intercom_writes: []                     # the join never authors intercom records
+    outputs:
+      - integrated-threat-model.json
+      - threat-workbench-summary.md
+      - dfd.mmd
+      - attack-trees.mmd
+      - stride-radar-data.json
+      - ranked-threat-scenarios.json
+      - verification-worklist.json
+      - assumptions-and-gaps.json
+      - intercom-transcript.jsonl
+      - workcell-manifest.json
+      - status.json
+    proof_obligations:
+      - every output threat traces to evidence, a model element, or an unresolved assumption
+      - every expected workcell status is represented in workcell-manifest.json
+      - every open intercom record is copied to assumptions-and-gaps.json as unresolved
+      - every .mmd node id resolves to a model record id
+      - completeness invariant holds or status is UNRESOLVED
+    must_not:
+      - fabricate missing workcell output
+      - promote candidates to verified findings
+      - drop failed or skipped workcells from coverage reporting
+      - resolve a disagreement by choosing a side

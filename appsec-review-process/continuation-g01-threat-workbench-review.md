@@ -138,3 +138,42 @@ Commit the bounded result on a dedicated branch. Report:
 
 Do not merge to `main` and do not mark G01/S02 complete in `TODO.md`.
 
+## Checkpoint — 2026-09-20 review (Claude)
+
+Branch `claude/g01-threat-workbench-review`, from `codex/g01-threat-workbench-decision` `5240670`.
+
+Files changed: `docs/decisions/ADR-0008-threat-workbench.md`;
+`docs/proposals/threat-workbench/input-sources.proposal.yaml`;
+`docs/proposals/threat-workbench/personas.proposal.yaml` renamed to `workcells.proposal.yaml`
+(rewritten); `docs/proposals/threat-workbench/task-series.md`; this checkpoint.
+
+Substantive changes:
+
+- ADR restated as options + recommendation + seven explicit human gates (G01 forbids choosing).
+- Real graph position recorded: `03` depends only on `component-map`; pregather is transitive;
+  five consumers, none allowing skip; `15-deployment-hardening` is downstream and must never be an
+  input (cycle). design-v3 §5.3 L6A placement is stale versus the graph (follow-up F03).
+- Wave model added: `wait_all`-only rendezvous means cells cannot converse; intercom is realised as
+  four staged waves with a frozen manifest as the only channel; wave 4 (one response round) is a
+  gate.
+- 12 of 32 producer IDs did not exist in `job-graph.json`; they are M01-gated. Sources now carry
+  `declared_edge` / `transitive` / `m01_gated` availability; gated families are optional-with-gap.
+- Cell statuses now use the full envelope set including `UNRESOLVED`; job-status mapping table
+  added; `SKIPPED` ruled out at job level.
+- Contract reduced to one `result_schema` artifact plus projections validated by a lane validator.
+- Claim class `threat_model_candidates` proposed within the closed `forbidden_promotions` enum;
+  the three inexpressible prohibitions go to validator rules and follow-up F02.
+- Flat persona records replaced by schema-conformant `persona/0.1` records plus workcell
+  compositions; five trait-selected specialist cells added (supply-chain, agent/tool,
+  native/parser, mobile, cloud control-plane) from the persona-pool L3 note.
+- Completeness invariant, rescope triggers, approval options (A1/A2/A3, recommend A2), evidence
+  representation, and golden/mutation fixture plan added per G1 decisions 3–5 and G01 acceptance.
+- Task series rewritten with status tokens, exclusive paths, paired owners, dependency map, and
+  ten out-of-boundary follow-ups.
+
+Validation: YAML parse ok; cross-reference check (producers vs graph, feeds vs workcell IDs,
+compositions vs personas) zero problems; `validate_design_parity.py` 42 jobs / 15 capabilities;
+`qualify_phase1.py --check-contracts` PASS/PASS (83 records); `git diff --check` clean.
+
+Open human gates: ADR-0008 "Human Gates" 1–7. Recommended next task: T01.
+

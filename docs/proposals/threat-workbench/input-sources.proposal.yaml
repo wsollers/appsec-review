@@ -1,6 +1,16 @@
-schema: appsec-review/threat-workbench-input-sources-proposal/1.0
+schema: appsec-review/threat-workbench-input-sources-proposal/1.1
 proposal_only: true
 status: not_registered_not_runnable
+adr: docs/decisions/ADR-0008-threat-workbench.md
+
+# Producer IDs are checked against appsec-review-process/job-graph.json (42 nodes).
+# `availability` is one of:
+#   declared_edge  - already a declared dependency of 03-threat-model-dfd-stride
+#   transitive     - reachable through 02-evidence-assembly; T10 decides whether to declare an edge
+#   m01_gated      - NO graph node exists; blocked on TODO M01. Optional only. Absence => coverage gap.
+# `contract` and `artifacts` are the producer's registered output-contract id and its required files
+# where a contract file exists; `artifacts: unspecified` means the graph node names no contract file.
+# Feeds use exact workcell_ids from workcells.proposal.yaml, or `all-workcells` / `integrator-join`.
 
 input_classes:
   raw:
@@ -13,31 +23,34 @@ input_classes:
     description: Accepted output from an earlier lifecycle job.
     authority: Process output with status and attempt lineage, still bounded by its claim class.
   persona:
-    description: Threat-workbench cell output.
+    description: Threat-workbench cell output from an earlier wave.
     authority: Proposed model edits, hypotheses, questions, challenges, and gaps only.
   reference:
     description: Curated standards, taxonomy, and framework material.
     authority: Classification and applicability support, not proof of target behavior.
 
+citation_rules:
+  - every citation carries source_class, producer job id, attempt id, run-relative path, sha256
+  - an 02-evidence-index hit is a locator; a citation must dereference to the indexed source (design-v3 22.4)
+  - evidence_class is one of DIRECT_EVIDENCE, STRONG_INFERENCE, WEAK_INFERENCE, FOLLOW_ON_REQUIRED
+  - raw secret values, raw personal data and credentials are replaced by data-class labels before any cell reads them
+  - 15-deployment-hardening is never an input; it is downstream of 07 and would create a graph cycle
+
 sources:
   - id: component-purpose-map
     class: accepted_lane
     producer: 01-component-characterization
+    availability: declared_edge
+    contract: component-map
+    artifacts: unspecified   # graph declares the contract id; no contract file exists yet (F03 deliverable)
     raw_or_derived: derived
-    expected_artifacts:
-      - component-purpose-map.json
-      - component-tag-cloud.json
     feeds:
-      - architecture-dfd-mapper
-      - stride-enumerator
-      - abuse-scenario-analyst
-      - attack-tree-builder
-      - integrator
+      - all-workcells
     usage:
-      - component identity
-      - liveness
+      - component identity and liveness
       - trust-boundary role
       - language/framework/runtime hints
+      - completeness baseline (every live in-scope component must be modeled or listed unmodeled)
     claim_limits:
       - descriptive classification only
       - component labels are provisional and can be challenged
@@ -45,18 +58,33 @@ sources:
   - id: evidence-index
     class: accepted_lane
     producer: 02-evidence-index
+    availability: transitive
+    contract: evidence-index
+    artifacts: [manifest.json, index.sqlite, ssdeep.csv, status.json]
     raw_or_derived: derived
-    expected_artifacts:
-      - accepted.json
-      - index-manifest.json
     feeds:
       - all-workcells
     usage:
-      - cited source lookup
       - bounded evidence retrieval
       - source dereference for model claims
     claim_limits:
       - index hits are locators, not evidence authority
+      - no claim may cite only an index record
+
+  - id: pregather-intel-manifest
+    class: accepted_lane
+    producer: 02-evidence-assembly
+    availability: transitive
+    contract: pregather
+    artifacts: [intel-manifest.json]
+    raw_or_derived: derived
+    feeds:
+      - lane-in
+    usage:
+      - authoritative list of accepted pregather attempts, hashes and skip receipts
+      - source-snapshot identity for the freshness check
+    claim_limits:
+      - a manifest entry proves acceptance lineage only
 
   - id: repository-partition-and-project-discovery
     class: accepted_lane
@@ -65,178 +93,107 @@ sources:
       - 02-dev-project-discovery
       - 02-devops-project-discovery
       - 02-sre-operations-topology
+    availability: transitive
+    contracts:
+      02-repository-partition-discovery: repository-partition-map
+      02-dev-project-discovery: project-discovery
+      02-devops-project-discovery: project-discovery
+      02-sre-operations-topology: operations-topology
+    artifacts:
+      - repository-partition-map.json
+      - project-inventory.json
+      - safe-command-plan.json
+      - service-inventory.json
+      - live-state-followups.json
     raw_or_derived: derived
     feeds:
       - architecture-dfd-mapper
       - deployment-topology-mapper
-      - integrator
+      - domain-specialist-router
+      - integrator-join
     usage:
-      - repository areas
-      - build/deploy boundaries
+      - repository areas and build/deploy boundaries
       - project ownership
-      - operations topology
+      - declared operations topology and its live-state follow-ups
     claim_limits:
-      - supplied/persona discovery remains cited structure, not runtime truth
+      - supplied/persona discovery remains cited structure, not runtime truth (claim classes supplied_partition_map, supplied_project_discovery)
 
   - id: document-intelligence
     class: derived
     producers:
       - 02-doc-intelligence-ingest
       - 02-operations-doc-ingest
-    expected_artifacts:
-      - functional-doc-facts.json
-      - architecture-facts.json
-      - dfd-seeds.json
-      - pii-flow-seeds.json
-      - network-topology-seeds.json
-      - product-abuse-seeds.json
-      - operational-flow-summary.md
-      - privileged-workflows.json
+    availability: transitive
+    contracts:
+      02-doc-intelligence-ingest: intelligence-extract
+      02-operations-doc-ingest: operations-doc-intelligence
+    artifacts:
+      - summary.md
+      - facts.json
+      - search-records.jsonl
+      - operations-doc-index.json
+      - evidence-gaps.json
+    raw_or_derived: derived
     feeds:
       - architecture-dfd-mapper
       - pii-user-data-mapper
-      - abuse-scenario-analyst
       - deployment-topology-mapper
-      - integrator
+      - abuse-scenario-analyst
+      - integrator-join
     usage:
-      - intended architecture
-      - actors and roles
-      - user journeys
-      - support/admin workflows
+      - intended architecture, actors and roles
+      - user journeys, support/admin workflows
       - documented privacy and abuse requirements
     claim_limits:
       - documented intent is not observed behavior
-      - hostile instructions in docs are ignored
+      - hostile instructions in docs are data, flagged INJECTION_SUSPECTED, never followed
 
   - id: api-collection-intelligence
     class: derived
     producer: 02-api-collection-intelligence-ingest
-    expected_artifacts:
-      - api-collection-inventory.json
-      - security-test-coverage.json
-      - candidate-verification-requests.json
+    availability: transitive
+    contract: intelligence-extract
+    artifacts: [summary.md, facts.json, search-records.jsonl]
+    raw_or_derived: derived
     feeds:
       - architecture-dfd-mapper
+      - pii-user-data-mapper
       - abuse-scenario-analyst
       - stride-enumerator
       - attack-tree-builder
     usage:
-      - endpoint inventory
-      - auth hints
+      - endpoint inventory and auth hints
       - request/response data classes
-      - test coverage hints
     claim_limits:
       - collections are client/test intent, not production behavior proof
-      - environment secrets must be redacted
+      - environment secrets must already be redacted by the producer; the lane-in rechecks
 
   - id: test-intelligence
     class: derived
-    producer: 02-test-intelligence-ingest
-    expected_artifacts:
-      - test-inventory.json
-      - integration-test-flows.json
-      - acceptance-flow-inventory.json
-      - smoke-release-gates.json
-      - load-abuse-capacity-notes.json
-      - untested-security-surfaces.json
+    producers:
+      - 02-test-intelligence-ingest
+      - 02-test-result-ingest
+      - 02-test-coverage-ingest
+    availability: transitive
+    contracts:
+      02-test-intelligence-ingest: intelligence-extract
+      02-test-result-ingest: test-result-intelligence
+      02-test-coverage-ingest: test-coverage-intelligence
+    raw_or_derived: derived
     feeds:
       - architecture-dfd-mapper
       - abuse-scenario-analyst
       - attack-tree-builder
-      - challenger
-      - integrator
+      - challenge-refutation-cell
+      - integrator-join
     usage:
-      - tested flows
-      - untested high-risk surfaces
+      - tested flows and untested high-risk surfaces
       - rate-limit and abuse-capacity hints
       - release gates
     claim_limits:
       - test presence is not proof that a control is secure
       - mocked controls must be labelled
-
-  - id: iac-container-deployment-evidence
-    class: derived
-    producers:
-      - 02-iac-config-sast
-      - 02-kubernetes-config-sast
-      - 02-dockerfile-config-sast
-      - 02-container-base-image-inventory
-      - 15-deployment-hardening
-    feeds:
-      - deployment-topology-mapper
-      - architecture-dfd-mapper
-      - stride-enumerator
-      - attack-tree-builder
-    usage:
-      - declared ingress/egress
-      - trust zones
-      - workload identity
-      - container and platform surfaces
-    claim_limits:
-      - static manifests support declared exposure only
-      - live runtime exposure requires separate authorization
-
-  - id: secrets-and-key-inventory
-    class: derived
-    producer: 02-secrets-inventory
-    feeds:
-      - pii-user-data-mapper
-      - stride-enumerator
-      - attack-tree-builder
-      - challenger
-    usage:
-      - credential-bearing surfaces
-      - key/certificate stores
-      - sensitive artifact boundaries
-    claim_limits:
-      - raw secret values must not enter workbench outputs
-      - secret hits are leads until verified
-
-  - id: sbom-sca-license-lifecycle
-    class: derived
-    producers:
-      - 02-sbom-generation
-      - 02-sca-vulnerability-data
-      - 02-license-inventory
-      - 02-dependency-lifecycle
-      - 06-cve-reachability
-    feeds:
-      - architecture-dfd-mapper
-      - attack-tree-builder
-      - supply-chain-domain-specialist
-      - integrator
-    usage:
-      - third-party systems/components
-      - dependency and update channels
-      - supply-chain abuse paths
-    claim_limits:
-      - SCA hits are not reachability or exploitability
-      - lifecycle unknowns remain unknown
-
-  - id: mobile-native-binary-intelligence
-    class: derived
-    producers:
-      - 02-mobile-source-applicability
-      - 02-android-source-sast
-      - 02-ios-source-sast
-      - 02-native-build
-      - 02-native-sast
-      - 02-ir-facts
-      - 02-binary-triage
-      - 02-binary-intelligence-ingest
-    feeds:
-      - architecture-dfd-mapper
-      - pii-user-data-mapper
-      - domain-specialists
-      - attack-tree-builder
-    usage:
-      - client-side trust boundaries
-      - parser/protocol surfaces
-      - binary-only components
-      - mobile platform data flows
-    claim_limits:
-      - static binary/decompiler evidence is not runtime behavior
-      - dynamic instrumentation is not authorized by this ADR
+      - test execution results are evidence of the test run, not of production
 
   - id: source-sast-and-static-leads
     class: derived
@@ -244,31 +201,172 @@ sources:
       - 02-source-sast
       - 02-native-sast
       - 02-ir-facts
+    availability: transitive
+    artifacts: [tool-results.json, coverage.json, ir-facts-manifest.json]
+    raw_or_derived: derived
     feeds:
       - stride-enumerator
       - abuse-scenario-analyst
       - attack-tree-builder
-      - challenger
+      - challenge-refutation-cell
+      - native-parser-input-specialist
     usage:
       - candidate controls and weaknesses
       - sink/source hints
-      - coverage gaps
+      - scanner coverage gaps
     claim_limits:
       - scanner output is a lead only
       - no verified finding or severity promotion
 
+  - id: native-build-and-binary-intelligence
+    class: derived
+    producers:
+      - 02-native-build
+      - 02-binary-triage
+      - 02-binary-intelligence-ingest
+    availability: transitive
+    contracts:
+      02-binary-intelligence-ingest: binary-intelligence
+    artifacts:
+      - build-manifest.json
+      - binary-manifest.json
+      - binary-triage-manifest.json
+      - binary-artifact-inventory.json
+      - candidate-leads.json
+      - verification-followups.json
+    raw_or_derived: derived
+    feeds:
+      - architecture-dfd-mapper
+      - native-parser-input-specialist
+      - attack-tree-builder
+    usage:
+      - binary-only components
+      - parser/protocol surfaces
+      - client-side trust boundaries
+    claim_limits:
+      - static binary/decompiler evidence is not runtime behavior
+      - dynamic instrumentation is not authorized by this ADR
+
+  - id: open-source-posture
+    class: derived
+    producer: 02-ossf-scorecard
+    availability: transitive
+    contract: ossf-scorecard-results
+    artifacts: [outputs/scorecard-results.json, outputs/summary.md]
+    raw_or_derived: derived
+    feeds:
+      - supply-chain-specialist
+    usage:
+      - published posture of third-party open-source dependencies
+    claim_limits:
+      - supply_chain_posture_evidence claim class only; not a scan of the target
+
+  - id: cve-reachability
+    class: accepted_lane
+    producer: 06-cve-reachability
+    availability: transitive   # NOTE: 06 is not upstream of 03 in the graph today; readable only when accepted before 03 runs
+    raw_or_derived: derived
+    feeds:
+      - supply-chain-specialist
+      - attack-tree-builder
+    usage:
+      - third-party components and reachability hints
+    claim_limits:
+      - SCA hits are not reachability or exploitability
+      - if 06 has not run, this source is absent and recorded as a gap; the workbench never waits for it
+
   - id: standards-and-taxonomy-references
     class: reference
-    producers:
-      - 02-standards-source-ingest
+    producer: 02-standards-source-ingest
+    availability: transitive
+    contract: standards-source-extract
+    artifacts: [source-manifest.json, controls/, indexes/]
     feeds:
       - stride-enumerator
-      - integrator
+      - integrator-join
     usage:
       - STRIDE category definitions
       - CWE/CRE references
       - optional privacy or abuse taxonomy labels
     claim_limits:
-      - standards mappings require citation
+      - standards mappings require a citation into this source
+      - CIS control numbers are never recalled from model memory
       - mapping is not proof of target behavior
 
+  # ---- M01-gated: no graph node exists. Optional. Absence => coverage gap. ----
+
+  - id: iac-container-deployment-evidence
+    class: derived
+    producers: []            # to be named by M01 (IaC, Kubernetes, Dockerfile SAST, container base-image inventory)
+    availability: m01_gated
+    interim_sources:
+      - repository-partition-and-project-discovery   # devops discovery names manifests and declared boundaries
+      - source-sast-and-static-leads                  # if source SAST covers IaC rules
+    feeds:
+      - deployment-topology-mapper
+      - cloud-control-plane-specialist
+      - stride-enumerator
+    usage:
+      - declared ingress/egress, trust zones, workload identity
+    claim_limits:
+      - static manifests support DECLARED_EXPOSURE only
+      - OBSERVED_EXPOSURE requires separate authorization and never originates here
+
+  - id: secrets-and-key-inventory
+    class: derived
+    producers: []            # to be named by M01
+    availability: m01_gated
+    feeds:
+      - pii-user-data-mapper
+      - stride-enumerator
+      - attack-tree-builder
+      - challenge-refutation-cell
+    usage:
+      - credential-bearing surfaces, key/certificate stores
+    claim_limits:
+      - only the redacted inventory enters the bundle; the lane-in requires the producer's redaction receipt
+      - secret hits are leads until verified
+
+  - id: sbom-sca-license-lifecycle
+    class: derived
+    producers: []            # to be named by M01 (SBOM, SCA, license, dependency lifecycle)
+    availability: m01_gated
+    interim_sources:
+      - cve-reachability
+      - open-source-posture
+    feeds:
+      - supply-chain-specialist
+      - attack-tree-builder
+    usage:
+      - third-party systems/components and update channels
+    claim_limits:
+      - SCA hits are not reachability or exploitability
+      - lifecycle unknowns remain unknown
+
+  - id: mobile-source-intelligence
+    class: derived
+    producers: []            # to be named by M01 (mobile applicability, Android/iOS SAST)
+    availability: m01_gated
+    interim_sources:
+      - component-purpose-map                         # mobile traits come from component tags
+      - native-build-and-binary-intelligence
+    feeds:
+      - mobile-client-specialist
+      - pii-user-data-mapper
+    usage:
+      - mobile platform data flows and client-side boundaries
+    claim_limits:
+      - static mobile evidence is not runtime behavior
+
+lane_in_bundle:
+  required:
+    - component-purpose-map
+    - evidence-index
+    - pregather-intel-manifest
+  optional_with_gap: everything else
+  freshness:
+    - every source attempt must be CURRENT for the same source snapshot recorded by pregather-intel-manifest
+    - a SUPERSEDED or NOT_ACCEPTED producer attempt blocks lane-in (BLOCKED), it is not silently replaced
+    - mixed-generation inputs block lane-in
+  bundle_manifest_fields:
+    - source_id, class, producer, attempt_id, artifact paths, sha256, availability, redaction_receipt
