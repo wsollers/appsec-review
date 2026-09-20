@@ -65,3 +65,25 @@ git diff --check
 Commit on a dedicated branch and report branch, commit, files changed, validation results, and
 remaining human gates.
 
+## Final checkpoint — 2026-09-19
+
+- Branch/base: `codex/g02-owasp-workbench-decision` from `90cebf1`.
+- Scope remained documentation/proposal-only; no runtime, schema, registry, graph/parity, generated
+  view, test, validator, Dockerfile, launcher, or `TODO.md` file was changed.
+- Refined ADR-0009 and the proposal packet to define standards/profile/version selection gates,
+  accepted raw-versus-derived intel lineage, evidence-backed applicability triage, deterministic
+  checklist partitioning, bounded batch defaults, persona/tool/handoff boundaries, structured
+  intercom, static/dynamic/manual evidence rules, the control-status taxonomy, dynamic-test request
+  contents, wait-all failure accounting, and the final joined matrix/gaps/requests/report structure.
+- Kept the packet proposal-only and non-runnable. A checklist gap cannot become a finding, severity,
+  exploitability, runtime observation, remediation claim, or compliance certification.
+- The supplied OWASP comparison location remained the literal placeholder `<OWASP_REPO_URL>`.
+  Accordingly, the packet records only the user/repository-described partitioning idea and does not
+  claim inspection of a specific upstream revision.
+- Verification passed: proposal YAML load, design-parity validation, Phase 1 contract
+  qualification, and `git diff --check`. Design-parity still reports the expected planned gaps,
+  including the unapproved OWASP decision and unimplemented S03 worker surfaces.
+- Remaining human gate: approve exact standard/test/crosswalk versions and storage/license policy,
+  ASVS profile/level and tailoring authority, enabled optional families, applicability override and
+  rescope authority, evidence/status and batch policy, dynamic/manual authorization authority, and
+  report/finding-promotion policy before implementation.

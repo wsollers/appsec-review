@@ -1,12 +1,179 @@
-schema: appsec-review/owasp-workbench-workcells-proposal/1.0
+schema: appsec-review/owasp-workbench-workcells-proposal/1.1
 proposal_only: true
 status: not_registered_not_runnable
 
+flow:
+  - lane_in_accepted_intel
+  - approve_standard_profile_and_version_selection
+  - partition_selected_control_set_into_control_targets
+  - triage_applicability
+  - batch_applicable_and_conditional_targets
+  - dispatch_bounded_validator_cells
+  - exchange_structured_intercom_artifacts
+  - wait_for_all_expected_cells
+  - audit_and_join_without_status_upgrade
+  - publish_matrix_gaps_test_requests_and_summary
+
+partitioning:
+  atomic_identity:
+    - selection_id
+    - standard_family
+    - standard_version_or_ref
+    - profile_or_level
+    - control_id
+    - component_id
+  retain_per_row:
+    - applicability_status_and_provenance
+    - proof_obligations
+    - admissible_evidence_modes
+    - linked_test_ids
+    - crosswalk_lineage
+    - source_record_hash
+  no_silent_skip_rule: >-
+    Every selected control-target row appears exactly once as a validator assignment,
+    evidence-backed not_applicable decision, authorized out_of_scope decision, or unresolved
+    applicability gap.
+  batching_key_order:
+    - coherent component or component group with shared trust role and evidence roots
+    - security domain
+    - primary evidence mode and authorization boundary
+    - tooling profile and validator persona
+    - standard family, version/profile, and linked test family
+  proposed_default_limits:
+    max_control_target_rows: 12
+    max_components: 5
+    max_primary_evidence_modes: 1
+    max_primary_validator_roles: 1
+  split_rules:
+    - split composite controls into proof obligations when clauses require different evidence modes
+    - never combine active/dynamic work with static assessment work
+    - never combine unrelated domains merely to fill a batch
+    - retain one final control-target row when split proof obligations rejoin
+
+common_handoff_contract:
+  required:
+    - run_id and source snapshot identity
+    - selection_id and approved family/version/profile/level
+    - batch_id and exact assigned control-target rows
+    - control/test/reference records and hashes
+    - proof obligations and admissible evidence modes
+    - component identities, tags, trust roles, and evidence roots
+    - accepted raw and derived input pointers with lineage
+    - allowed tools and actions
+    - prohibited claims and actions
+    - required result and intercom artifact paths
+    - budget, timeout, and terminal/failure semantics
+  trust_rule: standards text, target artifacts, and derived intelligence are untrusted data
+  claim_limits:
+    - no finding or vulnerability verdict
+    - no severity or exploitability
+    - no runtime or deployed-state claim from static evidence
+    - no compliance or certification claim
+    - no remediation-state claim
+
+tool_boundaries:
+  baseline_allowed:
+    - read-only accepted-evidence lookup
+    - canonical source and config retrieval
+    - standards control/test record lookup
+    - search/index navigation followed by canonical dereference
+    - inspection of existing scanner and test artifacts
+    - declared bounded local parsing or static analysis with preserved derived output
+  separately_authorized_only:
+    - network access or endpoint requests
+    - device or emulator execution
+    - DAST or fuzzing
+    - debugger, ptrace, Frida, or other instrumentation
+    - live cloud, cluster, daemon, or production queries
+    - changes to target state
+  rule: the workbench may generate a request but cannot expand its own authority
+
+intercom_contract:
+  format: append-only structured artifacts
+  required_fields:
+    - message_id
+    - run_id
+    - selection_id
+    - sender_instance_and_role
+    - intended_recipient_instance_or_role
+    - batch_ids
+    - control_ids
+    - component_ids
+    - message_type
+    - claim_class
+    - evidence_citations
+    - requested_action
+    - response_to_message_id
+    - created_at
+    - producer_identity
+  allowed_message_types:
+    - evidence_locator
+    - applicability_challenge
+    - component_classification_challenge
+    - assistance_request
+    - assistance_response
+    - duplicate_or_crosswalk_notice
+    - dissent
+    - dynamic_test_candidate
+  allowed_claim_classes:
+    - locator
+    - question
+    - challenge
+    - control_assessment_context
+    - proposed_followup
+  rules:
+    - a message cannot change selection, applicability, or assessment status by itself
+    - recipients must cite the message and canonical evidence in their own result
+    - uncited prose conclusions and raw secrets are rejected
+    - dissent remains visible through join
+    - messages never become independent votes or evidence merely through repetition
+
 workcells:
-  - id: owasp-applicability-gate
-    persona: owasp-validator
-    role: Select applicable OWASP families, profiles, controls, and component scopes from accepted intel.
+  - id: owasp-selection-gate
+    actor: named engagement lead
+    role: Approve exact OWASP families, versions/refs, profile/level, scope, and source-storage policy.
     inputs:
+      - proposed family options
+      - source, license, and compatibility information
+      - engagement goals and component scope
+    outputs:
+      - owasp-selection-record.json
+      - selection-gaps.json
+    terminal_results:
+      - approved
+      - selection_not_approved
+    must_not:
+      - infer profile or level from the repository
+      - approve a source without version/hash/license lineage
+      - treat crosswalk or API Top 10 context as control evidence
+
+  - id: owasp-intel-lane-in
+    persona: evidence-curator
+    role: Validate accepted raw and derived intelligence pointers, lineage, freshness, and permissions.
+    inputs:
+      - owasp-selection-record.json
+      - component-purpose-map
+      - source-and-evidence-index
+      - intelligence-manifest
+      - available raw evidence and accepted derived intelligence
+    outputs:
+      - owasp-input-manifest.json
+      - input-gaps.json
+    must_not:
+      - discover legacy scratch inputs implicitly
+      - accept stale indexes or unexplained derived facts
+      - upgrade derived intelligence into canonical target evidence
+
+  - id: owasp-applicability-gate
+    persona: owasp-applicability-reviewer
+    role: Decide applicability for every selected control x component target before validation.
+    method:
+      - apply deterministic inventory, tag, technology, DFD, route, data-class, and completeness rules
+      - route ambiguous cases for bounded reviewer decision
+      - preserve conditional and cannot-determine cases as gaps
+    inputs:
+      - owasp-selection-record.json
+      - owasp-input-manifest.json
       - component-purpose-map
       - standards-source-ingest
       - threat-workbench-output
@@ -17,85 +184,192 @@ workcells:
       - owasp-applicability-model.json
       - applicable-controls.json
       - applicability-gaps.json
+      - applicability-overrides.jsonl
     must_not:
       - select controls without source lineage
-      - mark not_applicable without evidence
-      - infer profile or level without recorded policy
+      - mark not_applicable from one absence signal
+      - collapse out_of_scope into not_applicable
+      - assess control satisfaction
 
   - id: owasp-control-batcher
     persona: standards-worklist-builder
-    role: Batch applicable controls into bounded work items by component, domain, evidence mode, and validator profile.
+    role: Partition selected rows and batch validation work by component, domain, evidence mode, tool, and persona.
     inputs:
+      - owasp-selection-record.json
       - owasp-applicability-model.json
       - component-purpose-map
       - standards-source-ingest
     outputs:
       - owasp-validation-worklist.json
+      - owasp-batch-manifest.json
       - batch-summary.md
     must_not:
-      - create huge all-controls prompts
-      - mix unrelated evidence modes in one work item
+      - create unbounded all-controls prompts
+      - mix unrelated domains or authorization boundaries
+      - assign one selected row to multiple status-producing cells
+      - issue a control assessment
 
-  - id: asvs-validator-cell
-    persona: owasp-validator
-    role: Assess ASVS worklist slices against cited source/config/doc/test evidence.
+  - id: asvs-domain-validator-cell
+    personas:
+      primary: owasp-validator
+      eligible_specialists:
+        - auth-session-specialist
+        - api-contract-abuser
+        - data-storage-records-reviewer
+        - observability-forensics-reviewer
+    role: Assess one bounded ASVS batch against its declared proof obligations.
     inputs:
-      - owasp-validation-worklist.json
+      - common handoff contract
       - source-and-evidence-index
+      - canonical-source-and-config
       - doc-intelligence
       - test-intelligence
       - source-sast-and-scanner-leads
     outputs:
       - control-assessment-result.json
-      - dynamic-test-requests.json
+      - intercom-messages.jsonl
+      - dynamic-test-candidates.json
       - candidate-verification-routes.json
     must_not:
       - discover arbitrary findings
-      - treat absence of scanner findings as satisfaction
-      - mark documentation intent as implementation proof
+      - treat scanner absence as satisfaction
+      - mark intent as implementation proof
+      - claim runtime behavior
 
   - id: masvs-mastg-validator-cell
-    persona: owasp-validator
-    role: Assess MASVS controls and linked MASTG tests for mobile component worklist slices.
+    personas:
+      primary: owasp-validator
+      eligible_specialists:
+        - mobile-platform-attacker
+    role: Assess one bounded MASVS batch and linked MASTG proof obligations for a mobile component group.
     inputs:
-      - owasp-validation-worklist.json
+      - common handoff contract
       - mobile-intelligence
       - source-and-evidence-index
+      - canonical-source-and-config
+      - built-artifact-evidence
       - test-intelligence
     outputs:
       - control-assessment-result.json
+      - intercom-messages.jsonl
       - mastg-test-followups.json
+      - dynamic-test-candidates.json
     must_not:
-      - claim dynamic MASTG tests passed from static evidence
+      - claim a dynamic MASTG test passed from static evidence
       - assess non-mobile components as MASVS targets
+      - execute device or emulator tests
 
   - id: api-top10-context-cell
     persona: api-contract-abuser
-    role: Map API Top 10 risk categories to applicable API components as context and routing hints.
+    role: Map an approved API Top 10 edition to applicable API components as context and routing hints.
     inputs:
+      - owasp-selection-record.json
       - api-collection-intelligence
       - threat-workbench-output
       - owasp-applicability-model.json
     outputs:
       - api-risk-context.json
+      - intercom-messages.jsonl
       - candidate-verification-routes.json
     must_not:
-      - substitute API Top 10 categories for ASVS control evidence
-      - publish verified findings
+      - substitute risk categories for ASVS control evidence
+      - emit satisfied/not_satisfied control results unless the selected source defines an assessable control
+      - publish findings
+
+  - id: llm-agent-guidance-cell
+    persona: llm-agent-abuse-reviewer
+    role: Assess only approved LLM/agent guidance for components explicitly classified into that scope.
+    inputs:
+      - owasp-selection-record.json
+      - common handoff contract
+      - component-purpose-map
+      - canonical-source-and-config
+      - threat-workbench-output
+      - test-intelligence
+    outputs:
+      - control-assessment-result.json
+      - intercom-messages.jsonl
+      - dynamic-test-candidates.json
+    must_not:
+      - infer that an ordinary API is an LLM/agent system
+      - use an unpinned guidance source
+      - execute tools or prompts against a live model/service
+
+  - id: dynamic-test-request-author
+    persona: qa-negative-test-designer
+    role: Convert unresolved dynamic/manual proof obligations into bounded follow-up requests without executing them.
+    inputs:
+      - dynamic-test-candidates.json
+      - related control results and citations
+      - engagement permissions
+    outputs:
+      - owasp-dynamic-test-requests.prejoin.json
+    required_request_fields:
+      - request_id
+      - linked_control_component_and_proof_obligation
+      - static_insufficiency_reason
+      - test_type_and_target_environment
+      - prerequisites_data_and_identity_requirements
+      - least_privilege_authorization_and_safety_constraints
+      - observation_and_pass_fail_inconclusive_criteria
+      - evidence_capture_and_redaction_requirements
+      - owner_and_reentry_path
+      - manual_specialist_requirement
+    must_not:
+      - execute the request
+      - imply authorization
+      - update a control status from a proposed request
 
   - id: owasp-join-integrator
     persona: standards-mapping-auditor
-    role: Join validator outputs into a single control-status matrix and gap model.
+    role: Wait for all expected cells, account for every selected row, and join without improving statuses.
+    rendezvous: wait_all
     inputs:
       - all-terminal-validator-results
+      - all-intercom-artifacts
+      - owasp-selection-record.json
       - owasp-applicability-model.json
       - owasp-validation-worklist.json
+      - owasp-batch-manifest.json
+      - owasp-dynamic-test-requests.prejoin.json
     outputs:
       - owasp-control-status-matrix.json
       - owasp-dynamic-test-requests.json
       - owasp-coverage-gaps.json
       - owasp-workbench-summary.md
+    join_rules:
+      - failed, canceled, timed-out, skipped, or invalid cells remain visible
+      - applicable rows without valid results become not_assessed
+      - never fall back to a prior accepted result after newer required work fails
+      - do not treat cell completion as evidence sufficiency
+      - preserve dissent, contradictions, override history, and rescope state
+      - deduplicate crosswalk aliases and shared gaps without losing per-standard traceability
+      - report selected, applicable, assessed, and satisfied denominators separately
     must_not:
-      - hide failed or skipped validator cells
-      - turn not_satisfied controls into verified findings
+      - hide failed or degraded cells
+      - turn control gaps into verified findings
+      - improve a validator status
+      - claim compliance, exploitability, severity, or runtime behavior
 
+joined_matrix_required_fields:
+  - selection_and_standard_identity
+  - profile_or_level
+  - control_id and component_id
+  - applicability_status_rationale_citations_and_provenance
+  - assessment_status_and_proof_obligation_results
+  - evidence_counterevidence_modes_freshness_and_limitations
+  - validator_tool_batch_attempt_and_intercom_provenance
+  - gap_dynamic_request_and_candidate_route_ids
+  - dissent_duplicate_crosswalk_group_and_rescope_state
+
+summary_report_sections:
+  - standards selection, source hashes, profiles/levels, and human approvals
+  - engagement scope, evidence cutoff, permissions, and static-only limitations
+  - checklist population and partition/batch accounting
+  - applicability totals and override summaries
+  - exact control-status totals by family, chapter, component, and evidence mode
+  - material control gaps and contradictions labeled as gaps
+  - dynamic/manual test request backlog and authorization state
+  - failed/degraded cells, unassessed rows, dissent, rescope, and limitations
+  - deduplicated candidate routes to discovery or independent verification
+  - pointers to matrix, citations, batch manifests, and intercom record

@@ -1,108 +1,253 @@
-schema: appsec-review/owasp-workbench-input-sources-proposal/1.0
+schema: appsec-review/owasp-workbench-input-sources-proposal/1.1
 proposal_only: true
 status: not_registered_not_runnable
 
+comparative_reference:
+  location_as_supplied: <OWASP_REPO_URL>
+  inspected_revision: null
+  adopted_idea: partition a checklist into small control/test units and assign bounded work
+  authority: comparative_only
+  constraints:
+    - do not treat the external repository as governing process
+    - do not copy its structure or text without an approved source and license decision
+    - do not claim a specific upstream revision was inspected while the supplied location is a placeholder
+
+selection_gate:
+  authority: named engagement lead
+  required_before_applicability: true
+  missing_decision_status: selection_not_approved
+  required_fields:
+    - selection_id
+    - standard_family
+    - edition_or_version
+    - immutable_ref
+    - source_uri_or_approved_local_path
+    - content_hash
+    - license_and_usage_terms
+    - extraction_identity
+    - retrieved_at
+    - enabled_scope
+    - profile_or_level
+    - approver
+    - approved_at
+  rules:
+    - crosswalks and test catalogs are pinned independently from control catalogs
+    - repository shape and business criticality cannot infer a profile or level
+    - a version mismatch or unresolved successor mapping is a visible selection gap
+    - optional family selection is explicit and never inherited from an earlier engagement
+  family_options:
+    - family: owasp_asvs
+      purpose: web, API, and server application controls
+      recommendation: consider ASVS 5.0.0 because docs/design-v3.md names it
+      required_human_decision: exact edition and target level/profile, including tailoring policy
+    - family: owasp_masvs
+      purpose: mobile application controls
+      required_human_decision: exact version/ref and supported mobile platforms
+    - family: owasp_mastg
+      purpose: control-linked mobile test guidance
+      required_human_decision: exact ref and compatibility with the selected MASVS snapshot
+    - family: owasp_api_security_top_10
+      purpose: risk-category context and routing only
+      required_human_decision: exact edition and whether context is enabled
+      cannot_substitute_for: ASVS control evidence
+    - family: owasp_llm_or_agent_guidance
+      purpose: controls or guidance for classified LLM, agent, RAG, or tool-use components
+      required_human_decision: exact artifact/ref and whether qualifying components exist
+    - family: opencre
+      purpose: crosswalk navigation and deduplication metadata
+      required_human_decision: exact snapshot and permitted storage mode
+      cannot_supply:
+        - target behavior proof
+        - exploitability
+        - impact
+        - severity
+
 input_sources:
-  - id: component-purpose-map
+  - id: standards-source-ingest
+    class: raw_reference
     required: true
+    acceptance:
+      - accepted run-owned artifact or explicit hash-checked import
+      - approved selection_id matches source family, version, ref, and hash
+      - source and license lineage is complete
     use:
-      - component identity
-      - component tags
-      - liveness
-      - platform and framework hints
+      - pinned control records and proof obligations
+      - linked test records
+      - crosswalk records
+      - source version, hash, license, and extraction provenance
+    claim_limit: reference material only; not target behavior proof
+
+  - id: component-purpose-map
+    class: derived_intelligence
+    required: true
+    acceptance:
+      - accepted producer pointer
+      - component evidence references and source snapshot match the engagement
+    use:
+      - component identity and coherent grouping
+      - component tags, liveness, platform, framework, and trust role
+      - evidence roots and rescope dependencies
     claim_limit: descriptive classification only
 
+  - id: source-and-evidence-index
+    class: derived_locator
+    required: true
+    acceptance:
+      - accepted index pointer
+      - source tree hash matches the engagement snapshot
+      - skipped and unsupported content is accounted for
+    use:
+      - bounded evidence discovery
+      - source/config path and symbol location
+    claim_limit: index hits are locators and must be dereferenced to canonical evidence
+
+  - id: canonical-source-and-config
+    class: raw_evidence
+    required: true
+    use:
+      - static source proof obligations
+      - declared configuration proof obligations
+    claim_limit: source and static config cannot establish deployed or runtime state
+
   - id: threat-workbench-output
+    class: derived_intelligence
     required: false
     use:
       - DFD elements and flows
-      - trust boundaries
-      - data classes and PII flows
-      - abuse scenarios
-      - verification worklist hints
+      - trust boundaries, data classes, and PII flows
+      - abuse scenarios and verification hints
     claim_limit: threat hypotheses and model facts only; not verified findings
 
-  - id: standards-source-ingest
-    required: true
-    use:
-      - pinned ASVS/MASVS/MASTG/API/LLM control records
-      - OpenCRE crosswalk records
-      - source version, hash, and license metadata
-    claim_limit: reference material only; not target behavior proof
-
   - id: api-collection-intelligence
+    class: derived_intelligence
     required: false
     use:
-      - endpoint inventory
-      - auth hints
-      - example payloads and data classes
-      - API test coverage
-    claim_limit: API collection intent/test behavior only
+      - endpoint inventory and auth hints
+      - example payload/data-class hints
+      - API test coverage and missing negative tests
+    claim_limit: collection intent or test behavior only; requests are not executed by this workbench
 
   - id: doc-intelligence
+    class: derived_intelligence
     required: false
     use:
-      - product requirements
-      - roles and permissions
-      - documented controls
-      - privacy and abuse requirements
-    claim_limit: documented intent unless source/config/test evidence corroborates
+      - product requirements, roles, and permissions
+      - documented controls, privacy requirements, and abuse constraints
+    claim_limit: documented intent unless the control is document/process-only
 
   - id: test-intelligence
+    class: derived_intelligence
     required: false
     use:
-      - unit/integration/acceptance/security/load coverage
-      - tested controls
-      - missing negative tests
-      - candidate verification requests
-    claim_limit: test evidence; mocks and fixtures require caveats
+      - unit, integration, acceptance, security, smoke, and load coverage
+      - test-to-component, route, and control mappings
+      - missing negative tests and follow-up candidates
+    claim_limit: tests require results and environment context; mocks/fixtures do not prove production behavior
 
-  - id: source-and-evidence-index
-    required: true
+  - id: supplied-test-results
+    class: raw_evidence
+    required: false
     use:
-      - cited source lookup
-      - source paths for relevant controls
-      - control evidence dereference
-    claim_limit: search hits are locators, not authority
+      - test_evidence proof obligations when definitions, results, and environment identity align
+    claim_limit: only the observed test scope and environment
 
   - id: source-sast-and-scanner-leads
+    class: raw_or_derived_evidence
     required: false
     use:
       - candidate weak areas
-      - rule mappings where present
-      - coverage gaps
-    claim_limit: scanner leads do not satisfy or fail controls alone
+      - tool-provided mappings
+      - coverage and source-completeness gaps
+    claim_limit: scanner presence or absence cannot alone satisfy or fail a control
 
   - id: mobile-intelligence
+    class: raw_and_derived_intelligence
     required: false
     use:
       - Android/iOS applicability
-      - mobile permissions
-      - local storage and network config hints
-      - MASTG test routing
-    claim_limit: static mobile evidence only unless dynamic testing is authorized
+      - permissions, storage, network, and platform-interaction hints
+      - MASVS/MASTG test routing
+    claim_limit: static mobile evidence only unless accepted dynamic results are separately supplied
 
-  - id: deployment-and-iac-evidence
+  - id: built-artifact-evidence
+    class: raw_evidence
     required: false
     use:
-      - security headers and ingress hints
-      - TLS/proxy/API gateway controls
-      - identity and network context
-    claim_limit: declared/static configuration only; not live runtime state
+      - image, binary, package, manifest, and compiled-artifact proof obligations
+    claim_limit: artifact state only; no automatic runtime or source-equivalence claim
+
+  - id: deployment-and-iac-evidence
+    class: raw_and_derived_evidence
+    required: false
+    use:
+      - security header, ingress, TLS, proxy, API gateway, identity, and network context
+    claim_limit: declared or static configuration only; not live effective state
+
+  - id: supplied-runtime-or-manual-evidence
+    class: raw_evidence
+    required: false
+    acceptance:
+      - explicit scope and environment identity
+      - authorization and producer identity
+      - capture time, lineage, and redaction state
+    use:
+      - dynamic_runtime or manual_inspection proof obligations
+    claim_limit: exact observed scope only; must not be generalized to production without matching evidence
+
+lineage_required_for_derived_intelligence:
+  - producer_job_and_attempt
+  - accepted_pointer
+  - source_artifact_paths_and_hashes
+  - derivation_status
+  - source_snapshot
+  - freshness
+  - redaction_status
+  - caveats
+
+evidence_modes:
+  - document_or_process
+  - static_source
+  - static_config
+  - built_artifact
+  - test_evidence
+  - dynamic_runtime
+  - manual_inspection
+
+evidence_sufficiency:
+  citation_fields:
+    - canonical_artifact_and_location
+    - hash_or_accepted_producer_pointer
+    - observed_fact
+    - evidence_mode
+    - freshness
+    - covered_scope
+  rules:
+    - evaluate every mandatory proof obligation, not artifact counts
+    - preserve counterevidence and contradictions
+    - documentation proves intent except for document/process-only controls
+    - absence of a scanner result is not positive evidence
+    - missing evidence alone cannot produce not_satisfied
+    - static-only evidence cannot satisfy dynamic, deployed, runtime, live-state, or manual obligations
+    - composite controls retain one result but expose clause-level proof obligations
 
 applicability_statuses:
-  - applicable
-  - not_applicable
-  - conditional
-  - cannot_determine
-  - out_of_scope
+  applicable: evidence shows the control governs the component
+  conditional: applicability depends on a recorded unresolved condition
+  not_applicable: adequate positive evidence supports exclusion
+  cannot_determine: evidence is insufficient or contradictory
+  out_of_scope: approved engagement scope excludes the target
 
-control_statuses:
-  - satisfied
-  - partially_satisfied
-  - not_satisfied
-  - not_applicable
-  - cannot_verify
-  - dynamic_test_required
-  - human_decision_required
+assessment_statuses:
+  satisfied: all mandatory obligations have admissible evidence and no material contradiction
+  partially_satisfied: some obligations are supported and others are missing, narrow, or contradicted
+  not_satisfied: admissible evidence demonstrates a required property is absent or contrary
+  cannot_verify: evidence or capability is insufficient and no ready authorized follow-up applies
+  dynamic_test_required: a specified runtime test is needed but not yet authorized or executed
+  human_decision_required: a policy, legal, risk, scope, or control-owner decision is needed
+  not_assessed: no valid result exists because the assigned cell did not complete validly
 
+rendering_rules:
+  - not_applicable is rendered from applicability, not used as an assessment shortcut
+  - out_of_scope is reported separately from not_applicable
+  - conditional and cannot_determine create coverage gaps
+  - every selected control-target row remains visible through final join
