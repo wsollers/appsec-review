@@ -2611,7 +2611,9 @@
           "appsec-review-process/tests/test_design_parity.py",
           "appsec-review-process/tests/test_worker_result_runtime.py",
           "appsec-review-process/tests/test_worker_adoption.py",
-          "appsec-review-process/qualify_worker_adoption.py"
+          "appsec-review-process/tests/test_critical_findings_sarif.py",
+          "appsec-review-process/qualify_worker_adoption.py",
+          "appsec-review-process/qualify_sarif_adoption.py"
         ]
       },
       "gaps": [

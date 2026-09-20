@@ -130,3 +130,63 @@ A reasonable Batch 9 is one separate deterministic-worker adoption for
 If SARIF cannot preserve its strict fixed-input/finding-validation boundary under the common
 envelope, record the gap and leave it on its existing implementation rather than broadening the
 batch.
+
+## Batch 9 result — `10-critical-findings-sarif` common-runtime adoption
+
+Implemented on branch `claude/b09-sarif-common-runtime` within the requested boundary.
+
+- `critical_findings_sarif.py` keeps its strict fixed-input Markdown-to-SARIF semantics unchanged
+  and its standalone Dagster job unbound from synthesis. Only the execution wrapper moved: it now
+  calls `coordinate_worker_lifecycle`, allocates and recovers attempts through
+  `publish_job_output.py`, persists the v1.0 `result.json` envelope, publishes through the
+  read-only validator, and executes its bounded child under
+  `appsec-review/deterministic-child/1.0` with one-MiB retained stdout/stderr limits.
+- The immutable input fingerprint now pins the output contract, worker kind, the child contract and
+  stream limits, and the hashes of `deterministic_child.py`, `execution_state.py`,
+  `process_gate.py`, `publish_job_output.py`, `validate_job_output.py`, `worker_result.py`, the job
+  template and the output contract. The worker's executable identity therefore changed.
+- `registry/output-contracts/critical-findings-sarif.json` declares
+  `outputs/critical-findings.sarif` as its single result artifact against the new
+  `schemas/critical-findings-sarif.schema.json`. It deliberately declares no `claim_class`: the
+  three trusted claim-class policies forbid finding/severity promotion, which is not a meaningful
+  surface for a transform whose whole purpose is republishing an upstream verification decision.
+  The strict fixed-input boundary, not a claim class, is what keeps it from verifying anything.
+- Pre-migration accepted pointers remain integrity-readable through `_validate_legacy`; they are
+  never reused as current. No historical attempt was rewritten.
+- `publish_job_output.py`, `validate_job_output.py`, `worker_result.py` and
+  `deterministic_child.py` are unchanged except for one docstring count in the coordinator. No
+  generic defect was found in them.
+- `qualify_sarif_adoption.py` is the narrowly separate live sequence: prepare, success, reuse,
+  pending-publication recovery, interrupted allocation, invalid newer attempt, and recovery.
+
+### Batch 9 files
+
+- `appsec-review-process/critical_findings_sarif.py`
+- `appsec-review-process/tests/test_critical_findings_sarif.py`
+- `appsec-review-process/qualify_sarif_adoption.py` (new)
+- `appsec-review-process/registry/output-contracts/critical-findings-sarif.json`
+- `schemas/critical-findings-sarif.schema.json` (new)
+- `appsec-review-process/publish_job_output.py` (docstring only)
+- `appsec-review-process/TODO.md`
+- `appsec-review-process/continuation-design-parity-worker-envelope.md`
+- `docs/critical-findings-sarif-job.md`
+- `docs/worker-result-envelope.md`
+- `docs/run-data-and-job-execution.md`
+- `docs/design-parity-completion-plan.md`
+
+### Batch 9 qualification state
+
+- Linux focused tests with `PYTHONDONTWRITEBYTECODE=1`: 13 SARIF cases, 19 worker-adoption cases,
+  and 6 deterministic-child cases passed.
+- `python -B -m py_compile` passed for every changed Python file.
+- `python -B appsec-review-process/validate_design_parity.py` — PASS, 42 jobs / 15 capabilities.
+- `python -B appsec-review-process/qualify_phase1.py --check-contracts` — PASS, 83 registry
+  records / 42 graph jobs / 15 parity capabilities.
+- `git diff --check` — PASS.
+- **Not performed, not faked:** the bounded live Dagster success/reuse/newer-failure/recovery
+  sequence and the Windows focused run. The implementation environment had no Docker daemon, no
+  Dagster service and no `/targets`, so no run IDs, attempt IDs, evidence hashes or success files
+  exist for them. B09 stays open until a host with the stack runs
+  `python -B appsec-review-process/qualify_sarif_adoption.py --run-id <owner_run_id>` after
+  confirming no Dagster run is active, and records the report path and SHA-256 under the owning
+  ignored run.

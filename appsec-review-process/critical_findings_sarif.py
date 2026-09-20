@@ -5,6 +5,12 @@ The converter preserves the legacy ``md_to_sarif.py`` format, but accepted workf
 stricter: the input is a fixed run-owned file, every finding is validated, work runs in a bounded
 child process with separate streams, and publication records immutable hashes. Target Markdown is
 untrusted data; it is parsed as data and is never executed or interpolated into a command.
+
+The conversion semantics below are unchanged. Only the execution wrapper is common: attempts are
+allocated, recovered, published and reused through ``publish_job_output.py`` against the v1.0
+worker-result envelope, read-only validation stays in ``validate_job_output.py``, and the bounded
+child obeys ``appsec-review/deterministic-child/1.0``. This worker is still the standalone
+``critical_findings_sarif`` Dagster job; it is deliberately not bound to synthesis.
 """
 from __future__ import annotations
 
@@ -15,20 +21,28 @@ from pathlib import Path
 import platform
 import re
 import sys
-import uuid
 from typing import Any
 
 import yaml
 
-from execution_state import (ROOT, Blocked, Lock, atomic_json, data_path, digest, execute,
-                             file_hash, identifier, now, read_json, run_path, tree_hashes)
+from deterministic_child import CONTRACT as CHILD_CONTRACT, ChildExecutionSpec, execute_child
+from execution_state import (ROOT, Blocked, atomic_json, data_path, digest, file_hash, identifier,
+                             now, read_json, run_path, tree_hashes)
 from job_graph import composition
 from phase1 import config_for
+from publish_job_output import (common_pointer, coordinate_worker_lifecycle,
+                                record_terminal_current, validate_published)
+from validate_job_output import validate_contract_result
 
 JOB_ID = "10-critical-findings-sarif"
 INPUT_NAME = "critical-findings.md"
+OUTPUT_NAME = "critical-findings.sarif"
+OUTPUT_CONTRACT = "critical-findings-sarif"
+WORKER_KIND = "deterministic_python"
 MAX_INPUT_BYTES = 4 * 1024 * 1024
 TIMEOUT_SECONDS = 120
+STDOUT_LIMIT_BYTES = 1024 * 1024
+STDERR_LIMIT_BYTES = 1024 * 1024
 REQUIRED_FIELDS = {"id", "title", "severity", "status", "location", "confidence"}
 SEVERITIES = {"Critical", "High", "Medium", "Low", "Info"}
 SEVERITY_TO_LEVEL = {
@@ -190,7 +204,12 @@ def validate_sarif(path: Path, expected_findings: int) -> dict[str, Any]:
     return value
 
 
-def inputs(run_id: str) -> dict[str, Any]:
+def current_inputs(run_id: str) -> dict[str, Any]:
+    """Derive the immutable input fingerprint record for one attempt.
+
+    Strict fixed-input validation happens here, before any attempt is allocated, so a malformed or
+    missing finding document is a preflight ``BLOCKED`` outcome rather than a failed child.
+    """
     config_for(run_id)
     source = input_path(run_id)
     if not source.is_file() or source.is_symlink():
@@ -202,107 +221,182 @@ def inputs(run_id: str) -> dict[str, Any]:
     return {"source": {"path": f"inputs/{INPUT_NAME}", "sha256": file_hash(source),
                        "bytes": source.stat().st_size, "finding_count": len(findings)},
             "composition": job["composition"], "timeout_seconds": job["timeout_seconds"],
+            "output_contract": OUTPUT_CONTRACT, "worker_kind": WORKER_KIND,
             "tool": {"name": "critical_findings_sarif", "version": "1.0.0",
                      "python": platform.python_version(), "pyyaml": yaml.__version__,
                      "executable": str(Path(sys.executable).resolve()),
                      "image": os.environ.get("APPSEC_WORKER_IMAGE", "appsec-review-dagster:local")},
             "code": {"critical_findings_sarif.py": file_hash(Path(__file__)),
-                     f"registry/job-templates/{JOB_ID}.json": file_hash(ROOT / "registry" / "job-templates" / f"{JOB_ID}.json")}}
+                     "deterministic_child.py": file_hash(ROOT / "deterministic_child.py"),
+                     "execution_state.py": file_hash(ROOT / "execution_state.py"),
+                     "process_gate.py": file_hash(ROOT / "process_gate.py"),
+                     "publish_job_output.py": file_hash(ROOT / "publish_job_output.py"),
+                     "validate_job_output.py": file_hash(ROOT / "validate_job_output.py"),
+                     "worker_result.py": file_hash(ROOT / "worker_result.py"),
+                     f"registry/job-templates/{JOB_ID}.json": file_hash(
+                         ROOT / "registry" / "job-templates" / f"{JOB_ID}.json"),
+                     f"registry/output-contracts/{OUTPUT_CONTRACT}.json": file_hash(
+                         ROOT / "registry" / "output-contracts" / f"{OUTPUT_CONTRACT}.json")},
+            "child_execution": {"contract": CHILD_CONTRACT, "argv_only": True,
+                                "shell_allowed": False,
+                                "stdout_limit_bytes": STDOUT_LIMIT_BYTES,
+                                "stderr_limit_bytes": STDERR_LIMIT_BYTES,
+                                "child_tree_cleanup": "always"}}
+
+
+def input_fingerprint(record: dict[str, Any]) -> str:
+    return "sha256:" + digest(record)
+
+
+def contract() -> dict[str, Any]:
+    return read_json(ROOT / "registry" / "output-contracts" / f"{OUTPUT_CONTRACT}.json")
+
+
+def _validate_attempt_payload(attempt: Path) -> None:
+    """Contract-declared result validation plus the SARIF-specific identity and hash checks.
+
+    The common validator owns the declared result artifact, its schema and the generic
+    non-mutating checks. Finding-count agreement with the immutable validated input and the
+    manifest hashes stay local to this worker.
+    """
+    errors = validate_contract_result(
+        attempt, contract(), run_id=read_json(attempt / "status.json").get("run_id", ""))
+    if errors:
+        raise Blocked("invalid critical-findings SARIF result: " + "; ".join(errors))
+    record = read_json(attempt / "inputs.json")
+    output = attempt / "outputs" / OUTPUT_NAME
+    validate_sarif(output, record["source"]["finding_count"])
+    manifest = read_json(attempt / "manifest.json")
+    if manifest.get("source_sha256") != record["source"]["sha256"]:
+        raise Blocked("SARIF manifest source hash mismatch")
+    if manifest.get("sarif_sha256") != file_hash(output):
+        raise Blocked("SARIF manifest output hash mismatch")
+
+
+def _validate_legacy(run_id: str, pointer: dict[str, Any]) -> Path:
+    """Pre-migration pointers stay integrity-readable; run() never reuses them as current."""
+    base = root(run_id)
+    if pointer.get("status") != "OK":
+        raise Blocked("SARIF transform is not accepted")
+    attempt = base / "attempts" / identifier(pointer["attempt_id"])
+    if tree_hashes(attempt) != pointer.get("hashes"):
+        raise Blocked("SARIF attempt artifacts changed")
+    if read_json(attempt / "status.json").get("status") != "OK":
+        raise Blocked("SARIF attempt did not finish OK")
+    _validate_attempt_payload(attempt)
+    return attempt
 
 
 def validate(run_id: str, pointer: dict[str, Any] | None = None) -> Path:
     base = root(run_id)
     pointer = pointer or read_json(base / "accepted.json")
-    if pointer.get("status") != "OK":
-        raise Blocked("SARIF transform is not accepted")
-    attempt = base / "attempts" / identifier(pointer["attempt_id"])
-    if tree_hashes(attempt) != pointer["hashes"]:
-        raise Blocked("SARIF attempt artifacts changed")
-    record = read_json(attempt / "inputs.json")
-    current = inputs(run_id)
-    if current != record:
+    if not common_pointer(pointer):
+        return _validate_legacy(run_id, pointer)
+    record = current_inputs(run_id)
+    attempt, _envelope = validate_published(
+        base, pointer, input_fingerprint(record), expected_run_id=run_id, expected_job_id=JOB_ID)
+    if read_json(attempt / "inputs.json") != record:
         raise Blocked("SARIF inputs, tooling or implementation are stale")
-    status = read_json(attempt / "status.json")
-    if status.get("status") != "OK":
-        raise Blocked("SARIF attempt did not finish OK")
-    validate_sarif(attempt / "outputs" / "critical-findings.sarif", record["source"]["finding_count"])
-    manifest = read_json(attempt / "manifest.json")
-    if manifest.get("source_sha256") != record["source"]["sha256"]:
-        raise Blocked("SARIF manifest source hash mismatch")
-    if manifest.get("sarif_sha256") != file_hash(attempt / "outputs" / "critical-findings.sarif"):
-        raise Blocked("SARIF manifest output hash mismatch")
+    _validate_attempt_payload(attempt)
     return attempt
+
+
+def _failure_record(run_id: str, exc: BaseException) -> dict[str, Any]:
+    """Bounded preflight descriptor for an attempt that never reached validated inputs."""
+    source = input_path(run_id)
+    descriptor: dict[str, Any] = {"run_id": run_id, "job": JOB_ID,
+                                  "preflight_error": f"{type(exc).__name__}: {exc}",
+                                  "code": file_hash(Path(__file__))}
+    if source.is_file() and not source.is_symlink():
+        descriptor["source"] = {"path": f"inputs/{INPUT_NAME}", "sha256": file_hash(source),
+                                "bytes": source.stat().st_size}
+    return descriptor
+
+
+def child_environment() -> dict[str, str]:
+    environment = {key: value for key, value in os.environ.items()
+                   if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "LANG", "LC_ALL"}}
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    return environment
 
 
 def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
     base = root(run_id)
-    with Lock(base / "job.lock"):
-        record = inputs(run_id)
-        fingerprint = digest(record)
-        if not force and (base / "accepted.json").exists():
-            candidate = read_json(base / "accepted.json")
-            if candidate.get("fingerprint") == fingerprint:
-                try:
-                    validate(run_id, candidate)
-                    atomic_json(data_path(run_id, "orchestration", "dagster", dagster_id,
-                                          "critical-findings-sarif-reuse.json"),
-                                {"status": "OK", "reused": True, "producer": candidate, "time": now()})
-                    return candidate
-                except (ValueError, Blocked, OSError, KeyError):
-                    pass
-        if (base / "latest.json").exists():
-            previous = read_json(base / "latest.json")
-            old = base / "attempts" / identifier(previous["attempt_id"]) / "status.json"
-            if old.exists() and read_json(old).get("status") == "RUNNING":
-                atomic_json(old, {**read_json(old), "status": "FAILED", "error": "INTERRUPTED_WORKER",
-                                  "ended_at": now()})
-        attempt_id = uuid.uuid4().hex
-        attempt = base / "attempts" / attempt_id
+    resume = (f"python -B appsec-review-process/launch_job.py --run-id {run_id} "
+              "--job critical_findings_sarif --wait")
+
+    def post_validate(attempt: Path, _envelope: dict[str, Any],
+                      record: dict[str, Any]) -> None:
+        if read_json(attempt / "inputs.json") != record:
+            raise Blocked("SARIF immutable attempt inputs changed")
+        _validate_attempt_payload(attempt)
+
+    def on_reuse(admitted: dict[str, Any]) -> None:
+        candidate, envelope = admitted["pointer"], admitted["envelope"]
+        atomic_json(data_path(run_id, "orchestration", "dagster", dagster_id,
+                              "critical-findings-sarif-reuse.json"),
+                    {"status": envelope["execution_status"], "reused": True,
+                     "publication_recovered": admitted["recovered_publication"],
+                     "producer": candidate, "time": now()})
+
+    def execute_attempt(allocation: dict[str, Any], record: dict[str, Any],
+                        fingerprint: str) -> dict[str, Any]:
+        attempt_id = allocation["attempt_id"]
+        attempt = allocation["attempt"]
         (attempt / "outputs").mkdir(parents=True)
+        started = allocation["started_at"]
         status = {"status": "RUNNING", "run_id": run_id, "attempt_id": attempt_id,
-                  "dagster_run_id": dagster_id, "started_at": now(), "fingerprint": fingerprint}
-        atomic_json(base / "accepted.json", {"status": "PENDING", "attempt_id": attempt_id})
-        atomic_json(base / "latest.json", {"attempt_id": attempt_id})
-        try:
-            atomic_json(attempt / "status.json", status)
-            atomic_json(attempt / "inputs.json", record)
-            atomic_json(attempt / "pre.json", {"status": "OK", "validation": "strict finding schema",
-                                                "source_sha256": record["source"]["sha256"]})
-            environment = {key: value for key, value in os.environ.items()
-                           if key.upper() in {"PATH", "SYSTEMROOT", "WINDIR", "LANG", "LC_ALL"}}
-            environment["PYTHONDONTWRITEBYTECODE"] = "1"
-            output = attempt / "outputs" / "critical-findings.sarif"
-            argv = [sys.executable, "-B", str(Path(__file__)), "worker", str(input_path(run_id)), str(output)]
-            result = execute(argv, ROOT, attempt / "logs", record["timeout_seconds"], env=environment)
-            atomic_json(attempt / "command.json", result)
-            if result.get("error") or result.get("exit_code") != 0:
-                raise Blocked("SARIF transform failed; inspect separate attempt logs")
-            if file_hash(input_path(run_id)) != record["source"]["sha256"]:
-                raise Blocked("critical findings input changed during conversion")
-            if record["code"] != inputs(run_id)["code"]:
-                raise Blocked("SARIF implementation changed during conversion")
-            validate_sarif(output, record["source"]["finding_count"])
-            manifest = {"schema": "appsec-review/critical-findings-sarif/1", "run_id": run_id,
-                        "attempt_id": attempt_id, "source_path": record["source"]["path"],
-                        "source_sha256": record["source"]["sha256"],
-                        "sarif_path": "outputs/critical-findings.sarif", "sarif_sha256": file_hash(output),
-                        "finding_count": record["source"]["finding_count"], "tool": record["tool"],
-                        "target_execution": False}
-            atomic_json(attempt / "manifest.json", manifest)
-            atomic_json(attempt / "post.json", {"status": "OK", "schema_validation": "PASS",
-                                                 "freshness": "PASS", "hash_validation": "PASS"})
-            status.update(status="OK", ended_at=now())
-            atomic_json(attempt / "status.json", status)
-            pointer = {"status": "OK", "run_id": run_id, "job": JOB_ID, "attempt_id": attempt_id,
-                       "fingerprint": fingerprint, "hashes": tree_hashes(attempt)}
-            atomic_json(base / "accepted.json", pointer)
-            validate(run_id, pointer)
-            return pointer
-        except BaseException as exc:
-            status.update(status="FAILED", error=f"{type(exc).__name__}: {exc}", ended_at=now())
-            atomic_json(attempt / "status.json", status)
-            atomic_json(base / "accepted.json", {"status": "FAILED", "attempt_id": attempt_id})
-            raise
+                  "dagster_run_id": dagster_id, "started_at": started, "fingerprint": fingerprint}
+        atomic_json(attempt / "status.json", status)
+        atomic_json(attempt / "pre.json", {"status": "OK", "validation": "strict finding schema",
+                                            "source_sha256": record["source"]["sha256"]})
+        output = attempt / "outputs" / OUTPUT_NAME
+        executable = str(Path(sys.executable).resolve())
+        argv = [executable, "-B", str(Path(__file__).resolve()), "worker",
+                str(input_path(run_id)), str(output)]
+        result = execute_child(ChildExecutionSpec(
+            argv=tuple(argv), argv_prefix=tuple(argv[:4]), executable=Path(executable),
+            cwd=ROOT.resolve(), owner_root=attempt.resolve(),
+            log_dir=(attempt / "logs").resolve(),
+            timeout_seconds=record["timeout_seconds"],
+            stdout_limit_bytes=record["child_execution"]["stdout_limit_bytes"],
+            stderr_limit_bytes=record["child_execution"]["stderr_limit_bytes"],
+            env=child_environment()))
+        atomic_json(attempt / "command.json", result)
+        if result.get("error") or result.get("exit_code") != 0:
+            raise Blocked("SARIF transform failed; inspect separate attempt logs")
+        if file_hash(input_path(run_id)) != record["source"]["sha256"]:
+            raise Blocked("critical findings input changed during conversion")
+        if record["code"] != current_inputs(run_id)["code"]:
+            raise Blocked("SARIF implementation changed during conversion")
+        validate_sarif(output, record["source"]["finding_count"])
+        manifest = {"schema": "appsec-review/critical-findings-sarif/1", "run_id": run_id,
+                    "attempt_id": attempt_id, "source_path": record["source"]["path"],
+                    "source_sha256": record["source"]["sha256"],
+                    "sarif_path": f"outputs/{OUTPUT_NAME}", "sarif_sha256": file_hash(output),
+                    "finding_count": record["source"]["finding_count"], "tool": record["tool"],
+                    "target_execution": False}
+        atomic_json(attempt / "manifest.json", manifest)
+        atomic_json(attempt / "post.json", {"status": "OK", "schema_validation": "PASS",
+                                             "freshness": "PASS", "hash_validation": "PASS"})
+        return record_terminal_current(
+            base, attempt, run_id=run_id, job_id=JOB_ID, dagster_run_id=dagster_id,
+            worker_kind=WORKER_KIND, output_contract=OUTPUT_CONTRACT,
+            input_fingerprint=fingerprint, started_at=started, execution_status="OK",
+            summary="Verified-finding Markdown converted to accepted SARIF 2.1.0.",
+            status_record=status,
+            artifact_paths=["manifest.json", f"outputs/{OUTPUT_NAME}", "status.json"],
+            pre_envelope_validate=lambda path, _status: _validate_attempt_payload(path))
+
+    return coordinate_worker_lifecycle(
+        base, run_id=run_id, job_id=JOB_ID, dagster_run_id=dagster_id,
+        worker_kind=WORKER_KIND, output_contract=OUTPUT_CONTRACT, resume_command=resume,
+        derive_inputs=lambda: current_inputs(run_id),
+        fingerprint_inputs=input_fingerprint, execute_attempt=execute_attempt,
+        preflight_failure_inputs=lambda exc: _failure_record(run_id, exc),
+        force=force, post_validate=post_validate, on_reuse=on_reuse,
+        blocked_summary="Critical-findings SARIF preflight did not complete.",
+        failed_summary="Critical-findings SARIF transform did not publish.")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "critical-findings-sarif.schema.json",
+  "title": "Critical Findings SARIF 2.1.0 Transform Result",
+  "description": "The exact SARIF document emitted by appsec-review-process/critical_findings_sarif.py. Free-text fields copied verbatim from the validated finding document are intentionally unconstrained so the common validator cannot change which inputs convert; identity, level, location and structure are pinned.",
+  "type": "object",
+  "required": ["$schema", "version", "runs"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+    },
+    "version": {"const": "2.1.0"},
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["tool", "results"],
+        "additionalProperties": false,
+        "properties": {
+          "tool": {
+            "type": "object",
+            "required": ["driver"],
+            "additionalProperties": false,
+            "properties": {
+              "driver": {
+                "type": "object",
+                "required": ["name", "informationUri", "version", "rules"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {"type": "string"},
+                  "informationUri": {"type": "string"},
+                  "version": {"const": "1.0.0"},
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["id", "name", "shortDescription", "fullDescription",
+                                   "helpUri", "properties"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {"type": "string"},
+                        "name": {"type": "string"},
+                        "shortDescription": {
+                          "type": "object",
+                          "required": ["text"],
+                          "additionalProperties": false,
+                          "properties": {"text": {}}
+                        },
+                        "fullDescription": {
+                          "type": "object",
+                          "required": ["text"],
+                          "additionalProperties": false,
+                          "properties": {"text": {}}
+                        },
+                        "helpUri": {"type": "string"},
+                        "properties": {
+                          "type": "object",
+                          "required": ["tags", "security-severity"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "tags": {"type": "array"},
+                            "security-severity": {"type": "string"}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["ruleId", "level", "message", "locations", "properties"],
+              "additionalProperties": false,
+              "properties": {
+                "ruleId": {"type": "string"},
+                "level": {"type": "string", "enum": ["error", "warning", "note"]},
+                "message": {
+                  "type": "object",
+                  "required": ["text"],
+                  "additionalProperties": false,
+                  "properties": {"text": {"type": "string"}}
+                },
+                "locations": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": ["physicalLocation"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "physicalLocation": {
+                        "type": "object",
+                        "required": ["artifactLocation", "region"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "artifactLocation": {
+                            "type": "object",
+                            "required": ["uri"],
+                            "additionalProperties": false,
+                            "properties": {"uri": {"type": "string"}}
+                          },
+                          "region": {
+                            "type": "object",
+                            "required": ["startLine"],
+                            "additionalProperties": false,
+                            "properties": {
+                              "startLine": {"type": "integer"},
+                              "endLine": {"type": "integer"}
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "properties": {
+                  "type": "object",
+                  "required": ["findingId", "severity", "status", "confidence", "component",
+                               "asvs", "dataClasses", "regulatory", "cve", "discoveredBy"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "findingId": {},
+                    "severity": {"type": "string",
+                                 "enum": ["Critical", "High", "Medium", "Low", "Info"]},
+                    "status": {},
+                    "confidence": {},
+                    "component": {},
+                    "asvs": {},
+                    "dataClasses": {},
+                    "regulatory": {},
+                    "cve": {},
+                    "discoveredBy": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

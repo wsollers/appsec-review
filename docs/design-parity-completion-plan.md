@@ -110,9 +110,11 @@ Completed subset:
   left behind `PENDING` without rerunning payload work. The per-job lock and lock-scoped lifecycle
   sequence are now also common for those two workers: preflight blockers, work/validation failures,
   and cancellation route to one terminal recorder while the original exception still reaches
-  Dagster. Scorecard alone now uses the versioned argv-only deterministic-child boundary for
-  timeout, bounded concurrent stdout/stderr draining, cancellation diagnostics, and complete
-  child-tree cleanup. Payload construction and contract-specific validation remain worker-local;
+  Dagster. Scorecard and the standalone critical-findings SARIF transform use the versioned
+  argv-only deterministic-child boundary for timeout, bounded concurrent stdout/stderr draining,
+  cancellation diagnostics, and complete child-tree cleanup; SARIF adopted the common lifecycle,
+  envelope and publication boundary in Batch 9 and still owes its bounded live Dagster sequence.
+  Payload construction and contract-specific validation remain worker-local;
   repository-partition discovery has no child, and no broader worker was migrated.
 - [ ] Add permission capabilities for target execution, network destinations, dynamic testing,
   debugger/ptrace, credentials, package restore, and target mutation.
