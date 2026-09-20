@@ -180,8 +180,8 @@ Exit 0 success, 1 error or failed verification, 2 publication refused.
 This is a heuristic, not a proof. A valid receipt means "this ruleset found nothing more", not
 "no secret is present".
 
-- A low-entropy value with **no** secret-ish name nearby (`x = "Hunter2"`, a bare `key`, `pin`,
-  `-p<value>`), or whose name and value are on different lines (YAML block scalars, tables, CSV
+- A low-entropy value with **no** secret-ish name nearby (`x = "Hunter2"`, a bare `key`, `pin`, a
+  generic `-p<value>` on an unrecognised command), or whose name and value are on different lines (YAML block scalars, tables, CSV
   columns headed `password`).
 - Encoded or transformed values: base64/hex/URL-encoding of a labelled password, gzip, encrypted
   blobs. Escapes other than `\uXXXX` in the text passes.
@@ -195,6 +195,13 @@ This is a heuristic, not a proof. A valid receipt means "this ruleset found noth
   pass only.
 - Content of withheld files is not published at all, which is safe but is a coverage gap the
   producer must report.
+
+Positional credentials are covered only for the clients named in `RULESET["cli_credentials"]`:
+the MySQL/MariaDB family's `-p<value>`, `sshpass -p`, and `user:password` after `-u`/`--user` for
+`curl`/`wget`/`http`. The operator-less directive form (`ENV API_KEY value`, `ARG NPM_TOKEN value`,
+`export SIGNING_KEY value`) is covered when the NAME is secret-ish, because Dockerfile linters quote
+such lines verbatim. Both were added after independent verification found them leaking; a
+positional password on any other command line remains a false negative.
 
 ## Known false positives
 

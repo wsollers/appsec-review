@@ -97,6 +97,18 @@ RULESET: dict[str, Any] = {
     "keyword_lookbehind_chars": 66,
     "flag_prefix": r"(?<![A-Za-z0-9])--?[A-Za-z0-9_\-]{0,64}\Z",
     "flag_tail": r"[A-Za-z0-9_\-]{0,64}[ \t]+",
+    # `ENV API_KEY value` / `ARG NPM_TOKEN value` / `export DB_PASSWORD value`: a directive, a
+    # secret-ish NAME, whitespace, then the value with no operator at all. Dockerfiles still accept
+    # this legacy ENV form, and hadolint/trivy output quotes such lines verbatim.
+    "directive_prefix": r"(?i)(?:^|\n)[ \t]{0,16}(?:ENV|ARG|LABEL|export|setenv|setx|set|declare(?:[ \t]+-[A-Za-z]{1,4})?)[ \t]{1,8}[A-Za-z0-9_.\-]{0,64}\Z",
+    "directive_tail": r"[A-Za-z0-9_.\-]{0,64}[ \t]{1,8}(?![=:])",
+    # Credentials passed positionally to well-known clients, where no secret-ish name exists to
+    # anchor on. Each pattern is bounded, so cost stays linear.
+    "cli_credentials": {
+        "mysql-family-short-password": r"(?i)\b(?:mysql|mysqldump|mysqladmin|mysqlimport|mysqlcheck|mysqlshow|mariadb|mariadb-dump|mariadb-admin)\b[^\n]{0,512}?[ \t]-p(?P<v>[^\s\-][^\s]{0,255})",
+        "sshpass-password": r"(?i)\bsshpass[ \t]{1,8}-p[ \t]{0,8}(?P<v>[^\s]{1,256})",
+        "user-colon-password": r"(?i)\b(?:curl|wget|http|https)\b[^\n]{0,512}?[ \t](?:-u|--user|--proxy-user)[ \t=]{1,8}[\"']?[^\s:\"']{1,128}:(?P<v>[^\s\"']{1,256})",
+    },
     "flag_only": r"(?i)^--?[A-Za-z0-9_\-]{0,64}?" + _KEYWORD + r"[A-Za-z0-9_\-]{0,64}$",
     "xml_prefix": r"<[A-Za-z0-9_:.\-]{0,64}\Z",
     "xml_tail": r"[A-Za-z0-9_:.\-]{0,64}(?:\s[^<>]{0,512})?>(?P<v>[^<]{1,4096})<",
@@ -147,6 +159,9 @@ _FLAG_TAIL_RE = re.compile(RULESET["flag_tail"])
 _XML_PREFIX_RE = re.compile(RULESET["xml_prefix"])
 _XML_TAIL_RE = re.compile(RULESET["xml_tail"])
 _FLAG_ONLY_RE = re.compile(RULESET["flag_only"])
+_DIRECTIVE_PREFIX_RE = re.compile(RULESET["directive_prefix"])
+_DIRECTIVE_TAIL_RE = re.compile(RULESET["directive_tail"])
+_CLI_CREDENTIAL_RES = tuple(re.compile(pattern) for _, pattern in sorted(RULESET["cli_credentials"].items()))
 _UNQUOTED_RE = re.compile(RULESET["unquoted_value"])
 _DQ_RE = re.compile(r'(?:\\.|[^"\\\n])*')
 _SQ_RE = re.compile(r"(?:\\.|[^'\\\n])*")
@@ -312,9 +327,17 @@ def _named_spans(text: str) -> Iterator[tuple[int, int, str]]:
             span = _value_span(text, tail.end(), require_quoted=False)
             if span:
                 yield span[0], span[1], "named-secret"
+        tail = _DIRECTIVE_PREFIX_RE.search(before) and _DIRECTIVE_TAIL_RE.match(text, keyword.end())
+        if tail:
+            span = _value_span(text, tail.end(), require_quoted=False)
+            if span:
+                yield span[0], span[1], "named-secret"
         tail = _XML_PREFIX_RE.search(before) and _XML_TAIL_RE.match(text, keyword.end())
         if tail and tail.group("v").strip():
             yield tail.start("v"), tail.end("v"), "named-secret"
+    for pattern in _CLI_CREDENTIAL_RES:
+        for match in pattern.finditer(text):
+            yield match.start("v"), match.end("v"), "named-secret"
     for match in _BEARER_RE.finditer(text):
         yield match.start("v"), match.end("v"), "bearer-token"
     for match in _URL_RE.finditer(text):

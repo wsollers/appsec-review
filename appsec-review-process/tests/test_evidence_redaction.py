@@ -1044,13 +1044,115 @@ class SchemaAndGoldenTests(RedactionTestCase):
                 self.assertTrue(any(scanner.search(value) for scanner in scanners), name)
 
 
+
+class VerificationProbeTests(unittest.TestCase):
+    """Cases added while independently verifying V06: shapes redactors commonly miss. Every planted
+    value is built at run time; none is a literal in this file."""
+
+    HUMAN = "Tr0ub4dor" + "-" + "EXAMPLE"                      # low entropy: only a name can catch it
+    TOKEN = "gh" + "p_" + stream("probe-token", ALNUM, 36)
+    SIGNATURE = stream("probe-sig", ALNUM, 43)
+    KEY_LINES = [stream(f"probe-key-{i}", BASE64, 64) for i in range(4)]
+
+    @classmethod
+    def key_block(cls, label, newline="\n"):
+        return ("-----BEGIN " + label + "-----" + newline + newline.join(cls.KEY_LINES) + newline
+                + "-----END " + label + "-----" + newline)
+
+    def cases(self):
+        human, token = self.HUMAN, self.TOKEN
+        basic = base64.b64encode(f"user:{human}".encode()).decode()
+        return {
+            "token-used-as-a-json-key.json": (json.dumps({token: True, "note": "a token as an object key"}), [token]),
+            "camel-upper-and-hyphen-names.json": (json.dumps({"clientSecret": human, "DB_PASSWORD": human + "1", "Api-Key": human + "2",
+                                                              "passphrase": human + "3", "pwd": human + "4"}), [human]),
+            # Dockerfile legacy form: directive, secret-ish NAME, whitespace, value, no operator.
+            "dockerfile-env-space-form.txt": (f"FROM scratch\nENV API_KEY {human}\nENV DB_PASSWORD={human}5\nARG NPM_TOKEN {token}\n"
+                                              f"  export SIGNING_KEY {human}6\n", [human, token]),
+            "dotenv.txt": (f"DB_PASS={human}\nexport SECRET_KEY='{human}7'\n", [human]),
+            "connection-strings.txt": (f"postgres://app:{human}@db.internal:5432/x\nServer=db;User Id=sa;Password={human}8;\n", [human]),
+            "basic-auth-header.txt": (f"Authorization: Basic {basic}\n", [basic]),
+            "pgp-private-key-block.txt": (self.key_block("PGP PRIVATE KEY BLOCK"), self.KEY_LINES),
+            "encrypted-private-key.txt": (self.key_block("ENCRYPTED PRIVATE KEY"), self.KEY_LINES),
+            "crlf-private-key.txt": (self.key_block("RSA PRIVATE KEY", "\r\n"), self.KEY_LINES),
+            "plain-yaml.yaml": (f"db:\n  user: app\n  password: {human}\n  token: \"{token}\"\n", [human, token]),
+            "xml-attribute-and-element.xml": (f'<conn user="app" password="{human}" />\n<apiKey>{token}</apiKey>\n', [human, token]),
+            "url-query.txt": (f"GET https://api.example.test/v1?user=a&access_token={token}&sig={self.SIGNATURE}\n", [token, self.SIGNATURE]),
+            # Positional credentials: no secret-ish name exists to anchor on.
+            "mysql-short-password-flag.txt": (f"mysql -u root -p{human} appdb\nmysqldump --host db -p{human}9 appdb > dump.sql\n", [human]),
+            "sshpass.txt": (f"sshpass -p {human} ssh deploy@host\nsshpass -p{human}a scp f host:\n", [human]),
+            "curl-user-password.txt": (f"curl -sS -u deploy:{human} https://repo.example.test/x\nwget --user=ci:{human}b https://x.example.test\n", [human]),
+        }
+
+    def redact(self, files, policy="withhold"):
+        base = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        source, published = base / "src", base / "dst"
+        (source / "nested").mkdir(parents=True)
+        for name, text in files.items():
+            (source / "nested" / name).write_bytes(text.encode("utf-8"))
+        out, err, log = io.StringIO(), io.StringIO(), io.StringIO()
+        handler = logging.StreamHandler(log)
+        logging.getLogger().addHandler(handler)
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                receipt = er.redact_tree(source, published, on_unhandled=policy, limits=LIMITS)
+        finally:
+            logging.getLogger().removeHandler(handler)
+        return receipt, published, out.getvalue() + err.getvalue() + log.getvalue()
+
+    def test_no_planted_value_survives_in_any_probe_case(self):
+        cases = self.cases()
+        receipt, published, noise = self.redact({name: text for name, (text, _) in cases.items()})
+        records = {record["path"].rsplit("/", 1)[-1]: record for record in receipt["files"]}
+        sealed = json.dumps(receipt)
+        for name, (_, planted) in cases.items():
+            with self.subTest(case=name):
+                self.assertEqual(records[name]["disposition"], "redacted")
+                text = (published / "nested" / name).read_text(encoding="utf-8")
+                for value in planted:
+                    self.assertNotIn(value, text, "published file")
+                    self.assertNotIn(value, sealed, "receipt")
+                    self.assertNotIn(value, noise, "stdout, stderr or logging")
+        er.verify_receipt(receipt, published, on_unhandled="withhold", limits=LIMITS)
+
+    def test_directive_rule_does_not_fire_without_a_secretish_name_or_with_an_operator(self):
+        text = "ENV APP_MODE production\nENV LOG_LEVEL debug\nARG BASE_IMAGE alpine\n"
+        receipt, published, _ = self.redact({"benign.txt": text})
+        self.assertEqual(receipt["files"][0]["disposition"], "unchanged")
+        self.assertEqual((published / "nested" / "benign.txt").read_text(encoding="utf-8"), text)
+
+    def test_mysql_rule_leaves_port_and_other_flags_alone(self):
+        text = "mysql -u root -P 3306 --protocol tcp appdb\nmysqldump --no-data -h db appdb\n"
+        receipt, _, _ = self.redact({"benign.txt": text})
+        self.assertEqual(receipt["files"][0]["disposition"], "unchanged")
+
+    def test_new_bounded_patterns_stay_linear_on_hostile_lines(self):
+        import time
+        width = LIMITS.max_line_length - 8
+        hostile = {
+            "mysql-repeated.txt": ("mysql " * (width // 6))[:width] + "\n",
+            "curl-repeated.txt": ("curl -u " * (width // 8))[:width] + "\n",
+            "env-repeated.txt": "\n".join(["ENV " + "A" * 60 + "_TOKEN"] * 400) + "\n",
+            "sshpass-repeated.txt": ("sshpass -p " * (width // 11))[:width] + "\n",
+        }
+        started = time.monotonic()
+        self.redact(hostile)
+        self.assertLess(time.monotonic() - started, 5.0)
+
+    def test_new_rules_are_part_of_the_ruleset_digest(self):
+        for key in ("directive_prefix", "directive_tail", "cli_credentials"):
+            changed = deepcopy(er.RULESET)
+            changed.pop(key)
+            self.assertNotEqual(er.digest({"module_version": er.MODULE_VERSION, "ruleset": changed}), er.RULESET_SHA256, key)
+
+
 # Produced by running the redactor over fixtures/evidence-redaction/sarif-snippets, then pinned.
 GOLDEN = {
-    "ruleset_sha256": "a7a1886c50e84d205c9fc4d79a4ca8b023521db5c872253ce951af52694443b1",
+    "ruleset_sha256": "48604e025dcea35947043c9f2a6acc4b1c67c3d1ad45a16eafd3bf556015ab79",
     "sarif_published_sha256": "bbf1eac71274b50cd3e39a71ff1d0979803ab1ad4d60329a153be848a253e93b",
     "sarif_redactions": {"private-key-block": 0, "named-secret": 8, "url-credential": 0, "bearer-token": 0,
                          "provider-token": 1, "jwt": 0, "high-entropy": 1, "fingerprint": 2},
-    "sarif_receipt_sha256": "fab94c99b5d357762bd8a904c30c7a70654cb6f2141e8305bcd05b991c09bd38",
+    "sarif_receipt_sha256": "230efa3c6304bfe97323f987efe000b168a1580eb218e6cdb77c5b36cba230c8",
 }
 
 
