@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool-results.schema.json",
+  "title": "Node tool-results aggregate (tool-results.json)",
+  "description": "ADR-0010 task V03. The deterministic per-node aggregate of tool instances. Cross-record rules (node status vs instances, declared tools, coverage and probe agreement) are enforced by appsec-review-process/tool_instance_shapes.py.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "tool_instances"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/tool-results/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z-]{0,95}$",
+      "description": "Owning graph node. A pattern, not a const: the shape is shared by every ADR-0010 family node and by D09's 02-source-sast."
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$",
+      "description": "The NODE attempt that published this aggregate. Tool instances carry their own attempt ids."
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Intake source-snapshot identity every tool instance and the probe ran against."
+    },
+    "tool_instances": {
+      "type": "array",
+      "items": {
+        "$ref": "tool-instance-result.schema.json"
+      },
+      "minItems": 1
+    }
+  }
+}

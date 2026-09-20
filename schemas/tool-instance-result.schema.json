@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool-instance-result.schema.json",
+  "title": "One tool instance inside a node aggregate",
+  "description": "One attempt-bearing tool instance under data/jobs/<node>/<tool-id>/ (ADR-0010 G1 = B). Carries identity, argv, exit semantics, output FILE hashes and counts only. There is no field for a tool message, snippet or matched line, and every string is an enum, a const or a whitespace-free pattern.",
+  "type": "object",
+  "required": [
+    "tool_id",
+    "attempt_id",
+    "terminal_status",
+    "skip_reason",
+    "cause_code",
+    "identity",
+    "argv",
+    "exit",
+    "outputs",
+    "result_record_count"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$",
+      "description": "The tool instance's own immutable attempt id."
+    },
+    "terminal_status": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED",
+        "UNRESOLVED"
+      ],
+      "description": "Exactly the v1.0 worker-result-envelope terminal set."
+    },
+    "skip_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "not-applicable-no-matching-inputs",
+        null
+      ],
+      "description": "Set if and only if terminal_status is SKIPPED."
+    },
+    "cause_code": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "tool-error",
+        "timeout",
+        "killed",
+        "canceled",
+        "image-unavailable",
+        "identity-unverified",
+        "offline-operation-unavailable",
+        "required-input-missing",
+        "output-invalid",
+        "partial-input-coverage",
+        null
+      ],
+      "description": "Closed cause for any status other than OK and SKIPPED."
+    },
+    "identity": {
+      "$ref": "tool-instance-identity.schema.json"
+    },
+    "argv": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[!-~]{1,512}$"
+      },
+      "minItems": 1,
+      "description": "Exact argument vector, one element per argument. Never a shell string; there is no command or shell field."
+    },
+    "exit": {
+      "type": "object",
+      "required": [
+        "exit_code",
+        "exit_meaning",
+        "timed_out",
+        "nonzero_exit_on_findings",
+        "findings_exit_codes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Process exit code. Null when the process never started or ended without one."
+        },
+        "exit_meaning": {
+          "type": "string",
+          "enum": [
+            "not-started",
+            "clean",
+            "findings-present",
+            "tool-error",
+            "timeout",
+            "canceled",
+            "killed"
+          ]
+        },
+        "timed_out": {
+          "type": "boolean"
+        },
+        "nonzero_exit_on_findings": {
+          "type": "boolean",
+          "description": "True when this tool exits non-zero to say 'findings present'. This is what the legacy runner hid behind '|| true', which ADR-0010 forbids."
+        },
+        "findings_exit_codes": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "The exact non-zero codes that mean 'findings present' for this tool. Any other non-zero code is a tool error."
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "bytes",
+          "media_type",
+          "role",
+          "validation",
+          "validated_against"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}$",
+            "description": "Attempt-relative POSIX path; bytes outside the pattern are percent-encoded."
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "media_type": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.+-]{0,63}/[a-z0-9][a-z0-9.+-]{0,63}$"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "normalized-result",
+              "raw-tool-output",
+              "analysis-substrate",
+              "retained-stdout",
+              "retained-stderr"
+            ]
+          },
+          "validation": {
+            "type": "string",
+            "enum": [
+              "schema-validated",
+              "format-validated",
+              "not-validated",
+              "invalid"
+            ]
+          },
+          "validated_against": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$",
+            "description": "Schema file or format id the output was validated against; null unless validated."
+          }
+        }
+      }
+    },
+    "result_record_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Number of records in the validated result. A count, never the records."
+    }
+  }
+}

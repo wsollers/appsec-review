@@ -1,0 +1,60 @@
+{
+  "schema": "appsec-review/applicability-probe-receipt/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-mobile-sast",
+  "attempt_id": "20260920T120502Z-d4e5f6",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "probe": {
+    "probe_id": "mobile-platform-marker-probe",
+    "probe_version": "1.0.0",
+    "probe_sha256": "sha256:6378f712225d18dbe949a840ec8988cc4dd2a23e82b7dcff4ccdc050fda1f19b"
+  },
+  "files_examined_count": 412,
+  "tools": [
+    {
+      "tool_id": "mobsfscan-android",
+      "detectors": [
+        {
+          "detector_id": "android-manifest",
+          "patterns_searched": [
+            "**/AndroidManifest.xml"
+          ],
+          "matching_input_count": 0
+        },
+        {
+          "detector_id": "android-gradle-plugin",
+          "patterns_searched": [
+            "**/build.gradle",
+            "**/build.gradle.kts"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "mobsfscan-ios",
+      "detectors": [
+        {
+          "detector_id": "ios-info-plist",
+          "patterns_searched": [
+            "**/Info.plist"
+          ],
+          "matching_input_count": 0
+        },
+        {
+          "detector_id": "xcode-project",
+          "patterns_searched": [
+            "**/*.xcodeproj/project.pbxproj"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    }
+  ],
+  "node_applicable": false,
+  "skip_reason": "not-applicable-no-matching-inputs"
+}

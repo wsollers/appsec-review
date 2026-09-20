@@ -1,0 +1,153 @@
+{
+  "schema": "appsec-review/applicability-probe-receipt/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-iac-config-scan",
+  "attempt_id": "20260920T120501Z-a1b2c3",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "probe": {
+    "probe_id": "iac-detector-probe",
+    "probe_version": "1.0.0",
+    "probe_sha256": "sha256:9e85c9fe026ceb2e902ffc462ebafb4f40fb0e55e1f3d2e1fe65681a3198ecd2"
+  },
+  "files_examined_count": 412,
+  "tools": [
+    {
+      "tool_id": "checkov",
+      "detectors": [
+        {
+          "detector_id": "terraform",
+          "patterns_searched": [
+            "**/*.tf",
+            "**/*.tf.json"
+          ],
+          "matching_input_count": 5
+        },
+        {
+          "detector_id": "cloudformation",
+          "patterns_searched": [
+            "**/*.template.json",
+            "**/*.template.yaml"
+          ],
+          "matching_input_count": 0
+        },
+        {
+          "detector_id": "kubernetes-manifest",
+          "patterns_searched": [
+            "**/k8s/**/*.yaml",
+            "**/Chart.yaml",
+            "**/kustomization.yaml"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 5,
+      "applicable": true
+    },
+    {
+      "tool_id": "trivy-config",
+      "detectors": [
+        {
+          "detector_id": "terraform",
+          "patterns_searched": [
+            "**/*.tf",
+            "**/*.tf.json"
+          ],
+          "matching_input_count": 5
+        },
+        {
+          "detector_id": "cloudformation",
+          "patterns_searched": [
+            "**/*.template.json",
+            "**/*.template.yaml"
+          ],
+          "matching_input_count": 0
+        },
+        {
+          "detector_id": "kubernetes-manifest",
+          "patterns_searched": [
+            "**/k8s/**/*.yaml",
+            "**/Chart.yaml",
+            "**/kustomization.yaml"
+          ],
+          "matching_input_count": 0
+        },
+        {
+          "detector_id": "dockerfile",
+          "patterns_searched": [
+            "**/Dockerfile",
+            "**/Dockerfile.*",
+            "**/*.dockerfile"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 5,
+      "applicable": true
+    },
+    {
+      "tool_id": "tfsec",
+      "detectors": [
+        {
+          "detector_id": "terraform",
+          "patterns_searched": [
+            "**/*.tf",
+            "**/*.tf.json"
+          ],
+          "matching_input_count": 5
+        }
+      ],
+      "matching_input_count": 5,
+      "applicable": true
+    },
+    {
+      "tool_id": "kube-linter",
+      "detectors": [
+        {
+          "detector_id": "kubernetes-manifest",
+          "patterns_searched": [
+            "**/k8s/**/*.yaml",
+            "**/Chart.yaml",
+            "**/kustomization.yaml"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "hadolint",
+      "detectors": [
+        {
+          "detector_id": "dockerfile",
+          "patterns_searched": [
+            "**/Dockerfile",
+            "**/Dockerfile.*",
+            "**/*.dockerfile"
+          ],
+          "matching_input_count": 5
+        }
+      ],
+      "matching_input_count": 5,
+      "applicable": true
+    },
+    {
+      "tool_id": "dockerfile-base-image-inventory",
+      "detectors": [
+        {
+          "detector_id": "dockerfile",
+          "patterns_searched": [
+            "**/Dockerfile",
+            "**/Dockerfile.*",
+            "**/*.dockerfile"
+          ],
+          "matching_input_count": 5
+        }
+      ],
+      "matching_input_count": 5,
+      "applicable": true
+    }
+  ],
+  "node_applicable": true,
+  "skip_reason": null
+}

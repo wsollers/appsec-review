@@ -1,0 +1,93 @@
+{
+  "schema": "appsec-review/tool-results/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-mobile-sast",
+  "attempt_id": "20260920T120502Z-d4e5f6",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tool_instances": [
+    {
+      "tool_id": "mobsfscan-android",
+      "attempt_id": "mobsfscan-android-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-mobile",
+        "image_digest": "sha256:59cb78d4646e5c700516028476f68a6d6c8d19eb9642e17d1da6cc3d304225e2",
+        "executable_sha256": null,
+        "tool_name": "mobsfscan",
+        "tool_version": null,
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "mobsfscan-bundled-rules",
+            "version": null,
+            "sha256": "sha256:1c03640eb27185005f57814da82722900d16b21b35e91da04bf6256385ebc183"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "mobsfscan",
+        "--sarif",
+        "--output",
+        "/out/mobsfscan-android.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "mobsfscan-ios",
+      "attempt_id": "mobsfscan-ios-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-mobile",
+        "image_digest": "sha256:59cb78d4646e5c700516028476f68a6d6c8d19eb9642e17d1da6cc3d304225e2",
+        "executable_sha256": null,
+        "tool_name": "mobsfscan",
+        "tool_version": null,
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "mobsfscan-bundled-rules",
+            "version": null,
+            "sha256": "sha256:1c03640eb27185005f57814da82722900d16b21b35e91da04bf6256385ebc183"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "mobsfscan",
+        "--sarif",
+        "--output",
+        "/out/mobsfscan-ios.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  "checkov",
+  "trivy-config",
+  "tfsec",
+  "kube-linter",
+  "hadolint",
+  "dockerfile-base-image-inventory"
+]
