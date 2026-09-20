@@ -1,0 +1,994 @@
+{
+  "schema": "appsec-review/vendor-prepass-job-nodes-proposal/1.0",
+  "proposal_only": true,
+  "status": "not_registered_not_runnable",
+  "adr": "docs/decisions/ADR-0010-vendor-prepass-decomposition.md",
+  "basis": "fixture values reflect the ADR's RECOMMENDED option for each open human gate; nothing here is decided until the gates in the ADR are answered",
+  "proposed_new_skip_reason": {
+    "id": "not-applicable-no-matching-inputs",
+    "shared_surface_change": "appsec-review-process/worker-result-contract.json",
+    "gate": "G5",
+    "requires": "deterministic probe receipt naming detectors, globs and zero counts"
+  },
+  "registered_skip_reasons_checked": [
+    "no-debug-symbols",
+    "not-applicable-after-partition-review",
+    "not-applicable-non-native",
+    "not-requested",
+    "not-requested-no-scorecard-projects"
+  ],
+  "consumer_join": {
+    "job": "02-evidence-assembly",
+    "join_policy_mode": "all-required-terminal-accepted",
+    "note": "every joining node becomes a new required wait_all edge; failure is not skip"
+  },
+  "cycle_rule": "no proposed 02-* node depends on 01-*, 03-* or any later node",
+  "proposed_nodes": [
+    {
+      "proposed_job_id": "02-secrets-inventory",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "secrets",
+      "tool_instances": [
+        {
+          "tool_id": "gitleaks",
+          "legacy_steps": [
+            "secrets"
+          ]
+        },
+        {
+          "tool_id": "key-material-file-inventory",
+          "legacy_steps": [
+            "secrets-binary"
+          ],
+          "worker_kind": "deterministic_python"
+        }
+      ],
+      "proposed_output_contract_id": "secrets-inventory",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/secrets-inventory.redacted.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "secret_exposure_lead",
+        "allowed_assertions": [
+          "candidate-secret-location",
+          "credential-store-file-present",
+          "private-key-header-present",
+          "redaction-applied",
+          "scan-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "secrets-inventory",
+        "allowed_skip_reasons": []
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "static/offline; no capability requested",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; gitleaks rule configuration hash; redaction rule-set hash",
+      "applicability_rule": "always applicable; never skipped",
+      "fills_threat_workbench_source_family": [
+        "secrets-and-key-inventory"
+      ],
+      "owning_followup_batch": "M03",
+      "open_human_gates": [
+        "G1",
+        "G9"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "REDACTION BOUNDARY: raw secret values never leave the producing attempt. The scanner runs with redaction enabled; any unredacted intermediate lives only in an attempt-private directory that is never published, never indexed by 02-evidence-index and never readable by a persona cell.",
+        "The only published artifacts are the redacted inventory and the redaction receipt. Logs pass the same redactor before retention.",
+        "Inventory entries are location fingerprints (path, line span, rule id, data-class label); no hash of an individual secret value is published because low-entropy values are brute-forceable.",
+        "No decrypt, crack, validity probe or credential use: a listed key store is a file-presence fact."
+      ]
+    },
+    {
+      "proposed_job_id": "02-iac-config-scan",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "iac-kubernetes-dockerfile",
+      "tool_instances": [
+        {
+          "tool_id": "checkov",
+          "legacy_steps": [
+            "iac-checkov"
+          ]
+        },
+        {
+          "tool_id": "trivy-config",
+          "legacy_steps": [
+            "iac-trivy"
+          ]
+        },
+        {
+          "tool_id": "tfsec",
+          "legacy_steps": [
+            "iac-tfsec"
+          ]
+        },
+        {
+          "tool_id": "kube-linter",
+          "legacy_steps": [
+            "iac-k8s"
+          ]
+        },
+        {
+          "tool_id": "hadolint",
+          "legacy_steps": [
+            "dockerfile-lint"
+          ]
+        },
+        {
+          "tool_id": "dockerfile-base-image-inventory",
+          "legacy_steps": [
+            "docker-base-images"
+          ],
+          "worker_kind": "deterministic_python"
+        }
+      ],
+      "proposed_output_contract_id": "iac-config-evidence",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/iac-config-evidence.json",
+        "outputs/base-image-inventory.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "declared_configuration_evidence",
+        "allowed_assertions": [
+          "declared-configuration-rule-hit",
+          "declared-base-image-reference",
+          "declared-exposure-lead",
+          "scan-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "iac-config-evidence",
+        "allowed_skip_reasons": [
+          "not-applicable-no-matching-inputs"
+        ]
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "network denied: checkov and trivy must run with their policy bundles baked into the pinned image and update/download disabled; a tool that cannot run offline is a BLOCKED tool instance and a coverage gap, never a network exception",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
+      "applicability_rule": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
+      "fills_threat_workbench_source_family": [
+        "iac-container-deployment-evidence"
+      ],
+      "owning_followup_batch": "M03",
+      "open_human_gates": [
+        "G1",
+        "G5"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "static manifests support DECLARED exposure only; never observed cloud or cluster state",
+        "15-deployment-hardening reads this evidence transitively after assembly; it is never an input to any 02-* node"
+      ]
+    },
+    {
+      "proposed_job_id": "02-container-image-inventory",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "supplied-container-image",
+      "tool_instances": [
+        {
+          "tool_id": "oci-archive-inventory",
+          "legacy_steps": []
+        },
+        {
+          "tool_id": "image-package-and-config-inspection",
+          "legacy_steps": []
+        }
+      ],
+      "proposed_output_contract_id": "container-image-inventory",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/container-image-inventory.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "supplied_image_static_evidence",
+        "allowed_assertions": [
+          "image-layer-package-inventory",
+          "image-configuration-property",
+          "image-hardening-rule-hit",
+          "scan-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "container-image-inventory",
+        "allowed_skip_reasons": [
+          "not-applicable-no-matching-inputs"
+        ]
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "no registry pull, no docker build, no container start; supplied archives are unpacked read-only inside the pinned analysis container",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; exact tool set is an M02/M04 decision; this proposal names none as verified",
+      "applicability_rule": "applicable only when OCI/docker image archives are supplied as run inputs; an image reference in a manifest is NOT an input (no registry pull)",
+      "fills_threat_workbench_source_family": [
+        "iac-container-deployment-evidence"
+      ],
+      "owning_followup_batch": "M04 (image split: M02)",
+      "open_human_gates": [
+        "G8"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "NO legacy prepass step exists for supplied images (the legacy audit-container image ships trivy but no step invokes `trivy image`). This node is declared from design-v3 2.1/17 scope, not from a legacy step."
+      ]
+    },
+    {
+      "proposed_job_id": "02-sbom-inventory",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "sbom",
+      "tool_instances": [
+        {
+          "tool_id": "syft-directory",
+          "legacy_steps": [
+            "sbom"
+          ]
+        }
+      ],
+      "proposed_output_contract_id": "sbom-inventory",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/sbom.cdx.json",
+        "outputs/sbom-manifest.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "dependency_inventory_evidence",
+        "allowed_assertions": [
+          "declared-component-present",
+          "component-version-unknown",
+          "inventory-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "sbom-inventory",
+        "allowed_skip_reasons": []
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "package restore denied: inventory comes from checked-in manifests and lockfiles only; unresolved transitive dependencies are recorded as gaps",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; CycloneDX spec version pinned and recorded; legacy-observed syft 1.51.1 is unverified",
+      "applicability_rule": "always applicable; a repository with no recognised manifest yields OK_WITH_GAPS with an explicit ecosystem-coverage gap (design-v3 L1 eastl lesson), not SKIPPED",
+      "fills_threat_workbench_source_family": [
+        "sbom-sca-license-lifecycle"
+      ],
+      "owning_followup_batch": "M05",
+      "open_human_gates": [
+        "G2",
+        "G4"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": []
+    },
+    {
+      "proposed_job_id": "02-sca-vulnerability-match",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "sca",
+      "tool_instances": [
+        {
+          "tool_id": "osv-scanner-offline",
+          "legacy_steps": [
+            "sca"
+          ]
+        }
+      ],
+      "proposed_output_contract_id": "sca-vulnerability-match",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/sca-vulnerability-match.json",
+        "outputs/vulnerability-database-identity.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "known_vulnerability_match_lead",
+        "allowed_assertions": [
+          "advisory-matches-declared-version",
+          "database-snapshot-identity",
+          "match-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "sca-vulnerability-match",
+        "allowed_skip_reasons": []
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "RECOMMENDED (G3 option A): network denied; consumes an immutable, separately published vulnerability-database snapshot (same pattern as the NVD reference publisher). The legacy step silently used live network from an unrestricted container. If G3 option B is chosen instead, the only capability is fixed_network_destinations=[api.osv.dev], explicitly authorized per run like 02-ossf-scorecard.",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; vulnerability database snapshot id, publisher, retrieval timestamp, sha256 and age are part of the input fingerprint; legacy-observed osv-scanner 1.9.2 is unverified",
+      "applicability_rule": "always applicable once the SBOM is accepted; an SBOM with zero matchable components yields OK_WITH_GAPS",
+      "fills_threat_workbench_source_family": [
+        "sbom-sca-license-lifecycle"
+      ],
+      "owning_followup_batch": "M05",
+      "open_human_gates": [
+        "G2",
+        "G3"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "a match is 'advisory range covers declared version'; it is never reachability, exploitability, or affected-product proof; 06-cve-reachability owns reachability triage",
+        "missing snapshot => BLOCKED; snapshot older than policy => OK_WITH_GAPS with database age recorded; never a silent live fetch"
+      ]
+    },
+    {
+      "proposed_job_id": "02-license-scan",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "license",
+      "tool_instances": [
+        {
+          "tool_id": "scancode-toolkit",
+          "legacy_steps": [
+            "scancode"
+          ]
+        }
+      ],
+      "proposed_output_contract_id": "license-inventory",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/license-inventory.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "license_detection_evidence",
+        "allowed_assertions": [
+          "license-text-detected",
+          "copyright-statement-detected",
+          "vendored-component-inferred",
+          "scan-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "license-inventory",
+        "allowed_skip_reasons": []
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "static/offline; no capability requested",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; scancode license-index identity; legacy image tag 'scancode-toolkit:local' is mutable and unacceptable",
+      "applicability_rule": "always applicable",
+      "fills_threat_workbench_source_family": [
+        "sbom-sca-license-lifecycle"
+      ],
+      "owning_followup_batch": "M05",
+      "open_human_gates": [
+        "G2"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "vendored-component-inferred is labelled 'not declared in any manifest, inferred from bundled license/copyright evidence' and never promoted to a definitive SBOM component (design-v3 L1)"
+      ]
+    },
+    {
+      "proposed_job_id": "02-dependency-lifecycle",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "deterministic_transform",
+      "worker_kind": "deterministic_python",
+      "evidence_family": "dependency-lifecycle",
+      "tool_instances": [
+        {
+          "tool_id": "dependency-lifecycle-transform",
+          "legacy_steps": [
+            "dependency-lifecycle"
+          ]
+        }
+      ],
+      "proposed_output_contract_id": "dependency-lifecycle",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/dependency-lifecycle.json",
+        "outputs/reference-table-identity.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "dependency_lifecycle_evidence",
+        "allowed_assertions": [
+          "reference-table-eol-match",
+          "lifecycle-unknown",
+          "license-field-resurfaced"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-license-scan",
+          "kind": "required",
+          "contract": "license-inventory",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "dependency-lifecycle",
+        "allowed_skip_reasons": []
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "static/offline; no capability requested",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; offline EOL reference table identity and sha256; table coverage is partial by design",
+      "applicability_rule": "always applicable once both inputs are accepted",
+      "fills_threat_workbench_source_family": [
+        "sbom-sca-license-lifecycle"
+      ],
+      "owning_followup_batch": "M05",
+      "open_human_gates": [
+        "G2"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "pure transform over two accepted inputs; both must be CURRENT for the same source snapshot",
+        "absence from the reference table is 'lifecycle-unknown', never 'supported'"
+      ]
+    },
+    {
+      "proposed_job_id": "02-binary-hardening",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "supplied-binary-hardening",
+      "tool_instances": [
+        {
+          "tool_id": "binskim",
+          "legacy_steps": [
+            "binskim"
+          ]
+        }
+      ],
+      "proposed_output_contract_id": "binary-hardening",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/binary-hardening.json",
+        "outputs/binskim.sarif",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "binary_hardening_property_evidence",
+        "allowed_assertions": [
+          "static-hardening-property-observed",
+          "static-hardening-rule-hit",
+          "binary-format-unsupported",
+          "scan-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "binary-hardening",
+        "allowed_skip_reasons": [
+          "not-applicable-no-matching-inputs"
+        ]
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "static only: no target execution, no debugger/ptrace, no symbol-server network",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; legacy-observed BinSkim 4.4.9.11 is unverified; symbol-server access disabled",
+      "applicability_rule": "deterministic probe for supplied PE/ELF/Mach-O files in the source snapshot; unsupported formats are per-file coverage gaps; SKIPPED only when zero candidate binaries exist",
+      "fills_threat_workbench_source_family": [],
+      "owning_followup_batch": "M04 (image pin: M02)",
+      "open_human_gates": [
+        "G7"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "covers binaries SUPPLIED in the snapshot. Binaries BUILT by 02-native-build stay with 02-binary-triage (its planned_scope already names security-property inspection).",
+        "not a CVE scanner; complements, never replaces, SBOM/SCA"
+      ]
+    },
+    {
+      "proposed_job_id": "02-mobile-sast",
+      "registered": false,
+      "runnable": false,
+      "option_only": false,
+      "lane": "02-evidence-pregather",
+      "node_kind": "producer",
+      "worker_kind": "pinned_container",
+      "evidence_family": "mobile-source",
+      "tool_instances": [
+        {
+          "tool_id": "mobsfscan-android",
+          "legacy_steps": [
+            "sast-mobile-android"
+          ]
+        },
+        {
+          "tool_id": "mobsfscan-ios",
+          "legacy_steps": [
+            "sast-mobile-ios"
+          ]
+        }
+      ],
+      "proposed_output_contract_id": "mobile-sast",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/mobile-applicability.json",
+        "outputs/mobile-sast.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "mobile_static_lead",
+        "allowed_assertions": [
+          "mobile-platform-marker-present",
+          "mobile-rule-hit",
+          "scan-coverage-gap"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": true,
+      "evidence_assembly_edge": {
+        "kind": "required",
+        "contract": "mobile-sast",
+        "allowed_skip_reasons": [
+          "not-applicable-no-matching-inputs"
+        ]
+      },
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "static/offline; no capability requested",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; mobsfscan rule-pack identity",
+      "applicability_rule": "RECOMMENDED (G6 option A): in-worker deterministic platform-marker probe (AndroidManifest.xml, Android Gradle plugin, Info.plist, Xcode project) written to mobile-applicability.json; per-platform applicability; bare *.java/*.kt/*.m counts are NOT a marker (legacy false-applicability lesson)",
+      "fills_threat_workbench_source_family": [
+        "mobile-source-intelligence"
+      ],
+      "owning_followup_batch": "M04",
+      "open_human_gates": [
+        "G5",
+        "G6"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "mobsfscan SARIF embeds raw matched source lines; publication passes the redactor",
+        "static mobile evidence is not runtime behaviour"
+      ]
+    },
+    {
+      "proposed_job_id": "02-mobile-applicability",
+      "registered": false,
+      "runnable": false,
+      "option_only": true,
+      "lane": "02-evidence-pregather",
+      "node_kind": "applicability_gate",
+      "worker_kind": "deterministic_python",
+      "evidence_family": "mobile-source",
+      "tool_instances": [
+        {
+          "tool_id": "mobile-platform-marker-probe",
+          "legacy_steps": []
+        }
+      ],
+      "proposed_output_contract_id": "mobile-applicability",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/mobile-applicability.json"
+      ],
+      "proposed_claim_class": {
+        "claim_class_id": "mobile_applicability_fact",
+        "allowed_assertions": [
+          "mobile-platform-marker-present",
+          "mobile-platform-marker-absent"
+        ],
+        "forbidden_promotions": [
+          "finding",
+          "severity",
+          "runtime-state"
+        ]
+      },
+      "claim_limit": "evidence lead only; no finding, severity, or runtime-state promotion; a clean or empty result is not proof of absence and zero analysed inputs is a coverage gap, not a pass",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "joins_02_evidence_assembly": false,
+      "evidence_assembly_edge": null,
+      "permitted_terminal_statuses": [
+        "OK",
+        "OK_WITH_GAPS",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ],
+      "permissions_b11": {
+        "target_execution": "denied",
+        "fixed_network_destinations": "denied",
+        "dynamic_testing": "denied",
+        "debugger_ptrace": "denied",
+        "credentials": "denied",
+        "package_restore": "denied",
+        "target_mutation": "denied"
+      },
+      "permission_notes": "static/offline; no capability requested",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal",
+      "applicability_rule": "always runs; emits applicable platforms",
+      "fills_threat_workbench_source_family": [
+        "mobile-source-intelligence"
+      ],
+      "owning_followup_batch": "M04",
+      "open_human_gates": [
+        "G6"
+      ],
+      "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
+      "notes": [
+        "EXISTS ONLY UNDER G6 OPTION B. Under the recommended option A this node is not declared and 02-mobile-sast carries the probe itself."
+      ]
+    }
+  ],
+  "existing_nodes_receiving_legacy_steps": [
+    {
+      "existing_job_id": "02-source-sast",
+      "graph_contract": "source-sast",
+      "owning_followup_batch": "D09",
+      "legacy_steps": [
+        "sast-python",
+        "sast-go",
+        "sast-cpp",
+        "sast-multi-semgrep-owasp",
+        "sast-multi-semgrep-csharp",
+        "sast-multi-semgrep-golang",
+        "sast-multi-semgrep-python",
+        "sast-multi-semgrep-php",
+        "sast-multi-semgrep-java",
+        "sast-multi-semgrep-security-audit",
+        "sast-multi-semgrep-terraform",
+        "sast-php",
+        "sast-php-parse-coverage",
+        "ast-grep-scan",
+        "joern-parse"
+      ],
+      "m01_requirements_on_owner": [
+        "one attempt-bearing tool instance per tool and per Semgrep rule pack; one bad rule pack must not fail siblings",
+        "Semgrep registry packs (p/...) are fetched over the network by the legacy step: vendor pinned rule packs into the image with sha256, network denied",
+        "gosec/Psalm/PHPStan must not restore packages: GOPROXY=off / GOFLAGS=-mod=vendor, no composer install; unresolvable packages are coverage gaps",
+        "PHP tools keep the parse-coverage cross-check: a file that failed to parse is 'not analysed', not clean",
+        "ast-grep runs only target-supplied rule config: label results 'target-supplied-rules', lead only",
+        "Joern c2cpg output is an analysis substrate referenced from tool-results.json, not a result and not indexed; PS1 hard-coded fsh-server excludes and -J-Xmx are dropped in favour of per-run configuration",
+        "publication passes the redactor (Semgrep output embeds raw matched lines)",
+        "proposed claim class source_static_lead; forbidden promotions finding|severity|runtime-state"
+      ]
+    },
+    {
+      "existing_job_id": "02-evidence-index",
+      "graph_contract": "evidence-index",
+      "registry_contract": "evidence-index",
+      "owning_followup_batch": "M06",
+      "legacy_steps": [
+        "symbol-index",
+        "semantic-index"
+      ],
+      "m01_requirements_on_owner": [
+        "M06 proves feature parity or ports unique behaviour; no second mutable index authority"
+      ]
+    }
+  ]
+}
