@@ -6,9 +6,12 @@ module owns the durable transcript and the rules that make it auditable:
 
 - append-only JSONL with a per-record ``content_hash`` chained through ``previous_hash``;
 - structural validation against ``schemas/threat-workbench-intercom-record.schema.json``;
-- authorization: a ``response`` may only come from the workcell a ``challenge`` targeted, in wave 4;
-  a ``challenge`` names what it challenges and cites counterevidence or the evidence it demands;
-  the integrator authors nothing; an optional write policy limits record types per workcell;
+- authorization: ownership of every challenged record is resolved from an authoritative map the
+  caller must supply (or from the transcript itself for intercom records) and unknown ownership
+  fails closed; a ``challenge`` may only target the workcell that owns what it challenges, names
+  its subjects and cites counterevidence or the evidence it demands; a ``response`` may only come
+  from that owner, in wave 4; a record may only resolve an EARLIER record addressed to or written
+  by its author; the integrator authors nothing; a write policy limits record types per workcell;
 - injection quarantine: record text that reads as an instruction to a reviewer is flagged
   ``injection_suspected`` and excluded from projections while staying in the transcript
   (``docs/design-v3.md`` 6.1: detection, not just avoidance);
@@ -34,6 +37,7 @@ INTERCOM_SCHEMA_FILE = "threat-workbench-intercom-record.schema.json"
 RECORD_TYPES = ("question", "assumption", "proposed_model_edit", "proposed_threat",
                 "proposed_attack_tree_node", "challenge", "coverage_gap", "response")
 OPEN_STATUS = "open"
+RESOLVING_STATUSES = frozenset({"answered", "accepted", "rejected", "withdrawn"})
 INTEGRATOR_AUTHORS = frozenset({"integrator", "integrator-join"})
 CHALLENGE_WAVE = 3
 RESPONSE_WAVE = 4
@@ -97,9 +101,13 @@ class IntercomTranscript:
     """One append-only ``intercom-transcript.jsonl``; the lock is a sibling file.
 
     ``write_policy`` maps workcell_id to the record types it may author (a workcell's
-    ``intercom_writes``). When omitted, only the built-in rules apply. ``model_record_authors`` maps
-    canonical model record ids to the workcell that authored them; when supplied, a response is also
-    checked against the authorship of the challenged model records.
+    ``intercom_writes``). When omitted, only the built-in rules apply.
+
+    ``append`` requires ``model_record_authors``: the authoritative map from canonical model record
+    id to the workcell that authored it, built by the runner from the frozen wave manifests. It is
+    a required argument on purpose. Ownership decides who may be challenged and who may respond, and
+    a check that can be skipped by leaving an argument out is not a check. Pass ``{}`` when no model
+    records exist yet; a challenge whose subject has no known owner is then rejected.
     """
 
     def __init__(self, path: Path, *, write_policy: dict[str, Iterable[str]] | None = None,
@@ -144,14 +152,16 @@ class IntercomTranscript:
     # ---- writing --------------------------------------------------------------------------
 
     def append(self, record: dict[str, Any], *,
-               model_record_authors: dict[str, str] | None = None) -> dict[str, Any]:
+               model_record_authors: dict[str, str]) -> dict[str, Any]:
         """Validates, authorizes, hashes and durably appends one record. Returns the stored record
         (with content_hash and any injection flag filled in). Never rewrites an earlier line."""
+        if not isinstance(model_record_authors, dict):
+            raise IntercomError("model_record_authors must be the authoritative ownership map (a dict)")
         candidate = dict(record)
         with Lock(self.lock_path):
             existing = self.records()
             self._check_structure(candidate, existing)
-            self._check_authorization(candidate, existing, model_record_authors or {})
+            self._check_authorization(candidate, existing, model_record_authors)
             reasons = suspect_injection(candidate)
             if reasons:
                 candidate["injection_suspected"] = True
@@ -202,9 +212,13 @@ class IntercomTranscript:
                 raise IntercomError(f"{rid}: workcell {author!r} has no intercom write policy")
             if rtype not in allowed:
                 raise IntercomError(f"{rid}: workcell {author!r} may not author {rtype!r}")
+        by_id = {r["record_id"]: r for r in existing}
+        self._check_resolution(record, by_id)
         if rtype == "challenge":
             if record["wave"] != CHALLENGE_WAVE:
                 raise IntercomError(f"{rid}: challenges are wave {CHALLENGE_WAVE} records")
+            if record["status"] != OPEN_STATUS:
+                raise IntercomError(f"{rid}: a challenge is written open; its outcome is derived by the sweep")
             if not record["subject_record_ids"]:
                 raise IntercomError(f"{rid}: a challenge must name the record ids it challenges")
             demanded = record["payload"].get("demanded_evidence")
@@ -213,28 +227,71 @@ class IntercomTranscript:
                     f"{rid}: a challenge must cite counterevidence or state the evidence it demands")
             if record["target"] in INTEGRATOR_AUTHORS:
                 raise IntercomError(f"{rid}: a challenge targets the authoring workcell, not the integrator")
+            owners = self._owners(rid, record["subject_record_ids"], by_id, model_record_authors)
+            if owners != {record["target"]}:
+                raise IntercomError(
+                    f"{rid}: a challenge must target the one workcell that owns every challenged "
+                    f"record; subjects are owned by {sorted(owners)}, target is {record['target']!r}")
+            if author in owners:
+                raise IntercomError(f"{rid}: a workcell cannot challenge its own records")
         elif rtype == "response":
             if record["wave"] != RESPONSE_WAVE:
                 raise IntercomError(f"{rid}: responses are wave {RESPONSE_WAVE} records")
-            by_id = {r["record_id"]: r for r in existing}
             challenges = [by_id[s] for s in record["subject_record_ids"]
                           if s in by_id and by_id[s]["record_type"] == "challenge"]
             if len(challenges) != 1:
                 raise IntercomError(f"{rid}: a response names exactly one existing challenge in subject_record_ids")
             challenge = challenges[0]
+            # Re-derive ownership rather than trusting the challenge's own target field.
+            owners = self._owners(rid, challenge["subject_record_ids"], by_id, model_record_authors)
+            if owners != {author}:
+                raise IntercomError(
+                    f"{rid}: only the workcell that owns the challenged records may respond to "
+                    f"{challenge['record_id']}; they are owned by {sorted(owners)}, author is {author!r}")
             if challenge["target"] != author:
                 raise IntercomError(
                     f"{rid}: only {challenge['target']!r}, the challenged workcell, may respond to "
                     f"{challenge['record_id']}; author is {author!r}")
             if record["target"] != challenge["author_workcell_id"]:
                 raise IntercomError(f"{rid}: a response is addressed to the challenger")
-            for subject in challenge["subject_record_ids"]:
-                owner = model_record_authors.get(subject)
-                if owner is not None and owner != author:
-                    raise IntercomError(
-                        f"{rid}: challenged record {subject!r} was authored by {owner!r}, not {author!r}")
         elif record["wave"] == RESPONSE_WAVE:
             raise IntercomError(f"{rid}: wave {RESPONSE_WAVE} carries responses only")
+
+    @staticmethod
+    def _owners(rid: str, subjects: list[str], by_id: dict[str, dict[str, Any]],
+                model_record_authors: dict[str, str]) -> set[str]:
+        """Owner of each subject: an intercom record's author comes from the tamper-evident
+        transcript, a model record's from the authoritative map. Unknown ownership fails closed."""
+        owners: set[str] = set()
+        for subject in subjects:
+            if subject in by_id:
+                owners.add(by_id[subject]["author_workcell_id"])
+            elif subject in model_record_authors:
+                owners.add(model_record_authors[subject])
+            else:
+                raise IntercomError(f"{rid}: no known owner for challenged record {subject!r}; "
+                                    "ownership must be authoritative, not assumed")
+        return owners
+
+    @staticmethod
+    def _check_resolution(record: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> None:
+        """resolves_record_id is a backward pointer. Self, forward and unknown references are
+        rejected here so the transcript can never contain one."""
+        rid = record["record_id"]
+        resolved_id = record["resolution"]["resolves_record_id"]
+        if resolved_id is None:
+            return
+        if resolved_id == rid:
+            raise IntercomError(f"{rid}: a record cannot resolve itself")
+        resolved = by_id.get(resolved_id)
+        if resolved is None:
+            raise IntercomError(f"{rid}: resolves_record_id {resolved_id!r} is not an earlier record in this transcript")
+        if record["status"] not in RESOLVING_STATUSES:
+            raise IntercomError(f"{rid}: a record with status {record['status']!r} does not resolve anything")
+        if record["author_workcell_id"] not in (resolved["target"], resolved["author_workcell_id"]):
+            raise IntercomError(
+                f"{rid}: {resolved_id} may be resolved only by its target {resolved['target']!r} "
+                f"or withdrawn by its author {resolved['author_workcell_id']!r}")
 
 
 # ---- projections -------------------------------------------------------------------------------
@@ -263,25 +320,62 @@ def quarantined(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 # ---- open-record sweep ---------------------------------------------------------------------------
 
-def sweep(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
-    """What the join copies out at the end.
+def chain_order(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Append order, rebuilt from the hash chain so it does not depend on how the caller ordered
+    its input. "Later" in this module always means later in this order."""
+    pending = list(records)
+    by_previous: dict[str | None, dict[str, Any]] = {}
+    for record in pending:
+        if record["previous_hash"] in by_previous:
+            raise IntercomTamperError(f"{record['record_id']}: two records claim the same predecessor")
+        by_previous[record["previous_hash"]] = record
+    ordered: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while cursor in by_previous:
+        record = by_previous.pop(cursor)
+        ordered.append(record)
+        cursor = record["content_hash"]
+    if by_previous:
+        orphan = next(iter(by_previous.values()))
+        raise IntercomTamperError(f"{orphan['record_id']}: not reachable from the start of the chain")
+    return ordered
 
-    ``unresolved``: every record still ``open`` that no later record resolves (by naming it in
-    ``resolution.resolving_record_id``), each id exactly once.
-    ``dissent``: one entry per challenge in the integrated model's dissent shape.
+
+def sweep(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """What the join copies out at the end. Input order is irrelevant; append order is rebuilt
+    from the hash chain.
+
+    ``unresolved``: every record written ``open`` that no LATER, DISTINCT record resolves by
+    naming it in ``resolution.resolves_record_id``; each id exactly once, in append order.
+    ``invalid_resolutions``: self or forward references. ``append`` rejects these, so one can only
+    come from records that did not pass through the bus; it is reported and never honoured.
+    ``dissent``: one entry per challenge, in the integrated model's dissent shape, using the first
+    later response that names the challenge.
     """
-    ordered = sorted(records, key=_sort_key)
+    ordered = chain_order(records)
+    position = {r["record_id"]: index for index, r in enumerate(ordered)}
     resolved_by: dict[str, str] = {}
-    for record in ordered:
-        target = record["resolution"].get("resolving_record_id")
-        if target and target not in resolved_by:
-            resolved_by[target] = record["record_id"]
+    invalid: list[dict[str, str]] = []
+    for index, record in enumerate(ordered):
+        target = record["resolution"]["resolves_record_id"]
+        if target is None:
+            continue
+        if target == record["record_id"]:
+            invalid.append({"record_id": record["record_id"], "reason": "self_reference"})
+        elif target not in position or position[target] >= index:
+            invalid.append({"record_id": record["record_id"], "reason": "forward_or_unknown_reference"})
+        elif record["status"] not in RESOLVING_STATUSES:
+            invalid.append({"record_id": record["record_id"], "reason": "non_resolving_status"})
+        else:
+            resolved_by.setdefault(target, record["record_id"])
     unresolved = [r["record_id"] for r in ordered
                   if r["status"] == OPEN_STATUS and r["record_id"] not in resolved_by]
     dissent = []
-    responses = [r for r in ordered if r["record_type"] == "response"]
-    for challenge in (r for r in ordered if r["record_type"] == "challenge"):
-        answer = next((r for r in responses if challenge["record_id"] in r["subject_record_ids"]), None)
+    for index, challenge in enumerate(ordered):
+        if challenge["record_type"] != "challenge":
+            continue
+        answer = next((r for r in ordered[index + 1:] if r["record_type"] == "response"
+                       and challenge["record_id"] in r["subject_record_ids"]), None)
         if answer is None:
             status = "unresolved"
         elif answer["status"] == "withdrawn":
@@ -296,4 +390,5 @@ def sweep(records: Iterable[dict[str, Any]]) -> dict[str, Any]:
             "subject_record_ids": list(challenge["subject_record_ids"]),
             "status": status,
         })
-    return {"unresolved": unresolved, "dissent": dissent, "quarantined": [r["record_id"] for r in quarantined(ordered)]}
+    return {"unresolved": unresolved, "invalid_resolutions": invalid, "dissent": dissent,
+            "quarantined": [r["record_id"] for r in quarantined(ordered)]}

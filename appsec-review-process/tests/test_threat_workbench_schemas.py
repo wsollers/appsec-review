@@ -357,8 +357,8 @@ class ThreatWorkbenchSchemaTests(unittest.TestCase):
 
     def test_intercom_requires_resolution_and_hash_chain_fields(self):
         record = deepcopy(self.intercom[1])
-        del record["resolution"]["resolving_record_id"]
-        self.assertRejected(record, INTERCOM, "resolution", "resolving_record_id")
+        del record["resolution"]["resolves_record_id"]
+        self.assertRejected(record, INTERCOM, "resolution", "resolves_record_id")
         record = deepcopy(self.intercom[1])
         del record["previous_hash"]
         self.assertRejected(record, INTERCOM, "missing required property 'previous_hash'")

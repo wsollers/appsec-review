@@ -247,7 +247,9 @@ Intercom is structured artifact exchange, not private chat. Records:
 Every record carries: `record_id`, `record_type`, `author_workcell_id`, `author_instance_id`,
 `wave`, `target` (a workcell ID or `integrator`), `topic`, `subject_ids` (model record IDs it
 concerns), `citations[]`, `status` (`open`, `answered`, `accepted`, `rejected`, `withdrawn`,
-`unresolved`), `resolution` (free text plus resolving `record_id`), `content_hash`.
+`unresolved`), `resolution` (free text plus `resolves_record_id`, a backward pointer to the
+earlier record this one resolves; status is frozen at write time and resolution is derived by the
+sweep), `content_hash`.
 
 Rules:
 

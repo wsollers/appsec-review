@@ -15,7 +15,7 @@
     "status": "open",
     "resolution": {
       "text": null,
-      "resolving_record_id": null
+      "resolves_record_id": null
     },
     "payload": {
       "question": "Is there an audit log store receiving login events? None was modeled."
@@ -52,7 +52,7 @@
     "status": "open",
     "resolution": {
       "text": null,
-      "resolving_record_id": null
+      "resolves_record_id": null
     },
     "payload": {
       "assumption": "TLS terminates at the ingress; internal hop is plaintext."
@@ -85,10 +85,10 @@
         "note": null
       }
     ],
-    "status": "answered",
+    "status": "open",
     "resolution": {
       "text": null,
-      "resolving_record_id": "ic-0004"
+      "resolves_record_id": null
     },
     "payload": {
       "challenge": "An integration test exercises a lockout after five failures; the hypothesis ignores it.",
@@ -115,7 +115,7 @@
     "status": "unresolved",
     "resolution": {
       "text": "Test exists but its lockout path is mocked; hypothesis kept at low confidence and marked contested.",
-      "resolving_record_id": null
+      "resolves_record_id": null
     },
     "payload": {
       "response": "Mocked control; not evidence of production behavior."
