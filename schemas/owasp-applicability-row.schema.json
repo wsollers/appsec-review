@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-row.schema.json",
+  "title": "One OWASP control/component applicability row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target_id", "selection_id", "standard_family", "standard_version", "profile_or_level",
+    "control_id", "control_title", "domain_id", "source_record_hash", "proof_obligations", "component_id",
+    "component_name", "classification_hash", "classification_input_ids", "applicability_status",
+    "rationale", "signals", "citations", "source_completeness", "conditional_expression",
+    "decision_source", "rule_ids", "override_ids", "scope_authority", "rescope_state",
+    "invalidated_result_ids", "rescope_actions"
+  ],
+  "properties": {
+    "target_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "standard_family": {"type": "string"},
+    "standard_version": {"type": "string"},
+    "profile_or_level": {"type": ["string", "null"]},
+    "control_id": {"type": "string"},
+    "control_title": {"type": "string"},
+    "domain_id": {"type": "string"},
+    "source_record_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "proof_obligations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["obligation_id", "text", "evidence_classification", "minimum_evidence_modes"],
+        "properties": {
+          "obligation_id": {"type": "string"},
+          "text": {"type": "string"},
+          "evidence_classification": {"enum": ["unclassified_requires_policy", "classified"]},
+          "minimum_evidence_modes": {
+            "type": "array",
+            "items": {"enum": ["document_or_process", "static_source", "static_config", "built_artifact", "test_evidence", "dynamic_runtime", "manual_inspection"]}
+          }
+        }
+      }
+    },
+    "component_id": {"type": "string"},
+    "component_name": {"type": "string"},
+    "classification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "classification_input_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "applicability_status": {"enum": ["applicable", "conditional", "not_applicable", "cannot_determine", "out_of_scope"]},
+    "rationale": {"type": "string"},
+    "signals": {"type": "array", "items": {"$ref": "owasp-applicability-signal.schema.json"}},
+    "citations": {"type": "array", "items": {"$ref": "owasp-applicability-citation.schema.json"}},
+    "source_completeness": {"enum": ["adequate", "partial", "unknown"]},
+    "conditional_expression": {"type": ["string", "null"]},
+    "decision_source": {"enum": ["deterministic_rule", "reviewer_override", "scope_authority", "unresolved"]},
+    "rule_ids": {"type": "array", "items": {"type": "string"}},
+    "override_ids": {"type": "array", "items": {"type": "string"}},
+    "scope_authority": {"type": ["object", "null"]},
+    "rescope_state": {"enum": ["none", "required"]},
+    "invalidated_result_ids": {"type": "array", "items": {"type": "string"}},
+    "rescope_actions": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-override.schema.json",
+  "title": "Append-only OWASP applicability override",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "override_id", "standard_family", "control_id", "component_id", "prior_status", "decision",
+    "reviewer", "decided_at", "invalidated_result_ids", "rescope_actions"
+  ],
+  "properties": {
+    "override_id": {"type": "string"},
+    "standard_family": {"type": "string"},
+    "control_id": {"type": "string"},
+    "component_id": {"type": "string"},
+    "prior_status": {"enum": ["applicable", "conditional", "not_applicable", "cannot_determine"]},
+    "decision": {"$ref": "owasp-applicability-decision.schema.json"},
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer_id", "role"],
+      "properties": {"reviewer_id": {"type": "string"}, "role": {"type": "string"}}
+    },
+    "decided_at": {"type": "string"},
+    "invalidated_result_ids": {"type": "array", "items": {"type": "string"}},
+    "rescope_actions": {"type": "array", "items": {"type": "string"}}
+  }
+}

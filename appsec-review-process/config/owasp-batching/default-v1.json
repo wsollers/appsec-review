@@ -1,0 +1,14 @@
+{
+  "schema": "appsec-review/owasp-batch-config/1.0",
+  "config_id": "owasp-batching-default",
+  "version": "1.0.0",
+  "qualification_fixture_id": "owasp-batching-default-v1",
+  "limits": {
+    "max_control_target_rows": 12,
+    "max_components": 5,
+    "max_primary_evidence_modes": 1,
+    "max_primary_validator_roles": 1
+  },
+  "dynamic_execution": false,
+  "manual_observation": false
+}

@@ -11,8 +11,10 @@ assigned-reviewer applicability/rescope overrides, tunable batches with the exis
 default, disabled dynamic execution with an inert launcher contract, and stale NVD use with an
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
-publisher. T03 accepted-intel lane-in is implemented as a standalone offline foundation. T04–T13 remain
-dependency ordered and later reporting/promotion work remains gated by the narrower T01 decisions.
+publisher. T03 accepted-intel lane-in, T04 applicability modeling, T05 deterministic batching,
+T06 validator handoff contracts, and T07 validator-result validation are implemented as standalone
+offline foundations. T08–T13 remain dependency ordered and later reporting/promotion work remains
+gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
 
@@ -132,9 +134,9 @@ python -B appsec-review-process/owasp_lane_in.py --run-id <run_id>
 ```
 
 This is not a registered graph job and does not make `04-owasp-validation-worklist` or
-`04-asvs-masvs` runnable. T04 applicability modeling is next.
+`04-asvs-masvs` runnable. T04 applicability modeling consumes this accepted manifest.
 
-## T04 — Applicability Model
+## T04 — Applicability Model — IMPLEMENTED FOUNDATION
 
 Define `owasp-applicability-model.json` with one row per selected control/component target:
 
@@ -146,7 +148,36 @@ Define `owasp-applicability-model.json` with one row per selected control/compon
 Prove `not_applicable` cannot be derived from a single absence signal, `out_of_scope` is not
 technical N/A, and ambiguous cases remain visible gaps.
 
-## T05 — Control Partitioning And Batch Worklist
+Implemented by `appsec-review-process/owasp_applicability.py` and the closed T04 applicability
+schemas documented in `schemas/README.md`. The worker:
+
+- consumes an explicit `runs/<run_id>/inputs/owasp-applicability-request.json` and verifies the
+  accepted T03 pointer, manifest, and selected reference snapshots again before publication;
+- enumerates the full selected-control by component matrix itself, so a caller cannot silently
+  omit a target;
+- applies deterministic exact-control, domain, then all-controls rules; equal-specificity conflicts
+  become `cannot_determine` gaps rather than an inferred decision;
+- requires cited positive presence for `applicable`, an explicit unresolved expression for
+  `conditional`, and cited positive exclusion plus adequate canonical evidence for technical
+  `not_applicable`;
+- reserves `out_of_scope` for the T03 selection approver's component-scope authority and never
+  treats it as technical N/A;
+- permits only the assigned applicability reviewer to add justified, cited, append-only overrides,
+  with prior-status continuity and bounded rescope actions for invalidated decisions;
+- publishes the complete model, applicable-control projection, visible gaps, and exact override
+  chain as one immutable attempt, while making no control-satisfaction, finding, severity,
+  exploitability, certification, or runtime claim.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_applicability.py --run-id <run_id>
+```
+
+This is not a registered graph job and does not dispatch validators or launch dynamic work. T05
+control partitioning and deterministic batching is next.
+
+## T05 — Control Partitioning And Batch Worklist — IMPLEMENTED FOUNDATION
 
 Define `owasp-validation-worklist.json` and `owasp-batch-manifest.json`:
 
@@ -163,7 +194,38 @@ Define `owasp-validation-worklist.json` and `owasp-batch-manifest.json`:
 Test deterministic IDs/order, boundary sizes, unrelated-domain separation, and the no-silent-skip
 invariant.
 
-## T06 — Validator Handoff And Tool Contract
+Implemented by `appsec-review-process/owasp_batching.py`, the tracked default configuration under
+`appsec-review-process/config/owasp-batching/`, its qualification fixture, and the closed T05
+schemas documented in `schemas/README.md`. The worker:
+
+- consumes the accepted T04 pointer and model, validates the exact four-artifact T04 publication,
+  and re-verifies each row against the pinned OWASP control catalog;
+- requires a tracked, semantic-versioned batch-limits file whose canonical digest and qualification
+  fixture match, using the approved defaults of 12 rows and five components;
+- routes each proof obligation by exact obligation, control, domain, then family fallback, with
+  component-specific routing taking precedence and equal-specificity conflicts failing closed;
+- batches in the approved order across coherent component group/trust role, domain, evidence mode,
+  authorization boundary, tooling profile, validator role, standard identity, and linked test family;
+- resolves linked MASTG tests only from the pinned snapshot and verifies that each test declares the
+  assigned MASVS control;
+- splits mixed-mode proof obligations into separate fragments while retaining one worklist
+  assignment and requiring a later joined control result;
+- accounts for every T04 target exactly once as a validator assignment, technical N/A, scope
+  exclusion, or unresolved applicability gap;
+- emits `owasp-validation-worklist.json`, `owasp-batch-manifest.json`, and `batch-summary.md` as one
+  locked immutable attempt.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_batching.py --run-id <run_id>
+```
+
+All batches are `dispatch_ready: false` and `execution_authorized: false`. Dynamic-runtime routing
+is limited to request drafting, manual observation remains blocked, and no control assessment or
+finding is produced. T06 consumes these batches without changing those flags.
+
+## T06 — Validator Handoff And Tool Contract — IMPLEMENTED FOUNDATION
 
 Define a handoff containing selection/batch/control/component identity, proof obligations, evidence
 roots, accepted inputs, tool permissions, prohibited claims, output paths, budget, timeout, and
@@ -177,7 +239,35 @@ the baseline workbench.
 Test prompt-injected standard/target/intel text, undeclared tool requests, secret-bearing output,
 stale source, and attempts to widen authorization.
 
-## T07 — Validator Output And Evidence Sufficiency
+Implemented by `appsec-review-process/owasp_validator_handoff.py`, a tracked versioned handoff
+configuration and instruction contract under `appsec-review-process/config/owasp-validator-handoff/`,
+and the closed T06 schemas documented in `schemas/README.md`. The worker:
+
+- consumes and re-verifies the exact accepted T05 pointer, three-artifact publication, worklist,
+  batch manifest, and complete batch-to-proof-obligation coverage;
+- follows the accepted T05 attempt back through T04 and T03, rechecking source snapshots,
+  component identities/evidence roots, accepted raw/derived input lineage, and authorization;
+- emits one deterministic immutable JSON handoff per batch plus a complete handoff set and summary;
+- pins exact standard/control/test/OpenCRE identities and source, config, prompt, and composition
+  hashes in every handoff;
+- resolves only declared baseline tooling profiles, exact allowed actions, eligible roles, budgets,
+  timeouts, terminal semantics, future output paths, and future structured-intercom paths;
+- preserves prompt-injected source/intelligence text as untrusted data and rejects undeclared tools,
+  secret-bearing output, stale/tampered sources, manual inspection, or permission expansion;
+- emits dynamic batches only as inert request-authoring contracts and records
+  `dynamic_execution_disabled` no-contact/no-mutation receipts for explicit execute/launch requests.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_validator_handoff.py --run-id <run_id>
+```
+
+Every handoff remains non-dispatchable and execution-unauthorized. This implementation does not
+register a worker, dispatch a persona, execute a validator, assess a control, implement structured
+intercom, or make either OWASP lane runnable. T07 validator result and evidence sufficiency is next.
+
+## T07 — Validator Output And Evidence Sufficiency — IMPLEMENTED FOUNDATION
 
 Define `control-assessment-result.json` with one result per assigned control target:
 
@@ -191,6 +281,37 @@ Define `control-assessment-result.json` with one result per assigned control tar
 Reject verified findings, severity, exploitability, compliance/certification, remediation status,
 or runtime claims unsupported by matching dynamic evidence. Missing evidence cannot become
 `not_satisfied`; documentation proves only intent except for document/process controls.
+
+Implemented by `appsec-review-process/owasp_validator_result.py` and the closed T07 schemas
+documented in `schemas/README.md`. The standalone worker:
+
+- consumes one exact newest accepted T06 pointer, handoff set, member path, and member hash plus one
+  explicit hash-pinned candidate result beneath the owning run;
+- preserves run, selection, T04 applicability, T05 worklist/batch, T06 handoff, source/config/prompt/
+  composition hashes, producer, validator/specialist, tool, budget, timeout, and failure identities;
+- requires every assigned fragment and mandatory proof obligation exactly once in T06 order, rejects
+  missing/duplicate/extra identities, and preserves `final_control_status_authority` without joining;
+- verifies canonical artifact bytes or accepted producer pointers, evidence/counterevidence facts,
+  modes, freshness, covered scope, limitations, contradictions, dissent, gaps, and unresolved state;
+- treats locators, derived intelligence, scanners, documents, tests, crosswalks, stale NVD context,
+  and static/runtime/manual evidence according to the approved sufficiency rules;
+- rejects undeclared tools/actions and requires preserved source lineage for declared bounded parser
+  or static-analysis output;
+- accepts failure/cancellation/timeout/invalid terminal work only as `not_assessed` with failure
+  provenance, and records rejected/blocked newer attempts without falling back to an older result;
+- emits the immutable `control-assessment-result.json`, `result-validation.json`,
+  `result-summary.md`, inert proposed dynamic-test candidates, and candidate-only verification routes.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_validator_result.py --run-id <run_id>
+```
+
+T07 does not register a worker, dispatch a persona, execute a validator, inspect a target beyond
+supplied accepted artifacts, join batches or mixed-mode fragments, implement structured intercom,
+authorize dynamic/manual execution, or promote findings. `04-owasp-validation-worklist` and
+`04-asvs-masvs` remain non-runnable proposals.
 
 ## T08 — Structured Intercom
 

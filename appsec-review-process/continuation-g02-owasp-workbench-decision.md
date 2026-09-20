@@ -163,3 +163,49 @@ remaining human gates.
   validator, dynamic launcher, registry/graph/parity surface, or generated view was activated.
 - T04 applicability modeling is the next bounded implementation task. Reporting/finding promotion
   remains gated.
+
+## Implementation checkpoint — T04 applicability model — 2026-09-20
+
+- Implemented a standalone offline applicability worker and closed schemas for its request,
+  citations, signals, decisions, override chain, complete matrix, applicable-control projection,
+  and visible gaps.
+- The worker verifies the accepted T03 pointer and artifact plus the exact selected ASVS/MASVS
+  reference snapshots, then independently enumerates every selected control/component target.
+  Caller-supplied target omission cannot reduce the matrix.
+- Deterministic rules use exact-control, domain, then all-controls precedence. Missing or conflicting
+  rules remain `cannot_determine`; no result is silently dropped.
+- Technical `not_applicable` requires cited positive exclusion and adequate canonical evidence.
+  `out_of_scope` is a distinct selection-owner decision. The signal vocabulary intentionally has no
+  generic absence signal.
+- Only the assigned applicability reviewer may add justified, cited, append-only row overrides.
+  Invalidated prior decisions require bounded rescope actions, and override chains must preserve
+  prior-status continuity.
+- Outputs are published together as a locked immutable attempt and rechecked before publication.
+  The worker makes no control-satisfaction, finding, severity, exploitability, certification, or
+  runtime claim.
+- No validator dispatch, batching, dynamic launcher, registry/graph/parity surface, generated view,
+  or report promotion was activated. T05 control partitioning and batching is next.
+
+## Implementation checkpoint — T05 control partitioning and batching — 2026-09-20
+
+- Implemented the standalone offline T05 batcher, closed request/worklist/batch schemas, a tracked
+  versioned default limits configuration, and its qualification fixture.
+- The worker validates the complete accepted T04 artifact set, re-verifies every control row against
+  its pinned standards snapshot, and permits linked MASTG tests only when the pinned test record
+  names the assigned MASVS control.
+- Deterministic proof routing uses exact obligation, control, domain, then family fallback, with
+  component-specific routes taking precedence. Missing routes block; equal-specificity conflicts
+  fail rather than selecting by input order.
+- Batches preserve component group/trust role, domain, evidence/authorization boundary,
+  tool/persona, standard/profile, and linked-test-family separation. The qualified default remains
+  12 control-target rows and five components, with one primary evidence mode and validator role.
+- Mixed-mode controls become obligation fragments in separate batches while retaining exactly one
+  worklist assignment and a required later join. No fragment may independently issue the final
+  control status.
+- Every T04 row is accounted exactly once as a validator assignment, technical N/A, scope exclusion,
+  or unresolved applicability gap. IDs and ordering are deterministic and accepted attempts are
+  immutable and reusable only after full artifact validation.
+- All batches explicitly remain non-dispatchable and execution-unauthorized. Dynamic routing is
+  request-drafting only; manual observation, validator dispatch, control assessment, findings,
+  registry/graph/parity changes, and report promotion remain inactive. T06 handoff/tool contracts
+  are next.
