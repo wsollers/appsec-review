@@ -1,0 +1,9 @@
+2026-09-20T00:00:00Z scan start target=example
+using access key @@AWS_KEY@@ for bucket listing
+git remote https://x-access-token:@@GITHUB_TOKEN@@@git.example.invalid/org/repo.git
+curl -H "Authorization: Bearer @@BEARER@@" https://api.example.invalid/v1
+session=@@JWT@@
+unlabelled blob @@BLOB@@ trailing words
+DefaultEndpointsProtocol=https;AccountName=examplestore;AccountKey=@@AZURE_KEY@@;EndpointSuffix=core.example.invalid
+provider key @@SK_KEY@@ end
+2026-09-20T00:00:09Z scan done files=12 findings=3

@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "check_id": "hardcoded-password",
+      "path": "src/app/config.php",
+      "extra": {
+        "lines": "$db_password = \"@@HUMAN_PASSWORD@@\";",
+        "message": "Hardcoded password assigned"
+      }
+    },
+    {
+      "check_id": "hardcoded-pin",
+      "path": "src/app/pin.py",
+      "extra": {
+        "lines": "ok",
+        "password": "@@NUMERIC_PASSWORD:number@@"
+      }
+    }
+  ],
+  "config": {
+    "client_secret": "@@SHORT_PASSWORD@@",
+    "user": "alice",
+    "credentials": {
+      "login": "svc",
+      "value": "@@HUMAN_PASSWORD@@"
+    }
+  }
+}

@@ -117,3 +117,10 @@ Still stub-only, unrelated to this effort, pending the foundational orchestrator
 `compile-command-audit`, `patch-policy`, `review-events` (the orchestrator's ledger/hash-chain event
 shape). Those need orchestrator/ to exist first; the four files above do not -- they're usable by
 review_cli.py/create_handoff.py today.
+
+Redaction receipt (ADR-0010 Decision G9-A, task V06; module and validator only -- no worker,
+publication runtime or `02-evidence-index` code consumes it yet, see `docs/evidence-redaction.md`):
+
+- `redaction-receipt.schema.json` -- the `redaction-receipt.json` that `appsec-review-process/evidence_redaction.py` writes last into the directory it redacted: redactor identity (module version plus ruleset sha256), the required fail-closed policy, the limits in force, per-file records (path, `unchanged`/`redacted`/`withheld`, withheld reason, parser mode, hashes, redaction counts by kind, pre-existing markers), totals, the `unredacted_file_in_published_set: false` statement and `receipt_sha256`. Closed objects, every property required. Deliberately no property for a value, fragment, per-value hash, value length, line text or timestamp, and `source_sha256` is non-null only for an unchanged file (a source hash of a redacted file is an oracle for the removed value).
+
+Disposition consistency, totals, ordering, the exact published file set and the fixed-point re-run over published bytes are `evidence_redaction.verify_receipt` responsibilities, not expressible here. `receipt_sha256` is an integrity check, not an authenticator.

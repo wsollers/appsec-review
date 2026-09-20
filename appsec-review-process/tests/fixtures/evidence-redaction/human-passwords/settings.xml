@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<settings>
+  <server><id>example</id><username>alice</username><password>@@HUMAN_PASSWORD@@</password></server>
+  <add key="Db" connectionString="Server=db.example.invalid;User Id=app;Password=@@SHORT_PASSWORD@@;" />
+</settings>
