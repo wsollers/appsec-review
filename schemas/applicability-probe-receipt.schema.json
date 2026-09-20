@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "applicability-probe-receipt.schema.json",
+  "title": "Applicability probe receipt",
+  "description": "ADR-0010 G5 = A. The deterministic detector probe a producer runs before its tools: what was searched, how much was examined, against which snapshot, and the per-tool matching-input counts. It is the supporting evidence for a SKIPPED node (skip reason not-applicable-no-matching-inputs) and for every SKIPPED tool instance.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "probe",
+    "files_examined_count",
+    "tools",
+    "node_applicable",
+    "skip_reason"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/applicability-probe-receipt/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z-]{0,95}$",
+      "description": "Owning graph node. A pattern, not a const: the shape is shared by every ADR-0010 family node and by D09's 02-source-sast."
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$",
+      "description": "The NODE attempt that published this aggregate. Tool instances carry their own attempt ids."
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Intake source-snapshot identity every tool instance and the probe ran against."
+    },
+    "probe": {
+      "type": "object",
+      "required": [
+        "probe_id",
+        "probe_version",
+        "probe_sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "probe_id": {
+          "type": "string",
+          "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+        },
+        "probe_version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~-]{0,63}$"
+        },
+        "probe_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "files_examined_count": {
+      "type": "integer",
+      "description": "Snapshot files the probe walked. A probe that examined nothing proves nothing."
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tool_id",
+          "detectors",
+          "matching_input_count",
+          "applicable"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+          },
+          "detectors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "detector_id",
+                "patterns_searched",
+                "matching_input_count"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "detector_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"
+                },
+                "patterns_searched": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._+@%~,/*?\\[\\]{}!-]{1,256}$"
+                  },
+                  "minItems": 1
+                },
+                "matching_input_count": {
+                  "type": "integer"
+                }
+              }
+            },
+            "minItems": 1
+          },
+          "matching_input_count": {
+            "type": "integer"
+          },
+          "applicable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "node_applicable": {
+      "type": "boolean"
+    },
+    "skip_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "not-applicable-no-matching-inputs",
+        null
+      ],
+      "description": "Set if and only if node_applicable is false."
+    }
+  }
+}

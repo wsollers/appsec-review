@@ -1,0 +1,17 @@
+[
+  "bandit",
+  "gosec",
+  "cppcheck",
+  "semgrep-p-owasp-top-ten",
+  "semgrep-p-csharp",
+  "semgrep-p-golang",
+  "semgrep-p-python",
+  "semgrep-p-php",
+  "semgrep-p-java",
+  "semgrep-p-security-audit",
+  "semgrep-p-terraform",
+  "php-static-analysis",
+  "php-parse-coverage",
+  "ast-grep-target-supplied-rules",
+  "joern-c2cpg"
+]

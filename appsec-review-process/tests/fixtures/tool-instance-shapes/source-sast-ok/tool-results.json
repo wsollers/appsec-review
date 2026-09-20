@@ -1,0 +1,707 @@
+{
+  "schema": "appsec-review/tool-results/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-source-sast",
+  "attempt_id": "20260920T120503Z-0a1b2c",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tool_instances": [
+    {
+      "tool_id": "bandit",
+      "attempt_id": "bandit-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "bandit",
+        "tool_version": "1.7.9",
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "bandit",
+        "--recursive",
+        "/src",
+        "--format",
+        "sarif",
+        "--output",
+        "/out/bandit.sarif"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "bandit/outputs/result.json",
+          "sha256": "sha256:4cdadab12297c3eeba471df311f9153f4624fe89c39d0938024c4c4cc9f517c9",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "gosec",
+      "attempt_id": "gosec-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "gosec",
+        "tool_version": "2.21.4",
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "gosec",
+        "-fmt=sarif",
+        "-out=/out/gosec.sarif",
+        "/src/..."
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "gosec/outputs/result.json",
+          "sha256": "sha256:e0aba08024ce7393b5878d2613cd7d2ee218573bbf171897e1f132aa98bce9f6",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "cppcheck",
+      "attempt_id": "cppcheck-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "cppcheck",
+        "tool_version": "2.14.2",
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "cppcheck",
+        "--xml",
+        "--output-file=/out/cppcheck.xml",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": 0,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": false,
+        "findings_exit_codes": []
+      },
+      "outputs": [
+        {
+          "path": "cppcheck/outputs/result.json",
+          "sha256": "sha256:2e9243f8f8ae80aa7bb9ae97958ea8d467c44be53eb20c99f81c6a39c2b684b4",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "semgrep-p-owasp-top-ten",
+      "attempt_id": "semgrep-p-owasp-top-ten-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": "1.90.0",
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-owasp-top-ten",
+            "version": "2026.09.01",
+            "sha256": "sha256:b74d7d20df0d299d2f64d4a5d23b4c8299fb6efa2a959783c1fc7010efa227b8"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-owasp-top-ten.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-owasp-top-ten.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "semgrep-p-owasp-top-ten/outputs/result.json",
+          "sha256": "sha256:34b335029bad9548cc11107b097a25dd880ef26b09fb256ed537cd25c14ef1a5",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "semgrep-p-csharp",
+      "attempt_id": "semgrep-p-csharp-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": null,
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-csharp",
+            "version": "2026.09.01",
+            "sha256": "sha256:18f7e8732f4a45e7e0a09cfe1ddeef01b8efa41b5a2546113ccbeeb6f6cd3684"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-csharp.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-csharp.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "semgrep-p-golang",
+      "attempt_id": "semgrep-p-golang-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": "1.90.0",
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-golang",
+            "version": "2026.09.01",
+            "sha256": "sha256:738994e86717b1f42deee6cabb17652023540671f5cae388987e1830a3a8bf39"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-golang.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-golang.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "semgrep-p-golang/outputs/result.json",
+          "sha256": "sha256:b4f8c36bae59dfeff009ae90d7ba7ea87bb0defed26dd5a3aa605cf3d625ebe1",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "semgrep-p-python",
+      "attempt_id": "semgrep-p-python-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": "1.90.0",
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-python",
+            "version": "2026.09.01",
+            "sha256": "sha256:626a0a3d4e5c348fbd204beac5104780cdcc42164caf243b46acf43100716f2a"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-python.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-python.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "semgrep-p-python/outputs/result.json",
+          "sha256": "sha256:dd9374dffe25235df0c7a3f70403958858274b4e6e70d52d5c17975c764edc1f",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "semgrep-p-php",
+      "attempt_id": "semgrep-p-php-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": null,
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-php",
+            "version": "2026.09.01",
+            "sha256": "sha256:b88832bfd54719a0963cbbd05325593384aca5a7e7ede8768376d7a60bfd7139"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-php.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-php.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "semgrep-p-java",
+      "attempt_id": "semgrep-p-java-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": null,
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-java",
+            "version": "2026.09.01",
+            "sha256": "sha256:e6b5e4e975d4cebe556ee636fd358516982ff904e666c798e56d49178f2e83a7"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-java.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-java.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "semgrep-p-security-audit",
+      "attempt_id": "semgrep-p-security-audit-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": "1.90.0",
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-security-audit",
+            "version": "2026.09.01",
+            "sha256": "sha256:34a8d5c45a5661a60dcd72c2792222cfbd66a8bd60a9c23d2793fa68ece54fb3"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-security-audit.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-security-audit.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "semgrep-p-security-audit/outputs/result.json",
+          "sha256": "sha256:ae7a0b7c8f66499a8a81f4f1ccefb8d1fc516cf7bf844afcb8ffa02f7a195cff",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "semgrep-p-terraform",
+      "attempt_id": "semgrep-p-terraform-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "semgrep",
+        "tool_version": null,
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "semgrep-p-terraform",
+            "version": "2026.09.01",
+            "sha256": "sha256:bdddb9119edab2744660914027f5b01031fb0936fdab3766144f679e2c8c7d6b"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--config",
+        "/rules/p-terraform.yml",
+        "--sarif",
+        "--output",
+        "/out/semgrep-p-terraform.sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "php-static-analysis",
+      "attempt_id": "php-static-analysis-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "php-static-analysis",
+        "tool_version": null,
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "psalm",
+        "--no-cache",
+        "--output-format=sarif",
+        "--report=/out/psalm.sarif"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "php-parse-coverage",
+      "attempt_id": "php-parse-coverage-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "deterministic_python",
+        "image_repository": null,
+        "image_digest": null,
+        "executable_sha256": "sha256:60f05ab7f68bbd5ad4a16d6f731d574ca02def99db712b4f5c0a4304a1ec589b",
+        "tool_name": "php-parse-coverage",
+        "tool_version": null,
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "python3",
+        "-B",
+        "-m",
+        "php_parse_coverage",
+        "--source",
+        "/src",
+        "--output",
+        "/out/php-parse-coverage.json"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "ast-grep-target-supplied-rules",
+      "attempt_id": "ast-grep-target-supplied-rules-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "ast-grep",
+        "tool_version": null,
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "ast-grep",
+        "scan",
+        "--config",
+        "/src/sgconfig.yml",
+        "--json=stream"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "joern-c2cpg",
+      "attempt_id": "joern-c2cpg-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-sast",
+        "image_digest": "sha256:a1f97dcc5ac9c57f965a6c42ebd9ea73c2abe8521d1e06bb3c3556a41be61cf4",
+        "executable_sha256": null,
+        "tool_name": "joern",
+        "tool_version": "4.0.150",
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "c2cpg.sh",
+        "/src",
+        "--output",
+        "/out/cpg.bin"
+      ],
+      "exit": {
+        "exit_code": 0,
+        "exit_meaning": "clean",
+        "timed_out": false,
+        "nonzero_exit_on_findings": false,
+        "findings_exit_codes": []
+      },
+      "outputs": [
+        {
+          "path": "joern-c2cpg/outputs/cpg.bin",
+          "sha256": "sha256:98e555f2eb38266862439e1856557c7ee26ff934ebeaf229e644ccb2e3168472",
+          "bytes": 48213504,
+          "media_type": "application/octet-stream",
+          "role": "analysis-substrate",
+          "validation": "format-validated",
+          "validated_against": "joern-cpg-overflowdb"
+        }
+      ],
+      "result_record_count": 0
+    }
+  ]
+}

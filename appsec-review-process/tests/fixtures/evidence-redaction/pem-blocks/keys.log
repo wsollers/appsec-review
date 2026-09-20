@@ -1,0 +1,8 @@
+reading key material
+@@PEM_RSA@@
+next key
+@@PEM_OPENSSH@@
+public part follows and is not a secret
+@@PUBLIC_CERT@@
+ssh-ed25519 @@SSH_PUBLIC@@ build@example.invalid
+done

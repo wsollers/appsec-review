@@ -12,3 +12,6 @@ data/reference/owasp/**/raw/** -diff
 data/reference/opencre/**/raw/** -diff
 data/reference/owasp/**/LICENSE-or-usage.txt -diff
 data/reference/opencre/**/LICENSE-or-usage.txt -diff
+# Redaction test templates: the suite normalizes their newlines when loading them, and this keeps
+# the files on disk LF on every platform so a Windows checkout matches what the fixture README says.
+appsec-review-process/tests/fixtures/evidence-redaction/** text eol=lf

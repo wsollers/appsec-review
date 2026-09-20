@@ -1,0 +1,283 @@
+{
+  "schema": "appsec-review/tool-results/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-iac-config-scan",
+  "attempt_id": "20260920T120501Z-a1b2c3",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tool_instances": [
+    {
+      "tool_id": "checkov",
+      "attempt_id": "checkov-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-iac",
+        "image_digest": "sha256:1d9a679d92e9ebdb548e65cca72505b12352a2f969593c5b79d11def3d1f8cb7",
+        "executable_sha256": null,
+        "tool_name": "checkov",
+        "tool_version": "3.2.451",
+        "data_identities": [
+          {
+            "kind": "policy-bundle",
+            "identity_id": "checkov-bundled-policies",
+            "version": "3.2.451",
+            "sha256": "sha256:02213ddb253baa4cf73b1cc6f0c9a664f3b88806e243ced373b798e4b6b3d91d"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "checkov",
+        "--directory",
+        "/src",
+        "--output",
+        "sarif",
+        "--output-file-path",
+        "/out",
+        "--skip-download"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "checkov/outputs/result.json",
+          "sha256": "sha256:97e2077c5de0b2dd49c03243cf05c146d9c0b734aed9eea4218d44c4ba06650c",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "trivy-config",
+      "attempt_id": "trivy-config-attempt-0001",
+      "terminal_status": "BLOCKED",
+      "skip_reason": null,
+      "cause_code": "offline-operation-unavailable",
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-iac",
+        "image_digest": "sha256:1d9a679d92e9ebdb548e65cca72505b12352a2f969593c5b79d11def3d1f8cb7",
+        "executable_sha256": null,
+        "tool_name": "trivy",
+        "tool_version": null,
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "trivy",
+        "config",
+        "--skip-check-update",
+        "--offline-scan",
+        "--format",
+        "json",
+        "--output",
+        "/out/trivy-config.json",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "tfsec",
+      "attempt_id": "tfsec-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-iac",
+        "image_digest": "sha256:1d9a679d92e9ebdb548e65cca72505b12352a2f969593c5b79d11def3d1f8cb7",
+        "executable_sha256": null,
+        "tool_name": "tfsec",
+        "tool_version": "1.28.13",
+        "data_identities": [
+          {
+            "kind": "rule-pack",
+            "identity_id": "tfsec-builtin-checks",
+            "version": "1.28.13",
+            "sha256": "sha256:eaa221eaed14bc22b753311ae5cbe7c0f37dfda240d9aea068d630774f4353d0"
+          }
+        ],
+        "redactor": null
+      },
+      "argv": [
+        "tfsec",
+        "/src",
+        "--format",
+        "json",
+        "--out",
+        "/out/tfsec.json",
+        "--no-module-downloads"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "tfsec/outputs/result.json",
+          "sha256": "sha256:15ecb8c4df8997a85ba93eea6e8702a158f0fe80d60dd9bd70ba5c91b6f86b08",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "kube-linter",
+      "attempt_id": "kube-linter-attempt-0001",
+      "terminal_status": "SKIPPED",
+      "skip_reason": "not-applicable-no-matching-inputs",
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-iac",
+        "image_digest": "sha256:1d9a679d92e9ebdb548e65cca72505b12352a2f969593c5b79d11def3d1f8cb7",
+        "executable_sha256": null,
+        "tool_name": "kube-linter",
+        "tool_version": null,
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "kube-linter",
+        "lint",
+        "--format",
+        "sarif",
+        "/src"
+      ],
+      "exit": {
+        "exit_code": null,
+        "exit_meaning": "not-started",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [],
+      "result_record_count": null
+    },
+    {
+      "tool_id": "hadolint",
+      "attempt_id": "hadolint-attempt-0001",
+      "terminal_status": "OK_WITH_GAPS",
+      "skip_reason": null,
+      "cause_code": "partial-input-coverage",
+      "identity": {
+        "executor_kind": "pinned_container",
+        "image_repository": "registry.internal.example:5000/appsec/audit-iac",
+        "image_digest": "sha256:1d9a679d92e9ebdb548e65cca72505b12352a2f969593c5b79d11def3d1f8cb7",
+        "executable_sha256": null,
+        "tool_name": "hadolint",
+        "tool_version": "2.14.0",
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "hadolint",
+        "--format",
+        "sarif",
+        "--no-fail",
+        "/src/Dockerfile"
+      ],
+      "exit": {
+        "exit_code": 0,
+        "exit_meaning": "clean",
+        "timed_out": false,
+        "nonzero_exit_on_findings": false,
+        "findings_exit_codes": []
+      },
+      "outputs": [
+        {
+          "path": "hadolint/outputs/result.json",
+          "sha256": "sha256:ee94631d0099355dc22bf39098439479a02eef48937e576922e0ba47b36f3811",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    },
+    {
+      "tool_id": "dockerfile-base-image-inventory",
+      "attempt_id": "dockerfile-base-image-inventory-attempt-0001",
+      "terminal_status": "OK",
+      "skip_reason": null,
+      "cause_code": null,
+      "identity": {
+        "executor_kind": "deterministic_python",
+        "image_repository": null,
+        "image_digest": null,
+        "executable_sha256": "sha256:c7a144462795b5a23cf35cbfda2cccf710f4b3e766ca1872209efbc5e7ba9ecd",
+        "tool_name": "dockerfile-base-image-inventory",
+        "tool_version": "1.0.0",
+        "data_identities": [],
+        "redactor": null
+      },
+      "argv": [
+        "python3",
+        "-B",
+        "-m",
+        "dockerfile_base_image_inventory",
+        "--source",
+        "/src",
+        "--output",
+        "/out/base-image-inventory.json"
+      ],
+      "exit": {
+        "exit_code": 1,
+        "exit_meaning": "findings-present",
+        "timed_out": false,
+        "nonzero_exit_on_findings": true,
+        "findings_exit_codes": [
+          1
+        ]
+      },
+      "outputs": [
+        {
+          "path": "dockerfile-base-image-inventory/outputs/result.json",
+          "sha256": "sha256:9a4f8f0afe3fccf861ef6ecd5213353875ad86c4e61517e3b74f0088a39c5170",
+          "bytes": 2048,
+          "media_type": "application/json",
+          "role": "normalized-result",
+          "validation": "schema-validated",
+          "validated_against": "tool-normalized-result.schema.json"
+        }
+      ],
+      "result_record_count": 7
+    }
+  ]
+}

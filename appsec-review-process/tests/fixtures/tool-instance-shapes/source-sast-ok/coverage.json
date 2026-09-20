@@ -1,0 +1,175 @@
+{
+  "schema": "appsec-review/scan-coverage/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-source-sast",
+  "attempt_id": "20260920T120503Z-0a1b2c",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tools": [
+    {
+      "tool_id": "bandit",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "gosec",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "cppcheck",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-owasp-top-ten",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-csharp",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-golang",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-python",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-php",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-java",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-security-audit",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "semgrep-p-terraform",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "php-static-analysis",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "php-parse-coverage",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "ast-grep-target-supplied-rules",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "joern-c2cpg",
+      "applicability": "applicable",
+      "candidate_input_count": 24,
+      "analyzed_input_count": 24,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    }
+  ],
+  "gaps": []
+}

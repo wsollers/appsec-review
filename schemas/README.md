@@ -66,6 +66,46 @@ graph, manifest or handoff consumes them yet, see `docs/permission-capabilities.
 
 Wildcard/widening detection, origin trust, staleness, conflict resolution, per-kind parameter exactness and secret rejection are `permission_capabilities.py` responsibilities, not expressible here.
 
+Tool-instance aggregate schemas (ADR-0010 task V03, added 2026-09-20; shapes and a read-only
+validator only -- no worker, contract, registry record or graph node consumes them yet; V04, V05, V07
+and D09 reference them, V10-V13 emit them):
+
+- `tool-results.schema.json` -- a family node's `outputs/tool-results.json`: one entry per
+  attempt-bearing tool instance (ADR-0010 G1 = B) with tool id, its own attempt id, a terminal status
+  pinned to the v1.0 envelope terminal set, identity, `argv`, exit semantics, output file hashes and a
+  record count. `job_id` is a pattern, not a const, so every ADR-0010 node and D09's `02-source-sast`
+  use the same file unchanged.
+- `tool-instance-result.schema.json` and `tool-instance-identity.schema.json` -- the per-instance
+  sibling shapes. Identity names an image by repository plus registry-resolved `sha256:` digest and
+  has no tag field, so `:local` / `:latest` cannot be written; a `deterministic_python` instance
+  carries an executable hash instead. Rule-pack / policy-bundle / database / reference-table
+  identities each carry a sha256; `redactor` is nullable until V06 lands. `argv` is an array; there is
+  no `command` or `shell` field. Exit semantics record the exit code, a closed `exit_meaning`, and
+  the exact non-zero codes that mean "findings present" for that tool -- the fact the legacy runner
+  hid behind `|| true`.
+- `scan-coverage.schema.json` -- `outputs/coverage.json`: per-tool applicability, candidate /
+  analyzed / not-analyzed / unsupported input counts with bounded path lists and closed reason codes,
+  and the node's named gaps (closed `kind` enum).
+- `applicability-probe-receipt.schema.json` -- the G5 detector-probe receipt: probe identity,
+  snapshot identity, files examined, and per tool the detectors, patterns searched and matching-input
+  counts. It is the supporting evidence for skip reason `not-applicable-no-matching-inputs`.
+
+No field in this set can hold a raw match line: every string is a const, an enum or an anchored
+whitespace-free pattern (paths are percent-encoded), and there is no message, snippet or free-text
+field. The cross-record rules live in `appsec-review-process/tool_instance_shapes.py`
+(`validate_node_aggregate`, every input required): a node cannot be `OK` with a non-`OK` instance or
+any gap, cannot be `OK_WITH_GAPS` without a validated hashed output and a named gap for every
+non-`OK` instance, cannot be `SKIPPED` without a receipt showing zero inputs for every declared
+tool, and tool ids must agree across the node's declared tools and all three documents. That proves the documents
+agree with each other; it cannot prove an output's `sha256`, `bytes` or existence, which are
+statements about files. `verify_outputs_on_disk(tool_results, attempt_root)` (attempt root required)
+binds them: every listed output stays inside the attempt, is a regular non-linked file with exactly
+the listed size and hash, and is listed exactly once. Output paths must be normalized (no `.`,
+`..`, empty or leading-slash segments), and ownership is keyed on the file's identity (device and
+inode, else the resolved path), so an alias, a hard link or a different-case name cannot give one
+file two owners. A worker calls both before
+publication.
+
 Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
 engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --
 plus the classification/classification_taxonomy cross-check against verdict-taxonomies.json that
@@ -77,6 +117,13 @@ Still stub-only, unrelated to this effort, pending the foundational orchestrator
 `compile-command-audit`, `patch-policy`, `review-events` (the orchestrator's ledger/hash-chain event
 shape). Those need orchestrator/ to exist first; the four files above do not -- they're usable by
 review_cli.py/create_handoff.py today.
+
+Redaction receipt (ADR-0010 Decision G9-A, task V06; module and validator only -- no worker,
+publication runtime or `02-evidence-index` code consumes it yet, see `docs/evidence-redaction.md`):
+
+- `redaction-receipt.schema.json` -- the `redaction-receipt.json` that `appsec-review-process/evidence_redaction.py` writes last into the directory it redacted: redactor identity (module version plus ruleset sha256), the required fail-closed policy, the limits in force, per-file records (path, `unchanged`/`redacted`/`withheld`, withheld reason, parser mode, hashes, redaction counts by kind, pre-existing markers), totals, the `unredacted_file_in_published_set: false` statement and `receipt_sha256`. Closed objects, every property required. Deliberately no property for a value, fragment, per-value hash, value length, line text or timestamp, and `source_sha256` is non-null only for an unchanged file (a source hash of a redacted file is an oracle for the removed value).
+
+Disposition consistency, totals, ordering, the exact published file set and the fixed-point re-run over published bytes are `evidence_redaction.verify_receipt` responsibilities, not expressible here. `receipt_sha256` is an integrity check, not an authenticator.
 
 SCA vulnerability-database identity (vendor pre-pass V09, ADR-0010 G3; resolver only -- no worker,
 graph, manifest or contract consumes it yet, see `docs/sca-nvd-snapshot-binding.md`):

@@ -1,0 +1,115 @@
+{
+  "schema": "appsec-review/scan-coverage/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-iac-config-scan",
+  "attempt_id": "20260920T120501Z-a1b2c3",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "tools": [
+    {
+      "tool_id": "checkov",
+      "applicability": "applicable",
+      "candidate_input_count": 5,
+      "analyzed_input_count": 5,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "trivy-config",
+      "applicability": "applicable",
+      "candidate_input_count": 5,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 5,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [
+        {
+          "path": "deploy/trivy-config/input-0.tf",
+          "reason_code": "tool-instance-did-not-complete"
+        },
+        {
+          "path": "deploy/trivy-config/input-1.tf",
+          "reason_code": "tool-instance-did-not-complete"
+        }
+      ],
+      "unsupported_inputs": [],
+      "input_lists_truncated": true
+    },
+    {
+      "tool_id": "tfsec",
+      "applicability": "applicable",
+      "candidate_input_count": 5,
+      "analyzed_input_count": 5,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "kube-linter",
+      "applicability": "not-applicable-no-matching-inputs",
+      "candidate_input_count": 0,
+      "analyzed_input_count": 0,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "hadolint",
+      "applicability": "applicable",
+      "candidate_input_count": 5,
+      "analyzed_input_count": 4,
+      "not_analyzed_input_count": 1,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [
+        {
+          "path": "deploy/hadolint/input-0.dockerfile",
+          "reason_code": "parse-failed"
+        }
+      ],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    },
+    {
+      "tool_id": "dockerfile-base-image-inventory",
+      "applicability": "applicable",
+      "candidate_input_count": 5,
+      "analyzed_input_count": 5,
+      "not_analyzed_input_count": 0,
+      "unsupported_input_count": 0,
+      "not_analyzed_inputs": [],
+      "unsupported_inputs": [],
+      "input_lists_truncated": false
+    }
+  ],
+  "gaps": [
+    {
+      "gap_id": "gap-trivy-config-instance",
+      "kind": "tool-instance-blocked",
+      "tool_id": "trivy-config",
+      "affected_input_count": null
+    },
+    {
+      "gap_id": "gap-trivy-config-not-analyzed",
+      "kind": "inputs-not-analyzed",
+      "tool_id": "trivy-config",
+      "affected_input_count": 5
+    },
+    {
+      "gap_id": "gap-hadolint-instance",
+      "kind": "tool-instance-partial",
+      "tool_id": "hadolint",
+      "affected_input_count": null
+    },
+    {
+      "gap_id": "gap-hadolint-not-analyzed",
+      "kind": "inputs-not-analyzed",
+      "tool_id": "hadolint",
+      "affected_input_count": 1
+    }
+  ]
+}

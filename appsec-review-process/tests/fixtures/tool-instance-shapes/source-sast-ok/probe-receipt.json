@@ -1,0 +1,246 @@
+{
+  "schema": "appsec-review/applicability-probe-receipt/1.0",
+  "run_id": "20260920T120000Z-v03abc",
+  "job_id": "02-source-sast",
+  "attempt_id": "20260920T120503Z-0a1b2c",
+  "source_snapshot_sha256": "sha256:16a0eeb0791b6c92451fd284dd9f599e0a7dbe7f6ebea6e2d2d06c7f74aec112",
+  "probe": {
+    "probe_id": "source-language-probe",
+    "probe_version": "1.0.0",
+    "probe_sha256": "sha256:914b0d52fd640b141f7a7dfdc50e7cf78364963be185e1896b5a65fd0185029b"
+  },
+  "files_examined_count": 1873,
+  "tools": [
+    {
+      "tool_id": "bandit",
+      "detectors": [
+        {
+          "detector_id": "python-source",
+          "patterns_searched": [
+            "**/*.py"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    },
+    {
+      "tool_id": "gosec",
+      "detectors": [
+        {
+          "detector_id": "go-source",
+          "patterns_searched": [
+            "**/*.go"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    },
+    {
+      "tool_id": "cppcheck",
+      "detectors": [
+        {
+          "detector_id": "c-cpp-source",
+          "patterns_searched": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hpp"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    },
+    {
+      "tool_id": "semgrep-p-owasp-top-ten",
+      "detectors": [
+        {
+          "detector_id": "semgrep-owasp-top-ten-languages",
+          "patterns_searched": [
+            "**/*.py",
+            "**/*.js",
+            "**/*.java",
+            "**/*.go",
+            "**/*.php",
+            "**/*.cs"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    },
+    {
+      "tool_id": "semgrep-p-csharp",
+      "detectors": [
+        {
+          "detector_id": "semgrep-csharp-languages",
+          "patterns_searched": [
+            "**/*.cs"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "semgrep-p-golang",
+      "detectors": [
+        {
+          "detector_id": "semgrep-golang-languages",
+          "patterns_searched": [
+            "**/*.go"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    },
+    {
+      "tool_id": "semgrep-p-python",
+      "detectors": [
+        {
+          "detector_id": "semgrep-python-languages",
+          "patterns_searched": [
+            "**/*.py"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    },
+    {
+      "tool_id": "semgrep-p-php",
+      "detectors": [
+        {
+          "detector_id": "semgrep-php-languages",
+          "patterns_searched": [
+            "**/*.php"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "semgrep-p-java",
+      "detectors": [
+        {
+          "detector_id": "semgrep-java-languages",
+          "patterns_searched": [
+            "**/*.java"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "semgrep-p-security-audit",
+      "detectors": [
+        {
+          "detector_id": "semgrep-security-audit-languages",
+          "patterns_searched": [
+            "**/*.py",
+            "**/*.js",
+            "**/*.java",
+            "**/*.go",
+            "**/*.php",
+            "**/*.cs"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    },
+    {
+      "tool_id": "semgrep-p-terraform",
+      "detectors": [
+        {
+          "detector_id": "semgrep-terraform-languages",
+          "patterns_searched": [
+            "**/*.tf"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "php-static-analysis",
+      "detectors": [
+        {
+          "detector_id": "php-source",
+          "patterns_searched": [
+            "**/*.php"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "php-parse-coverage",
+      "detectors": [
+        {
+          "detector_id": "php-source",
+          "patterns_searched": [
+            "**/*.php"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "ast-grep-target-supplied-rules",
+      "detectors": [
+        {
+          "detector_id": "ast-grep-config",
+          "patterns_searched": [
+            "sgconfig.yml",
+            "**/sgconfig.yml"
+          ],
+          "matching_input_count": 0
+        }
+      ],
+      "matching_input_count": 0,
+      "applicable": false
+    },
+    {
+      "tool_id": "joern-c2cpg",
+      "detectors": [
+        {
+          "detector_id": "c-cpp-source",
+          "patterns_searched": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hpp"
+          ],
+          "matching_input_count": 24
+        }
+      ],
+      "matching_input_count": 24,
+      "applicable": true
+    }
+  ],
+  "node_applicable": true,
+  "skip_reason": null
+}
