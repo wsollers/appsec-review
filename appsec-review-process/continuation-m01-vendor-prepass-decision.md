@@ -231,4 +231,3 @@ tighter `max_age`, exceeding it is `FAILED` (supersedes V09's `OK_WITH_GAPS`); *
 an aggregated gap summary to the threat workbench. Not done here: ADR-0010 Decisions row, task
 series V05/V09/V11 text plus new V16/V17 publisher tasks, `job-nodes.proposal.json`, the
 `match_basis` const in the V09 identity schema, and the V09 binding change for M4.
-
