@@ -1229,8 +1229,17 @@ class KnownBlockerTests(unittest.TestCase):
             self.skipTest(f"BLOCKER for V10: evidence_redaction flags {len(flagged)} of {len(sample)} sampled run ids "
                           "of the repository's own format as high-entropy")
 
+    def test_every_synthetic_secret_is_detected_whatever_the_shim_state(self):
+        for value in SECRETS.values():
+            self.assertTrue(redaction._merged_spans(value), value[:6])
+
     def test_the_shim_exempts_exactly_one_string(self):
-        for value in (*SECRETS.values(), V03_HEADER_KEY + "x", "x" + V03_HEADER_KEY):
+        if not V06_FLAGS_V03_HEADER_KEY:
+            # evidence_redaction >= 1.1.0 treats the key as an identifier itself; no shim is
+            # installed, so there is nothing for it to be exact about.
+            self.assertEqual(_PATCHES, [])
+            return
+        for value in (V03_HEADER_KEY + "x", "x" + V03_HEADER_KEY):
             self.assertTrue(redaction._merged_spans(value), value[:6])
 
 
