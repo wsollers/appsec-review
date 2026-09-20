@@ -566,8 +566,18 @@ def _decision(context, reasons, capabilities, applied, requirement, grants, defi
         "grants_applied": applied,
         "fingerprint_material": material,
     }
+    record["decision_sha256"] = decision_sha256(record)
     assert_no_secret_material(record)
     return record
+
+
+def decision_sha256(record: dict[str, Any]) -> str:
+    """Integrity hash over every field of a decision except itself. The capability fingerprint
+    deliberately excludes grant ids and timestamps, so it cannot protect ``valid_until``,
+    ``grants_applied`` or the binding; this hash does. It detects corruption and independent edits.
+    It is not an authenticator -- whoever can rewrite the record can rehash it -- which is why
+    ``require_granted`` never trusts a persisted record and re-derives from the hashed inputs."""
+    return "sha256:" + digest({k: v for k, v in record.items() if k != "decision_sha256"})
 
 
 # ---- consumers ---------------------------------------------------------------------------------
@@ -584,24 +594,77 @@ def validate_decision(decision: Any, store: SchemaStore | None = None) -> list[s
         errors.append("GRANTED decision carries reasons")
     if decision["decision"] == DENIED and (not decision["reasons"] or decision["capabilities"]):
         errors.append("DENIED decision must carry reasons and no capabilities")
+    errors.extend(_authorization_field_errors(decision))
+    if decision["decision_sha256"] != decision_sha256(decision):
+        errors.append("decision_sha256 does not match the decision record")
     errors.extend(f"{subject}: {label}" for subject, label in secret_findings(decision))
     return errors
 
 
-def require_granted(decision: dict[str, Any], *, run_id: str, job_id: str,
-                    source_snapshot_sha256: str, now: str) -> list[dict[str, Any]]:
-    """Pre-work gate for an integrator: returns the exact capability set or raises."""
-    errors = validate_decision(decision)
+def _authorization_field_errors(decision: dict[str, Any]) -> list[str]:
+    """valid_until, grants_applied and evaluated_at must agree with each other. None of them is
+    covered by the capability fingerprint, so an unbound valid_until would be an editable expiry."""
+    errors: list[str] = []
+    instants: dict[str, datetime] = {}
+    stamps = [("evaluated_at", decision["evaluated_at"]), ("valid_until", decision["valid_until"])]
+    stamps += [(f"grants_applied[{i}].expires_at", g["expires_at"]) for i, g in enumerate(decision["grants_applied"])]
+    for name, value in stamps:
+        if value is None:
+            continue
+        try:
+            instants[name] = _parse_ts(value)      # the schema pattern admits 2026-13-45T99:99:99Z
+        except ValueError:
+            errors.append(f"{name} is not a real UTC instant")
     if errors:
+        return errors
+    applied = decision["grants_applied"]
+    ids = [g["grant_id"] for g in applied]
+    if len(ids) != len(set(ids)):
+        errors.append("grants_applied repeats a grant_id")
+    if decision["decision"] == DENIED:
+        if applied or decision["valid_until"] is not None:
+            errors.append("DENIED decision must carry no applied grants and no valid_until")
+        return errors
+    if decision["capabilities"] and not applied:
+        errors.append("GRANTED decision with capabilities must name the grants that were applied")
+    expected = min((g["expires_at"] for g in applied), key=_parse_ts, default=None)
+    if decision["valid_until"] != expected:
+        errors.append("valid_until must equal the earliest grants_applied[].expires_at")
+    if expected is not None and instants["valid_until"] <= instants["evaluated_at"]:
+        errors.append("valid_until is not after evaluated_at")
+    return errors
+
+
+def require_granted(decision: dict[str, Any], *, requirement: Any, grants: Any,
+                    context: dict[str, Any],
+                    definitions: dict[tuple[str, str], dict[str, Any]] | None = None,
+                    store: SchemaStore | None = None) -> list[dict[str, Any]]:
+    """Pre-work gate for an integrator: returns the exact capability set or raises.
+
+    A persisted decision is a cache, never an authority. ``requirement`` and ``grants`` are
+    mandatory -- the integrator loads them from the run's staged, hashed inputs -- and the gate
+    re-evaluates them at ``context["now"]``. Work may start only if that fresh evaluation is
+    GRANTED and the persisted record agrees with it on the binding, the input hashes and the
+    capability fingerprint. No field of the persisted record, ``valid_until`` included, is ever
+    the thing that decides expiry.
+    """
+    if validate_decision(decision, store):
         raise PermissionDenied("permission decision is invalid")
     if decision["decision"] != GRANTED:
         raise PermissionDenied("permission denied: " + ", ".join(sorted({r["code"] for r in decision["reasons"]})))
-    if (decision["run_id"], decision["job_id"], decision["source_snapshot_sha256"]) != (
-            run_id, job_id, source_snapshot_sha256):
-        raise PermissionDenied("permission decision is bound to a different run, job or source snapshot")
-    if decision["valid_until"] is not None and _parse_ts(decision["valid_until"]) <= _parse_ts(now):
-        raise PermissionDenied("permission decision has expired; re-evaluate against current grants")
-    return decision["capabilities"]
+    fresh = evaluate(requirement, grants, context, definitions, store)
+    if fresh["decision"] != GRANTED:
+        raise PermissionDenied("permission is no longer granted: "
+                               + ", ".join(sorted({r["code"] for r in fresh["reasons"]})))
+    for name in ("run_id", "job_id", "source_snapshot_sha256"):
+        if decision[name] != fresh[name]:
+            raise PermissionDenied("permission decision is bound to a different run, job or source snapshot")
+    if decision["inputs"] != fresh["inputs"]:
+        raise PermissionDenied("permission decision was not derived from these requirement, grant and "
+                               "definition records; re-evaluate")
+    if decision["fingerprint_material"] != fresh["fingerprint_material"]:
+        raise PermissionDenied("permission decision's capability set differs from a fresh evaluation")
+    return fresh["capabilities"]
 
 
 def input_fingerprint_component(decision: dict[str, Any]) -> str:

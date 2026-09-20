@@ -17,7 +17,8 @@
     "reasons",
     "capabilities",
     "grants_applied",
-    "fingerprint_material"
+    "fingerprint_material",
+    "decision_sha256"
   ],
   "properties": {
     "schema": {
@@ -259,6 +260,11 @@
           "pattern": "^sha256:[0-9a-f]{64}$"
         }
       }
+    },
+    "decision_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Integrity hash over every other field. Detects corruption and independent edits of valid_until, grants_applied and the binding, which the capability fingerprint deliberately does not cover. Not an authenticator: require_granted re-derives from the hashed inputs instead of trusting this record."
     }
   }
 }

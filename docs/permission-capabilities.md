@@ -102,9 +102,25 @@ job in the same run is not applicable (so it yields `MISSING_GRANT`, not `STALE_
 capabilities in a run-wide (`job_id: null`) grant are ignored unless they are a broader form of a
 required capability. An expired or otherwise stale `DENY` no longer applies.
 
-Consumers use `require_granted(decision, run_id=, job_id=, source_snapshot_sha256=, now=)` as the
-pre-work gate (it re-validates the record, the binding and `valid_until`) and
-`validate_decision(decision)` when reading a persisted decision.
+Consumers use `require_granted(decision, requirement=, grants=, context=)` as the pre-work gate
+and `validate_decision(decision)` when reading a persisted decision.
+
+**A persisted decision is a cache, never an authority.** The capability fingerprint deliberately
+excludes grant ids and timestamps, so it cannot protect `valid_until`, `grants_applied` or the
+binding. Two layers cover that gap:
+
+- `validate_decision` checks the record against itself: every timestamp is a real UTC instant,
+  `valid_until` equals the earliest `grants_applied[].expires_at` and is after `evaluated_at`, a
+  `GRANTED` decision with capabilities names the grants applied, applied grant ids are unique, a
+  `DENIED` decision carries no grants and no expiry, and `decision_sha256` (a hash over every other
+  field) matches. This catches corruption and independent edits.
+- `require_granted` does not trust the record at all. `requirement` and `grants` are **mandatory**
+  arguments, loaded by the integrator from the run's staged, hashed inputs. The gate re-evaluates
+  them at `context["now"]` and lets work start only if that fresh evaluation is `GRANTED` and the
+  persisted record agrees with it on the binding, the three input hashes and the capability
+  fingerprint. A record whose expiry, applied grants and hash were all rewritten consistently is
+  still refused once the real grants have expired. `decision_sha256` is an integrity check, not an
+  authenticator: whoever can rewrite the record can rehash it, which is why the gate re-derives.
 
 ## Fingerprint material
 
@@ -139,7 +155,8 @@ decision, so a denied job cannot obtain an input fingerprint and therefore canno
 attempt. Jobs that require nothing still include the (stable) empty-set hash, so later adding a
 capability to such a job invalidates its accepted attempts. Expiry is not part of the fingerprint:
 an accepted attempt stays reusable after its grant expires, but new work requires a fresh
-`GRANTED` decision (`require_granted` checks `valid_until`).
+`GRANTED` evaluation (`require_granted` re-evaluates the staged grants at the current time; it
+never reads expiry from the persisted record).
 
 ## Redaction
 

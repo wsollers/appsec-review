@@ -92,9 +92,8 @@ class Base(unittest.TestCase):
         with self.assertRaises(pc.PermissionDenied):
             pc.input_fingerprint_component(decision)
         with self.assertRaises(pc.PermissionDenied):
-            pc.require_granted(decision, run_id=self.context["run_id"], job_id=self.context["job_id"],
-                               source_snapshot_sha256=self.context["source_snapshot_sha256"],
-                               now=self.context["now"])
+            pc.require_granted(decision, requirement=self.requirement, grants=self.grants,
+                               context=self.context)
 
     def network_only(self):
         """Smallest scenario: one fixed network destination and one job-bound grant for it."""
@@ -193,9 +192,8 @@ class GoldenTests(Base):
         self.assertEqual([g["grant_id"] for g in decision["grants_applied"]],
                          ["grant-dynamic", "grant-network-restore"])
         self.assertEqual(decision["valid_until"], "2026-09-26T00:00:00Z")
-        caps = pc.require_granted(decision, run_id=self.context["run_id"], job_id=self.context["job_id"],
-                                  source_snapshot_sha256=self.context["source_snapshot_sha256"],
-                                  now=self.context["now"])
+        caps = pc.require_granted(decision, requirement=self.requirement, grants=self.grants,
+                                  context=self.context)
         self.assertEqual(caps, decision["capabilities"])
 
     def test_default_deny_with_no_grants(self):
@@ -227,18 +225,105 @@ class GoldenTests(Base):
     def test_requirement_for_another_job_is_rejected(self):
         self.assertDenied(self.evaluate({**self.requirement, "job_id": "02-ossf-scorecard"}), pc.CONTEXT_MISMATCH)
 
+    def gate(self, decision, **context_changes):
+        return pc.require_granted(decision, requirement=self.requirement, grants=self.grants,
+                                  context={**self.context, **context_changes})
+
+    def rehashed(self, decision):
+        decision["decision_sha256"] = pc.decision_sha256(decision)
+        return decision
+
     def test_require_granted_rechecks_binding_and_expiry(self):
         decision = self.evaluate()
-        args = dict(run_id=self.context["run_id"], job_id=self.context["job_id"],
-                    source_snapshot_sha256=self.context["source_snapshot_sha256"], now=self.context["now"])
+        self.assertEqual(self.gate(decision), decision["capabilities"])
         for change in ({"run_id": "other-run"}, {"job_id": "other-job"},
-                       {"source_snapshot_sha256": "sha256:" + "0" * 64}, {"now": "2026-09-26T00:00:00Z"}):
-            with self.assertRaises(pc.PermissionDenied):
-                pc.require_granted(decision, **{**args, **change})
+                       {"source_snapshot_sha256": "sha256:" + "0" * 64}, {"now": "2026-09-26T00:00:00Z"},
+                       {"now": "2027-01-01T00:00:00Z"}):
+            with self.assertRaises(pc.PermissionDenied, msg=change):
+                self.gate(decision, **change)
         tampered = deepcopy(decision)
         tampered["capabilities"][0]["parameters"]["port"] = 8443
         with self.assertRaises(pc.PermissionDenied):
-            pc.require_granted(tampered, **args)
+            self.gate(tampered)
+
+    def test_require_granted_has_no_optional_inputs(self):
+        # An optional safety input is not a safety check: the grants and requirement are mandatory.
+        decision = self.evaluate()
+        with self.assertRaises(TypeError):
+            pc.require_granted(decision, context=self.context)
+        with self.assertRaises(TypeError):
+            pc.require_granted(decision, run_id=self.context["run_id"], job_id=self.context["job_id"],
+                               source_snapshot_sha256=self.context["source_snapshot_sha256"],
+                               now=self.context["now"])
+
+    # ---- PR 6 review: a persisted decision's expiry must not be extendable --------------------
+
+    def test_extended_valid_until_is_rejected_by_validation(self):
+        decision = self.evaluate()
+        decision["valid_until"] = "2099-01-01T00:00:00Z"
+        errors = pc.validate_decision(decision, self.store)
+        self.assertIn("valid_until must equal the earliest grants_applied[].expires_at", errors)
+        self.assertIn("decision_sha256 does not match the decision record", errors)
+        with self.assertRaises(pc.PermissionDenied):
+            self.gate(decision, now="2027-01-01T00:00:00Z")
+
+    def test_consistently_forged_expiry_still_cannot_start_work(self):
+        # The attacker edits valid_until AND every applied grant's expiry AND rehashes, so the
+        # record is internally consistent. The gate must not care: it re-derives from the grants.
+        decision = self.evaluate()
+        decision["valid_until"] = "2099-01-01T00:00:00Z"
+        for applied in decision["grants_applied"]:
+            applied["expires_at"] = "2099-01-01T00:00:00Z"
+        self.rehashed(decision)
+        self.assertEqual(pc.validate_decision(decision, self.store), [], "forgery is self-consistent by design")
+        with self.assertRaisesRegex(pc.PermissionDenied, "no longer granted: STALE_GRANT|no longer granted"):
+            self.gate(decision, now="2027-01-01T00:00:00Z")
+        self.assertEqual(self.gate(decision), decision["capabilities"], "still fine while the real grants are live")
+
+    def test_decision_not_derived_from_these_grants_is_rejected(self):
+        decision = self.evaluate()
+        other = deepcopy(self.grants)
+        other[0]["grant_id"] = other[0]["grant_id"] + "-reissued"   # valid, equivalent, but not these inputs
+        self.assertEqual(pc.evaluate(self.requirement, other, self.context)["decision"], pc.GRANTED)
+        with self.assertRaisesRegex(pc.PermissionDenied, "not derived from these"):
+            pc.require_granted(decision, requirement=self.requirement, grants=other, context=self.context)
+
+    def test_authorization_fields_are_cross_checked(self):
+        cases = {
+            "applied grants removed": lambda d: d.update(grants_applied=[], valid_until=None),
+            "duplicate applied grant": lambda d: d["grants_applied"].append(deepcopy(d["grants_applied"][0])),
+            "unreal instant": lambda d: d.update(valid_until="2026-13-45T99:99:99Z"),
+            "unreal evaluated_at": lambda d: d.update(evaluated_at="2026-02-30T00:00:00Z"),
+            "valid_until not the earliest": lambda d: d.update(valid_until=max(g["expires_at"] for g in d["grants_applied"])
+                                                               if len({g["expires_at"] for g in d["grants_applied"]}) > 1
+                                                               else "2026-09-27T00:00:00Z"),
+            "valid_until before evaluated_at": lambda d: (d.update(valid_until="2020-01-01T00:00:00Z"),
+                                                          [g.update(expires_at="2020-01-01T00:00:00Z") for g in d["grants_applied"]]),
+        }
+        for name, mutate in cases.items():
+            decision = self.evaluate()
+            mutate(decision)
+            self.rehashed(decision)     # prove the cross-field rule, not the hash, catches it
+            self.assertTrue(pc.validate_decision(decision, self.store), name)
+            with self.assertRaises(pc.PermissionDenied, msg=name):
+                self.gate(decision)
+
+    def test_denied_decision_cannot_carry_grants_or_expiry(self):
+        denied = self.evaluate(grants=[])
+        granted = self.evaluate()
+        denied["grants_applied"] = deepcopy(granted["grants_applied"])
+        denied["valid_until"] = granted["valid_until"]
+        self.rehashed(denied)
+        self.assertIn("DENIED decision must carry no applied grants and no valid_until",
+                      pc.validate_decision(denied, self.store))
+
+    def test_any_field_edit_breaks_the_decision_hash(self):
+        for field, value in (("evaluated_at", "2026-09-01T00:00:00Z"), ("run_id", "other-run"),
+                             ("job_id", "other-job"), ("source_snapshot_sha256", "sha256:" + "1" * 64)):
+            decision = self.evaluate()
+            decision[field] = value
+            self.assertIn("decision_sha256 does not match the decision record",
+                          pc.validate_decision(decision, self.store), field)
 
 
 class AcceptanceWordTests(Base):
