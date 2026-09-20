@@ -21,13 +21,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import evidence_redaction
 import evidence_store as store
 import execution_state as state
-from schema_validate import validate_document
+from schema_validate import SCHEMAS_DIR, validate_document
 from validate_job_output import validate_job_output
 from worker_result import artifact_records, terminal_envelope
 
-REPO = Path(__file__).resolve().parents[2]
-SCHEMA = json.loads((REPO / 'schemas' / store.METRICS_SCHEMA_FILE).read_text(encoding='utf-8'))
-CONTRACT = json.loads((REPO / 'appsec-review-process/registry/output-contracts/evidence-index.json')
+# Located the way the worker locates them, never by the repository's directory names: in the Linux
+# code-server this tree is mounted as /opt/process beside /opt/schemas, and a path built from
+# '<repo>/appsec-review-process' made this module fail to import there (found by the requalification).
+SCHEMA = json.loads((SCHEMAS_DIR / store.METRICS_SCHEMA_FILE).read_text(encoding='utf-8'))
+CONTRACT = json.loads((store.ROOT / 'registry' / 'output-contracts' / 'evidence-index.json')
                       .read_text(encoding='utf-8'))
 FINGERPRINT = hashlib.sha256(b'v15 fixture source').hexdigest()
 SUPPORTED_KEYWORDS = {'$schema', '$id', 'title', 'description', 'type', 'required', 'properties',

@@ -233,36 +233,69 @@ the buffer already read, hashed and stored by `collect`.
 
 ## Requalification record
 
+**Requalified on Linux, 2026-09-20: `PASS`.** Windows is still outstanding (last paragraph).
+
 | Field | Value |
 |---|---|
 | Date | 2026-09-20 |
-| Command | `APPSEC_RUNS_ROOT=<scratch>/qualruns python3 -B appsec-review-process/qualify_evidence_index.py --run-id 20260920T000000Z-v15host` |
-| Host | the development host above; no Dagster stack, no `code-server` container, no `docker compose` plugin, no `/targets/freeciv21`, no `libfuzzy.so.2` |
-| Result | **`FAILED` at the first step (`create`: `docker compose ... exec code-server` exit 125). The worker is NOT requalified by this slice.** |
-| Report path | `<scratch>/qualruns/20260920T000000Z-v15host/data/qualification/evidence-c68a78ac/report.json` (qualification reports live under the ignored `runs/` root and are never tracked) |
-| Report sha256 | `d228cdb3ed5a4dc19797173ab654ca26da708b98570077f998c62ae17406cbe2` |
+| Command | `python3 -B appsec-review-process/qualify_evidence_index.py --run-id 20260920T220000Z-v15requal`, resumed with `--engagement-run-id 20260920T215639Z-94abfb` after the two host blockers below |
+| Result | **`PASS`** — checks: live Dagster success, immutable reuse, separate streams, FTS citations, snapshot read, ssdeep similarity query, MCP initialize/tools/list/tools/call, metrics re-derived from index.sqlite and objects |
+| Report path | `appsec-review-process/runs/20260920T220000Z-v15requal/data/qualification/evidence-99e9c424/report.json` (under the ignored `runs/` root; never tracked) |
+| Report sha256 | `db324444f12bacc878292ba78ee5f5cf615de70438e0124d7aebb8815289feb8` |
+| Engagement run id | `20260920T215639Z-94abfb` |
+| Dagster run ids | `76a604cd-7afe-4809-b985-f4e0edee62ab` (first), `3fcdd4b7-32f6-46a5-a287-1de6c063945b` (reuse) |
+| Attempt id | `08020154848b4aeb9a7ba49ccfddc345` |
+| `metrics_sha256` | `06f5517972808ea01c5dd671512b2882f1f2af631dcc375ad57b14801509a361` |
+| Worker | `evidence_store.py` sha256 prefix `ce3fdbb35fe0d222`, identical on the host and inside the container |
+| Image | `appsec-review-dagster:local`, id `sha256:722e3187531cd7fed354eb2b3711abbc3c0f74d75be04d1ae769d6b485fa99b7`, built from `orchestrator/dagster/Dockerfile` on this branch; Python 3.12.14, dagster 1.13.21, libfuzzy2 `2.14.1+git20180629.57fcfff-3+b2` (real ssdeep) |
+| Target | Freeciv21 `https://github.com/longturn/freeciv21` at `0ce1c60acf1140d6c5c5a5cd6bef2507bd072319`, the revision `docs/phase-1-acceptance.md` records |
+| Host | Ubuntu 24.04, Docker 29.1.3, Compose 2.40.3, native Linux (not Docker Desktop) |
 
-What was qualified on this host instead, and only this: the unit and lifecycle suites below
-(`test_evidence_index_metrics` on the host Python with a libfuzzy stand-in class; the pre-existing
-`test_evidence_store` module only with the stand-in library on `LD_LIBRARY_PATH`, since it errors
-on this host on `origin/main` too), the real `collect()` over the 1 085-file and 8× inputs followed
-by `check_metrics(attempt, True)`, and the existing `validate_job_output.py` over a produced
-attempt. What was **not** qualified: live Dagster success, immutable reuse under Dagster, separate
-streams, FTS citations / snapshot read / similarity through the container CLI, the MCP exchange,
-real ssdeep, the Linux code-server suite, and anything on Windows.
+What the run measured on Freeciv21: 6 101 files, 252 312 338 bytes (equal to `snapshot_bytes`),
+3 017 text files with 3 510 686 lines of which 501 597 blank, 112 excluded, 23 languages, 27 groups.
+The text-file count equals the index's own `indexed` + `line length limit` + `text byte limit`
+(2 964 + 42 + 11), and binary + not-UTF-8 (3 081 + 3) is the remainder. Scopes present:
+`first-party` 6 098 and `review-evidence` 3. **No file was labelled `vendored`**, although
+Freeciv21 bundles third-party code under `dependencies/`: that directory name is not in rules
+version 1's vendored table. It is a known labelling limit, not a counting error; adding the name is
+a rules change (`METRICS_RULES_VERSION` bump) and therefore another identity change.
+
+Time, with real ssdeep: the qualifying `collect` took 47.6 s for the 252 MB snapshot against the
+600 s timeout; `check_metrics(attempt, False)` took 0.021 s and `check_metrics(attempt, True)`
+0.94 s on that attempt. The share of the 47.6 s spent in the metrics path was not measured in this
+run; at the 0.49 s per 114 MB measured above it would be about 1.1 s (roughly 2 %), inside the
+recorded bound.
+
+Focused suites inside the Linux code-server (same image, real libfuzzy): `test_evidence_index_metrics`
+33 OK, including `GOLDEN_SHA256`; `test_evidence_store` OK. The first attempt found that
+`test_evidence_index_metrics` could not be imported there: it built paths from
+`<repo>/appsec-review-process`, and the container mounts the tree as `/opt/process` beside
+`/opt/schemas`. It now locates the schema and the contract the way the worker does
+(`schema_validate.SCHEMAS_DIR`, `evidence_store.ROOT`). Only the test module changed after the
+qualifying run; `evidence_store.py` and the registry, which are the worker's identity, did not.
+
+Two host blockers were met before the pass. Both come from the stack's containers running as root
+on a native Linux host, neither involves the worker, and both are shared-surface follow-ups:
+
+1. Everything a container creates under the bind-mounted `runs/` is owned by root, so the host-side
+   `launch_job.py` (uid 1000) could not create `data/orchestration/launches`. Worked around with
+   `chown -R` of that one run directory from inside the container, then the qualifier's documented
+   resume.
+2. git inside the container refused the uid-1000-owned `/targets/freeciv21` ("dubious ownership");
+   `00-intake` correctly went `BLOCKED` instead of guessing a source identity. Worked around with
+   `git config --system --add safe.directory /targets/freeciv21` inside the running containers
+   (container-local; lost when they are recreated).
+
+An earlier run on the same host, before the stack existed, is superseded: run id
+`20260920T000000Z-v15host`, `FAILED` at `create` (`docker compose` absent), report sha256
+`d228cdb3ed5a4dc19797173ab654ca26da708b98570077f998c62ae17406cbe2`.
 
 `qualify_evidence_index.py` gained additive checks so that a rerun stays meaningful for the new
 identity: after the first launch it re-derives the metrics with `check_metrics(attempt, True)`,
 asserts they cover `manifest.files` and `manifest.snapshot_bytes` and that both projections sum to
 the file count, records `metrics_sha256` in the report, and re-derives again after the reuse
-launch. Without them the qualifier would pass a worker whose new output was never looked at.
+launch. Those lines ran for the first time in this qualification.
 
-**Integrator action before V14 may proceed:** on the qualified stack run
-
-```sh
-python -B appsec-review-process/qualify_evidence_index.py --run-id <OWNER_RUN_ID>
-```
-
-and record here the report path, its sha256, the engagement run id, both Dagster run ids, the
-attempt id, the image identity and the `metrics_sha256`; then run the focused suites in the Linux
-code-server and on Windows and compare `GOLDEN_SHA256` (it must not change).
+**Still outstanding before V14 may proceed:** the focused suites on Windows, confirming
+`GOLDEN_SHA256` there. It has now been computed on the Linux host and in the Linux code-server,
+never on Windows.
