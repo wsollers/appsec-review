@@ -1,0 +1,127 @@
+[
+  {
+    "schema": "appsec-review/threat-workbench-intercom-record/0.1",
+    "record_id": "ic-0001",
+    "record_type": "question",
+    "author_workcell_id": "stride-enumerator",
+    "author_instance_id": "w2-stride-01",
+    "wave": 2,
+    "target": "architecture-dfd-mapper",
+    "topic": "audit logging on flow-login",
+    "subject_record_ids": [
+      "flow-login"
+    ],
+    "citations": [],
+    "status": "open",
+    "resolution": {
+      "text": null,
+      "resolving_record_id": null
+    },
+    "payload": {
+      "question": "Is there an audit log store receiving login events? None was modeled."
+    },
+    "injection_suspected": false,
+    "previous_hash": null,
+    "content_hash": "0101010101010101010101010101010101010101010101010101010101010101"
+  },
+  {
+    "schema": "appsec-review/threat-workbench-intercom-record/0.1",
+    "record_id": "ic-0002",
+    "record_type": "assumption",
+    "author_workcell_id": "deployment-topology-mapper",
+    "author_instance_id": "w1-deploy-01",
+    "wave": 1,
+    "target": "integrator",
+    "topic": "TLS termination",
+    "subject_record_ids": [
+      "flow-api-db",
+      "zone-private"
+    ],
+    "citations": [
+      {
+        "source_class": "derived",
+        "producer": "02-devops-project-discovery",
+        "attempt_id": "att-devops-0001",
+        "path": "data/jobs/02-devops-project-discovery/whole/attempts/att-devops-0001/outputs/project-inventory.json",
+        "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+        "line_range": null,
+        "index_record_id": null,
+        "note": null
+      }
+    ],
+    "status": "open",
+    "resolution": {
+      "text": null,
+      "resolving_record_id": null
+    },
+    "payload": {
+      "assumption": "TLS terminates at the ingress; internal hop is plaintext."
+    },
+    "injection_suspected": false,
+    "previous_hash": "0101010101010101010101010101010101010101010101010101010101010101",
+    "content_hash": "0202020202020202020202020202020202020202020202020202020202020202"
+  },
+  {
+    "schema": "appsec-review/threat-workbench-intercom-record/0.1",
+    "record_id": "ic-0003",
+    "record_type": "challenge",
+    "author_workcell_id": "challenge-refutation-cell",
+    "author_instance_id": "w3-challenge-01",
+    "wave": 3,
+    "target": "stride-enumerator",
+    "topic": "thr-login-spoofing confidence",
+    "subject_record_ids": [
+      "thr-login-spoofing"
+    ],
+    "citations": [
+      {
+        "source_class": "derived",
+        "producer": "02-test-intelligence-ingest",
+        "attempt_id": "att-test-0001",
+        "path": "data/jobs/02-test-intelligence-ingest/whole/attempts/att-test-0001/outputs/facts.json",
+        "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+        "line_range": null,
+        "index_record_id": null,
+        "note": null
+      }
+    ],
+    "status": "answered",
+    "resolution": {
+      "text": null,
+      "resolving_record_id": "ic-0004"
+    },
+    "payload": {
+      "challenge": "An integration test exercises a lockout after five failures; the hypothesis ignores it.",
+      "demanded_evidence": "source of the lockout control"
+    },
+    "injection_suspected": false,
+    "previous_hash": "0202020202020202020202020202020202020202020202020202020202020202",
+    "content_hash": "0303030303030303030303030303030303030303030303030303030303030303"
+  },
+  {
+    "schema": "appsec-review/threat-workbench-intercom-record/0.1",
+    "record_id": "ic-0004",
+    "record_type": "response",
+    "author_workcell_id": "stride-enumerator",
+    "author_instance_id": "w4-stride-01",
+    "wave": 4,
+    "target": "challenge-refutation-cell",
+    "topic": "thr-login-spoofing confidence",
+    "subject_record_ids": [
+      "thr-login-spoofing",
+      "ic-0003"
+    ],
+    "citations": [],
+    "status": "unresolved",
+    "resolution": {
+      "text": "Test exists but its lockout path is mocked; hypothesis kept at low confidence and marked contested.",
+      "resolving_record_id": null
+    },
+    "payload": {
+      "response": "Mocked control; not evidence of production behavior."
+    },
+    "injection_suspected": false,
+    "previous_hash": "0303030303030303030303030303030303030303030303030303030303030303",
+    "content_hash": "0404040404040404040404040404040404040404040404040404040404040404"
+  }
+]

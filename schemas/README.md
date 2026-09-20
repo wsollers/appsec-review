@@ -32,6 +32,17 @@ Composable review schemas (added for the registry/worklist layer):
 - `intelligence-payload.schema.json` -- scrubbed doc/test/API intelligence facts with source lineage.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
+Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,
+registry record or validator is implemented by these files):
+
+- `integrated-threat-model.schema.json` -- the canonical `03-threat-model-dfd-stride` result: DFD substrate (elements, flows, trust boundaries) plus typed overlays (data classes, deployment zones, abuse scenarios, attack trees, STRIDE hypotheses and per-flow STRIDE coverage), assumptions, gaps, rescope triggers, per-workcell coverage and preserved dissent. Every object is closed and every declared field is required (nullable where optional), so there is no field that can carry verified status, final severity, runtime exposure, compliance verdict, intent or remediation status. `OBSERVED_EXPOSURE` is schema-valid on purpose so the lane validator (T08) can reject it by name.
+- `threat-model-*.schema.json` (citation, element, flow, trust-boundary, data-class, deployment-zone, abuse-scenario, attack-tree, stride-hypothesis, assumption, gap) -- the per-family record shapes, split into sibling files because `schema_validate.py` resolves `$ref` by filename only. Shared by the integrated model and by cell results.
+- `threat-workbench-cell-result.schema.json` -- one persona workcell instance's terminal contribution: identity and prompt/model hashes, envelope terminal status, inputs read, a typed `model_delta`, and authored intercom record ids.
+- `threat-workbench-intercom-record.schema.json` -- one append-only intercom record with author, target, subject ids, citations, status, resolution and a hash chain. Deliberately no `updated_at`.
+- `threat-workbench-wave-manifest.schema.json` -- the frozen per-wave rendezvous manifest: expected instances (selected or omitted with reason) and hashed terminal results. The only channel between waves.
+
+Cross-record id resolution, the completeness invariant, index-only citation rejection and claim-limit checks are lane-validator responsibilities, not expressible here.
+
 Validated by `appsec-review-process/schema_validate.py` (a small dependency-free JSON-Schema-subset
 engine -- type/required/properties/additionalProperties/enum/const/pattern/items/minItems/$ref --
 plus the classification/classification_taxonomy cross-check against verdict-taxonomies.json that

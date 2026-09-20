@@ -1,0 +1,126 @@
+{
+  "schema": "appsec-review/threat-workbench-cell-result/0.1",
+  "run_id": "20260920T000000Z-golden",
+  "job_id": "03-threat-model-dfd-stride",
+  "attempt_id": "att-0001",
+  "workcell_id": "stride-enumerator",
+  "instance_id": "w2-stride-01",
+  "wave": 2,
+  "persona_id": "stride-threat-enumerator",
+  "role_id": "threat-enumerator",
+  "domain_id": "threat-model-graph",
+  "tooling_profile_id": "threat-model-static-evidence",
+  "prompt_hash": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+  "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+  "budget_class": "standard",
+  "terminal_status": "OK_WITH_GAPS",
+  "started_at": "2026-09-20T10:00:00Z",
+  "finished_at": "2026-09-20T10:04:12Z",
+  "summary": "Enumerated STRIDE over one boundary-crossing flow; two hypotheses, two unresolved categories.",
+  "inputs_read": [
+    {
+      "source_class": "persona",
+      "producer": "architecture-dfd-mapper",
+      "attempt_id": "w1-arch-01",
+      "path": "cells/1/w1-arch-01/cell-result.json",
+      "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "line_range": null,
+      "index_record_id": null,
+      "note": null
+    },
+    {
+      "source_class": "reference",
+      "producer": "02-standards-source-ingest",
+      "attempt_id": "att-std-0001",
+      "path": "data/jobs/02-standards-source-ingest/whole/attempts/att-std-0001/outputs/controls/stride.json",
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "line_range": null,
+      "index_record_id": null,
+      "note": null
+    }
+  ],
+  "model_delta": {
+    "elements": [],
+    "flows": [],
+    "trust_boundaries": [],
+    "data_classes": [],
+    "deployment_zones": [],
+    "abuse_scenarios": [],
+    "attack_trees": [],
+    "stride_hypotheses": [
+      {
+        "threat_id": "thr-login-spoofing",
+        "target_kind": "flow",
+        "target_id": "flow-login",
+        "stride_category": "spoofing",
+        "statement": "An attacker replays or guesses credentials on the login flow across the internet edge.",
+        "evidence_class": "WEAK_INFERENCE",
+        "confidence": "low",
+        "citations": [
+          {
+            "source_class": "derived",
+            "producer": "02-api-collection-intelligence-ingest",
+            "attempt_id": "att-api-0001",
+            "path": "data/jobs/02-api-collection-intelligence-ingest/whole/attempts/att-api-0001/outputs/facts.json",
+            "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+            "line_range": null,
+            "index_record_id": null,
+            "note": null
+          }
+        ],
+        "proof_obligations": [
+          "locate and review the login rate-limit or lockout control in source"
+        ],
+        "minimum_verification": "source_review",
+        "downstream_owner": "09-independent-verification",
+        "contested": false,
+        "originating_workcell_id": "stride-enumerator"
+      }
+    ],
+    "stride_coverage": [
+      {
+        "flow_id": "flow-login",
+        "decisions": {
+          "spoofing": "hypothesis",
+          "tampering": "not_applicable",
+          "repudiation": "unresolved",
+          "information_disclosure": "hypothesis",
+          "denial_of_service": "unresolved",
+          "elevation_of_privilege": "not_applicable"
+        }
+      }
+    ],
+    "assumptions": [],
+    "gaps": [
+      {
+        "gap_id": "gap-repudiation-unresolved",
+        "kind": "unresolved_intercom",
+        "statement": "No audit-log evidence found for flow-login; asked architecture mapper.",
+        "affected_record_ids": [
+          "flow-login"
+        ],
+        "originating_workcell_id": "stride-enumerator",
+        "intercom_record_id": "ic-0001",
+        "evidence_class": "DIRECT_EVIDENCE",
+        "confidence": "high",
+        "citations": [
+          {
+            "source_class": "derived",
+            "producer": "02-evidence-assembly",
+            "attempt_id": "att-asm-0001",
+            "path": "data/jobs/02-evidence-assembly/whole/attempts/att-asm-0001/outputs/intel-manifest.json",
+            "sha256": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+            "line_range": null,
+            "index_record_id": null,
+            "note": null
+          }
+        ]
+      }
+    ]
+  },
+  "intercom_record_ids": [
+    "ic-0001"
+  ],
+  "gaps": [],
+  "cause": null
+}

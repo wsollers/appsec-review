@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-data-class.schema.json",
+  "title": "Threat-model data class",
+  "type": "object",
+  "required": [
+    "data_class_id",
+    "category",
+    "sensitivity",
+    "retention_hint",
+    "export_hint",
+    "delete_hint",
+    "store_element_ids",
+    "flow_ids",
+    "evidence_class",
+    "confidence",
+    "citations",
+    "originating_workcell_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "data_class_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "pii",
+        "credential",
+        "secret",
+        "user_content",
+        "telemetry",
+        "log",
+        "regulated",
+        "payment",
+        "location",
+        "device_id",
+        "other"
+      ]
+    },
+    "sensitivity": {
+      "type": "string",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ]
+    },
+    "retention_hint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "export_hint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "delete_hint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "store_element_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "flow_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

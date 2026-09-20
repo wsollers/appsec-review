@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-element.schema.json",
+  "title": "Threat-model architecture element",
+  "type": "object",
+  "required": [
+    "element_id",
+    "kind",
+    "name",
+    "component_id",
+    "zone_id",
+    "identities",
+    "tenancy",
+    "description",
+    "evidence_class",
+    "confidence",
+    "citations",
+    "originating_workcell_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "element_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "actor",
+        "process",
+        "store",
+        "queue",
+        "service",
+        "client",
+        "external_system",
+        "support_workflow",
+        "control_plane"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "component_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "zone_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "identities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tenancy": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "description": {
+      "type": "string"
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-gap.schema.json",
+  "title": "Threat-model coverage gap",
+  "type": "object",
+  "required": [
+    "gap_id",
+    "kind",
+    "statement",
+    "citations",
+    "confidence",
+    "evidence_class",
+    "affected_record_ids",
+    "originating_workcell_id",
+    "intercom_record_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "gap_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "missing_evidence",
+        "unmodeled_component",
+        "omitted_workcell",
+        "failed_workcell",
+        "unresolved_intercom",
+        "missing_source",
+        "m01_gated_source_absent",
+        "wave_4_omitted"
+      ]
+    },
+    "statement": {
+      "type": "string"
+    },
+    "affected_record_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "intercom_record_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    }
+  },
+  "description": "A gap is an absence claim and cites the search, bundle-manifest or coverage record that evidences the absence (registry rule: absence claims require search evidence)."
+}

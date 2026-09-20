@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-stride-hypothesis.schema.json",
+  "title": "Threat-model STRIDE hypothesis",
+  "description": "A candidate only. There is deliberately no field for verified status, severity, exploitability, compliance, intent or remediation.",
+  "type": "object",
+  "required": [
+    "threat_id",
+    "target_kind",
+    "target_id",
+    "stride_category",
+    "statement",
+    "evidence_class",
+    "confidence",
+    "citations",
+    "proof_obligations",
+    "minimum_verification",
+    "downstream_owner",
+    "contested",
+    "originating_workcell_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "threat_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "target_kind": {
+      "type": "string",
+      "enum": [
+        "element",
+        "flow"
+      ]
+    },
+    "target_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "stride_category": {
+      "type": "string",
+      "enum": [
+        "spoofing",
+        "tampering",
+        "repudiation",
+        "information_disclosure",
+        "denial_of_service",
+        "elevation_of_privilege"
+      ]
+    },
+    "statement": {
+      "type": "string"
+    },
+    "evidence_class": {
+      "type": "string",
+      "enum": [
+        "DIRECT_EVIDENCE",
+        "STRONG_INFERENCE",
+        "WEAK_INFERENCE",
+        "FOLLOW_ON_REQUIRED"
+      ]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "threat-model-citation.schema.json"
+      }
+    },
+    "proof_obligations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "minimum_verification": {
+      "type": "string",
+      "enum": [
+        "source_review",
+        "static_check",
+        "safe_request",
+        "dynamic_test",
+        "live_state_review",
+        "human_decision"
+      ]
+    },
+    "downstream_owner": {
+      "type": "string",
+      "enum": [
+        "04-asvs-masvs",
+        "05-native-memory",
+        "07-red-team-adversarial",
+        "08-blue-team-refutation",
+        "09-independent-verification",
+        "12-scoring-prioritization",
+        "13-fuzz-target-triage",
+        "15-deployment-hardening"
+      ]
+    },
+    "contested": {
+      "type": "boolean"
+    },
+    "originating_workcell_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    }
+  }
+}

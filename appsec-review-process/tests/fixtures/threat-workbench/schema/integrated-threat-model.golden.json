@@ -1,0 +1,730 @@
+{
+  "schema": "appsec-review/integrated-threat-model/0.1",
+  "run_id": "20260920T000000Z-golden",
+  "job_id": "03-threat-model-dfd-stride",
+  "attempt_id": "att-0001",
+  "source_snapshot": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "component_map_attempt_id": "att-cm-0001",
+  "budget_class": "standard",
+  "elements": [
+    {
+      "element_id": "el-browser-user",
+      "kind": "actor",
+      "name": "Browser user",
+      "component_id": null,
+      "zone_id": "zone-client",
+      "identities": [
+        "session-cookie"
+      ],
+      "tenancy": null,
+      "description": "Authenticated end user of the web application.",
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-doc-intelligence-ingest",
+          "attempt_id": "att-doc-0001",
+          "path": "data/jobs/02-doc-intelligence-ingest/whole/attempts/att-doc-0001/outputs/facts.json",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "architecture-dfd-mapper"
+    },
+    {
+      "element_id": "el-web-api",
+      "kind": "service",
+      "name": "Web API",
+      "component_id": "cmp-web-api",
+      "zone_id": "zone-private",
+      "identities": [
+        "service-account-api"
+      ],
+      "tenancy": "single",
+      "description": "HTTP API serving the browser client.",
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "accepted_lane",
+          "producer": "01-component-characterization",
+          "attempt_id": "att-cm-0001",
+          "path": "data/jobs/01-component-characterization/whole/attempts/att-cm-0001/outputs/component-purpose-map.json",
+          "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "architecture-dfd-mapper"
+    },
+    {
+      "element_id": "el-user-db",
+      "kind": "store",
+      "name": "User database",
+      "component_id": "cmp-user-db",
+      "zone_id": "zone-private",
+      "identities": [],
+      "tenancy": "single",
+      "description": "Relational store holding user profiles.",
+      "evidence_class": "STRONG_INFERENCE",
+      "confidence": "medium",
+      "citations": [
+        {
+          "source_class": "raw",
+          "producer": "02-evidence-index",
+          "attempt_id": "att-idx-0001",
+          "path": "data/source/src/db/schema.sql",
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "line_range": "1-40",
+          "index_record_id": "idx-000917",
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "architecture-dfd-mapper"
+    }
+  ],
+  "flows": [
+    {
+      "flow_id": "flow-login",
+      "source_element_id": "el-browser-user",
+      "destination_element_id": "el-web-api",
+      "protocol": "https",
+      "auth_context": "unauthenticated-then-session",
+      "data_class_ids": [
+        "dc-credential",
+        "dc-pii-profile"
+      ],
+      "boundary_ids": [
+        "tb-internet-edge"
+      ],
+      "direction": "request",
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-api-collection-intelligence-ingest",
+          "attempt_id": "att-api-0001",
+          "path": "data/jobs/02-api-collection-intelligence-ingest/whole/attempts/att-api-0001/outputs/facts.json",
+          "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "architecture-dfd-mapper"
+    },
+    {
+      "flow_id": "flow-api-db",
+      "source_element_id": "el-web-api",
+      "destination_element_id": "el-user-db",
+      "protocol": "postgres",
+      "auth_context": "service-account-api",
+      "data_class_ids": [
+        "dc-pii-profile"
+      ],
+      "boundary_ids": [],
+      "direction": "bidirectional",
+      "evidence_class": "STRONG_INFERENCE",
+      "confidence": "medium",
+      "citations": [
+        {
+          "source_class": "raw",
+          "producer": "02-evidence-index",
+          "attempt_id": "att-idx-0001",
+          "path": "data/source/src/config/database.yml",
+          "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+          "line_range": "3-9",
+          "index_record_id": "idx-000212",
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "architecture-dfd-mapper"
+    }
+  ],
+  "trust_boundaries": [
+    {
+      "boundary_id": "tb-internet-edge",
+      "kind": "network",
+      "reason": "Public ingress terminates TLS in front of the API.",
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-devops-project-discovery",
+          "attempt_id": "att-devops-0001",
+          "path": "data/jobs/02-devops-project-discovery/whole/attempts/att-devops-0001/outputs/project-inventory.json",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "architecture-dfd-mapper"
+    }
+  ],
+  "data_classes": [
+    {
+      "data_class_id": "dc-credential",
+      "category": "credential",
+      "sensitivity": "restricted",
+      "retention_hint": null,
+      "export_hint": null,
+      "delete_hint": null,
+      "store_element_ids": [
+        "el-user-db"
+      ],
+      "flow_ids": [
+        "flow-login"
+      ],
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "raw",
+          "producer": "02-evidence-index",
+          "attempt_id": "att-idx-0001",
+          "path": "data/source/src/db/schema.sql",
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "line_range": "12-14",
+          "index_record_id": "idx-000917",
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "pii-user-data-mapper"
+    },
+    {
+      "data_class_id": "dc-pii-profile",
+      "category": "pii",
+      "sensitivity": "confidential",
+      "retention_hint": "documented: retained until account deletion",
+      "export_hint": "documented: user export endpoint",
+      "delete_hint": null,
+      "store_element_ids": [
+        "el-user-db"
+      ],
+      "flow_ids": [
+        "flow-login",
+        "flow-api-db"
+      ],
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-doc-intelligence-ingest",
+          "attempt_id": "att-doc-0001",
+          "path": "data/jobs/02-doc-intelligence-ingest/whole/attempts/att-doc-0001/outputs/facts.json",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "pii-user-data-mapper"
+    }
+  ],
+  "deployment_zones": [
+    {
+      "zone_id": "zone-client",
+      "kind": "client_device",
+      "name": "End-user browser",
+      "exposure_label": "DECLARED_EXPOSURE",
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-doc-intelligence-ingest",
+          "attempt_id": "att-doc-0001",
+          "path": "data/jobs/02-doc-intelligence-ingest/whole/attempts/att-doc-0001/outputs/facts.json",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "deployment-topology-mapper"
+    },
+    {
+      "zone_id": "zone-private",
+      "kind": "private_service",
+      "name": "Private service network",
+      "exposure_label": "DECLARED_EXPOSURE",
+      "evidence_class": "STRONG_INFERENCE",
+      "confidence": "medium",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-devops-project-discovery",
+          "attempt_id": "att-devops-0001",
+          "path": "data/jobs/02-devops-project-discovery/whole/attempts/att-devops-0001/outputs/project-inventory.json",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "deployment-topology-mapper"
+    }
+  ],
+  "abuse_scenarios": [
+    {
+      "scenario_id": "abuse-credential-stuffing",
+      "attacker_objective": "Take over accounts using leaked credential lists.",
+      "actor": "external opportunistic attacker",
+      "capability": "internet access, credential lists, scripting",
+      "target_element_ids": [
+        "el-web-api"
+      ],
+      "target_data_class_ids": [
+        "dc-credential",
+        "dc-pii-profile"
+      ],
+      "harm": "Account takeover and profile disclosure.",
+      "preconditions": [
+        "login endpoint reachable without rate limiting"
+      ],
+      "missing_controls": [
+        "rate limiting evidence not found in tests"
+      ],
+      "evidence_class": "WEAK_INFERENCE",
+      "confidence": "low",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-test-intelligence-ingest",
+          "attempt_id": "att-test-0001",
+          "path": "data/jobs/02-test-intelligence-ingest/whole/attempts/att-test-0001/outputs/facts.json",
+          "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "originating_workcell_id": "abuse-scenario-analyst"
+    }
+  ],
+  "attack_trees": [
+    {
+      "tree_id": "tree-account-takeover",
+      "objective": "Read another user's profile",
+      "root_node_id": "node-root",
+      "nodes": [
+        {
+          "node_id": "node-root",
+          "kind": "OR",
+          "label": "Obtain a valid session for the victim",
+          "child_node_ids": [
+            "node-stuff",
+            "node-idor"
+          ],
+          "prerequisites": [],
+          "leaf_support": null,
+          "citations": [],
+          "verification_item_ids": []
+        },
+        {
+          "node_id": "node-stuff",
+          "kind": "leaf",
+          "label": "Credential stuffing against login",
+          "child_node_ids": [],
+          "prerequisites": [
+            "no rate limit"
+          ],
+          "leaf_support": "assumption",
+          "citations": [],
+          "verification_item_ids": [
+            "thr-login-spoofing"
+          ]
+        },
+        {
+          "node_id": "node-idor",
+          "kind": "leaf",
+          "label": "Profile endpoint lacks object-level authorization",
+          "child_node_ids": [],
+          "prerequisites": [],
+          "leaf_support": "unresolved",
+          "citations": [],
+          "verification_item_ids": []
+        }
+      ],
+      "originating_workcell_id": "attack-tree-builder",
+      "evidence_class": "WEAK_INFERENCE",
+      "confidence": "low",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-test-intelligence-ingest",
+          "attempt_id": "att-test-0001",
+          "path": "data/jobs/02-test-intelligence-ingest/whole/attempts/att-test-0001/outputs/facts.json",
+          "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        },
+        {
+          "source_class": "derived",
+          "producer": "02-doc-intelligence-ingest",
+          "attempt_id": "att-doc-0001",
+          "path": "data/jobs/02-doc-intelligence-ingest/whole/attempts/att-doc-0001/outputs/facts.json",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ]
+    }
+  ],
+  "stride_hypotheses": [
+    {
+      "threat_id": "thr-login-spoofing",
+      "target_kind": "flow",
+      "target_id": "flow-login",
+      "stride_category": "spoofing",
+      "statement": "An attacker replays or guesses credentials on the login flow across the internet edge.",
+      "evidence_class": "WEAK_INFERENCE",
+      "confidence": "low",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-api-collection-intelligence-ingest",
+          "attempt_id": "att-api-0001",
+          "path": "data/jobs/02-api-collection-intelligence-ingest/whole/attempts/att-api-0001/outputs/facts.json",
+          "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "proof_obligations": [
+        "locate and review the login rate-limit or lockout control in source"
+      ],
+      "minimum_verification": "source_review",
+      "downstream_owner": "09-independent-verification",
+      "contested": true,
+      "originating_workcell_id": "stride-enumerator"
+    },
+    {
+      "threat_id": "thr-login-info-disclosure",
+      "target_kind": "flow",
+      "target_id": "flow-login",
+      "stride_category": "information_disclosure",
+      "statement": "Login error responses may distinguish valid from invalid usernames.",
+      "evidence_class": "FOLLOW_ON_REQUIRED",
+      "confidence": "low",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-api-collection-intelligence-ingest",
+          "attempt_id": "att-api-0001",
+          "path": "data/jobs/02-api-collection-intelligence-ingest/whole/attempts/att-api-0001/outputs/facts.json",
+          "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "proof_obligations": [
+        "compare error handling branches for unknown user versus wrong password"
+      ],
+      "minimum_verification": "source_review",
+      "downstream_owner": "04-asvs-masvs",
+      "contested": false,
+      "originating_workcell_id": "stride-enumerator"
+    }
+  ],
+  "stride_coverage": [
+    {
+      "flow_id": "flow-login",
+      "decisions": {
+        "spoofing": "hypothesis",
+        "tampering": "not_applicable",
+        "repudiation": "unresolved",
+        "information_disclosure": "hypothesis",
+        "denial_of_service": "unresolved",
+        "elevation_of_privilege": "not_applicable"
+      }
+    }
+  ],
+  "assumptions": [
+    {
+      "assumption_id": "asm-tls-terminates-at-edge",
+      "topic": "deployment",
+      "statement": "TLS terminates at the public ingress; the API-to-DB hop is plaintext inside the private network.",
+      "affected_record_ids": [
+        "flow-api-db",
+        "zone-private"
+      ],
+      "status": "open",
+      "originating_workcell_id": "deployment-topology-mapper",
+      "intercom_record_id": "ic-0002",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-devops-project-discovery",
+          "attempt_id": "att-devops-0001",
+          "path": "data/jobs/02-devops-project-discovery/whole/attempts/att-devops-0001/outputs/project-inventory.json",
+          "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ],
+      "evidence_class": "WEAK_INFERENCE",
+      "confidence": "low"
+    }
+  ],
+  "gaps": [
+    {
+      "gap_id": "gap-no-secrets-inventory",
+      "kind": "m01_gated_source_absent",
+      "statement": "No secrets inventory producer exists yet (M01); credential-bearing config was not enumerated.",
+      "affected_record_ids": [
+        "dc-credential"
+      ],
+      "originating_workcell_id": "pii-user-data-mapper",
+      "intercom_record_id": null,
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-evidence-assembly",
+          "attempt_id": "att-asm-0001",
+          "path": "data/jobs/02-evidence-assembly/whole/attempts/att-asm-0001/outputs/intel-manifest.json",
+          "sha256": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ]
+    },
+    {
+      "gap_id": "gap-repudiation-unresolved",
+      "kind": "unresolved_intercom",
+      "statement": "Repudiation on flow-login is unresolved: no audit-log evidence was found and the question to the architecture mapper stayed open.",
+      "affected_record_ids": [
+        "flow-login"
+      ],
+      "originating_workcell_id": "stride-enumerator",
+      "intercom_record_id": "ic-0001",
+      "evidence_class": "DIRECT_EVIDENCE",
+      "confidence": "high",
+      "citations": [
+        {
+          "source_class": "derived",
+          "producer": "02-evidence-assembly",
+          "attempt_id": "att-asm-0001",
+          "path": "data/jobs/02-evidence-assembly/whole/attempts/att-asm-0001/outputs/intel-manifest.json",
+          "sha256": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+          "line_range": null,
+          "index_record_id": null,
+          "note": null
+        }
+      ]
+    }
+  ],
+  "rescope_triggers": [
+    {
+      "trigger_id": "rt-login-follow-on",
+      "kind": "boundary_crossing_follow_on_required",
+      "statement": "flow-login crosses tb-internet-edge with a FOLLOW_ON_REQUIRED hypothesis.",
+      "affected_record_ids": [
+        "flow-login",
+        "thr-login-info-disclosure"
+      ]
+    }
+  ],
+  "coverage": {
+    "unmodeled_components": [
+      {
+        "component_id": "cmp-legacy-cron",
+        "reason": "no source, docs or tests reference it; only a deployment name"
+      }
+    ],
+    "workcells": [
+      {
+        "workcell_id": "domain-specialist-router",
+        "instance_id": "w1-router-01",
+        "wave": 1,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK",
+        "persona_id": "target-trait-domain-selector",
+        "prompt_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "architecture-dfd-mapper",
+        "instance_id": "w1-arch-01",
+        "wave": 1,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK",
+        "persona_id": "architecture-trust-boundary-modeler",
+        "prompt_hash": "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "pii-user-data-mapper",
+        "instance_id": "w1-pii-01",
+        "wave": 1,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK_WITH_GAPS",
+        "persona_id": "privacy-and-user-data-modeler",
+        "prompt_hash": "a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "deployment-topology-mapper",
+        "instance_id": "w1-deploy-01",
+        "wave": 1,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK",
+        "persona_id": "deployment-and-zone-modeler",
+        "prompt_hash": "a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "stride-enumerator",
+        "instance_id": "w2-stride-01",
+        "wave": 2,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK_WITH_GAPS",
+        "persona_id": "stride-threat-enumerator",
+        "prompt_hash": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "abuse-scenario-analyst",
+        "instance_id": "w2-abuse-01",
+        "wave": 2,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK",
+        "persona_id": "abuse-case-and-attacker-objective-analyst",
+        "prompt_hash": "a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "attack-tree-builder",
+        "instance_id": "w2-tree-01",
+        "wave": 2,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK",
+        "persona_id": "attack-tree-and-chain-builder",
+        "prompt_hash": "a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "supply-chain-specialist",
+        "instance_id": null,
+        "wave": 2,
+        "selection": "omitted",
+        "omission_reason": "no third-party manifest or Scorecard evidence in bundle",
+        "terminal_status": null,
+        "persona_id": null,
+        "prompt_hash": null,
+        "model_identity_hash": null
+      },
+      {
+        "workcell_id": "agent-tool-boundary-specialist",
+        "instance_id": null,
+        "wave": 2,
+        "selection": "omitted",
+        "omission_reason": "no LLM/agent/tool-use component tags",
+        "terminal_status": null,
+        "persona_id": null,
+        "prompt_hash": null,
+        "model_identity_hash": null
+      },
+      {
+        "workcell_id": "native-parser-input-specialist",
+        "instance_id": null,
+        "wave": 2,
+        "selection": "omitted",
+        "omission_reason": "no native or parser components",
+        "terminal_status": null,
+        "persona_id": null,
+        "prompt_hash": null,
+        "model_identity_hash": null
+      },
+      {
+        "workcell_id": "mobile-client-specialist",
+        "instance_id": null,
+        "wave": 2,
+        "selection": "omitted",
+        "omission_reason": "no mobile client components",
+        "terminal_status": null,
+        "persona_id": null,
+        "prompt_hash": null,
+        "model_identity_hash": null
+      },
+      {
+        "workcell_id": "cloud-control-plane-specialist",
+        "instance_id": null,
+        "wave": 2,
+        "selection": "omitted",
+        "omission_reason": "no Kubernetes, IaC or pipeline manifests",
+        "terminal_status": null,
+        "persona_id": null,
+        "prompt_hash": null,
+        "model_identity_hash": null
+      },
+      {
+        "workcell_id": "challenge-refutation-cell",
+        "instance_id": "w3-challenge-01",
+        "wave": 3,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK",
+        "persona_id": "threat-model-defensive-skeptic",
+        "prompt_hash": "a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8",
+        "model_identity_hash": "c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2"
+      },
+      {
+        "workcell_id": "response-round",
+        "instance_id": "w4-stride-01",
+        "wave": 4,
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK",
+        "persona_id": "stride-threat-enumerator",
+        "prompt_hash": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+        "model_identity_hash": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+      },
+      {
+        "workcell_id": "integrator-join",
+        "instance_id": "join-01",
+        "wave": "join",
+        "selection": "selected",
+        "omission_reason": null,
+        "terminal_status": "OK_WITH_GAPS",
+        "persona_id": null,
+        "prompt_hash": null,
+        "model_identity_hash": null
+      }
+    ],
+    "wave_4": "executed"
+  },
+  "dissent": [
+    {
+      "challenge_record_id": "ic-0003",
+      "response_record_id": "ic-0004",
+      "subject_record_ids": [
+        "thr-login-spoofing"
+      ],
+      "status": "unresolved"
+    }
+  ]
+}

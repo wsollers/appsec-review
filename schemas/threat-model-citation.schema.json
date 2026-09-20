@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-citation.schema.json",
+  "title": "Threat-model evidence citation",
+  "description": "ADR-0008: every record cites at least one dereferenced source with class, producer lineage and hash.",
+  "type": "object",
+  "required": [
+    "source_class",
+    "producer",
+    "attempt_id",
+    "path",
+    "sha256",
+    "line_range",
+    "index_record_id",
+    "note"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "source_class": {
+      "type": "string",
+      "enum": [
+        "raw",
+        "derived",
+        "accepted_lane",
+        "persona",
+        "reference"
+      ]
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z-]*$",
+      "description": "Producing job id, or the workcell id for source_class persona."
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "path": {
+      "type": "string",
+      "description": "Run-relative path of the dereferenced source. Never an index record alone."
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "line_range": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "index_record_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Locator only. When set, path/sha256 must still name the dereferenced source (design-v3 22.4); enforced by the lane validator."
+    },
+    "note": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

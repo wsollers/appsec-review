@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-workbench-wave-manifest.schema.json",
+  "title": "Threat-workbench wave manifest",
+  "description": "Frozen once every expected selected instance is terminal (C02 wait_all). The only channel between waves. A missing instance is never an empty success.",
+  "type": "object",
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "wave",
+    "budget_class",
+    "frozen_at",
+    "previous_wave_manifest_sha256",
+    "expected_instances",
+    "terminal_instances"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/threat-workbench-wave-manifest/0.1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "job_id": {
+      "const": "03-threat-model-dfd-stride"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+    },
+    "wave": {
+      "type": "integer",
+      "enum": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "budget_class": {
+      "type": "string",
+      "enum": [
+        "probe",
+        "standard",
+        "deep"
+      ]
+    },
+    "frozen_at": {
+      "type": "string"
+    },
+    "previous_wave_manifest_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "expected_instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "workcell_id",
+          "instance_id",
+          "persona_id",
+          "output_root",
+          "selection",
+          "omission_reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "workcell_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "instance_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+          },
+          "persona_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "output_root": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selection": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "omitted"
+            ]
+          },
+          "omission_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "terminal_instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "instance_id",
+          "terminal_status",
+          "cell_result_path",
+          "cell_result_sha256",
+          "intercom_records_path",
+          "intercom_records_sha256"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "instance_id": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]*$"
+          },
+          "terminal_status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "OK_WITH_GAPS",
+              "SKIPPED",
+              "BLOCKED",
+              "FAILED",
+              "CANCELED",
+              "UNRESOLVED"
+            ]
+          },
+          "cell_result_path": {
+            "type": "string"
+          },
+          "cell_result_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "intercom_records_path": {
+            "type": "string"
+          },
+          "intercom_records_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

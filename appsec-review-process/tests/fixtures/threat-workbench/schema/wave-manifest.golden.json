@@ -1,0 +1,102 @@
+{
+  "schema": "appsec-review/threat-workbench-wave-manifest/0.1",
+  "run_id": "20260920T000000Z-golden",
+  "job_id": "03-threat-model-dfd-stride",
+  "attempt_id": "att-0001",
+  "wave": 2,
+  "budget_class": "standard",
+  "frozen_at": "2026-09-20T10:05:00Z",
+  "previous_wave_manifest_sha256": "0505050505050505050505050505050505050505050505050505050505050505",
+  "expected_instances": [
+    {
+      "workcell_id": "stride-enumerator",
+      "instance_id": "w2-stride-01",
+      "persona_id": "stride-threat-enumerator",
+      "output_root": "cells/2/w2-stride-01",
+      "selection": "selected",
+      "omission_reason": null
+    },
+    {
+      "workcell_id": "abuse-scenario-analyst",
+      "instance_id": "w2-abuse-01",
+      "persona_id": "abuse-case-and-attacker-objective-analyst",
+      "output_root": "cells/2/w2-abuse-01",
+      "selection": "selected",
+      "omission_reason": null
+    },
+    {
+      "workcell_id": "attack-tree-builder",
+      "instance_id": "w2-tree-01",
+      "persona_id": "attack-tree-and-chain-builder",
+      "output_root": "cells/2/w2-tree-01",
+      "selection": "selected",
+      "omission_reason": null
+    },
+    {
+      "workcell_id": "supply-chain-specialist",
+      "instance_id": null,
+      "persona_id": null,
+      "output_root": null,
+      "selection": "omitted",
+      "omission_reason": "no third-party manifest or Scorecard evidence in bundle"
+    },
+    {
+      "workcell_id": "agent-tool-boundary-specialist",
+      "instance_id": null,
+      "persona_id": null,
+      "output_root": null,
+      "selection": "omitted",
+      "omission_reason": "no LLM/agent/tool-use component tags"
+    },
+    {
+      "workcell_id": "native-parser-input-specialist",
+      "instance_id": null,
+      "persona_id": null,
+      "output_root": null,
+      "selection": "omitted",
+      "omission_reason": "no native or parser components"
+    },
+    {
+      "workcell_id": "mobile-client-specialist",
+      "instance_id": null,
+      "persona_id": null,
+      "output_root": null,
+      "selection": "omitted",
+      "omission_reason": "no mobile client components"
+    },
+    {
+      "workcell_id": "cloud-control-plane-specialist",
+      "instance_id": null,
+      "persona_id": null,
+      "output_root": null,
+      "selection": "omitted",
+      "omission_reason": "no Kubernetes, IaC or pipeline manifests"
+    }
+  ],
+  "terminal_instances": [
+    {
+      "instance_id": "w2-stride-01",
+      "terminal_status": "OK_WITH_GAPS",
+      "cell_result_path": "cells/2/w2-stride-01/cell-result.json",
+      "cell_result_sha256": "0606060606060606060606060606060606060606060606060606060606060606",
+      "intercom_records_path": "cells/2/w2-stride-01/intercom-records.jsonl",
+      "intercom_records_sha256": "0707070707070707070707070707070707070707070707070707070707070707"
+    },
+    {
+      "instance_id": "w2-abuse-01",
+      "terminal_status": "OK",
+      "cell_result_path": "cells/2/w2-abuse-01/cell-result.json",
+      "cell_result_sha256": "0808080808080808080808080808080808080808080808080808080808080808",
+      "intercom_records_path": "cells/2/w2-abuse-01/intercom-records.jsonl",
+      "intercom_records_sha256": "0909090909090909090909090909090909090909090909090909090909090909"
+    },
+    {
+      "instance_id": "w2-tree-01",
+      "terminal_status": "OK",
+      "cell_result_path": "cells/2/w2-tree-01/cell-result.json",
+      "cell_result_sha256": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "intercom_records_path": "cells/2/w2-tree-01/intercom-records.jsonl",
+      "intercom_records_sha256": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+    }
+  ]
+}
