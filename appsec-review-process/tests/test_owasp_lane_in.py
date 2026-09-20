@@ -49,7 +49,8 @@ class OwaspLaneInTests(unittest.TestCase):
         write_json(index, {"records": [{"path": "imports/import-1/config.json"}]})
         pointer = self.data / "jobs" / "02-evidence-index" / "whole" / "accepted.json"
         write_json(pointer, {"status": "OK", "run_id": self.run_id,
-                             "attempt_id": "attempt-1", "job_id": "02-evidence-index"})
+                             "attempt_id": "attempt-1", "job_id": "02-evidence-index",
+                             "artifacts": {"outputs/index.json": sha(index)}})
         self.raw, self.index, self.pointer = raw, index, pointer
 
         asvs_root = next((ROOT / "data" / "reference" / "owasp" / "owasp_asvs" / "5.0.0").iterdir())
@@ -198,6 +199,17 @@ class OwaspLaneInTests(unittest.TestCase):
         self.request["entries"][1]["producer"]["accepted_pointer_sha256"] = sha(self.pointer)
         self.write_request()
         with self.assertRaisesRegex(execution_state.Blocked, "producer is not accepted"):
+            owasp_lane_in.admit(self.run_id, self.request_path)
+
+    def test_unpublished_file_beneath_accepted_attempt_is_rejected(self):
+        unpublished = self.index.parent / "unpublished.json"
+        write_json(unpublished, {"records": []})
+        self.request["entries"][1]["artifact"] = {
+            "path": "jobs/02-evidence-index/whole/attempts/attempt-1/outputs/unpublished.json",
+            "sha256": sha(unpublished),
+        }
+        self.write_request()
+        with self.assertRaisesRegex(execution_state.Blocked, "does not publish the requested artifact/hash"):
             owasp_lane_in.admit(self.run_id, self.request_path)
 
 
