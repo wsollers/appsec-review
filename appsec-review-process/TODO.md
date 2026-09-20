@@ -110,7 +110,7 @@ Cross-cutting capability ownership is explicit:
 
 ### Runtime foundation
 
-#### B09 — Critical-findings SARIF common-runtime adoption — IN PROGRESS (live qualification outstanding)
+#### B09 — Critical-findings SARIF common-runtime adoption — QUALIFIED
 
 - Depends: Batch 8 checkpoint.
 - Deliver: migrate standalone `10-critical-findings-sarif` to the common lifecycle, envelope,
@@ -129,10 +129,11 @@ Cross-cutting capability ownership is explicit:
   `appsec-review/deterministic-child/1.0`; the `critical-findings-sarif` contract declares
   `schemas/critical-findings-sarif.schema.json` as its single result schema; conversion semantics
   are pinned by a golden fixture; 13 focused tests plus the generic adoption and child suites pass
-  on Linux. Outstanding before B09 may be closed: the bounded live Dagster success/reuse/
-  newer-failure/recovery sequence (`qualify_sarif_adoption.py`, executable identity changed) and
-  the same focused suite on Windows. Both need a host with the Dagster stack; neither was
-  available in the implementation environment and neither was faked.
+  on Linux. Windows host focused tests passed on 2026-09-20, and the bounded live Dagster
+  success/reuse/newer-failure/recovery sequence passed in owner run
+  `20260920T003602Z-41cea7`; report:
+  `appsec-review-process/runs/20260920T003602Z-41cea7/data/qualification/sarif-adoption-e96975cb/report.json`,
+  SHA-256 `e1b00bdbbc85fbf324cf9d79edb5117541e9e45009bf484bc12938bbe9860caa`.
 
 #### B10 — Supplied developer-discovery common envelope — BLOCKED(B09)
 

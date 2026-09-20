@@ -88,6 +88,6 @@ retained-log truncation, child loss, and log-write failure, plus one live succes
 `10-critical-findings-sarif` adopted the same boundary in Batch 9 and is focus-qualified for
 semantic parity, common publication/reuse/recovery, contract-declared result validation, and
 deterministic-child fault mapping; its bounded live Dagster sequence
-(`qualify_sarif_adoption.py`) is still outstanding and it is therefore not yet live-qualified.
+(`qualify_sarif_adoption.py`) passed in owner run `20260920T003602Z-41cea7`.
 Migration of all other workers remains later Workstream B work; historical attempts are not
 rewritten.

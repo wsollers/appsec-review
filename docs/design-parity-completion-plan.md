@@ -113,7 +113,8 @@ Completed subset:
   Dagster. Scorecard and the standalone critical-findings SARIF transform use the versioned
   argv-only deterministic-child boundary for timeout, bounded concurrent stdout/stderr draining,
   cancellation diagnostics, and complete child-tree cleanup; SARIF adopted the common lifecycle,
-  envelope and publication boundary in Batch 9 and still owes its bounded live Dagster sequence.
+  envelope and publication boundary in Batch 9 and passed its bounded live Dagster sequence in
+  owner run `20260920T003602Z-41cea7`.
   Payload construction and contract-specific validation remain worker-local;
   repository-partition discovery has no child, and no broader worker was migrated.
 - [ ] Add permission capabilities for target execution, network destinations, dynamic testing,

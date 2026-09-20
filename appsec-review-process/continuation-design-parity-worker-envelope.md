@@ -178,15 +178,14 @@ Implemented on branch `claude/b09-sarif-common-runtime` within the requested bou
 
 - Linux focused tests with `PYTHONDONTWRITEBYTECODE=1`: 13 SARIF cases, 19 worker-adoption cases,
   and 6 deterministic-child cases passed.
+- Windows host focused tests passed on 2026-09-20: 13 SARIF cases, 19 worker-adoption cases, and
+  6 deterministic-child cases.
 - `python -B -m py_compile` passed for every changed Python file.
 - `python -B appsec-review-process/validate_design_parity.py` — PASS, 42 jobs / 15 capabilities.
 - `python -B appsec-review-process/qualify_phase1.py --check-contracts` — PASS, 83 registry
   records / 42 graph jobs / 15 parity capabilities.
 - `git diff --check` — PASS.
-- **Not performed, not faked:** the bounded live Dagster success/reuse/newer-failure/recovery
-  sequence and the Windows focused run. The implementation environment had no Docker daemon, no
-  Dagster service and no `/targets`, so no run IDs, attempt IDs, evidence hashes or success files
-  exist for them. B09 stays open until a host with the stack runs
-  `python -B appsec-review-process/qualify_sarif_adoption.py --run-id <owner_run_id>` after
-  confirming no Dagster run is active, and records the report path and SHA-256 under the owning
-  ignored run.
+- Bounded live Dagster success/reuse/newer-failure/recovery qualification passed on 2026-09-20 in
+  owner run `20260920T003602Z-41cea7`; report:
+  `appsec-review-process/runs/20260920T003602Z-41cea7/data/qualification/sarif-adoption-e96975cb/report.json`,
+  SHA-256 `e1b00bdbbc85fbf324cf9d79edb5117541e9e45009bf484bc12938bbe9860caa`.
