@@ -94,6 +94,12 @@ def _accepted_producer(data_root: Path, entry: dict[str, Any], artifact: Path) -
         raise ValueError(f"{entry['input_id']}: accepted artifact is not beneath an attempt") from None
     if len(parts) <= attempts_at + 1 or parts[0] != "jobs" or parts[1] != job_id or parts[attempts_at + 1] != attempt_id:
         raise ValueError(f"{entry['input_id']}: artifact does not belong to its producer attempt")
+    published = pointer.get("artifacts")
+    if not isinstance(published, dict):
+        raise Blocked(f"{entry['input_id']}: accepted pointer does not publish an artifact map")
+    relative = PurePosixPath(*parts[attempts_at + 2:]).as_posix()
+    if published.get(relative) != entry["artifact"]["sha256"]:
+        raise Blocked(f"{entry['input_id']}: accepted pointer does not publish the requested artifact/hash")
 
 
 def _explicit_import(data_root: Path, entry: dict[str, Any], artifact: Path) -> None:
