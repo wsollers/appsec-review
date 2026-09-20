@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-run-artifact-ref.schema.json",
+  "title": "Hash-pinned run-owned artifact reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["path", "sha256"],
+  "properties": {
+    "path": {"type": "string"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

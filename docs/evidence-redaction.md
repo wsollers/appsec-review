@@ -175,6 +175,32 @@ python -B appsec-review-process/evidence_redaction.py verify <dst>/redaction-rec
 
 Exit 0 success, 1 error or failed verification, 2 publication refused.
 
+## This repository's own evidence documents
+
+The redactor sits on the publication path of documents this repository defines (tool-results,
+coverage, probe receipts, wave manifests). It must not rewrite their structure. Version 1.0.0 did:
+the key `source_snapshot_sha256` was classed as a high-entropy token and replaced with a marker,
+which made every such document schema-invalid, and about a third of run ids in the repository's
+own format (`20260919T123919Z-0b9e70`) were flagged too. Version 1.1.0 fixes both **narrowly**, in
+`RULESET`, so `ruleset_sha256` moves with the change:
+
+- `wordy_technical_pieces` is a closed list of algorithm and format NAMES (`sha256`, `md5`,
+  `base64`, `x509`, ...). One of them may appear as a PIECE of a kebab/snake identifier that is
+  otherwise made of at least two plain words. A short digit counter (`0001`) is allowed the same
+  way. A string that merely contains such a token is still judged on its entropy.
+- `exempt_patterns` holds the run-id shape: a UTC stamp plus a hex suffix of at most 12 characters.
+
+JSON object keys are **not** exempted wholesale: a secret can be a key, and the provider, JWT,
+private-key and entropy rules all still apply to keys. Tests pair every relaxation with a
+must-still-flag case, assert that no property name in any schema under `schemas/` is an entropy
+hit, and pass the repository's own evidence fixtures through `redact_tree` expecting `unchanged`.
+
+One constraint remains by design: in JSON, the VALUE beneath a secret-ish key name is redacted
+wholesale. A document shape that will be published through the redactor must therefore not name a
+property with a secret-ish keyword (`secret_kind`, `token_count`, `authorization`, ...) unless
+wholesale redaction of its value is intended. V04 renamed `secret_kind` to `data_class` for this
+reason.
+
 ## Known false negatives
 
 This is a heuristic, not a proof. A valid receipt means "this ruleset found nothing more", not

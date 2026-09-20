@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-validator-handoff-request.schema.json",
+  "title": "OWASP validator handoff build or blocked execution request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "batching", "handoff_config", "budget", "operation", "batch_id"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-validator-handoff-request/1.0"},
+    "run_id": {"type": "string"},
+    "batching": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "worklist_path", "worklist_sha256", "batch_manifest_path", "batch_manifest_sha256", "summary_path", "summary_sha256"],
+      "properties": {
+        "attempt_id": {"type": "string"},
+        "accepted_pointer_path": {"type": "string"},
+        "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "worklist_path": {"type": "string"},
+        "worklist_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "batch_manifest_path": {"type": "string"},
+        "batch_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "summary_path": {"type": "string"},
+        "summary_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "handoff_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "config_digest"],
+      "properties": {
+        "path": {"type": "string"},
+        "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "budget": {"enum": ["probe", "standard", "full"]},
+    "operation": {"enum": ["build", "execute", "launch"]},
+    "batch_id": {"type": ["string", "null"]}
+  }
+}

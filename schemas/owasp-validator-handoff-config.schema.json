@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-validator-handoff-config.schema.json",
+  "title": "Versioned OWASP validator handoff policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "config_id", "version", "prompt_path", "tooling_profiles", "eligible_specialists", "prohibited_tools", "prohibited_actions", "prohibited_claim_classes", "budgets", "terminal_results", "failure_semantics"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-validator-handoff-config/1.0"},
+    "config_id": {"type": "string"},
+    "version": {"type": "string"},
+    "prompt_path": {"type": "string"},
+    "tooling_profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["profile_id", "allowed_tools"],
+        "properties": {
+          "profile_id": {"type": "string"},
+          "allowed_tools": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["tool_id", "actions"],
+              "properties": {
+                "tool_id": {"type": "string"},
+                "actions": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+              }
+            }
+          }
+        }
+      }
+    },
+    "eligible_specialists": {"type": "object"},
+    "prohibited_tools": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "prohibited_actions": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "prohibited_claim_classes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "budgets": {"type": "object"},
+    "terminal_results": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "failure_semantics": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

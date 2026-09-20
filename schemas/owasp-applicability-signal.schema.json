@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-applicability-signal.schema.json",
+  "title": "Positive or unresolved applicability signal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["signal_type", "fact", "input_id"],
+  "properties": {
+    "signal_type": {"enum": ["positive_presence", "positive_exclusion", "unresolved_condition", "source_completeness"]},
+    "fact": {"type": "string"},
+    "input_id": {"type": "string"}
+  }
+}

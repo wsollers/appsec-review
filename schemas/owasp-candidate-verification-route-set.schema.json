@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-candidate-verification-route-set.schema.json",
+  "title": "T07 candidate-only verification route set",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "batch_id", "finding_promotion", "routes"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-candidate-verification-route-set/1.0"},
+    "run_id": {"type": "string"}, "batch_id": {"type": "string"},
+    "finding_promotion": {"const": "not_performed"},
+    "routes": {"type": "array", "items": {"$ref": "owasp-candidate-verification-route.schema.json"}}
+  }
+}

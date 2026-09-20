@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-control-assessment-validation.schema.json",
+  "title": "T07 validator-result validation receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "status", "run_id", "batch_id", "handoff_id"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-control-assessment-validation/1.0"},
+    "status": {"enum": ["PASS", "INVALID", "BLOCKED"]},
+    "run_id": {"type": "string"}, "batch_id": {"type": "string"}, "handoff_id": {"type": "string"},
+    "candidate_path": {"type": "string"}, "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "result_id": {"type": "string"}, "checks": {"type": "array", "items": {"type": "string"}},
+    "errors": {"type": "array", "items": {"type": "object"}}
+  }
+}
