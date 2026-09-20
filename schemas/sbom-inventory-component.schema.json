@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sbom-inventory-component.schema.json",
+  "title": "One SBOM component",
+  "description": "declaration is closed: a component a manifest or lockfile DECLARES, or one INFERRED from vendored file evidence. source.evidence_kind is re-derived from the basename of source.path by sbom_family_contracts.py, and declaration from evidence_kind, so an inferred vendored component cannot be relabelled declared. No description, licence, supplier, author, URL or free-text field exists.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "component_id",
+    "assertion",
+    "declaration",
+    "name",
+    "version",
+    "purl",
+    "cpe",
+    "ecosystem",
+    "source",
+    "tool_id",
+    "citation"
+  ],
+  "properties": {
+    "component_id": {
+      "type": "string",
+      "pattern": "^SC-[0-9]{6}\\Z"
+    },
+    "assertion": {
+      "type": "string",
+      "enum": [
+        "declared-component-present",
+        "component-version-unknown",
+        "inventory-coverage-gap"
+      ]
+    },
+    "declaration": {
+      "type": "string",
+      "enum": [
+        "declared",
+        "inferred-vendored"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._+~/-]{0,199}\\Z"
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~:!-]{0,95}\\Z"
+    },
+    "purl": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^pkg:[a-z][a-z0-9.+-]{0,31}/[A-Za-z0-9._~%@/+:?=&#-]{1,480}\\Z"
+    },
+    "cpe": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^cpe:2\\.3:[aho](:[A-Za-z0-9._~%*-]{1,128}){10}\\Z"
+    },
+    "ecosystem": {
+      "type": "string",
+      "enum": [
+        "npm",
+        "pypi",
+        "maven",
+        "golang",
+        "nuget",
+        "cargo",
+        "gem",
+        "composer",
+        "conan",
+        "deb",
+        "rpm",
+        "apk",
+        "generic"
+      ]
+    },
+    "source": {
+      "description": "The file in the source snapshot that produced this component, with the sha256 of its bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_kind",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "evidence_kind": {
+          "type": "string",
+          "enum": [
+            "manifest",
+            "lockfile",
+            "vendored-file-evidence"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "citation": {
+      "$ref": "sbom-inventory-citation.schema.json"
+    }
+  }
+}

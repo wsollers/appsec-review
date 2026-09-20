@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sbom-inventory-citation.schema.json",
+  "title": "Citation of a tool-instance output (SBOM family)",
+  "description": "Shared by the four ADR-0010 V05 contracts. Names one validated output that tool-results.json lists for the record's tool instance; sbom_family_contracts.py resolves it and compares attempt id and sha256. There is no free-text field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_class",
+    "producer",
+    "attempt_id",
+    "path",
+    "sha256"
+  ],
+  "properties": {
+    "source_class": {
+      "const": "raw"
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z-]{0,95}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}\\Z"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}\\Z"
+    }
+  }
+}

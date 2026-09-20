@@ -1,0 +1,55 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "license-inventory",
+  "display_name": "Licence Detection Inventory",
+  "required_files": [
+    "manifest.json",
+    "status.json",
+    "outputs/license-inventory.json",
+    "outputs/redaction-receipt.json",
+    "outputs/tool-results.json",
+    "outputs/coverage.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "run_id",
+    "attempt_id"
+  ],
+  "result_schema": {
+    "artifact": "outputs/license-inventory.json",
+    "schema_file": "license-inventory.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "license_detection_evidence",
+    "allowed_assertions": [
+      "license-text-detected",
+      "copyright-statement-detected",
+      "vendored-component-inferred",
+      "scan-coverage-gap"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
+  },
+  "validation_rules": [
+    "outputs/license-inventory.json must satisfy license-inventory.schema.json; cross-record rules and the on-disk bindings are sbom_family_contracts.verify_license_attempt",
+    "each record carries a licence expression or a closed state (spdx-expression, unknown, no-assertion) and the SOURCE of the claim: declared-in-manifest or found-in-file, with path, sha256 and line span; the file is re-hashed in the source snapshot and a line span must lie inside it",
+    "declared-in-manifest needs a recognised manifest file and a declared SBOM component; copyright-statement-detected carries no expression and no holder text",
+    "vendored-component-inferred means 'not declared in any manifest, inferred from bundled licence or copyright evidence': it is found-in-file, and its component_ref is null or an inferred-vendored SBOM component, never a declared one",
+    "the inventory is bound to the SBOM it was computed against: sbom_binding must equal the caller's expected SBOM attempt and sha256, the SBOM bytes are re-hashed before they are parsed, and every non-null component_ref resolves into it",
+    "no legal conclusion: no compatibility, compliance, obligation, category, risk, approval or policy verdict can be represented, and such a property is rejected by name",
+    "scan-coverage-gap is asserted only by coverage.json",
+    "tool-results.json and coverage.json must satisfy tool_instance_shapes.validate_node_aggregate with no probe receipt: this node is always applicable and SKIPPED is never a permitted status",
+    "outputs/redaction-receipt.json is required and must verify with evidence_redaction.verify_receipt against the outputs/ directory under the policy and limits the consumer demands, BEFORE any published document is parsed; if it does not verify nothing else is read and only the receipt's errors are reported",
+    "the receipt must list every other outputs/ contract file as published (unchanged or redacted, never withheld) and the bytes validated must hash to the receipt's published_sha256; every published document's redactor block must equal the receipt's",
+    "status.json carries exactly status, run_id and attempt_id plus, optionally, job_id and dagster_run_id; every one is bound to a caller-supplied fact (node status, expected header, the contract's job id, expected_dagster_run_id) and nothing from it is ever quoted",
+    "manifest.json is exactly {schema: appsec-review/attempt-manifest/1, contract_id, outputs[{path, sha256}]}, sorted, naming exactly the regular files beneath outputs/ with the sha256 of their bytes",
+    "run_id, job_id, attempt_id and source_snapshot_sha256 must equal the caller's expected header in every published document",
+    "every record's tool_id must resolve to a tool instance with a validated output in tool-results.json, its citation must name one of that instance's listed outputs with the same attempt id and sha256, and a tool cannot be cited for more records than its result_record_count",
+    "no error message quotes a value read from the attempt; messages name files, fields, ordinal record ids and what the caller expected",
+    "a clean or empty result is not evidence of absence; the result cannot promote a lead to a finding, a severity, or an observed runtime state",
+    "latest failed attempt blocks older accepted output"
+  ]
+}

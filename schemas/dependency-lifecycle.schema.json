@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dependency-lifecycle.schema.json",
+  "title": "Dependency lifecycle (outputs/dependency-lifecycle.json)",
+  "description": "Result document of contract dependency-lifecycle (ADR-0010 V05): a pure transform over the accepted SBOM and licence inventory and one identified reference table. Exactly one entry per SBOM component.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "redactor",
+    "sbom_binding",
+    "license_binding",
+    "reference_table",
+    "entries"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/dependency-lifecycle/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "job_id": {
+      "const": "02-dependency-lifecycle"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "redactor": {
+      "description": "Must equal the redactor block of outputs/redaction-receipt.json in the same attempt.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module_version",
+        "ruleset_sha256"
+      ],
+      "properties": {
+        "name": {
+          "const": "appsec-review-process/evidence_redaction"
+        },
+        "module_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\Z"
+        },
+        "ruleset_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "sbom_binding": {
+      "$ref": "sbom-inventory-upstream-binding.schema.json"
+    },
+    "license_binding": {
+      "$ref": "sbom-inventory-upstream-binding.schema.json"
+    },
+    "reference_table": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table_id",
+        "version",
+        "sha256",
+        "as_of"
+      ],
+      "properties": {
+        "table_id": {
+          "type": "string",
+          "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~-]{0,63}\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "as_of": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\Z"
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "dependency-lifecycle-entry.schema.json"
+      }
+    }
+  }
+}

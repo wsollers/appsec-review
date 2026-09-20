@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dependency-lifecycle-reference-table.schema.json",
+  "title": "Offline lifecycle reference table (consumed, not published)",
+  "description": "The curated EOL reference table 02-dependency-lifecycle reads. Coverage is partial by design: a component with no row is 'unknown', never 'supported'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "table_id",
+    "version",
+    "as_of",
+    "rows"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/dependency-lifecycle-reference-table/1.0"
+    },
+    "table_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~-]{0,63}\\Z"
+    },
+    "as_of": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\Z"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "row_id",
+          "ecosystem",
+          "name",
+          "cycle",
+          "status",
+          "eol_date"
+        ],
+        "properties": {
+          "row_id": {
+            "type": "string",
+            "pattern": "^[0-9a-z][0-9a-z._-]{0,95}\\Z"
+          },
+          "ecosystem": {
+            "type": "string",
+            "enum": [
+              "npm",
+              "pypi",
+              "maven",
+              "golang",
+              "nuget",
+              "cargo",
+              "gem",
+              "composer",
+              "conan",
+              "deb",
+              "rpm",
+              "apk",
+              "generic"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9@][A-Za-z0-9@._+~/-]{0,199}\\Z"
+          },
+          "cycle": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z._+~:!-]{0,95}\\Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "end-of-life"
+            ]
+          },
+          "eol_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}\\Z"
+          }
+        }
+      },
+      "minItems": 1
+    }
+  }
+}
