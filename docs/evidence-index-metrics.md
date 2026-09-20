@@ -286,6 +286,19 @@ on a native Linux host, neither involves the worker, and both are shared-surface
    `git config --system --add safe.directory /targets/freeciv21` inside the running containers
    (container-local; lost when they are recreated).
 
+**Rerun against the final orchestrator identity (after PR #26), 2026-09-20: `PASS`, no workarounds.**
+PR #26 changed `compose.yaml`, `Dockerfile` and `definitions.py`, which are in every job's runtime
+fingerprint, so the run above no longer describes the identity that ships. Rerun with `main`
+(including #26) merged in, containers as uid 1000, neither host blocker present: owner run
+`20260920T231129Z-b7c97e`, engagement `20260920T231129Z-efe11d`, Dagster runs
+`bf090c78-2d0a-48bf-a2d9-9822606f3717` and `2a7499dd-e6cf-4ccc-93fe-7753d6ea3535`, attempt
+`585a3a605a284726b9c7d4db9369dafd`, report
+`appsec-review-process/runs/20260920T231129Z-b7c97e/data/qualification/evidence-77c9108f/report.json`
+sha256 `62300048ac9b1398e3fb6b82dad8914506664f23677f1d4cd006554c2669ef23`, image id
+`sha256:0373f1c871f472e02f5e452f45e3644517ce5d2c9a21890232f9c035b57fed5d`, worker sha256 prefix
+unchanged (`ce3fdbb35fe0d222`). All 8 checks. `metrics_sha256` is **identical** to the first run
+(`06f55179…9a361`): same snapshot, different image and orchestrator identity, byte-identical metrics.
+
 An earlier run on the same host, before the stack existed, is superseded: run id
 `20260920T000000Z-v15host`, `FAILED` at `create` (`docker compose` absent), report sha256
 `d228cdb3ed5a4dc19797173ab654ca26da708b98570077f998c62ae17406cbe2`.
