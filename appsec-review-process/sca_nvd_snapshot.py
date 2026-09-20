@@ -25,7 +25,7 @@ import stat
 
 from schema_validate import SchemaStore, validate, validate_document
 
-IDENTITY_SCHEMA = "appsec-review/vulnerability-database-identity/1"
+IDENTITY_SCHEMA = "appsec-review/vulnerability-database-identity/2"
 IDENTITY_SCHEMA_FILE = "vulnerability-database-identity.schema.json"
 POINTER_SCHEMA_FILE = "nvd-current-pointer.schema.json"
 MANIFEST_SCHEMA_FILE = "nvd-snapshot-manifest.schema.json"
@@ -39,12 +39,26 @@ LIMITATIONS = (
     "Integrity is verified against the publisher's own hashes; the publication root is not signed, so this record does not authenticate the publisher.",
 )
 
-OK, OK_WITH_GAPS, BLOCKED, FAILED = "OK", "OK_WITH_GAPS", "BLOCKED", "FAILED"
-OUTCOMES = (OK, OK_WITH_GAPS, BLOCKED, FAILED)
-USABLE = (OK, OK_WITH_GAPS)
+OK, BLOCKED, FAILED = "OK", "BLOCKED", "FAILED"
+OUTCOMES = (OK, BLOCKED, FAILED)
+USABLE = (OK,)
+
+
+class _NoAgeLimit:
+    """The explicit "no age limit" policy (ADR-0010 sub-decision M4). It is a value a caller must
+    pass on purpose; `max_age` has no default, so "no limit" can never be reached by omission."""
+    __slots__ = ()
+
+    def __repr__(self):
+        return "NO_AGE_LIMIT"
+
+
+NO_AGE_LIMIT = _NoAgeLimit()
+AGE_POLICY_NO_LIMIT, AGE_POLICY_WITHIN_LIMIT = "no-limit", "within-limit"
 REASONS = {
-    "VERIFIED_FRESH": OK,
-    "VERIFIED_STALE": OK_WITH_GAPS,
+    "VERIFIED_NO_AGE_LIMIT": OK,
+    "VERIFIED_WITHIN_LIMIT": OK,
+    "SNAPSHOT_TOO_OLD": FAILED,
     "DATA_ROOT_MISSING": BLOCKED,
     "POINTER_MISSING": BLOCKED,
     "SNAPSHOT_MISSING": BLOCKED,
@@ -63,7 +77,6 @@ REASONS = {
     "TIMESTAMP_IN_FUTURE": FAILED,
     "READ_ERROR": FAILED,
 }
-STALE_GAP_ID = "nvd-snapshot-older-than-policy"
 MAX_POINTER_READS = 3
 MAX_CHAIN_LENGTH = 100000
 _MAX_JSON_BYTES = 64 * 1024 * 1024
@@ -128,7 +141,8 @@ class IdentityMismatch(ValueError):
 @dataclass(frozen=True)
 class Resolution:
     """Outcome of one resolve. `identity` and `fingerprint_component` are non-None if and only if
-    the outcome is OK or OK_WITH_GAPS; construction enforces it."""
+    the outcome is OK; construction enforces it. `gaps` is reserved and always empty: under
+    sub-decision M4 an over-age snapshot is FAILED, not a usable result with a staleness gap."""
     outcome: str
     reason: str
     detail: str
@@ -142,16 +156,17 @@ class Resolution:
             raise ValueError(f"reason {self.reason!r} does not belong to outcome {self.outcome!r}")
         usable = self.outcome in USABLE
         if usable != (self.identity is not None) or usable != (self.fingerprint_component is not None):
-            raise ValueError("identity and fingerprint_component are returned only for OK and OK_WITH_GAPS")
-        if (self.outcome == OK_WITH_GAPS) != bool(self.gaps):
-            raise ValueError("a named gap is recorded for OK_WITH_GAPS and only for OK_WITH_GAPS")
+            raise ValueError("identity and fingerprint_component are returned only for OK")
+        if self.gaps:
+            raise ValueError("gaps is reserved and must be empty: an over-age snapshot is FAILED, not a gap")
         if usable:
             # The identity a worker publishes and the component it fingerprints must be the same
             # statement. Bind them here, then make the identity read-only so they stay bound.
             if fingerprint_component(self.identity) != self.fingerprint_component:
                 raise ValueError("fingerprint_component does not belong to this identity record")
-            if (self.identity["freshness"] == "stale") != (self.outcome == OK_WITH_GAPS):
-                raise ValueError("identity freshness contradicts the outcome")
+            expected = "VERIFIED_NO_AGE_LIMIT" if self.identity["age_policy"] == AGE_POLICY_NO_LIMIT else "VERIFIED_WITHIN_LIMIT"
+            if self.reason != expected:
+                raise ValueError("identity age_policy contradicts the reason")
             object.__setattr__(self, "identity", _freeze(self.identity))
 
     @property
@@ -411,7 +426,13 @@ def _identity(head, chain, files, max_age, now):
         if times[name] > now:
             raise _Stop("TIMESTAMP_IN_FUTURE", f"manifest {name} {manifest[name]} is later than now {_stamp(now)}; age cannot be established")
     age = int((now - times["cursor"]).total_seconds())
-    limit = int(max_age.total_seconds())
+    limit = None if max_age is NO_AGE_LIMIT else int(max_age.total_seconds())
+    if limit is not None and age > limit:
+        # M4: a job that set a limit gets an error, not a usable result with a gap. No identity and
+        # no fingerprint component exist for this outcome, so nothing downstream can proceed on it.
+        raise _Stop("SNAPSHOT_TOO_OLD", f"snapshot data is {age} seconds old at {_stamp(now)}, which exceeds the "
+                                        f"max_age of {limit} seconds this job set; refresh the snapshot or re-launch "
+                                        "with the age policy the engagement intends")
     content = hashlib.sha256(_canonical({"chain": chain, "files": files}).encode()).hexdigest()
     return {
         "schema": IDENTITY_SCHEMA,
@@ -433,7 +454,7 @@ def _identity(head, chain, files, max_age, now):
         "evaluated_at": _stamp(now),
         "age_seconds": age,
         "max_age_seconds": limit,
-        "freshness": "stale" if age > limit else "fresh",
+        "age_policy": AGE_POLICY_NO_LIMIT if limit is None else AGE_POLICY_WITHIN_LIMIT,
         "match_basis": MATCH_BASIS,
         "limitations": list(LIMITATIONS),
     }
@@ -443,10 +464,12 @@ def fingerprint_component(identity):
     """Stable input-fingerprint material for the SCA job.
 
     Includes what changes the meaning of a match result: snapshot id, manifest sha256, the
-    full-strength content hash of every verified file, feed schema, match basis, and `freshness`
-    (so a result computed as OK is not reused as OK once the same snapshot is stale by policy).
-    Excludes `age_seconds`, `evaluated_at` and `max_age_seconds`, which would otherwise invalidate
-    reuse on every run.
+    full-strength content hash of every verified file, feed schema and match basis. Excludes
+    `age_seconds`, `evaluated_at`, `max_age_seconds` and `age_policy`: the clock would invalidate
+    reuse on every run, and under sub-decision M4 age is not a property of a usable result at all.
+    An over-age snapshot is FAILED before a component exists, so a worker MUST call
+    `resolve_snapshot` in preflight BEFORE reuse admission; a cached OK is then never reached with
+    a snapshot that exceeds the limit the job set.
     """
     errors = validate_document(identity, IDENTITY_SCHEMA_FILE, _STORE) if isinstance(identity, dict) else ["identity must be an object"]
     if errors:
@@ -455,22 +478,22 @@ def fingerprint_component(identity):
     if errors:
         raise ValueError(f"identity record is inconsistent: {errors[0]}")
     return _canonical({
-        "component": "vulnerability-database-identity/1",
+        "component": "vulnerability-database-identity/2",
         "database_kind": identity["database_kind"],
         "feed_schema": identity["feed_schema"],
         "snapshot_id": identity["snapshot_id"],
         "manifest_sha256": identity["manifest_sha256"],
         "content_sha256": identity["content_sha256"],
         "match_basis": identity["match_basis"],
-        "freshness": identity["freshness"],
     })
 
 
 def identity_consistency_errors(identity):
-    """Fields of an identity record that must agree with each other. `freshness` enters the input
-    fingerprint, so it may not be a free label: it is a function of `age_seconds` and
-    `max_age_seconds`, and `age_seconds` is a function of `evaluated_at` and `cursor`. This catches
-    an independently edited record. It cannot authenticate one: see `verify_identity`."""
+    """Fields of an identity record that must agree with each other. `age_policy` is not a free
+    label: it is `no-limit` exactly when `max_age_seconds` is null, and a `within-limit` record
+    whose age exceeds its own limit describes an outcome that is FAILED and never has an identity.
+    `age_seconds` is a function of `evaluated_at` and `cursor`. This catches an independently edited
+    record. It cannot authenticate one: see `verify_identity`."""
     errors = []
     try:
         evaluated, cursor, retrieved = (_utc(identity[name], name) for name in ("evaluated_at", "cursor", "retrieved_at"))
@@ -480,12 +503,14 @@ def identity_consistency_errors(identity):
         errors.append("cursor and retrieved_at must not be later than evaluated_at")
     if identity["age_seconds"] != int((evaluated - cursor).total_seconds()):
         errors.append("age_seconds must equal evaluated_at minus cursor")
-    if identity["max_age_seconds"] <= 0:
-        errors.append("max_age_seconds must be greater than zero")
-    expected = "stale" if identity["age_seconds"] > identity["max_age_seconds"] else "fresh"
-    if identity["freshness"] != expected:
-        errors.append(f"freshness must be {expected!r} for age_seconds {identity['age_seconds']} "
-                      f"and max_age_seconds {identity['max_age_seconds']}")
+    limit = identity["max_age_seconds"]
+    if (identity["age_policy"] == AGE_POLICY_NO_LIMIT) != (limit is None):
+        errors.append("age_policy must be 'no-limit' exactly when max_age_seconds is null")
+    elif limit is not None:
+        if limit <= 0:
+            errors.append("max_age_seconds must be greater than zero")
+        elif identity["age_seconds"] > limit:
+            errors.append("age_seconds exceeds max_age_seconds: that snapshot is SNAPSHOT_TOO_OLD and has no identity")
     if identity["snapshot_id"] not in identity["chain_snapshot_ids"]:
         errors.append("snapshot_id must appear in chain_snapshot_ids")
     return errors
@@ -505,7 +530,7 @@ def verify_identity(identity, data_root, *, max_age, now):
     A persisted `vulnerability-database-identity.json` is a cache, never an authority: whoever can
     rewrite it can make it self-consistent. So this does not trust it. `data_root`, `max_age` and
     `now` are required; the snapshot is resolved and re-verified from bytes, and the record is
-    accepted only if every snapshot-bound field equals the fresh one. Freshness, age and the
+    accepted only if every snapshot-bound field equals the fresh one. Age, the age policy and the
     fingerprint component are taken from the fresh Resolution that is returned, never from the
     record. Raises IdentityMismatch otherwise.
     """
@@ -529,13 +554,14 @@ def _stopped(stop, reads):
 def resolve_snapshot(data_root, *, max_age, now):
     """Resolve and verify the current NVD snapshot under `data_root` (the NVD publication root,
     the directory that holds `current.json`). All three arguments are required: there is no
-    default root, no default freshness policy, and the wall clock is never read here."""
+    default root, no default age policy (pass NO_AGE_LIMIT to say so), and the wall clock is never read here."""
     if not isinstance(data_root, (str, os.PathLike)) or not str(data_root):
         raise TypeError("data_root must be a non-empty path")
-    if not isinstance(max_age, timedelta):
-        raise TypeError("max_age must be a datetime.timedelta")
-    if max_age <= timedelta(0):
-        raise ValueError("max_age must be greater than zero")
+    if max_age is not NO_AGE_LIMIT:
+        if not isinstance(max_age, timedelta):
+            raise TypeError("max_age must be NO_AGE_LIMIT or a datetime.timedelta; it has no default")
+        if max_age <= timedelta(0):
+            raise ValueError("max_age must be greater than zero")
     if not isinstance(now, datetime):
         raise TypeError("now must be a datetime.datetime")
     if now.tzinfo is None or now.utcoffset() is None:
@@ -574,9 +600,10 @@ def resolve_snapshot(data_root, *, max_age, now):
     if errors:
         raise AssertionError(f"resolver built an identity record that violates its schema: {errors[0]}")
     component = fingerprint_component(identity)
-    if identity["freshness"] == "stale":
-        gap = {"id": STALE_GAP_ID, "age_seconds": identity["age_seconds"],
-               "max_age_seconds": identity["max_age_seconds"], "snapshot_id": identity["snapshot_id"],
-               "detail": f"snapshot cursor {identity['cursor']} is {identity['age_seconds']}s old at {identity['evaluated_at']}; policy allows {identity['max_age_seconds']}s"}
-        return Resolution(OK_WITH_GAPS, "VERIFIED_STALE", gap["detail"], identity, component, (gap,), reads)
-    return Resolution(OK, "VERIFIED_FRESH", f"snapshot {identity['snapshot_id']} verified offline", identity, component, (), reads)
+    if identity["age_policy"] == AGE_POLICY_NO_LIMIT:
+        return Resolution(OK, "VERIFIED_NO_AGE_LIMIT",
+                          f"snapshot {identity['snapshot_id']} verified offline; no age limit was set, data is "
+                          f"{identity['age_seconds']} seconds old", identity, component, (), reads)
+    return Resolution(OK, "VERIFIED_WITHIN_LIMIT",
+                      f"snapshot {identity['snapshot_id']} verified offline; data is {identity['age_seconds']} seconds old, "
+                      f"within the {identity['max_age_seconds']} second limit this job set", identity, component, (), reads)

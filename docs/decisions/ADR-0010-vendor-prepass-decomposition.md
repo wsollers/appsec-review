@@ -15,7 +15,7 @@ recommendation (G3 source, G10) and their consequences are stated here rather th
 |---|---|
 | G1 Granularity | **B.** Nine family nodes; each tool keeps its own template, attempt and `accepted.json` under `data/jobs/<node>/<tool-id>/`. |
 | G2 SBOM/SCA home | **A.** `02-*` pregather producers joined at `02-evidence-assembly`. design-v3 §4's "06 = full L1 scope" wording is now stale (follow-up). |
-| G3 SCA data | **A, with the source named by the user: the NVD copy under `/data`**, i.e. the immutable snapshot published by the existing `nvd_feed.py` publisher. No live lookup, no `api.osv.dev`, no new OSV publisher. Consequences: (1) V09 is no longer a new publisher; it binds `02-sca-vulnerability-match` to the current NVD snapshot pointer. (2) NVD is CPE-keyed, so matching ecosystem packages (npm, PyPI, Go, NuGet, Maven) is weaker than an OSV-keyed match; every match record carries `match_basis: cpe` and every SBOM component that cannot be mapped to a CPE is a **coverage gap**, never "no known vulnerabilities". (3) The legacy `osv-scanner` cannot consume a raw NVD feed, so the matcher is reopened as a V05/V11 tool-selection item; no tool is chosen by this ADR. Adding an offline OSV snapshot later remains possible without changing the node or contract. |
+| G3 SCA data | **A, with the source named by the user: the NVD copy under `/data`**, i.e. the immutable snapshot published by the existing `nvd_feed.py` publisher. No live lookup, no `api.osv.dev`, no new OSV publisher. Consequences: (1) V09 is no longer a new publisher; it binds `02-sca-vulnerability-match` to the current NVD snapshot pointer. (2) NVD is CPE-keyed, so matching ecosystem packages (npm, PyPI, Go, NuGet, Maven) is weaker than an OSV-keyed match; every match record carries `match_basis: cpe` and every SBOM component that cannot be mapped to a CPE is a **coverage gap**, never "no known vulnerabilities". (3) The legacy `osv-scanner` cannot consume a raw NVD feed, so the matcher was reopened as a V05/V11 tool-selection item. **That item is now closed by M1–M5 below, which supersede three statements in this row:** the NVD copy is no longer the matcher's source, there ARE new out-of-run publishers, and match records are not `cpe`-only. The NVD snapshot and its V09 binding stay, for `06-cve-reachability` enrichment and as an independent cross-check. |
 | G4 Package restore | **A now, B later.** Never restore in the SBOM job; manifests and lockfiles only. Resolved dependencies from accepted build output may be layered in later. |
 | G5 Inapplicability | **A.** New skip reason `not-applicable-no-matching-inputs` (shared-surface change to `worker-result-contract.json`, task V02). |
 | G6 Mobile gating | **A.** In-worker probe. The option-only node `02-mobile-applicability` is **not adopted**. |
@@ -24,6 +24,11 @@ recommendation (G3 source, G10) and their consequences are stated here rather th
 | G9 Redaction | **A.** Every scanner-backed producer redacts at its own publication boundary and emits a redaction receipt. |
 | G10 `cloc`/`scc` | **B.** Fold language/size metrics into `02-evidence-index` enrichment; one enrichment replaces both steps. Consequence: this touches an implemented, qualified worker, so it changes that worker's executable identity and needs requalification (task V15). |
 | ADR number | **0010 kept.** |
+| M1 SCA matcher | **Pinned syft + Grype image; the Grype vendor database mirrored into `/data`.** Decided 2026-09-20 from `docs/proposals/vendor-prepass/sca-matcher-options.md`. A new out-of-run publisher (task V16) downloads the Grype DB archive, records its identity (vendor build timestamp, schema version, sha256) and publishes it immutably in the `nvd_feed.py` pattern. The scan job runs with database auto-update disabled and **no network**. Grype consumes the syft SBOM natively and matches by purl/ecosystem **and** CPE. Trivy was considered and not chosen for SCA: it matches language packages from its own `trivy-db`, not from NVD. The native in-repo CPE matcher is **not** adopted. Consequence: "known vulnerable" rests on a third-party aggregated database that is pinned and hashed but not authored here; its licence and attribution terms are reviewed before V11 ships. |
+| M2 OSV source | **Build BOTH** the Grype DB mirror publisher (V16) **and** an independent offline OSV snapshot publisher (V17), before V11. OSV is kept as a second, independent source even though the Grype DB already carries GHSA/OSV-derived advisories. Each publisher has exactly one fixed network destination, authorized as a B11 capability **outside any engagement run**. |
+| M3 purl→CPE rules | A versioned rule table in the repo was chosen before M1 was refined. Under M1 = Grype there is no in-repo CPE matcher, so the table has **no consumer and is not built now**; the answer stands if a native NVD cross-check is added later. |
+| M4 Database age policy | **No age limit by default**: a job uses whatever static snapshot is present and always records its age. A job or engagement **may set a tighter `max_age`**; exceeding it is **`FAILED`**. This supersedes V09's original acceptance line ("older than policy ⇒ `OK_WITH_GAPS`"). "No limit" is an explicit, required argument value (`NO_AGE_LIMIT`), never a default, and the worker resolves the database in preflight **before** reuse admission so a cached `OK` is never reached with an over-age database. Implemented for the NVD binding in the same change as this row; V16/V17's bindings follow the same rule. |
+| M5 Gaps → threat workbench | The `sbom-sca-license-lifecycle` source family receives **matches plus an aggregated gap summary** (counts by ecosystem and reason; the full per-component list by reference). |
 
 Backlog: `TODO.md` M01 (`READY`, now decided); unblocks M03, M04, M05, D09, M07 and — through ADR-0008
 Decision 5 — S02. Companion packet: `docs/proposals/vendor-prepass/`.
@@ -171,6 +176,12 @@ option A's offline mechanism with option C's data source, so option C's stated w
 and is accepted knowingly: CPE-keyed matching covers ecosystem packages poorly. The contract
 therefore requires `match_basis` on every match and a coverage-gap record for every unmapped
 component. See Decisions for the V09 and tool-selection consequences.
+
+**Superseded in part by M1–M5 (see Decisions).** The option text above is kept as drafted. What
+no longer holds: the matcher is Grype over a mirrored vendor database plus an OSV snapshot, not an
+NVD/CPE matcher (M1, M2); there are new out-of-run publishers (V16, V17); match records carry
+`purl` or `cpe` (V05); and "stale beyond policy ⇒ `OK_WITH_GAPS`" is replaced by no limit by
+default and `FAILED` over a job-set limit (M4).
 
 > **Gate G3.** SCA vulnerability data: offline published snapshot (A), authorized live
 > `api.osv.dev` per run (B), or no `02` matching (C)?
@@ -405,9 +416,10 @@ not used: these nodes answer no contracted question. A node whose every tool ins
 | `02-binary-hardening` | no | none — no symbol server | no | no | no | no | no |
 | `02-mobile-sast` | no | none | no | no | no | no | no |
 
-As decided, **no node requests any capability**. The only network use is the already-existing
-out-of-run NVD publisher (`nvd_feed.py`); no new publisher is introduced (V09 is now a consumer
-binding). A tool that cannot run
+As decided, **no engagement-run node requests any capability**. Network use is confined to
+out-of-run reference publishers, each with exactly one fixed destination authorized as a B11
+capability outside any engagement run: the existing NVD publisher (`nvd_feed.py`), plus the two
+M1/M2 add: the Grype DB mirror (V16) and the OSV snapshot (V17). A tool that cannot run
 offline is a `BLOCKED` tool instance and a coverage gap, never an implicit exception. Recommended
 to D09 for `02-source-sast`: vendored Semgrep rule packs (no registry fetch), no Go/Composer
 package restore. Dynamic target execution is not authorized by this ADR for any node.
@@ -504,12 +516,15 @@ Full text: `docs/proposals/vendor-prepass/task-series.md`.
 | V06 Redactor + receipt | `READY` | new `appsec-review-process/evidence_redaction.py`, `schemas/redaction-receipt.schema.json`, tests | G9 boundary |
 | V07 Container/mobile/binary contracts/schemas | `BLOCKED(V03)` | `registry/output-contracts/{container-image-inventory,mobile-sast,binary-hardening}.json`, schemas | M04 part 1 |
 | V08 Threat-workbench producer fill | `BLOCKED(V02)` | `docs/proposals/threat-workbench/input-sources.proposal.yaml` (T03 owner) | the four families named |
-| V09 NVD snapshot consumer binding | `READY` | new `appsec-review-process/sca_nvd_snapshot.py` (name indicative), tests, doc | resolve + verify the current `nvd_feed.py` snapshot offline; identity into the fingerprint; no publisher work |
+| V09 NVD snapshot consumer binding | done (PR #8); age policy revised by M4 | new `appsec-review-process/sca_nvd_snapshot.py` (name indicative), tests, doc | resolve + verify the current `nvd_feed.py` snapshot offline; identity into the fingerprint; no publisher work |
 | V10 Secrets + IaC workers | `BLOCKED(V02,V04,V06,B13)` | new worker modules/templates/tooling profiles/tests | M03 part 2; legacy steps deleted |
-| V11 SBOM-family workers | `BLOCKED(V02,V05,V09,B13)` | new worker modules/templates/tests | M05 part 2 |
+| V11 SBOM-family workers | `BLOCKED(V02,V05,V09,V16,V17,V18,B13)` | new worker modules/templates/tests | M05 part 2 |
 | V12 Container/mobile/binary workers | `BLOCKED(V02,V06,V07,M02,B13)` | new worker modules/templates/tests | M04 part 2 |
 | V13 Source SAST | `BLOCKED(B13,V01,V06)` | D09's paths | D09 with this ADR's requirements |
 | V14 Retire + delete runners | `INTEGRATION`, `BLOCKED(V10–V13,V15,M06)` | `scripts/Invoke-VendorAuditPrePass.*`, helper scripts, callers, inventory, `TODO.md` | M07 slice; both scripts deleted |
+| V16 Grype DB mirror publisher | `BLOCKED(B11)` | new publisher module, snapshot manifest/pointer schemas, tests, doc | M1; one fixed destination; modelled on `nvd_feed.py` |
+| V17 OSV snapshot publisher | `BLOCKED(B11)` | new publisher module, snapshot schemas, tests, doc | M2; one fixed destination; bulk export, per-source licence review |
+| V18 Grype DB + OSV consumer bindings | `BLOCKED(V16,V17)` | new read-only binding module(s), identity schema(s), tests, doc | M4 age policy; same guarantees as `sca_nvd_snapshot.py` |
 | V15 Evidence-index metrics enrichment | `READY`; owner F01 | `evidence_store.py` metrics path, `evidence-index` contract/schema additions, focused tests, requalification record | G10 = B; replaces `cloc` and `scc`; requalify `02-evidence-index` |
 
 ## Consequences
@@ -544,3 +559,13 @@ elsewhere for the allocator-inventory decision).
 `/data` as the named source (V09 becomes a consumer binding; CPE-keyed coverage limitation and
 matcher tool selection recorded). G10 decided B (metrics enrichment in `02-evidence-index`, new
 task V15 with requalification). `02-mobile-applicability` not adopted (G6 = A).
+
+2026-09-20 (later): SCA matcher sub-decision M1–M5 recorded (rows above). It **supersedes** three
+statements made under G3 earlier the same day: the matcher is Grype over a mirrored vendor
+database, not an NVD/CPE matcher; two new out-of-run publishers exist (V16 Grype DB mirror, V17 OSV
+snapshot); and match records carry `purl` or `cpe`, not `cpe` only. M4 replaces V09's
+`OK_WITH_GAPS`-when-stale with no-limit-by-default and `FAILED` when a job-set limit is exceeded;
+`sca_nvd_snapshot.py`, its identity schema (`/2`) and its doc change in the same commit so the ADR
+and the code never disagree. Task table: V09 marked done, V11 now also blocked on V16–V18, V16–V18
+added. The options packet PR #11 merged without these decisions because a push was rejected
+unnoticed; PR #20 records them.
