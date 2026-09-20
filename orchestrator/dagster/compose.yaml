@@ -1,6 +1,10 @@
 name: appsec-review
 x-runtime: &runtime
   image: appsec-review-dagster:local
+  # Native Linux: setup.py records the host uid/gid so files created under the bind mounts
+  # (/runs, /data/feeds/nvd) belong to the operator and git accepts the mounted target. Unset (Docker
+  # Desktop, Windows) keeps the previous behaviour: root.
+  user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"
   environment:
     DAGSTER_HOME: /opt/dagster/home
     DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD:?Run setup first}
@@ -8,18 +12,21 @@ x-runtime: &runtime
     APPSEC_ORCHESTRATOR_ROOT: /opt/build-contract
     APPSEC_NVD_ROOT: /data/feeds/nvd
     NVD_API_KEY: ${NVD_API_KEY:-}
+    APPSEC_NVD_SCHEDULE: ${APPSEC_NVD_SCHEDULE:-running}
+    HOME: /tmp
   volumes:
     - dagster-storage:/var/dagster
     - ../../appsec-review-process/runs:/runs
     - ../../appsec-review-process:/opt/process:ro
     - ../../schemas:/opt/schemas:ro
     - ../../data/feeds/nvd:/data/feeds/nvd
+    - ../../data/reference:/opt/data/reference:ro
     - ./definitions.py:/opt/app/definitions.py:ro
     - ./definitions.py:/opt/build-contract/definitions.py:ro
     - ./Dockerfile:/opt/build-contract/Dockerfile:ro
     - ./requirements.txt:/opt/build-contract/requirements.txt:ro
     - ./requirements.lock.txt:/opt/build-contract/requirements.lock.txt:ro
-    - ../../docs/phase-1-job-graph.mmd:/opt/docs/phase-1-job-graph.mmd:ro
+    - ../../docs:/opt/docs:ro
     - ./compose.yaml:/opt/build-contract/compose.yaml:ro
     - ./dagster.yaml:/opt/dagster/home/dagster.yaml:ro
     - ./dagster.yaml:/opt/build-contract/dagster.yaml:ro
