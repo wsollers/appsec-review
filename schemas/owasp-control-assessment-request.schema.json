@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-control-assessment-request.schema.json",
+  "title": "Offline OWASP validator-result validation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "batch_id", "handoff_id", "handoff", "candidate"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-control-assessment-request/1.0"},
+    "run_id": {"type": "string"},
+    "batch_id": {"type": "string"},
+    "handoff_id": {"type": "string"},
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "handoff_set_path", "handoff_set_sha256", "member_path", "member_sha256"],
+      "properties": {
+        "attempt_id": {"type": "string"},
+        "accepted_pointer_path": {"type": "string"},
+        "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "handoff_set_path": {"type": "string"},
+        "handoff_set_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "member_path": {"type": "string"},
+        "member_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
