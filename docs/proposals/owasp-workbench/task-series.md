@@ -11,8 +11,8 @@ assigned-reviewer applicability/rescope overrides, tunable batches with the exis
 default, disabled dynamic execution with an inert launcher contract, and stale NVD use with an
 explicit gap. T02/T02A now provide initial schemas, a pinned source
 lock, immutable raw/normalized snapshots, offline verification, and the separately scheduled NVD
-publisher. T03 accepted-intel lane-in and T04 applicability modeling are implemented as standalone
-offline foundations. T05–T13 remain dependency ordered and later reporting/promotion work remains
+publisher. T03 accepted-intel lane-in, T04 applicability modeling, and T05 deterministic batching
+are implemented as standalone offline foundations. T06–T13 remain dependency ordered and later reporting/promotion work remains
 gated by the narrower T01 decisions.
 
 ## T01 — Approve OWASP Selection And Policy
@@ -176,7 +176,7 @@ python -B appsec-review-process/owasp_applicability.py --run-id <run_id>
 This is not a registered graph job and does not dispatch validators or launch dynamic work. T05
 control partitioning and deterministic batching is next.
 
-## T05 — Control Partitioning And Batch Worklist
+## T05 — Control Partitioning And Batch Worklist — IMPLEMENTED FOUNDATION
 
 Define `owasp-validation-worklist.json` and `owasp-batch-manifest.json`:
 
@@ -192,6 +192,37 @@ Define `owasp-validation-worklist.json` and `owasp-batch-manifest.json`:
 
 Test deterministic IDs/order, boundary sizes, unrelated-domain separation, and the no-silent-skip
 invariant.
+
+Implemented by `appsec-review-process/owasp_batching.py`, the tracked default configuration under
+`appsec-review-process/config/owasp-batching/`, its qualification fixture, and the closed T05
+schemas documented in `schemas/README.md`. The worker:
+
+- consumes the accepted T04 pointer and model, validates the exact four-artifact T04 publication,
+  and re-verifies each row against the pinned OWASP control catalog;
+- requires a tracked, semantic-versioned batch-limits file whose canonical digest and qualification
+  fixture match, using the approved defaults of 12 rows and five components;
+- routes each proof obligation by exact obligation, control, domain, then family fallback, with
+  component-specific routing taking precedence and equal-specificity conflicts failing closed;
+- batches in the approved order across coherent component group/trust role, domain, evidence mode,
+  authorization boundary, tooling profile, validator role, standard identity, and linked test family;
+- resolves linked MASTG tests only from the pinned snapshot and verifies that each test declares the
+  assigned MASVS control;
+- splits mixed-mode proof obligations into separate fragments while retaining one worklist
+  assignment and requiring a later joined control result;
+- accounts for every T04 target exactly once as a validator assignment, technical N/A, scope
+  exclusion, or unresolved applicability gap;
+- emits `owasp-validation-worklist.json`, `owasp-batch-manifest.json`, and `batch-summary.md` as one
+  locked immutable attempt.
+
+CLI foundation:
+
+```text
+python -B appsec-review-process/owasp_batching.py --run-id <run_id>
+```
+
+All batches are `dispatch_ready: false` and `execution_authorized: false`. Dynamic-runtime routing
+is limited to request drafting, manual observation remains blocked, and no control assessment or
+finding is produced. T06 validator handoff and tool contracts are next.
 
 ## T06 — Validator Handoff And Tool Contract
 

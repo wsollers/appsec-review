@@ -214,6 +214,7 @@ def _base_row(selection_id: str, control: dict[str, Any], component: dict[str, A
         "profile_or_level": profile, "control_id": control["control_id"],
         "control_title": control["title"], "domain_id": _domain(control),
         "source_record_hash": digest(control), "component_id": component["component_id"],
+        "proof_obligations": control["proof_obligations"],
         "component_name": component["name"], "classification_hash": component["classification_hash"],
         "classification_input_ids": component["input_ids"], "override_ids": [],
         "rescope_state": "none", "invalidated_result_ids": [], "rescope_actions": [],
@@ -381,9 +382,13 @@ def _build(request: dict[str, Any], input_manifest: dict[str, Any], controls: li
                             "hash": row["source_record_hash"]} for row in rows[::len(components)]],
              "components": request["components"]}
     fingerprint = digest(basis)
+    reference_snapshots = [{key: pin[key] for key in ("family", "edition", "profile_or_level",
+                                                        "snapshot_id", "manifest_sha256")}
+                           for pin in input_manifest["reference_snapshots"]]
     model = {"schema": "appsec-review/owasp-applicability-model/1.0", "run_id": request["run_id"],
              "selection_id": selection_id, "input_fingerprint": fingerprint,
              "generated_at": instant.isoformat(), "assigned_reviewer": assigned,
+             "reference_snapshots": reference_snapshots,
              "counts": {"selected_controls": len(controls), "components": len(components),
                         "control_targets": len(rows), **counts}, "rows": rows,
              "claim_limits": ["Applicability is not control satisfaction, a finding, severity, exploitability, or certification.",

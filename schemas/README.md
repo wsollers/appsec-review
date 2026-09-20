@@ -58,6 +58,16 @@ Composable review schemas (added for the registry/worklist layer):
   gaps. Cross-record validation enforces full Cartesian coverage, technical-N/A sufficiency,
   scope-owner-only `out_of_scope`, override continuity, bounded rescope actions, and exact T03
   lineage. These artifacts do not assess control satisfaction or establish findings.
+- `owasp-batch-config.schema.json`, `owasp-batch-routing-rule.schema.json`, and
+  `owasp-batch-request.schema.json` -- the T05 versioned limits, per-run deterministic proof-routing,
+  exact T04 input, and component-group context. Limits are accepted only with a matching tracked
+  qualification fixture; dynamic routes are request-only and manual observation is not authorized.
+- `owasp-batch-proof-obligation.schema.json`, `owasp-crosswalk-lineage.schema.json`,
+  `owasp-validation-worklist.schema.json`, and `owasp-batch-manifest.schema.json` -- routed proof
+  obligations, pinned OpenCRE navigation lineage, complete one-row accounting, and
+  bounded batch fragments. Cross-record validation enforces catalog hashes, pinned MASTG links,
+  ordered routing specificity, limits, domain/evidence/tool/persona separation, mixed-mode joins,
+  and the no-silent-skip invariant. Every T05 batch remains non-dispatchable and execution-disabled.
 - `design-parity-manifest.schema.json`, `design-parity-job.schema.json`, and `design-parity-capability.schema.json` -- the machine inventory that generates the lifecycle/readiness views and reconciles design claims with executable repository state.
 
 Threat-workbench schemas (ADR-0008 task T02, added 2026-09-20; schemas only -- no worker, contract,

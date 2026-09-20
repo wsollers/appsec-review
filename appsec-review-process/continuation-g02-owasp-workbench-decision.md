@@ -185,3 +185,27 @@ remaining human gates.
   runtime claim.
 - No validator dispatch, batching, dynamic launcher, registry/graph/parity surface, generated view,
   or report promotion was activated. T05 control partitioning and batching is next.
+
+## Implementation checkpoint — T05 control partitioning and batching — 2026-09-20
+
+- Implemented the standalone offline T05 batcher, closed request/worklist/batch schemas, a tracked
+  versioned default limits configuration, and its qualification fixture.
+- The worker validates the complete accepted T04 artifact set, re-verifies every control row against
+  its pinned standards snapshot, and permits linked MASTG tests only when the pinned test record
+  names the assigned MASVS control.
+- Deterministic proof routing uses exact obligation, control, domain, then family fallback, with
+  component-specific routes taking precedence. Missing routes block; equal-specificity conflicts
+  fail rather than selecting by input order.
+- Batches preserve component group/trust role, domain, evidence/authorization boundary,
+  tool/persona, standard/profile, and linked-test-family separation. The qualified default remains
+  12 control-target rows and five components, with one primary evidence mode and validator role.
+- Mixed-mode controls become obligation fragments in separate batches while retaining exactly one
+  worklist assignment and a required later join. No fragment may independently issue the final
+  control status.
+- Every T04 row is accounted exactly once as a validator assignment, technical N/A, scope exclusion,
+  or unresolved applicability gap. IDs and ordering are deterministic and accepted attempts are
+  immutable and reusable only after full artifact validation.
+- All batches explicitly remain non-dispatchable and execution-unauthorized. Dynamic routing is
+  request-drafting only; manual observation, validator dispatch, control assessment, findings,
+  registry/graph/parity changes, and report promotion remain inactive. T06 handoff/tool contracts
+  are next.
