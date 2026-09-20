@@ -232,7 +232,10 @@ nvd_reference_schedule = ScheduleDefinition(
     job=nvd_reference_sync,
     cron_schedule="0 */2 * * *",
     execution_timezone="UTC",
-    default_status=DefaultScheduleStatus.RUNNING,
+    # On by default, as before. APPSEC_NVD_SCHEDULE=stopped in the ignored .env keeps a development
+    # stack from calling the NVD API every two hours; any other value is refused, not guessed.
+    default_status={'running': DefaultScheduleStatus.RUNNING, 'stopped': DefaultScheduleStatus.STOPPED}[
+        os.environ.get('APPSEC_NVD_SCHEDULE', 'running')],
 )
 
 

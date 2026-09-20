@@ -32,6 +32,44 @@ docker compose -f orchestrator/dagster/compose.yaml ps
 docker compose -f orchestrator/dagster/compose.yaml exec code-server dagster job execute -f /opt/app/definitions.py -j orchestration_smoke
 ```
 
+### Native Linux host
+
+Docker Desktop (Windows, macOS) maps bind-mount ownership for you; a native Linux Docker engine does
+not. `setup.py` therefore also appends `APPSEC_UID` / `APPSEC_GID` (the operator's uid/gid) to the
+ignored `.env` on a POSIX host, and `compose.yaml` starts the runtime services as that user
+(`user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"`; unset keeps root, the previous behaviour). Running as
+root on native Linux fails in two ways: everything a container creates under the bind-mounted
+`runs/` is root-owned, so the host-side `launch_job.py` cannot write beside it; and git refuses the
+operator-owned `/targets/<name>` as "dubious ownership", so `00-intake` goes `BLOCKED`.
+
+Prerequisites: Docker Engine with the Compose v2 plugin (`docker compose version`; on Ubuntu the
+package is `docker-compose-v2`), the operator in the `docker` group, and the review target cloned at
+`targets/<name>` in the repository root (ignored by git). The host needs no `libfuzzy`: the image
+pins it, and workers run in the container.
+
+A stack first created as root has root-owned named volumes and run directories. Migrate once, while
+it is still running as root, then re-run `setup.py` and `up -d --build`:
+
+```text
+docker compose -f orchestrator/dagster/compose.yaml exec code-server chown -R <uid>:<gid> /runs /data/feeds/nvd /var/dagster
+```
+
+`nvd_reference_schedule` is on by default and calls the NVD API every two hours from the moment the
+stack starts. On a development host add `APPSEC_NVD_SCHEDULE=stopped` to `.env` (the only other
+accepted value is `running`); the job can still be launched by hand.
+
+The runtime mounts `docs/` and `data/reference/` read-only beside `/opt/process` and `/opt/schemas`
+so that suites and workers which read them resolve the same relative locations as on the host. Run
+the unit suite where the workers run:
+
+```text
+docker compose -f orchestrator/dagster/compose.yaml exec -T -e PHASE1_TEST_DATA=/tmp/p1 -w /opt code-server sh -c 'mkdir -p /tmp/p1 && python -B -m unittest discover -s /opt/process/tests -p "test_*.py"'
+```
+
+`compose.yaml`, `Dockerfile`, `definitions.py` and `dagster.yaml` are part of every job's runtime
+fingerprint (`job_graph.py`), so a change to any of them makes previously accepted pointers
+non-current.
+
 Open the UI, select `orchestration_smoke`, and inspect `pre_validation -> smoke_work ->
 post_validation`. Set `ops.smoke_work.config.fail_work: true` to exercise failure. A failing work
 step prevents post-validation execution. Each smoke execution deliberately creates a fresh
