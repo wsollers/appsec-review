@@ -77,3 +77,8 @@ Still stub-only, unrelated to this effort, pending the foundational orchestrator
 `compile-command-audit`, `patch-policy`, `review-events` (the orchestrator's ledger/hash-chain event
 shape). Those need orchestrator/ to exist first; the four files above do not -- they're usable by
 review_cli.py/create_handoff.py today.
+
+SCA vulnerability-database identity (vendor pre-pass V09, ADR-0010 G3; resolver only -- no worker,
+graph, manifest or contract consumes it yet, see `docs/sca-nvd-snapshot-binding.md`):
+
+- `vulnerability-database-identity.schema.json` -- the verified identity of the published NVD snapshot that `02-sca-vulnerability-match` fingerprints and publishes as `outputs/vulnerability-database-identity.json`: snapshot id and chain, manifest and content sha256, retrieval timestamp and cursor, file count and bytes, age against the freshness policy, `match_basis: cpe` and mandatory limitations. Closed, every property required. Produced only by `appsec-review-process/sca_nvd_snapshot.py` after a full offline re-hash; the hash, chain, containment and freshness checks are that module's responsibility, not expressible here. It reads `nvd-current-pointer.schema.json` and `nvd-snapshot-manifest.schema.json` unchanged.
