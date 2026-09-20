@@ -424,11 +424,11 @@
       "evidence_family": "sca",
       "tool_instances": [
         {
-          "tool_id": "nvd-cpe-matcher-tbd",
+          "tool_id": "grype",
           "legacy_steps": [
             "sca"
           ],
-          "note": "matcher selection is OPEN: legacy osv-scanner cannot consume a raw NVD feed; decided in V05/V11 after a short options note"
+          "note": "DECIDED (M1): Grype in a digest-pinned image alongside syft, reading the mirrored Grype vendor DB and the OSV snapshot through V18's bindings; database auto-update disabled; no network. Exact flags and no-phone-home behaviour are verified in V11."
         }
       ],
       "proposed_output_contract_id": "sca-vulnerability-match",
@@ -436,9 +436,10 @@
         "manifest.json",
         "status.json",
         "outputs/sca-vulnerability-match.json",
-        "outputs/vulnerability-database-identity.json",
+        "outputs/vulnerability-database-identities.json",
         "outputs/tool-results.json",
-        "outputs/coverage.json"
+        "outputs/coverage.json",
+        "outputs/coverage-gap-summary.json"
       ],
       "proposed_claim_class": {
         "claim_class_id": "known_vulnerability_match_lead",
@@ -484,8 +485,8 @@
         "package_restore": "denied",
         "target_mutation": "denied"
       },
-      "permission_notes": "DECIDED (G3): network denied; consumes the immutable NVD snapshot under /data published by the existing nvd_feed.py, resolved through the current pointer (task V09 is a read-only consumer binding, not a publisher). No api.osv.dev, no live lookup.",
-      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; vulnerability database snapshot id, publisher, retrieval timestamp, sha256 and age are part of the input fingerprint; NVD snapshot identity comes from nvd_feed.py's manifest and current pointer; legacy-observed osv-scanner 1.9.2 is unverified and not selected",
+      "permission_notes": "DECIDED (M1/M2): network denied for the job. It reads two immutable, separately published databases under /data: the mirrored Grype vendor DB (publisher V16) and an independent OSV snapshot (publisher V17). Each publisher has exactly one fixed network destination authorized as a B11 capability OUTSIDE any engagement run. The raw NVD mirror (nvd_feed.py, binding V09) is no longer this node's source; it serves 06-cve-reachability enrichment and cross-checking.",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), syft and Grype tool-reported versions, argv array, redactor identity; BOTH database identities are part of the input fingerprint: Grype vendor DB (vendor build timestamp, DB schema version, snapshot id, sha256) and OSV snapshot (snapshot id, sha256); no identity is claimed verified by this proposal",
       "applicability_rule": "always applicable once the SBOM is accepted; an SBOM with zero matchable components yields OK_WITH_GAPS",
       "fills_threat_workbench_source_family": [
         "sbom-sca-license-lifecycle"
@@ -495,9 +496,10 @@
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "a match is 'advisory range covers declared version'; it is never reachability, exploitability, or affected-product proof; 06-cve-reachability owns reachability triage",
-        "missing snapshot => BLOCKED; snapshot older than policy => OK_WITH_GAPS with database age recorded; never a silent live fetch",
-        "NVD is CPE-keyed: every match carries match_basis=cpe; every SBOM component with no CPE mapping is a coverage gap, never 'no known vulnerabilities'",
-        "an offline OSV snapshot may be added later without changing this node or contract"
+        "DECIDED (M4): no database age limit by default, age always recorded; a job or engagement may set a tighter max_age, and a database older than that limit is FAILED, never OK_WITH_GAPS; a missing database is BLOCKED; never a silent live fetch; the worker resolves both databases in preflight before reuse admission",
+        "match_basis is a closed enum (purl, cpe) recorded per match with the identity of the database that produced it; CVE/GHSA aliases are collapsed so one advisory from both sources is one match with two citations",
+        "DECIDED (M5): every component no source covers is an explicit coverage-gap record with a closed reason; the threat workbench receives matches plus an aggregated gap summary (counts by ecosystem and reason; per-component list by reference)",
+        "the known-vulnerability database is a third-party aggregation that is pinned and hashed but not authored here; licence and attribution terms of the bundled data are reviewed before V11 ships"
       ],
       "adopted": true
     },
@@ -991,6 +993,12 @@
     "G7": "A",
     "G8": "A",
     "G9": "A",
-    "G10": "B"
+    "G10": "B",
+    "M1": "pinned syft + Grype image; Grype vendor DB mirrored into /data (V16); native CPE matcher not adopted",
+    "M2": "build both the Grype DB mirror publisher (V16) and an independent OSV snapshot publisher (V17) before V11",
+    "M3": "versioned purl->CPE rule table chosen, but it has no consumer under M1 = Grype and is not built now",
+    "M4": "no age limit by default; a job may set a tighter max_age; exceeding it is FAILED",
+    "M5": "matches plus an aggregated gap summary to the threat workbench",
+    "sca_matcher_decisions_recorded": "2026-09-20"
   }
 }

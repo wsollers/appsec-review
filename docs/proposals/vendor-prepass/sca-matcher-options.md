@@ -2,7 +2,9 @@
 
 Status: **Decided 2026-09-20** (see Decisions). Documentation only. No matcher, worker, schema,
 contract, registry record or graph change follows from this document; the outcome still has to be
-recorded in ADR-0010's Decisions table and the task series by their owner (section F).
+recorded in the authoritative documents in the same change: ADR-0010's Decisions table and task
+table, the task series (V05, V09, V11, new V16-V18), `job-nodes.proposal.json`,
+`threat-workbench-producers.proposal.yaml`, and the V09 binding's age policy (code, schema, doc).
 
 Date: 2026-09-20 (drafted and decided)
 

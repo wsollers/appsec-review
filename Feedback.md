@@ -1,3 +1,0 @@
-[P1] Update the authoritative ADR and task records with the decided matcher policy
-
-This change marks M1-M5 decided but explicitly leaves ADR-0010, the vendor-prepass task series, `job-nodes.proposal.json`, and the merged V09 binding unchanged. Those authoritative records still require NVD-only matching, no OSV publisher, an open matcher selection, `match_basis: cpe`, and `OK_WITH_GAPS` for stale snapshots, while this decision requires Grype, two new publishers, an expanded match basis, and `FAILED` when a configured freshness limit is exceeded. Record the decision in the authoritative documents and update the affected tasks/contracts in the same change so downstream implementation cannot follow the opposite policy.

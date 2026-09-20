@@ -444,7 +444,7 @@ class HappyPathTests(Base):
     def test_bootstrap_snapshot_resolves_ok_with_schema_valid_identity(self):
         pointer = self.publisher.sync(T0)
         result = self.resolve()
-        self.assertEqual((result.outcome, result.reason, result.pointer_reads), ("OK", "VERIFIED_FRESH", 1))
+        self.assertEqual((result.outcome, result.reason, result.pointer_reads), ("OK", "VERIFIED_WITHIN_LIMIT", 1))
         identity = result.identity
         self.assertEqual(validate_document(identity, "vulnerability-database-identity.schema.json"), [])
         manifest = read(manifest_path(self.root))
@@ -455,7 +455,7 @@ class HappyPathTests(Base):
         self.assertEqual(identity["cursor"], manifest["cursor"])
         self.assertEqual(identity["age_seconds"], 6 * 3600)
         self.assertEqual(identity["max_age_seconds"], 24 * 3600)
-        self.assertEqual(identity["freshness"], "fresh")
+        self.assertEqual(identity["age_policy"], "within-limit")
         self.assertEqual(identity["match_basis"], "cpe")
         self.assertEqual(identity["file_count"], 1)
         self.assertEqual(identity["total_bytes"], len(self.publisher.compressed))
@@ -473,21 +473,42 @@ class HappyPathTests(Base):
         self.assertEqual(identity["total_bytes"], sum(path.stat().st_size for path in (self.root / "blobs").iterdir()))
         self.assertEqual(identity["age_seconds"], 4 * 3600)
 
-    def test_stale_snapshot_is_ok_with_gaps_with_age_and_policy_recorded(self):
+    def test_a_snapshot_older_than_the_limit_a_job_set_is_failed_with_no_identity(self):
+        """ADR-0010 sub-decision M4: exceeding a limit the job set is FAILED, not a usable result
+        with a staleness gap. No identity and no fingerprint component exist to proceed on."""
         self.publisher.sync(T0)
         result = self.resolve(now=T0 + timedelta(hours=30))
-        self.assertEqual((result.outcome, result.reason), ("OK_WITH_GAPS", "VERIFIED_STALE"))
-        self.assertEqual(result.identity["freshness"], "stale")
-        self.assertEqual(len(result.gaps), 1)
-        gap = result.gaps[0]
-        self.assertEqual((gap["id"], gap["age_seconds"], gap["max_age_seconds"]),
-                         ("nvd-snapshot-older-than-policy", 30 * 3600, 24 * 3600))
-        self.assertIsNotNone(result.fingerprint_component)
+        self.assert_refused(result, "FAILED", "SNAPSHOT_TOO_OLD")
+        self.assertIn(f"{30 * 3600} seconds old", result.detail)
+        self.assertIn(f"max_age of {24 * 3600} seconds", result.detail)
 
-    def test_age_exactly_at_policy_is_fresh_and_one_second_over_is_stale(self):
+    def test_no_age_limit_uses_whatever_snapshot_is_present_and_records_its_age(self):
+        """M4 default: no limit. It is an explicit value, never an omission."""
         self.publisher.sync(T0)
-        self.assertEqual(self.resolve(now=T0 + MAX_AGE).outcome, "OK")
-        self.assertEqual(self.resolve(now=T0 + MAX_AGE + timedelta(seconds=1)).outcome, "OK_WITH_GAPS")
+        for days in (0, 30, 4000):
+            result = self.resolve(now=T0 + timedelta(days=days, hours=1), max_age=binding.NO_AGE_LIMIT)
+            with self.subTest(days=days):
+                self.assertEqual((result.outcome, result.reason, result.gaps), ("OK", "VERIFIED_NO_AGE_LIMIT", ()))
+                self.assertEqual(result.identity["age_policy"], "no-limit")
+                self.assertIsNone(result.identity["max_age_seconds"])
+                self.assertEqual(result.identity["age_seconds"], days * 86400 + 3600)
+                self.assertEqual(validate_document(result.identity, "vulnerability-database-identity.schema.json"), [])
+        self.assertEqual(repr(binding.NO_AGE_LIMIT), "NO_AGE_LIMIT")
+
+    def test_no_limit_still_verifies_everything_and_still_rejects_a_future_timestamp(self):
+        self.publisher.sync(T0)
+        s_blob_tampered_same_size(self.root)
+        self.assert_refused(self.resolve(max_age=binding.NO_AGE_LIMIT), "FAILED", "BLOB_HASH_MISMATCH")
+        self.tearDown()
+        self.setUp()
+        self.publisher.sync(T0)
+        self.assert_refused(self.resolve(now=T0 - timedelta(days=1), max_age=binding.NO_AGE_LIMIT), "FAILED", "TIMESTAMP_IN_FUTURE")
+
+    def test_age_exactly_at_the_jobs_limit_is_ok_and_one_second_over_is_failed(self):
+        self.publisher.sync(T0)
+        at_limit = self.resolve(now=T0 + MAX_AGE)
+        self.assertEqual((at_limit.outcome, at_limit.reason), ("OK", "VERIFIED_WITHIN_LIMIT"))
+        self.assert_refused(self.resolve(now=T0 + MAX_AGE + timedelta(seconds=1)), "FAILED", "SNAPSHOT_TOO_OLD")
 
     def test_orphan_blob_from_a_failed_refresh_is_a_producible_state_and_not_a_failure(self):
         self.publisher.sync(T0)
@@ -512,7 +533,7 @@ class HappyPathTests(Base):
         """Nothing outside the publication root anchors it. This pins the honest limit stated in
         the doc: integrity against corruption, not authentication of the publisher."""
         self.publisher.sync(T0)
-        self.assertEqual(self.resolve(now=T0 + timedelta(hours=30)).outcome, "OK_WITH_GAPS")
+        self.assertEqual(self.resolve(now=T0 + timedelta(hours=30)).reason, "SNAPSHOT_TOO_OLD")
         edit_manifest(self.root, _set("cursor", "2026-09-20T17:00:00.000Z"), rebind="full")
         edit_manifest(self.root, _set("captured_at", "2026-09-20T17:00:00+00:00"), rebind="full")
         self.assertEqual(self.resolve(now=T0 + timedelta(hours=30)).outcome, "OK")
@@ -536,8 +557,10 @@ class RequiredInputTests(Base):
         for kwargs, error, text in [
             ({"data_root": None}, TypeError, "data_root must be a non-empty path"),
             ({"data_root": ""}, TypeError, "data_root must be a non-empty path"),
-            ({"max_age": None}, TypeError, "max_age must be a datetime.timedelta"),
-            ({"max_age": 86400}, TypeError, "max_age must be a datetime.timedelta"),
+            ({"max_age": None}, TypeError, "max_age must be NO_AGE_LIMIT or a datetime.timedelta"),
+            ({"max_age": 86400}, TypeError, "max_age must be NO_AGE_LIMIT or a datetime.timedelta"),
+            ({"max_age": "NO_AGE_LIMIT"}, TypeError, "max_age must be NO_AGE_LIMIT or a datetime.timedelta"),
+            ({"max_age": False}, TypeError, "max_age must be NO_AGE_LIMIT or a datetime.timedelta"),
             ({"max_age": timedelta(0)}, ValueError, "max_age must be greater than zero"),
             ({"now": None}, TypeError, "now must be a datetime.datetime"),
             ({"now": datetime(2026, 9, 20)}, ValueError, "now must be timezone-aware"),
@@ -698,10 +721,12 @@ class PointerSwapTests(Base):
 
 
 class FingerprintTests(Base):
-    def test_same_snapshot_same_component_regardless_of_now_and_policy_within_freshness(self):
+    def test_same_snapshot_same_component_regardless_of_now_and_age_policy(self):
         self.publisher.sync(T0)
         components = {self.resolve(now=T0 + timedelta(hours=hours), max_age=timedelta(hours=limit)).fingerprint_component
                       for hours, limit in [(1, 24), (2, 24), (23, 24), (24, 24), (5, 6), (5, 1000)]}
+        components |= {self.resolve(now=T0 + timedelta(days=days), max_age=binding.NO_AGE_LIMIT).fingerprint_component
+                       for days in (1, 9, 4000)}
         self.assertEqual(len(components), 1)
 
     def test_component_contains_snapshot_id_and_manifest_hash_and_excludes_clock_fields(self):
@@ -712,17 +737,20 @@ class FingerprintTests(Base):
         self.assertEqual(component["manifest_sha256"], pointer["manifest_sha256"])
         self.assertEqual(component["content_sha256"], result.identity["content_sha256"])
         self.assertEqual(component["match_basis"], "cpe")
-        for excluded in ("age_seconds", "evaluated_at", "max_age_seconds", "retrieved_at"):
+        for excluded in ("age_seconds", "evaluated_at", "max_age_seconds", "age_policy", "freshness", "retrieved_at"):
             self.assertNotIn(excluded, component)
         self.assertEqual(result.fingerprint_component, binding.fingerprint_component(result.identity))
 
-    def test_crossing_the_freshness_boundary_changes_the_component_exactly_once(self):
+    def test_an_over_age_snapshot_has_no_component_so_a_cached_ok_cannot_be_reached(self):
+        """Age is no longer in the component (M4). What stops a cached OK being reused once the same
+        snapshot exceeds the job's limit is that preflight resolves FIRST and gets FAILED with no
+        component at all; there is nothing to compare a cached fingerprint against."""
         self.publisher.sync(T0)
-        fresh = self.resolve(now=T0 + timedelta(hours=1)).fingerprint_component
-        stale = self.resolve(now=T0 + timedelta(hours=25)).fingerprint_component
-        staler = self.resolve(now=T0 + timedelta(days=400)).fingerprint_component
-        self.assertNotEqual(fresh, stale)
-        self.assertEqual(stale, staler)
+        within = self.resolve(now=T0 + timedelta(hours=1))
+        over = self.resolve(now=T0 + timedelta(hours=25))
+        self.assertIsNotNone(within.fingerprint_component)
+        self.assert_refused(over, "FAILED", "SNAPSHOT_TOO_OLD")
+        self.assertEqual(json.loads(within.fingerprint_component)["component"], "vulnerability-database-identity/2")
 
     def test_new_snapshot_changes_the_component(self):
         self.publisher.sync(T0)
@@ -771,17 +799,20 @@ class InvariantTests(Base):
         self.assertEqual(seen, set(binding.OUTCOMES))
 
     def test_resolution_cannot_be_constructed_in_a_contradictory_state(self):
-        with self.assertRaisesRegex(ValueError, "only for OK and OK_WITH_GAPS"):
+        with self.assertRaisesRegex(ValueError, "returned only for OK"):
             binding.Resolution("FAILED", "READ_ERROR", "x", {"a": 1}, "c", (), 1)
-        with self.assertRaisesRegex(ValueError, "only for OK and OK_WITH_GAPS"):
-            binding.Resolution("OK", "VERIFIED_FRESH", "x", None, None, (), 1)
+        with self.assertRaisesRegex(ValueError, "returned only for OK"):
+            binding.Resolution("FAILED", "SNAPSHOT_TOO_OLD", "x", {"a": 1}, "c", (), 1)
+        with self.assertRaisesRegex(ValueError, "returned only for OK"):
+            binding.Resolution("OK", "VERIFIED_WITHIN_LIMIT", "x", None, None, (), 1)
         with self.assertRaisesRegex(ValueError, "does not belong to outcome"):
             binding.Resolution("OK", "POINTER_MISSING", "x", {"a": 1}, "c", (), 1)
-        with self.assertRaisesRegex(ValueError, "named gap"):
-            binding.Resolution("OK_WITH_GAPS", "VERIFIED_STALE", "x", {"a": 1}, "c", (), 1)
+        with self.assertRaisesRegex(ValueError, "does not belong to outcome"):
+            binding.Resolution("OK_WITH_GAPS", "VERIFIED_WITHIN_LIMIT", "x", {"a": 1}, "c", (), 1)
+        self.assertNotIn("OK_WITH_GAPS", binding.OUTCOMES)
 
     def test_every_reason_is_reachable_or_documented(self):
-        reached = {reason for _, _, reason in SCENARIOS.values()} | {"VERIFIED_FRESH", "VERIFIED_STALE"}
+        reached = {reason for _, _, reason in SCENARIOS.values()} | {"VERIFIED_NO_AGE_LIMIT", "VERIFIED_WITHIN_LIMIT", "SNAPSHOT_TOO_OLD"}
         self.assertEqual(set(binding.REASONS), reached)
         doc = (ROOT.parent / "docs" / "sca-nvd-snapshot-binding.md").read_text()
         for reason in binding.REASONS:
@@ -842,7 +873,8 @@ class NoNetworkTests(Base):
                 result = binding.resolve_snapshot(directory, max_age=MAX_AGE, now=NOW)
                 self.assertEqual((result.outcome, result.reason), (outcome, reason))
             self.assertEqual(self.resolve().outcome, "OK")
-            self.assertEqual(self.resolve(now=T0 + timedelta(days=9)).outcome, "OK_WITH_GAPS")
+            self.assertEqual(self.resolve(now=T0 + timedelta(days=9)).reason, "SNAPSHOT_TOO_OLD")
+            self.assertEqual(self.resolve(now=T0 + timedelta(days=9), max_age=binding.NO_AGE_LIMIT).outcome, "OK")
 
 
 class PublisherParityTests(Base):
@@ -893,94 +925,115 @@ class PublisherParityTests(Base):
 
 
 class IdentityBindingTests(Base):
-    """A returned or persisted identity record is not an authority. `freshness` enters the input
-    fingerprint, so it must be bound to the numbers it is derived from, the identity inside a
-    Resolution must not be editable after the component was computed, and a record read back from
-    disk is only accepted by re-verifying the snapshot."""
+    """A returned or persisted identity record is not an authority. Its derived fields must agree
+    with what they are derived from, the identity inside a Resolution must not be editable after the
+    component was computed, and a record read back from disk is only accepted by re-verifying the
+    snapshot. Under sub-decision M4 there is no usable "stale" state: a record that claims an age
+    over its own limit describes an outcome that is FAILED and never had an identity."""
 
-    STALE_NOW = T0 + timedelta(days=30)
+    LATER = T0 + timedelta(days=30)
 
     def setUp(self):
         super().setUp()
         self.publish_chain()
-        self.fresh = self.resolve()
-        self.stale = self.resolve(now=self.STALE_NOW)
-        self.assertEqual((self.fresh.outcome, self.stale.outcome), ("OK", "OK_WITH_GAPS"))
+        self.limited = self.resolve()
+        self.unlimited = self.resolve(now=self.LATER, max_age=binding.NO_AGE_LIMIT)
+        self.assertEqual((self.limited.reason, self.unlimited.reason), ("VERIFIED_WITHIN_LIMIT", "VERIFIED_NO_AGE_LIMIT"))
 
     def copy(self, resolution):
         import copy
         return copy.deepcopy(resolution.identity)
 
-    def test_stale_identity_relabelled_fresh_cannot_obtain_the_fresh_component(self):
-        forged = self.copy(self.stale)
-        forged["freshness"] = "fresh"
-        with self.assertRaisesRegex(ValueError, "freshness must be 'stale'"):
+    def test_an_over_age_identity_cannot_be_fabricated(self):
+        forged = self.copy(self.limited)
+        forged["evaluated_at"] = self.unlimited.identity["evaluated_at"]
+        forged["age_seconds"] = self.unlimited.identity["age_seconds"]      # 30 days against a 24 hour limit
+        with self.assertRaisesRegex(ValueError, "exceeds max_age_seconds"):
             binding.fingerprint_component(forged)
 
     def test_each_derived_field_is_bound_to_what_it_is_derived_from(self):
         cases = {
-            "freshness": ("fresh", "freshness must be 'stale'"),
+            "age_policy": ("no-limit", "age_policy must be 'no-limit' exactly when max_age_seconds is null"),
+            "max_age_seconds": (None, "age_policy must be 'no-limit' exactly when max_age_seconds is null"),
             "age_seconds": (1, "age_seconds must equal evaluated_at minus cursor"),
-            "max_age_seconds": (10 ** 9, "freshness must be 'fresh'"),
             "evaluated_at": ("2026-09-19T12:00:01.000Z", "age_seconds must equal|must not be later"),
             "cursor": ("2026-10-19T00:00:00.000Z", "age_seconds must equal|must not be later"),
             "snapshot_id": ("sha256-0123456789abcdef", "snapshot_id must appear in chain_snapshot_ids"),
         }
         for field, (value, message) in cases.items():
-            forged = self.copy(self.stale)
+            forged = self.copy(self.limited)
             self.assertNotEqual(forged[field], value, field)
             forged[field] = value
             with self.assertRaisesRegex(ValueError, message, msg=field):
                 binding.fingerprint_component(forged)
+        unlimited = self.copy(self.unlimited)
+        unlimited["max_age_seconds"] = 60
+        with self.assertRaisesRegex(ValueError, "age_policy must be 'no-limit' exactly when"):
+            binding.fingerprint_component(unlimited)
+        negative = self.copy(self.limited)
+        negative["max_age_seconds"] = 0
+        with self.assertRaisesRegex(ValueError, "max_age_seconds must be greater than zero"):
+            binding.fingerprint_component(negative)
 
     def test_consistently_forged_age_is_self_consistent_and_that_is_why_verify_identity_exists(self):
-        # Edit evaluated_at, age_seconds and freshness together: the record now agrees with itself.
-        forged = self.copy(self.stale)
-        forged.update(evaluated_at=self.fresh.identity["evaluated_at"], age_seconds=self.fresh.identity["age_seconds"],
-                      max_age_seconds=self.fresh.identity["max_age_seconds"], freshness="fresh")
+        # Rewrite evaluated_at and age_seconds together so an old record reads as recent: the record
+        # agrees with itself, which is the limit of what cross-field rules can do.
+        forged = self.copy(self.limited)
         self.assertEqual(binding.identity_consistency_errors(forged), [])
-        self.assertEqual(binding.fingerprint_component(forged), self.fresh.fingerprint_component)
-        # ...so a consumer of a PERSISTED record must go through verify_identity, which ignores the
-        # record's own freshness and re-derives it at the caller's `now`.
-        verified = binding.verify_identity(forged, self.root, max_age=MAX_AGE, now=self.STALE_NOW)
-        self.assertEqual((verified.outcome, verified.identity["freshness"]), ("OK_WITH_GAPS", "stale"))
-        self.assertEqual(verified.fingerprint_component, self.stale.fingerprint_component)
+        # A consumer of a PERSISTED record goes through verify_identity, which ignores the record's
+        # own age and policy and re-derives them at the caller's `now` and `max_age`.
+        verified = binding.verify_identity(forged, self.root, max_age=binding.NO_AGE_LIMIT, now=self.LATER)
+        self.assertEqual((verified.reason, verified.identity["age_policy"]), ("VERIFIED_NO_AGE_LIMIT", "no-limit"))
+        self.assertEqual(verified.fingerprint_component, self.limited.fingerprint_component)
+        with self.assertRaisesRegex(binding.IdentityMismatch, "does not verify now: SNAPSHOT_TOO_OLD"):
+            binding.verify_identity(forged, self.root, max_age=MAX_AGE, now=self.LATER)
 
     def test_identity_inside_a_resolution_is_read_only_at_every_depth(self):
-        for mutate in (lambda i: i.__setitem__("freshness", "fresh"), lambda i: i.update(freshness="fresh"),
-                       lambda i: i.pop("freshness"), lambda i: i["limitations"].append("x"),
+        for mutate in (lambda i: i.__setitem__("age_policy", "no-limit"), lambda i: i.update(max_age_seconds=None),
+                       lambda i: i.pop("age_policy"), lambda i: i["limitations"].append("x"),
                        lambda i: i["chain_snapshot_ids"].clear(), lambda i: i.__delitem__("snapshot_id")):
             with self.assertRaisesRegex(TypeError, "read-only"):
-                mutate(self.stale.identity)
-        self.assertEqual(self.stale.identity["freshness"], "stale")
-        self.assertEqual(binding.fingerprint_component(self.stale.identity), self.stale.fingerprint_component)
+                mutate(self.limited.identity)
+        self.assertEqual(self.limited.identity["age_policy"], "within-limit")
+        self.assertEqual(binding.fingerprint_component(self.limited.identity), self.limited.fingerprint_component)
 
     def test_a_copy_is_an_ordinary_editable_json_document(self):
-        duplicate = self.copy(self.fresh)
+        duplicate = self.copy(self.limited)
         self.assertIs(type(duplicate), dict)
         self.assertIs(type(duplicate["limitations"]), list)
         duplicate["limitations"].append("edited copy")
-        self.assertEqual(json.loads(json.dumps(self.fresh.identity)), json.loads(json.dumps(self.copy(self.fresh))))
-        self.assertEqual(binding.validate_document(self.fresh.identity, binding.IDENTITY_SCHEMA_FILE), [])
+        self.assertEqual(json.loads(json.dumps(self.limited.identity)), json.loads(json.dumps(self.copy(self.limited))))
+        self.assertEqual(binding.validate_document(self.limited.identity, binding.IDENTITY_SCHEMA_FILE), [])
 
-    def test_resolution_refuses_a_component_that_is_not_its_identitys(self):
+    def test_resolution_refuses_a_component_or_reason_that_is_not_its_identitys(self):
+        other = self.resolve_other_snapshot_component()
         with self.assertRaisesRegex(ValueError, "does not belong to this identity"):
-            binding.Resolution("OK", "VERIFIED_FRESH", "x", self.copy(self.fresh), self.stale.fingerprint_component, (), 1)
-        with self.assertRaisesRegex(ValueError, "freshness contradicts the outcome"):
-            binding.Resolution("OK", "VERIFIED_FRESH", "x", self.copy(self.stale), self.stale.fingerprint_component, (), 1)
+            binding.Resolution("OK", "VERIFIED_WITHIN_LIMIT", "x", self.copy(self.limited), other, (), 1)
+        with self.assertRaisesRegex(ValueError, "age_policy contradicts the reason"):
+            binding.Resolution("OK", "VERIFIED_NO_AGE_LIMIT", "x", self.copy(self.limited), self.limited.fingerprint_component, (), 1)
+        with self.assertRaisesRegex(ValueError, "gaps is reserved"):
+            binding.Resolution("OK", "VERIFIED_WITHIN_LIMIT", "x", self.copy(self.limited), self.limited.fingerprint_component, ({"id": "x"},), 1)
+
+    def resolve_other_snapshot_component(self):
+        self.publisher.sync(T0 + timedelta(hours=4), "2026-09-19T16:00:05+00:00")
+        component = self.resolve(now=T0 + timedelta(hours=8)).fingerprint_component
+        self.assertNotEqual(component, self.limited.fingerprint_component)
+        return component
 
     def test_verify_identity_has_no_optional_inputs(self):
-        record = self.copy(self.fresh)
+        record = self.copy(self.limited)
         for kwargs in ({}, {"max_age": MAX_AGE}, {"now": NOW}):
             with self.assertRaises(TypeError):
                 binding.verify_identity(record, self.root, **kwargs)
         with self.assertRaises(TypeError):
             binding.verify_identity(record, max_age=MAX_AGE, now=NOW)
+        with self.assertRaisesRegex(TypeError, "NO_AGE_LIMIT or a datetime.timedelta"):
+            binding.verify_identity(record, self.root, max_age=None, now=NOW)
 
     def test_verify_identity_rejects_a_record_for_any_other_snapshot_content(self):
         for field, value in (("snapshot_id", None), ("manifest_sha256", "0" * 64), ("content_sha256", "1" * 64),
                              ("file_count", 99), ("total_bytes", 1), ("retrieved_at", "2026-01-01T00:00:00.000Z")):
-            record = self.copy(self.fresh)
+            record = self.copy(self.limited)
             if field == "snapshot_id":      # keep it self-consistent so only verify_identity can object
                 value = record["chain_snapshot_ids"][-1] if record["chain_snapshot_ids"][-1] != record["snapshot_id"] else record["chain_snapshot_ids"][0]
             self.assertNotEqual(record[field], value, field)
@@ -989,17 +1042,17 @@ class IdentityBindingTests(Base):
                 binding.verify_identity(record, self.root, max_age=MAX_AGE, now=NOW)
 
     def test_verify_identity_fails_closed_when_the_snapshot_no_longer_verifies(self):
-        record = self.copy(self.fresh)
+        record = self.copy(self.limited)
         s_blob_tampered_same_size(self.root)
         with self.assertRaisesRegex(binding.IdentityMismatch, "does not verify now: BLOB_HASH_MISMATCH"):
             binding.verify_identity(record, self.root, max_age=MAX_AGE, now=NOW)
 
     def test_every_identity_field_is_either_snapshot_bound_or_rederived(self):
         schema = binding._STORE.load(binding.IDENTITY_SCHEMA_FILE)
-        rederived = {"evaluated_at", "age_seconds", "max_age_seconds", "freshness"}
+        rederived = {"evaluated_at", "age_seconds", "max_age_seconds", "age_policy"}
         self.assertEqual(set(binding._SNAPSHOT_BOUND_FIELDS) | rederived, set(schema["properties"]))
         self.assertEqual(set(binding._SNAPSHOT_BOUND_FIELDS) & rederived, set())
-
+        self.assertNotIn("freshness", schema["properties"])
 
 
 class PortabilityTests(unittest.TestCase):

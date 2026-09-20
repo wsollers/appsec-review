@@ -25,5 +25,7 @@ coordinator acquires the process-owned kernel lock; the recovery receipt is reta
 
 NVD data is enrichment only. It does not establish that a component matches an affected product,
 that vulnerable code is reachable or exploitable, that a severity applies to the reviewed target,
-or that a finding exists. Engagement use must pin a snapshot and apply the separately approved
-freshness policy.
+or that a finding exists. Engagement use must pin a snapshot. Age policy is per job (ADR-0010
+sub-decision M4): by default a job uses the snapshot that is present and records its age; a job or
+engagement may set a tighter `max_age`, and a snapshot older than that limit fails the job. There
+is no repository-wide freshness policy.
