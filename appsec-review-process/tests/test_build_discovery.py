@@ -46,10 +46,21 @@ class BuildDiscoveryTests(unittest.TestCase):
         self.assertNotEqual(failed,result['attempt_id'])
         self.assertEqual(before,state.tree_hashes(base/'attempts'/failed))
 
+    # Registered job templates that are deliberately NOT full_review lifecycle nodes. 00-validation
+    # is the validator composition. docs/critical-findings-sarif-job.md: the SARIF transform "is a
+    # standalone registered job rather than a completed full_review lifecycle node" -- its own Dagster
+    # job, fed by a staged input, consumed by no graph node. This test was added in the same commit
+    # as that template and failed from then on (Linux baseline 2026-09-20) because it exempted only
+    # the first. Pinned both ways: adding a template, or moving one of these into the graph, has to
+    # be a decision recorded here.
+    STANDALONE_TEMPLATES={'00-validation','10-critical-findings-sarif'}
+
     def test_all_registry_jobs_have_lifecycle_nodes(self):
         graph=job_graph.load_graph()['jobs']
-        for path in (state.ROOT/'registry/job-templates').glob('*.json'):
-            if path.stem!='00-validation': self.assertIn(path.stem,graph)
+        templates={path.stem for path in (state.ROOT/'registry/job-templates').glob('*.json')}
+        self.assertLessEqual(self.STANDALONE_TEMPLATES,templates)
+        for name in sorted(templates-self.STANDALONE_TEMPLATES): self.assertIn(name,graph)
+        for name in sorted(self.STANDALONE_TEMPLATES): self.assertNotIn(name,graph)
 
     def test_target_text_never_becomes_executable_argv(self):
         pointer=self.start()

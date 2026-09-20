@@ -44,7 +44,7 @@ Previously failing in the container and now passing because `docs/` is mounted: 
 | `qualify_workflow.py` | PASS | real queue, multiprocess branches, branch recovery |
 | `qualify_worker_adoption.py` | PASS | |
 | `qualify_sarif_adoption.py` | PASS | |
-| `qualify_build_discovery.py` | **FAILED at its last assertion** | Build discovery itself was accepted and reused. The qualifier then expects `full_review` to be blocked at `02-repository-partition-discovery` with `WORKER_NOT_IMPLEMENTED`; that job now **runs**, and the blockers were recorded for six other unimplemented `02-*` nodes. Stale qualifier, and `job-graph.json` still says `implemented: false` for that node |
+| `qualify_build_discovery.py` | **FAILED at its last assertion** (fixed afterwards, see Corrections) | Build discovery itself was accepted and reused. The qualifier expected `full_review` to be blocked at `02-repository-partition-discovery` by a `WORKER_NOT_IMPLEMENTED` `pre.json`; that node is now `discovery_gate`'s hand-off gate and records a `BLOCKED` attempt with `HANDOFF_ISSUED` under `data/jobs/` instead. Stale qualifier only |
 | `qualify_build_execution.py` | **FAILED** | `configure failed inside buildenv: exit 127`: `/opt/images/audit-buildenv-common/run.sh` is absent, and that wrapper does `docker run`, while the code-server deliberately has no Docker socket. This is the B13 pinned-container-adapter gap, not a mount to add |
 | `qualify_tooling.py` | `MISSING_IMAGE` | no `audit-buildenv-*` image is built on this host |
 
@@ -56,3 +56,20 @@ run created first with `run_process.py --start`; `qualify_build_execution.py --r
 
 Windows. The Codex OWASP lane beyond its unit suites. Any worker that is not implemented
 (most of the 42 graph jobs block with `WORKER_NOT_IMPLEMENTED`).
+
+## Corrections (same day, branch `claude/linux-baseline-fixes`)
+
+- The first version of this document said `02-repository-partition-discovery` "now runs" and that
+  `job-graph.json`'s `implemented: false` was stale. **That was wrong.** It is a validated hand-off
+  gate that does no analysis and blocks until a partition map is supplied; `implemented: false` is
+  correct. Only the qualifier's expectation was stale, and it now asserts the hand-off.
+- Item 2 above is not a missing graph node. `docs/critical-findings-sarif-job.md` makes the SARIF
+  transform a deliberately standalone registered job; the test exempted only `00-validation`. The
+  test now pins both standalone templates, in both directions.
+- Item 1 (T05 config path) is fixed by resolving the repository-path identifier against the process
+  directory wherever it is mounted; the same pattern in `owasp_validator_handoff.py` (config and
+  prompt) was fixed with it.
+- After these three fixes, on the same stack: the whole unit suite inside the code-server is
+  **857 tests, OK (1 skip)** (was 1 failure + 59 errors), and `qualify_build_discovery.py` is `PASS`
+  (owner run `20260920T232243Z-169a47`). Still open from the table above: `qualify_build_execution`
+  (B13), `qualify_tooling` (no buildenv images), and A01's prompt-vetting record.

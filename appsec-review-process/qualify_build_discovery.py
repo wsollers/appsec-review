@@ -47,8 +47,19 @@ def main():
         blocked=launch(run_id,job='full_review',wait=True,timeout=600)
         atomic_json(root/'blocked-launch.json',blocked)
         assert blocked['status']=='FAILURE'
-        blocker=data_path(run_id,'orchestration','dagster',blocked['dagster_run_id'],'02-repository-partition-discovery','pre.json')
-        assert read_json(blocker)['reason']=='WORKER_NOT_IMPLEMENTED'
+        # 02-repository-partition-discovery is no longer a blocked_op stub: it is discovery_gate's
+        # validated hand-off gate (still implemented:false in the graph -- it does no analysis). With
+        # no supplied partition map it records a BLOCKED attempt and an actionable hand-off under
+        # data/jobs/, not a WORKER_NOT_IMPLEMENTED pre.json. The stubs downstream still do.
+        gate=data_path(run_id,'jobs','02-repository-partition-discovery')
+        attempt_status=read_json(gate/'attempts'/read_json(gate/'latest.json')['attempt_id']/'status.json')
+        assert attempt_status['status']=='BLOCKED' and attempt_status['dagster_run_id']==blocked['dagster_run_id']
+        assert 'HANDOFF_ISSUED' in attempt_status['cause']
+        handoff=read_json(gate/'handoff.json')
+        assert handoff['dagster_run_id']==blocked['dagster_run_id'] and handoff['expected_schema']=='repository-partition-map.schema.json'
+        assert not data_path(run_id,'orchestration','dagster',blocked['dagster_run_id'],'02-repository-partition-discovery').exists()
+        stubs=sorted(data_path(run_id,'orchestration','dagster',blocked['dagster_run_id']).glob('*/pre.json'))
+        assert stubs and all(read_json(stub)['reason']=='WORKER_NOT_IMPLEMENTED' for stub in stubs)
         assert read_json(data_path(run_id,'workflows','engagement','status.json'))['status']=='FAILED'
         recovery=launch(run_id,job='build_discovery',wait=True,timeout=600)
         atomic_json(root/'recovery-launch.json',recovery)
