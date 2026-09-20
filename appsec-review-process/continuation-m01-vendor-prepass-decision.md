@@ -188,3 +188,13 @@ identity or behavior changed.
 - Downstream owners: M03 (secrets, IaC, redactor), M05 (SBOM family, snapshot publisher), M04 with
   M02 (container image, mobile, binary hardening), D09 (source SAST), M06 (symbol/semantic index),
   M07 (retired steps and final runner deletion), ADR-0008 T03 (threat-workbench producer fill).
+
+## Checkpoint — 2026-09-20 gate decisions
+
+User answered G1–G10: B; A; A with the NVD copy under `/data` as the named source; A now/B later;
+A; A; A; A; A; **B**. ADR-0010 moved to Accepted with a Decisions table. Knock-on edits: V09 is now
+a read-only NVD snapshot consumer binding (no new publisher); SCA matching is CPE-keyed with
+`match_basis` and unmapped components as coverage gaps, and matcher selection is reopened for
+V05/V11; `cloc`/`scc` move to a `02-evidence-index` metrics enrichment (new task V15, needs
+requalification); `02-mobile-applicability` not adopted. Integrator follow-ups (not done here):
+close M01 in `TODO.md`, V02 node/skip-reason declaration, design-v3 §4 wording.

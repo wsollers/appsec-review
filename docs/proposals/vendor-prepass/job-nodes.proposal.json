@@ -110,17 +110,15 @@
         "secrets-and-key-inventory"
       ],
       "owning_followup_batch": "M03",
-      "open_human_gates": [
-        "G1",
-        "G9"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "REDACTION BOUNDARY: raw secret values never leave the producing attempt. The scanner runs with redaction enabled; any unredacted intermediate lives only in an attempt-private directory that is never published, never indexed by 02-evidence-index and never readable by a persona cell.",
         "The only published artifacts are the redacted inventory and the redaction receipt. Logs pass the same redactor before retention.",
         "Inventory entries are location fingerprints (path, line span, rule id, data-class label); no hash of an individual secret value is published because low-entropy values are brute-forceable.",
         "No decrypt, crack, validity probe or credential use: a listed key store is a file-presence fact."
-      ]
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-iac-config-scan",
@@ -235,15 +233,13 @@
         "iac-container-deployment-evidence"
       ],
       "owning_followup_batch": "M03",
-      "open_human_gates": [
-        "G1",
-        "G5"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "static manifests support DECLARED exposure only; never observed cloud or cluster state",
         "15-deployment-hardening reads this evidence transitively after assembly; it is never an input to any 02-* node"
-      ]
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-container-image-inventory",
@@ -328,13 +324,12 @@
         "iac-container-deployment-evidence"
       ],
       "owning_followup_batch": "M04 (image split: M02)",
-      "open_human_gates": [
-        "G8"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "NO legacy prepass step exists for supplied images (the legacy audit-container image ships trivy but no step invokes `trivy image`). This node is declared from design-v3 2.1/17 scope, not from a legacy step."
-      ]
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-sbom-inventory",
@@ -413,12 +408,10 @@
         "sbom-sca-license-lifecycle"
       ],
       "owning_followup_batch": "M05",
-      "open_human_gates": [
-        "G2",
-        "G4"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
-      "notes": []
+      "notes": [],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-sca-vulnerability-match",
@@ -431,10 +424,11 @@
       "evidence_family": "sca",
       "tool_instances": [
         {
-          "tool_id": "osv-scanner-offline",
+          "tool_id": "nvd-cpe-matcher-tbd",
           "legacy_steps": [
             "sca"
-          ]
+          ],
+          "note": "matcher selection is OPEN: legacy osv-scanner cannot consume a raw NVD feed; decided in V05/V11 after a short options note"
         }
       ],
       "proposed_output_contract_id": "sca-vulnerability-match",
@@ -490,22 +484,22 @@
         "package_restore": "denied",
         "target_mutation": "denied"
       },
-      "permission_notes": "RECOMMENDED (G3 option A): network denied; consumes an immutable, separately published vulnerability-database snapshot (same pattern as the NVD reference publisher). The legacy step silently used live network from an unrestricted container. If G3 option B is chosen instead, the only capability is fixed_network_destinations=[api.osv.dev], explicitly authorized per run like 02-ossf-scorecard.",
-      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; vulnerability database snapshot id, publisher, retrieval timestamp, sha256 and age are part of the input fingerprint; legacy-observed osv-scanner 1.9.2 is unverified",
+      "permission_notes": "DECIDED (G3): network denied; consumes the immutable NVD snapshot under /data published by the existing nvd_feed.py, resolved through the current pointer (task V09 is a read-only consumer binding, not a publisher). No api.osv.dev, no live lookup.",
+      "identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; vulnerability database snapshot id, publisher, retrieval timestamp, sha256 and age are part of the input fingerprint; NVD snapshot identity comes from nvd_feed.py's manifest and current pointer; legacy-observed osv-scanner 1.9.2 is unverified and not selected",
       "applicability_rule": "always applicable once the SBOM is accepted; an SBOM with zero matchable components yields OK_WITH_GAPS",
       "fills_threat_workbench_source_family": [
         "sbom-sca-license-lifecycle"
       ],
       "owning_followup_batch": "M05",
-      "open_human_gates": [
-        "G2",
-        "G3"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "a match is 'advisory range covers declared version'; it is never reachability, exploitability, or affected-product proof; 06-cve-reachability owns reachability triage",
-        "missing snapshot => BLOCKED; snapshot older than policy => OK_WITH_GAPS with database age recorded; never a silent live fetch"
-      ]
+        "missing snapshot => BLOCKED; snapshot older than policy => OK_WITH_GAPS with database age recorded; never a silent live fetch",
+        "NVD is CPE-keyed: every match carries match_basis=cpe; every SBOM component with no CPE mapping is a coverage gap, never 'no known vulnerabilities'",
+        "an offline OSV snapshot may be added later without changing this node or contract"
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-license-scan",
@@ -584,13 +578,12 @@
         "sbom-sca-license-lifecycle"
       ],
       "owning_followup_batch": "M05",
-      "open_human_gates": [
-        "G2"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "vendored-component-inferred is labelled 'not declared in any manifest, inferred from bundled license/copyright evidence' and never promoted to a definitive SBOM component (design-v3 L1)"
-      ]
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-dependency-lifecycle",
@@ -674,14 +667,13 @@
         "sbom-sca-license-lifecycle"
       ],
       "owning_followup_batch": "M05",
-      "open_human_gates": [
-        "G2"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "pure transform over two accepted inputs; both must be CURRENT for the same source snapshot",
         "absence from the reference table is 'lifecycle-unknown', never 'supported'"
-      ]
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-binary-hardening",
@@ -762,14 +754,13 @@
       "applicability_rule": "deterministic probe for supplied PE/ELF/Mach-O files in the source snapshot; unsupported formats are per-file coverage gaps; SKIPPED only when zero candidate binaries exist",
       "fills_threat_workbench_source_family": [],
       "owning_followup_batch": "M04 (image pin: M02)",
-      "open_human_gates": [
-        "G7"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "covers binaries SUPPLIED in the snapshot. Binaries BUILT by 02-native-build stay with 02-binary-triage (its planned_scope already names security-property inspection).",
         "not a CVE scanner; complements, never replaces, SBOM/SCA"
-      ]
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-mobile-sast",
@@ -858,15 +849,13 @@
         "mobile-source-intelligence"
       ],
       "owning_followup_batch": "M04",
-      "open_human_gates": [
-        "G5",
-        "G6"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "mobsfscan SARIF embeds raw matched source lines; publication passes the redactor",
         "static mobile evidence is not runtime behaviour"
-      ]
+      ],
+      "adopted": true
     },
     {
       "proposed_job_id": "02-mobile-applicability",
@@ -935,13 +924,13 @@
         "mobile-source-intelligence"
       ],
       "owning_followup_batch": "M04",
-      "open_human_gates": [
-        "G6"
-      ],
+      "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
-        "EXISTS ONLY UNDER G6 OPTION B. Under the recommended option A this node is not declared and 02-mobile-sast carries the probe itself."
-      ]
+        "EXISTS ONLY UNDER G6 OPTION B. Under the recommended option A this node is not declared and 02-mobile-sast carries the probe itself.",
+        "NOT ADOPTED: gate G6 decided A (in-worker probe); retained in this fixture for the record only"
+      ],
+      "adopted": false
     }
   ],
   "existing_nodes_receiving_legacy_steps": [
@@ -990,5 +979,18 @@
         "M06 proves feature parity or ports unique behaviour; no second mutable index authority"
       ]
     }
-  ]
+  ],
+  "gate_decisions": {
+    "recorded": "2026-09-20",
+    "G1": "B",
+    "G2": "A",
+    "G3": "A (source: NVD copy under /data via nvd_feed.py)",
+    "G4": "A now, B later",
+    "G5": "A",
+    "G6": "A",
+    "G7": "A",
+    "G8": "A",
+    "G9": "A",
+    "G10": "B"
+  }
 }

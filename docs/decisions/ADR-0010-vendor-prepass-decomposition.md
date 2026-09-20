@@ -1,12 +1,31 @@
 # ADR-0010: Vendor-Prepass Decomposition Into Run-Owned Evidence Jobs
 
-Status: **Proposed — awaiting human gates G1–G10.** This is the M01 decision packet. No worker,
+Status: **Accepted 2026-09-20** (see Decisions). This closes the M01 design gate only. No worker,
 tool, schema, registry record, graph node, graph edge, skip reason or readiness claim follows from
 this document. Both legacy runners keep their current behavior until the task series below lands.
 
-Date: 2026-09-19 (drafted)
+Date: 2026-09-19 (drafted); 2026-09-20 (gate decisions)
 
-Backlog: `TODO.md` M01 (`READY`); unblocks M03, M04, M05, D09, M07 and — through ADR-0008
+## Decisions
+
+Recorded 2026-09-20 from the user's answers to gates G1–G10. Two differ from the packet's
+recommendation (G3 source, G10) and their consequences are stated here rather than left implicit.
+
+| Gate | Decision |
+|---|---|
+| G1 Granularity | **B.** Nine family nodes; each tool keeps its own template, attempt and `accepted.json` under `data/jobs/<node>/<tool-id>/`. |
+| G2 SBOM/SCA home | **A.** `02-*` pregather producers joined at `02-evidence-assembly`. design-v3 §4's "06 = full L1 scope" wording is now stale (follow-up). |
+| G3 SCA data | **A, with the source named by the user: the NVD copy under `/data`**, i.e. the immutable snapshot published by the existing `nvd_feed.py` publisher. No live lookup, no `api.osv.dev`, no new OSV publisher. Consequences: (1) V09 is no longer a new publisher; it binds `02-sca-vulnerability-match` to the current NVD snapshot pointer. (2) NVD is CPE-keyed, so matching ecosystem packages (npm, PyPI, Go, NuGet, Maven) is weaker than an OSV-keyed match; every match record carries `match_basis: cpe` and every SBOM component that cannot be mapped to a CPE is a **coverage gap**, never "no known vulnerabilities". (3) The legacy `osv-scanner` cannot consume a raw NVD feed, so the matcher is reopened as a V05/V11 tool-selection item; no tool is chosen by this ADR. Adding an offline OSV snapshot later remains possible without changing the node or contract. |
+| G4 Package restore | **A now, B later.** Never restore in the SBOM job; manifests and lockfiles only. Resolved dependencies from accepted build output may be layered in later. |
+| G5 Inapplicability | **A.** New skip reason `not-applicable-no-matching-inputs` (shared-surface change to `worker-result-contract.json`, task V02). |
+| G6 Mobile gating | **A.** In-worker probe. The option-only node `02-mobile-applicability` is **not adopted**. |
+| G7 BinSkim | **A.** Separate supplied-binary node `02-binary-hardening`. |
+| G8 Supplied images | **A.** Static archive-only `02-container-image-inventory`; no registry pull. |
+| G9 Redaction | **A.** Every scanner-backed producer redacts at its own publication boundary and emits a redaction receipt. |
+| G10 `cloc`/`scc` | **B.** Fold language/size metrics into `02-evidence-index` enrichment; one enrichment replaces both steps. Consequence: this touches an implemented, qualified worker, so it changes that worker's executable identity and needs requalification (task V15). |
+| ADR number | **0010 kept.** |
+
+Backlog: `TODO.md` M01 (`READY`, now decided); unblocks M03, M04, M05, D09, M07 and — through ADR-0008
 Decision 5 — S02. Companion packet: `docs/proposals/vendor-prepass/`.
 
 ADR number: `0010` is the next number that is free in every sense. `docs/decisions/` on `main` and
@@ -147,6 +166,12 @@ Recommendation: **A**, leaving direct edges (C) to L03's integration task.
 
 Recommendation: **A**.
 
+**Decided: A, sourced from the NVD copy under `/data`** (the `nvd_feed.py` snapshot). This is
+option A's offline mechanism with option C's data source, so option C's stated weakness applies
+and is accepted knowingly: CPE-keyed matching covers ecosystem packages poorly. The contract
+therefore requires `match_basis` on every match and a coverage-gap record for every unmapped
+component. See Decisions for the V09 and tool-selection consequences.
+
 > **Gate G3.** SCA vulnerability data: offline published snapshot (A), authorized live
 > `api.osv.dev` per run (B), or no `02` matching (C)?
 
@@ -260,9 +285,11 @@ Recommendation: **A**.
 
 Recommendation: **A**; if size metrics are wanted for budgeting, B under F01.
 
+**Decided: B.** One language/size metrics enrichment in `02-evidence-index` replaces both steps.
+
 > **Gate G10.** `cloc`/`scc`: retire (A), fold into evidence-index enrichment (B), or new node (C)?
 
-## Proposed Decision (recommended answers; not in force until the gates are answered)
+## Decision (in force as recorded in Decisions above)
 
 Nine new `02-evidence-pregather` nodes, all joined at `02-evidence-assembly` by a new `required`
 edge; two existing nodes receive the remaining active steps.
@@ -278,7 +305,7 @@ edge; two existing nodes receive the remaining active steps.
 | `02-dependency-lifecycle` | deterministic transform | `02-sbom-inventory`, `02-license-scan` | `dependency-lifecycle` | none | `sbom-sca-license-lifecycle` |
 | `02-binary-hardening` | producer | `00-intake` | `binary-hardening` | `not-applicable-no-matching-inputs`† | — (not an M01-gated family) |
 | `02-mobile-sast` | producer (carries its applicability probe) | `00-intake` | `mobile-sast` | `not-applicable-no-matching-inputs`† | `mobile-source-intelligence` |
-| `02-mobile-applicability` | applicability gate — **G6 option B only** | `00-intake` | `mobile-applicability` | n/a (does not join) | `mobile-source-intelligence` |
+| ~~`02-mobile-applicability`~~ | **not adopted (G6 = A)**; listed for the record only | `00-intake` | `mobile-applicability` | n/a (does not join) | `mobile-source-intelligence` |
 
 † New skip reason; a shared-surface change to `worker-result-contract.json` (gate G5).
 
@@ -372,14 +399,15 @@ not used: these nodes answer no contracted question. A node whose every tool ins
 | `02-iac-config-scan` | no | none — policy bundles baked into the image, updates disabled | no | no | no | no | no |
 | `02-container-image-inventory` | no (no container start) | none — no registry pull | no | no | no | no | no |
 | `02-sbom-inventory` | no | none | no | no | no | **no** (G4) | no |
-| `02-sca-vulnerability-match` | no | **none under G3-A**; `api.osv.dev` only under G3-B | no | no | no | no | no |
+| `02-sca-vulnerability-match` | no | **none** — reads the published NVD snapshot under `/data` (G3) | no | no | no | no | no |
 | `02-license-scan` | no | none | no | no | no | no | no |
 | `02-dependency-lifecycle` | no | none | no | no | no | no | no |
 | `02-binary-hardening` | no | none — no symbol server | no | no | no | no | no |
 | `02-mobile-sast` | no | none | no | no | no | no | no |
 
-Under the recommended answers **no proposed node requests any capability**. The one fixed network
-destination moves to the out-of-run vulnerability-snapshot publisher (V09). A tool that cannot run
+As decided, **no node requests any capability**. The only network use is the already-existing
+out-of-run NVD publisher (`nvd_feed.py`); no new publisher is introduced (V09 is now a consumer
+binding). A tool that cannot run
 offline is a `BLOCKED` tool instance and a coverage gap, never an implicit exception. Recommended
 to D09 for `02-source-sast`: vendored Semgrep rule packs (no registry fetch), no Go/Composer
 package restore. Dynamic target execution is not authorized by this ADR for any node.
@@ -420,7 +448,7 @@ applicability, prerequisite, deletion gate) are in
 | `sast-python`, `sast-go`, `sast-cpp`, `sast-multi-semgrep-{owasp,csharp,golang,python,php,java,security-audit,terraform}`, `sast-php`, `sast-php-parse-coverage`, `ast-grep-scan`, `joern-parse` | consume accepted producer (declared node) | existing `02-source-sast` / graph contract `source-sast` | D09 |
 | `symbol-index`, `semantic-index` | consume accepted producer | existing `02-evidence-index` / `evidence-index` | M06 |
 | `evidence-scrub` | retain temporarily — blocker: per-producer redaction (V06) adopted everywhere | none (becomes a publication-boundary rule, not a node) | M03 → M07 |
-| `cloc`, `scc` | retire (no consumer; `scc` duplicates `cloc`) — G10 | none | M07 |
+| `cloc`, `scc` | consume existing node: language/size metrics enrichment (G10 = B); one enrichment replaces both | `02-evidence-index` / `evidence-index` | F01 via V15 |
 | `weggli-note`, `spotbugs-note` | retire (static usage note; analyzes nothing) | none | M07 |
 | _(no legacy step)_ supplied image archives | new scope from design-v3 §2.1/§17 | `02-container-image-inventory` / `container-image-inventory` | M04 (M02) |
 
@@ -448,8 +476,10 @@ a result.
    fixtures and a bounded live Dagster qualification, and every lane prompt or config that reads
    the legacy `static-evidence/<dir>/` path (`06-cve-reachability/config.md`,
    `15-deployment-hardening/subprompts.md`, …) is repointed at the accepted run-owned artifact.
-2. Retired steps (`cloc`, `scc`, `weggli-note`, `spotbugs-note`) are removed once their doc callers
-   (`pipeline/README.md`, the runbooks using `-StaticSteps cloc`) are updated.
+2. Retired steps (`weggli-note`, `spotbugs-note`) are removed once their doc callers are updated.
+   `cloc` and `scc` are removed only after the `02-evidence-index` metrics enrichment (V15) is
+   requalified and the callers (`pipeline/README.md`, the runbooks using `-StaticSteps cloc`) are
+   repointed at it.
 3. `evidence-scrub` is removed last among active steps, once every scanner-backed producer
    publishes a redaction receipt and no caller hands off a legacy evidence tree.
 4. Both scripts, plus `run-dockerfile-lint.sh`, `run-sast-php.sh` and the other helpers only they
@@ -466,20 +496,21 @@ Full text: `docs/proposals/vendor-prepass/task-series.md`.
 
 | Task | Status | Exclusive paths | Deliverable |
 |---|---|---|---|
-| V01 Approve ADR-0010 | `HUMAN_GATE` | this ADR (Decisions table) | G1–G10 answered and recorded |
-| V02 Declare nodes | `INTEGRATION`, `BLOCKED(V01)` | `job-graph.json`, `design-parity-manifest.json`, `worker-result-contract.json`, generated parity views, `TODO.md` | nodes as `implemented:false`, assembly edges, new skip reason, M01 closed |
-| V03 Tool-instance aggregate + probe receipt spec | `BLOCKED(V01)` | `schemas/tool-results.schema.json`, `schemas/scan-coverage.schema.json`, `schemas/applicability-probe-receipt.schema.json`, their tests | shared shapes for `tool-results.json`/`coverage.json` |
+| V01 Approve ADR-0010 | `HUMAN_GATE` → done 2026-09-20 | this ADR (Decisions table) | G1–G10 answered and recorded |
+| V02 Declare nodes | `INTEGRATION`, `READY` | `job-graph.json`, `design-parity-manifest.json`, `worker-result-contract.json`, generated parity views, `TODO.md` | nodes as `implemented:false`, assembly edges, new skip reason, M01 closed |
+| V03 Tool-instance aggregate + probe receipt spec | `READY` | `schemas/tool-results.schema.json`, `schemas/scan-coverage.schema.json`, `schemas/applicability-probe-receipt.schema.json`, their tests | shared shapes for `tool-results.json`/`coverage.json` |
 | V04 Secrets + IaC contracts/schemas | `BLOCKED(V03)` | `registry/output-contracts/{secrets-inventory,iac-config-evidence}.json`, matching `schemas/*.schema.json` | M03 part 1 |
 | V05 SBOM-family contracts/schemas | `BLOCKED(V03)` | `registry/output-contracts/{sbom-inventory,sca-vulnerability-match,license-inventory,dependency-lifecycle}.json`, schemas | M05 part 1 |
-| V06 Redactor + receipt | `BLOCKED(V01)` | new `appsec-review-process/evidence_redaction.py`, `schemas/redaction-receipt.schema.json`, tests | G9 boundary |
+| V06 Redactor + receipt | `READY` | new `appsec-review-process/evidence_redaction.py`, `schemas/redaction-receipt.schema.json`, tests | G9 boundary |
 | V07 Container/mobile/binary contracts/schemas | `BLOCKED(V03)` | `registry/output-contracts/{container-image-inventory,mobile-sast,binary-hardening}.json`, schemas | M04 part 1 |
 | V08 Threat-workbench producer fill | `BLOCKED(V02)` | `docs/proposals/threat-workbench/input-sources.proposal.yaml` (T03 owner) | the four families named |
-| V09 Vulnerability-snapshot publisher | `BLOCKED(V01,B11)` | new publisher module, snapshot schemas, tests, doc | G3-A only |
+| V09 NVD snapshot consumer binding | `READY` | new `appsec-review-process/sca_nvd_snapshot.py` (name indicative), tests, doc | resolve + verify the current `nvd_feed.py` snapshot offline; identity into the fingerprint; no publisher work |
 | V10 Secrets + IaC workers | `BLOCKED(V02,V04,V06,B13)` | new worker modules/templates/tooling profiles/tests | M03 part 2; legacy steps deleted |
 | V11 SBOM-family workers | `BLOCKED(V02,V05,V09,B13)` | new worker modules/templates/tests | M05 part 2 |
 | V12 Container/mobile/binary workers | `BLOCKED(V02,V06,V07,M02,B13)` | new worker modules/templates/tests | M04 part 2 |
 | V13 Source SAST | `BLOCKED(B13,V01,V06)` | D09's paths | D09 with this ADR's requirements |
-| V14 Retire + delete runners | `INTEGRATION`, `BLOCKED(V10–V13,M06)` | `scripts/Invoke-VendorAuditPrePass.*`, helper scripts, callers, inventory, `TODO.md` | M07 slice; both scripts deleted |
+| V14 Retire + delete runners | `INTEGRATION`, `BLOCKED(V10–V13,V15,M06)` | `scripts/Invoke-VendorAuditPrePass.*`, helper scripts, callers, inventory, `TODO.md` | M07 slice; both scripts deleted |
+| V15 Evidence-index metrics enrichment | `READY`; owner F01 | `evidence_store.py` metrics path, `evidence-index` contract/schema additions, focused tests, requalification record | G10 = B; replaces `cloc` and `scc`; requalify `02-evidence-index` |
 
 ## Consequences
 
@@ -508,3 +539,8 @@ does not extend the `forbidden_promotions` enum; and leaves both legacy runners 
 2026-09-19: initial M01 packet. 37 legacy steps mapped; 9 proposed nodes (+1 option-only); 10
 human gates; ADR number 0010 claimed instead of the continuation prompt's 0007 (reserved
 elsewhere for the allocator-inventory decision).
+
+2026-09-20: gates G1–G10 answered; status Accepted. G3 decided as offline with the NVD copy under
+`/data` as the named source (V09 becomes a consumer binding; CPE-keyed coverage limitation and
+matcher tool selection recorded). G10 decided B (metrics enrichment in `02-evidence-index`, new
+task V15 with requalification). `02-mobile-applicability` not adopted (G6 = A).

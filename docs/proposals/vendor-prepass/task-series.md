@@ -1,12 +1,12 @@
 # Vendor-Prepass Decomposition Task Series
 
-Status: task packet for M03, M04, M05, D09 and the M07 deletion slice under **proposed**
-ADR-0010. Nothing below is `READY` until V01 (the human gate) is answered. Do not mark any `02-*`
+Status: task packet for M03, M04, M05, D09 and the M07 deletion slice under **accepted**
+ADR-0010 (gates decided 2026-09-20). Do not mark any `02-*`
 node implemented from this document. Status tokens follow `TODO.md`: `READY`, `BLOCKED(<ids>)`,
 `HUMAN_GATE`, `INTEGRATION`. IDs prefixed `V` are this series; bare IDs are `TODO.md` batches.
 
 Paths are relative to the repo root; `arp/` abbreviates `appsec-review-process/`. Task text assumes
-the ADR's recommended gate answers; where a different answer changes a task it says so.
+the ADR's recorded Decisions (G3: NVD copy under `/data`; G10: evidence-index enrichment; G6: no applicability node).
 
 ## Review Pattern
 
@@ -29,14 +29,15 @@ V01 (HUMAN_GATE) ─┬─ V02 INTEGRATION: declare nodes + skip reason ─┬�
                   │                                                 ├─ V05 ─┤
                   │                                                 └─ V07 ─┤
                   ├─ V06 redactor + receipt ────────────────────────────────┤
-                  └─ V09 vulnerability-snapshot publisher (B11) ────────────┤
+                  ├─ V09 NVD snapshot consumer binding ─────────────────────┤
+                  └─ V15 evidence-index metrics enrichment (F01) ─────────── V14
 B13 pinned-container adapter ───────────────────────────────────────────────┤
 M02 binary/mobile/container image decision ─────────────────────────────────┤
                                        V10 secrets+IaC │ V11 SBOM family │ V12 container/mobile/binary │ V13 = D09
 M06 semantic-index disposition ─────────────────────────────────────── V14 INTEGRATION: delete runners
 ```
 
-## V01 — Approve ADR-0010 — `HUMAN_GATE`
+## V01 — Approve ADR-0010 — `HUMAN_GATE` → done 2026-09-20
 
 - Owner: user, after one Codex and one Claude review pass on the packet.
 - Exclusive paths: `docs/decisions/ADR-0010-vendor-prepass-decomposition.md` (add a Decisions table
@@ -46,7 +47,7 @@ M06 semantic-index disposition ────────────────�
 - Acceptance: no gate left open; fixtures and ADR agree; step-set equality check still passes.
 - Reviewer focus: no answer silently widens a permission; node IDs match the chosen G1/G6/G8 shape.
 
-## V02 — Declare Nodes, Edges And Skip Reason — `INTEGRATION`, `BLOCKED(V01)`
+## V02 — Declare Nodes, Edges And Skip Reason — `INTEGRATION`, `READY`
 
 - Exclusive paths: `arp/job-graph.json`, `arp/design-parity-manifest.json`,
   `arp/worker-result-contract.json`, generated parity views (`docs/design-parity-report.md`,
@@ -61,7 +62,7 @@ M06 semantic-index disposition ────────────────�
 - Reviewer focus: no edge from a new node to `03`/`06`/`15`; skip reasons only on the four
   conditionally applicable edges; generated views regenerated, not hand-edited.
 
-## V03 — Shared Tool-Instance Aggregate And Probe Shapes — `BLOCKED(V01)`
+## V03 — Shared Tool-Instance Aggregate And Probe Shapes — `READY`
 
 - Exclusive paths: new `schemas/tool-results.schema.json`, `schemas/scan-coverage.schema.json`,
   `schemas/applicability-probe-receipt.schema.json`, `arp/tests/test_tool_instance_shapes.py`.
@@ -96,7 +97,7 @@ M06 semantic-index disposition ────────────────�
   to a declared one.
 - Reviewer focus: nothing duplicates `06-cve-reachability`'s contract.
 
-## V06 — Redactor And Redaction Receipt — `BLOCKED(V01)`
+## V06 — Redactor And Redaction Receipt — `READY`
 
 - Exclusive paths: new `arp/evidence_redaction.py`, `schemas/redaction-receipt.schema.json`,
   `arp/tests/test_evidence_redaction.py`, `docs/evidence-redaction.md`.
@@ -125,15 +126,25 @@ M06 semantic-index disposition ────────────────�
 - Acceptance: every producer ID exists in `job-graph.json`; YAML parses; secrets family keeps the
   receipt requirement.
 
-## V09 — Vulnerability-Snapshot Publisher — `BLOCKED(V01,B11)` (G3-A only)
+## V09 — NVD Snapshot Consumer Binding — `READY`
 
-- Exclusive paths: new `arp/osv_snapshot.py` (name indicative), snapshot manifest/pointer schemas,
-  tests, `docs/vulnerability-snapshot-publisher.md`.
-- Deliverables: asynchronous immutable snapshot publisher modeled on `nvd_feed.py`; its single
-  fixed network destination expressed as a B11 capability outside any engagement run.
-- Acceptance: redirect/oversize/tamper/partial-download/lease-contention fixtures; offline consumer
-  proof; no engagement-run job gains network.
-- Reviewer focus: not wired into any review job graph.
+Decision G3: SCA matching reads the NVD copy under `/data` published by the existing `nvd_feed.py`.
+No new publisher, no network, no B11 capability.
+
+- Exclusive paths: new `arp/sca_nvd_snapshot.py` (name indicative), its tests, and
+  `docs/sca-nvd-snapshot-binding.md`. Do not edit `nvd_feed.py` or its schemas.
+- Deliverables: read-only resolver that locates the current snapshot through the
+  `nvd-current-pointer`, verifies the manifest and file hashes offline, and returns the identity
+  record (`snapshot id`, publisher, retrieval timestamp, sha256, age) that enters the SCA job's
+  input fingerprint and is published as `outputs/vulnerability-database-identity.json`.
+- Acceptance: missing pointer or snapshot => `BLOCKED`; hash mismatch or partial snapshot => fails
+  closed; snapshot older than policy => `OK_WITH_GAPS` with age recorded; a writer lease held by the
+  publisher never blocks a reader of the last-good pointer; no code path opens a socket.
+- Reviewer focus: never a silent live fetch; the binding does not select or wrap a matcher.
+- Known limitation carried into V05/V11: NVD is CPE-keyed. The contract requires `match_basis` on
+  every match and a coverage-gap record for every SBOM component with no CPE mapping. The legacy
+  `osv-scanner` cannot consume a raw NVD feed, so **matcher selection is open** and belongs to
+  V05 (contract) and V11 (worker); it needs its own short options note before V11 starts.
 
 ## V10 — Secrets And IaC Workers (M03) — `BLOCKED(V02,V04,V06,B13)`
 
@@ -163,9 +174,27 @@ M06 semantic-index disposition ────────────────�
 - Acceptance: D09's list plus vendored rule packs, no package restore, redaction receipt, fifteen
   steps deleted from both runners.
 
-## V14 — Retire And Delete The Runners (M07 slice) — `INTEGRATION`, `BLOCKED(V10,V11,V12,V13,M06)`
+## V14 — Retire And Delete The Runners (M07 slice) — `INTEGRATION`, `BLOCKED(V10,V11,V12,V13,V15,M06)`
 
 - Exclusive paths: `scripts/Invoke-VendorAuditPrePass.ps1`, `.sh`, helper scripts only they call,
   engagement callers, `pipeline/README.md`, runbooks, `docs/script-migration-inventory.md`,
   `arp/TODO.md`.
 - Acceptance: zero remaining steps, zero executable callers, no wrapper, inventory rows closed.
+
+## V15 — Evidence-Index Metrics Enrichment (F01) — `READY`
+
+Decision G10 = B: language/size metrics move into `02-evidence-index`; one enrichment replaces the
+legacy `cloc` and `scc` steps.
+
+- Exclusive paths: the metrics code path in `arp/evidence_store.py`, additive fields in the
+  `evidence-index` contract/manifest schema, focused tests, and the requalification record. No
+  change to retrieval behavior or to `evidence_mcp.py`.
+- Deliverables: deterministic per-language file/line counts computed from the already-indexed
+  snapshot (no external `cloc`/`scc` binary, no container), published inside the existing
+  `manifest.json` or a sibling artifact declared in the contract.
+- Acceptance: `02-evidence-index` is an implemented, qualified worker, so this changes its
+  executable identity: prior accepted pointers stay integrity-readable but are not reused as
+  current; `qualify_evidence_index.py` is rerun and its report path and hash recorded; metrics are
+  descriptive only (no claim class promotion); generated/vendored scope is labelled, not dropped.
+- Reviewer focus: additive and deterministic; identical snapshot => identical metrics on Windows
+  and Linux; no regression in index build time beyond a recorded bound.

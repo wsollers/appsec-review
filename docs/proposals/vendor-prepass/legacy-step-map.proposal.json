@@ -23,20 +23,23 @@
         "Invoke-VendorAuditPrePass.ps1",
         "Invoke-VendorAuditPrePass.sh"
       ],
-      "disposition": "retire_duplicate_or_unsafe",
+      "disposition": "consume_accepted_producer",
       "proposed_job_id": null,
       "dependencies": [],
-      "consumers": [],
-      "output_class": "none",
-      "claim_limit": "n/a",
+      "consumers": [
+        "02-evidence-assembly (through the existing evidence-index edge)"
+      ],
+      "output_class": "descriptive language/size metrics inside the evidence-index manifest",
+      "claim_limit": "descriptive only; no finding, severity or runtime-state",
       "permission_class": "none",
-      "tool_image_identity_requirement": "n/a",
-      "applicability_behavior": "n/a",
-      "migration_prerequisite": "ADR gates answered; G10",
-      "deletion_gate": "callers/docs updated (pipeline/README.md and runbooks using '-StaticSteps cloc'); step removed from both runners",
-      "owning_followup_batch": "M07",
+      "tool_image_identity_requirement": "none: computed deterministically from the indexed snapshot; no external cloc/scc binary or container",
+      "applicability_behavior": "always applicable",
+      "migration_prerequisite": "G10 decided B; task V15 lands and 02-evidence-index is requalified",
+      "deletion_gate": "V15 requalified; callers/docs (pipeline/README.md, runbooks using '-StaticSteps cloc') repointed; step removed from both runners",
+      "owning_followup_batch": "F01 via V15",
       "cross_platform_discrepancy": null,
-      "retirement_reason": "no run-owned consumer in the job graph; only documented use is a plumbing smoke test, which registered Dagster jobs now cover (G10 may redirect this)"
+      "existing_job_id": "02-evidence-index",
+      "decision_note": "G10 = B: one evidence-index metrics enrichment replaces both cloc and scc"
     },
     {
       "legacy_step": "scc",
@@ -44,20 +47,23 @@
         "Invoke-VendorAuditPrePass.ps1",
         "Invoke-VendorAuditPrePass.sh"
       ],
-      "disposition": "retire_duplicate_or_unsafe",
+      "disposition": "consume_accepted_producer",
       "proposed_job_id": null,
       "dependencies": [],
-      "consumers": [],
-      "output_class": "none",
-      "claim_limit": "n/a",
+      "consumers": [
+        "02-evidence-assembly (through the existing evidence-index edge)"
+      ],
+      "output_class": "descriptive language/size metrics inside the evidence-index manifest",
+      "claim_limit": "descriptive only; no finding, severity or runtime-state",
       "permission_class": "none",
-      "tool_image_identity_requirement": "n/a",
-      "applicability_behavior": "n/a",
-      "migration_prerequisite": "ADR gates answered; G10",
-      "deletion_gate": "callers/docs updated (pipeline/README.md and runbooks using '-StaticSteps cloc'); step removed from both runners",
-      "owning_followup_batch": "M07",
+      "tool_image_identity_requirement": "none: computed deterministically from the indexed snapshot; no external cloc/scc binary or container",
+      "applicability_behavior": "always applicable",
+      "migration_prerequisite": "G10 decided B; task V15 lands and 02-evidence-index is requalified",
+      "deletion_gate": "V15 requalified; callers/docs (pipeline/README.md, runbooks using '-StaticSteps cloc') repointed; step removed from both runners",
+      "owning_followup_batch": "F01 via V15",
       "cross_platform_discrepancy": null,
-      "retirement_reason": "duplicate of cloc; no run-owned consumer"
+      "existing_job_id": "02-evidence-index",
+      "decision_note": "G10 = B: one evidence-index metrics enrichment replaces both cloc and scc"
     },
     {
       "legacy_step": "secrets",
@@ -78,7 +84,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; gitleaks rule configuration hash; redaction rule-set hash",
       "applicability_behavior": "always applicable; never skipped",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": null
@@ -102,7 +108,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; gitleaks rule configuration hash; redaction rule-set hash",
       "applicability_behavior": "always applicable; never skipped",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": "PS1 lists .p12/.pfx/.jks/.keystore files plus a PEM private-key-header grep; SH lists files by extension only and additionally matches .pem/.key/.crt/.cer. Migrated tool takes the union."
@@ -126,7 +132,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; CycloneDX spec version pinned and recorded; legacy-observed syft 1.51.1 is unverified",
       "applicability_behavior": "always applicable; a repository with no recognised manifest yields OK_WITH_GAPS with an explicit ecosystem-coverage gap (design-v3 L1 eastl lesson), not SKIPPED",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M05",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M05",
       "cross_platform_discrepancy": null
@@ -150,7 +156,7 @@
       "permission_class": "static-offline-default-deny (G3 alternative: fixed_network_destinations=[api.osv.dev])",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; vulnerability database snapshot id, publisher, retrieval timestamp, sha256 and age are part of the input fingerprint; legacy-observed osv-scanner 1.9.2 is unverified",
       "applicability_behavior": "always applicable once the SBOM is accepted; an SBOM with zero matchable components yields OK_WITH_GAPS",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M05",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M05",
       "cross_platform_discrepancy": "PS1 enforces DependsOn=sbom and skips with a warning; SH has no dependency guard and runs against a missing SBOM. The graph edge replaces both."
@@ -499,7 +505,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
       "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": null
@@ -523,7 +529,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
       "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": null
@@ -547,7 +553,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
       "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": null
@@ -567,7 +573,7 @@
       "permission_class": "none",
       "tool_image_identity_requirement": "n/a",
       "applicability_behavior": "n/a",
-      "migration_prerequisite": "ADR gates answered",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20",
       "deletion_gate": "callers/docs updated (pipeline/README.md and runbooks using '-StaticSteps cloc'); step removed from both runners",
       "owning_followup_batch": "M07",
       "cross_platform_discrepancy": null,
@@ -690,7 +696,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; legacy-observed BinSkim 4.4.9.11 is unverified; symbol-server access disabled",
       "applicability_behavior": "deterministic probe for supplied PE/ELF/Mach-O files in the source snapshot; unsupported formats are per-file coverage gaps; SKIPPED only when zero candidate binaries exist",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M04 (image pin: M02)",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M04 (image pin: M02)",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M04 (image pin: M02)",
       "cross_platform_discrepancy": null
@@ -714,7 +720,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; mobsfscan rule-pack identity",
       "applicability_behavior": "RECOMMENDED (G6 option A): in-worker deterministic platform-marker probe (AndroidManifest.xml, Android Gradle plugin, Info.plist, Xcode project) written to mobile-applicability.json; per-platform applicability; bare *.java/*.kt/*.m counts are NOT a marker (legacy false-applicability lesson)",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M04",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M04",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M04",
       "cross_platform_discrepancy": null
@@ -738,7 +744,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; mobsfscan rule-pack identity",
       "applicability_behavior": "RECOMMENDED (G6 option A): in-worker deterministic platform-marker probe (AndroidManifest.xml, Android Gradle plugin, Info.plist, Xcode project) written to mobile-applicability.json; per-platform applicability; bare *.java/*.kt/*.m counts are NOT a marker (legacy false-applicability lesson)",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M04",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M04",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M04",
       "cross_platform_discrepancy": null
@@ -758,7 +764,7 @@
       "permission_class": "none",
       "tool_image_identity_requirement": "n/a",
       "applicability_behavior": "n/a",
-      "migration_prerequisite": "ADR gates answered",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20",
       "deletion_gate": "callers/docs updated (pipeline/README.md and runbooks using '-StaticSteps cloc'); step removed from both runners",
       "owning_followup_batch": "M07",
       "cross_platform_discrepancy": null,
@@ -783,7 +789,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
       "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": null
@@ -807,7 +813,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
       "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": null
@@ -831,7 +837,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; checkov/trivy policy-bundle identity and hash baked into the image; trivy is floating in the legacy audit-container image and must be pinned before acceptance",
       "applicability_behavior": "deterministic detector probe (Terraform/CloudFormation/Helm/Kubernetes manifests, Dockerfile*); per-tool applicability recorded in coverage.json; node SKIPPED only when every tool probe finds zero inputs",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M03",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M03",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M03",
       "cross_platform_discrepancy": null
@@ -855,7 +861,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; scancode license-index identity; legacy image tag 'scancode-toolkit:local' is mutable and unacceptable",
       "applicability_behavior": "always applicable",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M05",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M05",
       "cross_platform_discrepancy": null
@@ -880,7 +886,7 @@
       "permission_class": "static-offline-default-deny",
       "tool_image_identity_requirement": "registry-resolved image digest (B13; mutable tags such as ':local' are rejected), tool name, tool-reported version, argv array, rule-pack/database identity and sha256, redactor identity; no identity is claimed verified by this proposal; offline EOL reference table identity and sha256; table coverage is partial by design",
       "applicability_behavior": "always applicable once both inputs are accepted",
-      "migration_prerequisite": "ADR gates answered; node declared by integration task; contract+schema; B13 adapter; M05",
+      "migration_prerequisite": "ADR-0010 accepted 2026-09-20; node declared by integration task; contract+schema; B13 adapter; M05",
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "owning_followup_batch": "M05",
       "cross_platform_discrepancy": "PS1 enforces DependsOn=sbom; SH has no dependency guard. Neither guards the scancode input."
@@ -910,5 +916,6 @@
       "cross_platform_discrepancy": null,
       "note": "a whole-tree post-pass is the wrong boundary for run-owned evidence: secrets would already sit in accepted attempts and the index before the scrub runs"
     }
-  ]
+  ],
+  "gate_decisions_recorded": "2026-09-20"
 }
