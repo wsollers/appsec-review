@@ -91,13 +91,14 @@
         "rejected",
         "withdrawn",
         "unresolved"
-      ]
+      ],
+      "description": "Frozen at write time. A challenge is written open; whether it was later answered, withdrawn or amended is derived by the sweep from later records, never by editing this one."
     },
     "resolution": {
       "type": "object",
       "required": [
         "text",
-        "resolving_record_id"
+        "resolves_record_id"
       ],
       "additionalProperties": false,
       "properties": {
@@ -107,12 +108,13 @@
             "null"
           ]
         },
-        "resolving_record_id": {
+        "resolves_record_id": {
           "type": [
             "string",
             "null"
           ],
-          "pattern": "^[a-z0-9][a-z0-9-]*$"
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Backward pointer: the EARLIER record in this transcript that this record resolves, or null. Append-only means a record can never name a later record; the bus rejects self and forward references. Whether a record has been resolved is derived by the sweep, never written back."
         }
       }
     },
