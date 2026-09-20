@@ -51,6 +51,243 @@ class Fuzzy:
         return score
 
 
+# --- Language/size metrics (ADR-0010 G10 = B, task V15). Descriptive only. ---------------------
+# Pure functions of (indexed path, exact bytes). No clock, host path, locale or walk order reaches
+# the document; see docs/evidence-index-metrics.md. Changing any table below is a rules change:
+# bump METRICS_RULES_VERSION and update the schema enums in the same commit.
+METRICS_RULES_VERSION = '1'
+METRICS_SCHEMA_ID = 'appsec-review/evidence-index-metrics/0.1'
+METRICS_SCHEMA_FILE = 'evidence-index-metrics.schema.json'
+METRICS_LINE_RULE = 'bytes-bom-crlf-lf-cr'
+METRICS_SCOPES = ('first-party', 'generated', 'review-evidence', 'vendored')
+METRICS_CONTENT_KINDS = ('binary', 'text', 'undecodable')
+METRICS_UNCLASSIFIED = 'unclassified'
+_ASCII_LOWER = {ord(upper): ord(upper) + 32 for upper in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'}
+_BLANK_BYTES = b' \t\x0b\x0c'
+_UTF8_BOM = b'\xef\xbb\xbf'
+_LANGUAGE_BY_FILENAME = {
+    'build.bazel': 'Starlark', 'cmakelists.txt': 'CMake', 'containerfile': 'Dockerfile',
+    'dockerfile': 'Dockerfile', 'gemfile': 'Ruby', 'gnumakefile': 'Make', 'go.mod': 'Go Module',
+    'go.sum': 'Go Module', 'jenkinsfile': 'Groovy', 'makefile': 'Make', 'meson.build': 'Meson',
+    'rakefile': 'Ruby', 'vagrantfile': 'Ruby', 'workspace.bazel': 'Starlark'}
+_LANGUAGE_EXTENSIONS = {
+    'Assembly': 'asm s', 'Batch': 'bat cmd', 'C': 'c', 'C#': 'cs', 'C++': 'c++ cc cpp cxx',
+    'C/C++ Header': 'h h++ hh hpp hxx inl ipp tpp', 'CMake': 'cmake', 'CSS': 'css', 'CSV': 'csv',
+    'Clojure': 'clj cljc cljs', 'Dart': 'dart', 'Diff': 'diff patch', 'Dockerfile': 'dockerfile',
+    'Elixir': 'ex exs', 'Erlang': 'erl hrl', 'F#': 'fs fsx', 'Fortran': 'f f90 f95 for',
+    'Go': 'go', 'Gradle': 'gradle', 'GraphQL': 'gql graphql', 'Groovy': 'groovy', 'HCL': 'hcl',
+    'HTML': 'htm html xhtml', 'Haskell': 'hs', 'INI': 'cfg conf ini', 'JSON': 'json', 'JSX': 'jsx',
+    'Java': 'java', 'JavaScript': 'cjs js mjs', 'Julia': 'jl', 'Jupyter Notebook': 'ipynb',
+    'Kotlin': 'kt kts', 'LESS': 'less', 'Lua': 'lua', 'Make': 'mak mk', 'Markdown': 'markdown md',
+    'Nix': 'nix', 'OCaml': 'ml mli', 'Objective-C': 'm', 'Objective-C++': 'mm', 'PHP': 'php',
+    'Perl': 'pl pm', 'PowerShell': 'ps1 psd1 psm1', 'Properties': 'properties',
+    'Protocol Buffers': 'proto', 'Python': 'py pyi pyw', 'QML': 'qml', 'R': 'r', 'Ruby': 'rb',
+    'Rust': 'rs', 'SQL': 'sql', 'SVG': 'svg', 'Sass': 'sass scss', 'Scala': 'scala',
+    'Shell': 'bash ksh sh zsh', 'Solidity': 'sol', 'Starlark': 'bzl', 'Swift': 'swift',
+    'TOML': 'toml', 'TSX': 'tsx', 'Tcl': 'tcl', 'TeX': 'tex', 'Terraform': 'tf tfvars',
+    'Text': 'txt', 'Thrift': 'thrift', 'TypeScript': 'cts mts ts', 'VHDL': 'vhd vhdl',
+    'Verilog': 'sv v vh', 'Visual Basic': 'vb', 'Vue': 'vue', 'XML': 'xml xsd xsl xslt',
+    'YAML': 'yaml yml', 'Zig': 'zig', 'gettext': 'po pot', 'reStructuredText': 'rst'}
+_LANGUAGE_BY_EXTENSION = {extension: language for language, extensions in _LANGUAGE_EXTENSIONS.items()
+                          for extension in extensions.split()}
+METRICS_LANGUAGES = tuple(sorted(set(_LANGUAGE_EXTENSIONS) | set(_LANGUAGE_BY_FILENAME.values())
+                                 | {METRICS_UNCLASSIFIED}))
+# Scope rules are path-only and ordered: review-evidence, then vendored, then generated.
+_VENDORED_DIRECTORIES = frozenset(('3rdparty', 'bower_components', 'extern', 'external', 'node_modules',
+                                   'third-party', 'third_party', 'thirdparty', 'vendor', 'vendored'))
+_GENERATED_DIRECTORIES = frozenset(('.generated', '__generated__', 'autogen', 'generated'))
+_GENERATED_FILENAMES = frozenset(('cargo.lock', 'composer.lock', 'gemfile.lock', 'go.sum',
+                                  'package-lock.json', 'pipfile.lock', 'pnpm-lock.yaml',
+                                  'poetry.lock', 'yarn.lock'))
+_GENERATED_SUFFIXES = ('.designer.cs', '.g.cs', '.generated.cs', '.min.css', '.min.js', '.pb.cc',
+                       '.pb.go', '.pb.h', '_pb2.py', '_pb2_grpc.py')
+_ZERO = {'files': 0, 'bytes': 0, 'text_files': 0, 'lines': 0, 'blank_lines': 0}
+
+
+def count_lines(content):
+    """(lines, blank_lines) of exact bytes. One leading UTF-8 BOM is not line content. CRLF, a lone
+    LF and a lone CR each end one line; an unterminated non-empty tail is one more line. A blank
+    line holds only space, tab, vertical tab or form feed bytes."""
+    if not isinstance(content, bytes):
+        raise TypeError('line counting is defined on bytes')
+    if content.startswith(_UTF8_BOM):
+        content = content[3:]
+    parts = content.replace(b'\r\n', b'\n').replace(b'\r', b'\n').split(b'\n')
+    if parts[-1] == b'':
+        parts.pop()
+    return len(parts), sum(1 for part in parts if not part.strip(_BLANK_BYTES))
+
+
+def classify_path(name):
+    """(scope, language) of one indexed path by the closed tables above. Never echoes the path."""
+    segments = name.split('/') if isinstance(name, str) else []
+    if len(segments) < 2 or segments[0] not in ('source', 'evidence') or any(
+            segment in ('', '.', '..') for segment in segments):
+        raise Blocked('an indexed path is not a normalized source/ or evidence/ relative path')
+    lowered = [segment.translate(_ASCII_LOWER) for segment in segments[1:]]
+    base = lowered[-1]
+    stem, dot, extension = base.rpartition('.')
+    if base in _LANGUAGE_BY_FILENAME:
+        language = _LANGUAGE_BY_FILENAME[base]
+    elif base.startswith('dockerfile.'):
+        language = 'Dockerfile'
+    elif dot and stem:
+        language = _LANGUAGE_BY_EXTENSION.get(extension, METRICS_UNCLASSIFIED)
+    else:
+        language = METRICS_UNCLASSIFIED
+    if segments[0] == 'evidence':
+        scope = 'review-evidence'
+    elif any(segment in _VENDORED_DIRECTORIES for segment in lowered[:-1]):
+        scope = 'vendored'
+    elif (base in _GENERATED_FILENAMES or base.endswith(_GENERATED_SUFFIXES)
+          or any(segment in _GENERATED_DIRECTORIES for segment in lowered[:-1])):
+        scope = 'generated'
+    else:
+        scope = 'first-party'
+    return scope, language
+
+
+def content_kind(content):
+    """'binary' (a NUL byte), 'undecodable' (not strict UTF-8) or 'text'. Only text has lines."""
+    if b'\x00' in content:
+        return 'binary'
+    try:
+        content.decode('utf-8')
+    except UnicodeDecodeError:
+        return 'undecodable'
+    return 'text'
+
+
+def _projection(groups, field):
+    totals = {}
+    for group in groups:
+        row = totals.setdefault(group[field] if field else None, dict(_ZERO))
+        row['files'] += group['files']
+        row['bytes'] += group['bytes']
+        if group['content'] == 'text':
+            row['text_files'] += group['files']
+            row['lines'] += group['lines']
+            row['blank_lines'] += group['blank_lines']
+    if not field:
+        return totals.get(None, dict(_ZERO))
+    return [{field: key, **totals[key]} for key in sorted(totals)]
+
+
+def file_set_sha256(entries):
+    """Digest of the sorted (path, sha256, bytes) list: which files, with which bytes, were measured."""
+    identity = hashlib.sha256()
+    for entry in sorted(entries):
+        identity.update((json.dumps(list(entry), ensure_ascii=True, separators=(',', ':')) + '\n').encode('ascii'))
+    return identity.hexdigest()
+
+
+class MetricsTally:
+    """Aggregate counts only: no path, name or content fragment reaches the published document.
+    Path identity enters only through snapshot.file_set_sha256."""
+
+    def __init__(self):
+        self._groups = {}
+        self._entries = []
+
+    def add(self, name, sha256, content):
+        scope, language = classify_path(name)
+        kind = content_kind(content)
+        lines, blank = count_lines(content) if kind == 'text' else (0, 0)
+        group = self._groups.setdefault((scope, language, kind), [0, 0, 0, 0])
+        for index, amount in enumerate((1, len(content), lines, blank)):
+            group[index] += amount
+        self._entries.append((name, sha256, len(content)))
+
+    def document(self, source_fingerprint, excluded_files):
+        entries = sorted(self._entries)
+        if len({entry[0] for entry in entries}) != len(entries):
+            raise Blocked('an indexed path was measured more than once')
+        groups = [{'scope': scope, 'language': language, 'content': kind, 'files': value[0],
+                   'bytes': value[1], 'lines': value[2] if kind == 'text' else None,
+                   'blank_lines': value[3] if kind == 'text' else None}
+                  for (scope, language, kind), value in sorted(self._groups.items())]
+        return {'schema': METRICS_SCHEMA_ID, 'rules_version': METRICS_RULES_VERSION,
+                'descriptive_only': True, 'line_rule': METRICS_LINE_RULE,
+                'snapshot': {'source_fingerprint': source_fingerprint,
+                             'file_set_sha256': file_set_sha256(entries), 'files': len(entries)},
+                'excluded_files': excluded_files, 'overall': _projection(groups, None),
+                'by_scope': _projection(groups, 'scope'), 'by_language': _projection(groups, 'language'),
+                'groups': groups}
+
+
+def metrics_bytes(document):
+    return (json.dumps(document, indent=2, sort_keys=True, ensure_ascii=True) + '\n').encode('ascii')
+
+
+def check_metrics(attempt, rederive):
+    """Verify the metrics member of the attempt's manifest.json: its recorded digest first, then
+    its schema, its bindings to the rest of the manifest and its own projections; rederive=True
+    also recomputes it from index.sqlite and objects/. Both arguments are required and nothing
+    read from the attempt is echoed. Returns a fresh parsed copy: a cache for the caller, never
+    an authority."""
+    if not isinstance(rederive, bool):
+        raise TypeError('rederive must be True or False')
+    attempt = Path(attempt).absolute()
+    manifest = read_json(attempt / 'manifest.json')
+    document = manifest.get('metrics') if isinstance(manifest, dict) else None
+    if not isinstance(document, dict):
+        raise Blocked('manifest.json has no metrics member')
+    try:
+        data = metrics_bytes(document)
+    except (TypeError, ValueError):
+        raise Blocked('manifest.json metrics member cannot be serialized canonically') from None
+    if hashlib.sha256(data).hexdigest() != manifest.get('metrics_sha256'):
+        raise Blocked('manifest.json metrics member does not match metrics_sha256')
+    from schema_validate import validate_document
+    if validate_document(document, METRICS_SCHEMA_FILE):
+        raise Blocked('manifest.json metrics member does not satisfy ' + METRICS_SCHEMA_FILE)
+    if document['descriptive_only'] is not True:
+        raise Blocked('metrics descriptive_only must be the JSON literal true')
+    snapshot, groups = document['snapshot'], document['groups']
+    if snapshot['source_fingerprint'] != manifest.get('source_fingerprint'):
+        raise Blocked('metrics snapshot source_fingerprint differs from manifest.json source_fingerprint')
+    excluded = manifest.get('excluded')
+    if not isinstance(excluded, list) or document['excluded_files'] != len(excluded):
+        raise Blocked('metrics excluded_files differs from the length of manifest.json excluded')
+    keys = [(group['scope'], group['language'], group['content']) for group in groups]
+    if keys != sorted(set(keys)):
+        raise Blocked('metrics groups are not unique and sorted by scope, language, content')
+    for group in groups:
+        counted = group['content'] == 'text'
+        if not counted and (group['lines'] is not None or group['blank_lines'] is not None):
+            raise Blocked('a metrics group counts lines of content that is not text')
+        for field in ('files', 'bytes') + (('lines', 'blank_lines') if counted else ()):
+            if isinstance(group[field], bool) or not isinstance(group[field], int) or group[field] < 0:
+                raise Blocked('a metrics count is not a non-negative integer')
+        if group['files'] < 1 or (counted and group['blank_lines'] > group['lines']):
+            raise Blocked('a metrics group has no files or more blank lines than lines')
+    if (document['overall'] != _projection(groups, None) or document['by_scope'] != _projection(groups, 'scope')
+            or document['by_language'] != _projection(groups, 'language')):
+        raise Blocked('metrics overall, by_scope and by_language must be projections of groups')
+    if snapshot['files'] != document['overall']['files'] or snapshot['files'] != manifest.get('files'):
+        raise Blocked('metrics file count differs from the number of indexed files')
+    db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
+    try:
+        rows = db.execute('SELECT path, sha256, bytes FROM files').fetchall()
+    finally:
+        db.close()
+    if len(rows) != snapshot['files'] or file_set_sha256(rows) != snapshot['file_set_sha256']:
+        raise Blocked('metrics snapshot file_set_sha256 or files differs from the files table of index.sqlite')
+    if rederive:
+        tally = MetricsTally()
+        for name, sha, size in rows:
+            if not isinstance(sha, str) or len(sha) != 64 or set(sha) - set('0123456789abcdef'):
+                raise Blocked('an indexed sha256 is not a lowercase hex digest')
+            content = (attempt / 'objects' / sha).read_bytes()
+            if len(content) != size or hashlib.sha256(content).hexdigest() != sha:
+                raise Blocked('a snapshot object does not match its indexed sha256 and size')
+            tally.add(name, sha, content)
+        if metrics_bytes(tally.document(manifest['source_fingerprint'], len(excluded))) != data:
+            raise Blocked('manifest.json metrics are not what the indexed snapshot produces under rules version '
+                          + METRICS_RULES_VERSION)
+    return json.loads(data.decode('ascii'))
+
+
 def root(run_id):
     return data_path(run_id, 'jobs', JOB, 'whole')
 
@@ -116,6 +353,7 @@ def collect(run_id, attempt):
     if len(candidates) > LIMITS['max_files']:
         raise Blocked('file budget exceeded; narrow the accepted source scope')
     fuzzy = Fuzzy()
+    tally = MetricsTally()
     db = sqlite3.connect(attempt / 'index.sqlite')
     db.executescript('''PRAGMA journal_mode=DELETE; PRAGMA temp_store=MEMORY;
       CREATE TABLE files(path TEXT PRIMARY KEY, sha256 TEXT NOT NULL, bytes INTEGER NOT NULL,
@@ -157,6 +395,7 @@ def collect(run_id, attempt):
                 if text is not None and any(len(line) > LIMITS['max_line_chars'] for line in text.splitlines()):
                     status, text = 'line length limit', None
             db.execute('INSERT INTO files VALUES (?,?,?,?,?)', (name, sha, size, signature, status))
+            tally.add(name, sha, content)
             if status == 'indexed':
                 lines = text.splitlines()
                 for start in range(0, len(lines), LIMITS['chunk_lines']):
@@ -170,12 +409,14 @@ def collect(run_id, attempt):
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise Blocked('SQLite integrity check failed')
         counts = dict(db.execute('SELECT text_status, count(*) FROM files GROUP BY text_status'))
+        metrics = tally.document(source['fingerprint'], len(skipped))
         atomic_bytes(attempt / 'ssdeep.csv', signatures.getvalue().encode('utf-8'))
         atomic_json(attempt / 'manifest.json', {'status': 'OK', 'source_fingerprint': source['fingerprint'],
                     'source_revision': source['revision'], 'files': sum(counts.values()), 'chunks': chunks,
                     'snapshot_bytes': total, 'text_status_counts': counts, 'excluded': skipped,
                     'untrusted_content': True, 'scope': 'source + accepted intake/build discovery outputs',
-                    'producers': plan['producers'], 'limits': LIMITS})
+                    'producers': plan['producers'], 'limits': LIMITS, 'metrics': metrics,
+                    'metrics_sha256': hashlib.sha256(metrics_bytes(metrics)).hexdigest()})
         print(json.dumps({'files': sum(counts.values()), 'chunks': chunks, 'excluded': len(skipped)}))
         print('ssdeep hashes binary and text; full-text exclusions are recorded in files/manifest.', file=sys.stderr)
     finally:
@@ -251,6 +492,7 @@ def run(run_id, dagster_id, force=False):
             manifest = read_json(attempt / 'manifest.json')
             if manifest['files'] == 0 or manifest['chunks'] == 0:
                 raise Blocked('empty searchable corpus')
+            check_metrics(attempt, False)
             atomic_json(attempt / 'validation/post.json', {'status': 'OK', 'files': manifest['files'],
                                                         'chunks': manifest['chunks']})
             atomic_bytes(attempt / 'validation/post/stdout.log', b'Fresh producers and nonempty integrity-checked corpus validated.\n')

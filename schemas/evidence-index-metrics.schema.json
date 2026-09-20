@@ -1,0 +1,381 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence-index-metrics.schema.json",
+  "title": "Evidence-index language/size metrics (the metrics member of manifest.json)",
+  "description": "ADR-0010 G10 = B, task V15, contract evidence-index. DESCRIPTIVE ONLY: aggregate file, byte and line counts of the already-indexed snapshot, by closed scope, closed language label and content kind. It is not evidence of review coverage, code quality, reachability or analysis, carries no per-file path or name, no comment/code split and no cloc- or scc-equivalent number. Counts are non-negative; lines and blank_lines are null exactly when content is not text; overall, by_scope and by_language are projections of groups; those rules, the manifest.json bindings (metrics_sha256, source_fingerprint, files, excluded), the index.sqlite file-set binding and re-derivation from index.sqlite plus objects/ are enforced by appsec-review-process/evidence_store.py check_metrics. The language and scope enums are the tables of metrics rules version 1; a table change bumps rules_version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "rules_version",
+    "descriptive_only",
+    "line_rule",
+    "snapshot",
+    "excluded_files",
+    "overall",
+    "by_scope",
+    "by_language",
+    "groups"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/evidence-index-metrics/0.1"
+    },
+    "rules_version": {
+      "const": "1"
+    },
+    "descriptive_only": {
+      "const": true
+    },
+    "line_rule": {
+      "const": "bytes-bom-crlf-lf-cr"
+    },
+    "snapshot": {
+      "description": "Identity of what was measured: the accepted intake source fingerprint, a digest of the sorted (path, sha256, bytes) list of indexed files, and their number.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_fingerprint",
+        "file_set_sha256",
+        "files"
+      ],
+      "properties": {
+        "source_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        },
+        "file_set_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        },
+        "files": {
+          "type": "integer"
+        }
+      }
+    },
+    "excluded_files": {
+      "type": "integer",
+      "description": "Number of entries in manifest.json excluded[]; those files are not indexed and are not measured here."
+    },
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "bytes",
+        "text_files",
+        "lines",
+        "blank_lines"
+      ],
+      "properties": {
+        "files": {
+          "type": "integer"
+        },
+        "bytes": {
+          "type": "integer"
+        },
+        "text_files": {
+          "type": "integer"
+        },
+        "lines": {
+          "type": "integer"
+        },
+        "blank_lines": {
+          "type": "integer"
+        }
+      }
+    },
+    "by_scope": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "files",
+          "bytes",
+          "text_files",
+          "lines",
+          "blank_lines"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "first-party",
+              "generated",
+              "review-evidence",
+              "vendored"
+            ]
+          },
+          "files": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "text_files": {
+            "type": "integer"
+          },
+          "lines": {
+            "type": "integer"
+          },
+          "blank_lines": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "by_language": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "language",
+          "files",
+          "bytes",
+          "text_files",
+          "lines",
+          "blank_lines"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "Assembly",
+              "Batch",
+              "C",
+              "C#",
+              "C++",
+              "C/C++ Header",
+              "CMake",
+              "CSS",
+              "CSV",
+              "Clojure",
+              "Dart",
+              "Diff",
+              "Dockerfile",
+              "Elixir",
+              "Erlang",
+              "F#",
+              "Fortran",
+              "Go",
+              "Go Module",
+              "Gradle",
+              "GraphQL",
+              "Groovy",
+              "HCL",
+              "HTML",
+              "Haskell",
+              "INI",
+              "JSON",
+              "JSX",
+              "Java",
+              "JavaScript",
+              "Julia",
+              "Jupyter Notebook",
+              "Kotlin",
+              "LESS",
+              "Lua",
+              "Make",
+              "Markdown",
+              "Meson",
+              "Nix",
+              "OCaml",
+              "Objective-C",
+              "Objective-C++",
+              "PHP",
+              "Perl",
+              "PowerShell",
+              "Properties",
+              "Protocol Buffers",
+              "Python",
+              "QML",
+              "R",
+              "Ruby",
+              "Rust",
+              "SQL",
+              "SVG",
+              "Sass",
+              "Scala",
+              "Shell",
+              "Solidity",
+              "Starlark",
+              "Swift",
+              "TOML",
+              "TSX",
+              "Tcl",
+              "TeX",
+              "Terraform",
+              "Text",
+              "Thrift",
+              "TypeScript",
+              "VHDL",
+              "Verilog",
+              "Visual Basic",
+              "Vue",
+              "XML",
+              "YAML",
+              "Zig",
+              "gettext",
+              "reStructuredText",
+              "unclassified"
+            ]
+          },
+          "files": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "text_files": {
+            "type": "integer"
+          },
+          "lines": {
+            "type": "integer"
+          },
+          "blank_lines": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "language",
+          "content",
+          "files",
+          "bytes",
+          "lines",
+          "blank_lines"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "first-party",
+              "generated",
+              "review-evidence",
+              "vendored"
+            ]
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "Assembly",
+              "Batch",
+              "C",
+              "C#",
+              "C++",
+              "C/C++ Header",
+              "CMake",
+              "CSS",
+              "CSV",
+              "Clojure",
+              "Dart",
+              "Diff",
+              "Dockerfile",
+              "Elixir",
+              "Erlang",
+              "F#",
+              "Fortran",
+              "Go",
+              "Go Module",
+              "Gradle",
+              "GraphQL",
+              "Groovy",
+              "HCL",
+              "HTML",
+              "Haskell",
+              "INI",
+              "JSON",
+              "JSX",
+              "Java",
+              "JavaScript",
+              "Julia",
+              "Jupyter Notebook",
+              "Kotlin",
+              "LESS",
+              "Lua",
+              "Make",
+              "Markdown",
+              "Meson",
+              "Nix",
+              "OCaml",
+              "Objective-C",
+              "Objective-C++",
+              "PHP",
+              "Perl",
+              "PowerShell",
+              "Properties",
+              "Protocol Buffers",
+              "Python",
+              "QML",
+              "R",
+              "Ruby",
+              "Rust",
+              "SQL",
+              "SVG",
+              "Sass",
+              "Scala",
+              "Shell",
+              "Solidity",
+              "Starlark",
+              "Swift",
+              "TOML",
+              "TSX",
+              "Tcl",
+              "TeX",
+              "Terraform",
+              "Text",
+              "Thrift",
+              "TypeScript",
+              "VHDL",
+              "Verilog",
+              "Visual Basic",
+              "Vue",
+              "XML",
+              "YAML",
+              "Zig",
+              "gettext",
+              "reStructuredText",
+              "unclassified"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "enum": [
+              "binary",
+              "text",
+              "undecodable"
+            ]
+          },
+          "files": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "lines": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "blank_lines": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

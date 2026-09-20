@@ -33,11 +33,19 @@ def main():
         pointer=read_json(base/'accepted.json');attempt=base/'attempts'/pointer['attempt_id']
         manifest=read_json(attempt/'manifest.json');report['manifest']=manifest
         assert manifest['files']>1000 and manifest['chunks']>1000
+        # V15: the worker's identity changed to add descriptive metrics; re-derive them here from
+        # index.sqlite and objects/ rather than trusting the published member.
+        from evidence_store import check_metrics
+        metrics=check_metrics(attempt,True)
+        assert metrics['snapshot']['files']==manifest['files'] and metrics['overall']['bytes']==manifest['snapshot_bytes']
+        assert sum(row['files'] for row in metrics['by_scope'])==sum(row['files'] for row in metrics['by_language'])==manifest['files']
+        report['metrics_sha256']=manifest['metrics_sha256']
         assert (attempt/'logs/stdout.log').stat().st_size and (attempt/'logs/stderr.log').stat().st_size
         before=tree_hashes(attempt)
         second=launch(run_id,job='evidence_index',wait=True,timeout=900)
         atomic_json(root/'second-launch.json',second)
         assert second['status']=='SUCCESS' and pointer==read_json(base/'accepted.json') and before==tree_hashes(attempt)
+        assert check_metrics(attempt,True)==metrics
         search=json.loads(command('search',docker+['/opt/process/evidence_store.py','search','--run-id',run_id,'--text','CMAKE_EXPORT_COMPILE_COMMANDS']))
         assert search['results'] and all('sha256' in r and r['start_line']>=1 for r in search['results'])
         result=search['results'][0]
@@ -50,7 +58,8 @@ def main():
                 '--','python','-B','/opt/process/evidence_mcp.py','--run-id',run_id])
         report.update(status='PASS',attempt_id=pointer['attempt_id'],dagster_runs=[first['dagster_run_id'],second['dagster_run_id']],
                       checks=['live Dagster success','immutable reuse','separate streams','FTS citations','snapshot read',
-                              'ssdeep similarity query','MCP initialize/tools/list/tools/call'],
+                              'ssdeep similarity query','MCP initialize/tools/list/tools/call',
+                              'metrics re-derived from index.sqlite and objects'],
                       manifest_path=str(attempt/'manifest.json'))
     except BaseException as exc:
         report.update(status='FAILED',error=str(exc));raise

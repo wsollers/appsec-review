@@ -8,6 +8,15 @@
     "ssdeep.csv",
     "status.json"
   ],
+  "member_schemas": [
+    {
+      "artifact": "manifest.json",
+      "member": "metrics",
+      "schema_file": "evidence-index-metrics.schema.json",
+      "digest_member": "metrics_sha256",
+      "verifier": "appsec-review-process/evidence_store.py:check_metrics"
+    }
+  ],
   "required_status_fields": [
     "status",
     "attempt_id",
@@ -21,6 +30,11 @@
     "immutable snapshots and index hash validation",
     "explicit text and binary exclusions",
     "separate stdout/stderr",
-    "latest failed attempt blocks old success"
+    "latest failed attempt blocks old success",
+    "manifest.json carries a required metrics member that must satisfy evidence-index-metrics.schema.json; an attempt is accepted only after evidence_store.check_metrics passes: metrics_sha256 equals the sha256 of the member's canonical bytes, and its source_fingerprint, indexed file count, exclusion count and file_set_sha256 agree with manifest.json and the files table of index.sqlite",
+    "metrics are descriptive only: aggregate file, byte, line and blank-line counts by closed scope, closed language label and content kind; they are not evidence of coverage, quality, reachability or analysis and cannot support or promote any claim class, finding or severity",
+    "metrics cover exactly the indexed files, each counted once: unknown file types are counted as unclassified; binary and non-UTF-8 files are counted as files and bytes with null line counts; vendored, generated and review-evidence scope is labelled, never dropped",
+    "metrics publish no per-file path, name or content, no comment/code split, and no timestamp, host path or tool version; an identical snapshot yields a byte-identical canonical metrics member, and so an identical metrics_sha256, under the same rules_version",
+    "a consumer that relies on metrics re-derives them with evidence_store.check_metrics(attempt, True) from index.sqlite and objects/; the published member is a cache, never an authority"
   ]
 }
