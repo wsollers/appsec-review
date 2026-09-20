@@ -401,26 +401,54 @@ def _validate_chain(ledger: dict[str, Any]) -> None:
         raise Blocked("request ledger head state/hash mismatch")
 
 
-def _accepted_state(base: Path):
+def _accepted_state(base: Path, run_id: str, request_id: str, prior_latest: dict[str, Any] | None):
     pointer_path = base / "accepted.json"
     if not pointer_path.is_file():
         return None, None, None
     pointer = read_json(pointer_path)
     if pointer.get("status") not in SUCCESS:
         raise Blocked("T09 accepted pointer is not successful")
-    attempt = base / "attempts" / identifier(pointer["attempt_id"])
-    for relative, expected_hash in pointer.get("artifacts", {}).items():
+    expected_identity = {"run_id": run_id, "job_id": JOB_ID, "scope_id": request_id,
+                         "request_id": request_id}
+    if any(pointer.get(field) != value for field, value in expected_identity.items()):
+        raise Blocked("T09 accepted pointer identity does not match this request")
+    accepted_attempt_id = identifier(pointer["attempt_id"])
+    if not isinstance(prior_latest, dict) or not isinstance(prior_latest.get("attempt_id"), str):
+        raise Blocked("T09 accepted pointer is not backed by a newest attempt")
+    latest_attempt_id = identifier(prior_latest["attempt_id"])
+    if latest_attempt_id != accepted_attempt_id:
+        latest_status_path = base / "attempts" / latest_attempt_id / "status.json"
+        latest_status = read_json(latest_status_path) if latest_status_path.is_file() else None
+        replay_identity = {"run_id": run_id, "job_id": JOB_ID, "scope_id": request_id,
+                           "attempt_id": latest_attempt_id, "reused_attempt_id": accepted_attempt_id}
+        if (not isinstance(latest_status, dict) or latest_status.get("status") != "REUSED" or
+                any(latest_status.get(field) != value for field, value in replay_identity.items())):
+            raise Blocked("T09 accepted pointer does not identify the newest accepted request head")
+    attempt = base / "attempts" / accepted_attempt_id
+    artifacts = pointer.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise Blocked("T09 accepted pointer does not publish an artifact map")
+    for relative, expected_hash in artifacts.items():
         artifact = beneath(attempt, attempt.joinpath(*_relative(relative).parts))
         if not artifact.is_file() or file_hash(artifact) != expected_hash:
             raise Blocked(f"T09 accepted artifact is missing or corrupt: {relative}")
     ledger_path = attempt / "outputs" / "dynamic-request-ledger.json"
-    if file_hash(ledger_path) != pointer.get("ledger_sha256"):
+    data = base.parents[2]
+    expected_ledger_path = ledger_path.relative_to(data).as_posix()
+    published_ledger_hash = artifacts.get("outputs/dynamic-request-ledger.json")
+    if (pointer.get("ledger_path") != expected_ledger_path or
+            published_ledger_hash != pointer.get("ledger_sha256") or
+            file_hash(ledger_path) != published_ledger_hash):
         raise Blocked("T09 accepted ledger is missing or corrupt")
     ledger = read_json(ledger_path)
     if validate_document(ledger, "owasp-dynamic-request-ledger.schema.json"):
         raise Blocked("T09 accepted ledger no longer validates")
     _validate_chain(ledger)
-    data = base.parents[2]
+    pointer_projection = {"selection_id": ledger["selection_id"], "request_id": ledger["request_id"],
+                          "version": ledger["version"], "state": ledger["state"],
+                          "version_hash": ledger["head_version_hash"]}
+    if ledger["run_id"] != run_id or any(pointer.get(field) != value for field, value in pointer_projection.items()):
+        raise Blocked("T09 accepted pointer and ledger identity do not match")
     if ledger["version"] == 1:
         if any(ledger[key] is not None for key in
                ("previous_attempt_id", "previous_ledger_path", "previous_ledger_sha256")):
@@ -507,6 +535,8 @@ def publish(run_id: str, request_path: Path | None = None, *, clock=lambda: date
     base, data = _base(run_id, request_id), data_path(run_id)
     fingerprint = digest(envelope)
     with Lock(base / "job.lock"):
+        latest_path = base / "latest.json"
+        prior_latest = read_json(latest_path) if latest_path.is_file() else None
         attempt_id = uuid.uuid4().hex
         attempt = beneath(base, base / "attempts" / attempt_id)
         attempt.mkdir(parents=True, exist_ok=False)
@@ -518,7 +548,7 @@ def publish(run_id: str, request_path: Path | None = None, *, clock=lambda: date
         atomic_bytes(attempt / "logs/stdout.log", b""); atomic_bytes(attempt / "logs/stderr.log", b"")
         event(attempt / "logs/events.jsonl", "START", **started)
         try:
-            pointer, ledger, ledger_path = _accepted_state(base)
+            pointer, ledger, ledger_path = _accepted_state(base, run_id, request_id, prior_latest)
             expected_head = _actual_head(pointer, ledger, ledger_path, data)
             current = None if ledger is None else ledger["versions"][-1]
             if (current is not None and current["publication"]["candidate_sha256"] == envelope["candidate"]["sha256"]

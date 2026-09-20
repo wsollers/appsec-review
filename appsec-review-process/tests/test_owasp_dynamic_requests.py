@@ -236,8 +236,26 @@ class OwaspDynamicRequestTests(unittest.TestCase):
             self.publish()
         self.assertEqual(accepted_path.read_bytes(), before)
         self.advance("executed", "external_state_artifact", "external-authority", {"path": "missing", "sha256": "0"*64})
-        with self.assertRaisesRegex(owasp_dynamic_requests.CandidateRejected, "skipped|terminal|missing"):
+        with self.assertRaisesRegex(execution_state.Blocked, "newest accepted request head"):
             self.publish()
+
+    def test_accepted_pointer_rollback_cannot_branch_the_request_ledger(self):
+        first = self.publish(); self.last = first
+        base = self.data / "jobs" / owasp_dynamic_requests.JOB_ID / self.candidate["request_id"]
+        accepted_path = base / "accepted.json"
+        first_pointer = json.loads(accepted_path.read_text())
+        self.advance("blocked", "baseline_policy", "owasp-t09-static-policy")
+        second = self.publish()
+        self.assertEqual(second["version"], 2)
+        self.assertEqual(json.loads((base / "latest.json").read_text())["attempt_id"], second["attempt_id"])
+
+        # Restore a still-valid older pointer and offer a different version 2 from that stale head.
+        write_json(accepted_path, first_pointer)
+        self.last = first
+        self.advance("canceled", "request_owner", self.candidate["owner"]["owner_id"])
+        with self.assertRaisesRegex(execution_state.Blocked, "newest accepted request head"):
+            self.publish()
+        self.assertEqual(json.loads(accepted_path.read_text()), first_pointer)
 
     def test_execute_and_launch_only_publish_disabled_no_contact_receipts(self):
         for operation in ("execute", "launch"):
