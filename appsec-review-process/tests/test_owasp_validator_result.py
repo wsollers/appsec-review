@@ -242,6 +242,17 @@ class OwaspValidatorResultTests(unittest.TestCase):
         with self.assertRaisesRegex(owasp_validator_result.CandidateRejected, "satisfied requires"):
             owasp_validator_result.publish(self.run_id, self.request_path)
 
+    def test_nested_cannot_verify_gap_publishes_ok_with_gaps(self):
+        obligation = self.obligation()
+        obligation.update(outcome="cannot_verify", evidence_citations=[],
+                          evidence_gaps=["Required canonical evidence is unavailable."])
+        fragment = self.candidate["fragment_results"][0]
+        fragment.update(assessment_status="cannot_verify", final_control_status="cannot_verify")
+        self.assertEqual(self.candidate["evidence_gaps"], [])
+        self.write_candidate()
+        published = owasp_validator_result.publish(self.run_id, self.request_path)
+        self.assertEqual(published["status"], "OK_WITH_GAPS")
+
     def test_not_satisfied_needs_affirmative_non_scanner_counterevidence(self):
         obligation = self.obligation()
         obligation.update(outcome="not_satisfied", evidence_citations=[], evidence_gaps=["No evidence supplied."])

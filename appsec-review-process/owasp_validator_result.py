@@ -611,6 +611,27 @@ def _summary(result: dict[str, Any]) -> bytes:
     return ("\n".join(lines) + "\n").encode()
 
 
+def _publication_has_gaps(result: dict[str, Any]) -> bool:
+    if (result["terminal"]["state"] != "OK" or result["evidence_gaps"] or
+            result["unresolved_conditions"] or
+            any(not item["resolved"] for item in result["dissent"])):
+        return True
+    incomplete = {
+        "partially_satisfied", "cannot_verify", "dynamic_test_required",
+        "human_decision_required", "not_assessed",
+    }
+    for fragment in result["fragment_results"]:
+        if fragment["assessment_status"] in incomplete:
+            return True
+        for obligation in fragment["proof_obligation_results"]:
+            if (obligation["outcome"] in incomplete or obligation["evidence_gaps"] or
+                    obligation["unresolved_conditions"] or
+                    any(item["material"] and not item["resolved"]
+                        for item in obligation["contradictions"])):
+                return True
+    return False
+
+
 def publish(run_id: str, request_path: Path | None = None, *, force: bool = False,
             clock=lambda: datetime.now(timezone.utc)) -> dict[str, Any]:
     run_id = identifier(run_id)
@@ -710,7 +731,7 @@ def publish(run_id: str, request_path: Path | None = None, *, force: bool = Fals
             atomic_json(attempt / "validation" / "post.json", {"status": "OK", "artifacts": artifacts,
                 "schema_validation": "PASS", "coverage": "EXACT", "evidence_sufficiency": "PASS",
                 "tool_policy": "PASS", "claim_boundary": "PASS"})
-            status = "OK" if validated["terminal"]["state"] == "OK" and not validated["evidence_gaps"] else "OK_WITH_GAPS"
+            status = "OK_WITH_GAPS" if _publication_has_gaps(validated) else "OK"
             atomic_json(attempt / "status.json", {**started, "status": status, "ended_at": now(),
                                                    "result_id": validated["result_id"], "artifacts": artifacts})
             event(attempt / "logs" / "events.jsonl", "END", status=status, run_id=run_id,
