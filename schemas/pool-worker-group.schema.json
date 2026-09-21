@@ -1,0 +1,485 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pool-worker-group.schema.json",
+  "title": "Pool worker group (C01)",
+  "description": "One worker group of a pool specification: a worker kind, a count, the B11 permission block every instance of the group carries, and the adapter request template of that kind (the other template is null). A template is the B13 / B14 request schema minus what the expander assigns (run, job and attempt ids, every writable path, the permission block and its fingerprint pin); a test ties each copied property to the adapter's own schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "group_id",
+    "worker_kind",
+    "count",
+    "memory_heavy",
+    "permission",
+    "persona_request",
+    "tool_request"
+  ],
+  "properties": {
+    "group_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}\\Z"
+    },
+    "worker_kind": {
+      "type": "string",
+      "enum": [
+        "persona",
+        "pinned_container"
+      ]
+    },
+    "count": {
+      "type": "integer"
+    },
+    "memory_heavy": {
+      "type": "boolean"
+    },
+    "permission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "grants",
+        "decision"
+      ],
+      "properties": {
+        "requirement": {
+          "$ref": "permission-requirement.schema.json"
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "$ref": "permission-grant.schema.json"
+          }
+        },
+        "decision": {
+          "$ref": "permission-decision.schema.json"
+        }
+      }
+    },
+    "persona_request": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "invocation_role",
+        "invoker_id",
+        "outer_prompt",
+        "persona",
+        "model",
+        "tools",
+        "budget",
+        "readable_inputs",
+        "allowed_claim_classes",
+        "prohibited_claim_classes",
+        "producers"
+      ],
+      "properties": {
+        "invocation_role": {
+          "type": "string",
+          "enum": [
+            "produce",
+            "verify",
+            "refute",
+            "judge"
+          ]
+        },
+        "invoker_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+        },
+        "outer_prompt": {
+          "$ref": "persona-invocation-file.schema.json"
+        },
+        "persona": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_template_id",
+            "job_template_sha256",
+            "persona_id",
+            "persona_sha256",
+            "role_id",
+            "role_sha256",
+            "domain_id",
+            "domain_sha256",
+            "tooling_profile_id",
+            "tooling_profile_sha256",
+            "output_contract_id",
+            "output_contract_sha256"
+          ],
+          "properties": {
+            "job_template_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+            },
+            "job_template_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}\\Z"
+            },
+            "persona_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+            },
+            "persona_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}\\Z"
+            },
+            "role_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+            },
+            "role_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}\\Z"
+            },
+            "domain_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+            },
+            "domain_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}\\Z"
+            },
+            "tooling_profile_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+            },
+            "tooling_profile_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}\\Z"
+            },
+            "output_contract_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+            },
+            "output_contract_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}\\Z"
+            }
+          }
+        },
+        "model": {
+          "$ref": "persona-model-identity.schema.json"
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^act-[0-9a-f]{24}\\Z"
+          }
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_byte_limit",
+            "input_unit_limit",
+            "output_byte_limit",
+            "output_unit_limit",
+            "output_file_limit",
+            "tool_call_limit",
+            "timeout_seconds"
+          ],
+          "properties": {
+            "input_byte_limit": {
+              "type": "integer"
+            },
+            "input_unit_limit": {
+              "type": "integer"
+            },
+            "output_byte_limit": {
+              "type": "integer"
+            },
+            "output_unit_limit": {
+              "type": "integer"
+            },
+            "output_file_limit": {
+              "type": "integer"
+            },
+            "tool_call_limit": {
+              "type": "integer"
+            },
+            "timeout_seconds": {
+              "type": "integer"
+            }
+          }
+        },
+        "readable_inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "root",
+              "path",
+              "sha256",
+              "bytes",
+              "role",
+              "producer_request_sha256"
+            ],
+            "properties": {
+              "root": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}\\Z"
+              },
+              "bytes": {
+                "type": "integer"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "handoff",
+                  "evidence",
+                  "reference",
+                  "producer_output",
+                  "producer_result"
+                ]
+              },
+              "producer_request_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^sha256:[0-9a-f]{64}\\Z"
+              }
+            }
+          },
+          "minItems": 1
+        },
+        "allowed_claim_classes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+          },
+          "minItems": 1
+        },
+        "prohibited_claim_classes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+          },
+          "minItems": 1
+        },
+        "producers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "run_id",
+              "job_id",
+              "attempt_id",
+              "request_sha256",
+              "persona_id",
+              "model"
+            ],
+            "properties": {
+              "run_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+              },
+              "job_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+              },
+              "attempt_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+              },
+              "request_sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}\\Z"
+              },
+              "persona_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+              },
+              "model": {
+                "$ref": "persona-model-identity.schema.json"
+              }
+            }
+          }
+        }
+      }
+    },
+    "tool_request": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "image",
+        "argv",
+        "environment",
+        "target_mounts",
+        "network",
+        "limits"
+      ],
+      "properties": {
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "image_id",
+            "digest"
+          ],
+          "properties": {
+            "image_id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}\\Z"
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}\\Z"
+            }
+          }
+        },
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "environment": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "value"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": [
+                  "LANG",
+                  "LC_ALL",
+                  "NO_COLOR",
+                  "SOURCE_DATE_EPOCH",
+                  "TZ",
+                  "XDG_CACHE_HOME"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^[ -~]{0,256}\\Z"
+              }
+            }
+          }
+        },
+        "target_mounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "host_path",
+              "container_path"
+            ],
+            "properties": {
+              "host_path": {
+                "type": "string"
+              },
+              "container_path": {
+                "type": "string",
+                "pattern": "^/(workspace|inputs/[a-z0-9][a-z0-9_-]{0,39})\\Z"
+              }
+            }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "destinations"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "none",
+                "granted-fixed-destinations"
+              ]
+            },
+            "destinations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "scheme",
+                  "host",
+                  "port"
+                ],
+                "properties": {
+                  "scheme": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9+.-]{0,15}\\Z"
+                  },
+                  "host": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?\\Z"
+                  },
+                  "port": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "timeout_seconds",
+            "memory_bytes",
+            "cpu_millis",
+            "pids",
+            "tmpfs_bytes",
+            "stdout_limit_bytes",
+            "stderr_limit_bytes"
+          ],
+          "properties": {
+            "timeout_seconds": {
+              "type": "integer"
+            },
+            "memory_bytes": {
+              "type": "integer"
+            },
+            "cpu_millis": {
+              "type": "integer"
+            },
+            "pids": {
+              "type": "integer"
+            },
+            "tmpfs_bytes": {
+              "type": "integer"
+            },
+            "stdout_limit_bytes": {
+              "type": "integer"
+            },
+            "stderr_limit_bytes": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    }
+  }
+}
