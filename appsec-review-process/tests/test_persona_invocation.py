@@ -1095,6 +1095,50 @@ class OutcomeTests(Case):
         for text in SCANNABLE_BODY.splitlines():
             self.assertTrue(pi.text_form_ok(text))
 
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "mode bits do not bind this user")
+    def test_a_directory_that_cannot_be_listed_is_never_skipped(self):
+        """PR 32 review: ``os.walk`` skipped it silently, so an unlisted file inside it reached an OK
+        result that the verifier agreed with. Every mode that hides names or entries is refused."""
+        for mode in (0o000, 0o300, 0o400):
+            with self.subTest(mode=oct(mode)):
+                hidden = self.ws.attempt / "outputs" / "persona" / "hidden"
+                if hidden.exists():
+                    os.chmod(hidden, 0o700)          # a failed case must not block the next one
+                self.fresh()
+
+                def hide(manifest, root, package, mode=mode):
+                    (root / "hidden").mkdir()
+                    (root / "hidden" / "verdict.md").write_text(
+                        "Verified: critical severity, exploitable. " + MARKER, encoding="utf-8")
+                    os.chmod(root / "hidden", mode)
+                self.addCleanup(lambda: hidden.exists() and os.chmod(hidden, 0o700))
+                request = self.ws.request()
+                result = self.ws.run(request, self.ws.runtime(invoker=Rewriting(hide)))
+                self.check(request, result, "OUTPUT_ESCAPE", "FAILED")
+                self.assertEqual(self.read(pi.RECORD_FILE)["output_tree_state"], "irregular")
+                self.assertEqual(pi.scan_output_tree(hidden.parent, request["budget"]), ("irregular", None, {}))
+                os.chmod(hidden, 0o700)
+                self.assertEqual(pi.scan_output_tree(hidden.parent, request["budget"])[0], "regular")
+                self.assert_rejected(request)
+
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "mode bits do not bind this user")
+    def test_an_unlistable_directory_elsewhere_in_the_attempt_cannot_hide_a_write(self):
+        sealed = self.ws.attempt / "sealed"
+        sealed.mkdir()
+        os.chmod(sealed, 0o300)                       # enterable and writable, not listable
+        self.addCleanup(os.chmod, sealed, 0o700)
+
+        def write_unseen(manifest, root, package):
+            before = os.stat(sealed)
+            (sealed / "verdict.md").write_text(MARKER, encoding="utf-8")
+            os.utime(sealed, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertIsNone(pi._snapshot(self.ws.attempt, self.ws.attempt / "outputs"))
+        request = self.ws.request()
+        result = self.ws.run(request, self.ws.runtime(invoker=Rewriting(write_unseen)))
+        self.assertEqual((result["execution_status"], result["cause"]), ("FAILED", "OUTPUT_ESCAPE"))
+        self.assertTrue(self.read(pi.RECORD_FILE)["attempt_changed_outside_output_root"])
+        self.assertEqual(self.ws.verify(request), [])
+
     def test_an_invoker_that_edits_the_adapters_own_log_fails_and_the_attempt_never_verifies(self):
         def edit_request_copy(manifest, root, package):
             path = root.parent.parent / "logs" / "persona" / pi.REQUEST_FILE

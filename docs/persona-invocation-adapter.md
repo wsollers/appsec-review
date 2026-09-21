@@ -229,9 +229,12 @@ output root. `KeyboardInterrupt` and `SystemExit` are recorded as `CANCELED` and
 | `UNDECLARED_CITATION` | `FAILED` | a citation that is not a declared readable input at its pinned hash, or a verified invocation that is not a declared producer |
 | `SELF_VERIFICATION` | `FAILED` | see the independence section |
 
-`OUTPUT_ESCAPE` covers: the attempt changed outside the output root; the prompt or a readable
-input changed during the call; the output root holds a link, a hard-linked or special file, an
-empty directory or a name outside the path alphabet; the manifest lists a path that leaves the root.
+`OUTPUT_ESCAPE` covers: the attempt changed outside the output root, or holds a directory that
+cannot be listed, so that it cannot be compared; the prompt or a readable input changed during the
+call; the output root holds a link, a hard-linked or special file, an empty directory, a directory
+that cannot be listed, a file that cannot be read or a name outside the path alphabet; the manifest
+lists a path that leaves the root. A directory that cannot be listed is never skipped: what it
+hides would otherwise be neither listed nor counted as unlisted.
 
 `MALFORMED_RESULT` covers: a manifest that is missing, over 1 MiB, not UTF-8 JSON, not canonical or
 outside its closed schema; a listed file that is missing; an unlisted file; a wrong size or hash; a

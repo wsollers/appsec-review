@@ -845,24 +845,35 @@ def _gate(request: Mapping[str, Any], *, run_id: str, job_id: str, now: str,
 
 # ---- output derivation: shared by the adapter and the verifier ------------------------------------
 
+def _refuse_unlistable(error: OSError) -> None:
+    """``os.walk`` skips a directory it cannot list unless told otherwise. A directory that cannot
+    be listed hides whatever is inside it, so it is never skipped: the walk fails."""
+    raise error
+
+
 def _snapshot(attempt_root: Path, skip: Path) -> dict[str, tuple] | None:
-    """Every entry of the attempt outside ``skip``. None when the tree is too large to compare."""
+    """Every entry of the attempt outside ``skip``. None when the tree cannot be compared: it is too
+    large, or a directory in it cannot be listed or an entry cannot be examined."""
     found: dict[str, tuple] = {}
-    for folder, directories, files in os.walk(attempt_root, followlinks=False):
-        here = Path(folder)
-        directories[:] = [name for name in directories if here / name != skip]
-        for name in (*directories, *files):
-            status = os.stat(here / name, follow_symlinks=False)
-            found[str(here / name)] = (status.st_mode, status.st_size, status.st_mtime_ns, status.st_ino)
-            if len(found) > MAX_ATTEMPT_ENTRIES:
-                return None
+    try:
+        for folder, directories, files in os.walk(attempt_root, followlinks=False, onerror=_refuse_unlistable):
+            here = Path(folder)
+            directories[:] = [name for name in directories if here / name != skip]
+            for name in (*directories, *files):
+                status = os.stat(here / name, follow_symlinks=False)
+                found[str(here / name)] = (status.st_mode, status.st_size, status.st_mtime_ns, status.st_ino)
+                if len(found) > MAX_ATTEMPT_ENTRIES:
+                    return None
+    except OSError:
+        return None
     return found
 
 
 def scan_output_tree(output_root: Path, budget: Mapping[str, int]
                      ) -> tuple[str, list[dict[str, Any]] | None, dict[str, bytes]]:
     """(state, records, bytes by path). ``irregular``: a link, a special or hard-linked file, an
-    empty directory, a second spelling or a name outside the path alphabet. ``over_limit``: more
+    empty directory, a directory that cannot be listed, a file that cannot be read, a second
+    spelling or a name outside the path alphabet. ``over_limit``: more
     files or bytes than the budget could ever admit, decided before reading."""
     contents: dict[str, bytes] = {}
     records: list[dict[str, Any]] = []
@@ -870,7 +881,7 @@ def scan_output_tree(output_root: Path, budget: Mapping[str, int]
     try:
         if output_root.is_symlink() or not output_root.is_dir():
             return "irregular", None, {}
-        for folder, directories, files in os.walk(output_root, followlinks=False):
+        for folder, directories, files in os.walk(output_root, followlinks=False, onerror=_refuse_unlistable):
             here = Path(folder)
             if not directories and not files and here != output_root:
                 return "irregular", None, {}
