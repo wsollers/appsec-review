@@ -14,6 +14,22 @@ Not done in B15 (shared surfaces owned by another open change): the parity manif
 `resource_pools: []` and every job as `unassigned`; the manifest, generated views and `TODO.md`
 are updated in a follow-up. Live service qualification is a separate, owner-run step (below).
 
+### After PR #30 merges
+
+PR #30 (vendor pre-pass nodes) and B15 merge without a textual conflict but not without a change:
+whichever merges second has to make it, in the same merge.
+
+- `tests/test_vendor_prepass_graph.py` (PR #30) cuts `blocked_op` out of `dagster_workflow.py` by
+  AST and execs it in a hand-built namespace. B15 made `blocked_op` use the module global
+  `NOT_IMPLEMENTED`, so that namespace must supply
+  `"NOT_IMPLEMENTED": resource_pools.unassigned("worker_not_implemented")`, and the test must
+  assert that each new stub's declared tags equal that value. Without it the module fails with
+  `NameError: name 'NOT_IMPLEMENTED' is not defined`. `blocked_op` is not to be restructured to
+  avoid this. `SourceTies.test_op_factories_use_only_these_module_globals` pins the module globals
+  each op factory uses, so the next one is noticed on this side.
+- The counts in this change's description become 45 `blocked_op` stubs and 61 unassigned ops.
+- The manifest (`resource_pools`, each job's `resource_pool`), the generated views and `TODO.md`.
+
 ## Pools
 
 | Pool | Limit | Work | Why this number |
@@ -66,7 +82,7 @@ string such as `network:api.scorecard.dev`, or a string where a list belongs rai
 | Worker kind | Pool |
 |---|---|
 | `deterministic_python` | `cpu` (`memory` when `memory_heavy`) |
-| `supplied_human_decision` | `cpu` |
+| `supplied_human_decision` | `cpu` (`memory` when `memory_heavy`) |
 | `pinned_container` | `docker` |
 | `persona` | `persona_llm` |
 
@@ -175,10 +191,32 @@ python -B /opt/process/resource_pools.py verify-state <file>
 `state` writes a `resource-pool-state` document
 ([schema](../schemas/resource-pool-state.schema.json)): declared and observed limits, the floor,
 the outer limits, every op's pool or unassigned reason, and for the named runs each pooled step's
-start and end with the largest observed overlap per pool. It refuses to overwrite. `verify-state`
-re-reads the bytes, checks the schema and `state_sha256`, and re-derives the pool states, the
-overlaps, the errors and the result; it also fails a document in which pooled steps of two runs of
-one engagement overlap. `state_sha256` is an integrity check, not an authenticator.
+start and end with the largest observed overlap per pool. It refuses to overwrite and refuses a
+run id given twice. Steps without a pool are not recorded, so a recorded step always names a
+declared pool. `pooled_steps_recorded` is true only when at least one named run recorded at least
+one pooled step: **a `PASS` with `pooled_steps_recorded: false` (for example `state` without
+`--run-id`) shows the limits and assignments only and is not contention evidence.** `state` exits
+2 when runs were named and none of them recorded a pooled step.
+
+The document's `errors` (result `FAIL`) are faults of the observed system: a pool that is
+`MISSING`, `DEFAULTED` or `DRIFT`, an undeclared pool, a changed floor or outer limit, a Dagster
+release other than the pinned 1.13.21, more claimed slots than the declared limit, a recorded step
+that names an undeclared pool, an overlap above a limit, pooled steps of two runs of one engagement
+that overlap, an op assignment error, and no inspected op at all.
+
+`verify-state` re-reads the bytes and reports a problem when the document is not what this code
+would have written: JSON with a repeated key or a non-finite number (`1e999` as well as `NaN` and
+`Infinity`), a schema failure, a wrong `state_sha256`, a `declaration_sha256` that is not the hash
+of the `resource_pools.py` doing the verification (verify with the commit that produced the
+document), expected values that are not the declared ones, a pool state that does not follow from
+the observed limit, a negative slot, pending-step or step time, a step that ends before it starts,
+a (job, op) listed twice across pooled and unassigned, a Dagster run id or a step key listed twice,
+foreign pools that are not a sorted list of distinct undeclared pools, and `pooled_steps_recorded`,
+overlaps, errors or a result that do not follow from the rest. It returns fixed strings and never
+echoes a value read from the document. Not bound, because nothing on disk determines them:
+`generated_at`, the job, op and run identifiers, a run's `status` (a failed or canceled run is
+valid evidence for failure injection) and the step times themselves. `state_sha256` is an integrity
+check, not an authenticator.
 
 Stuck slot: `dagster instance concurrency get --all` shows holders; a slot held by a finished run
 is freed by the daemon after 120 seconds, or at once with the UI's "free slots for run".
@@ -225,13 +263,18 @@ pointers become non-current and the first run of each engagement re-executes ins
 10. Drift: set the docker pool to 5 in the UI; within 30 seconds the guard logs the correction and
     `verify` exits 0 again. Add a pool `gpu` in the UI; the guard tick fails visibly; delete it.
 11. Evidence: `resource_pools.py state --out /runs/<A>/data/qualification/resource-pools-<id>/resource-pool-state.json --run-id <each Dagster run id>`
-    (result `PASS`, overlaps within limits), then `verify-state` on the host copy. Record the
+    (result `PASS`, `pooled_steps_recorded` true, overlaps within limits), then `verify-state` on the
+    host copy from the same commit (no problems). A `PASS` without `pooled_steps_recorded` is not
+    qualification evidence. Record the
     engagement and Dagster run ids, attempt ids, the state document path and its `file_sha256`,
     the image id, the commit, the injected failures and the observed recovery.
 
 ## Tests
 
-`tests/test_resource_pools.py` is pure and runs anywhere. `tests/test_resource_pools_dagster.py`
+`tests/test_resource_pools.py` is pure and runs anywhere; it includes the `verify_state_file`
+tamper tests (every leaf edited alone with a consistent reseal, every key removed, repeated keys,
+overflowing numbers; the leaves that may change are an explicit, justified list) and the ties
+between this page and the module. `tests/test_resource_pools_dagster.py`
 needs Dagster, skips only when Dagster is not importable, and runs in the code-server against a
 temporary SQLite instance built from the repository's own `dagster.yaml` sections. It proves: each
 pool admits its limit and not one more with limit+1 contenders; a saturated pool does not delay

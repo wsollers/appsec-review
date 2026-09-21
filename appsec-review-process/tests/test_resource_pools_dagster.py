@@ -38,6 +38,18 @@ sys.path.insert(0, str(TESTS))
 import resource_pools as rp  # noqa: E402
 import resource_pools_support as support  # noqa: E402
 from schema_validate import validate_document  # noqa: E402
+from test_resource_pools import state_fixture  # noqa: E402  (the host suite's Dagster-free document)
+
+UNREADABLE = "state document is not readable JSON with unique keys and finite numbers"
+
+
+def shape(node):
+    """Keys of a document, with every list reduced to the shape of its first item."""
+    if isinstance(node, dict):
+        return {key: shape(value) for key, value in node.items()}
+    if isinstance(node, list):
+        return [shape(node[0])] if node else []
+    return "value"
 
 ORCHESTRATION = Path(os.environ.get("APPSEC_ORCHESTRATOR_ROOT", ROOT.parent / "orchestrator" / "dagster"))
 INSTANCE_SECTIONS = ("run_coordinator", "concurrency", "run_monitoring")
@@ -269,9 +281,18 @@ class Contention(Case):
         self.assertEqual(len(document["runs"][0]["steps"]), sum(rp.LIMITS.values()) + len(rp.POOLS))
         for item in document["observed_overlap"]:
             self.assertLessEqual(item["max_concurrent_steps"], item["limit"])
+        self.assertIs(document["pooled_steps_recorded"], True)
+        self.assertEqual(document["dagster_version"], rp.DAGSTER_VERSION)
+        self.assertEqual(shape(document), shape(state_fixture()))  # the host tamper tests use a real shape
         path = self.root / "state.json"
         path.write_text(json.dumps(document, indent=2), encoding="utf-8")
         self.assertEqual(rp.verify_state_file(path), [])
+        with self.assertRaisesRegex(rp.PoolStateError, "given twice"):
+            rp.build_state(instance, defs, [result.run_id, result.run_id], "2026-09-21T00:00:00+00:00")
+        empty = rp.build_state(instance, defs, [], "2026-09-21T00:00:00+00:00")
+        self.assertEqual((empty["result"], empty["pooled_steps_recorded"]), ("PASS", False))
+        self.assertEqual(rp.build_state(instance, [], [], "2026-09-21T00:00:00+00:00")["errors"],
+                         ["assignments: no op was inspected"])
 
         def tampered(change, rehash):
             value = deepcopy(document)
@@ -303,10 +324,10 @@ class Contention(Case):
         (self.root / "infinite.json").write_text(
             json.dumps(document).replace(json.dumps(document["runs"][0]["steps"][0]["started"]), "-Infinity", 1),
             encoding="utf-8")
-        self.assertEqual(rp.verify_state_file(self.root / "infinite.json"), ["state document is not readable JSON"])
+        self.assertEqual(rp.verify_state_file(self.root / "infinite.json"), [UNREADABLE])
         (self.root / "junk.json").write_text("{", encoding="utf-8")
-        self.assertEqual(rp.verify_state_file(self.root / "junk.json"), ["state document is not readable JSON"])
-        self.assertEqual(rp.verify_state_file(self.root / "absent.json"), ["state document is not readable JSON"])
+        self.assertEqual(rp.verify_state_file(self.root / "junk.json"), [UNREADABLE])
+        self.assertEqual(rp.verify_state_file(self.root / "absent.json"), [UNREADABLE])
 
     def test_a_saturated_pool_does_not_starve_another_pool(self):
         instance = self.instance()
@@ -359,7 +380,9 @@ class Contention(Case):
         self.assertEqual(sorted(grants), ["eng-a", "eng-a", "eng-b", "eng-b"])
         # FIFO by request: neither engagement gets its second slot before the other got its first.
         self.assertNotEqual(grants[0], grants[1])
-        document = rp.build_state(self.instance(), [], [r.run_id for r in results.values()],
+        sys.path.insert(0, os.environ.get("APPSEC_DEFINITIONS_DIR", "/opt/app"))
+        from definitions import defs
+        document = rp.build_state(self.instance(), defs, [r.run_id for r in results.values()],
                                   "2026-09-21T00:00:00+00:00")
         self.assertEqual([run["engagement_run_id"] for run in document["runs"]], ["eng-a", "eng-b"])
         self.assertEqual(document["errors"], [])

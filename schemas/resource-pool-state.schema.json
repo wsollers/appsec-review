@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["schema", "generated_at", "dagster_version", "declaration_sha256", "default_pool_limit",
                "free_slots_after_run_end_seconds", "outer_limits", "pools", "foreign_pools", "assignments",
-               "runs", "observed_overlap", "errors", "result", "state_sha256"],
+               "runs", "pooled_steps_recorded", "observed_overlap", "errors", "result", "state_sha256"],
   "properties": {
     "schema": {"const": "appsec-review/resource-pool-state/1.0"},
     "generated_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?\\+00:00\\Z"},
@@ -112,6 +112,7 @@
         }
       }
     },
+    "pooled_steps_recorded": {"type": "boolean"},
     "observed_overlap": {
       "type": "array", "minItems": 6,
       "items": {
