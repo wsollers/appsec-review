@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "persona-invocation-file.schema.json",
+  "title": "Persona invocation file record",
+  "description": "One regular file by its single relative spelling, size and sha256.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "sha256",
+    "bytes"
+  ],
+  "properties": {
+    "path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "bytes": {
+      "type": "integer"
+    }
+  }
+}

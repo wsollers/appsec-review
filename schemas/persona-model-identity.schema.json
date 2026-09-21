@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "persona-model-identity.schema.json",
+  "title": "Persona invocation model identity",
+  "description": "One exact model: provider, model family, model id and an immutable version or snapshot. Every part is required; aliases such as 'latest' are rejected by persona_invocation.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "provider",
+    "family",
+    "model_id",
+    "snapshot"
+  ],
+  "properties": {
+    "provider": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,39}\\Z"
+    },
+    "family": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,39}\\Z"
+    },
+    "model_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,79}\\Z"
+    },
+    "snapshot": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,79}\\Z"
+    }
+  }
+}
