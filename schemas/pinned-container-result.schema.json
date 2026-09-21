@@ -207,6 +207,7 @@
             "enum": [
               "command.json",
               "events.jsonl",
+              "observation.json",
               "request.json",
               "stderr.log",
               "stdout.log"

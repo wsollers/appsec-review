@@ -127,7 +127,7 @@ class SchemaConventionTests(unittest.TestCase):
         self.assertEqual(set(schema["properties"]["execution_status"]["enum"]),
                          set(ce.STATUS_BY_CAUSE.values()))
         self.assertEqual(sorted(schema["properties"]["files"]["items"]["properties"]["path"]["enum"]),
-                         sorted((ce.REQUEST_FILE, *ce.CHILD_FILES)))
+                         list(ce.ATTEMPT_FILES))
 
 
 class ImageRegistryTests(Sandbox):
@@ -404,7 +404,7 @@ class HostileMountTests(Sandbox):
             for path in (home, home.parent, home / ".ssh", home / ".config" / "gcloud"):
                 with self.subTest(path=str(path)):
                     self.rejected(self.mount(str(path)), "host home|credential directory")
-            expose, enter = ce.sensitive_locations(home=home, attempt_root=self.attempt, docker_host=None)
+            expose, enter = ce.sensitive_locations(homes=[home], attempt_root=self.attempt, docker_host=None)
             self.assertEqual(ce.checked_mount_sources(
                 [{"host_path": str(home / "projects" / "target"), "container_path": "/workspace"}],
                 flavor=support.runtime().host_flavor, expose=expose, enter=enter),
@@ -426,7 +426,7 @@ class HostileMountTests(Sandbox):
     def test_a_link_inside_the_target_is_not_followed_by_the_host(self):
         if SYMLINKS:
             (self.target / "escape").symlink_to(self.attempt, target_is_directory=True)
-        expose, enter = ce.sensitive_locations(home=None, attempt_root=self.attempt, docker_host=None)
+        expose, enter = ce.sensitive_locations(homes=[], attempt_root=self.attempt, docker_host=None)
         pairs = ce.checked_mount_sources([{"host_path": str(self.target), "container_path": "/workspace"}],
                                          flavor=support.runtime().host_flavor, expose=expose, enter=enter)
         self.assertEqual(pairs, [(str(self.target), "/workspace")])
@@ -663,7 +663,9 @@ class RequiredInputTests(Sandbox):
         for function in (ce.run_container, ce.verify_container_result, ce.load_verified_result,
                          ce.to_worker_envelope, ce.build_docker_argv, ce.checked_mount_sources,
                          ce.sensitive_locations, ce.translate_host_path, ce.docker_client_environment,
-                         ce.assert_boundary, ce.resolve_image, ce.fingerprint_material, ce.container_name):
+                         ce.assert_boundary, ce.resolve_image, ce.fingerprint_material, ce.container_name,
+                         ce.request_mount_sources, ce.attempt_paths, ce._outcome, ce._command_record_errors,
+                         ce._events_errors):
             for name, parameter in inspect.signature(function).parameters.items():
                 with self.subTest(function=function.__name__, parameter=name):
                     self.assertIs(parameter.default, inspect.Parameter.empty)
@@ -750,17 +752,24 @@ class ScriptedDocker:
             streams[name] = {"observed_bytes": len(data), "written_bytes": len(retained[name]),
                              "dropped_bytes": len(data) - len(retained[name]),
                              "truncated": len(data) > len(retained[name])}
-        metadata = {"exit_code": self.client_exit, "timed_out": False, "cancelled": False,
-                    "streams": streams, **self.metadata}
-        (log_dir / "events.jsonl").write_text('{"event":"START"}\n{"event":"END"}\n', encoding="utf-8")
-        # What deterministic_child records: the redacted argv it ran, its limits, and its outcome.
+        # What deterministic_child records: a START event, then one document -- the redacted argv
+        # it ran, its limits, its client environment names and its outcome -- as the END event
+        # and as command.json.
         from execution_state import redact_argv
-        (log_dir / "command.json").write_text(json.dumps({
-            "schema": "appsec-review/deterministic-child/1.0", "argv": redact_argv(list(spec.argv)),
-            "timeout_seconds": spec.timeout_seconds,
-            "log_limits": {"stdout": spec.stdout_limit_bytes, "stderr": spec.stderr_limit_bytes},
-            "exit_code": metadata["exit_code"], "timed_out": metadata["timed_out"],
-            "cancelled": metadata["cancelled"], "streams": streams}), encoding="utf-8")
+        started = {"schema": "appsec-review/deterministic-child/1.0", "argv": redact_argv(list(spec.argv)),
+                   "argv_prefix": redact_argv(list(spec.argv_prefix)), "cwd": str(spec.cwd),
+                   "started_at": "2026-09-20T12:00:00+00:00", "timeout_seconds": spec.timeout_seconds,
+                   "log_limits": {"stdout": spec.stdout_limit_bytes, "stderr": spec.stderr_limit_bytes},
+                   "environment_keys": sorted(spec.env), "exit_code": None, "signal": None,
+                   "timed_out": False, "cancelled": False}
+        metadata = {**started, "exit_code": self.client_exit,
+                    "signal": -self.client_exit if self.client_exit < 0 else None, "streams": streams,
+                    "ended_at": "2026-09-20T12:00:01+00:00", "duration_seconds": 1.25, **self.metadata}
+        (log_dir / "events.jsonl").write_text("".join(
+            json.dumps({"time": "2026-09-20T12:00:00+00:00", "event": kind, **details}, sort_keys=True) + "\n"
+            for kind, details in (("START", started), ("END", metadata))), encoding="utf-8")
+        (log_dir / "command.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                                              encoding="utf-8")
         return metadata
 
     def patches(self):
@@ -1020,7 +1029,7 @@ class PermissionGateTests(ScriptedCase):
             ce.fingerprint_material(denied, record)
 
 
-class VerifierTests(ScriptedCase):
+class VerifierCase(ScriptedCase):
     def result(self) -> dict:
         return json.loads((self.log_dir / ce.RESULT_FILE).read_text(encoding="utf-8"))
 
@@ -1049,6 +1058,8 @@ class VerifierTests(ScriptedCase):
             if entry["path"] == name:
                 entry.update(sha256=ce._bytes_sha(data), bytes=len(data))
 
+
+class VerifierTests(VerifierCase):
     def test_a_resealed_result_cannot_contradict_the_child_runners_own_record(self):
         # Found in verification: the verifier bound every file's hash but never read command.json,
         # so a failed run resealed as OK, a docker argv rewritten outside the boundary and forged
@@ -1156,7 +1167,7 @@ class VerifierTests(ScriptedCase):
     def test_every_file_tampered_one_at_a_time_is_rejected_and_nothing_is_echoed(self):
         request, _, _ = self.produce()
         names = sorted(path.name for path in self.log_dir.iterdir())
-        self.assertEqual(names, sorted((ce.RESULT_FILE, ce.REQUEST_FILE, *ce.CHILD_FILES)))
+        self.assertEqual(names, sorted((ce.RESULT_FILE, *ce.ATTEMPT_FILES)))
         for name in names:
             path = self.log_dir / name
             original = path.read_bytes()
@@ -1215,7 +1226,11 @@ class VerifierTests(ScriptedCase):
         with self.subTest(wrong="attempt root"):
             errors = ce.verify_container_result(self.root / "missing", **support.IDS, request=request,
                                                 images_dir=ce.IMAGES_DIR, **support.host_facts())
-            self.assertEqual(errors, ["the log directory or its container-result.json is missing, linked or unreadable"])
+            self.assertEqual(errors, ["the attempt root, the expected request and the host facts do not "
+                                      "derive a docker run the adapter could have made"])
+            self.log_dir.rename(self.attempt / "moved")
+            self.assertEqual(support.verify(self.attempt, request), [
+                "the log directory or its container-result.json is missing, linked or unreadable"])
 
     def test_impossible_outcome_shapes_are_rejected_even_when_rehashed(self):
         request, _, _ = self.produce()
@@ -1244,7 +1259,7 @@ class VerifierTests(ScriptedCase):
                      "resume_command": None}
         envelope = ce.to_worker_envelope(self.attempt, **arguments, output_paths=["scratch/report.json"])
         paths = [artifact["path"] for artifact in envelope["artifacts"]]
-        self.assertEqual(paths, [f"logs/container/{n}" for n in sorted((ce.REQUEST_FILE, *ce.CHILD_FILES))]
+        self.assertEqual(paths, [f"logs/container/{n}" for n in list(ce.ATTEMPT_FILES)]
                          + ["logs/container/container-result.json", "scratch/report.json"])
         self.assertEqual(envelope["retry"], {"allowed": False, "resume_command": None})
         hostile = ["../outside", "/etc/passwd", "scratch/./report.json", "scratch//report.json",
@@ -1365,6 +1380,359 @@ class VerifierMountParityTests(ScriptedCase):
             support.verify(self.attempt, request, host_flavor="solaris")
         with self.assertRaises(TypeError):
             support.verify(self.attempt, request, docker_host=7)
+
+
+# ---- PR 29 review, round 2 -----------------------------------------------------------------------
+
+class ResealCase(VerifierCase):
+    def reseal(self, edit_result=None):
+        """The reviewer's resealer: re-hash every listed file, optionally edit, re-hash the result."""
+        result = self.result()
+        if edit_result:
+            edit_result(result)
+        for entry in result["files"]:
+            data = (self.log_dir / entry["path"]).read_bytes()
+            entry.update(sha256=ce._bytes_sha(data), bytes=len(data))
+        self.write(result, rehash=True)
+
+    def forge_command(self, edit, *, events_too: bool):
+        command = json.loads((self.log_dir / "command.json").read_text(encoding="utf-8"))
+        edit(command)
+        (self.log_dir / "command.json").write_text(json.dumps(command), encoding="utf-8")
+        if events_too:          # a forger who keeps events.jsonl consistent gets no further
+            lines = (self.log_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+            rewritten = []
+            for line in lines:
+                item = json.loads(line)
+                edit(item)
+                rewritten.append(json.dumps(item, sort_keys=True))
+            (self.log_dir / "events.jsonl").write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+        self.reseal()
+
+
+class RecordFeedsNothingTests(ResealCase):
+    """P1: the scratch source, the docker executable and the container user used to be lifted out
+    of command.json and fed back into the 're-derived' argv, so the record agreed with itself."""
+
+    def test_the_reviewers_five_forgeries_of_command_json_are_rejected_everywhere(self):
+        def scratch(source):
+            def edit(record):
+                at = max(k for k, v in enumerate(record["argv"]) if v == "--mount")
+                record["argv"][at + 1] = f"type=bind,source={source},target=/scratch"
+            return edit
+
+        def executable_and_user(record):
+            record["argv"][0] = "/tmp/" + MARKER + "/docker"
+            record["argv"][record["argv"].index("--user") + 1] = "1:0"
+        forgeries = {
+            "/etc/scratch": scratch("/etc/scratch"),
+            "~/.ssh/scratch": scratch(str(Path.home() / ".ssh" / "scratch")),
+            "docker.sock/scratch": scratch("/var/run/docker.sock/scratch"),
+            "/scratch": scratch("/scratch"),
+            "marker/scratch": scratch("/" + MARKER + "/scratch"),
+            "docker executable and --user 1:0": executable_and_user,
+        }
+        for label, edit in forgeries.items():
+            for events_too in (False, True):
+                with self.subTest(forgery=label, events_too=events_too):
+                    self.tearDown()
+                    self.setUp()
+                    request, _, _ = self.produce(request=support.request(None, ["/bin/true"]))
+                    self.assertEqual(support.verify(self.attempt, request), [])
+                    self.forge_command(edit, events_too=events_too)
+                    self.assert_rejected(request)
+
+    def test_the_callers_docker_executable_and_container_user_decide_not_the_record(self):
+        request, _, _ = self.produce()
+        self.assertEqual(support.verify(self.attempt, request), [])
+        other = self.root / "other-docker"
+        self.assert_rejected(request, docker_executable=other)
+        self.assert_rejected(request, container_user="4242:4242")
+        self.assert_rejected(request, docker_host="unix:///run/user/1/docker.sock")
+        facts = support.host_facts()
+        for name in ("host_flavor", "docker_host", "docker_executable", "container_user"):
+            for function, extra in ((ce.verify_container_result, {}), (ce.load_verified_result, {}),
+                                    (ce.to_worker_envelope, {
+                                        "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "c",
+                                        "output_paths": [], "resume_command": None})):
+                with self.subTest(omitted=name, function=function.__name__):
+                    arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR,
+                                 **facts, **extra}
+                    del arguments[name]
+                    with self.assertRaises(TypeError):
+                        function(self.attempt, **arguments)
+        for over in ({"docker_executable": str(facts["docker_executable"])},
+                     {"docker_executable": Path("docker")}, {"container_user": "0:0"},
+                     {"container_user": "1:0"}, {"container_user": "root"}, {"container_user": None}):
+            with self.subTest(mistyped=str(over)):
+                with self.assertRaises(TypeError):
+                    support.verify(self.attempt, request, **over)
+
+    def test_group_zero_is_never_a_legal_container_user(self):
+        request = support.request(self.target, ["/bin/true"])
+        self.rejected(request, "gid 0", runtime=support.runtime(container_user="1000:0"))
+        with self.assertRaises(ce.ContainerRequestError):
+            ce.build_docker_argv(**{**golden_arguments("posix"), "user": "1:0"})
+
+    def test_a_different_spelling_of_the_attempt_root_does_not_verify(self):
+        request, _, _ = self.produce()
+        moved = self.root / "elsewhere"
+        self.attempt.rename(moved)
+        self.assertTrue(support.verify(moved, request))
+
+
+class OutcomeRederivationTests(ResealCase):
+    """P2: the outcome table ended in ``.get(cause, True)``; events.jsonl was hashed but never
+    read; command.json bound a log's length only."""
+
+    EXITED = {"Status": "exited", "OOMKilled": False}
+
+    def runs(self):
+        return {
+            "exit 0": ScriptedDocker(),
+            "exit 1": ScriptedDocker(client_exit=1),
+            "exit 137": ScriptedDocker(client_exit=137, state={**self.EXITED, "ExitCode": 137}),
+            "oom": ScriptedDocker(client_exit=137, state={**self.EXITED, "ExitCode": 137, "OOMKilled": True}),
+            "client and container disagree": ScriptedDocker(client_exit=1, state={**self.EXITED, "ExitCode": 0}),
+            "state unreadable": ScriptedDocker(client_exit=1, state=None),
+            "start failed": ScriptedDocker(client_exit=127, state={"Status": "created", "ExitCode": 127,
+                                                                   "OOMKilled": False}),
+            "timed out": ScriptedDocker(client_exit=-9, metadata={"timed_out": True, "error": "TimeoutError: x"}),
+            "cancelled": ScriptedDocker(client_exit=-9, metadata={"cancelled": True, "error": "InterruptedError: x"}),
+            "log write failed": ScriptedDocker(metadata={"error": "diagnostic stream failure: OSError: disk"}),
+        }
+
+    def test_every_cause_against_every_client_record_only_the_derived_outcome_verifies(self):
+        accepted = set()
+        for label, scripted in self.runs().items():
+            self.tearDown()
+            self.setUp()
+            request, _, genuine = self.produce(scripted=scripted)
+            golden = self.result()
+            truth = (genuine["cause"], genuine["exit_code"])
+            self.assertEqual(support.verify(self.attempt, request), [], label)
+            for cause in ce.STATUS_BY_CAUSE:
+                for exit_code in (None, 0, 1, 127, 137):
+                    with self.subTest(run=label, claimed=cause, exit_code=exit_code):
+                        def edit(result):
+                            result.update(cause=cause, execution_status=ce.STATUS_BY_CAUSE[cause],
+                                          exit_code=exit_code,
+                                          container_removed=cause != "CLEANUP_FAILED")
+                        self.write(json.loads(json.dumps(golden)), rehash=False)
+                        self.reseal(edit)
+                        if (cause, exit_code) == truth:
+                            self.assertEqual(support.verify(self.attempt, request), [])
+                            accepted.add(cause)
+                        else:
+                            self.assert_rejected(request)
+        self.assertEqual(accepted, {None, "CONTAINER_EXIT_NONZERO", "WORKER_LOST", "OOM_KILLED",
+                                    "CONTAINER_START_FAILED", "TIMEOUT", "CANCELED", "LOG_WRITE_FAILED"})
+
+    def test_the_reviewers_exit_one_run_cannot_be_reclassified_by_a_result_only_edit(self):
+        request, _, result = self.produce(request=support.request(None, ["/bin/false"]),
+                                          scripted=ScriptedDocker(client_exit=1))
+        self.assertEqual((result["cause"], result["exit_code"]), ("CONTAINER_EXIT_NONZERO", 1))
+        for cause, code in (("CANCELED", None), ("WORKER_LOST", 0), ("OOM_KILLED", 0), ("WORKER_LOST", None)):
+            with self.subTest(cause=cause, exit_code=code):
+                self.reseal(lambda r: r.update(cause=cause, execution_status=ce.STATUS_BY_CAUSE[cause],
+                                               exit_code=code))
+                self.assert_rejected(request)
+
+    def test_a_same_length_forgery_of_a_retained_log_is_rejected(self):
+        request, _, _ = self.produce(request=support.request(None, ["/bin/echo", "finding: none"]),
+                                     scripted=ScriptedDocker(stdout=b"finding: none\n", stderr=b"warn: a\n"))
+        for name, forged in (("stdout.log", b"finding: RCE!\n"), ("stderr.log", b"warn: b\n")):
+            with self.subTest(file=name):
+                path = self.log_dir / name
+                original = path.read_bytes()
+                self.assertEqual(len(original), len(forged))
+                path.write_bytes(forged)
+                self.reseal()
+                self.assert_rejected(request)
+                path.write_bytes(original)
+                self.reseal()
+                self.assertEqual(support.verify(self.attempt, request), [])
+
+    def test_events_jsonl_is_read_and_cross_checked_not_just_hashed(self):
+        request, _, _ = self.produce()
+        path = self.log_dir / "events.jsonl"
+        original = path.read_bytes()
+        start, end = (json.loads(line) for line in original.decode("utf-8").splitlines())
+
+        def lines(*items):
+            return "".join(json.dumps(item, sort_keys=True) + "\n" for item in items).encode("utf-8")
+        forgeries = {
+            "garbage": b"not json at all\n", "emptied": b"", "start only": lines(start),
+            "two ends": lines(end, end), "end before start": lines(end, start),
+            "three events": lines(start, start, end), "not objects": b"[]\n[]\n",
+            "unknown event": lines(start, {**end, "event": "FAILURE"}),
+            "end disagrees with command.json": lines(start, {**end, "exit_code": 9}),
+            "end carries an extra key": lines(start, {**end, MARKER: 1}),
+            "start already knows the exit": lines({**start, "exit_code": 0}, end),
+            "start ran another argv": lines({**start, "argv": [MARKER]}, end),
+            "torn last line": original + b'{"event":',
+            "no time": lines(start, {k: v for k, v in end.items() if k != "time"}),
+        }
+        for label, data in forgeries.items():
+            with self.subTest(events=label):
+                path.write_bytes(data)
+                self.reseal()
+                self.assert_rejected(request)
+        path.write_bytes(lines(end))            # producible: the START write failed, END did not
+        self.reseal()
+        self.assertEqual(support.verify(self.attempt, request), [])
+
+    def test_observation_json_is_closed_and_every_field_is_bound(self):
+        request, _, _ = self.produce(scripted=ScriptedDocker(client_exit=1))
+        path = self.log_dir / ce.OBSERVATION_FILE
+        golden = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(golden["state"], {"exit_code": 1, "exited": True, "created": False, "oom_killed": False})
+        edits = {
+            "interrupted": {**golden, "interrupted": True},
+            "state exit": {**golden, "state": {**golden["state"], "exit_code": 0}},
+            "state oom": {**golden, "state": {**golden["state"], "oom_killed": True}},
+            "state null": {**golden, "state": None},
+            "not removed": {**golden, "removed": False},
+            "stdout hash": {**golden, "stream_sha256": {**golden["stream_sha256"], "stdout": "sha256:" + "0" * 64}},
+            "stdout hash null": {**golden, "stream_sha256": {**golden["stream_sha256"], "stdout": None}},
+            "extra key": {**golden, MARKER: True},
+            "missing key": {k: v for k, v in golden.items() if k != "removed"},
+            "other schema": {**golden, "schema": ce.OBSERVATION_ID + "x"},
+            "state extra key": {**golden, "state": {**golden["state"], MARKER: 1}},
+            "bool as int": {**golden, "state": {**golden["state"], "exit_code": True}},
+        }
+        for label, value in edits.items():
+            with self.subTest(observation=label):
+                path.write_bytes(ce.canonical_request_bytes(value))
+                self.reseal()
+                self.assert_rejected(request)
+        with self.subTest(observation="non-canonical but equal"):
+            path.write_text(json.dumps(golden), encoding="utf-8")
+            self.reseal()
+            self.assert_rejected(request)
+        with self.subTest(observation="deleted and unlisted"):
+            path.unlink()
+            self.reseal(lambda r: r.__setitem__("files", [e for e in r["files"]
+                                                          if e["path"] != ce.OBSERVATION_FILE]))
+            self.assert_rejected(request)
+
+    def test_an_observation_that_cannot_be_written_is_a_log_write_failure_that_still_verifies(self):
+        real = ce.atomic_bytes
+
+        def failing(path, value):
+            if Path(path).name == ce.OBSERVATION_FILE:
+                raise OSError("disk full")
+            return real(path, value)
+        scripted = ScriptedDocker()
+        first, second = scripted.patches()
+        request = support.request(self.target, ["/bin/true"])
+        with first, second, mock.patch.object(ce, "atomic_bytes", side_effect=failing):
+            result = support.run(support.runtime(), self.attempt, request)
+        self.assertEqual((result["cause"], result["execution_status"]), ("LOG_WRITE_FAILED", "FAILED"))
+        self.assertEqual(support.verify(self.attempt, request), [])
+        self.reseal(lambda r: r.update(cause=None, execution_status="OK", exit_code=0))
+        self.assert_rejected(request)
+
+
+class EveryCompletedRunVerifiesTests(ScriptedCase):
+    """P2 invariant: every request run_container accepts and completes also verifies. The
+    redactor's keywords in a path, and docker option spellings in the container's own argv, made
+    genuine runs permanently unverifiable."""
+
+    ARGVS = (["/bin/echo", "--mount", "x"], ["/bin/echo", "--user", "0:0"], ["/bin/echo", "--network", "host"],
+             ["/bin/echo", "--mount", "type=bind,source=/etc,target=/scratch"],
+             ["/bin/echo", "--password", "p"], ["/bin/echo", "api_key=1", "--token"], ["/bin/true"])
+    SCRATCHES = ("scratch", "secret-scan/scratch", "token-audit", "work/api-key/password")
+    ROOTS = ("attempt", "secrets-detection/attempt", "02-secrets-inventory/token/attempt")
+
+    def test_keyword_bearing_paths_and_option_shaped_argv_all_verify(self):
+        for root in self.ROOTS:
+            for scratch in self.SCRATCHES:
+                for argv in self.ARGVS:
+                    with self.subTest(root=root, scratch=scratch, argv=argv):
+                        self.tearDown()
+                        self.setUp()
+                        self.attempt = self.root.joinpath(*root.split("/"))
+                        self.attempt.mkdir(parents=True, exist_ok=True)
+                        request = support.request(self.target, argv, scratch_path=scratch,
+                                                  log_path="logs/secret-token")
+                        _, _, result = self.produce(request=request)
+                        self.assertEqual(result["execution_status"], "OK")
+                        self.assertEqual(support.verify(self.attempt, request), [])
+
+    def test_a_redacted_record_still_cannot_be_verified_against_another_request(self):
+        request = support.request(self.target, ["/bin/echo", "--mount", "x"], scratch_path="secret-scan/scratch")
+        self.produce(request=request)
+        self.assertTrue(support.verify(self.attempt, {**request, "argv": ["/bin/echo", "--mount", "y"]}))
+        self.assertTrue(support.verify(self.attempt, request, container_user="4242:4242"))
+
+
+class HostHomeTests(Sandbox):
+    """P2: the mount rule's host home was $HOME alone -- an unstated environment input."""
+
+    def mountable(self, path: Path) -> bool:
+        request = {"target_mounts": [{"host_path": str(path), "container_path": "/workspace"}]}
+        try:
+            ce.request_mount_sources(request, attempt_root=self.attempt,
+                                     host_flavor=support.runtime().host_flavor, docker_host=None)
+        except ce.ContainerRequestError:
+            return False
+        return True
+
+    def homes(self):
+        account, environment = self.root / "account-home", self.root / "env-home"
+        for home in (account, environment):
+            (home / ".ssh").mkdir(parents=True)
+            (home / ".docker").mkdir()
+            (home / "projects").mkdir()
+        return account, environment
+
+    @unittest.skipIf(os.name == "nt", "the password database is POSIX only")
+    def test_the_account_home_is_refused_wherever_the_environment_points_home(self):
+        import pwd
+        account, environment = self.homes()
+        entry = mock.Mock(pw_dir=str(account))
+        for variable in (str(environment), "/nonexistent", None):
+            with self.subTest(HOME=variable), mock.patch.object(pwd, "getpwuid", return_value=entry), \
+                    mock.patch.dict(os.environ):
+                os.environ.pop("HOME", None)
+                if variable is not None:
+                    os.environ["HOME"] = variable
+                for path in (account, account / ".ssh", account / ".docker", self.root):
+                    self.assertFalse(self.mountable(path), path.name)
+                self.assertTrue(self.mountable(account / "projects"))
+                if variable == str(environment):     # the union: $HOME stays refused as well
+                    for path in (environment, environment / ".ssh", environment / ".docker"):
+                        self.assertFalse(self.mountable(path), path.name)
+                    self.assertEqual(ce.host_homes(), (account, environment))
+
+    @unittest.skipIf(os.name == "nt", "the password database is POSIX only")
+    def test_the_reviewers_case_the_real_account_home_with_home_pointed_elsewhere(self):
+        import pwd
+        try:
+            real = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        except KeyError:                     # a uid with no database entry has no such home
+            self.assertIsInstance(ce.host_homes(), tuple)
+            return
+        with mock.patch.dict(os.environ, {"HOME": "/nonexistent"}):
+            self.assertIn(real, ce.host_homes())
+            for path in (real, real / ".ssh", real / ".docker", real / ".config"):
+                if path.is_dir():
+                    with self.subTest(path=path.name):
+                        self.assertFalse(self.mountable(path))
+                        self.rejected(support.request(path, ["/bin/true"]), "host home|credential directory")
+
+    def test_without_a_password_database_the_environment_home_is_still_refused(self):
+        _, environment = self.homes()
+        with mock.patch.dict(sys.modules, {"pwd": None}), \
+                mock.patch.object(ce.Path, "home", return_value=environment):
+            self.assertEqual(ce.host_homes(), (environment,))
+            self.assertFalse(self.mountable(environment))
+            self.assertFalse(self.mountable(environment / ".ssh"))
+            self.assertTrue(self.mountable(environment / "projects"))
+        with mock.patch.dict(sys.modules, {"pwd": None}), \
+                mock.patch.object(ce.Path, "home", side_effect=RuntimeError("no home")):
+            self.assertEqual(ce.host_homes(), ())
 
 
 # ---- adapter wiring and documentation ------------------------------------------------------------

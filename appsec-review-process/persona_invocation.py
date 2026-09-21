@@ -32,6 +32,7 @@ import stat
 import sys
 import threading
 import time
+import unicodedata
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, runtime_checkable
 
@@ -111,7 +112,7 @@ CLAIM_TEXT_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "verified_finding": (r"\b(?:finding|vulnerability)\s+(?:is\s+)?(?:exists|confirmed|established|verified)\b",
                          r"\b(?:is|are|was|were)\s+(?:a\s+)?vulnerab"),
     "final_severity": (r"\b(?:critical|high|medium|low)\s+severity\b", r"\bseverity\s*(?:is|=|:)",
-                       r"\bcvss\b"),
+                       r"\bcvss"),
     "exploitability_verdict": (r"\bexploitable\b", r"\bexploitability\s*(?:is|=|:)"),
     "compliance_verdict": (r"\b(?:is|are)\s+(?:fully\s+)?(?:compliant|certified)\b", r"\bcertified\b"),
     "remediation_status": (r"\b(?:is|was|has\s+been)\s+(?:fixed|remediated)\b",),
@@ -120,6 +121,14 @@ CLAIM_TEXT_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({
 })
 _TEXT_RULES = {name: tuple(re.compile(p, re.IGNORECASE) for p in patterns)
                for name, patterns in CLAIM_TEXT_RULES.items()}
+# One normalisation for every scanned text (paths, JSON keys and values, file bodies, claim fields):
+# identifier separators and camelCase boundaries are read as spaces, so ``cvss_score``,
+# ``isExploitable`` and ``critical-severity`` meet the same rules as prose does.
+_SEPARATORS = re.compile(r"[-_./]+")
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=[0-9])|(?<=[0-9])(?=[A-Za-z])")
+_LETTER_RUN = re.compile(r"[^\W\d_]{3,}")
+_ASCII_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_CONFUSABLE_SCRIPTS = ("CYRILLIC", "GREEK")
 
 BLOCKED_CAUSES = ("PERMISSION_DENIED", "INVOKER_UNAVAILABLE")
 OUTPUT_CAUSES = ("OUTPUT_ESCAPE", "MALFORMED_RESULT", "IDENTITY_MISMATCH", "BUDGET_EXCEEDED",
@@ -143,11 +152,13 @@ SUMMARIES: Mapping[str | None, str] = MappingProxyType({
     "CANCELED": "the invocation was canceled; its output is not accepted",
     "INVOKER_EXCEPTION": "the invoker raised; its output is not accepted",
     "OUTPUT_ESCAPE": "something outside the output root changed, or the output root holds a link, a special file or a path that leaves it",
-    "MALFORMED_RESULT": "the invoker manifest or an output file is missing, extra, oversized, not UTF-8, not canonical or fails its closed schema",
+    "MALFORMED_RESULT": ("the invoker manifest or an output file is missing, extra, oversized, not UTF-8, not canonical, "
+                         "outside its closed schema or carries text in a form that cannot be scanned"),
     "IDENTITY_MISMATCH": "the invoker manifest names a different request, invoker, persona or model",
     "BUDGET_EXCEEDED": "the output or the reported usage exceeds the required budget",
     "UNDECLARED_TOOL": "the invoker manifest reports a tool that the request did not allow",
-    "PROHIBITED_CLAIM": "the output carries a claim class that is not allowed, or text that asserts a prohibited claim",
+    "PROHIBITED_CLAIM": ("the output carries a claim class that is not allowed, or text that asserts or names a "
+                         "prohibited claim class"),
     "UNDECLARED_CITATION": "a citation or a verified invocation is not a declared readable input or producer",
     "SELF_VERIFICATION": "the output claims to verify its own invocation, or a producing invocation claims a verification",
 })
@@ -404,12 +415,36 @@ def model_errors(model: Mapping[str, str], label: str) -> list[str]:
     return errors
 
 
+def model_key(model: Mapping[str, str]) -> tuple[str, str]:
+    """What a model IS for the independence rule: provider and model id. ``family`` is a label the
+    integrator's allow-list attaches to that pair, and ``snapshot`` is a version of it."""
+    return (model["provider"], model["model_id"])
+
+
+def checked_models(allowed_models: Any) -> dict[tuple[str, str], str]:
+    """The runtime's model allow-list as (provider, model_id) -> family. Each entry is one exact
+    model identity, and one (provider, model_id) has exactly one family, whatever its snapshot:
+    otherwise listing a model twice under two family names would make it independent of itself.
+    Shared by the adapter and the verifier."""
+    if not isinstance(allowed_models, tuple) or not allowed_models:
+        raise PersonaRequestError("runtime.allowed_models must be a non-empty tuple; there is no default model")
+    families: dict[tuple[str, str], str] = {}
+    for model in allowed_models:
+        if (not isinstance(model, Mapping) or validate_document(thaw(model), "persona-model-identity.schema.json")
+                or model_errors(thaw(model), "model")):
+            raise PersonaRequestError("runtime.allowed_models holds something that is not one exact model identity")
+        if families.setdefault(model_key(model), model["family"]) != model["family"]:
+            raise PersonaRequestError("runtime.allowed_models lists one provider and model_id under two families")
+    return families
+
+
 def independence_errors(request: Mapping[str, Any]) -> list[str]:
     """``appsec-review/persona-independence/1.0``.
 
     A producing invocation names no producer and reads no producer output. A reviewing invocation
     (verify, refute, judge) names every producer invocation whose output it reads, and for each:
-    it is a different attempt, a different persona and a different model family. Sources:
+    it is a different attempt, a different persona, a different model family and a different
+    model (provider and model id), whatever family either side states. Sources:
     design-v3 5.1 (not discovered, verified and adjudicated by the same agent), ADR-0008 claim
     limits (a different persona and, where B14 records it, a different model family; no cell
     verifies its own claim), design-parity plan (one worker result may not self-verify).
@@ -442,16 +477,21 @@ def independence_errors(request: Mapping[str, Any]) -> list[str]:
             errors.append(f"self-verification: producers[{index}] is the same persona")
         if producer["model"]["family"] == request["model"]["family"]:
             errors.append(f"self-verification: producers[{index}] is the same model family")
+        if model_key(producer["model"]) == model_key(request["model"]):
+            errors.append(f"self-verification: producers[{index}] is the same provider and model_id, "
+                          "whatever family it states")
         errors.extend(model_errors(producer["model"], f"producers[{index}].model"))
     return errors
 
 
-def producer_binding_errors(request: Mapping[str, Any], inputs: tuple) -> list[str]:
+def producer_binding_errors(request: Mapping[str, Any], inputs: tuple,
+                            families: Mapping[tuple[str, str], str]) -> list[str]:
     """Binds each declared producer to the bytes of that producer's own ``invocation-result.json``.
 
     The bytes are data: bounded, UTF-8, one reading per object, inside the result schema, in the
     canonical byte form, self-consistent (``result_sha256``) and ``OK``. The independence rule is
-    applied to the values READ FROM THOSE BYTES; the declared producer entry must then equal them,
+    applied to the values READ FROM THOSE BYTES (and a model the allow-list knows must state the
+    family the allow-list gives it); the declared producer entry must then equal them,
     and every ``producer_output`` input must be an output that result lists (sha256 and size). A
     producer may itself be a reviewing invocation. Fixed text: nothing read from the bytes is echoed.
     Results are unsigned, so this binds a declaration to bytes the integrator pinned, not to an
@@ -486,6 +526,12 @@ def producer_binding_errors(request: Mapping[str, Any], inputs: tuple) -> list[s
             errors.append(f"self-verification: the result of {label} is the same persona")
         if result["model"]["family"] == request["model"]["family"]:
             errors.append(f"self-verification: the result of {label} is the same model family")
+        if model_key(result["model"]) == model_key(request["model"]):
+            errors.append(f"self-verification: the result of {label} is the same provider and model_id, "
+                          "whatever family it states")
+        if families.get(model_key(result["model"]), result["model"]["family"]) != result["model"]["family"]:
+            errors.append(f"{label}: its producer result states another family than the runtime's model "
+                          "allow-list gives that provider and model_id")
         for field in ("run_id", "job_id", "attempt_id", "request_sha256", "persona_id", "model"):
             if result[field] != producer[field]:
                 errors.append(f"{label}.{field} is not what its producer result states")
@@ -676,6 +722,7 @@ def resolve_request(request: Any, *, run_id: str, job_id: str, attempt_id: str, 
     errors = request_errors(request, run_id=run_id, job_id=job_id, attempt_id=attempt_id)
     if errors:
         raise PersonaRequestError("persona request rejected: " + "; ".join(errors))
+    families = checked_models(allowed_models)
     if request["model"] not in [thaw(model) for model in allowed_models]:
         raise PersonaRequestError("model is not on the runtime's model allow-list")
     records = load_composition(registry_dir, request["persona"], SchemaStore())
@@ -721,7 +768,7 @@ def resolve_request(request: Any, *, run_id: str, job_id: str, attempt_id: str, 
         seen.add(identity)
         inputs.append(ReadableInput(entry["root"], entry["path"], entry["role"], entry["sha256"],
                                     entry["producer_request_sha256"], data))
-    errors = producer_binding_errors(request, tuple(inputs))
+    errors = producer_binding_errors(request, tuple(inputs), families)
     if errors:
         raise PersonaRequestError("persona request rejected: " + "; ".join(errors))
     decision = request["permission"]["decision"]
@@ -792,13 +839,7 @@ def validate_runtime(runtime: Any) -> None:
     if not isinstance(runtime.readable_roots, Mapping) or not runtime.readable_roots or not all(
             isinstance(path, Path) for path in runtime.readable_roots.values()):
         raise PersonaRequestError("runtime.readable_roots must map at least one id to a path")
-    models = runtime.allowed_models
-    if not isinstance(models, tuple) or not models:
-        raise PersonaRequestError("runtime.allowed_models must be a non-empty tuple; there is no default model")
-    for model in models:
-        if (not isinstance(model, Mapping) or validate_document(thaw(model), "persona-model-identity.schema.json")
-                or model_errors(thaw(model), "model")):
-            raise PersonaRequestError("runtime.allowed_models holds something that is not one exact model identity")
+    checked_models(runtime.allowed_models)
     if not isinstance(runtime.source_snapshot_sha256, str) or not _SHA_RE.match(runtime.source_snapshot_sha256):
         raise PersonaRequestError("runtime.source_snapshot_sha256 must be sha256:<64 hex>")
     if runtime.registry_ceiling is not None and not isinstance(runtime.registry_ceiling, list):
@@ -834,24 +875,35 @@ def _gate(request: Mapping[str, Any], *, run_id: str, job_id: str, now: str,
 
 # ---- output derivation: shared by the adapter and the verifier ------------------------------------
 
+def _refuse_unlistable(error: OSError) -> None:
+    """``os.walk`` skips a directory it cannot list unless told otherwise. A directory that cannot
+    be listed hides whatever is inside it, so it is never skipped: the walk fails."""
+    raise error
+
+
 def _snapshot(attempt_root: Path, skip: Path) -> dict[str, tuple] | None:
-    """Every entry of the attempt outside ``skip``. None when the tree is too large to compare."""
+    """Every entry of the attempt outside ``skip``. None when the tree cannot be compared: it is too
+    large, or a directory in it cannot be listed or an entry cannot be examined."""
     found: dict[str, tuple] = {}
-    for folder, directories, files in os.walk(attempt_root, followlinks=False):
-        here = Path(folder)
-        directories[:] = [name for name in directories if here / name != skip]
-        for name in (*directories, *files):
-            status = os.stat(here / name, follow_symlinks=False)
-            found[str(here / name)] = (status.st_mode, status.st_size, status.st_mtime_ns, status.st_ino)
-            if len(found) > MAX_ATTEMPT_ENTRIES:
-                return None
+    try:
+        for folder, directories, files in os.walk(attempt_root, followlinks=False, onerror=_refuse_unlistable):
+            here = Path(folder)
+            directories[:] = [name for name in directories if here / name != skip]
+            for name in (*directories, *files):
+                status = os.stat(here / name, follow_symlinks=False)
+                found[str(here / name)] = (status.st_mode, status.st_size, status.st_mtime_ns, status.st_ino)
+                if len(found) > MAX_ATTEMPT_ENTRIES:
+                    return None
+    except OSError:
+        return None
     return found
 
 
 def scan_output_tree(output_root: Path, budget: Mapping[str, int]
                      ) -> tuple[str, list[dict[str, Any]] | None, dict[str, bytes]]:
     """(state, records, bytes by path). ``irregular``: a link, a special or hard-linked file, an
-    empty directory, a second spelling or a name outside the path alphabet. ``over_limit``: more
+    empty directory, a directory that cannot be listed, a file that cannot be read, a second
+    spelling or a name outside the path alphabet. ``over_limit``: more
     files or bytes than the budget could ever admit, decided before reading."""
     contents: dict[str, bytes] = {}
     records: list[dict[str, Any]] = []
@@ -859,7 +911,7 @@ def scan_output_tree(output_root: Path, budget: Mapping[str, int]
     try:
         if output_root.is_symlink() or not output_root.is_dir():
             return "irregular", None, {}
-        for folder, directories, files in os.walk(output_root, followlinks=False):
+        for folder, directories, files in os.walk(output_root, followlinks=False, onerror=_refuse_unlistable):
             here = Path(folder)
             if not directories and not files and here != output_root:
                 return "irregular", None, {}
@@ -888,16 +940,66 @@ def scan_output_tree(output_root: Path, budget: Mapping[str, int]
     return "regular", sorted(records, key=lambda record: record["path"]), contents
 
 
-def _strings(value: Any):
+def _scalar_text(value: Any) -> str:
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+def _json_texts(value: Any, key: str | None, prose: list[str], identifiers: list[str],
+                path: tuple[str, ...] = ()) -> None:
+    """Every text a reader of a JSON output sees. A key is an identifier; a string is prose; and a
+    scalar member is also read together with its nearest key (``{"severity": "critical"}`` reads
+    ``severity: critical``) and with its whole key path (``{"severity": {"level": "critical"}}``
+    also reads ``severity level: critical``), because a rule that needs both words never meets
+    them otherwise."""
     if isinstance(value, dict):
-        for key, item in value.items():
-            yield key
-            yield from _strings(item)
+        for name, item in value.items():
+            identifiers.append(name)
+            _json_texts(item, name, prose, identifiers, (*path, name))
     elif isinstance(value, list):
         for item in value:
-            yield from _strings(item)
-    elif isinstance(value, str):
-        yield value
+            _json_texts(item, key, prose, identifiers, path)
+    else:
+        if isinstance(value, str):
+            prose.append(value)
+        if key is not None:
+            prose.append(f"{key}: {_scalar_text(value)}")
+        if len(path) > 1:
+            prose.append(f"{' '.join(path)}: {_scalar_text(value)}")
+            prose.append(f"{path[0]}: {_scalar_text(value)}")
+
+
+def text_form_ok(text: str) -> bool:
+    """Published text must be scannable as it is read. Refused: control characters other than
+    newline, carriage return and tab; format characters (category Cf: zero-width space and joiners,
+    soft hyphen, byte-order mark, direction overrides); lone surrogates; and a word of three or more
+    letters that mixes LATIN with CYRILLIC or GREEK letters (a homoglyph spelling; NFKC does not fold
+    those). Whole words in another script are fine."""
+    if text.isascii():
+        return not _ASCII_CONTROL.search(text)
+    for character in set(text):
+        if character not in "\n\r\t" and unicodedata.category(character) in ("Cc", "Cf", "Cs"):
+            return False
+    for word in _LETTER_RUN.findall(unicodedata.normalize("NFKC", text)):
+        if word.isascii():
+            continue
+        scripts = {unicodedata.name(letter, "").split(" ", 1)[0] for letter in set(word)}
+        if "LATIN" in scripts and scripts & set(_CONFUSABLE_SCRIPTS):
+            return False
+    return True
+
+
+def scan_forms(text: str) -> tuple[str, ...]:
+    """The forms the lexical rules read: the NFKC text as written, and the same text with combining
+    marks dropped and ``- _ . /`` and camelCase or letter/digit boundaries read as spaces."""
+    if text.isascii():
+        return text, _SEPARATORS.sub(" ", _CAMEL.sub(" ", text))
+    written = unicodedata.normalize("NFKC", text)
+    bare = "".join(c for c in unicodedata.normalize("NFKD", written) if unicodedata.category(c) != "Mn")
+    return written, _SEPARATORS.sub(" ", _CAMEL.sub(" ", bare))
+
+
+def _words(text: str) -> str:
+    return " ".join(scan_forms(text)[1].lower().split())
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -909,9 +1011,20 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return dict(pairs)
 
 
-def _asserts_prohibited(texts, prohibited: set[str]) -> bool:
+def _asserts_prohibited(texts, prohibited: set[str], identifiers=()) -> bool:
+    """True when a text matches a lexical rule of a prohibited class in either scan form, when a
+    text IS a prohibited class id, or when an identifier (a JSON key, a claim id, a path segment)
+    contains one. Class ids are compared after the same normalisation as the text."""
     rules = [rule for name in sorted(prohibited) for rule in _TEXT_RULES.get(name, ())]
-    return any(rule.search(text) for text in texts for rule in rules)
+    names = {_words(name) for name in prohibited}
+    for position, group in enumerate((texts, identifiers)):
+        for text in group:
+            if any(rule.search(form) for form in scan_forms(text) for rule in rules):
+                return True
+            words = _words(text)
+            if words in names or (position == 1 and any(f" {name} " in f" {words} " for name in names)):
+                return True
+    return False
 
 
 def no_facts() -> dict[str, Any]:
@@ -955,15 +1068,17 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
     if (paths != sorted(set(paths)) or MANIFEST_FILE in paths or not all(_segments_ok(p) for p in paths)
             or set(paths) != set(on_disk) or any(on_disk[e["path"]] != e for e in listed)):
         return "MALFORMED_RESULT", empty
-    # A published path is published text too: its separators are read as spaces.
-    texts: list[str] = [re.sub(r"[-_./]+", " ", path) for path in paths]
+    # A published path is published text too, and each of its segments is an identifier.
+    texts: list[str] = list(paths)
+    names: list[str] = [segment for path in paths for segment in path.split("/")]
     for path in paths:
         if not path.lower().endswith(OUTPUT_SUFFIXES):
             return "MALFORMED_RESULT", empty
         try:
             text = contents[path].decode("utf-8")
-            texts.extend(_strings(json.loads(text, object_pairs_hook=_unique_object))
-                         if path.lower().endswith(".json") else [text])
+            if path.lower().endswith(".json"):
+                _json_texts(json.loads(text, object_pairs_hook=_unique_object), None, texts, names)
+            texts.append(text)
         except (ValueError, RecursionError):
             return "MALFORMED_RESULT", empty
     usage = manifest["usage"]
@@ -1001,7 +1116,10 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
     if any((c["root"], c["path"], c["sha256"]) not in declared for c in citations):
         return "UNDECLARED_CITATION", empty
     texts += [claim["statement"] for claim in claims] + manifest["limitations"] + [c["locator"] for c in citations]
-    if _asserts_prohibited(texts, set(request["prohibited_claim_classes"])):
+    names += identifiers
+    if not all(text_form_ok(text) for text in (*texts, *names)):
+        return "MALFORMED_RESULT", empty
+    if _asserts_prohibited(texts, set(request["prohibited_claim_classes"]), names):
         return "PROHIBITED_CLAIM", empty
     return None, {"output_manifest_sha256": _bytes_sha(raw), "outputs": tree, "usage": usage,
                   "claim_classes": sorted({claim["claim_class"] for claim in claims}),
