@@ -13,7 +13,8 @@ dispatch) build on the manifest written here.
 
 Qualification: **unit level** (`IMPLEMENTED_NOT_QUALIFIED`). Three things are NOT done and each
 has its own section below: no Dagster op runs the rendezvous ("Capability record"), at most one
-rendezvous may run on a host at a time ("Constraint: one rendezvous at a time"), and a reviewer's
+engagement runs at a time, while rendezvous inside it may be concurrent and each sees only itself
+("Constraint: one engagement at a time"), and a reviewer's
 producers and chain independence are not built ("Not done: producers and chain independence").
 Schema ids stay `1.0` although the instance record gained `state_reason` and the reader's return
 type changed in the review of PR #35: nothing of C02 is released or consumed, as with C01.
@@ -224,42 +225,50 @@ In flight at once: at most `max_parallel` instances; persona instances at most
 `min(totals.persona_slot_request, LIMITS[persona_llm])`; per derived resource pool at most
 `resource_pools.LIMITS[pool]` (so tool instances run one at a time today). These are in-process
 caps that, **within one rendezvous**, can only be at or below B15's. No limit is raised here. They
-do not see other runs: see "Constraint: one rendezvous at a time".
+do not see any other rendezvous, in the same run or another: see "Constraint: one engagement at a time".
 
 Threads: one daemon thread per launched instance, named `pool-instance-<n>`. An instance is
 launched only into the still empty, real directory the expansion created.
 
-## Constraint: one rendezvous at a time
+## Constraint: one engagement at a time
 
-**Owner decision 2026-09-21** (review of PR #35, Q2): option (a) is adopted, and more strictly than
-it was proposed -- **one engagement at a time for now.** While pool lanes launch their instances
-in-process, the deployment is operated with a single engagement in flight, which makes "one
-rendezvous on the host" true by construction. Option (b) below remains the target design.
+**Owner decision 2026-09-21** (review of PR #35, Q2, clarified the same day): **one engagement at a
+time for now.** The review processes themselves are not concurrent: two engagements never run
+together, so there are never two OWASP pools at once. **Inside one engagement, concurrency is fine:**
+a flow that forks branches A and B may have each start its own pool -- an OWASP review in A, a
+red/blue-team pool in B -- and those rendezvous run at the same time.
 
-The concurrency caps are counters inside one Python process. **They do not see any other run.** The
-op that will call `run_rendezvous` is `resource_pools.unassigned('coordination_only')`: it holds no
-Dagster pool slot, and the instances it launches are threads, not pooled ops. Therefore:
+What that does and does not give:
 
-- two rendezvous running at the same time on one host can run two containers although B15 limits
-  `docker` to 1, and up to six persona invocations although `persona_llm` is limited to 3;
-- B15's `persona_slot_request` is a per-RUN bound; here it is applied per pool, so two pools of one
-  run would each take it;
+- The caps in this module are counters inside one Python process, and forked branches of one Dagster
+  run are separate step processes. **A rendezvous sees only itself.** The op that calls
+  `run_rendezvous` is `resource_pools.unassigned('coordination_only')`: it holds no Dagster pool
+  slot, and the instances it launches are threads, not pooled ops.
+- So B15's numbers bound EACH rendezvous, not the host. With k rendezvous running concurrently inside
+  the engagement, the host can see up to k containers although B15 limits `docker` to 1, and up to
+  3k persona invocations although `persona_llm` is limited to 3. k is bounded by the executor's
+  steps per run (`workflow-plan.json` `max_concurrent_steps`, 3). One engagement at a time removes
+  the multiplication by engagements; it does not remove k.
+- B15's `persona_slot_request` is a per-RUN bound (ADR-0008 Decision 6); here it is applied per
+  pool, so two pools of one run each take it.
 - B15's live-qualified behaviour -- a cancelled or failed run releases its slots, queued steps wait
   their turn, a slot is returned when the step's process ends -- **does not apply to these
   instances**. What applies instead is this module's own cancel, drain and restart handling.
 
-Until instances are launched as dynamically mapped POOLED ops with C02 as the collector (option
-(b), the target design; it changes this module's launch API, not its manifest), **at most one
-rendezvous may run on a host at a time**. Nothing in this module can enforce that across processes
-(the per-pool lock only excludes a second coordinator of the SAME pool). It is to be enforced where
-the calling op is written (T10): the job that contains the rendezvous op gets a run-level tag and a
-tag concurrency limit of 1 in the run coordinator's configuration, so a second such run queues.
-That op, that tag and that limit do not exist yet; they are T10's to add, and T10 does not merge
-without them. Until then the constraint is an operating rule, not an enforced one: the run queue
-still admits two runs of two engagements (`max_concurrent_runs: 2`, one per engagement), which is
-what `qualify_workflow.py` asserts, so nothing stops a second engagement being submitted.
-`docs/resource-pools.md` states the constraint under Limitations. The parity gap `in_process_caps_do_not_see_other_runs` stays
-open until option (b) lands.
+Enforcing the decision is for the op's author (T10): the job that contains a rendezvous op gets a
+run-level tag and a tag concurrency limit of 1 in the run coordinator's configuration, so a second
+engagement's review run queues. A run-level limit does not restrict the rendezvous ops INSIDE the
+run, which is the intent. That op, that tag and that limit do not exist yet, and T10 does not merge
+without them. Until then this is an operating rule, not an enforced one: the run queue still admits
+two runs of two engagements (`max_concurrent_runs: 2`, one per engagement), which is what
+`qualify_workflow.py` asserts. Nothing in this module can enforce it across processes (the per-pool
+lock only excludes a second coordinator of the SAME pool).
+
+The aggregate across concurrent rendezvous of one engagement stays open as the parity gap
+`in_process_caps_do_not_see_other_rendezvous`. It closes when instances are launched as dynamically
+mapped POOLED ops with C02 as the collector (the target design; it changes this module's launch
+API, not its manifest): B15's pools then count across branches natively, and B15's cancellation and
+slot-release behaviour applies. `docs/resource-pools.md` states this under Limitations.
 
 ## Cancel, timeout, late finish
 
@@ -373,7 +382,7 @@ a producer who edits one file and reseals every hash is refused. Messages are fi
 - The restart's container removal is best effort and is not recorded.
 - A coordinator that dies after the deadline but before publication forgets that deadline: the
   restart adopts what is verified on disk. Only a published manifest makes "late" final.
-- In-process caps do not see other runs; see "Constraint: one rendezvous at a time".
+- In-process caps do not see other rendezvous; see "Constraint: one engagement at a time".
 - An interrupt before the first launch publishes nothing (nothing was launched); see Interrupt.
 - Windows: `os.link` needs NTFS; path rules are the adapters'.
 
@@ -448,14 +457,14 @@ and the views `validate_design_parity.py --write-generated-views` writes), updat
 | execution mode | unchanged |
 | qualification level | `unit`; references are `tests/test_pool_rendezvous.py`, `tests/test_pool_rendezvous_cross_slice.py`, `tests/test_pool_rendezvous_live.py` |
 | gaps removed | `waiter_missing`, `terminal_instance_manifest_missing` |
-| gaps stated | `no_dagster_op_runs_the_rendezvous`, `chain_independence_not_implemented`, `in_process_caps_do_not_see_other_runs` |
+| gaps stated | `no_dagster_op_runs_the_rendezvous`, `chain_independence_not_implemented`, `in_process_caps_do_not_see_other_rendezvous` |
 | next prerequisite | C03 (typed merges) / T10 (OWASP validator dispatch) |
 
 ## What T10 and C03 need
 
 - Expand one pool per wave with C01, then `run_rendezvous`, from an op tagged
   `resource_pools.unassigned('coordination_only')`, in a job limited to one run at a time
-  ("Constraint: one rendezvous at a time"). Afterwards, and in any later process, read only
+  ("Constraint: one engagement at a time"). Afterwards, and in any later process, read only
   through `load_verified_manifest` with the run's `PoolContext`. A `RendezvousError` there means
   **no instance of that pool may be treated as assessed**.
 - Invariants a consumer may rely on: `instances` is the expansion's list, same ids, same order,

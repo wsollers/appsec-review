@@ -497,7 +497,7 @@ Design capabilities: **15**
 - threat-model-standard: resource pool unassigned
 - threat-model-standard: threat_model_schema_and_scope_undecided
 - wait-all-rendezvous: chain_independence_not_implemented
-- wait-all-rendezvous: in_process_caps_do_not_see_other_runs
+- wait-all-rendezvous: in_process_caps_do_not_see_other_rendezvous
 - wait-all-rendezvous: no_dagster_op_runs_the_rendezvous
 - wait-all-rendezvous: resource pool unassigned
 

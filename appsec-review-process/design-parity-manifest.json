@@ -3216,7 +3216,7 @@
       "gaps": [
         "no_dagster_op_runs_the_rendezvous",
         "chain_independence_not_implemented",
-        "in_process_caps_do_not_see_other_runs"
+        "in_process_caps_do_not_see_other_rendezvous"
       ],
       "blocking_decisions": [],
       "next_prerequisite": "C03/T10: typed merges over load_verified_manifest, and a Dagster op (coordination_only, one run at a time) that runs the rendezvous (docs/pool-rendezvous.md)."
