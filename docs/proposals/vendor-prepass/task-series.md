@@ -49,7 +49,7 @@ M06 semantic-index disposition ────────────────�
 - Acceptance: no gate left open; fixtures and ADR agree; step-set equality check still passes.
 - Reviewer focus: no answer silently widens a permission; node IDs match the chosen G1/G6/G8 shape.
 
-## V02 — Declare Nodes, Edges And Skip Reason — `INTEGRATION`, `READY`
+## V02 — Declare Nodes, Edges And Skip Reason — `INTEGRATION`, in review (branch `claude/v02-declare-vendor-prepass-nodes`)
 
 - Exclusive paths: `arp/job-graph.json`, `arp/design-parity-manifest.json`,
   `arp/worker-result-contract.json`, generated parity views (`docs/design-parity-report.md`,
@@ -77,7 +77,7 @@ M06 semantic-index disposition ────────────────�
 - Reviewer focus: shapes are reusable by D09's `02-source-sast` without change; no field can hold
   a raw match line.
 
-## V04 — Secrets And IaC Contracts — in review (PR #18)
+## V04 — Secrets And IaC Contracts — done (PR #18, #21)
 
 - Exclusive paths: `arp/registry/output-contracts/secrets-inventory.json`,
   `arp/registry/output-contracts/iac-config-evidence.json`,
@@ -88,7 +88,7 @@ M06 semantic-index disposition ────────────────�
   a missing receipt, an `OBSERVED` exposure assertion and any forbidden promotion.
 - Reviewer focus: the inventory schema has no free-text field able to carry a match.
 
-## V05 — SBOM-Family Contracts — `READY`
+## V05 — SBOM-Family Contracts — done (PR #23)
 
 - Exclusive paths: `arp/registry/output-contracts/{sbom-inventory,sca-vulnerability-match,
   license-inventory,dependency-lifecycle}.json`, matching `schemas/*.schema.json`, focused tests.
@@ -125,7 +125,7 @@ M06 semantic-index disposition ────────────────�
 - Reviewer focus: redaction happens before anything is offered to `02-evidence-index`; the module
   does not import or alter common runtime publication code (adoption happens in V10–V13).
 
-## V07 — Container, Mobile And Binary-Hardening Contracts — in review (PR #19)
+## V07 — Container, Mobile And Binary-Hardening Contracts — done (PR #19)
 
 - Exclusive paths: `arp/registry/output-contracts/{container-image-inventory,mobile-sast,
   binary-hardening}.json`, matching schemas, focused tests.
@@ -201,7 +201,7 @@ made Grype the SCA matcher, so this binding is **no longer the matcher's source*
   `arp/TODO.md`.
 - Acceptance: zero remaining steps, zero executable callers, no wrapper, inventory rows closed.
 
-## V15 — Evidence-Index Metrics Enrichment (F01) — `READY`
+## V15 — Evidence-Index Metrics Enrichment (F01) — done (PR #25; Windows verification outstanding)
 
 Decision G10 = B: language/size metrics move into `02-evidence-index`; one enrichment replaces the
 legacy `cloc` and `scc` steps.

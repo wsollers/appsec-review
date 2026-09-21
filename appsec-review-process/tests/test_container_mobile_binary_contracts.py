@@ -602,15 +602,10 @@ class ContractDeclarationTests(unittest.TestCase):
             self.assertEqual(contracts.CONTRACTS[contract_id]["job_id"], node["proposed_job_id"])
 
     def test_required_files_are_the_fixture_artifacts_plus_the_probe_receipt_and_the_redaction_receipt(self):
-        # Pinned differences from job-nodes.proposal.json: every node gains the probe receipt it needs to be
-        # SKIPPED; binary-hardening gains the redaction receipt (it publishes scanner output) and makes
-        # binskim.sarif conditional, because a SKIPPED node never ran BinSkim and has no SARIF to publish.
-        expected_extra = {
-            CONTAINER: ({"outputs/container-image-applicability.json"}, set()),
-            MOBILE: (set(), set()),
-            BINARY: ({"outputs/binary-hardening-applicability.json", "outputs/redaction-receipt.json"},
-                     {"outputs/binskim.sarif"}),
-        }
+        # job-nodes.proposal.json was reconciled with these contracts by V02 (2026-09-20): the probe
+        # receipts, binary-hardening's redaction receipt and the conditional BinSkim SARIF are now in the
+        # fixture and the ADR contract table, so nothing differs. Kept as an explicit empty pin.
+        expected_extra = {CONTAINER: (set(), set()), MOBILE: (set(), set()), BINARY: (set(), set())}
         for contract_id in CONTRACT_IDS:
             contract = self.load(contract_id)
             required, proposed = set(contract["required_files"]), set(PROPOSED[contract_id]["required_artifacts"])

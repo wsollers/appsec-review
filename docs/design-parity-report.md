@@ -3,7 +3,7 @@
 Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
-Lifecycle jobs: **42**
+Lifecycle jobs: **51**
 Design capabilities: **15**
 
 ## Readiness summary
@@ -12,7 +12,7 @@ Design capabilities: **15**
 |---|---:|
 | `implemented_and_qualified` | 3 |
 | `implemented_not_qualified` | 1 |
-| `missing_prerequisites` | 27 |
+| `missing_prerequisites` | 36 |
 | `registered_planned_not_executable` | 9 |
 | `supplied_artifact_gate` | 2 |
 
@@ -62,6 +62,15 @@ Design capabilities: **15**
 | `02-test-coverage-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-operations-doc-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-evidence-index` | true | `actual_worker` | `implemented_and_qualified` | `unassigned` |
+| `02-secrets-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-iac-config-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-container-image-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-sbom-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-sca-vulnerability-match` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-license-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-dependency-lifecycle` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-binary-hardening` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-mobile-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 
 ## Explicit gaps
 
@@ -92,6 +101,13 @@ Design capabilities: **15**
 - 02-binary-cfg: no_qualification
 - 02-binary-cfg: resource pool unassigned
 - 02-binary-cfg: unassigned_resource_pool
+- 02-binary-hardening: missing_registry_composition
+- 02-binary-hardening: missing_validator
+- 02-binary-hardening: missing_worker
+- 02-binary-hardening: no qualification evidence
+- 02-binary-hardening: no_qualification
+- 02-binary-hardening: resource pool unassigned
+- 02-binary-hardening: unassigned_resource_pool
 - 02-binary-intelligence-ingest: missing_dedicated_output_schema
 - 02-binary-intelligence-ingest: missing_validator
 - 02-binary-intelligence-ingest: missing_worker
@@ -116,6 +132,13 @@ Design capabilities: **15**
 - 02-build-configure: no_live_full_review_qualification
 - 02-build-configure: resource pool unassigned
 - 02-build-configure: unassigned_resource_pool
+- 02-container-image-inventory: missing_registry_composition
+- 02-container-image-inventory: missing_validator
+- 02-container-image-inventory: missing_worker
+- 02-container-image-inventory: no qualification evidence
+- 02-container-image-inventory: no_qualification
+- 02-container-image-inventory: resource pool unassigned
+- 02-container-image-inventory: unassigned_resource_pool
 - 02-debug-symbol-index: missing_dedicated_output_schema
 - 02-debug-symbol-index: missing_output_contract
 - 02-debug-symbol-index: missing_registry_composition
@@ -125,6 +148,13 @@ Design capabilities: **15**
 - 02-debug-symbol-index: no_qualification
 - 02-debug-symbol-index: resource pool unassigned
 - 02-debug-symbol-index: unassigned_resource_pool
+- 02-dependency-lifecycle: missing_registry_composition
+- 02-dependency-lifecycle: missing_validator
+- 02-dependency-lifecycle: missing_worker
+- 02-dependency-lifecycle: no qualification evidence
+- 02-dependency-lifecycle: no_qualification
+- 02-dependency-lifecycle: resource pool unassigned
+- 02-dependency-lifecycle: unassigned_resource_pool
 - 02-dev-project-discovery: no qualification evidence
 - 02-dev-project-discovery: not_automatic_analysis_dispatch
 - 02-dev-project-discovery: resource pool unassigned
@@ -155,6 +185,13 @@ Design capabilities: **15**
 - 02-evidence-index: missing_dedicated_output_schema
 - 02-evidence-index: resource pool unassigned
 - 02-evidence-index: unassigned_resource_pool
+- 02-iac-config-scan: missing_registry_composition
+- 02-iac-config-scan: missing_validator
+- 02-iac-config-scan: missing_worker
+- 02-iac-config-scan: no qualification evidence
+- 02-iac-config-scan: no_qualification
+- 02-iac-config-scan: resource pool unassigned
+- 02-iac-config-scan: unassigned_resource_pool
 - 02-ir-capture: missing_dedicated_output_schema
 - 02-ir-capture: missing_output_contract
 - 02-ir-capture: missing_registry_composition
@@ -182,6 +219,20 @@ Design capabilities: **15**
 - 02-ir-link: no_qualification
 - 02-ir-link: resource pool unassigned
 - 02-ir-link: unassigned_resource_pool
+- 02-license-scan: missing_registry_composition
+- 02-license-scan: missing_validator
+- 02-license-scan: missing_worker
+- 02-license-scan: no qualification evidence
+- 02-license-scan: no_qualification
+- 02-license-scan: resource pool unassigned
+- 02-license-scan: unassigned_resource_pool
+- 02-mobile-sast: missing_registry_composition
+- 02-mobile-sast: missing_validator
+- 02-mobile-sast: missing_worker
+- 02-mobile-sast: no qualification evidence
+- 02-mobile-sast: no_qualification
+- 02-mobile-sast: resource pool unassigned
+- 02-mobile-sast: unassigned_resource_pool
 - 02-native-build: missing_dedicated_output_schema
 - 02-native-build: missing_output_contract
 - 02-native-build: missing_registry_composition
@@ -215,6 +266,27 @@ Design capabilities: **15**
 - 02-repository-partition-discovery: resource pool unassigned
 - 02-repository-partition-discovery: supplied_result_required
 - 02-repository-partition-discovery: unassigned_resource_pool
+- 02-sbom-inventory: missing_registry_composition
+- 02-sbom-inventory: missing_validator
+- 02-sbom-inventory: missing_worker
+- 02-sbom-inventory: no qualification evidence
+- 02-sbom-inventory: no_qualification
+- 02-sbom-inventory: resource pool unassigned
+- 02-sbom-inventory: unassigned_resource_pool
+- 02-sca-vulnerability-match: missing_registry_composition
+- 02-sca-vulnerability-match: missing_validator
+- 02-sca-vulnerability-match: missing_worker
+- 02-sca-vulnerability-match: no qualification evidence
+- 02-sca-vulnerability-match: no_qualification
+- 02-sca-vulnerability-match: resource pool unassigned
+- 02-sca-vulnerability-match: unassigned_resource_pool
+- 02-secrets-inventory: missing_registry_composition
+- 02-secrets-inventory: missing_validator
+- 02-secrets-inventory: missing_worker
+- 02-secrets-inventory: no qualification evidence
+- 02-secrets-inventory: no_qualification
+- 02-secrets-inventory: resource pool unassigned
+- 02-secrets-inventory: unassigned_resource_pool
 - 02-source-sast: missing_dedicated_output_schema
 - 02-source-sast: missing_output_contract
 - 02-source-sast: missing_registry_composition

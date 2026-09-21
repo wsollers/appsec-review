@@ -56,7 +56,7 @@ class DesignParityTests(unittest.TestCase):
     def test_current_honest_baseline(self):
         result = validate_manifest(self.manifest)
         self.assertEqual(result["status"], "PASS", result["errors"])
-        self.assertEqual(result["job_count"], 42)
+        self.assertEqual(result["job_count"], 51)
         self.assertEqual(result["capability_count"], 15)
         self.assertIn("resource_pools: no dedicated Dagster resource pools are configured", result["gaps"])
 
@@ -154,7 +154,7 @@ class DesignParityTests(unittest.TestCase):
         first = render_report(self.manifest, result)
         second = render_report(deepcopy(self.manifest), validate_manifest(deepcopy(self.manifest)))
         self.assertEqual(first, second)
-        self.assertIn("Lifecycle jobs: **42**", first)
+        self.assertIn("Lifecycle jobs: **51**", first)
 
     def test_common_worker_result_envelope_semantics(self):
         base = {
