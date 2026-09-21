@@ -14,7 +14,8 @@ State lives under ``images/.build-state/<image_id>/`` (override: APPSEC_IMAGE_BU
     attempts/<attempt_id>/        status.json, plan.json, result.json, command.json, logs/
 
 Outcomes: OK, REUSED (fingerprint unchanged and the image still exists), BLOCKED (a precondition was
-not met; nothing was built), FAILED (fetch, build, timeout or verification failed), CANCELED.
+not met; nothing was built), FAILED (fetch, build, timeout or verification failed), CANCELED,
+INTERRUPTED (the build process died without a record; set by the next build that reclaims its lock).
 A terminal record is always written before the error is reported, with the log tail attached.
 
     python -B images/image_build.py list
@@ -32,6 +33,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import urllib.request
@@ -337,6 +339,46 @@ def _environment() -> dict[str, str]:
     return env
 
 
+def _reclaim_stale_lock(lock: Path) -> bool:
+    """Take over a lock whose owning process is dead on this host, and close its attempt out.
+
+    A crashed or killed build leaves the lock and a status.json stuck on RUNNING. The lock is only
+    reclaimed when its recorded pid is provably gone on this same host; anything else stays BLOCKED.
+    """
+    try:
+        holder = json.loads(lock.read_text(encoding="utf-8"))
+        pid = int(holder["pid"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if holder.get("host") not in (None, socket.gethostname()):
+        return False
+    try:
+        os.kill(pid, 0)
+        return False  # still alive
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        return False  # alive, owned by another user
+    attempt = lock.parent / "attempts" / str(holder.get("attempt_id", ""))
+    status_path = attempt / "status.json"
+    if status_path.is_file():
+        try:
+            record = json.loads(status_path.read_text(encoding="utf-8"))
+        except ValueError:
+            record = {}
+        if record.get("status") == "RUNNING":
+            record.update({"status": "INTERRUPTED", "finished_at": now(),
+                           "error": f"build process {pid} died without a terminal record; "
+                                    "lock reclaimed by a later build"})
+            atomic_json(status_path, record)
+            atomic_json(attempt / "result.json", record)
+    try:
+        lock.unlink()
+    except FileNotFoundError:
+        pass
+    return True
+
+
 def run(image_id: str, override: dict[str, Any] | None = None, *, force: bool = False,
         root: Path | None = None) -> dict[str, Any]:
     builds = load_builds(root)
@@ -349,7 +391,12 @@ def run(image_id: str, override: dict[str, Any] | None = None, *, force: bool = 
     attempt_id = now().replace(":", "").replace("+00:00", "Z").replace(".", "") + "-" + uuid.uuid4().hex[:8]
     attempt = base / "attempts" / attempt_id
     try:
-        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            if not _reclaim_stale_lock(lock):
+                raise
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
         holder = ""
         try:
@@ -358,7 +405,7 @@ def run(image_id: str, override: dict[str, Any] | None = None, *, force: bool = 
             pass
         raise Blocked(f"BUILD_IN_PROGRESS: {lock} is held ({holder or 'unknown holder'}); remove it only if that build is dead") from None
     with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        json.dump({"attempt_id": attempt_id, "pid": os.getpid(), "at": now()}, stream)
+        json.dump({"attempt_id": attempt_id, "pid": os.getpid(), "host": socket.gethostname(), "at": now()}, stream)
     (attempt / "logs").mkdir(parents=True)
     status: dict[str, Any] = {"schema": SCHEMA, "image_id": image_id, "tag": build["tag"], "attempt_id": attempt_id,
                               "started_at": now(), "status": "RUNNING"}
