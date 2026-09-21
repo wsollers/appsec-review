@@ -105,6 +105,11 @@ python -B appsec-review-process/validate_job_output.py `
 
 Add `--consumer-job <job-id>` for `SKIPPED` so the validator can check the exact dependency edge.
 Add `--accepted-envelope <path> --reuse` only when proving immutable reuse of the current attempt.
+For one of the nine ADR-0010 vendor-prepass contracts add BOTH
+`--dagster-run-id <orchestrator run that produced the attempt>` and
+`--source-snapshot-sha256 sha256:<digest>` (one without the other is a usage error). Without them
+those contracts fail closed with `... the caller supplied NO_ORCHESTRATION_FACTS ...`; every other
+contract ignores them. See `docs/validator-vendor-prepass-dispatch.md`.
 This validator is read-only and does not make a legacy worker conform automatically.
 
 ## Persona And Registry Lookups
