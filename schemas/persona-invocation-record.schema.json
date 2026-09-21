@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "persona-invocation-record.schema.json",
+  "title": "Persona invocation record",
+  "description": "The invocation.json the adapter writes after the invoker stops: what was handed over, how the call ended and the adapter's own scan of the output root. No invoker text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "adapter",
+    "request_sha256",
+    "package_sha256",
+    "invoker_id",
+    "outcome",
+    "invoker_stopped",
+    "timeout_seconds",
+    "started_at",
+    "finished_at",
+    "output_tree_state",
+    "output_tree",
+    "attempt_changed_outside_output_root",
+    "inputs_changed"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/persona-invocation-record/1.0"
+    },
+    "adapter": {
+      "const": "appsec-review/persona-invocation-adapter/1.0"
+    },
+    "request_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "package_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "invoker_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "not_invoked",
+        "returned",
+        "raised",
+        "unavailable",
+        "timed_out",
+        "canceled"
+      ]
+    },
+    "invoker_stopped": {
+      "type": "boolean"
+    },
+    "timeout_seconds": {
+      "type": "integer"
+    },
+    "started_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "finished_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "output_tree_state": {
+      "type": "string",
+      "enum": [
+        "not_scanned",
+        "regular",
+        "irregular",
+        "over_limit"
+      ]
+    },
+    "output_tree": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "persona-invocation-file.schema.json"
+      }
+    },
+    "attempt_changed_outside_output_root": {
+      "type": "boolean"
+    },
+    "inputs_changed": {
+      "type": "boolean"
+    }
+  }
+}

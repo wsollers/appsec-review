@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "persona-invocation-result.schema.json",
+  "title": "Persona invocation result",
+  "description": "The invocation-result.json written last into the log directory: adapter and rule identity, request, prompt, composition, model, permission and input hashes, a closed cause, the re-derived output list, usage and emitted claim classes. No prompt, evidence or invoker text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "adapter",
+    "independence_rule",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "request_sha256",
+    "package_sha256",
+    "invocation_role",
+    "invoker_id",
+    "persona_id",
+    "prompt_sha256",
+    "composition_sha256",
+    "model",
+    "permission_fingerprint_sha256",
+    "readable_inputs_sha256",
+    "input_bytes",
+    "execution_status",
+    "cause",
+    "outcome",
+    "invoker_stopped",
+    "started_at",
+    "finished_at",
+    "output_root",
+    "log_path",
+    "output_manifest_sha256",
+    "outputs",
+    "usage",
+    "claim_classes",
+    "claim_count",
+    "verified_invocations",
+    "files",
+    "result_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/persona-invocation-result/1.0"
+    },
+    "adapter": {
+      "const": "appsec-review/persona-invocation-adapter/1.0"
+    },
+    "independence_rule": {
+      "const": "appsec-review/persona-independence/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "request_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "package_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "invocation_role": {
+      "type": "string",
+      "enum": [
+        "produce",
+        "verify",
+        "refute",
+        "judge"
+      ]
+    },
+    "invoker_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "persona_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "prompt_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "composition_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "model": {
+      "$ref": "persona-model-identity.schema.json"
+    },
+    "permission_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "readable_inputs_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "input_bytes": {
+      "type": "integer"
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED"
+      ]
+    },
+    "cause": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "PERMISSION_DENIED",
+        "INVOKER_UNAVAILABLE",
+        "TIMEOUT",
+        "CANCELED",
+        "INVOKER_EXCEPTION",
+        "OUTPUT_ESCAPE",
+        "MALFORMED_RESULT",
+        "IDENTITY_MISMATCH",
+        "BUDGET_EXCEEDED",
+        "UNDECLARED_TOOL",
+        "PROHIBITED_CLAIM",
+        "UNDECLARED_CITATION",
+        "SELF_VERIFICATION"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "not_invoked",
+        "returned",
+        "raised",
+        "unavailable",
+        "timed_out",
+        "canceled"
+      ]
+    },
+    "invoker_stopped": {
+      "type": "boolean"
+    },
+    "started_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "finished_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "output_root": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+    },
+    "log_path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+    },
+    "output_manifest_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "$ref": "persona-invocation-file.schema.json"
+      }
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "input_bytes",
+        "input_units",
+        "output_bytes",
+        "output_units",
+        "tool_calls"
+      ],
+      "properties": {
+        "input_bytes": {
+          "type": "integer"
+        },
+        "input_units": {
+          "type": "integer"
+        },
+        "output_bytes": {
+          "type": "integer"
+        },
+        "output_units": {
+          "type": "integer"
+        },
+        "tool_calls": {
+          "type": "integer"
+        }
+      }
+    },
+    "claim_classes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+      }
+    },
+    "claim_count": {
+      "type": "integer"
+    },
+    "verified_invocations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}\\Z"
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "persona-invocation-file.schema.json"
+      },
+      "minItems": 1
+    },
+    "result_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}

@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "persona-invocation-request.schema.json",
+  "title": "Persona invocation request",
+  "description": "Everything a caller may say to the persona invocation adapter. There is deliberately no property for prompt text, a free-text tool, an absolute path, a permission string or a default model. Bounds, registry ceilings, path identity, independence and the permission gate are persona_invocation.py responsibilities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "invocation_role",
+    "invoker_id",
+    "outer_prompt",
+    "persona",
+    "model",
+    "tools",
+    "budget",
+    "readable_inputs",
+    "output_root",
+    "log_path",
+    "allowed_claim_classes",
+    "prohibited_claim_classes",
+    "producers",
+    "permission",
+    "permission_fingerprint_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/persona-invocation-request/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "invocation_role": {
+      "type": "string",
+      "enum": [
+        "produce",
+        "verify",
+        "refute",
+        "judge"
+      ]
+    },
+    "invoker_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "outer_prompt": {
+      "$ref": "persona-invocation-file.schema.json"
+    },
+    "persona": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_template_id",
+        "job_template_sha256",
+        "persona_id",
+        "persona_sha256",
+        "role_id",
+        "role_sha256",
+        "domain_id",
+        "domain_sha256",
+        "tooling_profile_id",
+        "tooling_profile_sha256",
+        "output_contract_id",
+        "output_contract_sha256"
+      ],
+      "properties": {
+        "job_template_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+        },
+        "job_template_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "persona_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+        },
+        "persona_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "role_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+        },
+        "role_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "domain_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+        },
+        "domain_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "tooling_profile_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+        },
+        "tooling_profile_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "output_contract_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+        },
+        "output_contract_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "model": {
+      "$ref": "persona-model-identity.schema.json"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^act-[0-9a-f]{24}\\Z"
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input_byte_limit",
+        "input_unit_limit",
+        "output_byte_limit",
+        "output_unit_limit",
+        "output_file_limit",
+        "tool_call_limit",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "input_byte_limit": {
+          "type": "integer"
+        },
+        "input_unit_limit": {
+          "type": "integer"
+        },
+        "output_byte_limit": {
+          "type": "integer"
+        },
+        "output_unit_limit": {
+          "type": "integer"
+        },
+        "output_file_limit": {
+          "type": "integer"
+        },
+        "tool_call_limit": {
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "type": "integer"
+        }
+      }
+    },
+    "readable_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "root",
+          "path",
+          "sha256",
+          "bytes",
+          "role",
+          "producer_request_sha256"
+        ],
+        "properties": {
+          "root": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}\\Z"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "handoff",
+              "evidence",
+              "reference",
+              "producer_output",
+              "producer_result"
+            ]
+          },
+          "producer_request_sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^sha256:[0-9a-f]{64}\\Z"
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "output_root": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+    },
+    "log_path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+    },
+    "allowed_claim_classes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+      },
+      "minItems": 1
+    },
+    "prohibited_claim_classes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+      },
+      "minItems": 1
+    },
+    "producers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "job_id",
+          "attempt_id",
+          "request_sha256",
+          "persona_id",
+          "model"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+          },
+          "attempt_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+          },
+          "request_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}\\Z"
+          },
+          "persona_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+          },
+          "model": {
+            "$ref": "persona-model-identity.schema.json"
+          }
+        }
+      }
+    },
+    "permission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "grants",
+        "decision"
+      ],
+      "properties": {
+        "requirement": {
+          "$ref": "permission-requirement.schema.json"
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "$ref": "permission-grant.schema.json"
+          }
+        },
+        "decision": {
+          "$ref": "permission-decision.schema.json"
+        }
+      }
+    },
+    "permission_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}
