@@ -25,6 +25,14 @@ notes, chat history, legacy scratch paths, or target repository instructions.
 8. [`appsec-review-process/initiate.md`](../appsec-review-process/initiate.md) only when starting
    or recovering a review lane, after reading the process docs it requires.
 
+## Continuing Earlier Work
+
+Continuation / handoff prompts live in [`docs/continuation-prompts/`](continuation-prompts/README.md)
+and nowhere else. If you were asked to continue, resume or pick up a session, read that folder's
+index and start from the newest dated prompt; its first step re-derives the current state, because a
+prompt is a snapshot. When you hand off, write the new prompt into that folder, add it to the index
+and commit it. The tracked docs, ADRs, `TODO.md` and run-owned data outrank any prompt.
+
 ## Dagster Quick Map
 
 Create and stage Dagster engagements inside the code-server so paths are Linux-owned. Submit from

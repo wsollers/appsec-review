@@ -7,7 +7,7 @@
 - [x] Adopt the common envelope and separated publication boundary in exactly
   `02-ossf-scorecard` and supplied `02-repository-partition-discovery`.
 - [x] Qualify Windows/Linux validation plus live Dagster publication, reuse, newer-failure
-  blocking, and recovery. See `continuation-design-parity-worker-envelope.md` for run IDs.
+  blocking, and recovery. See `docs/continuation-prompts/design-parity-worker-envelope.md` for run IDs.
 - [x] Centralize collision-safe allocation, fail-closed `PENDING`/`latest.json` movement,
   interrupted-attempt recovery, and durable `BLOCKED`/`FAILED`/`CANCELED` envelopes for exactly
   the same two adopted workers. Worker execution and process control remain local.
@@ -37,7 +37,7 @@ The cross-cutting implementation and acceptance backlog for parity with `docs/de
 [`docs/design-parity-completion-plan.md`](../docs/design-parity-completion-plan.md). It is the
 authoritative checklist for pools, all lifecycle jobs, personas, feedback loops, standards decision
 gates, and final end-to-end qualification. Continue the next bounded Workstream B batch with
-[`continuation-design-parity-worker-envelope.md`](continuation-design-parity-worker-envelope.md).
+[`docs/continuation-prompts/design-parity-worker-envelope.md`](../docs/continuation-prompts/design-parity-worker-envelope.md).
 The sections below retain
 subsystem-specific detail.
 
@@ -877,7 +877,7 @@ Cross-cutting capability ownership is explicit:
 Per the 2026-09-19 script migration rule (`AGENTS.md`, `README.md`, `docs/migration.md`): no new
 review-work logic in `scripts/`; port active review scripts, qualify, update callers, delete the
 old script outright (no thin wrapper). Full script-by-script survey and priority tiers:
-`appsec-review-process/continuation-scripts-to-pipeline-migration.md`.
+`docs/continuation-prompts/scripts-to-pipeline-migration.md`.
 
 - [x] Port `scripts/summarize_evidence.py` -> `pipeline/summarize_evidence.py` (2026-09-19,
   verbatim copy -- the script had no dependency on anything else under `scripts/`). Updated both

@@ -31,7 +31,7 @@ Batch 8 changed exactly these 10 paths. Eight were already inside the Batch 7 bo
 new paths:
 
 - `appsec-review-process/TODO.md`
-- `appsec-review-process/continuation-design-parity-worker-envelope.md`
+- `docs/continuation-prompts/design-parity-worker-envelope.md`
 - `appsec-review-process/deterministic_child.py` (new)
 - `appsec-review-process/ossf_scorecard.py`
 - `appsec-review-process/qualify_worker_adoption.py`
@@ -168,7 +168,7 @@ Implemented on branch `claude/b09-sarif-common-runtime` within the requested bou
 - `schemas/critical-findings-sarif.schema.json` (new)
 - `appsec-review-process/publish_job_output.py` (docstring only)
 - `appsec-review-process/TODO.md`
-- `appsec-review-process/continuation-design-parity-worker-envelope.md`
+- `docs/continuation-prompts/design-parity-worker-envelope.md`
 - `docs/critical-findings-sarif-job.md`
 - `docs/worker-result-envelope.md`
 - `docs/run-data-and-job-execution.md`

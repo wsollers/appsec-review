@@ -8,6 +8,9 @@ This repository keeps agent operating instructions in tracked docs and process s
   [`appsec-review-process/agent-skills/claude/process-reader.md`](appsec-review-process/agent-skills/claude/process-reader.md).
 - Shared reader map:
   [`docs/agent-reader.md`](docs/agent-reader.md).
+- Continuation / handoff prompts (picking up earlier work): every one lives in
+  [`docs/continuation-prompts/`](docs/continuation-prompts/README.md). Start from the newest dated
+  prompt in its index, and write new prompts there and nowhere else.
 
 When docs and old scratch evidence disagree, use the docs and run-owned
 `appsec-review-process/runs/<run_id>/data/` records as authoritative.
