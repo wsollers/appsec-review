@@ -9,10 +9,24 @@ import discovery_gate
 import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
 import ossf_scorecard as ossf_scorecard_worker
+import resource_pools
 import json
 import os
 import urllib.error
 import urllib.request
+
+
+# B15 resource pools. Pool ids, limits and the derivation live in resource_pools.py; this module
+# only names, per op, the worker kind and permission kinds that decide its pool. An op that holds
+# no pool records the explicit unassigned state, so no op is silently unlimited.
+CPU_POOL=resource_pools.derive_pool('deterministic_python',(),memory_heavy=False)
+MEMORY_POOL=resource_pools.derive_pool('deterministic_python',(),memory_heavy=True)
+GATE_POOL=resource_pools.derive_pool('supplied_human_decision',(),memory_heavy=False)
+NETWORK_POOL=resource_pools.derive_pool('deterministic_python',('fixed-network-destination',),memory_heavy=False)
+DOCKER_POOL=resource_pools.derive_pool('pinned_container',('target-execution',),memory_heavy=False)
+# Coordination ops reserve, check and publish under short locks; they must never wait on a work pool.
+COORDINATION=resource_pools.unassigned('coordination_only')
+NOT_IMPLEMENTED=resource_pools.unassigned('worker_not_implemented')
 
 
 @resource(config_schema={'engagement_run_id':str,'force':bool})
@@ -62,7 +76,7 @@ def workflow_failed(context):
         raise
 
 
-@op(required_resource_keys={'workflow_settings'})
+@op(required_resource_keys={'workflow_settings'},tags=COORDINATION)
 def workflow_config(context):
     settings=context.resources.workflow_settings
     run_id=settings['engagement_run_id']
@@ -87,7 +101,7 @@ def workflow_config(context):
     return dict(settings)
 
 
-@op
+@op(pool=CPU_POOL)
 def workflow_intake(context, configured: dict):
     # Never share a live Session/OS lock between Dagster subprocesses.
     with Session(configured['engagement_run_id'],force=configured['force'],dagster_id=context.run_id,
@@ -98,7 +112,7 @@ def workflow_intake(context, configured: dict):
 
 
 def branch_op(name, op_name=None):
-    @op(name=op_name or name)
+    @op(name=op_name or name,pool=CPU_POOL)
     def prepared(context, intake: dict):
         pointer=workflow.run_branch(intake['engagement_run_id'],name,intake['intake'],context.run_id,intake['force'])
         path=data_path(intake['engagement_run_id'],'jobs','00-workflow-preparation',name,'attempts',pointer['attempt_id'])
@@ -114,7 +128,7 @@ native_plan_check=branch_op('native_plan_check')
 discovery_handoffs=branch_op('discovery_handoffs')
 
 
-@op
+@op(tags=COORDINATION)
 def workflow_publish(context, intake: dict, scope: dict, native: dict, handoffs: dict):
     result=workflow.publish(intake['engagement_run_id'],context.run_id,intake['intake'],[scope,native,handoffs])
     context.add_output_metadata({'workflow':MetadataValue.path(str(workflow.root(result['run_id'])/'accepted.json'))})
@@ -132,7 +146,7 @@ def engagement_workflow():
 build_discovery_work=branch_op('build_discovery','build_discovery_work')
 
 
-@op
+@op(tags=COORDINATION)
 def build_discovery_publish(context, intake: dict, discovered: dict):
     run_id=intake['engagement_run_id']
     if discovered['upstream']!=intake['intake']['fingerprint']:
@@ -164,7 +178,7 @@ def build_discovery():
     build_discovery_publish(intake,build_discovery_work(intake))
 
 
-@op(required_resource_keys={'workflow_settings'})
+@op(required_resource_keys={'workflow_settings'},tags=COORDINATION)
 def build_execution_config(context):
     # Deliberately does NOT touch workflow.root(run_id)/status.json. That shared file's
     # RUNNING/OK lifecycle is owned by whichever of engagement_workflow/build_discovery last
@@ -178,7 +192,7 @@ def build_execution_config(context):
     return dict(settings)
 
 
-@op
+@op(pool=DOCKER_POOL)
 def build_execution_work(context, intake: dict):
     # This is the one op in the graph allowed to execute target-adjacent commands (a bounded
     # CMake configure inside audit-buildenv-cpp). See build_execution.py's module docstring for
@@ -202,7 +216,7 @@ def build_execution():
     build_execution_work(intake)
 
 
-@op
+@op(pool=MEMORY_POOL)
 def evidence_index_work(context, intake: dict, discovered: dict):
     if discovered['upstream'] != intake['intake']['fingerprint']:
         raise Failure('mixed intake generations at evidence indexing')
@@ -223,7 +237,7 @@ def evidence_index():
     evidence_index_work(intake, build_discovery_work(intake))
 
 
-@op
+@op(pool=CPU_POOL)
 def critical_findings_sarif_work(context, configured: dict):
     result = critical_findings_sarif_worker.run(configured['engagement_run_id'], context.run_id,
                                                 configured['force'])
@@ -258,12 +272,12 @@ def run_ossf_scorecard(context, configured: dict):
     return result
 
 
-@op
+@op(pool=NETWORK_POOL)
 def ossf_scorecard_work(context, configured: dict):
     return run_ossf_scorecard(context, configured)
 
 
-@op(name='job_02_ossf_scorecard', ins={'configured': In(dict), 'upstream': In(list)})
+@op(name='job_02_ossf_scorecard', ins={'configured': In(dict), 'upstream': In(list)}, pool=NETWORK_POOL)
 def ossf_scorecard_lifecycle_work(context, configured: dict, upstream: list):
     return run_ossf_scorecard(context, configured)
 
@@ -278,7 +292,7 @@ def ossf_scorecard():
 
 
 def blocked_op(name, node):
-    @op(name='job_'+name.replace('-','_'),ins={'configured':In(dict),'upstream':In(list)},
+    @op(name='job_'+name.replace('-','_'),ins={'configured':In(dict),'upstream':In(list)},tags=NOT_IMPLEMENTED,
         description='BLOCKED: worker not implemented. Dependencies and failure are explicit.')
     def unavailable(context, configured, upstream):
         path=data_path(configured['engagement_run_id'],'orchestration','dagster',context.run_id,name)
@@ -292,7 +306,7 @@ def blocked_op(name, node):
     return unavailable
 
 
-@op(name='job_02_build_configure',ins={'configured':In(dict),'upstream':In(list)})
+@op(name='job_02_build_configure',ins={'configured':In(dict),'upstream':In(list)},pool=DOCKER_POOL)
 def build_configure_work(context, configured, upstream):
     # Bridges job-graph.json's '02-build-configure' lifecycle node (planned_scope: "Isolated
     # configure and validated compile database") to build_execution.py's real, sandboxed
@@ -335,12 +349,12 @@ def run_repository_partition_discovery(context, configured):
     return result
 
 
-@op
+@op(pool=GATE_POOL)
 def repository_partition_discovery_standalone_work(context, configured):
     return run_repository_partition_discovery(context, configured)
 
 
-@op(name='job_02_repository_partition_discovery', ins={'configured': In(dict), 'upstream': In(list)})
+@op(name='job_02_repository_partition_discovery', ins={'configured': In(dict), 'upstream': In(list)}, pool=GATE_POOL)
 def repository_partition_discovery_work(context, configured, upstream):
     return run_repository_partition_discovery(context, configured)
 
@@ -352,7 +366,7 @@ def repository_partition_discovery():
     repository_partition_discovery_standalone_work(build_execution_config())
 
 
-@op(name='job_02_dev_project_discovery', ins={'configured': In(dict), 'upstream': In(list)})
+@op(name='job_02_dev_project_discovery', ins={'configured': In(dict), 'upstream': In(list)}, pool=GATE_POOL)
 def dev_project_discovery_work(context, configured, upstream):
     # Same validated hand-off gate as repository_partition_discovery_work above, for the
     # project-discovery contract. See discovery_gate.py.
