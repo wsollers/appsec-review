@@ -392,7 +392,7 @@ The completed BinSkim patcher-retirement batch added or changed:
 
 - the completed historical row and then-current 39-item checkpoint in `docs/architecture/script-migration-inventory.md`
 - the completed-retirement notes in `docs/architecture/migration.md` and `appsec-review-process/TODO.md`
-- removal of the stale historical filename analogy from `docs/toolbox-remediation-2026-09-01.md`
+- removal of the stale historical filename analogy from the 2026-09-01 toolbox remediation log (itself removed 2026-09-21)
 - deletion of `scripts/fix-binskim.ps1`
 
 The completed component-location batch added or changed:

@@ -28,8 +28,6 @@ Read these files before acting:
 - `appsec-review-process/artifacts.md`
 - `appsec-review-process/budget-policy.md`
 - `appsec-review-process/manual-orchestration-runbook.md`
-- `docs/lessons-learned-2026-09-16-eastl-full-stack.md`
-- `docs/project-context-zip-inventory-2026-09-16.md`
 
 ## Candidate Repository Discovery
 

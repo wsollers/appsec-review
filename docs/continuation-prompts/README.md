@@ -34,23 +34,14 @@ Session handoffs, newest first:
 | Prompt | What it covers |
 |---|---|
 | [2026-09-21-appsec-review-continuation.md](2026-09-21-appsec-review-continuation.md) | State late 2026-09-20, the subagent/verification protocol, lessons 1–16, next tasks. Supersedes every earlier session handoff. |
-| [2026-09-20-appsec-review-continuation.md](2026-09-20-appsec-review-continuation.md) | Superseded by 2026-09-21. |
-| [2026-09-17-appsec-review-continuation.md](2026-09-17-appsec-review-continuation.md) | "Next cheap-wins pass". Superseded. |
-| [2026-09-14-continuation-prompt.md](2026-09-14-continuation-prompt.md) | EASTL testbed, allocator inventory, Unreal as scale target. Historical; cited by ADR-0010. |
-| [2026-09-14-eastl.md](2026-09-14-eastl.md) | EASTL testbed natively in WSL2 via the pipeline scripts. Historical; cited by ADR-0010. |
 
 Task-scoped prompts:
 
 | Prompt | Task |
 |---|---|
-| [design-parity-todo.md](design-parity-todo.md) | Begin the design-parity implementation (the `TODO.md` backlog). |
 | [design-parity-worker-envelope.md](design-parity-worker-envelope.md) | Design parity Workstream B, batch 9 (common worker envelope); holds run ids `TODO.md` cites. |
 | [scripts-to-pipeline-migration.md](scripts-to-pipeline-migration.md) | Migrating review jobs out of `scripts/` (see the Script Migration Rule in `AGENTS.md`). |
-| [g01-threat-workbench-review.md](g01-threat-workbench-review.md) | G01 threat-workbench review (ADR-0008, accepted). |
 | [g02-owasp-workbench-decision.md](g02-owasp-workbench-decision.md) | G02 OWASP control workbench decision. |
-| [m01-vendor-prepass-decision.md](m01-vendor-prepass-decision.md) | M01 vendor-prepass graph and contract decision (ADR-0010, accepted). |
-| [remediation-rt-fc04-002.md](remediation-rt-fc04-002.md) | EASTL RT-FC04-002 remediation proposal probe. |
-| [doom3-bfg-full-static-analysis.md](doom3-bfg-full-static-analysis.md) | Doom 3 BFG full static-analysis pregather. |
 
 ## History of this folder
 

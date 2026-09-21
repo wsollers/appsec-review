@@ -248,7 +248,7 @@ the buffer already read, hashed and stored by `collect`.
 | `metrics_sha256` | `06f5517972808ea01c5dd671512b2882f1f2af631dcc375ad57b14801509a361` |
 | Worker | `evidence_store.py` sha256 prefix `ce3fdbb35fe0d222`, identical on the host and inside the container |
 | Image | `appsec-review-dagster:local`, id `sha256:722e3187531cd7fed354eb2b3711abbc3c0f74d75be04d1ae769d6b485fa99b7`, built from `orchestrator/dagster/Dockerfile` on this branch; Python 3.12.14, dagster 1.13.21, libfuzzy2 `2.14.1+git20180629.57fcfff-3+b2` (real ssdeep) |
-| Target | Freeciv21 `https://github.com/longturn/freeciv21` at `0ce1c60acf1140d6c5c5a5cd6bef2507bd072319`, the revision `docs/phase-1-acceptance.md` records |
+| Target | Freeciv21 `https://github.com/longturn/freeciv21` at `0ce1c60acf1140d6c5c5a5cd6bef2507bd072319`, the revision the Phase 1 acceptance run `20260919T104300Z-ba7b4c` records |
 | Host | Ubuntu 24.04, Docker 29.1.3, Compose 2.40.3, native Linux (not Docker Desktop) |
 
 What the run measured on Freeciv21: 6 101 files, 252 312 338 bytes (equal to `snapshot_bytes`),

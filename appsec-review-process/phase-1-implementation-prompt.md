@@ -15,7 +15,7 @@ Read `initiate.md`, `environment.md`, `artifacts.md`, `budget-policy.md`,
 `manual-orchestration-runbook.md`, `process-manifest.json`, `00-intake-recovery/{config,prompt}.md`,
 `registry/AUTHORING-TEMPLATE.md`, `registry/job-templates/`, `tooling/buildenv-catalog.json`,
 `../docs/decisions/ADR-0002-orchestrator-in-python.md`,
-`../docs/engagement-job-flow.md`, and `../docs/dagster/run-data-and-job-execution.md`.
+`../docs/design-parity/job-graph.mmd`, and `../docs/dagster/run-data-and-job-execution.md`.
 Inspect `run_process.py`, `stage_artifacts.py`, `create_handoff.py`, `validate_lane_output.py`,
 `review_cli.py`, and the engagement pipeline before changing contracts. Preserve unrelated edits.
 

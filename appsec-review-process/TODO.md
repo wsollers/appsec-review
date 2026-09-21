@@ -732,7 +732,7 @@ Cross-cutting capability ownership is explicit:
 
 ## 0. Accepted foundation
 
-- [x] Re-vet and implement Phase 1 intake: [A01-A16 PASS](../docs/phase-1-acceptance.md).
+- [x] Re-vet and implement Phase 1 intake: A01-A16 PASS on 2026-09-19, run `20260919T104300Z-ba7b4c`.
 - [x] Add the persistent Dagster run queue, per-engagement serialization, parallel preparation,
   validated final join and branch recovery: [workflow documentation](../docs/dagster/dagster-workflow.md).
 - [x] Enforce run-owned `runs/<run_id>/data/`, immutable attempts, validated reuse and explicit

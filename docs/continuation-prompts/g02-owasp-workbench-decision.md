@@ -25,7 +25,7 @@ and control-status model.
 3. `appsec-review-process/TODO.md` — G02 and S03
 4. `docs/design-parity/design-parity-completion-plan.md` — G2
 5. `docs/architecture/design-v3.md`
-6. `docs/standards-checklist-validation-proposal.md`
+6. `docs/decisions/ADR-0009-owasp-control-workbench.md` (the standards-checklist proposal it decided was removed 2026-09-21)
 7. `docs/personas-and-registry/persona-catalog.md`
 8. `docs/evidence/intelligence-sources-and-jobs.md`
 9. `appsec-review-process/04-asvs-masvs/prompt.md`

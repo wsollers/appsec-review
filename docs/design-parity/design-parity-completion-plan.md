@@ -193,6 +193,15 @@ standalone diagnostic entry where useful, lifecycle binding, documentation, and 
   mobile, source, and binary evidence; add missing graph nodes instead of hiding tools inside a
   generic source-SAST success.
 
+Ported from the 2026-09-11 design review (open there, tracked nowhere else until 2026-09-21):
+
+- [ ] Hostile-build isolation profile: write and validate a scoped seccomp profile against a
+  running `audit-native` container (Docker's default applies today), design a Hyper-V
+  snapshot-revert profile if a Windows host is ever used, and add `ANALYSIS_TOOLCHAIN_DIVERGENCE`
+  beside the compile-database trust states for clang-cl != cl (design-v3 §2.2.1).
+- [ ] L3 substrate: fold the SVF / LLVM IR / CPG enrichment and the ADR-0001 tiered strategy
+  into design-v3 §4/§17's tool list, which still names only clang/CSA/Joern/cppcheck.
+
 ### D3. Evidence rendezvous and analysis
 
 - [ ] Implement `02-evidence-assembly` as the required applicability/freshness/hash/lineage barrier.
@@ -258,6 +267,18 @@ Validation:
   human gates, and an `UNRESOLVED_AND_REPORTED` terminal path.
 - [ ] Recompute only affected descendants while preserving independent accepted branches and all
   earlier attempts.
+- [ ] Ported from the 2026-09-11 design review: L7 verifiers (`09-independent-verification`)
+  receive only cited artifact spans, never discoverer prose -- a process-enforcement change to
+  the lane's inputs, not a doc change (design-v3 §6.1 already states the data-not-instructions
+  rule; `INJECTION_SUSPECTED` exists in §23.8 but nothing emits it until the ledger exists).
+- [ ] Ported from the 2026-09-11 design review: `VERIFIED_PRIMITIVE` stranding -- a
+  high-consequence primitive whose reachability dependency is unresolved past the deadline is
+  forced to escalation or must-fix-with-caveat; terminal state `PRIMITIVE_UNRESOLVED_REPORTED`
+  is required by the finalization gate (design-v3 §23.1).
+- [ ] Ported from the 2026-09-11 design review: ledger anchoring -- the hash chain is
+  tamper-evident only if the head hash is anchored outside the orchestrator (signed with a key it
+  does not hold, or written out-of-band periodically); the orchestrator never parses evidence
+  content, only schema and hashes (design-v3 §8.2).
 
 Validation:
 
@@ -353,6 +374,10 @@ Required validation:
   results.
 - [ ] Require an independent review of the parity report and residual limitations before declaring
   design parity.
+- [ ] Ported from the 2026-09-11 design review: design-v3 §19 pass criteria -- required recall per
+  defect class, a false-positive budget, discrimination targets for benign/ambiguous cases, a
+  tuning corpus split from a holdout, and real historical CVEs (Notepad++ v8.5.6 -> v8.5.7)
+  alongside planted defects.
 
 Release criteria:
 

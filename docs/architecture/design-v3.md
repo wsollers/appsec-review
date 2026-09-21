@@ -82,7 +82,7 @@ that needs to happen in an environment that can actually execute Docker builds a
 not as a paper exercise. Tracked as a follow-up in the project TODO rather than attempted blind here.
 
 **Not yet implemented: Windows/Hyper-V isolation.** The profile above is the Linux/WSL/Docker path.
-`docs/status-2026-09-16.md` and the architecture doc confirm Windows PowerShell + Docker is a
+The 2026-09-16 status log (git history) and the architecture doc confirm Windows PowerShell + Docker is a
 validated, supported host path for the evidence pipeline generally, but no equivalent
 snapshot-revert or Hyper-V isolation boundary has been designed or documented for the hostile-build
 step specifically when run from that host path. This is a genuine open design gap, not just an

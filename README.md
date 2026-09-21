@@ -44,7 +44,7 @@ lookups are documented in [Dagster launching](docs/dagster/dagster-launching.md)
 
 ## Layout
 
-Phase 1 stateful intake is [accepted through A01-A16](docs/phase-1-acceptance.md).
+Phase 1 intake was accepted through A01-A16 on 2026-09-19 (run `20260919T104300Z-ba7b4c`).
 Use the [Dagster launcher](docs/dagster/dagster-launching.md) to submit staged intake to the running service.
 The default [engagement workflow](docs/dagster/dagster-workflow.md) queues concurrent engagements and runs
 independent preparation steps in separate processes, with a validated final join.
@@ -78,10 +78,7 @@ Top-level process docs now live under `docs/`:
 
 - [`docs/architecture/migration.md`](docs/architecture/migration.md)
 - [`docs/personas-and-registry/persona-catalog.md`](docs/personas-and-registry/persona-catalog.md)
-- [`docs/persona-pool-proposal.md`](docs/persona-pool-proposal.md)
-- [`docs/composable-review-template-proposal.md`](docs/composable-review-template-proposal.md)
 - [`docs/evidence/intelligence-sources-and-jobs.md`](docs/evidence/intelligence-sources-and-jobs.md)
-- [`docs/standards-checklist-validation-proposal.md`](docs/standards-checklist-validation-proposal.md)
 - [`docs/design-parity/design-parity-completion-plan.md`](docs/design-parity/design-parity-completion-plan.md)
 - [`docs/dagster/critical-findings-sarif-job.md`](docs/dagster/critical-findings-sarif-job.md)
 
@@ -120,8 +117,8 @@ The LLM process layer is run from `appsec-review-process/`. It starts with `init
 evidence into an ignored `runs/<run_id>/` directory, creates lane handoffs, records failures and
 resume points, and validates lane outputs.
 
-See `docs/appsec-review-architecture-and-jobs-2026-09-16.md` for the historical scanner/prompt
-architecture and the current guides above for Dagster submission.
+The pre-Dagster scanner/prompt architecture is in git history (`docs/appsec-review-architecture-and-jobs-2026-09-16.md`,
+removed 2026-09-21); the current guides above cover Dagster submission.
 
 ## Operating assumption
 

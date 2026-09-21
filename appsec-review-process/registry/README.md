@@ -10,7 +10,7 @@ The accepted Phase 1 runner executes `00-intake` with the `intake-coordinator` p
 `00-validation` template uses the `contract-validator` persona and `execution-validator` role
 with the `execution-validation` contract. Validators use a trusted nonrecursive bootstrap.
 `job_graph.py` resolves all five references and checks semantic compatibility before work.
-See [acceptance](../../docs/phase-1-acceptance.md) and [operations](../../docs/dagster/operations.md).
+Phase 1 intake was accepted through A01-A16 on 2026-09-19 (run `20260919T104300Z-ba7b4c`); see [operations](../../docs/dagster/operations.md).
 Other compositions are plans until an executor and validated output contract are implemented.
 `00-intake.execution` specifies the trusted Python worker and argv template. Dagster resolves
 this along with the staged run configuration before pre-validation; arbitrary target commands

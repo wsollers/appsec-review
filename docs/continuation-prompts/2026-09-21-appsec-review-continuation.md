@@ -36,7 +36,7 @@ docker compose ls          # which compose.yaml is the live stack running from?
 Then read: `AGENTS.md`, `docs/agent-reader.md`, `appsec-review-process/TODO.md` ("Independent work
 protocol"), `docs/decisions/ADR-0010-vendor-prepass-decomposition.md` (reconciled with the V05
 contracts; see its revision notes), `docs/proposals/vendor-prepass/task-series.md`,
-`docs/linux-host-baseline-2026-09-20.md` (incl. its Corrections section),
+the 2026-09-20 Linux host baseline (in git history; its durable facts live in `orchestrator/dagster/README.md`),
 `orchestrator/dagster/README.md` ("Native Linux host").
 
 ## 1. State when this was written (verify with step 0)
@@ -263,7 +263,7 @@ pregather batches. `qualify_tooling` needs `audit-buildenv-*` images built on th
 AND a run-level `data/acceptance/prompt-vetting.json` whose `prompt_sha256` equals the hash of
 `appsec-review-process/phase-1-implementation-prompt.md` with `requirement_blockers: []`. That file
 is a line-by-line review record of the implementation prompt against the owner's requirements
-(`docs/phase-1-prompt-review.md`; the original is in run `20260919T104300Z-ba7b4c` on the machine
+(the historical `docs/phase-1-prompt-review.md`, now only in git history; the original is in run `20260919T104300Z-ba7b4c` on the machine
 that did the first acceptance). On Linux A02–A16 pass; A01 was **not attempted**: a fresh run has no
 such record and the coordinator must not fabricate one. Offer: do the line-by-line review and put it
 in front of the owner to approve, then rerun — or the owner accepts A02–A16 as the Linux baseline.

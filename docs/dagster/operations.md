@@ -1,7 +1,7 @@
 # Phase 1 operations
 
 Phase 1 implements deterministic engagement intake and a validated handoff to pregather. Its
-acceptance status is recorded in `docs/phase-1-acceptance.md` and the cited run's A01–A16 report.
+acceptance (A01–A16, 2026-09-19) is recorded in run `20260919T104300Z-ba7b4c`'s acceptance report.
 Partition discovery, specialist collection and characterization remain planned graph nodes;
 no full review, target build, scanner, network probe or LLM is dispatched by this qualification.
 

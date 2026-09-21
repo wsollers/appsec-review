@@ -1,8 +1,8 @@
 # Local Dagster runner
 
 This stack belongs to appsec-review. It runs the default `engagement_workflow`, the retained
-`phase1_intake` job and the original smoke diagnostic, with persistent queue and instance history. See
-[Phase 1 acceptance](../../docs/phase-1-acceptance.md) and the
+`phase1_intake` job and the original smoke diagnostic, with persistent queue and instance history.
+Phase 1 intake was accepted through A01-A16 on 2026-09-19 (run `20260919T104300Z-ba7b4c`). See the
 [operations guide](../../docs/dagster/operations.md) for staging and launch configuration.
 The normal entry point is `python -B appsec-review-process/launch_job.py --run-id <run_id> --wait`.
 It now selects [engagement_workflow](../../docs/dagster/dagster-workflow.md): two concurrent runs globally,
@@ -96,7 +96,7 @@ webserver on port 3000 while this stack is running would conflict.
 
 Follow the [Phase 1 prompt](../../appsec-review-process/phase-1-implementation-prompt.md),
 [run-data contract](../../docs/dagster/run-data-and-job-execution.md), and
-[flow diagram](../../docs/engagement-job-flow.md) for production job wiring.
+[generated job graph](../../docs/design-parity/job-graph.mmd) for production job wiring.
 Dagster [asset-check documentation](https://docs.dagster.io/guides/test/asset-checks) explains that
 checks must be configured to block downstream execution; check visibility alone is not a gate.
 The bootstrap uses explicit op dependencies and propagated exceptions.

@@ -4,7 +4,7 @@ Engagement Phase 1 modernization is separately specified in
 [`phase-1-implementation-prompt.md`](phase-1-implementation-prompt.md). It adds Dagster execution,
 run-owned `data/`, explicit validation jobs, idempotency and acceptance gates. The numbered registry
 phases below describe the older implementation breakdown, not engagement lifecycle phase numbers.
-Engagement Phase 1 is [ACCEPTED through A01-A16](../docs/phase-1-acceptance.md).
+Phase 1 intake was accepted through A01-A16 on 2026-09-19 (run `20260919T104300Z-ba7b4c`).
 Use the [operations guide](../docs/dagster/operations.md); downstream dispatch remains planned.
 
 This plan consolidates the persona, intelligence, composable-template, and standards-checklist

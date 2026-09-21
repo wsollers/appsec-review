@@ -61,16 +61,15 @@ Find or ask for:
 4. Read `appsec-review-process/budget-policy.md`.
 5. Read `appsec-review-process/manual-orchestration-runbook.md`.
 6. Read this file fully.
-7. Check `docs/lessons-learned-2026-09-16-eastl-full-stack.md` and `docs/project-context-zip-inventory-2026-09-16.md` for current process lessons.
-8. Inspect `git status --short` and do not overwrite unrelated work.
-9. If an engagement output exists, inspect:
+7. Inspect `git status --short` and do not overwrite unrelated work.
+8. If an engagement output exists, inspect:
    - `job-status.md`
    - `job-manifest.jsonl`
    - `llm/coverage-ledger.json`
    - `llm/deep-confirmation.md`
-10. If `job-status.md` is missing or not `Status: OK`, prioritize `02-evidence-pregather`.
-11. If evidence is healthy but there is no component map, prioritize `01-component-characterization`.
-12. If component mapping exists, choose the next lane based on the user's goal:
+9. If `job-status.md` is missing or not `Status: OK`, prioritize `02-evidence-pregather`.
+10. If evidence is healthy but there is no component map, prioritize `01-component-characterization`.
+11. If component mapping exists, choose the next lane based on the user's goal:
    - architecture/trust boundaries: `03-threat-model-dfd-stride`
    - ASVS/MASVS: `04-asvs-masvs`
    - native memory: `05-native-memory`

@@ -27,3 +27,5 @@ spec that a test ties to code says so in its first paragraph; every relative lin
 
 Changelog: 2026-09-21 chunk 01 -- keep-set moved into buckets, links rewritten, generators and
 tests repointed (`docs/REORG-2026-09-21.md` is the classification this executed).
+2026-09-21 chunks 02 + 04 -- 24 disposed docs removed (git history keeps them), their inbound
+references redirected, the six open 2026-09-11 design-review items ported into the completion plan.

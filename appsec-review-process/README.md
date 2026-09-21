@@ -11,10 +11,9 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 
 Phase 1 intake modernization is specified in
 [`phase-1-implementation-prompt.md`](phase-1-implementation-prompt.md), with explicit acceptance
-gates and prompt vetting. See the [job-flow diagram](../docs/engagement-job-flow.md),
+gates and prompt vetting. See the [generated job graph](../docs/design-parity/job-graph.mmd),
 [run-owned data contract](../docs/dagster/run-data-and-job-execution.md), and
-[Dagster runner](../orchestrator/dagster/README.md). Phase 1 intake is
-[accepted through A01-A16](../docs/phase-1-acceptance.md); use the
+[Dagster runner](../orchestrator/dagster/README.md). Phase 1 intake was accepted through A01-A16 on 2026-09-19 (run `20260919T104300Z-ba7b4c`); use the
 [operations guide](../docs/dagster/operations.md) for new runs and recovery.
 The normal CLI submits to the service with `launch_job.py --run-id <run_id> --wait`;
 [Dagster launching](../docs/dagster/dagster-launching.md) explains configuration, transitions and recovery.
@@ -41,8 +40,6 @@ See [`docs/evidence/ossf-scorecard-job.md`](../docs/evidence/ossf-scorecard-job.
 | `artifacts.md` | Artifact locations, staging rules, and lane output contract. |
 | `budget-policy.md` | Probe/standard/full budget contracts for subtasks. |
 | `manual-orchestration-runbook.md` | How to operate the process before a full orchestrator exists. |
-| `docs/continuation-prompts/remediation-rt-fc04-002.md` | Fresh-task continuation prompt for the EASTL remediation probe. |
-| `docs/continuation-prompts/doom3-bfg-full-static-analysis.md` | Fresh-task continuation prompt for Doom 3 BFG full static-analysis pregather. |
 | `initial-idsoftware-game-repo-compile-and-review.md` | Fresh-task starter prompt for selecting, cloning, building, and staging an id Software game/engine repo. |
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
 | `registry/` | Composable persona, role, domain, tooling-profile, output-contract, and job-template records. |

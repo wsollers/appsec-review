@@ -307,8 +307,8 @@ Recorded here because the review batch could not edit the owning files.
   design-v3 or open a decision to move `03` earlier (which would starve it of intelligence).
 - **F04 — persona ID convention across `03/07/08/09`.** Decided 2026-09-20: bare IDs. Record the
   decision in `design-v3.md` §5.5 and the persona-pool proposal.
-- **F05 — persona-pool proposal path drift.** `docs/persona-pool-proposal.md` names
-  `appsec-review-process/personas/*.yaml`; the registry is `appsec-review-process/registry/*.json`.
+- **F05 — persona-pool proposal path drift.** Closed 2026-09-21: the proposal was removed
+  (superseded by the registry, B14 and B15/C01/C02); the registry is `appsec-review-process/registry/*.json`.
 - **F06 — M01 vendor-prepass decision.** Now a hard S02 prerequisite (ADR Decision 5). The
   integrator adds `M01` to S02's `BLOCKED(...)` in `TODO.md`; M01's batch should name the four
   `m01_gated` families in `input-sources.proposal.yaml` as consumers so the node/contract IDs come
