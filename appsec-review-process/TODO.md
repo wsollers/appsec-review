@@ -156,7 +156,14 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: schema/citation/cross-ID/claim-class/secret rejection, immutable reuse, invalid-newer
   blocking, interrupted recovery, Windows/Linux tests, and live supplied-result qualification.
 
-#### B11 — Permission-capability model — READY (parallel only if B09 owns no shared surfaces)
+#### B11 — Permission-capability model — IMPLEMENTED_NOT_QUALIFIED (PR #6, merged 2026-09-20; consumed by B13/B14/C01/C02, no job declares a requirement yet)
+
+- Status 2026-09-21: the evaluator, seven schemas and seven registry records exist and are
+  imported by `container_execution.py`, `persona_invocation.py`, `pool_specification.py` and
+  `pool_rendezvous.py` (fingerprint folding; C01 re-evaluates at expansion). Not wired into any
+  lifecycle worker, the launcher, the graph or the handoff builder; no parity capability tracks
+  it. Remaining work is the eleven integration follow-ups in
+  `docs/adapters/permission-capabilities.md`.
 
 - Deliver: versioned capability records and validation for target execution, fixed network
   destinations, dynamic testing, debugger/ptrace, credentials, package restore, and target
@@ -371,10 +378,11 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: secrets, stale links, unknown services, unsupported docs, reuse/recovery, and live
   registration.
 
-#### D09 — Source SAST job and legacy-prepass split — BLOCKED(B13)
+#### D09 — Source SAST job and legacy-prepass split — READY (B13 done 2026-09-21; settle B13's `expected_result_sha256` question before this worker calls the verifier)
 
-- Status 2026-09-20: M01 is closed (ADR-0010 accepted) and the V06 redactor is merged (PR #10,
-  #17), so B13 is the remaining predecessor. ADR-0010's requirements on this batch are listed
+- Status 2026-09-21: M01 is closed (ADR-0010 accepted), the V06 redactor is merged (PR #10,
+  #17) and B13 is DONE (PR #29), so nothing precedes this batch; `02-source-sast` is declared in
+  `job-graph.json` (`implemented: false`, depends only on `00-intake`). ADR-0010's requirements on this batch are listed
   under `existing_nodes_receiving_legacy_steps` in
   `docs/proposals/vendor-prepass/job-nodes.proposal.json` (task V13).
 - Deliver: per-tool source SAST Dagster worker(s) for the declared `02-source-sast` node, pinned
@@ -629,13 +637,13 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: reproducible image identities, licenses, offline/static default, smoke fixtures, and
   no unpinned download or network-enabled analysis by default.
 
-#### M03 — Secrets and IaC per-tool jobs — BLOCKED(B13)
+#### M03 — Secrets and IaC per-tool jobs — READY (B13 done 2026-09-21; settle B13's `expected_result_sha256` question before these workers call the verifier)
 
 - Graph nodes (declared, not implemented): `02-secrets-inventory`, `02-iac-config-scan`.
 - Status 2026-09-20: part 1 is merged: contracts and schemas (V04, PR #18 and #21), shared
   tool-instance shapes (V03, PR #9) and the redactor with its receipt (V06, PR #10 and #17).
-  Part 2, the workers (V10), waits for B13; the validator policy and dispatch for the new claim
-  classes are a separate integration change.
+  Part 2, the workers (V10), is unblocked since B13 merged (PR #29, 2026-09-21); the validator
+  policy and dispatch for the new claim classes are a separate integration change.
 - Deliver: separate run-owned secrets and IaC jobs/contracts/schemas, safe redaction, pinned images,
   and legacy-step deletion after parity. Scanner hits remain evidence leads.
 - Acceptance: clean/hit/secret-output/tool-error/timeout/cancel/reuse/recovery and bounded live runs.
