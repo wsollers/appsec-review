@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dispatch-pool.schema.json",
+  "title": "One C01/C02 pool (wave) of an OWASP dispatch attempt (T10)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "wave",
+    "cells",
+    "pool_directory",
+    "spec_sha256",
+    "manifest_verified",
+    "expansion_state",
+    "empty_pool_reason",
+    "outcome",
+    "degraded",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "wave": {
+      "type": "integer"
+    },
+    "cells": {
+      "type": "integer"
+    },
+    "pool_directory": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "spec_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "manifest_verified": {
+      "type": "boolean"
+    },
+    "expansion_state": {
+      "enum": [
+        "EMPTY",
+        "POPULATED",
+        null
+      ]
+    },
+    "empty_pool_reason": {
+      "enum": [
+        "no_applicable_work",
+        "scope_excluded",
+        "upstream_produced_no_work",
+        null
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "EMPTY",
+        "COMPLETE",
+        "DEGRADED",
+        "FAILED",
+        "CANCELED",
+        null
+      ]
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "manifest_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}

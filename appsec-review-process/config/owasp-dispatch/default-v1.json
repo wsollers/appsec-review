@@ -1,0 +1,105 @@
+{
+  "schema": "appsec-review/owasp-dispatch-config/1.0",
+  "config_id": "owasp-dispatch-default",
+  "version": "1.0.0",
+  "job_template_id": "04-owasp-validation-worklist",
+  "persona_id": "owasp-validator",
+  "required_claim_class": "control_verdict",
+  "cell_claim_classes": [
+    "candidate_followup",
+    "control_verdict",
+    "coverage_gap",
+    "dynamic_test_request"
+  ],
+  "budget_classes": {
+    "probe": "probe",
+    "standard": "standard",
+    "full": "deep"
+  },
+  "cell_budgets": {
+    "probe": {
+      "input_byte_limit": 8388608,
+      "input_unit_limit": 200000,
+      "output_byte_limit": 4194304,
+      "output_unit_limit": 100000,
+      "output_file_limit": 16,
+      "max_timeout_seconds": 900
+    },
+    "standard": {
+      "input_byte_limit": 8388608,
+      "input_unit_limit": 400000,
+      "output_byte_limit": 4194304,
+      "output_unit_limit": 200000,
+      "output_file_limit": 16,
+      "max_timeout_seconds": 1800
+    },
+    "full": {
+      "input_byte_limit": 8388608,
+      "input_unit_limit": 800000,
+      "output_byte_limit": 4194304,
+      "output_unit_limit": 400000,
+      "output_file_limit": 16,
+      "max_timeout_seconds": 3600
+    }
+  },
+  "prohibited_claim_map": [
+    {
+      "handoff_class": "certification",
+      "registry_classes": [
+        "compliance_verdict"
+      ]
+    },
+    {
+      "handoff_class": "compliance",
+      "registry_classes": [
+        "compliance_score",
+        "compliance_verdict"
+      ]
+    },
+    {
+      "handoff_class": "exploitability",
+      "registry_classes": [
+        "exploitability_verdict"
+      ]
+    },
+    {
+      "handoff_class": "finding",
+      "registry_classes": [
+        "verified_finding",
+        "verified_security_finding"
+      ]
+    },
+    {
+      "handoff_class": "remediation_state",
+      "registry_classes": [
+        "remediation_status"
+      ]
+    },
+    {
+      "handoff_class": "severity",
+      "registry_classes": [
+        "final_severity"
+      ]
+    },
+    {
+      "handoff_class": "unobserved_runtime_behavior",
+      "registry_classes": [
+        "observed_runtime_state"
+      ]
+    },
+    {
+      "handoff_class": "vulnerability_verdict",
+      "registry_classes": [
+        "verified_finding",
+        "verified_security_finding"
+      ]
+    }
+  ],
+  "pool": {
+    "max_cells_per_pool": 32,
+    "rendezvous_margin_seconds": 600
+  },
+  "dynamic_execution": false,
+  "manual_observation": false,
+  "network_access": false
+}

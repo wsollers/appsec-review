@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dispatch-config.schema.json",
+  "title": "Tracked, versioned OWASP validator dispatch configuration (T10)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "config_id",
+    "version",
+    "job_template_id",
+    "persona_id",
+    "required_claim_class",
+    "cell_claim_classes",
+    "budget_classes",
+    "cell_budgets",
+    "prohibited_claim_map",
+    "pool",
+    "dynamic_execution",
+    "manual_observation",
+    "network_access"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/owasp-dispatch-config/1.0"
+    },
+    "config_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\Z"
+    },
+    "job_template_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "persona_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+    },
+    "required_claim_class": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+    },
+    "cell_claim_classes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+      }
+    },
+    "budget_classes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "probe",
+        "standard",
+        "full"
+      ],
+      "properties": {
+        "probe": {
+          "enum": [
+            "probe",
+            "standard",
+            "deep"
+          ]
+        },
+        "standard": {
+          "enum": [
+            "probe",
+            "standard",
+            "deep"
+          ]
+        },
+        "full": {
+          "enum": [
+            "probe",
+            "standard",
+            "deep"
+          ]
+        }
+      }
+    },
+    "cell_budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "probe",
+        "standard",
+        "full"
+      ],
+      "properties": {
+        "probe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_byte_limit",
+            "input_unit_limit",
+            "output_byte_limit",
+            "output_unit_limit",
+            "output_file_limit",
+            "max_timeout_seconds"
+          ],
+          "properties": {
+            "input_byte_limit": {
+              "type": "integer"
+            },
+            "input_unit_limit": {
+              "type": "integer"
+            },
+            "output_byte_limit": {
+              "type": "integer"
+            },
+            "output_unit_limit": {
+              "type": "integer"
+            },
+            "output_file_limit": {
+              "type": "integer"
+            },
+            "max_timeout_seconds": {
+              "type": "integer"
+            }
+          }
+        },
+        "standard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_byte_limit",
+            "input_unit_limit",
+            "output_byte_limit",
+            "output_unit_limit",
+            "output_file_limit",
+            "max_timeout_seconds"
+          ],
+          "properties": {
+            "input_byte_limit": {
+              "type": "integer"
+            },
+            "input_unit_limit": {
+              "type": "integer"
+            },
+            "output_byte_limit": {
+              "type": "integer"
+            },
+            "output_unit_limit": {
+              "type": "integer"
+            },
+            "output_file_limit": {
+              "type": "integer"
+            },
+            "max_timeout_seconds": {
+              "type": "integer"
+            }
+          }
+        },
+        "full": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_byte_limit",
+            "input_unit_limit",
+            "output_byte_limit",
+            "output_unit_limit",
+            "output_file_limit",
+            "max_timeout_seconds"
+          ],
+          "properties": {
+            "input_byte_limit": {
+              "type": "integer"
+            },
+            "input_unit_limit": {
+              "type": "integer"
+            },
+            "output_byte_limit": {
+              "type": "integer"
+            },
+            "output_unit_limit": {
+              "type": "integer"
+            },
+            "output_file_limit": {
+              "type": "integer"
+            },
+            "max_timeout_seconds": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "prohibited_claim_map": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handoff_class",
+          "registry_classes"
+        ],
+        "properties": {
+          "handoff_class": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+          },
+          "registry_classes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\Z"
+            }
+          }
+        }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_cells_per_pool",
+        "rendezvous_margin_seconds"
+      ],
+      "properties": {
+        "max_cells_per_pool": {
+          "type": "integer"
+        },
+        "rendezvous_margin_seconds": {
+          "type": "integer"
+        }
+      }
+    },
+    "dynamic_execution": {
+      "const": false
+    },
+    "manual_observation": {
+      "const": false
+    },
+    "network_access": {
+      "const": false
+    }
+  }
+}

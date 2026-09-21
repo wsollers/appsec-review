@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dispatch-status.schema.json",
+  "title": "Lifecycle status of one OWASP dispatch attempt; no timestamp and no free text (T10)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "input_fingerprint",
+    "dispatch_outcome",
+    "accounting_sha256",
+    "refusal"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/owasp-dispatch-status/1.0"
+    },
+    "status": {
+      "enum": [
+        "RUNNING",
+        "OK",
+        "OK_WITH_GAPS",
+        "BLOCKED",
+        "FAILED"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "input_fingerprint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "dispatch_outcome": {
+      "enum": [
+        "EMPTY",
+        "COMPLETE",
+        "DEGRADED",
+        "FAILED",
+        "CANCELED",
+        null
+      ]
+    },
+    "accounting_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "refusal": {
+      "enum": [
+        "lineage_refused",
+        "config_refused",
+        "registry_refused",
+        "prompt_refused",
+        "evidence_refused",
+        "specification_refused",
+        "runtime_refused",
+        "publication_failed",
+        null
+      ]
+    }
+  }
+}

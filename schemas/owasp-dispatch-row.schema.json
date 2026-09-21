@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dispatch-row.schema.json",
+  "title": "One T05 worklist row accounted exactly once by an OWASP dispatch attempt (T10)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "row_index",
+    "assignment_digest",
+    "source_row_hash",
+    "applicability_status",
+    "worklist_disposition",
+    "join_required",
+    "fragments",
+    "row_disposition",
+    "final_control_status_issued"
+  ],
+  "properties": {
+    "row_index": {
+      "type": "integer"
+    },
+    "assignment_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "source_row_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "applicability_status": {
+      "enum": [
+        "applicable",
+        "conditional",
+        "not_applicable",
+        "cannot_determine",
+        "out_of_scope"
+      ]
+    },
+    "worklist_disposition": {
+      "enum": [
+        "validator_assignment",
+        "not_applicable_accounted",
+        "out_of_scope_accounted",
+        "unresolved_applicability_gap"
+      ]
+    },
+    "join_required": {
+      "type": "boolean"
+    },
+    "fragments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fragment_digest",
+          "cell_ordinal",
+          "fragment_index",
+          "final_control_status_authority",
+          "disposition",
+          "not_assessed_reason",
+          "instance_id",
+          "state",
+          "adapter_status",
+          "adapter_cause",
+          "validation_attempt_id",
+          "result_sha256"
+        ],
+        "properties": {
+          "fragment_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}\\Z"
+          },
+          "cell_ordinal": {
+            "type": "integer"
+          },
+          "fragment_index": {
+            "type": "integer"
+          },
+          "final_control_status_authority": {
+            "enum": [
+              "control_result",
+              "obligation_fragment_only"
+            ]
+          },
+          "disposition": {
+            "enum": [
+              "deferred_to_validated_result",
+              "not_assessed",
+              "request_only"
+            ]
+          },
+          "not_assessed_reason": {
+            "enum": [
+              "cell_state",
+              "pool_unverifiable",
+              "adapter_result_unverifiable",
+              "candidate_missing",
+              "candidate_unreadable",
+              "candidate_identity",
+              "validation_refused",
+              "validation_unavailable",
+              null
+            ]
+          },
+          "instance_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{32}\\Z"
+          },
+          "state": {
+            "enum": [
+              "succeeded",
+              "failed",
+              "blocked",
+              "canceled",
+              "instance_timed_out",
+              "rendezvous_timed_out",
+              "crashed",
+              "invalid",
+              "not_launched_canceled",
+              "not_launched_rendezvous_timeout",
+              "missing",
+              null
+            ]
+          },
+          "adapter_status": {
+            "enum": [
+              "OK",
+              "BLOCKED",
+              "FAILED",
+              "CANCELED",
+              null
+            ]
+          },
+          "adapter_cause": {
+            "enum": [
+              "BUDGET_EXCEEDED",
+              "CANCELED",
+              "IDENTITY_MISMATCH",
+              "INVOKER_EXCEPTION",
+              "INVOKER_UNAVAILABLE",
+              "MALFORMED_RESULT",
+              "OUTPUT_ESCAPE",
+              "PERMISSION_DENIED",
+              "PROHIBITED_CLAIM",
+              "SELF_VERIFICATION",
+              "TIMEOUT",
+              "UNDECLARED_CITATION",
+              "UNDECLARED_TOOL",
+              null
+            ]
+          },
+          "validation_attempt_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{32}\\Z"
+          },
+          "result_sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}\\Z"
+          }
+        }
+      }
+    },
+    "row_disposition": {
+      "enum": [
+        "deferred_to_validated_results",
+        "deferred_with_request_only_fragments",
+        "not_assessed",
+        "request_only",
+        "not_a_validator_assignment"
+      ]
+    },
+    "final_control_status_issued": {
+      "const": false
+    }
+  }
+}
