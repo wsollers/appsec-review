@@ -830,6 +830,59 @@ def result_sha256(result: Mapping[str, Any]) -> str:
     return _sha({key: value for key, value in thaw(result).items() if key != "result_sha256"})
 
 
+def _command_record_errors(path: Path, *, request: Mapping[str, Any], image_ref: str, name: str,
+                           cause: str | None, exit_code: int | None, streams: Any) -> list[str]:
+    """``command.json`` is the child runner's own account of the docker client it ran. The result
+    and that account are two projections of one run and must agree: the recorded docker argv is
+    re-derived from the expected request (only the docker executable, the container user and the
+    scratch source are host facts taken from the record, and each is re-validated), and the
+    outcome the result claims must be one the recorded client exit allows."""
+    from execution_state import redact_argv
+    try:
+        command = json.loads(path.read_bytes().decode("utf-8"))
+        recorded = command["argv"]
+        if not isinstance(recorded, list) or not all(isinstance(item, str) for item in recorded):
+            raise ValueError
+        user = recorded[recorded.index("--user") + 1]
+        mounts = [recorded[at + 1] for at, item in enumerate(recorded[:-1]) if item == "--mount"]
+        prefix, suffix = "type=bind,source=", ",target=" + SCRATCH_TARGET
+        if not mounts or not mounts[-1].startswith(prefix) or not mounts[-1].endswith(suffix):
+            raise ValueError
+        scratch_source = mounts[-1][len(prefix):-len(suffix)]
+        if re.split(r"[\\/]", scratch_source)[-len(request["scratch_path"].split("/")):] != \
+                request["scratch_path"].split("/"):
+            raise ValueError
+        expected = build_docker_argv(
+            docker_executable=recorded[0], name=name, user=user, image_ref=image_ref,
+            limits=request["limits"], environment=request["environment"],
+            mounts=[(mount["host_path"], mount["container_path"]) for mount in request["target_mounts"]],
+            scratch_source=scratch_source, argv=request["argv"])
+        client_exit, timed_out, cancelled = command["exit_code"], command["timed_out"], command["cancelled"]
+        recorded_streams = {stream: {key: command["streams"][stream][key] for key in
+                                     ("observed_bytes", "written_bytes", "dropped_bytes", "truncated")}
+                            for stream in ("stdout", "stderr")}
+        limits = (command["timeout_seconds"], command["log_limits"]["stdout"], command["log_limits"]["stderr"])
+    except (OSError, ValueError, KeyError, IndexError, TypeError, ContainerRequestError):
+        return ["command.json is not the child runner's record of a boundary docker run"]
+    errors: list[str] = []
+    if recorded != redact_argv(list(expected)):
+        errors.append("command.json does not record the docker argv the expected request derives")
+    if limits != (request["limits"]["timeout_seconds"], request["limits"]["stdout_limit_bytes"],
+                  request["limits"]["stderr_limit_bytes"]):
+        errors.append("command.json does not record the required timeout and retention limits")
+    if cause != "LOG_WRITE_FAILED" and streams is not None and thaw(streams) != recorded_streams:
+        errors.append("stream counts disagree with command.json")
+    agrees = {
+        None: client_exit == 0 and not timed_out and not cancelled,
+        "CONTAINER_EXIT_NONZERO": client_exit == exit_code and not timed_out and not cancelled,
+        "CONTAINER_START_FAILED": client_exit in (125, 126, 127) and not timed_out and not cancelled,
+        "TIMEOUT": timed_out is True,
+    }.get(cause, True)
+    if not agrees:
+        errors.append("the claimed outcome is not one the recorded docker client exit allows")
+    return errors
+
+
 def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
                             request: Any, images_dir: Path) -> list[str]:
     """Re-derives the on-disk result from the expected request, the registry and the bytes.
@@ -924,6 +977,11 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
             errors.append("a listed file does not have its recorded size and hash")
         if entry["path"] == REQUEST_FILE and data != canonical_request_bytes(request):
             errors.append("request.json is not the expected request")
+    if "command.json" in sizes:
+        errors.extend(_command_record_errors(
+            log_dir / "command.json", request=request, image_ref=image_reference(record),
+            name=container_name(run_id, job_id, attempt_id), cause=cause, exit_code=exit_code,
+            streams=streams))
     if streams is not None:
         for stream in ("stdout", "stderr"):
             counts = streams[stream]

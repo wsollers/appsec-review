@@ -192,8 +192,15 @@ fields, the request hash, the image reference and record hash, the capability fi
 container name and the paths; checks status against cause, exit-code and removal rules, canonical
 bytes and `result_sha256`; requires the log directory to hold exactly the listed regular files
 with their sizes and hashes; requires `request.json` to be the expected request byte for byte; and
-ties stream counts to the retained logs and the required limits. `result_sha256` is an integrity
-check, not an authenticator. The adapter does not hash scratch: worker outputs are validated by
+ties stream counts to the retained logs and the required limits. It also reads `command.json`, the
+child runner's own record of the docker client: the recorded (redacted) docker argv must equal the
+argv that the expected request, registry and boundary derive -- only the docker executable, the
+container user and the scratch source are host facts taken from the record, each re-validated --
+its timeout and retention limits must be the required ones, its stream counts must equal the
+result's, and the claimed outcome must be one the recorded client exit allows (an `OK` result needs
+client exit 0 with no timeout or cancellation). A result can therefore not be resealed against the
+files beside it. `result_sha256` is an integrity check, not an authenticator: a party able to
+rewrite every file in the log directory consistently is outside what 1.0 detects. The adapter does not hash scratch: worker outputs are validated by
 their output contract.
 
 ## Worker-result envelope
@@ -244,6 +251,10 @@ prove after every test that no labelled container remains.
 - A host that reaches docker through `DOCKER_HOST` or a context must say so in
   `ContainerRuntime.docker_host`; the host variable is ignored on purpose.
 - Windows behavior is covered by pure tests only; no live Windows run was made in this batch.
+- Scratch is a host bind mount without a disk quota: `tmpfs_bytes` bounds `/tmp` only, and a
+  container can fill the filesystem that holds the attempt until its memory or time limit ends it.
+- `attempt_root` must itself be a real directory, but an ancestor may be a link; identity checks
+  use device and inode, and the scratch mount source is the resolved spelling.
 
 ## Integration follow-ups
 

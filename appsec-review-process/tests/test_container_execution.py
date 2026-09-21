@@ -752,7 +752,14 @@ class ScriptedDocker:
         metadata = {"exit_code": self.client_exit, "timed_out": False, "cancelled": False,
                     "streams": streams, **self.metadata}
         (log_dir / "events.jsonl").write_text('{"event":"START"}\n{"event":"END"}\n', encoding="utf-8")
-        (log_dir / "command.json").write_text(json.dumps({"exit_code": self.client_exit}), encoding="utf-8")
+        # What deterministic_child records: the redacted argv it ran, its limits, and its outcome.
+        from execution_state import redact_argv
+        (log_dir / "command.json").write_text(json.dumps({
+            "schema": "appsec-review/deterministic-child/1.0", "argv": redact_argv(list(spec.argv)),
+            "timeout_seconds": spec.timeout_seconds,
+            "log_limits": {"stdout": spec.stdout_limit_bytes, "stderr": spec.stderr_limit_bytes},
+            "exit_code": metadata["exit_code"], "timed_out": metadata["timed_out"],
+            "cancelled": metadata["cancelled"], "streams": streams}), encoding="utf-8")
         return metadata
 
     def patches(self):
@@ -1034,6 +1041,67 @@ class VerifierTests(ScriptedCase):
                 **support.IDS, "request": request, "images_dir": ce.IMAGES_DIR,
                 "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "fixture-contract",
                 "output_paths": [], "resume_command": None, **over})
+
+    def reseal_file(self, result: dict, name: str, data: bytes):
+        (self.log_dir / name).write_bytes(data)
+        for entry in result["files"]:
+            if entry["path"] == name:
+                entry.update(sha256=ce._bytes_sha(data), bytes=len(data))
+
+    def test_a_resealed_result_cannot_contradict_the_child_runners_own_record(self):
+        # Found in verification: the verifier bound every file's hash but never read command.json,
+        # so a failed run resealed as OK, a docker argv rewritten outside the boundary and forged
+        # retained output (with matching counts and hashes) all verified.
+        request, _, _ = self.produce(scripted=ScriptedDocker(client_exit=1))
+        failed = self.result()
+        self.assertEqual((failed["cause"], support.verify(self.attempt, request)),
+                         ("CONTAINER_EXIT_NONZERO", []))
+        self.write({**failed, "cause": None, "execution_status": "OK", "exit_code": 0}, rehash=True)
+        self.assert_rejected(request)
+        self.write({**failed, "exit_code": 7}, rehash=True)
+        self.assert_rejected(request)
+        self.write({**failed, "cause": "TIMEOUT", "exit_code": None}, rehash=True)
+        self.assert_rejected(request)
+        self.write(failed, rehash=False)
+        self.assertEqual(support.verify(self.attempt, request), [])
+
+        command_bytes = (self.log_dir / "command.json").read_bytes()
+        command = json.loads(command_bytes)
+
+        def widened(edit):
+            value = json.loads(command_bytes)
+            edit(value)
+            return json.dumps(value).encode("utf-8")
+        widenings = {
+            "network": lambda c: c["argv"].__setitem__(c["argv"].index("--network") + 1, "host"),
+            "privileged": lambda c: c["argv"].insert(2, "--privileged"),
+            "other-argv": lambda c: c["argv"].__setitem__(-1, MARKER),
+            "writable-target": lambda c: c["argv"].__setitem__(
+                c["argv"].index("--mount") + 1,
+                c["argv"][c["argv"].index("--mount") + 1].replace(",readonly", "")),
+            "scratch-elsewhere": lambda c: c["argv"].__setitem__(
+                len(c["argv"]) - 1 - c["argv"][::-1].index("--mount") + 1,
+                "type=bind,source=/" + MARKER + ",target=/scratch"),
+            "root-user": lambda c: c["argv"].__setitem__(c["argv"].index("--user") + 1, "0:0"),
+            "longer-timeout": lambda c: c.__setitem__("timeout_seconds", c["timeout_seconds"] + 1),
+            "larger-retention": lambda c: c["log_limits"].__setitem__("stdout", 1 << 30),
+            "client-exit": lambda c: c.__setitem__("exit_code", 0),
+            "not-an-object": lambda c: c.clear(),
+        }
+        for label, edit in widenings.items():
+            with self.subTest(command=label):
+                result = json.loads(json.dumps(failed))
+                self.reseal_file(result, "command.json", widened(edit))
+                self.write(result, rehash=True)
+                self.assert_rejected(request)
+        self.assertIn("--network", command["argv"])
+
+        result = json.loads(json.dumps(failed))
+        self.reseal_file(result, "command.json", command_bytes)
+        self.reseal_file(result, "stdout.log", b"forged\n")
+        result["streams"]["stdout"].update(observed_bytes=7, written_bytes=7, dropped_bytes=0)
+        self.write(result, rehash=True)
+        self.assert_rejected(request)
 
     def test_editing_only_one_result_field_is_rejected_with_and_without_a_rehash(self):
         request, _, _ = self.produce(scripted=ScriptedDocker(stdout=b"x" * 100000))
