@@ -6,6 +6,7 @@ test_resource_pools_dagster.py and run in the code-server.
 from __future__ import annotations
 
 import ast
+import builtins
 from copy import deepcopy
 import json
 import os
@@ -300,6 +301,56 @@ class SourceTies(unittest.TestCase):
         self.assertTrue(any("unknown resource pool gpu" in error
                             for error in parity.validate_manifest(candidate)["errors"]))
 
+
+    def test_op_factories_use_only_these_module_globals(self):
+        # Other suites (the vendor pre-pass graph test of PR #30) cut an op factory such as
+        # `blocked_op` out of this file by AST and exec it in a hand-built namespace. A module
+        # global that the factory starts to use is a NameError there, not here. This pins the exact
+        # set per factory: when one changes, every such namespace has to supply the new name (see
+        # docs/resource-pools.md, "After PR #30 merges").
+        tree = ast.parse(WORKFLOW_SOURCE.read_text(encoding="utf-8"))
+        defined = set()
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                defined.add(node.name)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                defined.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
+            elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                defined.update(name.id for target in targets for name in ast.walk(target)
+                               if isinstance(name, ast.Name))
+        factories = {}
+        for factory in tree.body:  # a top-level function that builds a decorated function
+            if not isinstance(factory, ast.FunctionDef) or not any(
+                    isinstance(node, ast.FunctionDef) and node is not factory and node.decorator_list
+                    for node in ast.walk(factory)):
+                continue
+            local = set()
+            for node in ast.walk(factory):
+                if isinstance(node, ast.FunctionDef):
+                    local.add(node.name)
+                    arguments = node.args
+                    local.update(arg.arg for arg in arguments.posonlyargs + arguments.args + arguments.kwonlyargs)
+                    self.assertIsNone(arguments.vararg)
+                    self.assertIsNone(arguments.kwarg)
+                elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                    local.add(node.id)
+                # Scopes this simple name analysis does not model; none is used in a factory today.
+                self.assertNotIsInstance(node, (ast.Global, ast.Nonlocal, ast.Import, ast.ImportFrom, ast.Lambda,
+                                                ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp))
+            free = {node.id for node in ast.walk(factory)
+                    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)} - local - set(dir(builtins))
+            self.assertEqual(free - defined, set(), factory.name + " uses a name the module never defines")
+            factories[factory.name] = free
+        self.assertEqual(factories, {
+            "branch_op": {"op", "MetadataValue", "workflow", "data_path", "CPU_POOL"},
+            "blocked_op": {"op", "In", "Failure", "MetadataValue", "data_path", "now", "atomic_json",
+                           "NOT_IMPLEMENTED"}})
+        # The global is the recorded unassigned state, not a copy of its literals.
+        value = [node.value for node in tree.body if isinstance(node, ast.Assign)
+                 and [getattr(target, "id", None) for target in node.targets] == ["NOT_IMPLEMENTED"]]
+        self.assertEqual([ast.unparse(node) for node in value],
+                         ["resource_pools.unassigned('worker_not_implemented')"])
 
     def test_the_dagster_version_is_the_pinned_requirement(self):
         pins = re.findall(r"^dagster==(\S+)$", REQUIREMENTS.read_text(encoding="utf-8"), re.M)

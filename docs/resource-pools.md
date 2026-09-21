@@ -14,6 +14,22 @@ Not done in B15 (shared surfaces owned by another open change): the parity manif
 `resource_pools: []` and every job as `unassigned`; the manifest, generated views and `TODO.md`
 are updated in a follow-up. Live service qualification is a separate, owner-run step (below).
 
+### After PR #30 merges
+
+PR #30 (vendor pre-pass nodes) and B15 merge without a textual conflict but not without a change:
+whichever merges second has to make it, in the same merge.
+
+- `tests/test_vendor_prepass_graph.py` (PR #30) cuts `blocked_op` out of `dagster_workflow.py` by
+  AST and execs it in a hand-built namespace. B15 made `blocked_op` use the module global
+  `NOT_IMPLEMENTED`, so that namespace must supply
+  `"NOT_IMPLEMENTED": resource_pools.unassigned("worker_not_implemented")`, and the test must
+  assert that each new stub's declared tags equal that value. Without it the module fails with
+  `NameError: name 'NOT_IMPLEMENTED' is not defined`. `blocked_op` is not to be restructured to
+  avoid this. `SourceTies.test_op_factories_use_only_these_module_globals` pins the module globals
+  each op factory uses, so the next one is noticed on this side.
+- The counts in this change's description become 45 `blocked_op` stubs and 61 unassigned ops.
+- The manifest (`resource_pools`, each job's `resource_pool`), the generated views and `TODO.md`.
+
 ## Pools
 
 | Pool | Limit | Work | Why this number |
