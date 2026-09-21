@@ -41,7 +41,6 @@ current code govern the work.
 Read these completely before editing:
 
 - `AGENTS.md`
-- `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`
 - `README.md`
 - `docs/migration.md`
 - `docs/script-migration-inventory.md`

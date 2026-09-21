@@ -58,7 +58,7 @@ For every batch:
 
 - Start from current `origin/main` on a dedicated branch. Do not commit directly to `main` and do
   not merge the branch. Report the branch and commit so the integrator can review it.
-- Read `AGENTS.md`, the applicable process-reader skill, `docs/agent-reader.md`,
+- Read `AGENTS.md`, `docs/agent-reader.md`,
   `docs/run-data-and-job-execution.md`, and the batch's named source documents before editing.
 - Preserve unrelated work and ignored run evidence. Never reset, clean, stash, rewrite historical
   attempts, delete locks, or make old evidence look current.
@@ -800,8 +800,8 @@ Cross-cutting capability ownership is explicit:
   run-owned receipts.
 - [ ] Qualify language-server semantic references against accepted compile databases/build variants;
   initialization smoke tests alone do not establish semantic coverage.
-- [ ] Publish reusable Codex and Claude skill installation instructions from
-  `appsec-review-process/agent-skills/`.
+- [ ] Publish reusable Codex and Claude skill installation instructions from `skills/agents/`
+  once the skills rework (`docs/TODO/09-skills-rework.md`) lands.
 - [ ] Add CI coverage for evidence-index CLI/MCP query bounds, stale acceptance and corrupt
   artifact rejection when CI orchestration is introduced.
 

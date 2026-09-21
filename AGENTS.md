@@ -33,6 +33,11 @@ shim is left behind. Do not add new review logic under `scripts/`.
 Docker images define tools only. Do not `COPY` repo scripts into an image; the owner approves any
 exception, which mounts `scripts/<image-name>/` at run time.
 
+## Skills
+
+Skills live under [`skills/`](skills/README.md). The previous `appsec-review-process/agent-skills/`
+tree was archived to `skills/_archive/` on 2026-09-21 pending a rework; do not load it.
+
 ## Continuation prompts
 
 Continuation and handoff prompts live in

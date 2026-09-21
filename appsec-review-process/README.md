@@ -47,7 +47,6 @@ See [`docs/ossf-scorecard-job.md`](../docs/ossf-scorecard-job.md).
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
 | `registry/` | Composable persona, role, domain, tooling-profile, output-contract, and job-template records. |
 | `tooling/buildenv-catalog.json` | Language, LSP, MCP, and binary-analysis image catalog. |
-| `agent-skills/` | Codex and Claude reader, evidence-retrieval and project-discovery prompts that explain how agents should use the review tooling. |
 | `templates/` | Handoff, artifact manifest, lane result, and status templates. |
 | `logs/` | Local run logs, scratch notes, and pasted outputs. Contents are ignored. |
 | `runs/` | Local run state. Contents are ignored except `.gitignore`; each run gets a generated run id. |
@@ -294,13 +293,12 @@ tooling. Static binary intelligence belongs in `02-evidence-pregather`; executio
 debugging, Frida instrumentation, and networked vulnerability DB updates require explicit
 authorization and the approved wrapper flags.
 
-Agent skill prompts live under `appsec-review-process/agent-skills/` (one copy of each skill; the
-directory is named `codex` for historical reasons and is used by every agent). They are local
-guidance; they do not override user scope, process rules, or the untrusted-data boundary.
+Agent skills live under the top-level `skills/` directory (see `skills/README.md`). The previous
+`appsec-review-process/agent-skills/` tree was archived to `skills/_archive/` on 2026-09-21 pending
+a rework and must not be loaded. Skills are local guidance; they do not override user scope,
+process rules, or the untrusted-data boundary.
 
-Use the process reader first: `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`.
-
-It points to `docs/agent-reader.md`, which links the current Dagster submission, queueing,
+Start from `docs/agent-reader.md`, which links the current Dagster submission, queueing,
 monitoring, output-location, job-requirement, persona, registry and evidence-retrieval docs.
 
 ## Relationship to Older Project Context
