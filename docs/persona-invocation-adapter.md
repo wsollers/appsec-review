@@ -256,7 +256,8 @@ lists no outputs, no usage and no claim classes.
 
 Every published file is a claim surface. The scanned texts are: every claim statement, limitation
 and locator in the manifest; the full text of every output file; in a JSON output every string, and
-every scalar member read together with its nearest key (`{"level": "x"}` is read as `level: x`, also
+every scalar member read together with its nearest key, its outermost key and its whole key path
+(`{"outer": {"level": "x"}}` is read as `level: x`, `outer: x` and `outer level: x`, also
 through arrays); every published output path. JSON keys, claim ids and path segments are scanned as
 identifiers. A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last
 value while a reader of the bytes sees both, so the first would be published unchecked.
@@ -346,8 +347,8 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
   in `design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
 - The lexical rules are a backstop, not a classifier. They fail closed on phrasing such as a
-  quoted severity word in a summary, and they do not recognise a paraphrase, a synonym, a key and
-  value separated by more than one level of nesting, or a confusable spelling inside one script
+  quoted severity word in a summary, and they do not recognise a paraphrase, a synonym, a claim
+  split between sibling members or files, or a confusable spelling inside one script
   family (the mixed-script rule covers LATIN with CYRILLIC or GREEK only).
 - Whoever can rewrite every file of an attempt consistently can produce another valid attempt;
   nothing here is signed. The verifier guarantees agreement between the projections and with the

@@ -36,7 +36,8 @@ REVIEW_PAYLOAD = {"final_severity": "critical", "severity": "high", "cvss_score"
 SPELLED_JSON = ({"severity": "critical"}, {"isExploitable": True}, {"CVSSScore": 9.8}, {"cvss3": "9.8"},
                 {"severity": ["critical"]}, {"outer": [{"Severity": {"level": 1}}, {"exploitability": "yes"}]},
                 {"note": "verified_finding"}, {"note": "Verified-Finding"}, {"note": " compliance score "},
-                {"observedRuntimeState": 1}, {"x_malicious.intent_y": 1}, {"note": "CVSSv3 9.8"})
+                {"observedRuntimeState": 1}, {"x_malicious.intent_y": 1}, {"note": "CVSSv3 9.8"},
+                {"severity": {"level": "critical"}}, {"severity": {"a": [{"b": "critical"}]}})
 SPELLED_BODIES = ("critical_severity\n", "highSeverity\n", "exploitability_is_high\n", "e\u0301xploitable\n",
                   "\uff45xploitable\n", "the finding/is/confirmed\n")
 UNSCANNABLE_BODIES = (b"critical\x00severity explo\x00itable\n", b"explo\x1bitable\n", b"explo\x7fitable\n",

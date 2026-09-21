@@ -944,22 +944,28 @@ def _scalar_text(value: Any) -> str:
     return value if isinstance(value, str) else json.dumps(value)
 
 
-def _json_texts(value: Any, key: str | None, prose: list[str], identifiers: list[str]) -> None:
+def _json_texts(value: Any, key: str | None, prose: list[str], identifiers: list[str],
+                path: tuple[str, ...] = ()) -> None:
     """Every text a reader of a JSON output sees. A key is an identifier; a string is prose; and a
     scalar member is also read together with its nearest key (``{"severity": "critical"}`` reads
-    ``severity: critical``), because a rule that needs both words never meets them otherwise."""
+    ``severity: critical``) and with its whole key path (``{"severity": {"level": "critical"}}``
+    also reads ``severity level: critical``), because a rule that needs both words never meets
+    them otherwise."""
     if isinstance(value, dict):
         for name, item in value.items():
             identifiers.append(name)
-            _json_texts(item, name, prose, identifiers)
+            _json_texts(item, name, prose, identifiers, (*path, name))
     elif isinstance(value, list):
         for item in value:
-            _json_texts(item, key, prose, identifiers)
+            _json_texts(item, key, prose, identifiers, path)
     else:
         if isinstance(value, str):
             prose.append(value)
         if key is not None:
             prose.append(f"{key}: {_scalar_text(value)}")
+        if len(path) > 1:
+            prose.append(f"{' '.join(path)}: {_scalar_text(value)}")
+            prose.append(f"{path[0]}: {_scalar_text(value)}")
 
 
 def text_form_ok(text: str) -> bool:
