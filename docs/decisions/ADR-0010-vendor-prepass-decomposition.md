@@ -36,7 +36,7 @@ Decision 5 — S02. Companion packet: `docs/proposals/vendor-prepass/`.
 ADR number: `0010` is the next number that is free in every sense. `docs/decisions/` on `main` and
 on every remote branch holds 0001–0004, 0006, 0008, 0009. `0005` (CTP_Nov2013 shim vs Tier B) and
 `0007` (allocator inventory) are unwritten but reserved by `docs/status-2026-09-16.md` and the two
-`docs/continuation-prompt-2026-09-14*.md` files. The M01 continuation prompt names
+`docs/continuation-prompts/2026-09-14-*.md` files. The M01 continuation prompt names
 `ADR-0007-vendor-prepass-decomposition.md`; this packet deviates from that one filename to avoid
 the reservation collision and records the deviation in the continuation checkpoint.
 

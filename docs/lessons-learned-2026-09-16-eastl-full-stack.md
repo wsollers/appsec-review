@@ -366,7 +366,7 @@ compiler results must be labeled non-authoritative and cannot alone justify `ver
 fresh-task continuation prompt for the current EASTL remediation rehearsal is:
 
 ```text
-appsec-review-process/continuation-remediation-rt-fc04-002.md
+docs/continuation-prompts/remediation-rt-fc04-002.md
 ```
 
 ## Commands Worth Keeping

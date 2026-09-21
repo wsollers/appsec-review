@@ -298,7 +298,7 @@ user asks for a fix recommendation or patch.
 For the current EASTL rehearsal, use:
 
 ```text
-appsec-review-process/continuation-remediation-rt-fc04-002.md
+docs/continuation-prompts/remediation-rt-fc04-002.md
 ```
 
 Create a lane handoff:
@@ -323,7 +323,7 @@ python appsec-review-process/validate_lane_output.py \
 The EASTL remediation proposal lane for verified finding `RT-FC04-002` is tracked at:
 
 ```text
-appsec-review-process/continuation-remediation-rt-fc04-002.md
+docs/continuation-prompts/remediation-rt-fc04-002.md
 ```
 
 It tells a fresh task to read the independent verification artifacts, propose a minimal fix, generate
