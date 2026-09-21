@@ -27,6 +27,7 @@ import argparse
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -37,6 +38,9 @@ ROOT = Path(__file__).resolve().parent
 
 STATE_SCHEMA_ID = "appsec-review/resource-pool-state/1.0"
 STATE_SCHEMA_FILE = "resource-pool-state.schema.json"
+# The Dagster release everything on docs/resource-pools.md was confirmed against; a test ties it to
+# orchestrator/dagster/requirements.txt. A pool-state document from another release is a FAIL.
+DAGSTER_VERSION = "1.13.21"
 
 CPU = "cpu"
 MEMORY = "memory"
@@ -367,7 +371,13 @@ def build_guard_sensor() -> Any:
 # ---------------------------------------------------------------------------------------------
 
 def _canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                      allow_nan=False).encode("utf-8")
+
+
+def declaration_digest() -> str:
+    """Hash of this module's bytes: the declaration a pool-state document was produced from."""
+    return "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 
 def _state_digest(document: Mapping[str, Any]) -> str:
@@ -389,6 +399,8 @@ def max_overlap(intervals: Sequence[tuple[float, float | None]]) -> int:
 
 
 def overlap_by_pool(runs: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Largest overlap per declared pool. A step of an undeclared pool is not counted here;
+    `_state_errors` makes any such step an error, so it is never silently dropped."""
     result = []
     for pool in POOLS:
         intervals = [(step["started"], step["ended"]) for run in runs for step in run["steps"]
@@ -428,11 +440,25 @@ def _run_record(instance: Any, run_id: str) -> dict[str, Any]:
             "engagement_run_id": run.tags.get(ENGAGEMENT_TAG), "steps": steps}
 
 
+def pooled_steps_recorded(runs: Sequence[Mapping[str, Any]]) -> bool:
+    """True when at least one named run recorded at least one pooled step. Without that a
+    document says nothing about contention, whatever its result is."""
+    return any(run["steps"] for run in runs)
+
+
 def _state_errors(document: Mapping[str, Any]) -> list[str]:
     errors = list(document["assignments"]["errors"])
+    if not document["assignments"]["pooled"] and not document["assignments"]["unassigned"]:
+        errors.append("assignments: no op was inspected")
+    if document["dagster_version"] != DAGSTER_VERSION:
+        errors.append("dagster version: not the pinned version")
     for pool in document["pools"]:
         if pool["state"] != "OK":
             errors.append(f"pool {pool['pool_id']}: {pool['state']}")
+        if pool["claimed_slots"] > pool["expected_limit"]:
+            errors.append(f"pool {pool['pool_id']}: more slots are claimed than the declared limit")
+    if any(step["pool_id"] not in POOL_IDS for run in document["runs"] for step in run["steps"]):
+        errors.append("runs: a recorded step names an undeclared pool")
     for name in document["foreign_pools"]:
         errors.append(f"pool {name}: not a declared pool")
     for key in ("default_pool_limit", "free_slots_after_run_end_seconds"):
@@ -458,6 +484,8 @@ def _state_errors(document: Mapping[str, Any]) -> list[str]:
 
 def build_state(instance: Any, definitions: Any, run_ids: Sequence[str], generated_at: str) -> dict[str, Any]:
     import dagster
+    if len(set(run_ids)) != len(run_ids):
+        raise PoolStateError("a Dagster run id was given twice")
     storage = _storage(instance)
     observed = observed_limits(instance)
     drift = {item["pool_id"]: item["state"] for item in limit_drift(instance)}
@@ -474,36 +502,60 @@ def build_state(instance: Any, definitions: Any, run_ids: Sequence[str], generat
     runs = [_run_record(instance, run_id) for run_id in run_ids]
     document: dict[str, Any] = {
         "schema": STATE_SCHEMA_ID, "generated_at": generated_at, "dagster_version": dagster.__version__,
-        "declaration_sha256": "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "declaration_sha256": declaration_digest(),
         "default_pool_limit": {"expected": DEFAULT_POOL_LIMIT, "observed": settings["default_pool_limit"]},
         "free_slots_after_run_end_seconds": {"expected": FREE_SLOTS_AFTER_RUN_END_SECONDS,
                                              "observed": settings["free_slots_after_run_end_seconds"]},
         "outer_limits": {"expected": dict(OUTER_LIMITS), "observed": settings["outer_limits"]},
         "pools": pools, "foreign_pools": sorted(set(observed) - set(POOL_IDS)),
         "assignments": inspect_assignments(definitions), "runs": runs,
-        "observed_overlap": overlap_by_pool(runs)}
+        "pooled_steps_recorded": pooled_steps_recorded(runs), "observed_overlap": overlap_by_pool(runs)}
     document["errors"] = _state_errors(document)
     document["result"] = "FAIL" if document["errors"] else "PASS"
     document["state_sha256"] = _state_digest(document)
     return document
 
 
-def verify_state_file(path: Path) -> list[str]:
-    """Re-derive a pool-state document from the bytes on disk. Read-only."""
-    from schema_validate import validate_document
-    def refuse_constant(name: str) -> None:
-        raise ValueError(f"non-finite number: {name}")  # NaN / Infinity are not JSON
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value = dict(pairs)
+    if len(value) != len(pairs):
+        raise ValueError("repeated object key")  # the last copy would silently win
+    return value
 
+
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError("non-finite number")  # 1e999 overflows to inf without any literal
+    return value
+
+
+def _refuse_constant(_name: str) -> None:
+    raise ValueError("non-finite number")  # NaN / Infinity are not JSON
+
+
+def _repeated(values: Iterable[Any]) -> bool:
+    values = list(values)
+    return len(set(values)) != len(values)
+
+
+def verify_state_file(path: Path) -> list[str]:
+    """Re-derive a pool-state document from the bytes on disk. Read-only. Returns fixed strings
+    only; no value read from the document is echoed except a schema-enumerated pool id."""
+    from schema_validate import validate_document
     try:
-        document = json.loads(Path(path).read_bytes().decode("utf-8"), parse_constant=refuse_constant)
-    except (OSError, UnicodeDecodeError, ValueError):
-        return ["state document is not readable JSON"]
+        document = json.loads(Path(path).read_bytes().decode("utf-8"), parse_constant=_refuse_constant,
+                              parse_float=_finite_float, object_pairs_hook=_unique_object)
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        return ["state document is not readable JSON with unique keys and finite numbers"]
     errors = validate_document(document, STATE_SCHEMA_FILE)
     if errors:
         return [f"state document fails its schema ({len(errors)} errors)"]
     problems = []
     if document["state_sha256"] != _state_digest(document):
         problems.append("state_sha256 does not match the document")
+    if document["declaration_sha256"] != declaration_digest():
+        problems.append("declaration_sha256 is not the hash of this resource_pools.py")
     if [pool["pool_id"] for pool in document["pools"]] != list(POOL_IDS):
         problems.append("pools are not the declared pools in declared order")
     for pool in document["pools"]:
@@ -513,14 +565,29 @@ def verify_state_file(path: Path) -> list[str]:
                  else "OK" if pool["observed_limit"] == pool["expected_limit"] else "DRIFT")
         if pool["state"] != state:
             problems.append(f"pool {pool['pool_id']}: state does not follow from the observed limit")
+        if pool["claimed_slots"] < 0 or pool["pending_steps"] < 0:
+            problems.append(f"pool {pool['pool_id']}: a slot or pending-step count is negative")
     if document["default_pool_limit"]["expected"] != DEFAULT_POOL_LIMIT or \
             document["free_slots_after_run_end_seconds"]["expected"] != FREE_SLOTS_AFTER_RUN_END_SECONDS or \
             document["outer_limits"]["expected"] != OUTER_LIMITS:
         problems.append("expected settings are not the declared settings")
+    if document["foreign_pools"] != sorted(set(document["foreign_pools"]) - set(POOL_IDS)):
+        problems.append("foreign pools are not a sorted list of distinct undeclared pools")
+    assignments = document["assignments"]
+    if _repeated((item["job"], item["op"]) for item in assignments["pooled"] + assignments["unassigned"]):
+        problems.append("assignments: a (job, op) pair is listed more than once")
+    if _repeated(run["dagster_run_id"] for run in document["runs"]):
+        problems.append("runs: a Dagster run id is listed more than once")
     for run in document["runs"]:
+        if _repeated(step["step_key"] for step in run["steps"]):
+            problems.append("runs: a step key is listed more than once in one run")
         for step in run["steps"]:
+            if step["started"] < 0 or (step["ended"] is not None and step["ended"] < 0):
+                problems.append("a step time is negative")
             if step["ended"] is not None and step["ended"] < step["started"]:
                 problems.append("a step ends before it starts")
+    if document["pooled_steps_recorded"] is not pooled_steps_recorded(document["runs"]):
+        problems.append("pooled_steps_recorded does not follow from the recorded steps")
     if document["observed_overlap"] != overlap_by_pool(document["runs"]):
         problems.append("observed overlap does not follow from the recorded steps")
     if document["errors"] != _state_errors(document):
@@ -569,9 +636,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.out.write_bytes(json.dumps(document, indent=2, sort_keys=True).encode("utf-8") + b"\n")
             problems = verify_state_file(args.out)
             print(json.dumps({"path": str(args.out), "result": document["result"], "errors": document["errors"],
+                              "pooled_steps_recorded": document["pooled_steps_recorded"],
                               "file_sha256": hashlib.sha256(args.out.read_bytes()).hexdigest(),
                               "problems": problems}, indent=2))
-            return 0 if document["result"] == "PASS" and not problems else 2
+            # Runs were named as evidence: a document that records no pooled step of them is not evidence.
+            evidence = document["pooled_steps_recorded"] or not args.run_id
+            return 0 if document["result"] == "PASS" and not problems and evidence else 2
         corrections = apply_limits(instance) if args.command == "apply" else []
         errors = verify_instance(instance)
         print(json.dumps({"corrections": corrections, "errors": errors,

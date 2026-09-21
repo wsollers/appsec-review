@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -20,12 +21,13 @@ sys.path.insert(0, str(ROOT))
 
 import resource_pools as rp  # noqa: E402
 import validate_design_parity as parity  # noqa: E402
-from schema_validate import SCHEMAS_DIR  # noqa: E402
+from schema_validate import SCHEMAS_DIR, validate_document  # noqa: E402
 
 ORCHESTRATION = Path(os.environ.get("APPSEC_ORCHESTRATOR_ROOT", ROOT.parent / "orchestrator" / "dagster"))
 WORKFLOW_SOURCE = ROOT / "dagster_workflow.py"
 DEFINITIONS_SOURCE = ORCHESTRATION / "definitions.py"
 DAGSTER_YAML = ORCHESTRATION / "dagster.yaml"
+REQUIREMENTS = ORCHESTRATION / "requirements.txt"
 DOC = ROOT.parent / "docs" / "resource-pools.md"
 SUPPORTED_KEYWORDS = {"$schema", "$id", "title", "description", "type", "required", "properties",
                       "additionalProperties", "enum", "const", "pattern", "items", "minItems", "$ref"}
@@ -42,6 +44,42 @@ def _decorator_calls(path: Path, name: str):
                 target = decorator.func if isinstance(decorator, ast.Call) else decorator
                 if isinstance(target, ast.Name) and target.id == name:
                     yield node, decorator
+
+
+def reseal(document):
+    """What a forger with this module can do: re-derive every derived field, then re-hash."""
+    document["pooled_steps_recorded"] = rp.pooled_steps_recorded(document["runs"])
+    document["observed_overlap"] = rp.overlap_by_pool(document["runs"])
+    document["errors"] = rp._state_errors(document)
+    document["result"] = "FAIL" if document["errors"] else "PASS"
+    document["state_sha256"] = rp._state_digest(document)
+    return document
+
+
+def state_fixture():
+    """A pool-state document of the shape `build_state` writes, built without Dagster. The
+    Dagster suite checks that a real `build_state` document has exactly this shape."""
+    def run(number, engagement, steps):
+        return {"dagster_run_id": f"{number:08d}-0000-0000-0000-000000000000", "job": "contention",
+                "status": "SUCCESS", "engagement_run_id": engagement,
+                "steps": [{"step_key": key, "pool_id": pool, "started": start, "ended": end}
+                          for key, pool, start, end in steps]}
+    return reseal({
+        "schema": rp.STATE_SCHEMA_ID, "generated_at": "2026-09-21T00:00:00+00:00",
+        "dagster_version": rp.DAGSTER_VERSION, "declaration_sha256": rp.declaration_digest(),
+        "default_pool_limit": {"expected": rp.DEFAULT_POOL_LIMIT, "observed": rp.DEFAULT_POOL_LIMIT},
+        "free_slots_after_run_end_seconds": {"expected": rp.FREE_SLOTS_AFTER_RUN_END_SECONDS,
+                                             "observed": rp.FREE_SLOTS_AFTER_RUN_END_SECONDS},
+        "outer_limits": {"expected": dict(rp.OUTER_LIMITS), "observed": dict(rp.OUTER_LIMITS)},
+        "pools": [{"pool_id": pool.pool_id, "expected_limit": pool.limit, "observed_limit": pool.limit,
+                   "from_default": False, "claimed_slots": 0, "pending_steps": 0, "state": "OK"}
+                  for pool in rp.POOLS],
+        "foreign_pools": [],
+        "assignments": {"pooled": [{"job": "evidence_index", "op": "evidence_index_work", "pool_id": rp.MEMORY}],
+                        "unassigned": [{"job": "evidence_index", "op": "reserve", "reason": "coordination_only"}],
+                        "errors": []},
+        "runs": [run(1, "eng-a", [("memory_0", rp.MEMORY, 10.0, 13.0), ("memory_1", rp.MEMORY, 13.5, 16.0)]),
+                 run(2, None, [("cpu_0", rp.CPU, 11.0, 12.5)])]})
 
 
 class Declaration(unittest.TestCase):
@@ -263,6 +301,11 @@ class SourceTies(unittest.TestCase):
                             for error in parity.validate_manifest(candidate)["errors"]))
 
 
+    def test_the_dagster_version_is_the_pinned_requirement(self):
+        pins = re.findall(r"^dagster==(\S+)$", REQUIREMENTS.read_text(encoding="utf-8"), re.M)
+        self.assertEqual(pins, [rp.DAGSTER_VERSION])
+
+
 class StateSchema(unittest.TestCase):
     def test_schema_is_closed_and_uses_only_the_supported_subset(self):
         schema = json.loads((SCHEMAS_DIR / rp.STATE_SCHEMA_FILE).read_text(encoding="utf-8"))
@@ -290,11 +333,237 @@ class StateSchema(unittest.TestCase):
         reasons = schema["properties"]["assignments"]["properties"]["unassigned"]["items"]["properties"]["reason"]
         self.assertEqual(reasons["enum"], list(rp.UNASSIGNED_REASONS))
 
+    def test_step_pool_and_flag_are_in_the_schema(self):
+        schema = json.loads((SCHEMAS_DIR / rp.STATE_SCHEMA_FILE).read_text(encoding="utf-8"))
+        self.assertEqual(schema["properties"]["pooled_steps_recorded"], {"type": "boolean"})
+        self.assertEqual(state_fixture()["state_sha256"], rp._state_digest(state_fixture()))
+        self.assertEqual(validate_document(state_fixture(), rp.STATE_SCHEMA_FILE), [])
+
     def test_overlap_sweep(self):
         self.assertEqual(rp.max_overlap([]), 0)
         self.assertEqual(rp.max_overlap([(0, 1), (1, 2)]), 1)  # touching intervals do not overlap
         self.assertEqual(rp.max_overlap([(0, 2), (1, 3), (1.5, 1.6)]), 3)
         self.assertEqual(rp.max_overlap([(0, None), (5, 6)]), 2)  # an open step never releases
+
+
+PLANT = "PLANTED_zz9"
+# Replacement values tried for every leaf, by the type of the value that is there.
+HOSTILE = {
+    bool: lambda value: [not value],
+    int: lambda value: [-1, value + 1, 99],
+    float: lambda value: [-1.0, value + 1000.0, value + 1.5],
+    type(None): lambda value: [PLANT, 1],
+    str: lambda value: [item for item in (
+        PLANT, "0.0.1", "sha256:" + "0" * 64, "1999-01-01T00:00:00+00:00", "FAILURE", "DRIFT", "FAIL",
+        rp.CPU, rp.DOCKER, "Memory", rp.UNASSIGNED, "bootstrap_diagnostic", "9" * 8 + "-0000-0000-0000-" + "0" * 12,
+        "appsec-review/resource-pool-state/2.0") if item != value],
+}
+# Leaves a consistent reseal can change and still verify PASS, each because no byte on disk or
+# constant in the module determines it. Anything else that verifies is an unbound trusted field.
+FREE_LEAVES = {
+    "generated_at": "a clock reading; only its shape is checked",
+    "pools[].claimed_slots": "a live count; bound to 0..expected_limit, not to one value",
+    "pools[].pending_steps": "a live count; bound to >= 0",
+    "assignments.pooled[].job": "registered names; bound to be listed once", "assignments.pooled[].op": "same",
+    "assignments.pooled[].pool_id": "any declared pool is a possible assignment",
+    "assignments.unassigned[].job": "same", "assignments.unassigned[].op": "same",
+    "assignments.unassigned[].reason": "any closed reason is possible",
+    "runs[].dagster_run_id": "an identifier; bound to be listed once", "runs[].job": "a registered name",
+    "runs[].status": "a failed or canceled run is valid evidence (failure injection)",
+    "runs[].engagement_run_id": "an identifier; two runs sharing one must not overlap",
+    "runs[].steps[].step_key": "an identifier; bound to be unique in its run",
+    "runs[].steps[].pool_id": "another declared pool verifies only while its limit still holds",
+    "runs[].steps[].started": "a clock reading; any value that keeps every limit verifies",
+    "runs[].steps[].ended": "same",
+}
+
+
+def _leaves(node, path=()):
+    if isinstance(node, dict):
+        for key in node:
+            yield from _leaves(node[key], path + (key,))
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            yield from _leaves(item, path + (index,))
+    else:
+        yield path, node
+
+
+def _containers(node, path=()):
+    if isinstance(node, dict):
+        yield path
+    for key, item in (node.items() if isinstance(node, dict) else enumerate(node) if isinstance(node, list) else ()):
+        yield from _containers(item, path + (key,))
+
+
+def _at(document, path):
+    for key in path:
+        document = document[key]
+    return document
+
+
+def _label(path):
+    return "".join("[]" if isinstance(key, int) else "." + key for key in path).lstrip(".")
+
+
+class StateVerifier(unittest.TestCase):
+    """Host-runnable: `verify_state_file` needs no Dagster."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(dir=os.environ.get("PHASE1_TEST_DATA"))
+        self.addCleanup(self.directory.cleanup)
+        self.path = Path(self.directory.name) / "state.json"
+
+    def verify(self, document=None, *, text=None):
+        self.path.write_text(json.dumps(document) if text is None else text, encoding="utf-8")
+        problems = rp.verify_state_file(self.path)
+        self.assertNotIn(PLANT, json.dumps(problems))
+        return problems
+
+    def accepted(self, document):
+        """The qualification reading of a document: verifies, PASS, and records pooled steps."""
+        return self.verify(document) == [] and document["result"] == "PASS" and document["pooled_steps_recorded"]
+
+    def test_the_fixture_verifies(self):
+        self.assertTrue(self.accepted(state_fixture()))
+
+    def test_every_leaf_edited_alone(self):
+        unbound = set()
+        for path, value in _leaves(state_fixture()):
+            for hostile in HOSTILE[type(value)](value):
+                document = state_fixture()
+                _at(document, path[:-1])[path[-1]] = hostile
+                self.assertTrue(self.verify(document), (path, "edited, nothing re-derived"))
+                if path[0] in ("pooled_steps_recorded", "observed_overlap", "errors", "result", "state_sha256"):
+                    continue  # derived fields: a reseal would overwrite the edit
+                try:
+                    reseal(document)
+                except (TypeError, ValueError):  # a value of the wrong type: the forger can only re-hash
+                    document["state_sha256"] = rp._state_digest(document)
+                if self.accepted(document):
+                    unbound.add(_label(path))
+        self.assertEqual(unbound, set(FREE_LEAVES))
+
+    def test_every_key_removed_and_an_extra_key_added(self):
+        for path in _containers(state_fixture()):
+            for key in list(_at(state_fixture(), path)):
+                document = state_fixture()
+                del _at(document, path)[key]
+                document["state_sha256"] = rp._state_digest(document) if "state_sha256" in document else None
+                self.assertEqual(len(self.verify(document)), 1, (path, key))
+            document = state_fixture()
+            _at(document, path)[PLANT] = PLANT
+            document["state_sha256"] = rp._state_digest(document)
+            self.assertRegex(self.verify(document)[0], r"^state document fails its schema \(\d+ errors\)\Z")
+
+    def test_repeated_keys(self):
+        # The reviewer's case: a FAIL document's keys first, a PASS copy of the same keys last.
+        good = state_fixture()
+        bad = state_fixture()
+        for step in bad["runs"][0]["steps"]:
+            step["started"], step["ended"] = 10.0, 20.0
+        reseal(bad)
+        self.assertEqual(bad["result"], "FAIL")
+        text = json.dumps(good)
+        text = text[:1] + '"result":"FAIL","errors":' + json.dumps(bad["errors"]) + ',"runs":' + \
+            json.dumps(bad["runs"]) + "," + text[1:]
+        self.assertEqual(json.loads(text), good)  # a plain loader sees only the PASS copy
+        refusal = ["state document is not readable JSON with unique keys and finite numbers"]
+        self.assertEqual(self.verify(text=text), refusal)
+        self.assertEqual(self.verify(text=json.dumps(good)[:-1] + ',"result":"PASS"}'), refusal)
+        nested = json.dumps(good).replace('"claimed_slots": 0', '"claimed_slots": 0, "claimed_slots": 0', 1)
+        self.assertNotEqual(nested, json.dumps(good))
+        self.assertEqual(self.verify(text=nested), refusal)
+
+    def test_non_finite_and_negative_step_times(self):
+        refusal = ["state document is not readable JSON with unique keys and finite numbers"]
+        # The reviewer's case: two memory steps (limit 1) that never end, started at 1e999.
+        document = state_fixture()
+        for step in document["runs"][0]["steps"]:
+            step["started"], step["ended"] = float("inf"), None
+        document["observed_overlap"] = rp.overlap_by_pool(document["runs"])
+        self.assertEqual(rp._state_errors(document), [])  # the sweep is blind to it: inf opens after it closes
+        with self.assertRaises(ValueError):
+            rp._state_digest(document)  # and the producer's canonical form refuses to emit Infinity
+        text = json.dumps(state_fixture())
+        for literal in ("1e999", "-1e999", "Infinity", "-Infinity", "NaN"):
+            for field in ('"started": 10.0', '"ended": 13.0', '"claimed_slots": 0'):
+                self.assertIn(field, text)
+                self.assertEqual(self.verify(text=text.replace(field, field.split(":")[0] + ": " + literal, 1)),
+                                 refusal, (literal, field))
+        for field in ("started", "ended"):
+            document = state_fixture()
+            document["runs"][1]["steps"][0]["started"] = -5.0
+            document["runs"][1]["steps"][0][field] = -5.0 if field == "started" else -1.0
+            self.assertIn("a step time is negative", self.verify(reseal(document)))
+
+    def test_unbound_fields_the_review_found(self):
+        def edited(change):
+            document = state_fixture()
+            change(document)
+            return reseal(document)
+
+        def overlapping(pool_id):
+            def change(document):
+                for step in document["runs"][0]["steps"]:
+                    step.update(started=10.0, ended=20.0, pool_id=pool_id)
+            return change
+
+        document = edited(lambda d: d.__setitem__("declaration_sha256", "sha256:" + "0" * 64))
+        self.assertEqual(self.verify(document), ["declaration_sha256 is not the hash of this resource_pools.py"])
+        document = edited(lambda d: d.__setitem__("dagster_version", "0.0.1"))
+        self.assertEqual((document["result"], document["errors"]), ("FAIL", ["dagster version: not the pinned version"]))
+        document = edited(lambda d: d["pools"][0].__setitem__("claimed_slots", 99))
+        self.assertEqual(document["errors"], ["pool cpu: more slots are claimed than the declared limit"])
+        self.assertTrue(self.accepted(edited(lambda d: d["pools"][0].__setitem__("claimed_slots", rp.LIMITS[rp.CPU]))))
+        for field, value in (("claimed_slots", -9), ("pending_steps", -1)):
+            document = edited(lambda d: d["pools"][0].__setitem__(field, value))
+            self.assertEqual(self.verify(document), ["pool cpu: a slot or pending-step count is negative"])
+        for pool_id in ("Memory", rp.UNASSIGNED, PLANT):
+            document = edited(overlapping(pool_id))
+            self.assertEqual(document["errors"], ["runs: a recorded step names an undeclared pool"])
+            self.assertEqual(self.verify(document), [])  # a consistent FAIL document
+            document["errors"], document["result"] = [], "PASS"
+            document["state_sha256"] = rp._state_digest(document)
+            self.assertEqual(self.verify(document), ["errors do not follow from the document"])
+        self.assertEqual(edited(overlapping(rp.MEMORY))["errors"], ["pool memory: observed overlap exceeds the limit"])
+        document = edited(lambda d: d.__setitem__("assignments", {"pooled": [], "unassigned": [], "errors": []}))
+        self.assertEqual(document["errors"], ["assignments: no op was inspected"])
+        for target in ("pooled", "unassigned"):
+            document = edited(lambda d: d["assignments"]["unassigned"].append(
+                dict(d["assignments"][target][0], reason="coordination_only", pool_id=None)))
+            for item in document["assignments"]["unassigned"]:
+                item.pop("pool_id", None)
+            document["state_sha256"] = rp._state_digest(document)
+            self.assertEqual(self.verify(document), ["assignments: a (job, op) pair is listed more than once"])
+        document = edited(lambda d: d["runs"].append(dict(deepcopy(d["runs"][1]), steps=[])))
+        self.assertEqual(self.verify(document), ["runs: a Dagster run id is listed more than once"])
+        document = edited(lambda d: d["runs"][0]["steps"][1].__setitem__("step_key", "memory_0"))
+        self.assertEqual(self.verify(document), ["runs: a step key is listed more than once in one run"])
+        for foreign in (["gpu", "gpu"], ["zeta", "gpu"], [rp.CPU]):
+            document = edited(lambda d: d.__setitem__("foreign_pools", foreign))
+            self.assertIn("foreign pools are not a sorted list of distinct undeclared pools", self.verify(document))
+
+    def test_no_pooled_step_is_not_qualification_evidence(self):
+        for runs in ([], [dict(state_fixture()["runs"][0], steps=[])]):
+            document = state_fixture()
+            document["runs"] = runs
+            reseal(document)
+            self.assertEqual((self.verify(document), document["result"]), ([], "PASS"))
+            self.assertIs(document["pooled_steps_recorded"], False)
+            self.assertFalse(self.accepted(document))
+            document["pooled_steps_recorded"] = True
+            document["state_sha256"] = rp._state_digest(document)
+            self.assertEqual(self.verify(document), ["pooled_steps_recorded does not follow from the recorded steps"])
+
+    def test_unreadable_documents(self):
+        refusal = ["state document is not readable JSON with unique keys and finite numbers"]
+        self.assertEqual(self.verify(text="{"), refusal)
+        self.assertEqual(self.verify(text="[" * 100000), refusal)
+        self.assertEqual(rp.verify_state_file(Path(self.directory.name) / "absent.json"), refusal)
+        self.path.write_bytes(b"\xff\xfe")
+        self.assertEqual(rp.verify_state_file(self.path), refusal)
+        self.assertEqual(self.verify(text="[]")[0][:33], "state document fails its schema (")
 
 
 class Documentation(unittest.TestCase):
