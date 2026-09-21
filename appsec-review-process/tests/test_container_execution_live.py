@@ -240,7 +240,7 @@ class LiveBoundaryTests(unittest.TestCase):
             with self.assertRaises(KeyboardInterrupt):
                 support.run(support.runtime(), self.attempt, request)
         self.assertEqual(support.verify(self.attempt, request), [])
-        result = ce.load_verified_result(self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR)
+        result = ce.load_verified_result(self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR, **support.host_facts())
         self.assertEqual(result["cause"], "CANCELED")
 
     # -- blocked before any container
@@ -273,7 +273,7 @@ class LiveBoundaryTests(unittest.TestCase):
                                                {"container_request": request}))
         self.assertEqual(result["execution_status"], "OK")
         envelope = ce.to_worker_envelope(
-            self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR,
+            self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR, **support.host_facts(),
             input_fingerprint=ce.fingerprint_material(request, support.fixture_record())["sha256"],
             output_contract="fixture-contract", output_paths=["scratch/report.txt"], resume_command=None)
         self.assertEqual(validate_worker_result(envelope), [])

@@ -97,6 +97,13 @@ def run(rt: ce.ContainerRuntime, attempt_root: Path, req, **ids):
     return ce.run_container(rt, **{**IDS, **ids}, attempt_root=attempt_root, request=req)
 
 
+def host_facts() -> dict:
+    """The integrator's host facts the verification path needs for the target-mount rule: the same
+    two fields of the runtime that run_container reads."""
+    rt = runtime()
+    return {"host_flavor": rt.host_flavor, "docker_host": rt.docker_host}
+
+
 def verify(attempt_root: Path, req, **over) -> list[str]:
     return ce.verify_container_result(attempt_root, **{**IDS, "request": req,
-                                                       "images_dir": ce.IMAGES_DIR, **over})
+                                                       "images_dir": ce.IMAGES_DIR, **host_facts(), **over})

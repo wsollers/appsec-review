@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -676,7 +677,7 @@ class RequiredInputTests(Sandbox):
         for name in call:
             with self.subTest(run_argument=name), self.assertRaises(TypeError):
                 ce.run_container(support.runtime(), **{k: v for k, v in call.items() if k != name})
-        check = {**support.IDS, "request": call["request"], "images_dir": ce.IMAGES_DIR}
+        check = {**support.IDS, "request": call["request"], "images_dir": ce.IMAGES_DIR, **support.host_facts()}
         for name in check:
             with self.subTest(verify_argument=name), self.assertRaises(TypeError):
                 ce.verify_container_result(self.attempt, **{k: v for k, v in check.items() if k != name})
@@ -822,7 +823,7 @@ class OutcomeTests(ScriptedCase):
 
     def envelope(self, request, **over):
         record = support.fixture_record()
-        arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR,
+        arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
                      "input_fingerprint": ce.fingerprint_material(request, record)["sha256"],
                      "output_contract": "fixture-contract", "output_paths": [],
                      "resume_command": "python -B launch_job.py --run-id run-b13", **over}
@@ -1034,11 +1035,11 @@ class VerifierTests(ScriptedCase):
         self.assertNotIn(MARKER, "\n".join(errors))
         with self.assertRaises(ce.ContainerRequestError) as caught:
             ce.load_verified_result(self.attempt, **{**support.IDS, "request": request,
-                                                     "images_dir": ce.IMAGES_DIR, **over})
+                                                     "images_dir": ce.IMAGES_DIR, **support.host_facts(), **over})
         self.assertNotIn(MARKER, str(caught.exception))
         with self.assertRaises(ce.ContainerRequestError):
             ce.to_worker_envelope(self.attempt, **{
-                **support.IDS, "request": request, "images_dir": ce.IMAGES_DIR,
+                **support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
                 "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "fixture-contract",
                 "output_paths": [], "resume_command": None, **over})
 
@@ -1213,7 +1214,7 @@ class VerifierTests(ScriptedCase):
             self.assert_rejected(request, images_dir=directory)
         with self.subTest(wrong="attempt root"):
             errors = ce.verify_container_result(self.root / "missing", **support.IDS, request=request,
-                                                images_dir=ce.IMAGES_DIR)
+                                                images_dir=ce.IMAGES_DIR, **support.host_facts())
             self.assertEqual(errors, ["the log directory or its container-result.json is missing, linked or unreadable"])
 
     def test_impossible_outcome_shapes_are_rejected_even_when_rehashed(self):
@@ -1238,7 +1239,7 @@ class VerifierTests(ScriptedCase):
         request, _, _ = self.produce()
         (self.attempt / "scratch").mkdir(exist_ok=True)
         (self.attempt / "scratch" / "report.json").write_text("{}", encoding="utf-8")
-        arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR,
+        arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
                      "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "fixture-contract",
                      "resume_command": None}
         envelope = ce.to_worker_envelope(self.attempt, **arguments, output_paths=["scratch/report.json"])
@@ -1259,6 +1260,111 @@ class VerifierTests(ScriptedCase):
             with self.subTest(omitted=name), self.assertRaises(TypeError):
                 ce.to_worker_envelope(self.attempt, output_paths=[],
                                       **{k: v for k, v in arguments.items() if k != name})
+
+
+
+class VerifierMountParityTests(ScriptedCase):
+    """PR 29 review [P1]: run_container applied the target-mount rule and the verification path did
+    not, so verify_container_result -- and to_worker_envelope behind it -- certified a self-consistent
+    attempt whose request mounted /etc, the host home, the attempt or the docker socket: states the
+    adapter can never produce. The forgery is built the way a forger would build it: the mount rule
+    is disabled ONLY while the attempt is materialized; the verifier and the envelope mapper then
+    run unmodified. The suite missed it because every verifier test started from a request that
+    run_container had already accepted."""
+
+    def forge(self, mounts):
+        request = support.request(None, ["/bin/echo", "hello"], target_mounts=mounts)
+
+        def permissive(req, *, attempt_root, host_flavor, docker_host):
+            return [(ce.translate_host_path(mount["host_path"], host_flavor), mount["container_path"])
+                    for mount in req["target_mounts"]]
+        first, second = ScriptedDocker().patches()
+        with first, second, mock.patch.object(ce, "request_mount_sources", permissive):
+            support.run(support.runtime(), self.attempt, request)
+        return request
+
+    def envelope_arguments(self, request):
+        return {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
+                "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "fixture-contract",
+                "output_paths": [], "resume_command": None}
+
+    def assert_uncertifiable(self, request):
+        errors = support.verify(self.attempt, request)
+        self.assertEqual(errors, ["the expected request mounts a host directory the adapter refuses to mount "
+                                  "(missing, linked, sensitive, or the same directory twice): no run of it can exist"])
+        with self.assertRaises(ce.ContainerRequestError):
+            ce.load_verified_result(self.attempt, **{**support.IDS, "request": request,
+                                                     "images_dir": ce.IMAGES_DIR, **support.host_facts()})
+        with self.assertRaises(ce.ContainerRequestError):
+            ce.to_worker_envelope(self.attempt, **self.envelope_arguments(request))
+
+    @unittest.skipUnless(os.name == "posix", "/etc is a POSIX location; the parity test below is host-independent")
+    def test_the_reviewers_case_etc_mounted_read_only_as_workspace(self):
+        request = self.forge([{"host_path": "/etc", "container_path": "/workspace"}])
+        self.assertTrue((self.log_dir / ce.RESULT_FILE).is_file())  # the forgery is complete and self-consistent
+        self.assert_uncertifiable(request)
+
+    def test_run_and_verify_refuse_exactly_the_same_mounts(self):
+        """One rule, two callers. For each mount: run_container refuses it if and only if the
+        verifier, the loader and the envelope mapper refuse a forged attempt that used it."""
+        inside = self.attempt / "inner"
+        inside.mkdir()
+        second = self.root / "second"
+        second.mkdir()
+        cases = {
+            "the legitimate target": [{"host_path": str(self.target), "container_path": "/workspace"}],
+            "two distinct directories": [{"host_path": str(self.target), "container_path": "/workspace"},
+                                         {"host_path": str(second), "container_path": "/inputs/second"}],
+            "the attempt itself": [{"host_path": str(self.attempt), "container_path": "/workspace"}],
+            "inside the attempt": [{"host_path": str(inside), "container_path": "/workspace"}],
+            "an ancestor of the attempt": [{"host_path": str(self.root), "container_path": "/workspace"}],
+            "the host home": [{"host_path": str(Path.home()), "container_path": "/workspace"}],
+            "one directory twice": [{"host_path": str(self.target), "container_path": "/workspace"},
+                                    {"host_path": str(self.target), "container_path": "/inputs/second"}],
+            "a missing directory": [{"host_path": str(self.root / "absent"), "container_path": "/workspace"}],
+        }
+        if os.name == "posix":
+            cases["/etc"] = [{"host_path": "/etc", "container_path": "/workspace"}]
+            cases["/proc"] = [{"host_path": "/proc", "container_path": "/workspace"}]
+        outcomes = {}
+        for label, mounts in cases.items():
+            with self.subTest(mount=label):
+                for leftover in ("logs", "scratch"):
+                    shutil.rmtree(self.attempt / leftover, ignore_errors=True)
+                request = support.request(None, ["/bin/echo", "hello"], target_mounts=mounts)
+                try:
+                    first, second_patch = ScriptedDocker().patches()
+                    with first, second_patch:
+                        support.run(support.runtime(), self.attempt, request)
+                    runs = True
+                except ce.ContainerRequestError:
+                    runs = False
+                for leftover in ("logs", "scratch"):
+                    shutil.rmtree(self.attempt / leftover, ignore_errors=True)
+                forged = self.forge(mounts)
+                verifies = support.verify(self.attempt, forged) == []
+                self.assertEqual(runs, verifies, "execution and verification disagree about this mount")
+                if runs:
+                    ce.to_worker_envelope(self.attempt, **self.envelope_arguments(forged))
+                else:
+                    self.assert_uncertifiable(forged)
+                outcomes[label] = runs
+        self.assertTrue(outcomes["the legitimate target"] and outcomes["two distinct directories"])
+        self.assertFalse(any(allowed for label, allowed in outcomes.items()
+                             if label not in ("the legitimate target", "two distinct directories")))
+
+    def test_a_mount_that_vanishes_after_the_run_fails_closed(self):
+        request, _, _ = self.produce()
+        self.assertEqual(support.verify(self.attempt, request), [])
+        shutil.rmtree(self.target)
+        self.assertTrue(support.verify(self.attempt, request))
+
+    def test_the_host_facts_are_required_and_typed(self):
+        request, _, _ = self.produce()
+        with self.assertRaises(TypeError):
+            support.verify(self.attempt, request, host_flavor="solaris")
+        with self.assertRaises(TypeError):
+            support.verify(self.attempt, request, docker_host=7)
 
 
 # ---- adapter wiring and documentation ------------------------------------------------------------
