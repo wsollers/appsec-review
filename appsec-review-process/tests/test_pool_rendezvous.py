@@ -353,6 +353,7 @@ class ContractTests(Case):
         self.assertEqual(built[ps.PERSONA].stop_grace_seconds, runtime.stop_grace_seconds)
 
     def test_a_launch_object_the_context_or_an_adapter_refuses_launches_nothing(self):
+        self.scripted()     # no real docker here: the code-server has none, and a host must not run one
         spec, plan = self.mixed(1, 1)
 
         class Other(pi.FixtureInvoker):
