@@ -176,7 +176,8 @@
         "outputs/base-image-inventory.json",
         "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
-        "outputs/coverage.json"
+        "outputs/coverage.json",
+        "outputs/applicability-probe-receipt.json"
       ],
       "proposed_claim_class": {
         "claim_class_id": "declared_configuration_evidence",
@@ -237,7 +238,8 @@
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "static manifests support DECLARED exposure only; never observed cloud or cluster state",
-        "15-deployment-hardening reads this evidence transitively after assembly; it is never an input to any 02-* node"
+        "15-deployment-hardening reads this evidence transitively after assembly; it is never an input to any 02-* node",
+        "RECONCILED 2026-09-20 (V02): required_artifacts are the merged contract's required_files (PR #18): the node may be SKIPPED, so it publishes outputs/applicability-probe-receipt.json."
       ],
       "adopted": true
     },
@@ -265,6 +267,7 @@
         "manifest.json",
         "status.json",
         "outputs/container-image-inventory.json",
+        "outputs/container-image-applicability.json",
         "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
         "outputs/coverage.json"
@@ -327,7 +330,8 @@
       "open_human_gates": [],
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
-        "NO legacy prepass step exists for supplied images (the legacy audit-container image ships trivy but no step invokes `trivy image`). This node is declared from design-v3 2.1/17 scope, not from a legacy step."
+        "NO legacy prepass step exists for supplied images (the legacy audit-container image ships trivy but no step invokes `trivy image`). This node is declared from design-v3 2.1/17 scope, not from a legacy step.",
+        "RECONCILED 2026-09-20 (V02): required_artifacts are the merged contract's required_files (PR #19): the node may be SKIPPED, so it publishes outputs/container-image-applicability.json."
       ],
       "adopted": true
     },
@@ -712,7 +716,8 @@
         "manifest.json",
         "status.json",
         "outputs/binary-hardening.json",
-        "outputs/binskim.sarif",
+        "outputs/binary-hardening-applicability.json",
+        "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
         "outputs/coverage.json"
       ],
@@ -773,7 +778,8 @@
       "deletion_gate": "legacy steps mapped to this node are removed from both runners only after this node has a qualified registered worker (fixtures + bounded live Dagster qualification) and every lane prompt reading the legacy static-evidence path is repointed",
       "notes": [
         "covers binaries SUPPLIED in the snapshot. Binaries BUILT by 02-native-build stay with 02-binary-triage (its planned_scope already names security-property inspection).",
-        "not a CVE scanner; complements, never replaces, SBOM/SCA"
+        "not a CVE scanner; complements, never replaces, SBOM/SCA",
+        "RECONCILED 2026-09-20 (V02): required_artifacts are the merged contract's required_files (PR #19): the applicability receipt and the redaction receipt are required; the BinSkim SARIF file is conditional, not required, because a SKIPPED node never ran BinSkim."
       ],
       "adopted": true
     },

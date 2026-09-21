@@ -1,9 +1,9 @@
 # Mythos design-parity report
 
-Status: **PASS**
+Status: **FAIL**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
-Lifecycle jobs: **42**
+Lifecycle jobs: **51**
 Design capabilities: **15**
 
 ## Readiness summary
@@ -12,7 +12,7 @@ Design capabilities: **15**
 |---|---:|
 | `implemented_and_qualified` | 3 |
 | `implemented_not_qualified` | 1 |
-| `missing_prerequisites` | 27 |
+| `missing_prerequisites` | 36 |
 | `registered_planned_not_executable` | 9 |
 | `supplied_artifact_gate` | 2 |
 
@@ -20,10 +20,10 @@ Design capabilities: **15**
 
 | Job | Graph implemented | Binding | Readiness | Pool |
 |---|---:|---|---|---|
-| `00-intake` | true | `controller` | `implemented_and_qualified` | `unassigned` |
-| `02-ossf-scorecard` | true | `actual_worker` | `implemented_and_qualified` | `unassigned` |
-| `02-repository-partition-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `unassigned` |
-| `02-dev-project-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `unassigned` |
+| `00-intake` | true | `controller` | `implemented_and_qualified` | `cpu` |
+| `02-ossf-scorecard` | true | `actual_worker` | `implemented_and_qualified` | `network` |
+| `02-repository-partition-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
+| `02-dev-project-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
 | `02-devops-project-discovery` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `02-sre-operations-topology` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `02-evidence-assembly` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -47,7 +47,7 @@ Design capabilities: **15**
 | `02-test-intelligence-ingest` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `04-owasp-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `15-stig-srg-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `02-build-configure` | false | `actual_worker` | `implemented_not_qualified` | `unassigned` |
+| `02-build-configure` | false | `actual_worker` | `implemented_not_qualified` | `docker` |
 | `02-native-build` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-source-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-native-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -61,12 +61,19 @@ Design capabilities: **15**
 | `02-test-result-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-test-coverage-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-operations-doc-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-evidence-index` | true | `actual_worker` | `implemented_and_qualified` | `unassigned` |
+| `02-evidence-index` | true | `actual_worker` | `implemented_and_qualified` | `memory` |
+| `02-secrets-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-iac-config-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-container-image-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-sbom-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-sca-vulnerability-match` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-license-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-dependency-lifecycle` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-binary-hardening` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-mobile-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 
 ## Explicit gaps
 
-- 00-intake: resource pool unassigned
-- 00-intake: unassigned_resource_pool
 - 01-component-characterization: missing_dedicated_output_schema
 - 01-component-characterization: missing_output_contract
 - 01-component-characterization: missing_registry_composition
@@ -92,6 +99,13 @@ Design capabilities: **15**
 - 02-binary-cfg: no_qualification
 - 02-binary-cfg: resource pool unassigned
 - 02-binary-cfg: unassigned_resource_pool
+- 02-binary-hardening: missing_registry_composition
+- 02-binary-hardening: missing_validator
+- 02-binary-hardening: missing_worker
+- 02-binary-hardening: no qualification evidence
+- 02-binary-hardening: no_qualification
+- 02-binary-hardening: resource pool unassigned
+- 02-binary-hardening: unassigned_resource_pool
 - 02-binary-intelligence-ingest: missing_dedicated_output_schema
 - 02-binary-intelligence-ingest: missing_validator
 - 02-binary-intelligence-ingest: missing_worker
@@ -114,8 +128,13 @@ Design capabilities: **15**
 - 02-build-configure: missing_registry_composition
 - 02-build-configure: no qualification evidence
 - 02-build-configure: no_live_full_review_qualification
-- 02-build-configure: resource pool unassigned
-- 02-build-configure: unassigned_resource_pool
+- 02-container-image-inventory: missing_registry_composition
+- 02-container-image-inventory: missing_validator
+- 02-container-image-inventory: missing_worker
+- 02-container-image-inventory: no qualification evidence
+- 02-container-image-inventory: no_qualification
+- 02-container-image-inventory: resource pool unassigned
+- 02-container-image-inventory: unassigned_resource_pool
 - 02-debug-symbol-index: missing_dedicated_output_schema
 - 02-debug-symbol-index: missing_output_contract
 - 02-debug-symbol-index: missing_registry_composition
@@ -125,11 +144,16 @@ Design capabilities: **15**
 - 02-debug-symbol-index: no_qualification
 - 02-debug-symbol-index: resource pool unassigned
 - 02-debug-symbol-index: unassigned_resource_pool
+- 02-dependency-lifecycle: missing_registry_composition
+- 02-dependency-lifecycle: missing_validator
+- 02-dependency-lifecycle: missing_worker
+- 02-dependency-lifecycle: no qualification evidence
+- 02-dependency-lifecycle: no_qualification
+- 02-dependency-lifecycle: resource pool unassigned
+- 02-dependency-lifecycle: unassigned_resource_pool
 - 02-dev-project-discovery: no qualification evidence
 - 02-dev-project-discovery: not_automatic_analysis_dispatch
-- 02-dev-project-discovery: resource pool unassigned
 - 02-dev-project-discovery: supplied_result_required
-- 02-dev-project-discovery: unassigned_resource_pool
 - 02-devops-project-discovery: missing_validator
 - 02-devops-project-discovery: missing_worker
 - 02-devops-project-discovery: no qualification evidence
@@ -153,8 +177,13 @@ Design capabilities: **15**
 - 02-evidence-assembly: resource pool unassigned
 - 02-evidence-assembly: unassigned_resource_pool
 - 02-evidence-index: missing_dedicated_output_schema
-- 02-evidence-index: resource pool unassigned
-- 02-evidence-index: unassigned_resource_pool
+- 02-iac-config-scan: missing_registry_composition
+- 02-iac-config-scan: missing_validator
+- 02-iac-config-scan: missing_worker
+- 02-iac-config-scan: no qualification evidence
+- 02-iac-config-scan: no_qualification
+- 02-iac-config-scan: resource pool unassigned
+- 02-iac-config-scan: unassigned_resource_pool
 - 02-ir-capture: missing_dedicated_output_schema
 - 02-ir-capture: missing_output_contract
 - 02-ir-capture: missing_registry_composition
@@ -182,6 +211,20 @@ Design capabilities: **15**
 - 02-ir-link: no_qualification
 - 02-ir-link: resource pool unassigned
 - 02-ir-link: unassigned_resource_pool
+- 02-license-scan: missing_registry_composition
+- 02-license-scan: missing_validator
+- 02-license-scan: missing_worker
+- 02-license-scan: no qualification evidence
+- 02-license-scan: no_qualification
+- 02-license-scan: resource pool unassigned
+- 02-license-scan: unassigned_resource_pool
+- 02-mobile-sast: missing_registry_composition
+- 02-mobile-sast: missing_validator
+- 02-mobile-sast: missing_worker
+- 02-mobile-sast: no qualification evidence
+- 02-mobile-sast: no_qualification
+- 02-mobile-sast: resource pool unassigned
+- 02-mobile-sast: unassigned_resource_pool
 - 02-native-build: missing_dedicated_output_schema
 - 02-native-build: missing_output_contract
 - 02-native-build: missing_registry_composition
@@ -209,12 +252,29 @@ Design capabilities: **15**
 - 02-operations-doc-ingest: no_qualification
 - 02-operations-doc-ingest: resource pool unassigned
 - 02-operations-doc-ingest: unassigned_resource_pool
-- 02-ossf-scorecard: resource pool unassigned
-- 02-ossf-scorecard: unassigned_resource_pool
 - 02-repository-partition-discovery: not_automatic_analysis_dispatch
-- 02-repository-partition-discovery: resource pool unassigned
 - 02-repository-partition-discovery: supplied_result_required
-- 02-repository-partition-discovery: unassigned_resource_pool
+- 02-sbom-inventory: missing_registry_composition
+- 02-sbom-inventory: missing_validator
+- 02-sbom-inventory: missing_worker
+- 02-sbom-inventory: no qualification evidence
+- 02-sbom-inventory: no_qualification
+- 02-sbom-inventory: resource pool unassigned
+- 02-sbom-inventory: unassigned_resource_pool
+- 02-sca-vulnerability-match: missing_registry_composition
+- 02-sca-vulnerability-match: missing_validator
+- 02-sca-vulnerability-match: missing_worker
+- 02-sca-vulnerability-match: no qualification evidence
+- 02-sca-vulnerability-match: no_qualification
+- 02-sca-vulnerability-match: resource pool unassigned
+- 02-sca-vulnerability-match: unassigned_resource_pool
+- 02-secrets-inventory: missing_registry_composition
+- 02-secrets-inventory: missing_validator
+- 02-secrets-inventory: missing_worker
+- 02-secrets-inventory: no qualification evidence
+- 02-secrets-inventory: no_qualification
+- 02-secrets-inventory: resource pool unassigned
+- 02-secrets-inventory: unassigned_resource_pool
 - 02-source-sast: missing_dedicated_output_schema
 - 02-source-sast: missing_output_contract
 - 02-source-sast: missing_registry_composition
@@ -403,7 +463,10 @@ Design capabilities: **15**
 - completeness-feedback: completeness_auditor_missing
 - completeness-feedback: coverage_feedback_missing
 - completeness-feedback: resource pool unassigned
-- dedicated-resource-pools: no_dedicated_dagster_resource_pools
+- dedicated-resource-pools: lifecycle_jobs_without_workers_remain_unassigned
+- dedicated-resource-pools: live_worker_loss_injection_pending
+- dedicated-resource-pools: manifest_job_pool_not_cross_checked_against_op_pool
+- dedicated-resource-pools: no_load_evidence_limits_must_not_be_raised
 - dedicated-resource-pools: resource pool unassigned
 - deterministic-pool-merge: persona_merge_missing
 - deterministic-pool-merge: resource pool unassigned
@@ -428,7 +491,6 @@ Design capabilities: **15**
 - remediation-retest-feedback: fix_reverification_loop_missing
 - remediation-retest-feedback: resource pool unassigned
 - remediation-retest-feedback: same_environment_retest_missing
-- resource_pools: no dedicated Dagster resource pools are configured
 - synthetic-hypothesis-resynthesis: resource pool unassigned
 - synthetic-hypothesis-resynthesis: resynthesis_loop_missing
 - synthetic-hypothesis-resynthesis: synthetic_hypothesis_routing_missing
@@ -440,4 +502,4 @@ Design capabilities: **15**
 
 ## Validation errors
 
-- None.
+- stale generated readiness_table: docs/design-parity-readiness.md

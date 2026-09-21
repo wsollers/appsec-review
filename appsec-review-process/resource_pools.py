@@ -36,7 +36,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parent
 
-STATE_SCHEMA_ID = "appsec-review/resource-pool-state/1.0"
+STATE_SCHEMA_ID = "appsec-review/resource-pool-state/1.1"
 STATE_SCHEMA_FILE = "resource-pool-state.schema.json"
 # The Dagster release everything on docs/resource-pools.md was confirmed against; a test ties it to
 # orchestrator/dagster/requirements.txt. A pool-state document from another release is a FAIL.

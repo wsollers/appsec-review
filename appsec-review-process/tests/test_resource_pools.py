@@ -407,7 +407,7 @@ HOSTILE = {
     str: lambda value: [item for item in (
         PLANT, "0.0.1", "sha256:" + "0" * 64, "1999-01-01T00:00:00+00:00", "FAILURE", "DRIFT", "FAIL",
         rp.CPU, rp.DOCKER, "Memory", rp.UNASSIGNED, "bootstrap_diagnostic", "9" * 8 + "-0000-0000-0000-" + "0" * 12,
-        "appsec-review/resource-pool-state/2.0") if item != value],
+        "appsec-review/resource-pool-state/1.0", "appsec-review/resource-pool-state/2.0") if item != value],
 }
 # Leaves a consistent reseal can change and still verify PASS, each because no byte on disk or
 # constant in the module determines it. Anything else that verifies is an unbound trusted field.

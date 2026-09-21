@@ -22,7 +22,7 @@ import evidence_redaction
 import evidence_store as store
 import execution_state as state
 from schema_validate import SCHEMAS_DIR, validate_document
-from validate_job_output import validate_job_output
+from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
 from worker_result import artifact_records, terminal_envelope
 
 # Located the way the worker locates them, never by the repository's directory names: in the Linux
@@ -506,7 +506,8 @@ class PublishedMetricsTests(LifecycleCase):
             started_at='2026-09-20T10:00:00Z', finished_at='2026-09-20T10:01:00Z', summary='indexed',
             artifacts=artifact_records(attempt, CONTRACT['required_files']))
         self.assertEqual(validate_job_output(attempt, envelope, 'sha256:' + pointer['fingerprint'],
-                                             expected_run_id='fixture', expected_job_id=store.JOB), [])
+                                             expected_run_id='fixture', expected_job_id=store.JOB,
+                                             orchestration=NO_ORCHESTRATION_FACTS), [])
 
 
 class TamperTests(LifecycleCase):

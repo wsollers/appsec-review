@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 sys.path.insert(0, str(ROOT))
 
+import resource_pools
 from validate_design_parity import (
     render_mermaid,
     render_readiness,
@@ -56,9 +57,10 @@ class DesignParityTests(unittest.TestCase):
     def test_current_honest_baseline(self):
         result = validate_manifest(self.manifest)
         self.assertEqual(result["status"], "PASS", result["errors"])
-        self.assertEqual(result["job_count"], 42)
+        self.assertEqual(result["job_count"], 51)
         self.assertEqual(result["capability_count"], 15)
-        self.assertIn("resource_pools: no dedicated Dagster resource pools are configured", result["gaps"])
+        self.assertNotIn("resource_pools: no dedicated Dagster resource pools are configured", result["gaps"])
+        self.assertEqual(tuple(self.manifest["dagster_inventory"]["resource_pools"]), resource_pools.POOL_IDS)
 
     def test_missing_and_extra_graph_nodes(self):
         missing = self.mutated()
@@ -142,7 +144,9 @@ class DesignParityTests(unittest.TestCase):
     def test_unassigned_pool_is_an_explicit_gap_not_an_invented_default(self):
         result = validate_manifest(self.manifest)
         self.assertEqual(result["status"], "PASS")
-        self.assertIn("02-evidence-index: resource pool unassigned", result["gaps"])
+        # B15 assigned the six jobs that have workers; a job whose worker does not exist stays unassigned.
+        self.assertNotIn("02-evidence-index: resource pool unassigned", result["gaps"])
+        self.assertIn("02-native-build: resource pool unassigned", result["gaps"])
 
     def test_qualification_reference_mutation(self):
         manifest = self.mutated()
@@ -154,7 +158,7 @@ class DesignParityTests(unittest.TestCase):
         first = render_report(self.manifest, result)
         second = render_report(deepcopy(self.manifest), validate_manifest(deepcopy(self.manifest)))
         self.assertEqual(first, second)
-        self.assertIn("Lifecycle jobs: **42**", first)
+        self.assertIn("Lifecycle jobs: **51**", first)
 
     def test_common_worker_result_envelope_semantics(self):
         base = {

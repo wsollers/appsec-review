@@ -341,8 +341,10 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
 - Independence is checked against **direct producers only**, not transitively: persona P1 may
   produce, P2 may verify that, and P1 may then judge P2's result, because P2's result names P1 only
   inside bytes this adapter does not follow. That meets the letter of `design-v3.md` section 5.1
-  (no single invocation discovers, verifies and adjudicates); whether a chain must be independent
-  end to end is an open owner decision for C02/C04.
+  (no single invocation discovers, verifies and adjudicates). **Owner decision 2026-09-21:** this
+  is accepted for B14, which sees one request at a time; independence of a whole chain is a stated
+  requirement of C02 (which builds a reviewer's producers and sees the chain) and C04 (which
+  accounts for diversity), with a `TODO.md` item to consider enforcing it there.
 - Requiring a different model family for every reviewer is stricter than the panel-level minimum
   in `design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
@@ -367,7 +369,10 @@ Shared surfaces, to be done sequentially by whoever owns them. None were edited 
    `fingerprint_material` in the instance fingerprint; pass `PersonaRuntime.cancel` from the pool.
 2. C02 wait-all: treat `invocation-result.json` as terminal only after `verify_invocation_result`
    passes; build a reviewer's `producers` and its `producer_result` inputs from those verified
-   results, never from a request.
+   results, never from a request. C02 also owns chain independence (owner decision 2026-09-21):
+   when it builds a reviewer's producers it must consider every ancestor of those results, not
+   only the direct producers this adapter checks, and C04 must not count a persona or model that
+   appears earlier in a claim's chain as independent.
 3. T10 dispatch: map a T06 handoff to a request. The handoff travels as a readable input with role
    `handoff`; its tool contract, budget and prohibited claim classes must be translated by trusted
    code into pins, never read by the adapter.
