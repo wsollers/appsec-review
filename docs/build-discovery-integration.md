@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 42 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 51 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -162,7 +162,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 42-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 51-node lifecycle view
 and from full developer project discovery.
 
 | Job | Execution readiness | Registry template |

@@ -83,8 +83,11 @@ predecessors or decisions; `HUMAN_GATE` produces an ADR/options packet but may n
 `INTEGRATION` combines already-qualified producers and should not invent missing worker behavior.
 
 Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, and `02-evidence-index`.
-Every one of the 42 graph job IDs appears in this backlog; a later batch may harden an implemented
-node without changing the honest current readiness flag.
+Every one of the 51 graph job IDs appears in this backlog; a later batch may harden an implemented
+node without changing the honest current readiness flag. (42 until 2026-09-20; ADR-0010 task V02
+declared the nine vendor-prepass nodes named under M03, M04 and M05, all `implemented: false`.)
+A closed decision batch is marked `DONE` with the accepted ADR that closed it; `DONE` is not a
+worker-readiness claim.
 
 Cross-cutting capability ownership is explicit:
 
@@ -228,8 +231,10 @@ Cross-cutting capability ownership is explicit:
 
 ### Decision gates (can run independently; implementation remains blocked on user approval)
 
-#### G01 — Threat-model ADR/options packet — HUMAN_GATE
+#### G01 — Threat-model ADR/options packet — DONE (ADR-0008 accepted 2026-09-20)
 
+- Closed: `docs/decisions/ADR-0008-threat-workbench.md` is `Accepted 2026-09-20` with every
+  gate answered by the user. This closes the design gate only; S02 remains blocked below.
 - Deliver: decision-ready ADR covering DFD/STRIDE versus composed privacy/abuse/attack-tree/runtime
   overlays; element schema; evidence types; applicability/completeness; rescope; disagreement; and
   approval authority. Do not choose for the user.
@@ -309,8 +314,12 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: secrets, stale links, unknown services, unsupported docs, reuse/recovery, and live
   registration.
 
-#### D09 — Source SAST job and legacy-prepass split — BLOCKED(B13,M01)
+#### D09 — Source SAST job and legacy-prepass split — BLOCKED(B13)
 
+- Status 2026-09-20: M01 is closed (ADR-0010 accepted) and the V06 redactor is merged (PR #10,
+  #17), so B13 is the remaining predecessor. ADR-0010's requirements on this batch are listed
+  under `existing_nodes_receiving_legacy_steps` in
+  `docs/proposals/vendor-prepass/job-nodes.proposal.json` (task V13).
 - Deliver: per-tool source SAST Dagster worker(s) for the declared `02-source-sast` node, pinned
   tool/image identity, normalized evidence, tool-specific exit semantics, and no finding promotion.
 - Acceptance: clean/hit/tool-error/timeout/cancel/corrupt/stale/reuse/recovery fixtures and live
@@ -397,6 +406,10 @@ Cross-cutting capability ownership is explicit:
   citations, hashes, redaction, and type labels; never index raw secrets or conflate intent/runtime.
 - Acceptance: stale producer, corrupt pointer, duplicate record, secret negative tests, query bounds,
   immutable reuse, and CLI/MCP retrieval qualification.
+- Slice done 2026-09-20: ADR-0010 task V15 (G10 = B), the language/size metrics enrichment that
+  replaces the legacy `cloc` and `scc` steps, merged in PR #25 and `02-evidence-index` was
+  requalified on Linux (`docs/evidence-index-metrics.md`); Windows verification is outstanding.
+  The rest of F01 (derived intelligence and partition maps) is unchanged and still blocked.
 
 #### F02 — Evidence assembly rendezvous — BLOCKED(D02,D03,D04,D05,D06,D07,D08,D09,E03,E05,E08,E10,F01,S01)
 
@@ -423,8 +436,11 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: changed source/version/license, missing control text, duplicate IDs, crosswalk lineage,
   offline reuse, recovery, and live registration.
 
-#### S02 — Threat model — BLOCKED(G01 user-approved ADR,F03,B14)
+#### S02 — Threat model — BLOCKED(G01,F03,B14,M01)
 
+- Predecessors as ADR-0008 records them (Decision 5 added M01). G01 (ADR-0008) and M01 (ADR-0010,
+  nodes declared by V02) are now `DONE`; F03 and B14 remain. The threat-workbench producer fill
+  (ADR-0010 task V08, ADR-0008 task T03) is unblocked by V02.
 - Deliver: `03-threat-model-dfd-stride` according to the approved ADR, with modeled elements,
   trust-boundary flows, cited threats, unknowns, completeness, dissent, and rescope triggers.
 - Acceptance: approved golden and mutation fixtures; every threat cites an element/evidence and every
@@ -536,8 +552,13 @@ Cross-cutting capability ownership is explicit:
 
 ### Legacy-script decomposition and tooling qualification
 
-#### M01 — Vendor-prepass graph/contract decision — READY
+#### M01 — Vendor-prepass graph/contract decision — DONE (ADR-0010 accepted 2026-09-20; nodes declared by V02)
 
+- Closed: `docs/decisions/ADR-0010-vendor-prepass-decomposition.md` answers gates G1-G10 and M1-M5
+  and maps all 37 legacy steps; task V02 declared its nine `02-*` nodes in `job-graph.json` as
+  `implemented: false`, joined them at `02-evidence-assembly`, and registered the skip reason
+  `not-applicable-no-matching-inputs`. Every one of them blocks with `WORKER_NOT_IMPLEMENTED`.
+  Remaining work is the task series in `docs/proposals/vendor-prepass/task-series.md`.
 - Deliver: explicit graph-node and output-contract decisions for secrets, IaC, SBOM/SCA, container,
   BinSkim/binary-hardening, mobile SAST, and source SAST. Map old steps; do not implement tools yet.
 - Primary paths: ADR/plan, job graph/parity proposal fixtures. Do not guess hidden generic nodes.
@@ -551,21 +572,37 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: reproducible image identities, licenses, offline/static default, smoke fixtures, and
   no unpinned download or network-enabled analysis by default.
 
-#### M03 — Secrets and IaC per-tool jobs — BLOCKED(M01,B13)
+#### M03 — Secrets and IaC per-tool jobs — BLOCKED(B13)
 
+- Graph nodes (declared, not implemented): `02-secrets-inventory`, `02-iac-config-scan`.
+- Status 2026-09-20: part 1 is merged: contracts and schemas (V04, PR #18 and #21), shared
+  tool-instance shapes (V03, PR #9) and the redactor with its receipt (V06, PR #10 and #17).
+  Part 2, the workers (V10), waits for B13; the validator policy and dispatch for the new claim
+  classes are a separate integration change.
 - Deliver: separate run-owned secrets and IaC jobs/contracts/schemas, safe redaction, pinned images,
   and legacy-step deletion after parity. Scanner hits remain evidence leads.
 - Acceptance: clean/hit/secret-output/tool-error/timeout/cancel/reuse/recovery and bounded live runs.
 
-#### M04 — Container, mobile, and binary-hardening jobs — BLOCKED(M01,M02,B13)
+#### M04 — Container, mobile, and binary-hardening jobs — BLOCKED(M02,B13)
 
+- Graph nodes (declared, not implemented): `02-container-image-inventory`, `02-mobile-sast`,
+  `02-binary-hardening`. `02-mobile-applicability` is not adopted (ADR-0010 G6 = A).
+- Status 2026-09-20: part 1, contracts and schemas (V07), merged in PR #19. Part 2, the workers
+  (V12), waits for M02 and B13.
 - Deliver: separate jobs selected by applicability with pinned tools and explicit static/dynamic
   semantics; remove replaced legacy steps without wrappers.
 - Acceptance: applicable/inapplicable/unsupported artifacts, tool failure, permissions, partial
   coverage, reuse/recovery, and bounded live qualification.
 
-#### M05 — SBOM/SCA evidence jobs — BLOCKED(M01,B13)
+#### M05 — SBOM/SCA evidence jobs — BLOCKED(B13,V16,V17,V18)
 
+- Graph nodes (declared, not implemented): `02-sbom-inventory`, `02-sca-vulnerability-match`,
+  `02-license-scan`, `02-dependency-lifecycle`.
+- Status 2026-09-20: part 1, contracts and schemas (V05), merged in PR #23; the NVD snapshot
+  binding (V09) merged in PR #8. Part 2, the workers (V11), waits for B13 and for ADR-0010 tasks
+  V16 (Grype DB mirror publisher) and V17 (OSV snapshot publisher), both behind B11, and V18
+  (their consumer bindings). `02-dependency-lifecycle` also needs a published, identified
+  lifecycle reference table; no publisher for one exists.
 - Deliver: separate SBOM, dependency lifecycle, vulnerability database, and license producers with
   component/version/source/database timestamps and hashes; do not claim reachability.
 - Acceptance: lockfile/binary/vendor cases, offline/stale DB, unknown version, duplicate component,
@@ -578,8 +615,10 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: feature matrix, retrieval parity fixtures, explicit disposition, updated callers/docs,
   and no duplicate mutable index authority.
 
-#### M07 — Remaining script disposition/migration — BLOCKED(M01,M06)
+#### M07 — Remaining script disposition/migration — BLOCKED(M06)
 
+- Status 2026-09-20: M01 is closed. The vendor-prepass deletion slice (ADR-0010 task V14) is
+  additionally blocked on V10-V13.
 - Deliver: process Tier 2–4 inventory in dependency order; each script gets delete/superseded/port/
   retain-tooling disposition, caller update, focused parity test, and no thin wrapper.
 - Acceptance: zero undocumented executable callers and updated migration inventory after each slice.
@@ -811,8 +850,9 @@ old script outright (no thin wrapper). Full script-by-script survey and priority
   `docs/migration.md` planned-change #5). Each tool becomes a job that communicates like every
   other job in the graph (`accepted.json`/`attempts/<id>/`), orchestrated by Dagster. Source-SAST
   tools map onto the already-declared `02-source-sast` node; secrets, IaC, SBOM/SCA, BinSkim and
-  mobile SAST have no declared `job-graph.json` node yet and need a decision on new nodes/contracts
-  before implementation (see the tool -> job mapping in the continuation prompt doc above). Highest-
+  mobile SAST had no declared `job-graph.json` node and needed a decision on new nodes/contracts
+  before implementation. **Decided 2026-09-20 (ADR-0010, batch M01) and declared by task V02**:
+  nine `implemented: false` nodes, listed under M03, M04 and M05 above; no worker exists yet. Highest-
   value, highest-risk remaining Tier 1 item -- treat the PowerShell/bash as reference for step
   semantics only, not code to lift verbatim.
 - [ ] Resolve `scripts/build_semantic_index.py` / `query_semantic_index.py` -- check for overlap

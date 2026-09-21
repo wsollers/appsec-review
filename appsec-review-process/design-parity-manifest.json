@@ -51,7 +51,7 @@
       {"job": "nvd_reference_sync", "lifecycle_jobs": [], "relationship": "shared asynchronous reference-feed publisher; not an engagement lifecycle or validator job"},
       {"job": "ossf_scorecard", "lifecycle_jobs": ["02-ossf-scorecard"], "relationship": "standalone and lifecycle-wired published-results ingestion"},
       {"job": "repository_partition_discovery", "lifecycle_jobs": ["02-repository-partition-discovery"], "relationship": "standalone qualification and lifecycle-wired supplied-artifact gate"},
-      {"job": "full_review", "lifecycle_jobs": ["00-intake", "02-ossf-scorecard", "02-repository-partition-discovery", "02-dev-project-discovery", "02-devops-project-discovery", "02-sre-operations-topology", "02-evidence-assembly", "01-component-characterization", "03-threat-model-dfd-stride", "04-asvs-masvs", "05-native-memory", "06-cve-reachability", "13-fuzz-target-triage", "15-deployment-hardening", "07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification", "11-remediation-proposal", "12-scoring-prioritization", "10-synthesis-report", "02-api-collection-intelligence-ingest", "02-binary-intelligence-ingest", "02-doc-intelligence-ingest", "02-standards-source-ingest", "02-test-intelligence-ingest", "04-owasp-validation-worklist", "15-stig-srg-validation-worklist", "02-build-configure", "02-native-build", "02-source-sast", "02-native-sast", "02-ir-capture", "02-ir-link", "02-ir-facts", "02-debug-symbol-index", "02-binary-triage", "02-binary-cfg", "02-test-execution", "02-test-result-ingest", "02-test-coverage-ingest", "02-operations-doc-ingest", "02-evidence-index"], "relationship": "lifecycle graph; blocked nodes remain explicit"}
+      {"job": "full_review", "lifecycle_jobs": ["00-intake", "02-ossf-scorecard", "02-repository-partition-discovery", "02-dev-project-discovery", "02-devops-project-discovery", "02-sre-operations-topology", "02-evidence-assembly", "01-component-characterization", "03-threat-model-dfd-stride", "04-asvs-masvs", "05-native-memory", "06-cve-reachability", "13-fuzz-target-triage", "15-deployment-hardening", "07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification", "11-remediation-proposal", "12-scoring-prioritization", "10-synthesis-report", "02-api-collection-intelligence-ingest", "02-binary-intelligence-ingest", "02-doc-intelligence-ingest", "02-standards-source-ingest", "02-test-intelligence-ingest", "04-owasp-validation-worklist", "15-stig-srg-validation-worklist", "02-build-configure", "02-native-build", "02-source-sast", "02-native-sast", "02-ir-capture", "02-ir-link", "02-ir-facts", "02-debug-symbol-index", "02-binary-triage", "02-binary-cfg", "02-test-execution", "02-test-result-ingest", "02-test-coverage-ingest", "02-operations-doc-ingest", "02-evidence-index", "02-secrets-inventory", "02-iac-config-scan", "02-container-image-inventory", "02-sbom-inventory", "02-sca-vulnerability-match", "02-license-scan", "02-dependency-lifecycle", "02-binary-hardening", "02-mobile-sast"], "relationship": "lifecycle graph; blocked nodes remain explicit"}
     ],
     "launcher_jobs": [
       "build_discovery",
@@ -509,7 +509,16 @@
           "02-test-coverage-ingest",
           "02-operations-doc-ingest",
           "02-evidence-index",
-          "02-ossf-scorecard"
+          "02-ossf-scorecard",
+          "02-secrets-inventory",
+          "02-iac-config-scan",
+          "02-container-image-inventory",
+          "02-sbom-inventory",
+          "02-sca-vulnerability-match",
+          "02-license-scan",
+          "02-dependency-lifecycle",
+          "02-binary-hardening",
+          "02-mobile-sast"
         ]
       },
       "registry": null,
@@ -2589,6 +2598,503 @@
         "unassigned_resource_pool"
       ],
       "next_prerequisite": "Assign a dedicated resource pool when Workstream B defines pools."
+    },
+    {
+      "id": "02-secrets-inventory",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-secrets-inventory",
+        "implemented": false,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "secrets-inventory",
+        "contract_file": "appsec-review-process/registry/output-contracts/secrets-inventory.json",
+        "schema_file": "schemas/secrets-inventory.schema.json",
+        "claim_class": "secret_exposure_lead"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-iac-config-scan",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-iac-config-scan",
+        "implemented": false,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "iac-config-evidence",
+        "contract_file": "appsec-review-process/registry/output-contracts/iac-config-evidence.json",
+        "schema_file": "schemas/iac-config-evidence.schema.json",
+        "claim_class": "declared_configuration_evidence"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-container-image-inventory",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-container-image-inventory",
+        "implemented": false,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "container-image-inventory",
+        "contract_file": "appsec-review-process/registry/output-contracts/container-image-inventory.json",
+        "schema_file": "schemas/container-image-inventory.schema.json",
+        "claim_class": "supplied_image_static_evidence"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-sbom-inventory",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-sbom-inventory",
+        "implemented": false,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "sbom-inventory",
+        "contract_file": "appsec-review-process/registry/output-contracts/sbom-inventory.json",
+        "schema_file": "schemas/sbom-inventory.schema.json",
+        "claim_class": "dependency_inventory_evidence"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-sca-vulnerability-match",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-sca-vulnerability-match",
+        "implemented": false,
+        "dependencies": [
+          "02-sbom-inventory"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "sca-vulnerability-match",
+        "contract_file": "appsec-review-process/registry/output-contracts/sca-vulnerability-match.json",
+        "schema_file": "schemas/sca-vulnerability-match.schema.json",
+        "claim_class": "known_vulnerability_match_lead"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the V16 Grype DB mirror publisher, the V17 OSV snapshot publisher (both behind B11), the V18 consumer bindings and the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-license-scan",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-license-scan",
+        "implemented": false,
+        "dependencies": [
+          "00-intake",
+          "02-sbom-inventory"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "license-inventory",
+        "contract_file": "appsec-review-process/registry/output-contracts/license-inventory.json",
+        "schema_file": "schemas/license-inventory.schema.json",
+        "claim_class": "license_detection_evidence"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-dependency-lifecycle",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-dependency-lifecycle",
+        "implemented": false,
+        "dependencies": [
+          "02-sbom-inventory",
+          "02-license-scan"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "dependency-lifecycle",
+        "contract_file": "appsec-review-process/registry/output-contracts/dependency-lifecycle.json",
+        "schema_file": "schemas/dependency-lifecycle.schema.json",
+        "claim_class": "dependency_lifecycle_evidence"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs a published, identified lifecycle reference table (no reference-table publisher exists) and its upstream SBOM and license workers; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-binary-hardening",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-binary-hardening",
+        "implemented": false,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "binary-hardening",
+        "contract_file": "appsec-review-process/registry/output-contracts/binary-hardening.json",
+        "schema_file": "schemas/binary-hardening.schema.json",
+        "claim_class": "binary_hardening_property_evidence"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+    },
+    {
+      "id": "02-mobile-sast",
+      "design_refs": [
+        "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
+        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-mobile-sast",
+        "implemented": false,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": null,
+      "execution": {
+        "mode": "none",
+        "worker": null,
+        "validator": null
+      },
+      "output": {
+        "contract": "mobile-sast",
+        "contract_file": "appsec-review-process/registry/output-contracts/mobile-sast.json",
+        "schema_file": "schemas/mobile-sast.schema.json",
+        "claim_class": "mobile_static_lead"
+      },
+      "permissions": [],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "unassigned",
+      "readiness": "missing_prerequisites",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": [
+        "missing_registry_composition",
+        "missing_validator",
+        "missing_worker",
+        "no_qualification",
+        "unassigned_resource_pool"
+      ],
+      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
     }
   ],
   "capabilities": [
