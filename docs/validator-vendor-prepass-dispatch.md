@@ -152,9 +152,11 @@ consumer (`--consumer-job 02-evidence-assembly`).
   fields, so a vendor-prepass worker cannot publish through that helper as it stands.
 - `publish_job_output.allocate_attempt` writes `inputs.json` into every attempt it allocates.
   Nothing verifies that file, so the closed attempt tree refuses it like any other
-  (`test_the_common_runtimes_inputs_json_is_not_an_allowance`). Together with the previous item:
-  the V10-V12 workers need either their own allocation that keeps the input record outside the
-  attempt, or an owner decision to allow `inputs.json` WITH a check that binds its bytes.
+  (`test_the_common_runtimes_inputs_json_is_not_an_allowance`). **Owner decision 2026-09-21:** the
+  strict rule stays and `inputs.json` is never an allowance. The V10-V12 workers get their own
+  attempt allocation, which keeps the input record outside the attempt and writes only the closed
+  set; they do not publish through `allocate_attempt` / `persist_terminal_current` as those stand
+  (that also settles the previous item for them). Recorded in `TODO.md` under M03-M05.
 - The closure is a rule of the nine, not of the generic layer. The three live jobs (`02-ossf-scorecard`,
   `10-critical-findings-sarif`, `02-repository-partition-discovery`) are allocated by
   `allocate_attempt` and keep attempts that hold an `inputs.json` their envelopes do not list, so "file set == envelope
