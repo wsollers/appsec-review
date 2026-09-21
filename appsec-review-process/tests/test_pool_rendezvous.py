@@ -68,6 +68,15 @@ class Background:
         return self.box["value"]
 
 
+def iter_then(first: list, then):
+    """A mock side effect: the listed values once, then whatever ``then()`` says."""
+    values = list(first)
+
+    def effect(*_args, **_kwargs):
+        return values.pop(0) if values else then()
+    return effect
+
+
 def wait_for(event: threading.Event) -> None:
     if not event.wait(HANG_SECONDS):
         raise AssertionError("an expected event never happened")
@@ -118,13 +127,20 @@ class Case(unittest.TestCase):
             self.assertEqual(record["result_file"] is not None, adopted)
             self.assertEqual(record["adapter_status"] is not None, adopted)
             self.assertEqual(record["worker_stopped"] is not None, record["state"] == pr.RENDEZVOUS_TIMED_OUT)
+            self.assertIn(record["state_reason"], pr.REASONS_BY_STATE[record["state"]])
 
     def published(self, spec, plan):
-        """The manifest on disk verifies, equals what load_verified_manifest returns, and holds."""
+        """The manifest on disk verifies, equals what load_verified_manifest returns, and holds; the
+        verified record hands over a result exactly for the five result states."""
         self.assertEqual(self.ws.verify(spec, plan), [])
-        loaded = self.ws.load(spec, plan)
+        verified = self.ws.load(spec, plan)
+        loaded = verified.manifest
         self.assertEqual(pr.canonical_bytes(pr.thaw(loaded)), self.raw(plan))
         self.assert_invariants(loaded, plan)
+        self.assertEqual([item.instance for item in verified.instances], list(plan.instances))
+        self.assertEqual([item.record for item in verified.instances], list(loaded["instances"]))
+        for item in verified.instances:
+            self.assertEqual(item.result is not None, item.state in pr.RESULT_STATES)
         return loaded
 
     def reseal(self, plan, edit) -> None:
@@ -190,7 +206,18 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(manifest["properties"]["expansion"]["const"], ps.EXPANSION_ID)
         self.assertEqual(manifest["properties"]["empty_pool_reason"]["enum"], [*ps.EMPTY_POOL_REASONS, None])
         self.assertEqual(len(set(pr.STATES)), len(pr.STATES))
+        self.assertEqual(len(pr.STATES), 11)
         self.assertLessEqual(set(pr.RESULT_STATES), set(pr.STATES))
+        # Q4: the reason enum is the module's table, which is total over the states
+        self.assertEqual(instance["properties"]["state_reason"]["enum"], list(pr.STATE_REASONS))
+        self.assertEqual(instance["properties"]["state_reason"]["type"], "string", "every entry has a reason")
+        self.assertEqual(sorted(pr.REASONS_BY_STATE), sorted(pr.STATES))
+        self.assertEqual(sorted(pr.STATE_REASONS),
+                         sorted(value for name, value in vars(pr).items() if name.startswith("REASON_")))
+        self.assertEqual(sorted(pr.STATE_REASONS),
+                         sorted({reason for reasons in pr.REASONS_BY_STATE.values() for reason in reasons}))
+        self.assertEqual(len(pr.REASONS_BY_STATE[pr.INVALID]), 5)
+        self.assertEqual(len(pr.REASONS_BY_STATE[pr.MISSING]), 3)
 
     def test_no_property_name_is_free_text_or_secret_looking(self):
         import evidence_redaction
@@ -223,7 +250,8 @@ class ContractTests(Case):
             with self.subTest(run=name), self.assertRaises(TypeError):
                 pr.run_rendezvous(root, **arguments)
         full = self.ws.reader_arguments(spec)
-        self.assertIn("host_facts", full)
+        self.assertEqual(sorted(full), ["context", "expected_spec", "rendezvous_parent"],
+                         "the context is the single carrier: no reader takes host facts beside it")
         for call in (pr.verify_manifest, pr.load_verified_manifest):
             for name in full:
                 arguments = dict(full)
@@ -273,9 +301,7 @@ class ContractTests(Case):
                 with self.subTest(field=name, value=repr(value)):
                     self.refused(spec, plan, "runtime." + name, **{name: value})
         plain = threading.Event()       # the adapters would accept it; it cannot wake the waiter
-        self.refused(spec, plan, "runtime.cancel must be a PoolCancel", cancel=plain,
-                     container_runtime=self.ws.container_runtime(cancel=plain),
-                     persona_runtime=self.ws.persona_runtime(cancel=plain))
+        self.refused(spec, plan, "runtime.cancel must be a PoolCancel", cancel=plain)
 
     def test_the_rendezvous_parent_may_not_be_reachable_by_a_worker(self):
         spec, plan = self.personas(1)
@@ -303,35 +329,62 @@ class ContractTests(Case):
             finally:
                 inside.rmdir()
 
-    def test_each_adapter_runtime_fact_is_bound_to_the_context_and_each_cancel_to_the_pool(self):
+    def test_the_runtime_holds_only_launch_objects_and_the_context_builds_both_adapter_runtimes(self):
+        """Q3: the context is the single carrier. No ready-made adapter runtime can be handed in, so
+        nothing can run under one registry, image directory or snapshot and be verified under another."""
+        launch_only = set(ps.CONTAINER_LAUNCH_ONLY_FIELDS) | set(ps.PERSONA_LAUNCH_ONLY_FIELDS)
+        fields = set(self.ws.runtime_fields())
+        self.assertEqual(fields, launch_only | {"rendezvous_parent", "max_parallel", "wait_limit_seconds",
+                                                "drain_seconds"})
+        self.assertFalse(fields & set(self.ws.context_fields()), "a host fact has a second carrier")
+        for name in ("ContainerHostFacts", "host_facts_of", "_host_facts_errors", "_binding_errors"):
+            self.assertFalse(hasattr(pr, name), name)
+        spec, plan = self.mixed(1, 1)
+        context, runtime = self.ws.context(), self.ws.runtime()
+        built = pr.adapter_runtimes(plan, context, runtime)
+        self.assertEqual(sorted(built), sorted(ps.WORKER_KINDS))
+        for kind, arguments in ((ps.PINNED_CONTAINER, context.container_verification_arguments()),
+                                (ps.PERSONA, context.persona_verification_arguments())):
+            self.assertIs(built[kind].cancel, runtime.cancel)
+            self.assertIs(built[kind].clock, runtime.clock)
+            for name, value in arguments.items():
+                self.assertEqual(getattr(built[kind], name), value, name)
+        self.assertIs(built[ps.PERSONA].invoker, runtime.invoker)
+        self.assertEqual(built[ps.PERSONA].stop_grace_seconds, runtime.stop_grace_seconds)
+
+    def test_a_launch_object_the_context_or_an_adapter_refuses_launches_nothing(self):
         spec, plan = self.mixed(1, 1)
 
         class Other(pi.FixtureInvoker):
             invoker_id = "other-invoker"
-        other = self.ws.base / "elsewhere"
-        other.mkdir()
-        tool = {"images_dir": other, "host_flavor": "windows" if self.ws.context().host_flavor == "posix" else "posix",
-                "docker_host": "unix:///run/elsewhere.sock", "source_snapshot_sha256": "sha256:" + "b" * 64,
-                "registry_ceiling": [], "cancel": pr.PoolCancel()}
-        persona = {"registry_dir": other, "prompt_root": other, "allowed_models": (b14.MODEL,),
-                   "source_snapshot_sha256": "sha256:" + "b" * 64, "registry_ceiling": [],
-                   "readable_roots": {"run-data": other}, "cancel": pr.PoolCancel(), "invoker": Other()}
-        for name, value in tool.items():
-            with self.subTest(container_runtime=name):
-                message = self.refused(spec, plan, "runtime.container_runtime." + name,
-                                       container_runtime=self.ws.container_runtime(**{name: value}))
-                self.assertNotIn("; ", message, "exactly the one edited field is named")
-        for name, value in persona.items():
-            with self.subTest(persona_runtime=name):
-                message = self.refused(spec, plan, "runtime.persona_runtime." + name,
-                                       persona_runtime=self.ws.persona_runtime(**{name: value}))
-                self.assertNotIn("; ", message, "exactly the one edited field is named")
-        self.refused(spec, plan, "runtime.container_runtime is null", container_runtime=None)
-        self.refused(spec, plan, "runtime.persona_runtime is null", persona_runtime=None)
+        hostile = {"another invoker": {"invoker": Other()}, "no invoker": {"invoker": None},
+                   "a clock that is not callable": {"clock": b14.NOW},
+                   "a stop grace the adapter refuses": {"stop_grace_seconds": -1}}
+        for label, over in hostile.items():
+            with self.subTest(case=label):
+                before = support.c01.tree(self.ws.base)
+                runtime = pr.RendezvousRuntime(**{**self.ws.runtime_fields(), **over})
+                with self.assertRaises(ps.PoolSpecError) as caught:
+                    pr.run_rendezvous(self.ws.root(plan), **self.ws.arguments(spec), runtime=runtime)
+                self.assertNotIn(MARKER, str(caught.exception))
+                self.assertEqual(support.c01.tree(self.ws.base), before)
+        # a context without the container facts cannot launch, classify or verify a container instance
+        bare = self.ws.context(docker_executable=None, container_user=None)
+        self.assertEqual(self.ws.run(spec, plan)["outcome"], pr.COMPLETE)
+        errors = pr.verify_manifest(self.ws.root(plan), **self.ws.reader_arguments(spec, context=bare))
+        self.assertEqual(len(errors), 1)
+        with self.assertRaises(pr.RendezvousError):
+            pr.classify_instance(plan, 1, pool_root=self.ws.root(plan), context=bare, observation=pr.REPORTED)
 
-    def test_a_pool_of_one_kind_needs_only_that_kind_s_runtime(self):
+    def test_a_pool_of_one_kind_needs_only_that_kind_s_launch_objects(self):
         spec, plan = self.personas(1)
-        manifest = self.ws.run(spec, plan, container_runtime=None)
+        self.assertEqual(sorted(pr.adapter_runtimes(plan, self.ws.context(), self.ws.runtime())), [ps.PERSONA])
+        tools = self.ws.spec([self.ws.tool_group("scanners", 1)], attempt_id="attempt-tools")
+        self.scripted()
+        runtime = pr.RendezvousRuntime(**{**self.ws.runtime_fields(), "invoker": None})
+        manifest = pr.run_rendezvous(self.ws.root(self.ws.expand(tools)), **self.ws.arguments(tools), runtime=runtime)
+        self.assertEqual(support.states(manifest), [pr.SUCCEEDED])
+        manifest = self.ws.run(spec, plan)
         self.assertEqual(support.states(manifest), [pr.SUCCEEDED])
 
     def test_the_expansion_is_verified_first_and_a_wrong_pool_root_launches_nothing(self):
@@ -381,7 +434,7 @@ class ZeroOneManyTests(Case):
     def test_an_empty_pool_publishes_EMPTY_with_its_reason_and_is_never_a_result_set(self):
         spec = self.ws.spec([self.ws.persona_group("reviewers", 0)], empty_pool_reason="scope_excluded")
         plan = self.ws.expand(spec)
-        manifest = self.ws.run(spec, plan, container_runtime=None, persona_runtime=None)
+        manifest = self.ws.run(spec, plan)
         self.assertEqual((manifest["outcome"], manifest["expansion_state"], manifest["empty_pool_reason"]),
                          (pr.EMPTY, ps.EMPTY, "scope_excluded"))
         self.assertEqual(manifest["instances"], ())
@@ -416,7 +469,7 @@ class ZeroOneManyTests(Case):
             data = self.ws.result_path(plan, index).read_bytes()
             self.assertEqual(record["result_file"], {
                 "path": self.ws.result_path(plan, index).relative_to(self.ws.root(plan)).as_posix(),
-                "sha256": pi._bytes_sha(data), "bytes": len(data)})
+                "sha256": pr._bytes_sha(data), "bytes": len(data)})
             persona = record["worker_kind"] == ps.PERSONA
             self.assertEqual((record["invoker_stopped"], record["container_removed"]),
                              (True, None) if persona else (None, True))
@@ -488,7 +541,7 @@ class AdapterOutcomeTests(Case):
     def test_a_pool_where_nothing_succeeded_is_FAILED(self):
         spec, plan = self.mixed(0, 2)
         self.scripted(RoutedDocker(ScriptedDocker, default=ScriptedDocker(version=1)))
-        manifest = self.ws.run(spec, plan, persona_runtime=None)
+        manifest = self.ws.run(spec, plan)
         self.assertEqual(support.states(manifest), [pr.BLOCKED, pr.BLOCKED])
         self.assertEqual(manifest["outcome"], pr.POOL_FAILED)
         self.published(spec, plan)
@@ -545,13 +598,8 @@ class AdapterOutcomeTests(Case):
         self.published(spec, plan)
 
     def test_a_worker_thread_that_cannot_start_or_dies_without_reporting_is_not_waited_for_forever(self):
-        def dead(work, index):
-            thread = threading.Thread(target=lambda: None, daemon=True)
-            thread.start()
-            thread.join()
-            return thread
         for label, seam in (("cannot start", mock.Mock(side_effect=RuntimeError("no thread"))),
-                            ("dies unreported", mock.Mock(side_effect=dead))):
+                            ("never runs", mock.Mock(return_value=None))):
             with self.subTest(case=label):
                 spec, plan = self.personas(3, attempt_id="attempt-" + label.split()[0], budget_class="probe")
                 with mock.patch.object(pr, "_start_worker", seam), \
@@ -559,6 +607,8 @@ class AdapterOutcomeTests(Case):
                     manifest = self.ws.run(spec, plan)
                 self.assertEqual(seam.call_count, 3, "a lost worker's slot is given to the next instance")
                 self.assertEqual(support.states(manifest), [pr.MISSING] * 3)
+                self.assertEqual([record["state_reason"] for record in manifest["instances"]],
+                                 [pr.REASON_THREAD_NOT_STARTED] * 3)
                 self.assertEqual(manifest["outcome"], pr.POOL_FAILED)
                 self.published(spec, plan)
 
@@ -579,6 +629,7 @@ class AdapterOutcomeTests(Case):
                         expected = [pr.SUCCEEDED, pr.SUCCEEDED]
                         expected[kind_index] = pr.INVALID
                         self.assertEqual(support.states(manifest), expected)
+                        self.assertEqual(manifest["instances"][kind_index]["state_reason"], pr.REASON_RESULT_REFUSED)
                         self.assertNotEqual(manifest["outcome"], pr.COMPLETE)
                         self.assertIsNone(manifest["instances"][kind_index]["result_file"])
                         self.assertNotIn(MARKER, self.raw(plan).decode("utf-8"))
@@ -606,14 +657,14 @@ class AdapterOutcomeTests(Case):
         self.ws.run(spec, plan)
         real = pr._load_result
         for index, field in ((0, "invoker_stopped"), (1, "container_removed")):
-            def doctored(item, entry, attempt_root, context, host_facts, field=field,
-                         wanted=support.ids(plan)[index]):
-                result = pr.thaw(real(item, entry, attempt_root, context, host_facts))
-                return pr.freeze({**result, field: False} if entry["instance_id"] == wanted else result)
+            def doctored(instance, attempt_root, context, field=field, wanted=support.ids(plan)[index]):
+                result = pr.thaw(real(instance, attempt_root, context))
+                return pr.freeze({**result, field: False} if instance.instance_id == wanted else result)
             with self.subTest(field=field), mock.patch.object(pr, "_load_result", side_effect=doctored):
                 record = pr.classify_instance(plan, index, **self.ws.classifier_arguments(plan),
                                               observation=pr.REPORTED)
-                self.assertEqual((record["state"], record["result_file"]), (pr.INVALID, None))
+                self.assertEqual((record["state"], record["state_reason"], record["result_file"]),
+                                 (pr.INVALID, pr.REASON_WRITER_NOT_STOPPED, None))
 
 
 # ---- cancel ---------------------------------------------------------------------------------------
@@ -678,11 +729,144 @@ class CancelTests(Case):
         manifest = self.published(spec, plan)
         self.assertEqual(support.states(manifest), [pr.CANCELED, pr.NOT_LAUNCHED_CANCELED])
 
+    def interrupting(self, when, times: int = 1):
+        """A Condition whose ``wait`` raises KeyboardInterrupt in the coordinator thread, ``times``
+        times, once ``when()`` holds: the operator's Ctrl-C."""
+        real, raised = threading.Condition, []
+
+        class Interrupting(real):
+            def wait(inner, timeout=None):
+                if len(raised) < times and threading.current_thread().name == "test-coordinator" and when():
+                    raised.append(True)
+                    raise KeyboardInterrupt
+                return super().wait(timeout)
+        return mock.patch.object(pr.threading, "Condition", Interrupting), raised
+
+    def closing(self):
+        """Patches TerminalLedger.close so that a test knows the wait has ended and the drain began."""
+        state, real = {"closed": False}, pr.TerminalLedger.close
+
+        def close(ledger):
+            state["closed"] = True
+            return real(ledger)
+        return mock.patch.object(pr.TerminalLedger, "close", close), state
+
+    def test_an_interrupt_during_the_drain_still_publishes_and_the_late_result_is_never_adopted(self):
+        """Review of PR #35, F1, the reviewer's R2 case: the interrupt lands in a Condition.wait AFTER
+        ledger.close(). Before the fix nothing was published, the KeyboardInterrupt escaped, and the
+        next run adopted the late instance as `succeeded` / COMPLETE."""
+        spec, plan = self.personas(1)
+        gate = Gated(honor_cancel=False)
+        closed, state = self.closing()
+        condition, raised = self.interrupting(lambda: state["closed"])
+        with condition, closed:
+            running = Background(lambda: self.ws.run(spec, plan, gate, stop_grace_seconds=60,
+                                                     wait_limit_seconds=0.5, drain_seconds=2))
+            wait_for(gate.started)
+            with self.assertRaises(KeyboardInterrupt):
+                running.result()
+        self.assertEqual(raised, [True], "the interrupt never landed in the drain")
+        manifest = self.published(spec, plan)             # published BEFORE the interrupt was re-raised
+        self.assertEqual(support.states(manifest), [pr.RENDEZVOUS_TIMED_OUT])
+        self.assertEqual(manifest["instances"][0]["state_reason"], pr.REASON_WORKER_STILL_RUNNING)
+        before = self.raw(plan)
+        gate.release.set()                                # the late instance now finishes, validly
+        wait_for(gate.finished)
+        support.join_pool_threads()
+        self.ws.cancel = pr.PoolCancel()
+        invoker = Routed()
+        with self.assertRaises(pr.RendezvousPublishedError):
+            self.ws.run(spec, plan, invoker)              # R2: this used to publish ['succeeded'] COMPLETE
+        self.assertEqual((self.raw(plan), invoker.invoked), (before, []))
+        self.assertEqual(support.states(self.published(spec, plan)), [pr.RENDEZVOUS_TIMED_OUT])
+
+    def test_a_second_interrupt_cuts_the_drain_short_and_the_manifest_is_still_published(self):
+        spec, plan = self.personas(1)
+        gate = Gated(honor_cancel=False)
+        closed, state = self.closing()
+        condition, raised = self.interrupting(lambda: state["closed"], times=2)
+        with condition, closed:
+            running = Background(lambda: self.ws.run(spec, plan, gate, stop_grace_seconds=60,
+                                                     wait_limit_seconds=0.5, drain_seconds=pr.DRAIN_BOUNDS[1]))
+            wait_for(gate.started)
+            with self.assertRaises(KeyboardInterrupt):
+                running.result()                          # bounded by HANG_SECONDS, far below the 180 s drain
+        self.assertEqual(raised, [True, True])
+        self.assertEqual(support.states(self.published(spec, plan)), [pr.RENDEZVOUS_TIMED_OUT])
+        gate.release.set()
+        wait_for(gate.finished)
+
+    def test_an_interrupt_anywhere_after_the_launch_is_held_until_publication(self):
+        """Derivation, validation and publication are inside the held section too, and entering
+        publication again links nothing twice."""
+        seams = {"derive": (pr, "derive_manifest"), "validate": (pr, "manifest_errors"),
+                 "before the link": (pr.os, "link"), "after the link": (pr.os, "link"),
+                 "system exit": (pr, "derive_manifest")}
+        for number, (label, (owner, name)) in enumerate(seams.items()):
+            with self.subTest(interrupt=label):
+                spec, plan = self.personas(1, attempt_id=f"attempt-held-{number}")
+                real, raised = getattr(owner, name), []
+
+                def interrupted(*args, real=real, raised=raised, label=label, **kwargs):
+                    if not raised:
+                        raised.append(True)
+                        if label == "after the link":
+                            real(*args, **kwargs)
+                        raise SystemExit(3) if label == "system exit" else KeyboardInterrupt
+                    return real(*args, **kwargs)
+                with mock.patch.object(owner, name, side_effect=interrupted), \
+                        self.assertRaises(SystemExit if label == "system exit" else KeyboardInterrupt):
+                    self.ws.run(spec, plan)
+                self.assertEqual(raised, [True])
+                self.assertTrue(self.ws.cancel.is_set(), "an interrupt is a pool cancel")
+                self.assertEqual(support.states(self.published(spec, plan)), [pr.SUCCEEDED])
+                self.assertEqual(os.listdir(pr.rendezvous_root(plan, self.ws.rendezvous_parent)), [pr.MANIFEST_FILE])
+                self.ws.cancel = pr.PoolCancel()
+
+    def test_an_interrupt_that_lands_in_a_worker_s_start_is_not_launched_and_never_timed_out(self):
+        """Review of PR #35, Q4: between taking an instance off the pending list and starting its
+        thread. It used to be published as `rendezvous_timed_out` with `worker_stopped: false` for a
+        worker that never existed."""
+        for label, start_anyway in (("before the thread starts", False), ("after the thread started", True)):
+            with self.subTest(interrupt=label):
+                spec, plan = self.personas(2, budget_class="probe", attempt_id="attempt-" + label.split()[0])
+                raised, invoker = [], Routed()
+
+                def start(thread, raised=raised, start_anyway=start_anyway):
+                    if not raised:
+                        raised.append(True)
+                        if start_anyway:
+                            thread.start()
+                        raise KeyboardInterrupt
+                    thread.start()
+                with mock.patch.object(pr, "_start_worker", side_effect=start), \
+                        mock.patch.object(pr, "LIVENESS_BACKSTOP_SECONDS", 0.05), \
+                        self.assertRaises(KeyboardInterrupt):
+                    self.ws.run(spec, plan, invoker)
+                manifest = self.published(spec, plan)
+                support.join_pool_threads()
+                found = support.states(manifest)
+                self.assertEqual(found[1], pr.NOT_LAUNCHED_CANCELED)
+                if not start_anyway:
+                    self.assertEqual((found[0], invoker.invoked), (pr.NOT_LAUNCHED_CANCELED, []))
+                # started: it either passed the launch gate before the cancel (and then ran and was
+                # canceled by its adapter) or it did not (and then launched nothing); never in between
+                self.assertIn(found[0], (pr.NOT_LAUNCHED_CANCELED, pr.CANCELED, pr.SUCCEEDED))
+                self.assertEqual(found[0] == pr.NOT_LAUNCHED_CANCELED, invoker.invoked == [])
+                self.assertNotIn(pr.RENDEZVOUS_TIMED_OUT, found)
+                self.ws.cancel = pr.PoolCancel()
+
+    def test_an_interrupt_storm_is_given_back_instead_of_being_held_for_ever(self):
+        spec, plan = self.personas(1)
+        with mock.patch.object(pr, "derive_manifest", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            self.ws.run(spec, plan)
+        self.assertFalse(self.ws.manifest_path(plan).exists())
+
     def test_a_stuck_invoker_is_recorded_as_not_stopped_and_its_later_output_is_never_adopted(self):
         spec, plan = self.personas(1)
         gate = Gated(honor_cancel=False)
-        runtime = self.ws.persona_runtime(gate, stop_grace_seconds=0)
-        running = Background(lambda: self.ws.run(spec, plan, persona_runtime=runtime))
+        running = Background(lambda: self.ws.run(spec, plan, gate, stop_grace_seconds=0))
         wait_for(gate.started)
         self.ws.cancel.set()
         manifest = running.result()
@@ -732,13 +916,10 @@ class LateFinishTests(Case):
 
         blocking.release.set()                          # ... and now the late instance finishes, validly
         support.join_pool_threads()
-        entry = plan.manifest["instances"][1]
+        late_instance = plan.instances[1]
         self.assertEqual(ce.verify_container_result(
-            self.ws.instance_root(plan, 1), run_id=entry["run_id"], job_id=entry["job_id"],
-            attempt_id=entry["attempt_id"], request=plan.requests[1].request, images_dir=ce.IMAGES_DIR,
-            host_flavor=self.ws.context().host_flavor, docker_host=None,
-            docker_executable=self.ws.host_facts().docker_executable,
-            container_user=self.ws.host_facts().container_user), [])
+            late_instance.attempt_root_path(self.ws.root(plan)), **late_instance.ids,
+            request=late_instance.request.request, **self.ws.context().container_verification_arguments()), [])
         self.assertEqual(json.loads(self.ws.result_path(plan, 1).read_text(encoding="utf-8"))["execution_status"], "OK")
         self.assertEqual(self.raw(plan), before, "the published manifest changed")
         loaded = self.published(spec, plan)
@@ -773,10 +954,14 @@ class LateFinishTests(Case):
     def test_the_runtime_can_only_narrow_the_specification_s_rendezvous_timeout(self):
         spec, plan = self.personas(1, rendezvous_timeout_seconds=30)
         gate = Gated()
-        with mock.patch.object(pr.time, "monotonic", side_effect=[1000.0, 1029.0, 1031.0] + [1031.0] * 50):
+        # 29 s into a 30 s specification timeout until the instance is really running, then 31 s
+        clock = lambda: 1031.0 if gate.started.is_set() else 1029.0       # noqa: E731
+        with mock.patch.object(pr.time, "monotonic", side_effect=iter_then([1000.0], clock)), \
+                mock.patch.object(pr, "LIVENESS_BACKSTOP_SECONDS", 0.05):
             manifest = self.ws.run(spec, plan, gate, wait_limit_seconds=3600, drain_seconds=0)
         gate.release.set()
         self.assertEqual(support.states(manifest), [pr.RENDEZVOUS_TIMED_OUT])
+        self.assertEqual(manifest["instances"][0]["state_reason"], pr.REASON_WORKER_STILL_RUNNING)
 
 
 # ---- publication never occurs early -----------------------------------------------------------------
@@ -912,13 +1097,12 @@ class RestartTests(Case):
             spec = ws.spec([ws.persona_group("reviewers", 4)])
             plan = ws.expand(spec)
             if interrupted:        # exactly what a coordinator does for an instance, and then it is gone
-                adapter = worker_adapters.PersonaInvocationAdapter(ws.persona_runtime())
-                for index in (0, 1):
-                    entry = plan.manifest["instances"][index]
+                adapter = worker_adapters.PersonaInvocationAdapter(
+                    pr.adapter_runtimes(plan, ws.context(), ws.runtime())[ps.PERSONA])
+                for instance in plan.instances[:2]:
                     adapter.execute(worker_adapters.WorkerRequest(
-                        run_id=entry["run_id"], job_id=entry["job_id"], attempt_id=entry["attempt_id"],
-                        attempt_root=ws.instance_root(plan, index),
-                        inputs={"persona_request": plan.requests[index].request}))
+                        **instance.ids, attempt_root=instance.attempt_root_path(ws.root(plan)),
+                        inputs={"persona_request": instance.request.request}))
             invoker = Routed()
             ws.run(spec, plan, invoker)
             self.assertEqual(len(invoker.invoked), 2 if interrupted else 4)
@@ -999,8 +1183,7 @@ class DuplicateTerminalTests(Case):
         second = Routed()
         other = pr.PoolCancel()
         with self.assertRaises(pr.RendezvousBusyError) as caught:
-            self.ws.run(spec, plan, cancel=other, container_runtime=None,
-                        persona_runtime=self.ws.persona_runtime(second, cancel=other))
+            self.ws.run(spec, plan, second, cancel=other)
         self.assertNotIn(str(self.ws.base), str(caught.exception))
         self.assertEqual(second.invoked, [])
         self.assertFalse(self.ws.manifest_path(plan).exists())
@@ -1017,8 +1200,7 @@ class DuplicateTerminalTests(Case):
         def coordinator(invoker):
             cancel = pr.PoolCancel()
             barrier.wait(HANG_SECONDS)
-            return self.ws.run(spec, plan, cancel=cancel, container_runtime=None,
-                               persona_runtime=self.ws.persona_runtime(invoker, cancel=cancel))
+            return self.ws.run(spec, plan, invoker, cancel=cancel)
         running = [Background(lambda invoker=invoker: coordinator(invoker)) for invoker in invokers]
         outcomes = []
         for background in running:
@@ -1059,16 +1241,93 @@ class DuplicateTerminalTests(Case):
 # ---- missing instance -------------------------------------------------------------------------------
 
 class MissingInstanceTests(Case):
-    def test_the_two_c01_findings_this_module_leaves_to_classification_are_c01_s_exact_words(self):
+    def test_only_damage_to_one_expected_root_is_left_to_classification_and_it_is_selected_by_code(self):
         spec, plan = self.personas(2)
+        arguments = self.ws.arguments(spec)
         shutil.rmtree(self.ws.instance_root(plan, 1))
-        self.assertEqual(ps.verify_expansion(self.ws.root(plan), **self.ws.arguments(spec)), [pr._ROOTS_LISTING])
+        codes = [finding.code for finding in ps.check_expansion(self.ws.root(plan), **arguments).findings]
+        self.assertEqual(codes, [ps.CODE_INSTANCE_ROOT_MISSING])
+        self.assertEqual(pr.expansion_errors(self.ws.root(plan), **arguments), [])
         if SYMLINKS:
             self.ws.instance_root(plan, 1).symlink_to(self.ws.instance_root(plan, 0), target_is_directory=True)
-            self.assertEqual(ps.verify_expansion(self.ws.root(plan), **self.ws.arguments(spec)), [pr._ROOTS_IDENTITY])
-        self.assertEqual(pr.expansion_errors(self.ws.root(plan), **self.ws.arguments(spec)), [])
+            codes = [finding.code for finding in ps.check_expansion(self.ws.root(plan), **arguments).findings]
+            self.assertEqual(codes, [ps.CODE_INSTANCE_ROOT_NOT_PRIVATE])
+            self.assertEqual(pr.expansion_errors(self.ws.root(plan), **arguments), [])
         (self.ws.root(plan) / ps.SPEC_FILE).write_bytes(b"{}")
-        self.assertEqual(len(pr.expansion_errors(self.ws.root(plan), **self.ws.arguments(spec))), 1)
+        self.assertEqual(len(pr.expansion_errors(self.ws.root(plan), **arguments)), 1)
+        source = inspect.getsource(pr)
+        self.assertNotIn("verify_expansion(", source, "findings are selected by code, from one check")
+        self.assertEqual(source.count("plan_expansion("), 0, "the verifier derives the plan a second time")
+
+    def test_a_pool_root_change_the_executor_refuses_is_refused_by_the_verifier_too(self):
+        """Review of PR #35, F2 (the reviewer's R1 case first): executor and verifier apply one rule.
+        Only a deleted or replaced EXPECTED root is an instance outcome."""
+        def extra_root(ws, plan):
+            extra = ws.root(plan) / ps.INSTANCES_DIR / ("f" * 32)
+            extra.mkdir()
+            (extra / "planted.txt").write_text("x", encoding="utf-8")
+
+        def instances_not_a_directory(ws, plan):
+            directory = ws.root(plan) / ps.INSTANCES_DIR
+            directory.rename(ws.base / "moved-instances")
+            directory.write_bytes(b"")
+
+        def instances_is_a_link(ws, plan):
+            directory = ws.root(plan) / ps.INSTANCES_DIR
+            directory.rename(ws.base / "moved-instances")
+            directory.symlink_to(ws.base / "moved-instances", target_is_directory=True)
+
+        cases = [("an unexpected extra root", extra_root, ps.CODE_INSTANCE_ROOT_UNEXPECTED),
+                 ("instances is a file", instances_not_a_directory, ps.CODE_INSTANCES_NOT_DIRECTORY)]
+        if SYMLINKS:
+            cases.append(("instances is a link", instances_is_a_link, ps.CODE_INSTANCES_NOT_DIRECTORY))
+        for number, (label, damage, code) in enumerate(cases):
+            with self.subTest(case=label):
+                directory = tempfile.TemporaryDirectory()
+                self.addCleanup(directory.cleanup)
+                ws = support.RendezvousWorkspace(Path(directory.name).resolve())
+                spec, plan = ws.spec([ws.persona_group("reviewers", 2)]), None
+                plan = ws.expand(spec)
+                ws.run(spec, plan)
+                self.assertEqual(ws.verify(spec, plan), [])
+                damage(ws, plan)
+                codes = [finding.code for finding in ps.check_expansion(ws.root(plan), **ws.arguments(spec)).findings]
+                self.assertIn(code, codes)
+                errors = ws.verify(spec, plan)
+                self.assertEqual(len(errors), 1)
+                self.assertIn("the pool expansion does not verify", errors[0])
+                with self.assertRaises(pr.RendezvousError):
+                    ws.load(spec, plan)
+                # ... exactly as the executor refuses the same pool root
+                other = support.RendezvousWorkspace.__new__(support.RendezvousWorkspace)
+                other.__dict__.update(ws.__dict__)
+                other.rendezvous_parent = ws.base / "second-rendezvous"
+                other.rendezvous_parent.mkdir()
+                other.cancel = pr.PoolCancel()
+                with self.assertRaises(ps.PoolSpecError):
+                    other.run(spec, plan)
+
+    def test_every_c01_finding_code_but_the_two_damage_codes_refuses_the_manifest(self):
+        """Shared roots (``instance_roots_shared``) cannot be staged without a link, which is itself
+        ``not private``; so the rule is pinned over C01's whole closed code list, through its public
+        ``check_expansion``: exactly ``INSTANCE_ROOT_DAMAGE_CODES`` is tolerated."""
+        spec, plan = self.personas(2)
+        self.ws.run(spec, plan)
+        honest = ps.check_expansion(self.ws.root(plan), **self.ws.arguments(spec))
+        self.assertEqual(honest.findings, ())
+        self.assertEqual(ps.INSTANCE_ROOT_DAMAGE_CODES,
+                         {ps.CODE_INSTANCE_ROOT_MISSING, ps.CODE_INSTANCE_ROOT_NOT_PRIVATE})
+        for code in ps.FINDING_CODES:
+            finding = ps.ExpansionFinding(code, "fixed text for " + code, None)
+            with self.subTest(code=code), mock.patch.object(
+                    ps, "check_expansion", return_value=ps.ExpansionCheck(honest.plan, (finding,))):
+                errors = self.ws.verify(spec, plan)
+                if code in ps.INSTANCE_ROOT_DAMAGE_CODES:
+                    self.assertEqual(errors, [])
+                else:
+                    self.assertEqual(errors, ["the pool expansion does not verify: fixed text for " + code])
+                    with self.assertRaises(pr.RendezvousError):
+                        self.ws.load(spec, plan)
 
     def test_an_instance_whose_root_disappears_is_missing_and_is_never_launched_into(self):
         spec, plan = self.personas(3, budget_class="probe")         # one slot: strictly one after another
@@ -1081,6 +1340,7 @@ class MissingInstanceTests(Case):
         invoker = Routed({ids[0]: Deleting()})
         manifest = self.ws.run(spec, plan, invoker)
         self.assertEqual(support.states(manifest), [pr.SUCCEEDED, pr.SUCCEEDED, pr.MISSING])
+        self.assertEqual(manifest["instances"][2]["state_reason"], pr.REASON_ROOT_ABSENT)
         self.assertEqual((manifest["outcome"], invoker.invoked), (pr.DEGRADED, ids[:2]))
         self.assertFalse(self.ws.instance_root(plan, 2).exists(), "the adapter was launched and rebuilt the root")
         self.published(spec, plan)
@@ -1111,6 +1371,9 @@ class MissingInstanceTests(Case):
         self.assertEqual(executed, ids[:1] if SYMLINKS else [ids[0], ids[2]], "an adapter was handed a bad root")
         self.assertEqual(support.states(manifest), [pr.SUCCEEDED, pr.CRASHED, pr.INVALID if SYMLINKS else pr.SUCCEEDED])
         self.assertEqual(invoker.invoked, ids[:1] if SYMLINKS else [ids[0], ids[2]])
+        self.assertEqual(manifest["instances"][1]["state_reason"], pr.REASON_NO_RESULT_FILE)
+        if SYMLINKS:
+            self.assertEqual(manifest["instances"][2]["state_reason"], pr.REASON_ROOT_NOT_PRIVATE)
         self.assertEqual(os.listdir(elsewhere), [])
         self.assertEqual(support.c01.tree(self.ws.instance_root(plan, 1)), ["planted.json"])
         self.published(spec, plan)
@@ -1121,6 +1384,7 @@ class MissingInstanceTests(Case):
                                return_value={"execution_status": "OK", "cause": None}):
             manifest = self.ws.run(spec, plan)
         self.assertEqual(support.states(manifest), [pr.MISSING, pr.MISSING])
+        self.assertEqual([record["state_reason"] for record in manifest["instances"]], [pr.REASON_NO_EVIDENCE] * 2)
         self.assertEqual(manifest["outcome"], pr.POOL_FAILED)
         self.published(spec, plan)
 
@@ -1204,7 +1468,7 @@ class ConcurrencyTests(Case):
         self.assertEqual(rp.LIMITS[rp.DOCKER], 1)
         self.scripted(RoutedDocker(ScriptedDocker, {support.container_name(plan, index): Logging(index)
                                                     for index in range(3)}))
-        manifest = self.ws.run(spec, plan, persona_runtime=None)
+        manifest = self.ws.run(spec, plan)
         self.assertEqual(manifest["outcome"], pr.COMPLETE)
         self.assertEqual(log, [(word, index) for index in range(3) for word in ("start", "end")])
 
@@ -1311,7 +1575,8 @@ class VerifierTests(Case):
         hostile = {
             "instance_id": other["instance_id"], "group_id": MARKER, "ordinal": 7, "worker_kind": ps.PINNED_CONTAINER,
             "attempt_root": other["attempt_root"], "resource_pool": rp.CPU, "request_sha256": ZERO_SHA,
-            "input_fingerprint": ZERO_SHA, "state": pr.SUCCEEDED, "adapter_status": "OK", "adapter_cause": None,
+            "input_fingerprint": ZERO_SHA, "state": pr.SUCCEEDED, "state_reason": pr.REASON_RESULT_REFUSED,
+            "adapter_status": "OK", "adapter_cause": None,
             "result_file": other["result_file"], "invoker_stopped": False, "container_removed": True,
             "worker_stopped": True,
         }
@@ -1351,7 +1616,7 @@ class VerifierTests(Case):
             record = manifest["instances"][1]
             record.update(state=pr.SUCCEEDED, adapter_status="OK", adapter_cause=None, invoker_stopped=True,
                           result_file={"path": record["attempt_root"] + "/logs/persona/" + pi.RESULT_FILE,
-                                       "sha256": pi._bytes_sha(data), "bytes": len(data)})
+                                       "sha256": pr._bytes_sha(data), "bytes": len(data)})
             found = [item["state"] for item in manifest["instances"]]
             manifest["counts"] = {"instances": 5, **{state: found.count(state) for state in pr.STATES}}
             manifest["outcome"] = pr.pool_outcome(found)
@@ -1459,47 +1724,26 @@ class VerifierTests(Case):
                     self.assertEqual([record[name] for name in ("adapter_status", "adapter_cause", "result_file",
                                                                 "invoker_stopped", "container_removed")], [None] * 5)
 
-    def test_the_container_host_facts_are_required_and_are_the_ones_the_launch_used(self):
-        """B13's verifier builds the one docker argv a run can have from host facts a PoolContext
-        does not carry. They are an argument, never a default and never read from the attempt."""
-        honest = self.ws.host_facts()
+    def test_the_container_facts_are_the_context_s_and_are_the_ones_the_launch_used(self):
+        """B13's verifier builds the one docker argv a run can have from the docker executable and the
+        container user. They are the CONTEXT's (C01), never a default and never read from the attempt."""
         hostile = {
-            "another docker executable": pr.ContainerHostFacts(Path("/usr/local/bin/other-docker"), honest.container_user),
-            "another container user": pr.ContainerHostFacts(honest.docker_executable, "4242:4242"),
+            "another docker executable": {"docker_executable": Path("/usr/local/bin/other-docker")},
+            "another container user": {"container_user": "4242:4242"},
         }
-        for label, facts in hostile.items():
+        for label, over in hostile.items():
             with self.subTest(facts=label):
-                errors = self.ws.verify(self.spec, self.plan, host_facts=facts)
+                errors = self.ws.verify(self.spec, self.plan, context=self.ws.context(**over))
                 self.assertEqual(len(errors), 2, "exactly the two pinned-container instances stop verifying")
                 self.assertTrue(all("instances[3]" in e or "instances[4]" in e for e in errors), errors)
                 with self.assertRaises(pr.RendezvousError):
-                    self.ws.load(self.spec, self.plan, host_facts=facts)
-        for label, facts in (("none", None), ("a mapping", {"docker_executable": honest.docker_executable,
-                                                            "container_user": honest.container_user}),
-                             ("a relative path", pr.ContainerHostFacts(Path("docker"), honest.container_user)),
-                             ("a string path", pr.ContainerHostFacts(str(honest.docker_executable), honest.container_user)),
-                             ("no user", pr.ContainerHostFacts(honest.docker_executable, None))):
-            with self.subTest(facts=label):
-                errors = self.ws.verify(self.spec, self.plan, host_facts=facts)
-                self.assertEqual(len(errors), 1)
-                self.assertIn("host facts" if facts is None else "host_facts", errors[0])
-                with self.assertRaises(pr.RendezvousError):
-                    pr.classify_instance(self.plan, 3, **{**self.ws.classifier_arguments(self.plan), "host_facts": facts},
-                                         observation=pr.REPORTED)
-                with self.assertRaises(pr.RendezvousError):
-                    pr.derive_manifest(self.plan, **{**self.ws.classifier_arguments(self.plan), "host_facts": facts},
-                                       observations=[pr.REPORTED] * 5)
-        for name in ("docker_executable", "container_user"):
-            with self.assertRaises(TypeError):
-                pr.ContainerHostFacts(**{name: getattr(honest, name)})
-        runtime = self.ws.container_runtime()
-        self.assertEqual(pr.host_facts_of(runtime), pr.ContainerHostFacts(runtime.docker_executable, runtime.container_user))
-        self.assertIsNone(pr.host_facts_of(None))
+                    self.ws.load(self.spec, self.plan, context=self.ws.context(**over))
 
-    def test_a_pool_without_containers_needs_no_container_host_facts(self):
+    def test_a_pool_without_containers_needs_no_container_facts(self):
         spec, plan = self.personas(1, attempt_id="attempt-personas-only")
-        self.ws.run(spec, plan, container_runtime=None)
-        self.assertEqual(self.ws.verify(spec, plan, host_facts=None), [])
+        self.ws.run(spec, plan)
+        bare = self.ws.context(docker_executable=None, container_user=None, mount_roots={})
+        self.assertEqual(self.ws.verify(spec, plan, context=bare), [])
 
     def test_one_wait_cannot_have_ended_both_ways(self):
         spec, plan = self.personas(2, attempt_id="attempt-both")
@@ -1507,12 +1751,116 @@ class VerifierTests(Case):
         self.ws.run(spec, plan)
 
         def edit(manifest):
-            manifest["instances"][1]["state"] = pr.NOT_LAUNCHED_RENDEZVOUS_TIMEOUT
+            manifest["instances"][1].update(state=pr.NOT_LAUNCHED_RENDEZVOUS_TIMEOUT,
+                                            state_reason=pr.REASON_WAIT_ENDED_BEFORE_LAUNCH)
             manifest["counts"].update({pr.NOT_LAUNCHED_CANCELED: 1, pr.NOT_LAUNCHED_RENDEZVOUS_TIMEOUT: 1})
         self.reseal(plan, edit)
         errors = self.ws.verify(spec, plan)
         self.assertEqual(len(errors), 1)
         self.assertIn("both by cancel and by timeout", errors[0])
+
+    def test_the_reason_is_total_closed_and_re_derived_or_bounded_by_the_verifier(self):
+        """Q4. Every (disk fact, observation) pair derives a state and one of THAT state's reasons;
+        a resealed reason is refused when the disk decides it, and bounded to the closed set of the
+        same state when only the coordinator saw it."""
+        instance = self.plan.instances[0]
+        verified = pr._disk_facts(instance, self.ws.root(self.plan), self.ws.context())
+        self.assertEqual(verified[0], pr._VERIFIED)
+        seen = set()
+        for kind in (pr._ROOT_ABSENT, pr._ROOT_NOT_PRIVATE, pr._NO_EVIDENCE, pr._NO_RESULT, pr._RESULT_REFUSED,
+                     pr._VERIFIED):
+            for observation in pr.OBSERVATIONS:
+                record = pr._entry(instance, verified if kind == pr._VERIFIED else (kind, None), observation)
+                self.assertIn(record["state_reason"], pr.REASONS_BY_STATE[record["state"]])
+                seen.add((record["state"], record["state_reason"]))
+        unreachable_here = {(pr.INVALID, pr.REASON_WRITER_NOT_STOPPED), (pr.INVALID, pr.REASON_STATUS_UNKNOWN)}
+        unreachable_here |= {(state, pr.REASON_VERIFIED_RESULT) for state in pr.RESULT_STATES if state != pr.SUCCEEDED}
+        everything = {(state, reason) for state, reasons in pr.REASONS_BY_STATE.items() for reason in reasons}
+        self.assertEqual(seen, everything - unreachable_here)
+        # the disk decides: instances[1] FAILED with a verified result; no other reason verifies
+        for reason in pr.STATE_REASONS:
+            if reason == pr.REASON_VERIFIED_RESULT:
+                continue
+            with self.subTest(resealed_reason=reason):
+                self.reseal(self.plan, lambda m, reason=reason: m["instances"][1].__setitem__("state_reason", reason))
+                self.refuted("instances[1]")
+                self.restore()
+
+    def test_a_reason_only_the_coordinator_saw_is_bounded_to_its_state_s_closed_set(self):
+        spec, plan = self.personas(1, attempt_id="attempt-bounded")
+        with mock.patch.object(worker_adapters.PersonaInvocationAdapter, "execute", autospec=True, return_value={}):
+            manifest = self.ws.run(spec, plan)
+        self.assertEqual((manifest["instances"][0]["state"], manifest["instances"][0]["state_reason"]),
+                         (pr.MISSING, pr.REASON_NO_EVIDENCE))
+        honest = self.raw(plan)
+        for reason, accepted in ((pr.REASON_THREAD_NOT_STARTED, True), (pr.REASON_ROOT_ABSENT, False),
+                                 (pr.REASON_RESULT_REFUSED, False)):
+            with self.subTest(reason=reason):
+                self.reseal(plan, lambda m, reason=reason: m["instances"][0].__setitem__("state_reason", reason))
+                self.assertEqual(self.ws.verify(spec, plan) == [], accepted)
+                self.ws.manifest_path(plan).unlink()
+                self.ws.manifest_path(plan).write_bytes(honest)
+
+    def test_the_first_ten_lines_of_c03_against_the_reader(self):
+        """Review of PR #35, F4. A consumer gets the verified adapter results with the manifest: it
+        calls no adapter verifier, re-supplies no host fact beside the context, and can read a pool
+        with a `missing` instance, which `ps.load_verified_expansion` refuses."""
+        spec, plan = self.personas(3, budget_class="probe", attempt_id="attempt-c03")
+        ids = support.ids(plan)
+
+        class Deleting(pi.FixtureInvoker):
+            def invoke(inner, package, *, output_root, cancel):
+                shutil.rmtree(self.ws.instance_root(plan, 2))
+                super().invoke(package, output_root=output_root, cancel=cancel)
+        self.ws.run(spec, plan, Routed({ids[0]: Deleting()}))
+        pool_root, context, parent = self.ws.root(plan), self.ws.context(), self.ws.rendezvous_parent
+        with self.assertRaises(ps.PoolSpecError):                  # the trap the doc now names
+            ps.load_verified_expansion(pool_root, expected_spec=spec, context=context)
+
+        # ---- C03's first ten lines (docs/pool-rendezvous.md, "Reading a rendezvous") ----
+        verified = pr.load_verified_manifest(pool_root, expected_spec=spec, context=context,
+                                             rendezvous_parent=parent)
+        if verified.outcome not in (pr.COMPLETE, pr.DEGRADED):
+            raise AssertionError("nothing to merge")
+        candidates = []
+        for item in verified.in_state(pr.SUCCEEDED):
+            attempt_root = item.instance.attempt_root_path(pool_root)
+            for output in item.result["outputs"]:
+                candidates.append((item.instance.instance_id, item.result["persona_id"], item.result["model"],
+                                   attempt_root / item.result["output_root"] / output["path"], output["sha256"]))
+        absent = [(item.instance.instance_id, item.record["state_reason"]) for item in verified.in_state(pr.MISSING)]
+        # ---- end ----
+
+        self.assertEqual(sorted({candidate[0] for candidate in candidates}), sorted(ids[:2]))
+        self.assertTrue(candidates)
+        for _, _, _, path, sha in candidates:
+            self.assertEqual(pr._bytes_sha(path.read_bytes()), sha)
+        self.assertEqual(absent, [(ids[2], pr.REASON_ROOT_ABSENT)])
+        self.assertEqual(verified.plan.spec_sha256, plan.spec_sha256)
+        with self.assertRaises(pr.RendezvousError):
+            verified.in_state("done")
+
+    def test_what_the_reader_returns_cannot_be_changed(self):
+        verified = self.ws.load(self.spec, self.plan)
+        self.assertEqual([item.result is not None for item in verified.instances], [True] * 5)
+        for item, record in zip(verified.instances, verified.manifest["instances"]):
+            data = (pi.canonical_bytes if item.instance.worker_kind == ps.PERSONA
+                    else ce.canonical_request_bytes)(pr.thaw(item.result))
+            self.assertEqual(record["result_file"]["sha256"], pr._bytes_sha(data), "the result the record pins")
+            self.assertEqual(data, self.ws.result_path(self.plan, item.instance.index).read_bytes())
+        from dataclasses import FrozenInstanceError
+        with self.assertRaises(FrozenInstanceError):
+            verified.manifest = {}
+        with self.assertRaises(FrozenInstanceError):
+            verified.instances[0].result = None
+        for mutate in (lambda: verified.manifest.__setitem__("outcome", pr.COMPLETE),
+                       lambda: verified.manifest["instances"][0].__setitem__("state", pr.SUCCEEDED),
+                       lambda: verified.instances[1].result.__setitem__("execution_status", "OK"),
+                       lambda: verified.instances[1].record.__setitem__("state", pr.SUCCEEDED),
+                       lambda: verified.instances[0].result["outputs"].append({})):
+            with self.assertRaises((TypeError, AttributeError)):
+                mutate()
+        self.assertIsInstance(verified.instances, tuple)
 
     def test_classification_refuses_an_unknown_observation_and_a_short_observation_list(self):
         arguments = self.ws.classifier_arguments(self.plan)

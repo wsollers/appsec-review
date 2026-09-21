@@ -7,8 +7,9 @@ invocation), waits without busy polling until every instance is terminal or the 
 publishes exactly one immutable ``appsec-review/pool-rendezvous-manifest/1.0``: LAST, atomically,
 created exclusively. :func:`verify_manifest` is the read-only counterpart.
 
-Readers need the launch's :class:`ContainerHostFacts` as well as the ``PoolContext``: B13's verifier
-requires the docker executable and container user, and the context does not carry them.
+The ``PoolContext`` is the single carrier of host facts (C01): the coordinator builds the adapter
+runtimes from it and the launch-only objects of :class:`RendezvousRuntime`, and every reader hands the
+adapters' verifiers the context's own keyword arguments, so what ran is what is verified.
 
 What this module guarantees to T10 and C03:
 
@@ -18,12 +19,17 @@ What this module guarantees to T10 and C03:
   an adapter returned and never from a worker thread's say-so.
 * The manifest lists every instance of the expansion, in the expansion's order. A worker that was
   not observed is ``missing``, ``crashed``, ``rendezvous_timed_out`` or ``not_launched_*``; it is
-  never an empty success. An ``EMPTY`` expansion publishes ``EMPTY`` with its reason.
+  never an empty success. An ``EMPTY`` expansion publishes ``EMPTY`` with its reason. Every entry
+  carries a closed ``state_reason`` saying which of a state's causes applied.
+* Once anything may have been launched, ``KeyboardInterrupt`` and ``SystemExit`` are held until the
+  manifest is published and re-raised afterwards; they are a cancel, never a way out without one.
 * The manifest carries no timestamp, no host path and no free text: one set of on-disk facts and
   coordinator observations derives one byte sequence, in one run or across a restart.
 * No value read from a specification, from disk or from an adapter is echoed into a message.
 * Threads are in-process and bounded. The caps here (persona slots, ``resource_pools.LIMITS``, the
-  runtime's ``max_parallel``) can only be narrower than B15's; they do not replace Dagster pools.
+  runtime's ``max_parallel``) can only be narrower than B15's WITHIN ONE RENDEZVOUS; they do not see
+  other runs and do not replace Dagster pools, so at most one rendezvous may run on a host at a
+  time (``docs/pool-rendezvous.md``, "Constraint: one rendezvous at a time").
   The op that calls this is ``resource_pools.unassigned('coordination_only')``.
 
 See ``docs/pool-rendezvous.md``.
@@ -31,6 +37,7 @@ See ``docs/pool-rendezvous.md``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -75,6 +82,35 @@ STATES = (SUCCEEDED, FAILED, BLOCKED, CANCELED, INSTANCE_TIMED_OUT, RENDEZVOUS_T
           NOT_LAUNCHED_CANCELED, NOT_LAUNCHED_RENDEZVOUS_TIMEOUT, MISSING)
 RESULT_STATES = (SUCCEEDED, FAILED, BLOCKED, CANCELED, INSTANCE_TIMED_OUT)   # the only states with a result_file
 
+# ---- why an instance is in its state (closed; one per entry) --------------------------------------
+REASON_VERIFIED_RESULT = "verified_adapter_result"
+REASON_WORKER_STOPPED_LATE = "worker_stopped_after_the_wait_ended"
+REASON_WORKER_STILL_RUNNING = "worker_still_running_after_the_drain"
+REASON_NO_RESULT_FILE = "attempt_evidence_without_adapter_result"
+REASON_RESULT_REFUSED = "adapter_verifier_refused_the_result"
+REASON_ROOT_NOT_PRIVATE = "instance_root_not_a_private_directory"
+REASON_EVIDENCE_NOT_LAUNCHED = "evidence_nobody_launched"
+REASON_WRITER_NOT_STOPPED = "ok_result_whose_writer_has_not_stopped"
+REASON_STATUS_UNKNOWN = "adapter_status_not_classifiable"
+REASON_CANCELED_BEFORE_LAUNCH = "pool_canceled_before_launch"
+REASON_WAIT_ENDED_BEFORE_LAUNCH = "wait_ended_before_launch"
+REASON_ROOT_ABSENT = "instance_root_absent"
+REASON_NO_EVIDENCE = "adapter_left_no_evidence"
+REASON_THREAD_NOT_STARTED = "worker_thread_not_started"
+# THE table of which reasons a state can have. ``_entry`` can produce nothing else (a test walks
+# every disk fact and observation), and the instance schema's enum is this table's values.
+REASONS_BY_STATE = {
+    **{state: (REASON_VERIFIED_RESULT,) for state in RESULT_STATES},
+    RENDEZVOUS_TIMED_OUT: (REASON_WORKER_STOPPED_LATE, REASON_WORKER_STILL_RUNNING),
+    CRASHED: (REASON_NO_RESULT_FILE,),
+    INVALID: (REASON_RESULT_REFUSED, REASON_ROOT_NOT_PRIVATE, REASON_EVIDENCE_NOT_LAUNCHED,
+              REASON_WRITER_NOT_STOPPED, REASON_STATUS_UNKNOWN),
+    NOT_LAUNCHED_CANCELED: (REASON_CANCELED_BEFORE_LAUNCH,),
+    NOT_LAUNCHED_RENDEZVOUS_TIMEOUT: (REASON_WAIT_ENDED_BEFORE_LAUNCH,),
+    MISSING: (REASON_ROOT_ABSENT, REASON_NO_EVIDENCE, REASON_THREAD_NOT_STARTED),
+}
+STATE_REASONS = tuple(dict.fromkeys(reason for state in STATES for reason in REASONS_BY_STATE[state]))
+
 # ---- pool outcomes (closed) ----------------------------------------------------------------------
 EMPTY = "EMPTY"
 COMPLETE = "COMPLETE"
@@ -87,10 +123,11 @@ OUTCOMES = (EMPTY, COMPLETE, DEGRADED, POOL_FAILED, POOL_CANCELED)
 REPORTED = "reported"                    # the attempt ended, or its evidence pre-existed, before the wait ended
 UNREPORTED_STOPPED = "unreported_stopped"        # launched, not back in time, worker thread gone after the drain
 UNREPORTED_RUNNING = "unreported_running"        # launched, not back in time, worker thread still alive
-UNLAUNCHED_CANCELED = "unlaunched_canceled"
+UNLAUNCHED_CANCELED = "unlaunched_canceled"      # never began: the pool was canceled (or interrupted) first
 UNLAUNCHED_RENDEZVOUS_TIMEOUT = "unlaunched_rendezvous_timeout"
+UNSTARTABLE = "unstartable"              # the interpreter refused to start the worker thread
 OBSERVATIONS = (REPORTED, UNREPORTED_STOPPED, UNREPORTED_RUNNING, UNLAUNCHED_CANCELED,
-                UNLAUNCHED_RENDEZVOUS_TIMEOUT)
+                UNLAUNCHED_RENDEZVOUS_TIMEOUT, UNSTARTABLE)
 
 # Overall in-process bound. B15's aggregate step ceiling is the most work one host is allowed to
 # run at once under the merged limits; a rendezvous may ask for less and never for more.
@@ -137,7 +174,8 @@ class PoolCancel(threading.Event):
 
     def subscribe(self, listener: Any) -> None:
         with self._guard:
-            self._listeners.append(listener)
+            if listener not in self._listeners:
+                self._listeners.append(listener)
 
     def unsubscribe(self, listener: Any) -> None:
         with self._guard:
@@ -154,54 +192,29 @@ class PoolCancel(threading.Event):
 
 @dataclass(frozen=True)
 class RendezvousRuntime:
-    """Trusted, integrator-supplied side of one rendezvous. Every field is required; there is no
-    default anywhere.
+    """Trusted, integrator-supplied LAUNCH side of one rendezvous. Every field is required; there is
+    no default anywhere.
+
+    It holds no host fact: those are the ``PoolContext``'s, and the coordinator builds the B13 and
+    B14 runtimes itself with ``context.container_runtime`` / ``context.persona_runtime`` from the
+    launch-only objects here (``pool_specification.CONTAINER_LAUNCH_ONLY_FIELDS`` /
+    ``PERSONA_LAUNCH_ONLY_FIELDS``), so a ready-made adapter runtime that disagrees with the context
+    cannot be handed in. ``invoker`` may be ``None`` only when the expansion has no persona
+    instance; with one it must be the invoker ``context.invoker_id`` names. ``cancel`` is the pool's
+    one cancel event and is the event both adapters get.
 
     ``rendezvous_parent`` is a run-owned directory for terminal-instance manifests. It may not be,
-    contain or lie beneath ``context.pool_parent``. ``container_runtime`` and ``persona_runtime``
-    are the B13 and B14 runtimes; one may be ``None`` only when the expansion has no instance of
-    that kind. Both must carry ``cancel`` itself (the same object) and the facts the context
-    records, so what runs is what is later verified. ``wait_limit_seconds`` can only narrow the
+    contain or lie beneath ``context.pool_parent``. ``wait_limit_seconds`` can only narrow the
     specification's ``rendezvous_timeout_seconds``.
     """
     rendezvous_parent: Path
-    container_runtime: Any
-    persona_runtime: Any
+    invoker: Any
+    clock: Any
+    stop_grace_seconds: int
     cancel: PoolCancel
     max_parallel: int
     wait_limit_seconds: float
     drain_seconds: int
-
-
-@dataclass(frozen=True)
-class ContainerHostFacts:
-    """The two B13 host facts a ``PoolContext`` does not carry and B13's verifier requires: the
-    docker executable and the container user the launch used (``ContainerRuntime`` fields of the
-    same names). With the context's ``host_flavor`` and ``docker_host`` they let B13's verifier
-    build the one docker argv a run can have. Required wherever an attempt is classified; ``None``
-    only for an expansion without pinned-container instances. Never defaulted, never read from an
-    attempt."""
-    docker_executable: Path
-    container_user: str
-
-
-def host_facts_of(runtime: Any) -> ContainerHostFacts | None:
-    """The facts a launch through this ``ContainerRuntime`` uses; what its verifier must be given."""
-    if runtime is None:
-        return None
-    return ContainerHostFacts(docker_executable=runtime.docker_executable, container_user=runtime.container_user)
-
-
-def _host_facts_errors(plan: ps.ExpansionPlan, host_facts: Any) -> list:
-    tools = any(entry["worker_kind"] == ps.PINNED_CONTAINER for entry in plan.manifest["instances"])
-    if host_facts is None:
-        return (["the expansion has pinned-container instances and no container host facts were supplied"]
-                if tools else [])
-    if (not isinstance(host_facts, ContainerHostFacts) or not isinstance(host_facts.docker_executable, Path)
-            or not host_facts.docker_executable.is_absolute() or not isinstance(host_facts.container_user, str)):
-        return ["host_facts must be ContainerHostFacts with an absolute docker_executable path and a "
-                "container_user string"]
-    return []
 
 
 def _is_int(value: Any) -> bool:
@@ -209,18 +222,16 @@ def _is_int(value: Any) -> bool:
 
 
 def _bytes_sha(data: bytes) -> str:
-    return pi._bytes_sha(data)
+    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def validate_runtime(runtime: Any) -> None:
+    """What can be checked without a context. ``invoker``, ``clock`` and ``stop_grace_seconds`` are
+    validated by the adapters themselves when :func:`adapter_runtimes` builds their runtimes."""
     if not isinstance(runtime, RendezvousRuntime):
         raise TypeError("a rendezvous requires a RendezvousRuntime")
     if type(runtime.cancel) is not PoolCancel:
         raise RendezvousError("runtime.cancel must be a PoolCancel")
-    if runtime.container_runtime is not None:
-        ce.validate_runtime(runtime.container_runtime)
-    if runtime.persona_runtime is not None:
-        pi.validate_runtime(runtime.persona_runtime)
     if not _is_int(runtime.max_parallel) or not 1 <= runtime.max_parallel <= MAX_PARALLEL:
         raise RendezvousError(f"runtime.max_parallel must be an integer within 1..{MAX_PARALLEL}")
     limit = runtime.wait_limit_seconds
@@ -233,48 +244,28 @@ def validate_runtime(runtime: Any) -> None:
         raise RendezvousError(f"runtime.drain_seconds must be an integer within {low}..{high}")
 
 
-def _same_roots(left: Any, right: Any) -> bool:
-    return (isinstance(left, Mapping) and isinstance(right, Mapping) and sorted(left) == sorted(right)
-            and all(left[key] == right[key] for key in left))
-
-
-def _binding_errors(plan: ps.ExpansionPlan, context: ps.PoolContext, runtime: RendezvousRuntime) -> list:
-    """Every adapter-runtime fact the verifier will later take from the context must BE the
-    context's, and every cancel event must be the pool's. Otherwise an instance could run under
-    one registry, image directory or snapshot and be verified under another."""
-    errors: list = []
-    kinds = {entry["worker_kind"] for entry in plan.manifest["instances"]}
-    tool, persona = runtime.container_runtime, runtime.persona_runtime
-    if ps.PINNED_CONTAINER in kinds and tool is None:
-        errors.append("the expansion has pinned-container instances and runtime.container_runtime is null")
-    if ps.PERSONA in kinds and persona is None:
-        errors.append("the expansion has persona instances and runtime.persona_runtime is null")
-    if tool is not None:
-        if tool.cancel is not runtime.cancel:
-            errors.append("runtime.container_runtime.cancel is not the pool's cancel event")
-        for name in ("images_dir", "host_flavor", "docker_host", "source_snapshot_sha256", "registry_ceiling"):
-            if getattr(tool, name) != getattr(context, name):
-                errors.append(f"runtime.container_runtime.{name} is not context.{name}")
-    if persona is not None:
-        if persona.cancel is not runtime.cancel:
-            errors.append("runtime.persona_runtime.cancel is not the pool's cancel event")
-        for name in ("registry_dir", "prompt_root", "allowed_models", "source_snapshot_sha256",
-                     "registry_ceiling"):
-            if getattr(persona, name) != getattr(context, name):
-                errors.append(f"runtime.persona_runtime.{name} is not context.{name}")
-        if not _same_roots(persona.readable_roots, context.readable_roots):
-            errors.append("runtime.persona_runtime.readable_roots is not context.readable_roots")
-        if persona.invoker.invoker_id != context.invoker_id:
-            errors.append("runtime.persona_runtime.invoker is not the invoker context.invoker_id names")
-    return errors
+def adapter_runtimes(plan: ps.ExpansionPlan, context: ps.PoolContext, runtime: RendezvousRuntime) -> dict:
+    """``{worker kind: adapter runtime}`` for exactly the kinds the expansion has, built by the
+    context from its own facts and the launch-only objects. Raises ``PoolSpecError`` (C01's and the
+    adapters' fixed text): a missing container fact, an invoker that is not the one the context
+    names, a clock or stop grace the adapter refuses."""
+    kinds = {instance.worker_kind for instance in plan.instances}
+    built: dict = {}
+    if ps.PINNED_CONTAINER in kinds:
+        built[ps.PINNED_CONTAINER] = context.container_runtime(clock=runtime.clock, cancel=runtime.cancel)
+    if ps.PERSONA in kinds:
+        built[ps.PERSONA] = context.persona_runtime(
+            invoker=runtime.invoker, clock=runtime.clock, cancel=runtime.cancel,
+            stop_grace_seconds=runtime.stop_grace_seconds)
+    return built
 
 
 def _location_errors(context: ps.PoolContext, rendezvous_parent: Any) -> list:
-    if (not isinstance(rendezvous_parent, Path) or not ps._real_directory(rendezvous_parent)
+    if (not isinstance(rendezvous_parent, Path) or not ps.real_directory(rendezvous_parent)
             or os.path.realpath(rendezvous_parent) != str(rendezvous_parent)):
         return ["rendezvous_parent must be an absolute, existing, non-link directory in its one real spelling"]
-    mine, pools = ps._identity(rendezvous_parent), ps._identity(context.pool_parent)
-    if mine in ps._chain(context.pool_parent) or pools in ps._chain(rendezvous_parent):
+    mine, pools = ps.path_identity(rendezvous_parent), ps.path_identity(context.pool_parent)
+    if mine in ps.identity_chain(context.pool_parent) or pools in ps.identity_chain(rendezvous_parent):
         return ["rendezvous_parent is, contains or lies beneath context.pool_parent: a manifest may not live "
                 "where an instance or an expansion lives"]
     return []
@@ -285,45 +276,41 @@ def _location_errors(context: ps.PoolContext, rendezvous_parent: Any) -> list:
 _ROOT_ABSENT, _ROOT_NOT_PRIVATE, _NO_EVIDENCE, _NO_RESULT, _RESULT_REFUSED, _VERIFIED = range(6)
 
 
-def _load_result(item: ps.InstanceRequest, entry: Mapping[str, Any], attempt_root: Path,
-                 context: ps.PoolContext, host_facts: Any) -> Mapping[str, Any] | None:
-    """The adapter's own verifier, for this instance's ids and request. None means refused.
+def _load_result(instance: ps.PlannedInstance, attempt_root: Path,
+                 context: ps.PoolContext) -> Mapping[str, Any] | None:
+    """The adapter's own verifier, for this instance's ids and request and the CONTEXT's facts.
+    None means refused.
 
-    ANY exception is a refusal, a ``TypeError`` from a changed adapter signature included: an
-    adapter verifier that cannot be called has verified nothing. It never propagates, never
-    passes, and its text is never kept."""
-    ids = {"run_id": entry["run_id"], "job_id": entry["job_id"], "attempt_id": entry["attempt_id"]}
+    ANY exception is a refusal, a ``TypeError`` from a changed adapter signature and a context
+    without container facts included: an adapter verifier that cannot be called has verified
+    nothing. It never propagates, never passes, and its text is never kept."""
     try:
-        if item.worker_kind == ps.PERSONA:
-            return pi.load_verified_result(
-                attempt_root, **ids, request=item.request, registry_dir=context.registry_dir,
-                prompt_root=context.prompt_root, readable_roots=context.readable_roots,
-                allowed_models=context.allowed_models,
-                source_snapshot_sha256=context.source_snapshot_sha256,
-                registry_ceiling=context.registry_ceiling)
-        return ce.load_verified_result(
-            attempt_root, **ids, request=item.request, images_dir=context.images_dir,
-            host_flavor=context.host_flavor, docker_host=context.docker_host,
-            docker_executable=host_facts.docker_executable, container_user=host_facts.container_user)
+        if instance.worker_kind == ps.PERSONA:
+            return pi.load_verified_result(attempt_root, **instance.ids, request=instance.request.request,
+                                           **context.persona_verification_arguments())
+        return ce.load_verified_result(attempt_root, **instance.ids, request=instance.request.request,
+                                       **context.container_verification_arguments())
     except Exception:      # noqa: BLE001 - a refusal of any kind is a refusal; its text is never kept
         return None
 
 
-def _disk_facts(plan: ps.ExpansionPlan, index: int, pool_root: Path, context: ps.PoolContext,
-                host_facts: Any) -> tuple:
-    entry, item = plan.manifest["instances"][index], plan.requests[index]
-    attempt_root = pool_root.joinpath(*entry["attempt_root"].split("/"))
+def _result_file_name(instance: ps.PlannedInstance) -> str:
+    return pi.RESULT_FILE if instance.worker_kind == ps.PERSONA else ce.RESULT_FILE
+
+
+def _disk_facts(instance: ps.PlannedInstance, pool_root: Path, context: ps.PoolContext) -> tuple:
+    attempt_root = instance.attempt_root_path(pool_root)
     if not os.path.lexists(attempt_root):
         return _ROOT_ABSENT, None
-    listing = ps._listing(attempt_root) if ps._real_directory(attempt_root) else None
+    listing = ps.directory_listing(attempt_root) if ps.real_directory(attempt_root) else None
     if listing is None:
         return _ROOT_NOT_PRIVATE, None
     if not listing:
         return _NO_EVIDENCE, None
-    file_name = pi.RESULT_FILE if item.worker_kind == ps.PERSONA else ce.RESULT_FILE
-    if not os.path.lexists(attempt_root.joinpath(*entry["log_path"].split("/"), file_name)):
+    if not os.path.lexists(attempt_root.joinpath(*instance.entry["log_path"].split("/"),
+                                                 _result_file_name(instance))):
         return _NO_RESULT, None
-    result = _load_result(item, entry, attempt_root, context, host_facts)
+    result = _load_result(instance, attempt_root, context)
     return (_VERIFIED, result) if result is not None else (_RESULT_REFUSED, None)
 
 
@@ -339,75 +326,109 @@ def _result_state(status: Any, cause: Any) -> str | None:
     return None
 
 
+def _context_errors(plan: ps.ExpansionPlan, context: Any) -> list:
+    """A reader of a pool with pinned-container instances must hold the container facts; without
+    them B13's verifier cannot be called and every such instance would silently read ``invalid``."""
+    if not isinstance(context, ps.PoolContext):
+        return ["context must be a PoolContext"]
+    if any(instance.worker_kind == ps.PINNED_CONTAINER for instance in plan.instances):
+        try:
+            context.require_container_facts()
+        except ps.PoolSpecError:
+            return ["the expansion has pinned-container instances and the context carries no "
+                    "docker_executable and container_user"]
+    return []
+
+
 def classify_instance(plan: ps.ExpansionPlan, index: int, *, pool_root: Path, context: ps.PoolContext,
-                      host_facts: Any, observation: str) -> dict:
+                      observation: str) -> dict:
     """The manifest entry of one instance: :func:`_disk_facts` now, then :func:`_entry`."""
-    errors = _host_facts_errors(plan, host_facts)
+    errors = _context_errors(plan, context)
     if errors:
         raise RendezvousError("; ".join(errors))
-    return _entry(plan, index, _disk_facts(plan, index, pool_root, context, host_facts), observation)
+    instance = plan.instances[index]
+    return _entry(instance, _disk_facts(instance, pool_root, context), observation)
 
 
-def _entry(plan: ps.ExpansionPlan, index: int, facts: tuple, observation: str) -> dict:
+def _entry(instance: ps.PlannedInstance, facts: tuple, observation: str) -> dict:
     """``appsec-review/pool-instance-classification/1.0``: the manifest entry of one instance.
 
     A pure function of the expansion, what is on disk now, and what the coordinator observed.
 
-    ================================  =====================================================
-    observation                       state
-    ================================  =====================================================
-    any, instance root absent         ``missing``
-    unreported (either)               ``rendezvous_timed_out``, whatever is on disk: a
-                                      result that appears late is never adopted
-    unlaunched, root empty            ``not_launched_canceled`` / ``..._rendezvous_timeout``
-    unlaunched, root not empty        ``invalid``: evidence nobody here launched
-    reported, root not a private dir  ``invalid``
-    reported, root empty              ``missing``: a worker's say-so is not evidence
-    reported, no adapter result file  ``crashed``
-    reported, verifier refuses        ``invalid``
-    reported, verified result         by execution status and cause
-    ================================  =====================================================
+    ================================  ==============================  =================================
+    observation, disk                 state                           state_reason
+    ================================  ==============================  =================================
+    any, instance root absent         ``missing``                     ``instance_root_absent``
+    unreported, worker gone           ``rendezvous_timed_out``        ``worker_stopped_after_the_...``
+    unreported, worker alive          ``rendezvous_timed_out``        ``worker_still_running_after...``
+                                      (whatever is on disk: a result that appears late is never adopted)
+    unlaunched, root empty            ``not_launched_canceled`` /     ``pool_canceled_before_launch`` /
+                                      ``..._rendezvous_timeout``      ``wait_ended_before_launch``
+    unstartable, root empty           ``missing``                     ``worker_thread_not_started``
+    unlaunched or unstartable, root   ``invalid``                     ``evidence_nobody_launched``
+    not empty (or not private)
+    reported, root not a private dir  ``invalid``                     ``instance_root_not_a_private...``
+    reported, root empty              ``missing``                     ``adapter_left_no_evidence``
+                                      (a worker's say-so is not evidence)
+    reported, no adapter result file  ``crashed``                     ``attempt_evidence_without_...``
+    reported, verifier refuses        ``invalid``                     ``adapter_verifier_refused_...``
+    reported, OK but writer running   ``invalid``                     ``ok_result_whose_writer_has...``
+    reported, verified result         by execution status and cause   ``verified_adapter_result``
+    ================================  ==============================  =================================
     """
     if observation not in OBSERVATIONS:
         raise RendezvousError("unknown coordinator observation")
-    entry, item = plan.manifest["instances"][index], plan.requests[index]
+    entry = instance.entry
     record = {
         **{name: entry[name] for name in ("instance_id", "group_id", "ordinal", "worker_kind", "attempt_root",
                                           "resource_pool", "request_sha256", "input_fingerprint")},
-        "state": None, "adapter_status": None, "adapter_cause": None, "result_file": None,
+        "state": None, "state_reason": None, "adapter_status": None, "adapter_cause": None, "result_file": None,
         "invoker_stopped": None, "container_removed": None, "worker_stopped": None,
     }
+
+    def end(state: str, reason: str) -> dict:
+        if reason not in REASONS_BY_STATE[state]:
+            raise RendezvousError("the classification rule derived a reason its state does not have")
+        record.update(state=state, state_reason=reason)
+        return record
+
     kind, result = facts
     if kind == _ROOT_ABSENT:
-        record["state"] = MISSING
-    elif observation in (UNREPORTED_STOPPED, UNREPORTED_RUNNING):
-        record["state"] = RENDEZVOUS_TIMED_OUT
+        return end(MISSING, REASON_ROOT_ABSENT)
+    if observation in (UNREPORTED_STOPPED, UNREPORTED_RUNNING):
         record["worker_stopped"] = observation == UNREPORTED_STOPPED
-    else:
-        if observation != REPORTED:
-            record["state"] = INVALID if kind != _NO_EVIDENCE else (
-                NOT_LAUNCHED_CANCELED if observation == UNLAUNCHED_CANCELED else NOT_LAUNCHED_RENDEZVOUS_TIMEOUT)
-        elif kind == _NO_EVIDENCE:
-            record["state"] = MISSING
-        elif kind == _NO_RESULT:
-            record["state"] = CRASHED
-        elif kind != _VERIFIED:
-            record["state"] = INVALID
-        else:
-            persona = item.worker_kind == ps.PERSONA
-            state = _result_state(result["execution_status"], result["cause"])
-            stopped = result["invoker_stopped"] if persona else result["container_removed"]
-            if state is None or (state == SUCCEEDED and stopped is not True):
-                record["state"] = INVALID        # nothing that may still be written to is a success
-            else:
-                data = pi.canonical_bytes(thaw(result)) if persona else ce.canonical_request_bytes(thaw(result))
-                file_name = pi.RESULT_FILE if persona else ce.RESULT_FILE
-                record.update({
-                    "state": state, "adapter_status": result["execution_status"], "adapter_cause": result["cause"],
-                    "result_file": {"path": f"{entry['attempt_root']}/{entry['log_path']}/{file_name}",
-                                    "sha256": _bytes_sha(data), "bytes": len(data)},
-                    "invoker_stopped" if persona else "container_removed": stopped})
-    return record
+        return end(RENDEZVOUS_TIMED_OUT, REASON_WORKER_STOPPED_LATE if record["worker_stopped"]
+                   else REASON_WORKER_STILL_RUNNING)
+    if observation != REPORTED:
+        if kind != _NO_EVIDENCE:
+            return end(INVALID, REASON_EVIDENCE_NOT_LAUNCHED)
+        if observation == UNSTARTABLE:
+            return end(MISSING, REASON_THREAD_NOT_STARTED)
+        if observation == UNLAUNCHED_CANCELED:
+            return end(NOT_LAUNCHED_CANCELED, REASON_CANCELED_BEFORE_LAUNCH)
+        return end(NOT_LAUNCHED_RENDEZVOUS_TIMEOUT, REASON_WAIT_ENDED_BEFORE_LAUNCH)
+    if kind == _ROOT_NOT_PRIVATE:
+        return end(INVALID, REASON_ROOT_NOT_PRIVATE)
+    if kind == _NO_EVIDENCE:
+        return end(MISSING, REASON_NO_EVIDENCE)
+    if kind == _NO_RESULT:
+        return end(CRASHED, REASON_NO_RESULT_FILE)
+    if kind != _VERIFIED:
+        return end(INVALID, REASON_RESULT_REFUSED)
+    persona = instance.worker_kind == ps.PERSONA
+    state = _result_state(result["execution_status"], result["cause"])
+    stopped = result["invoker_stopped"] if persona else result["container_removed"]
+    if state is None:
+        return end(INVALID, REASON_STATUS_UNKNOWN)
+    if state == SUCCEEDED and stopped is not True:
+        return end(INVALID, REASON_WRITER_NOT_STOPPED)      # nothing that may still be written to is a success
+    data = pi.canonical_bytes(thaw(result)) if persona else ce.canonical_request_bytes(thaw(result))
+    record.update({
+        "adapter_status": result["execution_status"], "adapter_cause": result["cause"],
+        "result_file": {"path": f"{entry['attempt_root']}/{entry['log_path']}/{_result_file_name(instance)}",
+                        "sha256": _bytes_sha(data), "bytes": len(data)},
+        "invoker_stopped" if persona else "container_removed": stopped})
+    return end(state, REASON_VERIFIED_RESULT)
 
 
 def pool_outcome(states: Any) -> str:
@@ -437,22 +458,22 @@ def manifest_sha256(manifest: Mapping[str, Any]) -> str:
 
 
 def derive_manifest(plan: ps.ExpansionPlan, *, pool_root: Path, context: ps.PoolContext,
-                    host_facts: Any, observations: Any) -> dict:
+                    observations: Any) -> dict:
     """The whole manifest from the expansion, the disk and one observation per instance, in the
     expansion's order. No clock, no host path, no free text."""
-    errors = _host_facts_errors(plan, host_facts)
+    errors = _context_errors(plan, context)
     if errors:
         raise RendezvousError("; ".join(errors))
-    facts = [_disk_facts(plan, index, pool_root, context, host_facts)
-             for index in range(len(plan.manifest["instances"]))]
+    facts = [_disk_facts(instance, pool_root, context) for instance in plan.instances]
     return _derive(plan, facts, observations)
 
 
 def _derive(plan: ps.ExpansionPlan, facts: list, observations: Any) -> dict:
     observations = list(observations)
-    if len(observations) != len(plan.manifest["instances"]):
+    if len(observations) != len(plan.instances):
         raise RendezvousError("there must be exactly one observation per expected instance, in order")
-    instances = [_entry(plan, index, facts[index], observation) for index, observation in enumerate(observations)]
+    instances = [_entry(instance, facts[instance.index], observations[instance.index])
+                 for instance in plan.instances]
     states = [record["state"] for record in instances]
     manifest = {
         "schema": MANIFEST_ID, "classification": CLASSIFICATION_ID, "expansion": ps.EXPANSION_ID,
@@ -511,78 +532,128 @@ def _limits(plan: ps.ExpansionPlan, runtime: RendezvousRuntime) -> tuple:
     return runtime.max_parallel, personas, pools
 
 
-def _start_worker(work: Any, index: int) -> threading.Thread:
-    """One daemon thread per launched instance; at most ``max_parallel`` are in flight."""
-    thread = threading.Thread(target=work, args=(index,), daemon=True, name="pool-instance-" + str(index))
+def _start_worker(thread: threading.Thread) -> None:
+    """The one place a worker thread is started (a seam for tests). ``RuntimeError`` means the
+    interpreter could not start it."""
     thread.start()
-    return thread
 
 
-def _wait(plan: ps.ExpansionPlan, pool_root: Path, context: ps.PoolContext,
-          runtime: RendezvousRuntime) -> tuple:
-    """Launches, waits, drains. Returns one observation per instance, in order, and any interrupt
-    (KeyboardInterrupt / SystemExit) to re-raise after publication."""
-    entries = plan.manifest["instances"]
-    ids = [entry["instance_id"] for entry in entries]
-    ledger = TerminalLedger(ids)
-    condition = threading.Condition()
-    exited: set = set()
-    threads: dict = {}
-    unlaunched: dict = {}
-    adapters = {
-        ps.PINNED_CONTAINER: (None if runtime.container_runtime is None
-                              else worker_adapters.PinnedContainerAdapter(runtime.container_runtime)),
-        ps.PERSONA: (None if runtime.persona_runtime is None
-                     else worker_adapters.PersonaInvocationAdapter(runtime.persona_runtime)),
-    }
+# An interrupt is held, never swallowed for good: a caller that keeps interrupting one step more
+# often than this gets its interrupt back although nothing was published.
+MAX_HELD_INTERRUPTS = 32
 
-    # Restart: an instance root that already holds anything is an attempt that ended or was lost
-    # with an earlier coordinator. It is classified from disk and NEVER launched into.
-    pending = []
-    for index, entry in enumerate(entries):
-        kind, _ = _disk_facts(plan, index, pool_root, context, host_facts_of(runtime.container_runtime))
-        if kind == _NO_EVIDENCE:
-            pending.append(index)
-            continue
-        ledger.report(entry["instance_id"])
-        if kind == _NO_RESULT and entry["worker_kind"] == ps.PINNED_CONTAINER:
-            # Best effort, never recorded: a lost coordinator may have left the run-owned container.
-            ce.remove_container(runtime.container_runtime,
-                                ce.container_name(entry["run_id"], entry["job_id"], entry["attempt_id"]))
 
-    def work(index: int) -> None:
-        entry, item = entries[index], plan.requests[index]
-        key = "persona_request" if item.worker_kind == ps.PERSONA else "container_request"
-        attempt_root = pool_root.joinpath(*entry["attempt_root"].split("/"))
+class _Interrupts:
+    """``KeyboardInterrupt`` / ``SystemExit`` from the first possible launch until publication.
+    Each is a cancel: it is recorded, the pool's cancel event is set, and the RESUMABLE step it
+    landed in is entered again. The first one is re-raised by ``run_rendezvous`` after publication."""
+
+    def __init__(self, cancel: PoolCancel) -> None:
+        self.caught: list = []
+        self._cancel = cancel
+
+    def hold(self, step: Any) -> Any:
+        while True:
+            try:
+                if self.caught:
+                    self._cancel.set()
+                return step()
+            except (KeyboardInterrupt, SystemExit) as exc:
+                self.caught.append(exc)
+                if len(self.caught) > MAX_HELD_INTERRUPTS:
+                    raise
+
+
+class _Wait:
+    """Launches, waits, drains. :meth:`run` returns one observation per instance, in order, and is
+    RESUMABLE: every piece of state lives here, so entering it again after an interrupt at any
+    point continues the same wait (nothing is launched twice, the ledger closes once, the drain
+    keeps its one deadline)."""
+
+    def __init__(self, plan: ps.ExpansionPlan, pool_root: Path, context: ps.PoolContext,
+                 runtime: RendezvousRuntime, runtimes: Mapping[str, Any], interrupts: _Interrupts) -> None:
+        self.plan, self.pool_root, self.context, self.runtime = plan, pool_root, context, runtime
+        self.instances = plan.instances
+        self.runtimes, self.interrupts = runtimes, interrupts
+        self.adapters = {
+            ps.PINNED_CONTAINER: worker_adapters.PinnedContainerAdapter,
+            ps.PERSONA: worker_adapters.PersonaInvocationAdapter,
+        }
+        self.ledger = TerminalLedger([instance.instance_id for instance in self.instances])
+        self.condition = threading.Condition()
+        self.pending: list = []
+        self.threads: dict = {}          # index -> Thread, registered BEFORE it is started
+        self.begun: set = set()          # workers that passed the launch gate (under the condition)
+        self.exited: set = set()         # instance ids whose worker left its ``finally``
+        self.unlaunched: dict = {}       # index -> why nothing was ever launched for it
+        self.unstartable: set = set()
+        self.ended: str | None = None    # why the wait ended for what was never launched
+        self.deadline: float | None = None
+        self.reported: frozenset | None = None
+        self.drain_until: float | None = None
+
+    def scan(self) -> None:
+        """Restart, before anything is launched (not held: an interrupt here leaves nothing behind
+        that a later coordinator cannot classify). An instance root that already holds anything is
+        an attempt that ended or was lost with an earlier coordinator. It is classified from disk
+        and NEVER launched into."""
+        for instance in self.instances:
+            kind, _ = _disk_facts(instance, self.pool_root, self.context)
+            if kind == _NO_EVIDENCE:
+                self.pending.append(instance.index)
+                continue
+            self.ledger.report(instance.instance_id)
+            if kind == _NO_RESULT and instance.worker_kind == ps.PINNED_CONTAINER:
+                # Best effort, never recorded: a lost coordinator may have left the run-owned container.
+                ce.remove_container(self.runtimes[ps.PINNED_CONTAINER], ce.container_name(**instance.ids))
+
+    # -- worker side ------------------------------------------------------------------------------
+    def _work(self, index: int) -> None:
+        instance = self.instances[index]
+        with self.condition:
+            # THE launch gate. The coordinator decides "never launched" under this same lock, so a
+            # worker that has not passed the gate by then launches nothing, ever.
+            if index in self.unlaunched:
+                return
+            if self.runtime.cancel.is_set():
+                self.unlaunched[index] = UNLAUNCHED_CANCELED
+                self.condition.notify_all()
+                return
+            self.begun.add(index)
+        key = "persona_request" if instance.worker_kind == ps.PERSONA else "container_request"
+        attempt_root = instance.attempt_root_path(self.pool_root)
         try:
             # Only ever into the private, still empty directory the expansion created: not into a
             # root that was deleted or replaced, and not on top of anything that is already there.
-            if ps._real_directory(attempt_root) and ps._listing(attempt_root) == []:
-                adapters[item.worker_kind].execute(worker_adapters.WorkerRequest(
-                    run_id=entry["run_id"], job_id=entry["job_id"], attempt_id=entry["attempt_id"],
-                    attempt_root=attempt_root, inputs={key: item.request}))
+            if ps.real_directory(attempt_root) and ps.directory_listing(attempt_root) == []:
+                adapter = self.adapters[instance.worker_kind](self.runtimes[instance.worker_kind])
+                adapter.execute(worker_adapters.WorkerRequest(
+                    **instance.ids, attempt_root=attempt_root, inputs={key: instance.request.request}))
         except BaseException:      # noqa: BLE001 - the outcome is read from disk, never from here
             pass
         finally:
-            with condition:
-                exited.add(entry["instance_id"])
+            with self.condition:
+                self.exited.add(instance.instance_id)
                 try:
-                    ledger.report(entry["instance_id"])
+                    self.ledger.report(instance.instance_id)
                 except RendezvousError:
                     pass               # late: the wait has ended and this attempt is not adopted
-                condition.notify_all()
+                self.condition.notify_all()
 
-    def wake() -> None:
-        with condition:
-            condition.notify_all()
+    def wake(self) -> None:
+        with self.condition:
+            self.condition.notify_all()
 
-    def in_flight() -> list:
-        return [index for index in threads if entries[index]["instance_id"] not in ledger.reported]
+    # -- coordinator side (all under the condition) -------------------------------------------------
+    def _in_flight(self) -> list:
+        return [index for index in self.threads
+                if index not in self.unlaunched and index not in self.unstartable
+                and self.instances[index].instance_id not in self.ledger.reported]
 
-    def launchable(index: int) -> bool:
-        overall, personas, pools = _limits(plan, runtime)
-        running = [entries[other] for other in in_flight()]
-        entry = entries[index]
+    def _launchable(self, index: int) -> bool:
+        overall, personas, pools = _limits(self.plan, self.runtime)
+        running = [self.instances[other].entry for other in self._in_flight()]
+        entry = self.instances[index].entry
         if len(running) >= overall:
             return False
         if entry["worker_kind"] == ps.PERSONA and sum(
@@ -591,63 +662,96 @@ def _wait(plan: ps.ExpansionPlan, pool_root: Path, context: ps.PoolContext,
         return sum(1 for other in running
                    if other["resource_pool"] == entry["resource_pool"]) < pools[entry["resource_pool"]]
 
-    deadline = time.monotonic() + min(plan.manifest["rendezvous_timeout_seconds"], runtime.wait_limit_seconds)
-    interrupt: BaseException | None = None
-    runtime.cancel.subscribe(wake)
-    try:
-        with condition:
-            while True:
-                try:
-                    timed_out = time.monotonic() >= deadline
-                    if runtime.cancel.is_set() or timed_out:
-                        reason = UNLAUNCHED_CANCELED if runtime.cancel.is_set() else UNLAUNCHED_RENDEZVOUS_TIMEOUT
-                        for index in pending:
-                            unlaunched[index] = reason
-                        pending = []
-                    for index in list(pending):
-                        if launchable(index):
-                            pending.remove(index)
-                            try:
-                                threads[index] = _start_worker(work, index)
-                            except RuntimeError:        # no thread: nothing ran, and the disk will say so
-                                threads[index] = None
-                                exited.add(entries[index]["instance_id"])
-                                ledger.report(entries[index]["instance_id"])
-                    if timed_out or (not pending and not in_flight()):
-                        break
-                    lost = [index for index in in_flight() if not threads[index].is_alive()
-                            and entries[index]["instance_id"] not in exited]
-                    for index in lost:              # liveness backstop: a thread that died unreported
-                        exited.add(entries[index]["instance_id"])
-                        ledger.report(entries[index]["instance_id"])
-                    if lost:
-                        continue                    # its slot is free: launch before waiting again
-                    condition.wait(max(0.0, min(deadline - time.monotonic(), LIVENESS_BACKSTOP_SECONDS)))
-                except (KeyboardInterrupt, SystemExit) as exc:
-                    interrupt = interrupt or exc
-                    runtime.cancel.set()
-            reported = ledger.close()       # from here on no report is adopted
-            late = [index for index in threads if entries[index]["instance_id"] not in reported]
-            if late:
-                runtime.cancel.set()        # stop what is still running; its output is not adopted
-                drained = time.monotonic() + runtime.drain_seconds
-                while any(entries[index]["instance_id"] not in exited for index in late):
-                    remaining = drained - time.monotonic()
-                    if remaining <= 0:
-                        break
-                    condition.wait(min(remaining, LIVENESS_BACKSTOP_SECONDS))
+    def _never_began(self, index: int) -> None:
+        """A registered worker that has not passed the gate and now never will."""
+        if self.ended is None and not self.runtime.cancel.is_set():
+            self.unstartable.add(index)         # nothing ended the wait: the thread simply never ran
+        else:
+            self.unlaunched[index] = self.ended or UNLAUNCHED_CANCELED
+
+    def _loop(self) -> None:
+        if self.deadline is None:
+            self.deadline = time.monotonic() + min(self.plan.manifest["rendezvous_timeout_seconds"],
+                                                   self.runtime.wait_limit_seconds)
+        while True:
+            timed_out = time.monotonic() >= self.deadline
+            if self.runtime.cancel.is_set() or timed_out:
+                if self.ended is None:
+                    self.ended = (UNLAUNCHED_CANCELED if self.runtime.cancel.is_set()
+                                  else UNLAUNCHED_RENDEZVOUS_TIMEOUT)
+                for index in self.pending:
+                    self.unlaunched[index] = self.ended
+                self.pending = []
+            for index in list(self.pending):
+                if self._launchable(index):
+                    thread = threading.Thread(target=self._work, args=(index,), daemon=True,
+                                              name="pool-instance-" + str(index))
+                    self.threads[index] = thread        # registered first: an interrupt cannot lose it
+                    self.pending.remove(index)
+                    try:
+                        _start_worker(thread)
+                    except RuntimeError:                # no thread: nothing ran, and the manifest says so
+                        self.unstartable.add(index)
+            if timed_out or (not self.pending and not self._in_flight()):
+                return
+            lost = [index for index in self._in_flight() if not self.threads[index].is_alive()
+                    and self.instances[index].instance_id not in self.exited]
+            for index in lost:                  # liveness backstop
+                if index in self.begun:         # a thread that died unreported: the disk says what it left
+                    self.exited.add(self.instances[index].instance_id)
+                    self.ledger.report(self.instances[index].instance_id)
+                else:                           # a thread that never ran (an interrupt landed in its start)
+                    self._never_began(index)
+            if lost:
+                continue                        # its slot is free: launch before waiting again
+            self.condition.wait(max(0.0, min(self.deadline - time.monotonic(), LIVENESS_BACKSTOP_SECONDS)))
+
+    def _drain(self) -> None:
+        late = [index for index in self._in_flight()
+                if self.instances[index].instance_id not in self.reported]
+        if not late:
+            return
+        self.runtime.cancel.set()               # stop what is still running; its output is not adopted
+        if self.drain_until is None:
+            self.drain_until = time.monotonic() + self.runtime.drain_seconds
+        while any(self.instances[index].instance_id not in self.exited for index in late):
+            if len(self.interrupts.caught) > 1:
+                return                          # a second interrupt cuts the drain short; publication follows
+            remaining = self.drain_until - time.monotonic()
+            if remaining <= 0:
+                return
+            self.condition.wait(min(remaining, LIVENESS_BACKSTOP_SECONDS))
+
+    def run(self) -> list:
+        with self.condition:
+            if self.reported is None:
+                self._loop()
+                for index in self.threads:      # under the gate's lock: what has not begun never will
+                    if (index not in self.begun and index not in self.unlaunched
+                            and index not in self.unstartable):
+                        self._never_began(index)
+                self.reported = self.ledger.close()     # from here on no report is adopted
+            self._drain()
             observations = []
-            for index, entry in enumerate(entries):
-                if entry["instance_id"] in reported:
+            for instance in self.instances:
+                if instance.index in self.unstartable:
+                    observations.append(UNSTARTABLE)
+                elif instance.index in self.unlaunched:
+                    observations.append(self.unlaunched[instance.index])
+                elif instance.instance_id in self.reported:
                     observations.append(REPORTED)
-                elif index in unlaunched:
-                    observations.append(unlaunched[index])
                 else:
-                    observations.append(UNREPORTED_STOPPED if entry["instance_id"] in exited
+                    observations.append(UNREPORTED_STOPPED if instance.instance_id in self.exited
                                         else UNREPORTED_RUNNING)
-    finally:
-        runtime.cancel.unsubscribe(wake)
-    return observations, interrupt
+            return observations
+
+
+def _wait(plan: ps.ExpansionPlan, pool_root: Path, context: ps.PoolContext, runtime: RendezvousRuntime,
+          runtimes: Mapping[str, Any], interrupts: _Interrupts) -> _Wait:
+    """The wait of one rendezvous, restart scan done, nothing launched yet."""
+    wait = _Wait(plan, pool_root, context, runtime, runtimes, interrupts)
+    wait.scan()
+    return wait
 
 
 # ---- publication ----------------------------------------------------------------------------------
@@ -661,7 +765,7 @@ def _prepare_root(root: Path) -> None:
     publication left, and refuses anything foreign."""
     if not os.path.lexists(root):
         os.mkdir(root, 0o700)
-    listing = ps._listing(root) if ps._real_directory(root) else None
+    listing = ps.directory_listing(root) if ps.real_directory(root) else None
     if listing is None:
         raise RendezvousError("the rendezvous root is a link, is not a directory or cannot be listed")
     for name in listing:
@@ -699,19 +803,40 @@ def _publish(root: Path, data: bytes) -> None:
             os.close(directory)
 
 
+def _publish_once(root: Path, data: bytes) -> None:
+    """:func:`_publish`, RESUMABLE: entered again after an interrupt it links nothing twice, clears
+    a temporary file the interrupted attempt left, and still refuses a manifest that is not these
+    bytes. Under the pool's lock, after :func:`_prepare_root` found no manifest."""
+    if not os.path.lexists(root / MANIFEST_FILE):
+        _publish(root, data)
+    for name in ps.directory_listing(root) or []:
+        if _TEMP_RE.match(name):
+            os.unlink(root / name)
+    if ps.read_regular_file(root, root / MANIFEST_FILE) != data:
+        raise RendezvousPublishedError("a terminal-instance manifest is already published for this pool; "
+                                       "it is never replaced")
+
+
 def run_rendezvous(pool_root: Path, *, expected_spec: Any, context: ps.PoolContext,
                    runtime: RendezvousRuntime) -> Mapping[str, Any]:
     """Verify the expansion, launch and wait for every instance, publish the manifest once.
 
     Every argument is required. Returns the published manifest, deeply immutable. Raises
-    ``PoolSpecError`` (the expansion does not verify), ``RendezvousBusyError`` (another coordinator
-    holds the lock), ``RendezvousPublishedError`` (a manifest exists; it is left alone) or
-    ``RendezvousError``; in each case this call published nothing."""
+    ``PoolSpecError`` (the expansion does not verify, or the context and the launch-only objects do
+    not make the adapter runtimes), ``RendezvousBusyError`` (another coordinator holds the lock),
+    ``RendezvousPublishedError`` (a manifest exists; it is left alone) or ``RendezvousError``; in
+    each case this call published nothing.
+
+    From the moment anything may be launched until the manifest is published, ``KeyboardInterrupt``
+    and ``SystemExit`` are HELD: each is a pool cancel, a second one also cuts the drain short, and
+    the first is re-raised after publication. So an interrupted rendezvous still publishes, a
+    late instance stays ``rendezvous_timed_out``, and no later run can adopt its result."""
     validate_runtime(runtime)
     plan = ps.load_verified_expansion(pool_root, expected_spec=expected_spec, context=context)
-    errors = _location_errors(context, runtime.rendezvous_parent) + _binding_errors(plan, context, runtime)
+    errors = _location_errors(context, runtime.rendezvous_parent)
     if errors:
         raise RendezvousError("rendezvous runtime rejected: " + "; ".join(errors))
+    runtimes = adapter_runtimes(plan, context, runtime)
     root = rendezvous_root(plan, runtime.rendezvous_parent)
     lock = Lock(runtime.rendezvous_parent / (plan.pool_directory + LOCK_SUFFIX))
     try:
@@ -719,77 +844,90 @@ def run_rendezvous(pool_root: Path, *, expected_spec: Any, context: ps.PoolConte
     except Blocked:
         raise RendezvousBusyError("another coordinator holds this pool's rendezvous lock; this call launched "
                                   "nothing and published nothing") from None
+    interrupts = _Interrupts(runtime.cancel)
+    done: dict = {}
     try:
         _prepare_root(root)
-        observations, interrupt = _wait(plan, pool_root, context, runtime)
-        # The facts the launch used ARE the runtime's; the verifier must later be given the same.
-        host_facts = host_facts_of(runtime.container_runtime)
-        manifest = derive_manifest(plan, pool_root=pool_root, context=context, host_facts=host_facts,
-                                   observations=observations)
-        data = canonical_bytes(manifest)
-        errors = manifest_errors(data, plan, pool_root=pool_root, context=context, host_facts=host_facts)
-        if errors:
-            raise RendezvousError("the derived manifest does not verify, so it is not published: "
-                                  + "; ".join(errors))
-        _publish(root, data)
+        wait = _wait(plan, pool_root, context, runtime, runtimes, interrupts)
+
+        def finish() -> None:       # RESUMABLE as a whole: wait -> close -> drain -> derive -> validate -> publish
+            runtime.cancel.subscribe(wait.wake)
+            if "observations" not in done:
+                done["observations"] = wait.run()
+            if "data" not in done:
+                manifest = derive_manifest(plan, pool_root=pool_root, context=context,
+                                           observations=done["observations"])
+                data = canonical_bytes(manifest)
+                errors = manifest_errors(data, plan, pool_root=pool_root, context=context)
+                if errors:
+                    raise RendezvousError("the derived manifest does not verify, so it is not published: "
+                                          + "; ".join(errors))
+                done["manifest"] = manifest
+                done["data"] = data
+            _publish_once(root, done["data"])
+            runtime.cancel.unsubscribe(wait.wake)
+
+        try:
+            interrupts.hold(finish)
+        finally:
+            runtime.cancel.unsubscribe(wait.wake)
     finally:
         lock.__exit__(None, None, None)
-    if interrupt is not None:
-        raise interrupt
-    return freeze(manifest)
+    if interrupts.caught:
+        raise interrupts.caught[0]
+    return freeze(done["manifest"])
 
 
 # ---- verification: a published manifest is a cache, never an authority ----------------------------
 
-# The two things pool_specification.verify_expansion says about a pool whose instance roots are no
-# longer all there. A manifest that records such an instance as `missing` must stay verifiable.
-_ROOTS_LISTING = "the instances directory does not hold exactly one private root per expected instance"
-_ROOTS_IDENTITY = "an instance root is a link, is not a directory, or two roots are one directory"
+def _checked_expansion(pool_root: Path, expected_spec: Any, context: ps.PoolContext) -> tuple:
+    """(errors, plan): C01's ONE check of the pool root, with exactly one tolerance."""
+    check = ps.check_expansion(pool_root, expected_spec=expected_spec, context=context)
+    return [finding.message for finding in check.findings
+            if finding.code not in ps.INSTANCE_ROOT_DAMAGE_CODES], check.plan
 
 
 def expansion_errors(pool_root: Path, *, expected_spec: Any, context: ps.PoolContext) -> list:
-    """C01's verifier, except that a damaged ``instances/`` directory is left to the classification
-    rule (``missing``, ``invalid``): every other finding stands."""
-    return [error for error in ps.verify_expansion(pool_root, expected_spec=expected_spec, context=context)
-            if error not in (_ROOTS_LISTING, _ROOTS_IDENTITY)]
+    """C01's verifier (``check_expansion``), except that damage to ONE EXPECTED instance root --
+    the codes in ``pool_specification.INSTANCE_ROOT_DAMAGE_CODES``: the root was deleted, or it was
+    replaced by a link or a non-directory -- is left to the classification rule, which records
+    that instance as ``missing`` or ``invalid``. Findings are selected by code, never by message
+    text. Every other finding stands, exactly as it does for ``run_rendezvous``: an unexpected
+    extra entry under ``instances/``, an ``instances`` that is not a real directory and two roots
+    that are one directory are no instance's outcome, and refuse the pool."""
+    return _checked_expansion(pool_root, expected_spec, context)[0]
 
 
-def manifest_errors(raw: Any, plan: ps.ExpansionPlan, *, pool_root: Path, context: ps.PoolContext,
-                    host_facts: Any) -> list:
-    """THE acceptance rule for manifest bytes, used before publication and by the verifier.
-
-    Per instance, the recorded entry must be exactly what :func:`classify_instance` derives NOW for
-    one of the observations a coordinator can make; then the whole document must be the bytes
-    :func:`derive_manifest` derives for those observations. No hash in the manifest is an input."""
-    errors = _host_facts_errors(plan, host_facts)
+def _check_manifest(raw: Any, plan: ps.ExpansionPlan, pool_root: Path, context: ps.PoolContext) -> tuple:
+    """(errors, the disk facts they were derived from, one per instance)."""
+    errors = _context_errors(plan, context)
     if errors:
-        return errors
+        return errors, None
     try:
         found = ps.parse_document(raw)
     except ps.PoolSpecError:
-        return ["the manifest is not bounded UTF-8 JSON with exactly one reading"]
+        return ["the manifest is not bounded UTF-8 JSON with exactly one reading"], None
     schema_errors = validate_document(found, MANIFEST_SCHEMA)
     if schema_errors:
-        return [f"the manifest fails its closed schema ({len(schema_errors)} errors)"]
+        return [f"the manifest fails its closed schema ({len(schema_errors)} errors)"], None
     if found["wait_all"] is not True:
-        return ["wait_all must be the JSON value true"]
-    expected = plan.manifest["instances"]
-    if [record["instance_id"] for record in found["instances"]] != [entry["instance_id"] for entry in expected]:
+        return ["wait_all must be the JSON value true"], None
+    if [record["instance_id"] for record in found["instances"]] != [item.instance_id for item in plan.instances]:
         return ["the manifest's instances are not the expansion's instances, each once and in order: a "
-                "duplicate, unknown, reordered or absent instance is refused"]
-    errors: list = []
+                "duplicate, unknown, reordered or absent instance is refused"], None
+    errors = []
     observations = []
-    facts = [_disk_facts(plan, index, pool_root, context, host_facts) for index in range(len(expected))]
-    for index, record in enumerate(found["instances"]):
+    facts = [_disk_facts(instance, pool_root, context) for instance in plan.instances]
+    for instance, record in zip(plan.instances, found["instances"]):
         for observation in OBSERVATIONS:
-            if _entry(plan, index, facts[index], observation) == record:
+            if _entry(instance, facts[instance.index], observation) == record:
                 observations.append(observation)
                 break
         else:
-            errors.append(f"instances[{index}] is not what the expansion, the attempt on disk and any "
-                          "coordinator observation derive")
+            errors.append(f"instances[{instance.index}] is not what the expansion, the attempt on disk and "
+                          "any coordinator observation derive")
     if errors:
-        return errors
+        return errors, None
     states = [record["state"] for record in found["instances"]]
     if NOT_LAUNCHED_CANCELED in states and NOT_LAUNCHED_RENDEZVOUS_TIMEOUT in states:
         errors.append("one wait cannot end both by cancel and by timeout for instances it never launched")
@@ -799,41 +937,96 @@ def manifest_errors(raw: Any, plan: ps.ExpansionPlan, *, pool_root: Path, contex
         if bytes(raw) != canonical_bytes(found):
             errors.append("the manifest is not in the canonical byte form")
         errors.append("the manifest is not the byte sequence the expansion and the attempts on disk derive")
-    return errors
+    return errors, facts
 
 
-def _verify(pool_root: Path, expected_spec: Any, context: ps.PoolContext, rendezvous_parent: Path,
-            host_facts: Any) -> tuple:
-    """(errors, the bytes those errors are about)."""
-    errors = expansion_errors(pool_root, expected_spec=expected_spec, context=context)
+def manifest_errors(raw: Any, plan: ps.ExpansionPlan, *, pool_root: Path, context: ps.PoolContext) -> list:
+    """THE acceptance rule for manifest bytes, used before publication and by the verifier.
+
+    Per instance, the recorded entry -- ``state_reason`` included -- must be exactly what
+    :func:`classify_instance` derives NOW for one of the observations a coordinator can make; then
+    the whole document must be the bytes :func:`derive_manifest` derives for those observations. No
+    hash in the manifest is an input. A reason the disk decides is thereby re-derived; the ones only
+    the coordinator saw (which of the two ``rendezvous_timed_out`` reasons; for an empty root,
+    ``adapter_left_no_evidence`` or ``worker_thread_not_started``) are bounded to that closed set."""
+    return _check_manifest(raw, plan, pool_root, context)[0]
+
+
+def _verify(pool_root: Path, expected_spec: Any, context: ps.PoolContext, rendezvous_parent: Path) -> tuple:
+    """(errors, the bytes those errors are about, the plan, the disk facts)."""
+    errors, plan = _checked_expansion(pool_root, expected_spec, context)
     if errors:
-        return ["the pool expansion does not verify: " + "; ".join(errors)], None
-    plan = ps.plan_expansion(expected_spec, context=context)
+        return ["the pool expansion does not verify: " + "; ".join(errors)], None, None, None
     errors = _location_errors(context, rendezvous_parent)
     if errors:
-        return errors, None
+        return errors, None, None, None
     root = rendezvous_root(plan, rendezvous_parent)
-    if not ps._real_directory(root):
-        return ["the rendezvous root is missing, is a link or is not a directory: no manifest was published"], None
-    if ps._listing(root) != [MANIFEST_FILE]:
-        return ["the rendezvous root does not hold exactly the terminal-instance manifest"], None
-    raw = ps._read_regular(root, root / MANIFEST_FILE)
+    if not ps.real_directory(root):
+        return (["the rendezvous root is missing, is a link or is not a directory: no manifest was published"],
+                None, None, None)
+    if ps.directory_listing(root) != [MANIFEST_FILE]:
+        return ["the rendezvous root does not hold exactly the terminal-instance manifest"], None, None, None
+    raw = ps.read_regular_file(root, root / MANIFEST_FILE)
     if raw is None:
-        return ["the manifest is missing, linked, hard-linked, oversized or unreadable"], None
-    return manifest_errors(raw, plan, pool_root=pool_root, context=context, host_facts=host_facts), raw
+        return ["the manifest is missing, linked, hard-linked, oversized or unreadable"], None, None, None
+    errors, facts = _check_manifest(raw, plan, pool_root, context)
+    return errors, raw, plan, facts
 
 
 def verify_manifest(pool_root: Path, *, expected_spec: Any, context: ps.PoolContext,
-                    rendezvous_parent: Path, host_facts: Any) -> list:
+                    rendezvous_parent: Path) -> list:
     """Re-derives the published manifest from the expected specification, the expansion and the
     instance attempts on disk. Read-only. Every argument is required. Messages are fixed text."""
-    return _verify(pool_root, expected_spec, context, rendezvous_parent, host_facts)[0]
+    return _verify(pool_root, expected_spec, context, rendezvous_parent)[0]
+
+
+@dataclass(frozen=True)
+class VerifiedInstance:
+    """One instance as a consumer needs it: C01's planned instance (ids, request, paths), its
+    manifest ``record``, and -- exactly for the ``RESULT_STATES`` -- the adapter ``result`` that the
+    adapter's own verifier returned during THIS verification and whose canonical bytes the record's
+    ``result_file`` pins. ``result`` is ``None`` for every other state. Deeply immutable."""
+    instance: ps.PlannedInstance
+    record: Mapping[str, Any]
+    result: Mapping[str, Any] | None
+
+    @property
+    def state(self) -> str:
+        return self.record["state"]
+
+
+@dataclass(frozen=True)
+class VerifiedManifest:
+    """What :func:`load_verified_manifest` hands a consumer: the manifest (the very bytes that were
+    verified), the plan they were verified against, and one :class:`VerifiedInstance` per expected
+    instance, in the expansion's order. Deeply immutable; a cache of one verification, never an
+    authority -- a consumer that needs the facts later verifies again."""
+    manifest: Mapping[str, Any]
+    plan: ps.ExpansionPlan
+    instances: tuple
+
+    @property
+    def outcome(self) -> str:
+        return self.manifest["outcome"]
+
+    def in_state(self, state: str) -> tuple:
+        if state not in STATES:
+            raise RendezvousError("unknown instance state")
+        return tuple(item for item in self.instances if item.state == state)
 
 
 def load_verified_manifest(pool_root: Path, *, expected_spec: Any, context: ps.PoolContext,
-                           rendezvous_parent: Path, host_facts: Any) -> Mapping[str, Any]:
-    """The manifest T10 and C03 may rely on: verified against disk, deeply immutable."""
-    errors, raw = _verify(pool_root, expected_spec, context, rendezvous_parent, host_facts)
+                           rendezvous_parent: Path) -> VerifiedManifest:
+    """The rendezvous T10 and C03 may rely on: verified against disk, deeply immutable, with the
+    adapter results the verification itself obtained -- a consumer does not call an adapter
+    verifier again, and does not need ``pool_specification.load_verified_expansion`` (which refuses
+    a pool whose manifest honestly records a ``missing`` instance)."""
+    errors, raw, plan, facts = _verify(pool_root, expected_spec, context, rendezvous_parent)
     if errors:
         raise RendezvousError("terminal-instance manifest rejected: " + "; ".join(errors))
-    return freeze(ps.parse_document(raw))       # the very bytes that were verified
+    manifest = freeze(ps.parse_document(raw))       # the very bytes that were verified
+    instances = tuple(
+        VerifiedInstance(instance=instance, record=record,
+                         result=facts[instance.index][1] if record["state"] in RESULT_STATES else None)
+        for instance, record in zip(plan.instances, manifest["instances"]))
+    return VerifiedManifest(manifest=manifest, plan=plan, instances=instances)

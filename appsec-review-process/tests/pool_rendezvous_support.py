@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import container_execution as ce  # noqa: E402
-import container_execution_support as b13  # noqa: E402
 import persona_invocation as pi  # noqa: E402
 import persona_invocation_support as b14  # noqa: E402
 import pool_rendezvous as pr  # noqa: E402
@@ -36,17 +35,10 @@ class RendezvousWorkspace(c01.PoolWorkspace):
         self.rendezvous_parent.mkdir()
         self.cancel = pr.PoolCancel()
 
-    def persona_runtime(self, invoker=None, **over) -> pi.PersonaRuntime:
-        fields = self.persona.runtime_fields(invoker=invoker or pi.FixtureInvoker(), cancel=self.cancel)
-        fields.update(over)
-        return pi.PersonaRuntime(**fields)
-
-    def container_runtime(self, **over) -> ce.ContainerRuntime:
-        return b13.runtime(**{"cancel": self.cancel, **over})
-
     def runtime_fields(self, invoker=None, **over) -> dict:
-        fields = {"rendezvous_parent": self.rendezvous_parent, "container_runtime": self.container_runtime(),
-                  "persona_runtime": self.persona_runtime(invoker), "cancel": self.cancel,
+        """The launch-only side. Every host fact is the context's (``PoolWorkspace.context``)."""
+        fields = {"rendezvous_parent": self.rendezvous_parent, "invoker": invoker or pi.FixtureInvoker(),
+                  "clock": lambda: b14.NOW, "stop_grace_seconds": 2, "cancel": self.cancel,
                   "max_parallel": pr.MAX_PARALLEL, "wait_limit_seconds": HANG_SECONDS, "drain_seconds": 5}
         fields.update(over)
         return fields
@@ -63,16 +55,11 @@ class RendezvousWorkspace(c01.PoolWorkspace):
     def run(self, spec: dict, plan: ps.ExpansionPlan, invoker=None, **over):
         return pr.run_rendezvous(self.root(plan), **self.arguments(spec), runtime=self.runtime(invoker, **over))
 
-    def host_facts(self) -> pr.ContainerHostFacts:
-        """What every launch in these tests uses: the facts of ``container_runtime()``."""
-        return pr.host_facts_of(self.container_runtime())
-
     def reader_arguments(self, spec: dict, **over) -> dict:
-        return {**self.arguments(spec), "rendezvous_parent": self.rendezvous_parent,
-                "host_facts": self.host_facts(), **over}
+        return {**self.arguments(spec), "rendezvous_parent": self.rendezvous_parent, **over}
 
     def classifier_arguments(self, plan: ps.ExpansionPlan) -> dict:
-        return {"pool_root": self.root(plan), "context": self.context(), "host_facts": self.host_facts()}
+        return {"pool_root": self.root(plan), "context": self.context()}
 
     def verify(self, spec: dict, plan: ps.ExpansionPlan, **over) -> list:
         return pr.verify_manifest(self.root(plan), **self.reader_arguments(spec, **over))
@@ -84,13 +71,13 @@ class RendezvousWorkspace(c01.PoolWorkspace):
         return pr.rendezvous_root(plan, self.rendezvous_parent) / pr.MANIFEST_FILE
 
     def result_path(self, plan: ps.ExpansionPlan, index: int) -> Path:
-        entry = plan.manifest["instances"][index]
-        name = pi.RESULT_FILE if entry["worker_kind"] == ps.PERSONA else ce.RESULT_FILE
-        return self.instance_root(plan, index).joinpath(*entry["log_path"].split("/"), name)
+        instance = plan.instances[index]
+        name = pi.RESULT_FILE if instance.worker_kind == ps.PERSONA else ce.RESULT_FILE
+        return instance.attempt_root_path(self.root(plan)).joinpath(*instance.entry["log_path"].split("/"), name)
 
 
 def ids(plan: ps.ExpansionPlan) -> list:
-    return [entry["instance_id"] for entry in plan.manifest["instances"]]
+    return [instance.instance_id for instance in plan.instances]
 
 
 def states(manifest) -> list:
@@ -186,8 +173,7 @@ class RoutedDocker:
 
 
 def container_name(plan: ps.ExpansionPlan, index: int) -> str:
-    entry = plan.manifest["instances"][index]
-    return ce.container_name(entry["run_id"], entry["job_id"], entry["attempt_id"])
+    return ce.container_name(**plan.instances[index].ids)
 
 
 # ---- a coordinator in its own process, so that it can really die ----------------------------------
