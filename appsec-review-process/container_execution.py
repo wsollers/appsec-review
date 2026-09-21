@@ -574,6 +574,20 @@ def checked_mount_sources(mounts: list[Mapping[str, str]], *, flavor: str, expos
     return pairs
 
 
+
+def request_mount_sources(request: Mapping[str, Any], *, attempt_root: Path, host_flavor: str,
+                          docker_host: str | None) -> list[tuple[str, str]]:
+    """The ONE rule for which host directories a request may mount, used by the execution path and
+    by the verification path alike. PR 29 review: ``run_container`` applied it and
+    ``verify_container_result`` did not, so the verifier (and ``to_worker_envelope`` behind it)
+    certified a self-consistent attempt whose request mounted ``/etc``, the host home, the attempt
+    itself or the docker socket -- states the adapter can never produce. Two callers, one
+    definition: they cannot drift. Identity is device+inode on THIS host at THIS moment; a mount
+    source that has since vanished or become sensitive fails closed."""
+    expose, enter = sensitive_locations(home=Path.home(), attempt_root=Path(attempt_root),
+                                        docker_host=docker_host)
+    return checked_mount_sources(request["target_mounts"], flavor=host_flavor, expose=expose, enter=enter)
+
 # ---- runtime -------------------------------------------------------------------------------------
 
 def host_defaults() -> dict[str, Any]:
@@ -726,10 +740,8 @@ def run_container(runtime: ContainerRuntime, *, run_id: str, job_id: str, attemp
             "scratch_path or log_path leaves the attempt, crosses a link or is not mountable") from None
     if os.path.lexists(scratch) or os.path.lexists(log_dir):
         raise ContainerRequestError("scratch_path and log_path must not exist: the adapter creates them")
-    expose, enter = sensitive_locations(home=Path.home(), attempt_root=attempt_root,
-                                        docker_host=runtime.docker_host)
-    mounts = checked_mount_sources(request["target_mounts"], flavor=runtime.host_flavor,
-                                   expose=expose, enter=enter)
+    mounts = request_mount_sources(request, attempt_root=attempt_root, host_flavor=runtime.host_flavor,
+                                   docker_host=runtime.docker_host)
     command = build_docker_argv(
         docker_executable=str(runtime.docker_executable), name=name, user=runtime.container_user,
         image_ref=image_ref, limits=request["limits"], environment=request["environment"],
@@ -884,15 +896,29 @@ def _command_record_errors(path: Path, *, request: Mapping[str, Any], image_ref:
 
 
 def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
-                            request: Any, images_dir: Path) -> list[str]:
+                            request: Any, images_dir: Path, host_flavor: str,
+                            docker_host: str | None) -> list[str]:
     """Re-derives the on-disk result from the expected request, the registry and the bytes.
 
     Every argument is required. Messages are fixed text: nothing read from the attempt is echoed.
+    ``host_flavor`` and ``docker_host`` are the integrator's host facts (``ContainerRuntime``'s),
+    needed to apply the same target-mount rule ``run_container`` applies: a request the adapter
+    would refuse to run cannot have a verifiable result.
     """
+    if host_flavor not in ("posix", "windows"):
+        raise TypeError("host_flavor must be one of the adapter's host flavors")
+    if docker_host is not None and not isinstance(docker_host, str):
+        raise TypeError("docker_host must be a string or None")
     request = thaw(request)
     errors = request_errors(request, run_id=run_id, job_id=job_id, attempt_id=attempt_id)
     if errors:
         return ["the expected request is itself invalid: " + "; ".join(errors)]
+    try:
+        request_mount_sources(request, attempt_root=Path(attempt_root), host_flavor=host_flavor,
+                              docker_host=docker_host)
+    except ContainerRequestError:
+        return ["the expected request mounts a host directory the adapter refuses to mount "
+                "(missing, linked, sensitive, or the same directory twice): no run of it can exist"]
     try:
         record = resolve_image(request["image"], load_image_registry(Path(images_dir)))
     except ContainerRequestError:
@@ -998,9 +1024,11 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
 
 
 def load_verified_result(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
-                         request: Any, images_dir: Path) -> Mapping[str, Any]:
+                         request: Any, images_dir: Path, host_flavor: str,
+                         docker_host: str | None) -> Mapping[str, Any]:
     errors = verify_container_result(attempt_root, run_id=run_id, job_id=job_id,
-                                     attempt_id=attempt_id, request=request, images_dir=images_dir)
+                                     attempt_id=attempt_id, request=request, images_dir=images_dir,
+                                     host_flavor=host_flavor, docker_host=docker_host)
     if errors:
         raise ContainerRequestError("container result rejected: " + "; ".join(errors))
     request = thaw(request)
@@ -1011,8 +1039,8 @@ def load_verified_result(attempt_root: Path, *, run_id: str, job_id: str, attemp
 # ---- common worker-result envelope ---------------------------------------------------------------
 
 def to_worker_envelope(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
-                       request: Any, images_dir: Path, input_fingerprint: str,
-                       output_contract: str, output_paths: list[str],
+                       request: Any, images_dir: Path, host_flavor: str, docker_host: str | None,
+                       input_fingerprint: str, output_contract: str, output_paths: list[str],
                        resume_command: str | None) -> dict[str, Any]:
     """Maps the verified on-disk result into ``worker-result-envelope/1.0``.
 
@@ -1021,7 +1049,8 @@ def to_worker_envelope(attempt_root: Path, *, run_id: str, job_id: str, attempt_
     """
     from worker_result import artifact_records, terminal_envelope, validate_worker_result
     result = load_verified_result(attempt_root, run_id=run_id, job_id=job_id, attempt_id=attempt_id,
-                                  request=request, images_dir=images_dir)
+                                  request=request, images_dir=images_dir, host_flavor=host_flavor,
+                                  docker_host=docker_host)
     attempt_root = Path(attempt_root)
     relative = [f"{result['log_path']}/{entry['path']}" for entry in result["files"]]
     relative.append(f"{result['log_path']}/{RESULT_FILE}")
