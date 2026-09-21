@@ -1,5 +1,186 @@
 # AppSec Review Process TODO
 
+## Step 4 plan: run-owned evidence collection, proven on the `hello-autotools` fixture (2026-09-21)
+
+This is the first thing to do. It is the executable plan for taking the engagement flow
+(`docs/processes/engagement-start.md`) through step 4 -- deterministic evidence collection as
+run-owned Dagster jobs -- and proving it end to end on a tiny fixture target instead of a real
+repository, so every job can be exercised in minutes. The phases below are ordered by dependency;
+each names the batch ids it closes so the batch table further down stays the status authority.
+
+### Decisions this plan is built on (record as ADR-0011 in phase 2)
+
+- **Dagster stays.** It walks the process, holds state, retries and routes errors. It never
+  references, pulls, builds or runs an image.
+- **Python jobs do the work, on the host.** The code location runs as a host gRPC server
+  (`dagster api grpc`); ops execute as host processes with the host's Docker. The compose stack
+  keeps only postgres, webserver and daemon. Nothing mounts the Docker socket into a container.
+- **B13 is the only code that composes `docker run`.** Every container a job starts goes through
+  the pinned-container adapter: image resolved from `registry/container-images/` to a digest, argv
+  array, boundary flags, one writable scratch mount, files in, files out, streams as diagnostics.
+- **Build environments are provisioned before the engagement, not by it.** A supplied, tracked
+  `buildenv.lock` (image digest, Dockerfile hash, configure argv) is produced by an agent/human loop
+  and validated on read; `build_execution` replays it.
+- **Persona-dependent discovery nodes use the supplied pattern until D01 lands.** A validated,
+  hand-supplied record stands in for `02-dev-project-discovery`, `02-devops-project-discovery` and
+  `02-sre-operations-topology` so the build chain is not blocked on pool dispatch.
+- **The fixture is tracked, not a target.** `/targets*/` is git-ignored, so the fixture lives
+  under `fixtures/targets/hello-autotools/` and is committed.
+
+### Done when
+
+`launch_job.py --job full_review` on the fixture reaches an accepted `02-evidence-assembly` with
+every `02-*` node either accepted or `SKIPPED` under a declared `allowed_skip_reasons` value, zero
+`WORKER_NOT_IMPLEMENTED`, all evidence under `runs/<run_id>/data/`, `validate_design_parity.py`
+PASS with the readiness view regenerated, and the whole chain under ten minutes on the fixture.
+
+### Phase 1 -- fixture target (fast lane; no batch)
+
+- Deliver `fixtures/targets/hello-autotools/`: `configure.ac`, `Makefile.am`, `src/greet.h`,
+  `src/greet.cpp`, `src/main.cpp`, `tests/run.sh` wired to `make check`, `README.md` stating it is
+  a fixture, `.gitignore` for autotools output. Builds with `autoreconf -fi && ./configure &&
+  make && make check` on a stock toolchain. No IaC, containers, mobile code, lockfiles or
+  third-party code, so those scanners exercise their zero-input skip paths.
+- One seeded, documented defect in `src/greet.cpp` (fixed buffer + `strcpy`) so `02-source-sast`
+  and `02-native-sast` have exactly one expected hit; `README.md` names it. Remove it later if a
+  clean baseline is wanted -- the hit fixture in the test suite keeps SAST qualification.
+- Done when: the four commands succeed on Linux/WSL2 and the tree is committed.
+
+### Phase 2 -- ADR-0011 and the host code location (full protocol: `orchestrator/dagster/`)
+
+- `docs/decisions/ADR-0011-orchestration-boundary.md`: the decisions above, the alternatives
+  rejected (socket in the code-server, socket proxy, a custom host executor, switching engines) and
+  why, with the engine criterion list (fork/join, pools, human gates, loops, external waits, UI).
+- `orchestrator/dagster/workspace.yaml`: `grpc_server` -> `host.docker.internal:4000`;
+  `compose.yaml`: `extra_hosts: ["host.docker.internal:host-gateway"]` on webserver and daemon,
+  remove the `code-server` service and the `/runs`, `/opt/process`, `/opt/schemas`, `/targets/*`
+  mounts it existed for (webserver/daemon need only postgres and `dagster.yaml`).
+- `orchestrator/dagster/code-location.sh` (+ `.ps1` twin for a Windows host that runs it under
+  WSL): starts `dagster api grpc -h 0.0.0.0 -p 4000 -f appsec-review-process/../orchestrator/dagster/definitions.py`
+  with `APPSEC_RUNS_ROOT=<repo>/appsec-review-process/runs`, `DAGSTER_HOME` pointing at a host
+  copy of `dagster.yaml`, the repo venv, and a health check; a systemd user unit example.
+- Runs become host-owned: `run_process.py --start` and `stage_artifacts.py` run on the host and
+  `--target` is a host path (the fixture: `fixtures/targets/hello-autotools`). Delete the
+  "create inside the code-server / Linux-owned" rule from `docs/dagster/dagster-launching.md`,
+  `docs/dagster/operations.md`, `orchestrator/dagster/README.md`, `00-intake-recovery/config.md`;
+  keep the execution-platform check (host platform recorded in the manifest).
+- Update `setup.py`, `qualify_dagster.py`, `tests/test_dagster.py`, `tests/test_phase1.py`
+  fixtures that assume `/runs` and `/opt/process`.
+- Done when: smoke job, `phase1_intake` and `engagement_workflow` pass on the fixture from the
+  host code location; a deliberately failed op is re-executed from failure in the UI and skips
+  the successful ops; `qualify_dagster.py` passes. Closes the "B13 build execution" open.
+
+### Phase 3 -- B13 into service (B13 follow-up + new batch B16 "container image registry")
+
+- Decide the open B13 question: `verify_container_result` / `load_verified_result` /
+  `to_worker_envelope` **require** an externally held `expected_result_sha256`. Recommendation:
+  require it; the hash is returned by `run_container` and kept in the attempt's `command.json`
+  outside the scratch mount. Record in `docs/adapters/pinned-container-adapter.md`.
+- B16: `registry/container-images/<image_id>.json` for every image a step-4 worker uses
+  (`audit-static`, `audit-buildenv-cpp`, `audit-native`, `audit-iac`, `audit-container`,
+  `scancode-toolkit`, `audit-binary-analysis`), generated from `images/.build-state/<id>/latest.json`
+  by a new `images/registry_records.py` (digest, Dockerfile hash, build attempt id); a test ties
+  each record's digest to the local image (`docker image inspect`) and fails on drift. Local builds
+  get `digest_kind: "image-id"` until a registry push exists.
+- Done when: a Dagster op on the host runs `fixture-harmless` through B13 and publishes a verified
+  envelope; every step-4 image has a registry record; `test_container_execution.py` live tests pass
+  against the host Docker.
+
+### Phase 4 -- build-environment provisioning (supplied) and the C++ buildenv
+
+- `images/audit-buildenv-cpp`: add `autoconf automake libtool pkg-config make bear`; catalog
+  markers add `configure.ac`, `Makefile.am`, `configure`. Rebuild, record the B16 entry.
+- `schemas/buildenv-lock.schema.json` and `registry/buildenv-locks/<project>.json`: image id +
+  digest, Dockerfile sha256, ordered argv arrays for configure / build / test, `compile_commands`
+  producer (`bear -- make`), attempts log summary, provisioning authority and date.
+- Validate-on-read in `build_execution.py` (and intake's native plan): lock present, digest matches
+  a registry record, Dockerfile hash matches; otherwise `BLOCKED(BUILDENV_LOCK_MISSING)`.
+- `skills/agents/claude/provision-buildenv.md` (+ Codex wrapper): the bounded loop -- read
+  `build-discovery.md`, propose or amend a Dockerfile/lock, `docker build`, run configure+build in
+  the B13 boundary, on failure revise, at most N attempts then a human gate, on success write the
+  lock. First real use of `skills/agents/`.
+- Done when: `registry/buildenv-locks/hello-autotools.json` exists and `build_execution` replays
+  it to a non-empty `compile_commands.json` under the run.
+
+### Phase 5 -- discovery chain via supplied records (B10; D02 deferred)
+
+- Author the fixture's supplied `02-repository-partition-discovery` and `02-dev-project-discovery`
+  records (one component, one native family, autotools build route), validated on read through
+  the existing supplied-envelope path (B10). `02-devops-project-discovery` and
+  `02-sre-operations-topology` end `SKIPPED(not-applicable-no-matching-inputs)` with receipts.
+- Done when: the three nodes are accepted/skipped on the fixture and `02-build-configure`'s
+  dependency is satisfied without persona dispatch.
+
+### Phase 6 -- build and compile database (E01, E02)
+
+- E01 `02-build-configure`: B13 + `audit-buildenv-cpp`, replays the lock's configure argv
+  (`autoreconf -fi`, `./configure`), common-runtime adoption, provenance (image digest, lock hash,
+  source revision).
+- E02 `02-native-build`: `bear -- make` and `make check` prerequisites, produces
+  `compile_commands.json`, objects, binaries and logs as run-owned artifacts; variant = the lock's
+  single variant for now.
+- Done when: both accepted on the fixture with `CONFIGURE_OK`, a 3-entry compile database and the
+  `hello` binary recorded with hashes.
+
+### Phase 7 -- static evidence off intake (parallel; one batch each)
+
+| Node | Batch | Tool / image | Fixture expectation |
+|---|---|---|---|
+| `02-source-sast` | D09 | Semgrep in `audit-static` | 1 hit (seeded `strcpy`) |
+| `02-secrets-inventory` | M03 | gitleaks in `audit-static` | clean; V06 redaction receipt present |
+| `02-iac-config-scan` | M03 | `audit-iac` | `SKIPPED(not-applicable-no-matching-inputs)` |
+| `02-sbom-inventory` | M05 | syft in `audit-static` | valid SBOM with zero components |
+| `02-license-scan` | M05 | `scancode-toolkit` | project licence only |
+| `02-dependency-lifecycle` | M05 | `analyze_dependency_lifecycle` + `data/eol-reference.json` | empty, `unknown` never inferred current |
+| `02-sca-vulnerability-match` | M05 + V16/V17/V18 | Grype with mirrored DB, OSV snapshot | zero matches against a published snapshot (the publishers are the real work here) |
+| `02-container-image-inventory` | M04 (after M02) | `audit-container` | `SKIPPED` zero-input receipt |
+| `02-binary-hardening` | M04 | `audit-binary-analysis` | `SKIPPED` (no supplied binaries) |
+| `02-mobile-sast` | M04 | mobile SAST in `audit-static` | `SKIPPED` |
+
+- Each worker: own attempt allocation writing only the closed set (owner decision 2026-09-21),
+  vendor-prepass contract validation (`validator-vendor-prepass-dispatch.md`), fixtures for
+  clean / hit / tool-error / timeout / cancel / reuse / recovery, then the fixture live run.
+  Delete the replaced `pipeline/Invoke-VendorAuditPrePass.*` step for each node as it lands
+  (V10-V14 in the vendor-prepass task series); no wrapper.
+
+### Phase 8 -- native evidence chain (E03-E10)
+
+- E03 `02-native-sast` (clang-tidy, cppcheck, CSA in `audit-native`; expect the seeded hit),
+  E04 `02-ir-capture`, E05 `02-ir-link` + `02-ir-facts`, E06 `02-debug-symbol-index`,
+  E07 `02-binary-triage` (after the M02 image decision), E08 `02-binary-cfg` +
+  `02-binary-intelligence-ingest`, E09 `02-test-execution` (`make check`; the first job to declare
+  a `target-execution` capability requirement, so B11 gets its first grant record and its
+  qualification), E10 `02-test-result-ingest` + `02-test-coverage-ingest`.
+- Done when: each accepted on the fixture; IR facts name `greet` and `main`; test ingest records
+  one passing test.
+
+### Phase 9 -- intelligence ingests and the standards gate (D05-D08, S01)
+
+- D05-D08 and `02-api-collection-intelligence-ingest`: on the fixture these are zero-input
+  (`README.md` only) and must end accepted-empty or `SKIPPED` with receipts -- the skip paths are
+  the test.
+- `02-standards-source-ingest` (S01) is blocked on the G02/G03 human gates yet is a required
+  input of `02-evidence-assembly`. Decision needed before phase 10: either resolve G02/G03, or
+  add `decision-pending` to that edge's `allowed_skip_reasons` for fixture qualification only,
+  recorded in the parity manifest as a gap.
+
+### Phase 10 -- assembly rendezvous (F01, F02; first Dagster consumer of C01/C02/B15)
+
+- F01 evidence-index enrichment over the accepted step-4 outputs.
+- F02 `02-evidence-assembly`: a wait-all rendezvous (C02) over the `02-*` set expressed as a pool
+  specification (C01), running under the B15 pools -- which also closes B15's owed live step 8
+  and takes C01/C02 from unit level to qualified.
+- Done when: `02-evidence-assembly` accepted on the fixture with a terminal-instances manifest
+  listing every node and its state.
+
+### Phase 11 -- close-out
+
+- Parity manifest: every step-4 capability `implemented_and_qualified` or a declared gap;
+  regenerate the four views; `docs/design-parity/design-parity-completion-plan.md` D1-D3 checked.
+- `docs/processes/evidence-collection.md`: the step-4 runbook (fixture commands, expected states,
+  how to read the assembly manifest); update `engagement-start.md` so step 4 is no longer a fork.
+- Q02 (real supplied discovery/build chain) then runs the same graph on the first real target.
+
 ## Workstream B Batch 8 checkpoint (2026-09-19)
 
 - [x] Add fully resolved immutable registry handoffs and bounded run-owned input hashes.
