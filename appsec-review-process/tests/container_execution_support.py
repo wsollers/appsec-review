@@ -85,7 +85,8 @@ def runtime(**over) -> ce.ContainerRuntime:
     fields = {
         "docker_executable": defaults["docker_executable"] or Path(sys.executable).resolve(),
         "docker_host": None, "images_dir": ce.IMAGES_DIR, "host_flavor": defaults["host_flavor"],
-        "container_user": defaults["container_user"] if defaults["container_user"] != "0:0" else "10001:10001",
+        "container_user": (defaults["container_user"] if ce._USER_RE.match(defaults["container_user"])
+                           else "10001:10001"),
         "source_snapshot_sha256": SNAPSHOT, "registry_ceiling": None, "clock": lambda: NOW,
         "cancel": threading.Event(),
     }
@@ -97,11 +98,12 @@ def run(rt: ce.ContainerRuntime, attempt_root: Path, req, **ids):
     return ce.run_container(rt, **{**IDS, **ids}, attempt_root=attempt_root, request=req)
 
 
-def host_facts() -> dict:
-    """The integrator's host facts the verification path needs for the target-mount rule: the same
-    two fields of the runtime that run_container reads."""
-    rt = runtime()
-    return {"host_flavor": rt.host_flavor, "docker_host": rt.docker_host}
+def host_facts(rt: ce.ContainerRuntime | None = None) -> dict:
+    """The integrator's host facts the verification path needs: the same four fields of the
+    runtime that run_container reads for the mount rule and for the docker argv."""
+    rt = rt or runtime()
+    return {"host_flavor": rt.host_flavor, "docker_host": rt.docker_host,
+            "docker_executable": rt.docker_executable, "container_user": rt.container_user}
 
 
 def verify(attempt_root: Path, req, **over) -> list[str]:
