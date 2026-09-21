@@ -23,6 +23,8 @@ IDS = {"run_id": RUN, "job_id": JOB, "attempt_id": ATTEMPT}
 SNAPSHOT = "sha256:" + "a" * 64
 NOW = "2026-09-20T12:00:00Z"
 TEMPLATE = "04-owasp-validation-worklist"
+PRODUCER_TEMPLATE = "02-dev-project-discovery"      # persona developer-engineer
+PRODUCER_IDS = {"run_id": "run-b14", "job_id": "job-producer", "attempt_id": "attempt-producer"}
 # Never echoed: hostile prompt, evidence and invoker text carry this marker and every message,
 # result and envelope is searched for it.
 MARKER = "zq-hostile-marker"
@@ -147,18 +149,40 @@ class Workspace:
         value.setdefault("permission_fingerprint_sha256", decision["fingerprint_material"]["sha256"])
         return json.loads(json.dumps(value))
 
-    def reviewing(self, role: str = "verify", **producer_over) -> dict:
-        """A reviewing request that reads one producer's output, independent of it."""
-        target = self.data / "producer" / "claims.json"
-        target.parent.mkdir(exist_ok=True)
-        target.write_bytes(json.dumps({"claims": [], "comment": INJECTION}).encode("utf-8"))
-        producer = {"run_id": RUN, "job_id": "job-producer", "attempt_id": "attempt-producer",
-                    "request_sha256": "sha256:" + "b" * 64, "persona_id": "developer-engineer",
-                    "model": deepcopy(OTHER_MODEL)}
-        producer.update(deepcopy(producer_over))
-        return self.request(invocation_role=role, producers=[producer], readable_inputs=[
-            self.input("producer/claims.json", "producer_output", producer["request_sha256"]),
-            self.input("evidence/source.json")])
+    def produce(self, name: str | None = None, *, template: str = PRODUCER_TEMPLATE, model=None,
+                ids=None, invoker=None) -> dict:
+        """Actually runs a producing invocation in a second attempt root beneath the readable root,
+        so a reviewer pins a real ``invocation-result.json`` and real output bytes."""
+        model, ids = deepcopy(model or OTHER_MODEL), dict(ids or PRODUCER_IDS)
+        name = name or f"producer-{len(list(self.data.glob('producer-*'))) + 1}"
+        attempt = self.data / name
+        attempt.mkdir()
+        limits = ceiling(template)
+        request = self.request(**ids, persona=composition_block(template), model=model,
+                               allowed_claim_classes=list(limits["allowed"]),
+                               prohibited_claim_classes=list(limits["prohibited"]),
+                               permission=permission(job_id=ids["job_id"], run_id=ids["run_id"]))
+        runtime = self.runtime(allowed_models=(MODEL, OTHER_MODEL, model),
+                               **({"invoker": invoker} if invoker is not None else {}))
+        result = pi.run_invocation(runtime, **ids, attempt_root=attempt, request=request)
+        return {"name": name, "request": request, "result": pi.thaw(result)}
+
+    def reviewing(self, role: str = "verify", *, produced: dict | None = None, declared: dict | None = None,
+                  output: str | None = None, **request_over) -> dict:
+        """A reviewing request over a producer that really ran. ``produced`` changes what the
+        producer was; ``declared`` changes only what the request says about it."""
+        made = self.produce(**(produced or {}))
+        result, base = made["result"], made["name"] + "/"
+        producer = {field: deepcopy(result[field]) for field in
+                    ("run_id", "job_id", "attempt_id", "request_sha256", "persona_id", "model")}
+        producer.update(deepcopy(declared or {}))
+        named = producer["request_sha256"]
+        self.producer_result_path = base + "logs/persona/" + pi.RESULT_FILE
+        inputs = [self.input(self.producer_result_path, "producer_result", named),
+                  self.input(output or base + "outputs/persona/notes/fixture-note.json", "producer_output", named),
+                  self.input("evidence/source.json")]
+        return self.request(**{"invocation_role": role, "producers": [producer], "readable_inputs": inputs,
+                               **request_over})
 
     def runtime_fields(self, **over) -> dict:
         fields = {

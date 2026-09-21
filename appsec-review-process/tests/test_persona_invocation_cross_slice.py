@@ -110,6 +110,20 @@ class OwaspHandoffAsReadableInputTests(unittest.TestCase):
         manifest = json.loads((self.ws.attempt / "outputs" / "persona" / pi.MANIFEST_FILE).read_text(encoding="utf-8"))
         self.assertEqual(manifest["claims"][0]["citations"][0]["path"], relative)
 
+    def test_a_handoff_is_not_a_producer_result(self):
+        request = self.ws.reviewing()
+        named = request["producers"][0]["request_sha256"]
+        relative = self.handoff_path.relative_to(self.fixture.data).as_posix()
+        request["readable_inputs"][0] = {"root": "owasp-run-data", **support.file_pin(self.handoff_path, relative),
+                                         "role": "producer_result", "producer_request_sha256": named}
+        request["budget"]["input_byte_limit"] = 4 * 1024 * 1024
+        roots = {"run-data": self.ws.data, "owasp-run-data": self.fixture.data}
+        with self.assertRaises(pi.PersonaRequestError) as caught:
+            self.ws.run(request, self.ws.runtime(readable_roots=roots))
+        self.assertIn("producers[0]: its producer result", str(caught.exception))
+        self.assertNotIn(self.handoff["handoff_id"], str(caught.exception))
+        self.assertEqual(list(self.ws.attempt.iterdir()), [])
+
     def test_the_handoff_is_not_an_invoker_manifest_and_not_a_request(self):
         def as_manifest(manifest, root, package):
             return self.handoff
@@ -160,6 +174,18 @@ class ContainerAttemptAsEvidenceTests(unittest.TestCase):
                                          input_fingerprint="sha256:" + "0" * 64, resume_command=None)
         self.assertEqual((envelope["worker_kind"], envelope["acceptance_status"]), ("persona", "NOT_ACCEPTED"))
         self.assertNotIn(MARKER, json.dumps(envelope))
+
+    def test_a_container_result_is_not_a_producer_result(self):
+        """Both are canonical, self-hashed, OK-capable result records; only one is a persona result."""
+        request = self.ws.reviewing()
+        named = request["producers"][0]["request_sha256"]
+        request["readable_inputs"][0] = self.ws.input("container-attempt/logs/container/container-result.json",
+                                                      "producer_result", named)
+        with self.assertRaises(pi.PersonaRequestError) as caught:
+            self.ws.run(request)
+        self.assertIn("producers[0]: its producer result fails the invocation-result schema", str(caught.exception))
+        self.assertNotIn(MARKER, str(caught.exception))
+        self.assertEqual(list(self.ws.attempt.iterdir()), [])
 
     def test_a_container_result_is_neither_a_persona_result_nor_an_invoker_manifest(self):
         container = pi.thaw(self.container_result)

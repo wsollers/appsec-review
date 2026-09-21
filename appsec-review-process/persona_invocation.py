@@ -77,6 +77,7 @@ COMPOSITION_KINDS: tuple[tuple[str, str, str, str], ...] = (
 )
 
 REVIEW_ROLES = ("verify", "refute", "judge")
+PRODUCER_ROLES = ("producer_output", "producer_result")
 BUDGET_BOUNDS: Mapping[str, tuple[int, int]] = MappingProxyType({
     "input_byte_limit": (1, 64 * 1024 * 1024),
     "input_unit_limit": (1, 2_000_000),
@@ -417,9 +418,11 @@ def independence_errors(request: Mapping[str, Any]) -> list[str]:
     role, producers = request["invocation_role"], request["producers"]
     reads = [entry["producer_request_sha256"] for entry in request["readable_inputs"]
              if entry["role"] == "producer_output"]
+    results = [entry["producer_request_sha256"] for entry in request["readable_inputs"]
+               if entry["role"] == "producer_result"]
     if role not in REVIEW_ROLES:
-        if producers or reads:
-            errors.append("a producing invocation cannot name producers or read producer output")
+        if producers or reads or results:
+            errors.append("a producing invocation cannot name producers or read producer output or results")
         return errors
     if not producers or len(producers) > MAX_PRODUCERS:
         errors.append(f"a reviewing invocation must name 1..{MAX_PRODUCERS} producer invocations")
@@ -428,6 +431,9 @@ def independence_errors(request: Mapping[str, Any]) -> list[str]:
         errors.append("producers repeat a request hash")
     if set(reads) != set(named):
         errors.append("every producer must be read, and every producer output must name a declared producer")
+    if sorted(results) != sorted(named):
+        errors.append("a reviewing invocation must carry exactly one producer_result input for each declared "
+                      "producer, and none for anything else")
     for index, producer in enumerate(producers):
         if (producer["run_id"], producer["job_id"], producer["attempt_id"]) == (
                 request["run_id"], request["job_id"], request["attempt_id"]):
@@ -437,6 +443,57 @@ def independence_errors(request: Mapping[str, Any]) -> list[str]:
         if producer["model"]["family"] == request["model"]["family"]:
             errors.append(f"self-verification: producers[{index}] is the same model family")
         errors.extend(model_errors(producer["model"], f"producers[{index}].model"))
+    return errors
+
+
+def producer_binding_errors(request: Mapping[str, Any], inputs: tuple) -> list[str]:
+    """Binds each declared producer to the bytes of that producer's own ``invocation-result.json``.
+
+    The bytes are data: bounded, UTF-8, one reading per object, inside the result schema, in the
+    canonical byte form, self-consistent (``result_sha256``) and ``OK``. The independence rule is
+    applied to the values READ FROM THOSE BYTES; the declared producer entry must then equal them,
+    and every ``producer_output`` input must be an output that result lists (sha256 and size). A
+    producer may itself be a reviewing invocation. Fixed text: nothing read from the bytes is echoed.
+    Results are unsigned, so this binds a declaration to bytes the integrator pinned, not to an
+    authenticated producer."""
+    errors: list[str] = []
+    for index, producer in enumerate(request["producers"]):
+        label = f"producers[{index}]"
+        named = producer["request_sha256"]
+        raw = next(item.data for item in inputs
+                   if item.role == "producer_result" and item.producer_request_sha256 == named)
+        if len(raw) > MAX_RESULT_BYTES:
+            errors.append(f"{label}: its producer result is larger than the adapter ever writes")
+            continue
+        try:
+            result = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
+        except (ValueError, RecursionError):
+            errors.append(f"{label}: its producer result is not UTF-8 JSON with one reading")
+            continue
+        if validate_document(result, RESULT_SCHEMA):
+            errors.append(f"{label}: its producer result fails the invocation-result schema")
+            continue
+        if raw != canonical_bytes(result) or result["result_sha256"] != result_sha256(result):
+            errors.append(f"{label}: its producer result is not canonical or does not match its result_sha256")
+            continue
+        if result["execution_status"] != "OK" or result["cause"] is not None:
+            errors.append(f"{label}: its producer result is not OK; only an OK invocation has output to review")
+            continue
+        if (result["run_id"], result["job_id"], result["attempt_id"]) == (
+                request["run_id"], request["job_id"], request["attempt_id"]):
+            errors.append(f"self-verification: the result of {label} is this attempt")
+        if result["persona_id"] == request["persona"]["persona_id"]:
+            errors.append(f"self-verification: the result of {label} is the same persona")
+        if result["model"]["family"] == request["model"]["family"]:
+            errors.append(f"self-verification: the result of {label} is the same model family")
+        for field in ("run_id", "job_id", "attempt_id", "request_sha256", "persona_id", "model"):
+            if result[field] != producer[field]:
+                errors.append(f"{label}.{field} is not what its producer result states")
+        listed = {(entry["sha256"], entry["bytes"]) for entry in result["outputs"]}
+        for position, item in enumerate(inputs):
+            if (item.role == "producer_output" and item.producer_request_sha256 == named
+                    and (item.sha256, len(item.data)) not in listed):
+                errors.append(f"readable_inputs[{position}] is not an output that the result of {label} lists")
     return errors
 
 
@@ -500,8 +557,9 @@ def request_errors(request: Any, *, run_id: str, job_id: str, attempt_id: str,
         if entry["bytes"] < 0:
             errors.append(f"readable_inputs[{index}].bytes is negative")
         total += max(entry["bytes"], 0)
-        if (entry["role"] == "producer_output") != (entry["producer_request_sha256"] is not None):
-            errors.append(f"readable_inputs[{index}].producer_request_sha256 is required exactly for producer output")
+        if (entry["role"] in PRODUCER_ROLES) != (entry["producer_request_sha256"] is not None):
+            errors.append(f"readable_inputs[{index}].producer_request_sha256 is required exactly for "
+                          "producer output and producer results")
     if total > budget["input_byte_limit"]:
         errors.append("unbounded context: the prompt and readable inputs exceed budget.input_byte_limit")
     errors.extend(independence_errors(request))
@@ -663,6 +721,9 @@ def resolve_request(request: Any, *, run_id: str, job_id: str, attempt_id: str, 
         seen.add(identity)
         inputs.append(ReadableInput(entry["root"], entry["path"], entry["role"], entry["sha256"],
                                     entry["producer_request_sha256"], data))
+    errors = producer_binding_errors(request, tuple(inputs))
+    if errors:
+        raise PersonaRequestError("persona request rejected: " + "; ".join(errors))
     decision = request["permission"]["decision"]
     fingerprint = pc.fingerprint_material(decision["decision"], decision["capabilities"])["sha256"]
     inputs_sha = _sha(request["readable_inputs"])
@@ -1037,6 +1098,7 @@ def run_invocation(runtime: PersonaRuntime, *, run_id: str, job_id: str, attempt
                 "run_id": run_id, "job_id": job_id, "attempt_id": attempt_id,
                 "request_sha256": resolved.request_sha256, "package_sha256": resolved.package_sha256,
                 "invocation_role": request["invocation_role"], "invoker_id": request["invoker_id"],
+                "persona_id": request["persona"]["persona_id"],
                 "prompt_sha256": request["outer_prompt"]["sha256"],
                 "composition_sha256": resolved.composition_sha256, "model": request["model"],
                 "permission_fingerprint_sha256": resolved.permission_fingerprint_sha256,
@@ -1160,6 +1222,7 @@ def verify_invocation_result(attempt_root: Path, *, run_id: str, job_id: str, at
         "run_id": run_id, "job_id": job_id, "attempt_id": attempt_id,
         "request_sha256": resolved.request_sha256, "package_sha256": resolved.package_sha256,
         "invocation_role": request["invocation_role"], "invoker_id": request["invoker_id"],
+        "persona_id": request["persona"]["persona_id"],
         "prompt_sha256": request["outer_prompt"]["sha256"],
         "composition_sha256": resolved.composition_sha256, "model": request["model"],
         "permission_fingerprint_sha256": resolved.permission_fingerprint_sha256,

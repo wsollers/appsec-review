@@ -207,7 +207,8 @@
               "handoff",
               "evidence",
               "reference",
-              "producer_output"
+              "producer_output",
+              "producer_result"
             ]
           },
           "producer_request_sha256": {

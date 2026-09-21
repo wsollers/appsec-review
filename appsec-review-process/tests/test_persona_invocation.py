@@ -613,43 +613,220 @@ class IndependenceTests(Case):
                 shutil.rmtree(self.ws.attempt)
                 self.ws.attempt.mkdir()
 
-    def test_each_independence_condition_is_enforced_alone(self):
+    def test_each_declared_independence_condition_is_enforced_alone(self):
+        """An honest declaration of a dependent producer is refused by the pure request check."""
+        same_family = {**support.OTHER_MODEL, "family": support.MODEL["family"]}
         cases = (
-            ({"persona_id": "owasp-validator"}, r"self-verification: producers\[0\] is the same persona"),
-            ({"model": {**support.OTHER_MODEL, "family": support.MODEL["family"]}},
-             r"self-verification: producers\[0\] is the same model family"),
-            ({"model": deepcopy(support.MODEL)}, "same model family"),
-            ({"job_id": support.JOB, "attempt_id": support.ATTEMPT}, r"self-verification: producers\[0\] is this attempt"),
-            ({"model": {**support.OTHER_MODEL, "snapshot": "latest"}}, r"producers\[0\].model names a moving alias"),
+            ({"template": support.TEMPLATE}, "self-verification: producers[0] is the same persona"),
+            ({"model": same_family}, "self-verification: producers[0] is the same model family"),
+            ({"model": support.MODEL}, "self-verification: producers[0] is the same model family"),
+            ({"ids": support.IDS}, "self-verification: producers[0] is this attempt"),
         )
-        for over, pattern in cases:
-            with self.subTest(pattern=pattern):
-                self.rejected(self.ws.reviewing(**over), pattern)
+        for produced, message in cases:
+            with self.subTest(message=message):
+                request = self.ws.reviewing(produced=produced)
+                self.assertIn(message, pi.request_errors(request, **support.IDS))
+                self.rejected(request, re.escape(message))
+        alias = self.ws.reviewing(declared={"model": {**support.OTHER_MODEL, "snapshot": "latest"}})
+        self.rejected(alias, r"producers\[0\].model names a moving alias")
 
     def test_a_reviewer_must_name_and_read_every_producer_and_a_producer_names_none(self):
         golden = self.ws.reviewing()
+        self.assertEqual([e["role"] for e in golden["readable_inputs"]],
+                         ["producer_result", "producer_output", "evidence"])
         without = deepcopy(golden)
         without["producers"] = []
         self.rejected(without, "must name 1..64 producer invocations")
         unread = deepcopy(golden)
-        unread["readable_inputs"] = unread["readable_inputs"][1:]
+        del unread["readable_inputs"][1]
         self.rejected(unread, "every producer must be read")
         relabelled = deepcopy(golden)
-        relabelled["readable_inputs"][0].update(role="evidence", producer_request_sha256=None)
+        relabelled["readable_inputs"][1].update(role="evidence", producer_request_sha256=None)
         self.rejected(relabelled, "every producer must be read")
         undeclared = deepcopy(golden)
-        undeclared["readable_inputs"][0]["producer_request_sha256"] = OTHER_SHA
+        undeclared["readable_inputs"][1]["producer_request_sha256"] = OTHER_SHA
         self.rejected(undeclared, "every producer output must name a declared producer")
         unnamed = deepcopy(golden)
-        unnamed["readable_inputs"][0]["producer_request_sha256"] = None
-        self.rejected(unnamed, "required exactly for producer output")
+        unnamed["readable_inputs"][1]["producer_request_sha256"] = None
+        self.rejected(unnamed, "required exactly for producer output and producer results")
         twice = deepcopy(golden)
         twice["producers"].append(deepcopy(twice["producers"][0]))
         self.rejected(twice, "producers repeat a request hash")
         producing = deepcopy(golden)
         producing["invocation_role"] = "produce"
-        self.rejected(producing, "a producing invocation cannot name producers or read producer output")
+        self.rejected(producing, "a producing invocation cannot name producers or read producer output or results")
 
+    def test_a_producer_result_is_required_exactly_once_per_producer_and_nowhere_else(self):
+        golden = self.ws.reviewing()
+        pattern = "exactly one producer_result input for each declared producer"
+        missing = deepcopy(golden)
+        del missing["readable_inputs"][0]
+        self.rejected(missing, pattern)
+        relabelled = deepcopy(golden)
+        relabelled["readable_inputs"][0]["role"] = "producer_output"      # still read, no longer a result
+        self.rejected(relabelled, pattern)
+        duplicate = deepcopy(golden)
+        copy = self.ws.data / "copy-of-result.json"
+        copy.write_bytes(self.ws.data.joinpath(*self.ws.producer_result_path.split("/")).read_bytes())
+        duplicate["readable_inputs"].append(self.ws.input("copy-of-result.json", "producer_result",
+                                                          golden["producers"][0]["request_sha256"]))
+        self.rejected(duplicate, pattern)
+        orphan = deepcopy(golden)
+        orphan["readable_inputs"].append(self.ws.input("copy-of-result.json", "producer_result", OTHER_SHA))
+        self.rejected(orphan, pattern)
+        unnamed = deepcopy(golden)
+        unnamed["readable_inputs"][0]["producer_request_sha256"] = None
+        self.rejected(unnamed, "required exactly for producer output and producer results")
+        on_producer = self.ws.request()
+        on_producer["readable_inputs"].append(self.ws.input("copy-of-result.json", "producer_result", OTHER_SHA))
+        self.rejected(on_producer, "a producing invocation cannot name producers or read producer output or results")
+        for parameter in inspect.signature(pi.producer_binding_errors).parameters.values():
+            self.assertIs(parameter.default, inspect.Parameter.empty)
+
+    def test_a_reviewer_may_review_a_reviewer(self):
+        first = self.ws.reviewing("verify")
+        attempt = self.ws.data / "producer-verify"
+        attempt.mkdir()
+        ids = {"run_id": support.RUN, "job_id": "job-verify", "attempt_id": "attempt-verify"}
+        first.update(ids, permission=support.permission(job_id=ids["job_id"]))
+        verified = pi.thaw(pi.run_invocation(self.ws.runtime(), **ids, attempt_root=attempt, request=first))
+        self.assertEqual((verified["invocation_role"], verified["cause"]), ("verify", None))
+        third = {"provider": "fixture-provider", "family": "fixture-family-c", "model_id": "fixture-third",
+                 "snapshot": "2026-07-01"}
+        named = verified["request_sha256"]
+        template = "02-sre-operations-topology"
+        judge = self.ws.request(
+            invocation_role="judge", model=third, persona=support.composition_block(template),
+            allowed_claim_classes=list(support.ceiling(template)["allowed"]),
+            prohibited_claim_classes=list(support.ceiling(template)["prohibited"]),
+            producers=[{f: verified[f] for f in ("run_id", "job_id", "attempt_id", "request_sha256",
+                                                 "persona_id", "model")}],
+            readable_inputs=[
+                self.ws.input("producer-verify/logs/persona/" + pi.RESULT_FILE, "producer_result", named),
+                self.ws.input("producer-verify/outputs/persona/" + pi.MANIFEST_FILE, "producer_output", named)])
+        models = (support.MODEL, support.OTHER_MODEL, third)
+        self.assertIsNone(self.ws.run(judge, self.ws.runtime(allowed_models=models))["cause"])
+        self.assertEqual(self.ws.verify(judge, allowed_models=models), [])
+
+
+class ProducerBindingTests(Case):
+    """The declared producer is bound to the bytes of that producer's own result. Every producer
+    here really ran (FixtureInvoker, a second attempt root); each case departs in one way."""
+
+    def result_file(self) -> Path:
+        return self.ws.data.joinpath(*self.ws.producer_result_path.split("/"))
+
+    def repin(self, request: dict, data: bytes) -> dict:
+        self.result_file().write_bytes(data)
+        request = deepcopy(request)
+        request["readable_inputs"][0].update(sha256=pi._bytes_sha(data), bytes=len(data))
+        return request
+
+    def test_a_dependent_producer_is_refused_whatever_the_request_declares(self):
+        same_family = {**support.OTHER_MODEL, "family": support.MODEL["family"]}
+        cases = (
+            ({"template": support.TEMPLATE}, {"persona_id": "developer-engineer"}, "is the same persona"),
+            ({"model": same_family}, {"model": deepcopy(support.OTHER_MODEL)}, "is the same model family"),
+            ({"ids": support.IDS}, {"job_id": "job-producer", "attempt_id": "attempt-producer"}, "is this attempt"),
+        )
+        for produced, declared, pattern in cases:
+            with self.subTest(pattern=pattern):
+                request = self.ws.reviewing(produced=produced, declared=declared)
+                self.assertEqual(pi.request_errors(request, **support.IDS), [], "the lie must look independent")
+                self.rejected(request, r"self-verification: the result of producers\[0\] " + pattern)
+
+    def test_each_declared_identity_field_must_equal_the_result_bytes(self):
+        edits = {"run_id": "another-run", "job_id": "another-job", "attempt_id": "another-attempt",
+                 "request_sha256": OTHER_SHA, "persona_id": "sre-engineer",
+                 "model": {**support.OTHER_MODEL, "snapshot": "2026-08-16"}}
+        for field, value in edits.items():
+            with self.subTest(field=field):
+                request = self.ws.reviewing(declared={field: value})
+                self.assertEqual(pi.request_errors(request, **support.IDS), [])
+                self.rejected(request, rf"producers\[0\]\.{field} is not what its producer result states")
+
+    def test_producer_output_must_be_an_output_the_result_lists(self):
+        request = self.ws.reviewing(output="evidence/notes.md")
+        self.rejected(request, r"readable_inputs\[1\] is not an output that the result of producers\[0\] lists")
+        golden = self.ws.reviewing()
+        note = self.ws.data.joinpath(*golden["readable_inputs"][1]["path"].split("/"))
+        note.write_bytes(note.read_bytes() + b"\n")
+        edited = deepcopy(golden)
+        edited["readable_inputs"][1].update(support.file_pin(note, golden["readable_inputs"][1]["path"]))
+        self.rejected(edited, "is not an output that the result")
+
+    def test_a_producer_that_did_not_end_ok_cannot_be_reviewed(self):
+        for invoker, cause in ((support.Raising(RuntimeError("x")), "INVOKER_EXCEPTION"),
+                               (support.Raising(pi.InvokerUnavailable("x")), "INVOKER_UNAVAILABLE")):
+            with self.subTest(cause=cause):
+                request = self.ws.reviewing(produced={"invoker": invoker}, output="evidence/notes.md")
+                self.assertEqual(json.loads(self.result_file().read_text(encoding="utf-8"))["cause"], cause)
+                self.rejected(request, r"producers\[0\]: its producer result is not OK")
+
+    def test_a_tampered_producer_result_is_refused_with_and_without_a_reseal(self):
+        golden = self.ws.reviewing()
+        original = self.result_file().read_bytes()
+        result = json.loads(original)
+        edits = {"run_id": "another-run", "job_id": "another-job", "attempt_id": "another-attempt",
+                 "request_sha256": OTHER_SHA, "persona_id": "sre-engineer",
+                 "model": {**support.OTHER_MODEL, "snapshot": "2026-08-16"},
+                 "outputs": result["outputs"][:1], "execution_status": "FAILED", "cause": "TIMEOUT"}
+        for field, value in edits.items():
+            for reseal in (False, True):
+                with self.subTest(field=field, reseal=reseal):
+                    edited = {**deepcopy(result), field: value}
+                    if reseal:
+                        edited["result_sha256"] = pi.result_sha256(edited)
+                    expected = (r"does not match its result_sha256" if not reseal else
+                                r"is not OK" if field in ("execution_status", "cause") else
+                                r"is not an output that the result" if field == "outputs" else
+                                rf"producers\[0\]\.{field} is not what its producer result states")
+                    self.rejected(self.repin(golden, pi.canonical_bytes(edited)), expected)
+        with self.subTest(edit="not re-pinned"):
+            self.result_file().write_bytes(pi.canonical_bytes({**result, "claim_count": 9}))
+            self.rejected(golden, r"readable_inputs\[0\]: bytes on disk")
+        self.result_file().write_bytes(original)
+        self.assertIsNone(self.ws.run(golden)["cause"])
+
+    def test_bytes_that_are_not_one_canonical_result_are_refused_and_never_echoed(self):
+        golden = self.ws.reviewing()
+        golden["budget"]["input_byte_limit"] = pi.MAX_RESULT_BYTES + 65536
+        result = json.loads(self.result_file().read_bytes())
+        repeated = pi.canonical_bytes(result).replace(b"{\n", b'{\n  "cause": "' + MARKER.encode() + b'",\n', 1)
+        cases = (
+            (json.dumps(result).encode(), "is not canonical"),
+            (pi.canonical_bytes(result) + b" ", "is not canonical"),
+            (b"\xff\xfe" + MARKER.encode(), "is not UTF-8 JSON with one reading"),
+            (("{not json " + MARKER).encode(), "is not UTF-8 JSON with one reading"),
+            (b"[" * 200000 + b"]" * 200000, "is not UTF-8 JSON with one reading"),
+            (repeated, "is not UTF-8 JSON with one reading"),
+            (pi.canonical_bytes({**result, "note": MARKER}), "fails the invocation-result schema"),
+            (pi.canonical_bytes({k: v for k, v in result.items() if k != "persona_id"}),
+             "fails the invocation-result schema"),
+            (b"[]\n", "fails the invocation-result schema"),
+        )
+        for data, pattern in cases:
+            with self.subTest(pattern=pattern, size=len(data)):
+                self.rejected(self.repin(golden, data), r"producers\[0\]: its producer result " + pattern)
+        padded = pi.canonical_bytes(result) + b" " * pi.MAX_RESULT_BYTES
+        self.rejected(self.repin(golden, padded), "is larger than the adapter ever writes")
+
+    def test_the_verifier_shares_the_binding(self):
+        request = self.ws.reviewing()
+        self.assertIsNone(self.ws.run(request)["cause"])
+        self.assertEqual(self.ws.verify(request), [])
+        lying = deepcopy(request)
+        lying["producers"][0]["persona_id"] = "sre-engineer"
+        errors = self.assert_rejected(lying)
+        self.assertIn("producers[0].persona_id is not what its producer result states", errors[0])
+        original = self.result_file().read_bytes()
+        self.result_file().write_bytes(original + b" ")
+        self.assert_rejected(request)
+        self.result_file().write_bytes(original)
+        self.assertEqual(self.ws.verify(request), [])
+
+
+class SelfVerifiedResultTests(Case):
     def test_a_result_that_claims_to_verify_itself_fails_closed(self):
         def own(manifest, root, package):
             manifest["verified_invocations"] = [package.request_sha256]
@@ -1116,7 +1293,8 @@ class VerifierTests(Case):
             "schema": "appsec-review/persona-invocation-result/2.0", "adapter": pi.ADAPTER_ID + "x",
             "independence_rule": pi.INDEPENDENCE_ID + "x", "run_id": "other-run", "job_id": "other-job",
             "attempt_id": "other-attempt", "request_sha256": OTHER_SHA, "package_sha256": OTHER_SHA,
-            "invocation_role": "verify", "invoker_id": "other-invoker", "prompt_sha256": OTHER_SHA,
+            "invocation_role": "verify", "invoker_id": "other-invoker", "persona_id": "developer-engineer",
+            "prompt_sha256": OTHER_SHA,
             "composition_sha256": OTHER_SHA, "model": deepcopy(support.OTHER_MODEL),
             "permission_fingerprint_sha256": OTHER_SHA, "readable_inputs_sha256": OTHER_SHA, "input_bytes": 1,
             "execution_status": "FAILED", "cause": "TIMEOUT", "outcome": "timed_out", "invoker_stopped": False,

@@ -150,13 +150,30 @@ only (`root`, `path`, `sha256`, `locator`); the suspected text itself has no fie
 Rule id `appsec-review/persona-independence/1.0`, written into every result.
 
 - `invocation_role` is `produce`, `verify`, `refute` or `judge`.
-- A **producing** invocation names no producer and reads no input with role `producer_output`.
+- A **producing** invocation names no producer and reads no input with role `producer_output` or
+  `producer_result`.
 - A **reviewing** invocation (`verify`, `refute`, `judge`) names 1 to 64 producers, each
   `{run_id, job_id, attempt_id, request_sha256, persona_id, model}`. Every producer must be read
   through at least one `producer_output` input, and every such input must name a declared producer.
+- A reviewing invocation carries **exactly one `producer_result` input for each declared producer**
+  (its `producer_request_sha256` names that producer) and none for anything else. Its bytes are that
+  producer's own `invocation-result.json`. There is no optional path: a reviewing request without
+  it is rejected before anything is created.
+- `resolve_request` (shared by the adapter and the verifier) reads those pinned bytes as data: at
+  most 4 MiB, UTF-8 JSON in which no object repeats a key, inside the result schema, in the
+  canonical byte form, `result_sha256` matching, `execution_status` `OK` and no cause.
 - For each producer, the reviewer is refused when it is **the same attempt**, **the same persona**,
-  or **the same model family**. The request is rejected before anything is created, with a
-  `self-verification:` message naming the position.
+  or **the same model family**, judged on the values **read from the producer result bytes**
+  (`self-verification: the result of producers[i] ...`). The pure request check applies the same
+  rule to the declared values first, so an honest declaration of a dependent producer never reaches
+  the disk.
+- The declared `run_id`, `job_id`, `attempt_id`, `request_sha256`, `persona_id` and `model` must then
+  each **equal** the producer result, and every `producer_output` input naming that producer must
+  match, by sha256 and size, an entry of that result's `outputs`.
+- A producer may be of any role. A `judge` may review a `verify` result; what matters is that the
+  producer ended `OK`, because only an `OK` result lists output.
+- Every failure is a `PersonaRequestError` with fixed text; nothing read from a producer result is
+  echoed.
 - A result whose `verified_invocations` contains its own request hash, or any entry at all from a
   producing invocation, is `SELF_VERIFICATION`. An entry that is not a declared producer is
   `UNDECLARED_CITATION`.
@@ -242,8 +259,8 @@ optional argument and returns fixed-text errors. It trusts no record:
    count one. Each JSON file must be canonical and inside its closed schema.
 3. **Every file that is hashed is also read and cross-checked.** `request.json` must equal the
    expected request. Every field of `invocation.json` is re-derived from the request, the result or
-   the output root. The result's identity fields are re-derived from the request, the registry and
-   the inputs.
+   the output root. The result's identity fields, `persona_id` included, are re-derived from the
+   request, the registry and the inputs.
 4. The permission gate is re-evaluated at `started_at`: the cause is `PERMISSION_DENIED` exactly
    when that evaluation is not `GRANTED`.
 5. For a returned invocation the output root is scanned again. The scan must equal the tree
@@ -284,9 +301,12 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
 - A Python thread cannot be killed. After a timeout the invoker may still be running
   (`invoker_stopped: false`); its late writes are never accepted because the result is already
   terminal and lists no outputs.
-- Producer identities are declared by the integrator. This adapter does not open the producer's
-  attempt; C02's terminal-instance manifest is where they must come from. A producer output that an
-  integrator labels `evidence` is not recognised as producer output.
+- A declared producer is bound to the bytes of a producer result that the integrator pinned, not
+  to an authenticated producer. Results are unsigned: whoever can write a canonical result with a
+  matching `result_sha256` can state any persona or model. This adapter does not open the producer's
+  attempt or re-run its verifier, so C02 must pin only results that passed
+  `verify_invocation_result`. A producer output that an integrator labels `evidence` is not
+  recognised as producer output.
 - Requiring a different model family for every reviewer is stricter than the panel-level minimum
   in `design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
@@ -308,7 +328,8 @@ Shared surfaces, to be done sequentially by whoever owns them. None were edited 
    private attempt root per instance, the exact input list, a budget and the model identity; use
    `fingerprint_material` in the instance fingerprint; pass `PersonaRuntime.cancel` from the pool.
 2. C02 wait-all: treat `invocation-result.json` as terminal only after `verify_invocation_result`
-   passes; build a reviewer's `producers` from verified producer results, never from a request.
+   passes; build a reviewer's `producers` and its `producer_result` inputs from those verified
+   results, never from a request.
 3. T10 dispatch: map a T06 handoff to a request. The handoff travels as a readable input with role
    `handoff`; its tool contract, budget and prohibited claim classes must be translated by trusted
    code into pins, never read by the adapter.
