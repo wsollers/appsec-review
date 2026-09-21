@@ -27,14 +27,14 @@ the attempt is parsed. Every other contract ignores `orchestration`.
 
 | Verifier argument | Contracts | Authoritative source |
 |---|---|---|
-| `attempt_root` | all | The caller's argument. `validate_job_output` requires its directory name to equal the envelope's `attempt_id`. |
-| `expected_header.run_id` | V07, V05 | Envelope `run_id`, which `validate_job_output` binds to the caller's `expected_run_id`; the attempt must also sit inside the run directory of that name. |
-| `expected_header.attempt_id` | V07, V05 | Envelope `attempt_id`, bound to the attempt directory's name. |
-| `expected_header.job_id` | V07, V05 | The owning module's policy table (`CONTRACT_POLICIES[...]["job_id"]`, V07 `CONTRACTS[...]["job_id"]`). The envelope's `job_id` must equal it, or the contract is being presented by the wrong job. |
+| `attempt_root` | all | The caller's argument. `validate_job_output` requires the envelope's `attempt_id` to equal its directory name. |
+| `expected_header.run_id` | V07, V05 | The caller's `expected_run_id` (the envelope must restate it; the envelope's own value is never passed on). The attempt must also sit inside the run directory of that name. |
+| `expected_header.attempt_id` | V07, V05 | The attempt directory's name (the envelope must restate it). |
+| `expected_header.job_id` | V07, V05 | The owning module's policy table (`CONTRACT_POLICIES[...]["job_id"]`, V07 `CONTRACTS[...]["job_id"]`). The caller's `expected_job_id` must equal it, or the contract is being presented by the wrong job. |
 | `expected_header.source_snapshot_sha256` | V07, V05 | `OrchestrationFacts.source_snapshot_sha256`. **The worker envelope has no such field** (V07's docstring says it does), and no run-level record defines how the intake snapshot identity is derived, so the caller states it. See "Known limits". |
 | header of the result document | all nine, incl. V04 | V04's verifier takes no expected header: it proves the documents agree with EACH OTHER. After any verifier accepts, the dispatch compares the result's `run_id`, `job_id`, `attempt_id` and `source_snapshot_sha256` with the facts above. |
 | `expected_dagster_run_id` | all | `OrchestrationFacts.dagster_run_id`: the orchestrator run that PRODUCED the attempt. Not in the envelope. |
-| `node_status` | all | Envelope `execution_status`. |
+| `node_status` | all | Envelope `execution_status`, the one fact with no other source. It is passed on only when it is one of the closed `NODE_STATUSES`; otherwise the verifier is not run and the attempt is refused. |
 | `declared_tool_ids` | all | `VENDOR_PREPASS_NODES` in the validator, pinned from the adopted ADR-0010 fixture (`docs/proposals/vendor-prepass/job-nodes.proposal.json`). No job template or tooling profile registers these tools yet (V10-V12); a test fails on drift from the fixture and from every suite's goldens. |
 | `permitted_node_statuses` | all | V04: `CONTRACT_POLICIES[...]["permitted_node_statuses"]`. V05: `NEVER_SKIPS`. V07 exports no table: `tool_instance_shapes.NODE_STATUSES`. A test ties all nine to the fixture's `permitted_terminal_statuses`. `SKIPPED` additionally needs the graph edge (below). |
 | `on_unhandled`, `limits` | all | The validator is the receipt's CONSUMER: `REDACTION_POLICY = "refuse"`, `REDACTION_LIMITS = evidence_redaction.DEFAULT_LIMITS`. An attempt sealed under `withhold` is rejected. |
@@ -60,11 +60,35 @@ For the nine contracts `validate_job_output`:
 3. **only if that returned nothing** parses `status.json` (`_status_errors`) and the result
    artifact (`validate_contract_result`: schema, `_secret_errors`, `_claim_class_errors`).
 
-If the verifier, or the assembly of its facts, reports anything, step 3 does not run: no file of
-the attempt is parsed by the validator and only the verifier's non-echoing errors describe the
-attempt. The generic schema check echoes offending values, which is why it must not see a
+If step 2 reports anything, step 3 does not run and no file of the attempt is parsed by the
+validator. The generic schema check echoes offending values, which is why it must not see a
 document the receipt has not cleared. The three older contracts keep their path exactly:
 `_status_errors`, then `validate_contract_result`.
+
+### No value of the attempt is quoted, the envelope included
+
+The envelope IS the attempt's `result.json`, so step 1 handles producer-controlled values too. For
+a vendor-prepass job (the caller's `expected_job_id`) or contract:
+
+- an artifact problem names the artifact's INDEX: `$.artifacts[3].path: is missing or not a regular
+  file`, `... repeats an earlier artifact`, `... escapes the attempt or is reached through a link`,
+  `... is not a normalized POSIX relative path`, `$.artifacts[3].sha256: is not the sha256 of the
+  file`, `$.artifacts[3].media_type: is empty`;
+- an envelope schema problem names the location and the keyword: `$.worker_kind: violates
+  worker-result-envelope.schema.json (enum)`. The envelope schema is closed, so a location holds
+  only the schema's own property names and indexes; an unexpected property's NAME is not quoted;
+- the cross-field state messages are kept only when they interpolate nothing of the envelope (a
+  closed table, derived from `validate_worker_result` by a test); an unauthorized skip reason is
+  `$.skip_reason: the skip reason is not authorized for this dependency edge`;
+- an unknown contract id is `registry output contract does not exist`, and the SKIPPED edge
+  message names the caller's expected job;
+- the verifiers quote "what the caller expected", so they are given the caller's run, job and
+  attempt directory name, never the envelope's restatement (previous section).
+
+Every other contract keeps its messages, which other suites pin. `Staged.validate` in the test
+module asserts on every validation that no planted value, the envelope marker included, is in any
+error; `EnvelopeEchoTests` plants the marker in every string field, property name and artifact
+field and checks both `validate_job_output` and the `Blocked` text of `publish_validated`.
 
 ## What fails closed today
 
@@ -104,6 +128,8 @@ consumer (`--consumer-job 02-evidence-assembly`).
 - `publish_job_output.persist_terminal_current` writes a canonical `status.json` with `job`,
   `started_at`, `ended_at` and `fingerprint`. All three verifiers reject unregistered status
   fields, so a vendor-prepass worker cannot publish through that helper as it stands.
+- `publish_validated` raises `ValueError` (not `Blocked`) quoting the envelope's `attempt_id` when
+  it is not an identifier; that is the publisher's pre-existing behaviour for every contract.
 - V07 exports no claim-class or permitted-status table; its three claim classes are typed in the
   validator and tied to the ADR fixture and the records by a test.
 

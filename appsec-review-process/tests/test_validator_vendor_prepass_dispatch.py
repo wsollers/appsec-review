@@ -17,7 +17,9 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import inspect
+import itertools
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -65,7 +67,10 @@ V07_GOLDEN = {"container-image-inventory": "container-ok-with-gaps", "mobile-sas
 SKIPPED_GOLDEN = {v04.IAC_CONTRACT_ID: "iac-skipped", "container-image-inventory": "container-skipped",
                   "mobile-sast": "mobile-skipped", "binary-hardening": "binary-skipped"}
 OTHER_SHA = "sha256:" + "c0ffee" * 10 + "abcd"
-PLANTED = list(dict.fromkeys([*t04.PLANTED, *t05.PLANTED, OTHER_SHA]))
+# What a producer plants in its own ENVELOPE (result.json) and in the names of files it adds. It is
+# a legal identifier, contract id and path segment, so it gets as far as a value of its kind can.
+MARKER = "zq" + "planted-7f3a-by-the-producer"
+PLANTED = list(dict.fromkeys([*t04.PLANTED, *t05.PLANTED, OTHER_SHA, MARKER]))
 
 
 def setUpModule():
@@ -805,7 +810,7 @@ class RequiredArgumentTests(unittest.TestCase):
             for bad in (None, "", 7):
                 errors = validate_vendor_prepass_attempt(staged.attempt, record, **{**full, name: bad})
                 self.assertEqual(len(errors), 1)
-                self.assertIn("the worker envelope carries no usable", errors[0])
+                self.assertIn("the caller and the worker envelope supply no usable", errors[0])
 
     def test_every_orchestration_fact_is_required_and_checked(self):
         full = {"dagster_run_id": "dagster-run-1", "source_snapshot_sha256": "sha256:" + "a" * 64, "now": NOW}
@@ -1016,6 +1021,103 @@ class JobContractBindingTests(unittest.TestCase):
         self.assertEqual(validator._job_contract_errors("job-nobody-registered", "evidence-index", {"jobs": {}}, REGISTRY), [])
         for hostile in ("../x", "", None, 7, "a/b"):
             self.assertEqual(validator._job_contract_errors(hostile, "evidence-index", {"jobs": {}}, REGISTRY), [])
+
+
+class EnvelopeEchoTests(unittest.TestCase):
+    """Review P2: the envelope is the attempt's result.json. Its values were quoted by the artifact
+    loop and by the envelope schema errors, before the verifier ran."""
+
+    STRING_FIELDS = ("schema", "run_id", "job_id", "attempt_id", "worker_kind", "execution_status",
+                     "acceptance_status", "input_fingerprint", "output_contract", "started_at", "finished_at",
+                     "summary", "skip_reason", "cause", "superseded_by_attempt_id")
+
+    def mutations(self, envelope: dict):
+        self.assertEqual({key for key, value in envelope.items() if isinstance(value, str) or value is None},
+                         set(self.STRING_FIELDS))  # every string-capable top-level field is covered
+        for field in self.STRING_FIELDS:
+            yield field, {**envelope, field: MARKER}
+        yield "unexpected property name", {**envelope, MARKER: MARKER}
+        yield "gaps[]", {**envelope, "gaps": [*envelope["gaps"], MARKER, 7]}
+        yield "retry.resume_command", {**envelope, "retry": {"allowed": False, "resume_command": MARKER}}
+        yield "retry property name", {**envelope, "retry": {**envelope["retry"], MARKER: MARKER}}
+        for key in ("path", "sha256", "media_type", MARKER):
+            artifacts = deepcopy(envelope["artifacts"])
+            artifacts[1][key] = MARKER
+            yield f"artifacts[1].{key.replace(MARKER, '<name>')}", {**envelope, "artifacts": artifacts}
+        for spelling in (f"outputs/{MARKER}", f"../{MARKER}", f"/{MARKER}", f"outputs/./{MARKER}", f"{MARKER}\\x", ""):
+            artifacts = deepcopy(envelope["artifacts"])
+            artifacts[0]["path"] = spelling
+            yield "artifacts[0].path spelling", {**envelope, "artifacts": artifacts}
+        yield "duplicate artifact", {**envelope, "artifacts": [*envelope["artifacts"], envelope["artifacts"][0]]}
+
+    def test_no_envelope_value_reaches_an_error_of_either_entry_point(self):
+        for contract_id in NINE:
+            staged = stage(self, contract_id)
+            for name, envelope in self.mutations(staged.envelope()):
+                with self.subTest(contract=contract_id, field=name):
+                    with bindings(staged.world):
+                        errors = staged.validate(envelope)  # asserts the invariant over PLANTED, MARKER included
+                    if name not in ("started_at", "finished_at", "summary", "artifacts[1].media_type"):  # free text
+                        self.assertTrue(errors)
+                    publish.mark_attempt_started(staged.base, staged.attempt_id, FINGERPRINT)
+                    (staged.attempt / "result.json").unlink(missing_ok=True)
+                    atomic_json(staged.attempt / "result.json", envelope)
+                    try:
+                        with bindings(staged.world):
+                            publish.publish_validated(staged.base, staged.attempt, staged.attempt / "result.json",
+                                                      FINGERPRINT, expected_run_id=staged.run_id,
+                                                      expected_job_id=staged.job_id, orchestration=staged.facts)
+                    except publish.Blocked as blocked:
+                        self.assertNotIn(MARKER, str(blocked))
+                    (staged.attempt / "result.json").unlink()
+
+    def test_the_reviewers_two_cases_name_the_index_and_the_location(self):
+        staged = stage(self, LEAK_INVENTORY_CONTRACT)
+        envelope = staged.envelope()
+        envelope["artifacts"][0]["path"] = f"outputs/{MARKER}"
+        self.assertIn("$.artifacts[0].path: is missing or not a regular file", staged.validate(envelope))
+        errors = staged.validate(staged.envelope(worker_kind=MARKER))
+        self.assertIn("$.worker_kind: violates worker-result-envelope.schema.json (enum)", errors)
+
+    def test_an_unauthorized_skip_reason_and_a_foreign_job_are_not_quoted(self):
+        staged = stage(self, v04.IAC_CONTRACT_ID, golden="iac-skipped")
+        errors = staged.validate(staged.envelope(skip_reason=MARKER, job_id=MARKER), consumer_job_id="02-evidence-assembly")
+        self.assertIn("$.skip_reason: the skip reason is not authorized for this dependency edge", errors)
+        self.assertIn("job_id does not match the owning job", errors)
+
+    def test_the_value_free_message_table_is_exactly_what_the_envelope_validator_says(self):
+        """Derived from `validate_worker_result` over every state combination: a new or reworded
+        cross-field message fails here instead of silently becoming the generic text."""
+        base = terminal_envelope(run_id="r", job_id="j", attempt_id="a", worker_kind="persona", execution_status="OK",
+                                 acceptance_status="CURRENT", input_fingerprint=FINGERPRINT, output_contract="c",
+                                 started_at="s", finished_at="f", summary="x", artifacts=[])
+        statuses = ("OK", "OK_WITH_GAPS", "SKIPPED", "BLOCKED", "FAILED", "CANCELED", "UNRESOLVED")
+        seen: set[str] = set()
+        for status, acceptance, gaps, cause, skip, superseded, retry in itertools.product(
+                statuses, ("CURRENT", "NOT_ACCEPTED", "SUPERSEDED"), ([], ["g"]), (None, "c"), (None, "s"),
+                (None, "a", "b"), ((False, None), (True, None), (True, "cmd"), (False, "cmd"))):
+            envelope = {**base, "execution_status": status, "acceptance_status": acceptance, "gaps": gaps, "cause": cause,
+                        "skip_reason": skip, "superseded_by_attempt_id": superseded,
+                        "retry": {"allowed": retry[0], "resume_command": retry[1]}}
+            raw = validator.validate_worker_result(envelope, allowed_skip_reasons=None)
+            self.assertEqual([message.partition(": ")[2] for message in raw],
+                             [message.partition(": ")[2] for message in validator._envelope_errors_without_values(raw)])
+            seen.update(message.partition(": ")[2] for message in raw)
+        self.assertEqual(seen, set(validator._VALUE_FREE_ENVELOPE_DETAILS))
+
+    def test_the_other_contracts_keep_their_messages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt = Path(tmp) / "attempt-1"
+            attempt.mkdir()
+            envelope = terminal_envelope(
+                run_id="run-1", job_id="02-legacy", attempt_id="attempt-1", worker_kind=MARKER, execution_status="OK",
+                acceptance_status="CURRENT", input_fingerprint=FINGERPRINT, output_contract="evidence-index",
+                started_at="s", finished_at="f", summary="legacy",
+                artifacts=[{"path": f"outputs/{MARKER}", "sha256": "0" * 64, "media_type": "application/json"}])
+            errors = validate_job_output(attempt, envelope, FINGERPRINT, expected_run_id="run-1",
+                                         expected_job_id="02-legacy", orchestration=NO_ORCHESTRATION_FACTS)
+            self.assertIn(f"artifact is missing or not a regular file: outputs/{MARKER}", errors)
+            self.assertTrue(any(error.startswith(f"$.worker_kind: {MARKER!r} not in enum") for error in errors))
 
 
 if __name__ == "__main__":

@@ -692,9 +692,12 @@ def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any]
                                     orchestration: Any) -> list[str]:
     """Assemble every caller fact from outside the attempt and run the contract's own verifier.
 
-    Every argument is required. `run_id`, `job_id`, `attempt_id` and `node_status` are the worker
-    ENVELOPE's values (which `validate_job_output` binds to its own expected run, job and attempt
-    directory); `orchestration` is `OrchestrationFacts` or the explicit `NO_ORCHESTRATION_FACTS`.
+    Every argument is required. `run_id` and `job_id` are the caller's EXPECTED run and job,
+    `attempt_id` the attempt directory's name (`validate_job_output` requires the worker envelope to
+    restate all three and passes its own, never the envelope's); `node_status` is the envelope's
+    `execution_status`, passed only when it is one of the closed `NODE_STATUSES`. The verifiers
+    quote these as "what the caller expected", so none may be a free value of the attempt.
+    `orchestration` is `OrchestrationFacts` or the explicit `NO_ORCHESTRATION_FACTS`.
     An empty list means the verifier ran and accepted the attempt. Anything that prevents the
     verifier from running is an error: there is no schema-only fallback. Messages quote only
     values the caller expected."""
@@ -709,7 +712,7 @@ def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any]
     for name, value in (("run_id", run_id), ("job_id", job_id), ("attempt_id", attempt_id),
                         ("execution_status", node_status)):
         if not isinstance(value, str) or not value:
-            return [prefix + f"the worker envelope carries no usable {name}"]
+            return [prefix + f"the caller and the worker envelope supply no usable {name}"]
     if job_id != node["job_id"]:
         return [prefix + f"the contract belongs to job {node['job_id']!r} and the envelope names another job"]
     attempt_root = Path(attempt_root).absolute()
@@ -885,6 +888,47 @@ def _job_contract_errors(job_id: Any, contract_id: Any, graph: dict[str, Any], r
     return []
 
 
+# The envelope IS the attempt's result.json: every value in it is the producer's. For a
+# vendor-prepass job or contract no envelope value reaches a message; a location (the envelope
+# schema is closed, so a location holds only its own property names and indexes) and the rule do.
+_ENVELOPE_SCHEMA_RULES = (("missing required property", "required"), ("unexpected property", "additionalProperties"),
+                          ("expected const", "const"), ("expected type", "type"), ("not in enum", "enum"),
+                          ("does not match pattern", "pattern"))
+_ENVELOPE_LOCATION_RE = re.compile(r"\$(?:\.[a-z_]{1,40}|\[[0-9]{1,9}\])*\Z")
+# The cross-field messages of `worker_result.validate_worker_result` that interpolate nothing, or
+# only a status the message's own condition drew from a closed set. A test derives this set from
+# that function, so a new or reworded message cannot silently become the generic one.
+_VALUE_FREE_ENVELOPE_DETAILS = frozenset({
+    "SKIPPED requires an explicit edge-authorized reason", "only SKIPPED may declare a skip reason",
+    *(f"{status} requires at least one explicit gap" for status in ("OK_WITH_GAPS", "UNRESOLVED")),
+    *(f"{status} requires an explicit cause" for status in ("BLOCKED", "FAILED", "CANCELED", "UNRESOLVED")),
+    *(f"{status} cannot declare a failure cause" for status in ("OK", "OK_WITH_GAPS")),
+    *(f"{status} cannot be CURRENT" for status in ("BLOCKED", "FAILED", "CANCELED", "UNRESOLVED")),
+    "SUPERSEDED requires the replacement attempt", "an attempt cannot supersede itself",
+    "only SUPERSEDED may name a replacement attempt", "retryable results require a resume command",
+    "non-retryable results cannot declare a resume command"})
+
+
+def _envelope_errors_without_values(messages: list[str]) -> list[str]:
+    quiet: list[str] = []
+    for message in messages:
+        location, _, detail = message.partition(": ")
+        if not _ENVELOPE_LOCATION_RE.match(location):
+            location = "$"
+        rule = next((name for marker, name in _ENVELOPE_SCHEMA_RULES if marker in detail), None)
+        if detail in _VALUE_FREE_ENVELOPE_DETAILS:
+            text = detail
+        elif rule is not None:
+            text = f"violates worker-result-envelope.schema.json ({rule})"
+        elif detail.endswith(" is not authorized for this dependency edge"):
+            text = "the skip reason is not authorized for this dependency edge"
+        else:
+            text = "violates the worker-result state rules"
+        if f"{location}: {text}" not in quiet:
+            quiet.append(f"{location}: {text}")
+    return quiet
+
+
 def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
                         expected_input_fingerprint: str,
                         expected_run_id: str | None = None,
@@ -912,13 +956,17 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
     if expected_job_id is None or envelope.get("job_id") != expected_job_id:
         errors.append("job_id does not match the owning job")
     contract_id = envelope.get("output_contract")
+    # `quiet`: the attempt belongs to a vendor-prepass job (the CALLER's expected job) or claims a
+    # vendor-prepass contract. Then no value of the envelope is quoted below.
+    quiet = (isinstance(contract_id, str) and contract_id in VENDOR_PREPASS_NODES) or any(
+        node["job_id"] == expected_job_id for node in VENDOR_PREPASS_NODES.values())
     if not isinstance(contract_id, str) or not re.fullmatch(r"[0-9a-z][0-9a-z-]*", contract_id):
         errors.append("invalid output contract identity")
         contract = None
     else:
         contract_path = Path(registry_root) / "output-contracts" / f"{contract_id}.json"
         if not contract_path.is_file():
-            errors.append(f"registry output contract does not exist: {contract_id}")
+            errors.append("registry output contract does not exist" + ("" if quiet else f": {contract_id}"))
             contract = None
         else:
             contract = read_json(contract_path)
@@ -930,10 +978,12 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
     errors.extend(_job_contract_errors(envelope.get("job_id"), contract_id, graph, Path(registry_root)))
     allowed_skips: set[str] | None = None
     if envelope.get("execution_status") == "SKIPPED":
+        # A mismatch with the expected job is already an error above; the edge is the caller's.
         allowed_skips, edge_errors = _skip_reasons(
-            graph, envelope.get("job_id"), consumer_job_id)
+            graph, expected_job_id if quiet else envelope.get("job_id"), consumer_job_id)
         errors.extend(edge_errors)
-    errors.extend(validate_worker_result(envelope, allowed_skip_reasons=allowed_skips))
+    envelope_errors = validate_worker_result(envelope, allowed_skip_reasons=allowed_skips)
+    errors.extend(_envelope_errors_without_values(envelope_errors) if quiet else envelope_errors)
     if envelope.get("input_fingerprint") != expected_input_fingerprint:
         errors.append("stale input fingerprint: envelope does not match the staged input fingerprint")
     if envelope.get("attempt_id") != attempt_root.name:
@@ -946,26 +996,32 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
                 continue
             value = artifact.get("path")
             relative, path_error = _relative_artifact_path(value)
+            where = f"$.artifacts[{index}]"  # `quiet`: the index, never the path
             if path_error:
-                errors.append(f"$.artifacts[{index}].path: {path_error}")
+                errors.append(f"{where}.path: " + ("is not a normalized POSIX relative path" if quiet else path_error))
                 continue
             if value in artifact_paths:
-                errors.append(f"duplicate artifact path: {value}")
+                errors.append(f"{where}.path: repeats an earlier artifact" if quiet else
+                              f"duplicate artifact path: {value}")
                 continue
             artifact_paths[value] = artifact
             try:
                 path = beneath(attempt_root, attempt_root / relative)
             except ValueError as exc:
-                errors.append(f"artifact {value}: {exc}")
+                errors.append(f"{where}.path: escapes the attempt or is reached through a link" if quiet else
+                              f"artifact {value}: {exc}")
                 continue
             if not path.is_file():
-                errors.append(f"artifact is missing or not a regular file: {value}")
+                errors.append(f"{where}.path: is missing or not a regular file" if quiet else
+                              f"artifact is missing or not a regular file: {value}")
                 continue
             actual = file_hash(path)
             if artifact.get("sha256") != actual:
-                errors.append(f"artifact hash mismatch: {value}")
+                errors.append(f"{where}.sha256: is not the sha256 of the file" if quiet else
+                              f"artifact hash mismatch: {value}")
             if not artifact.get("media_type"):
-                errors.append(f"artifact media_type is empty: {value}")
+                errors.append(f"{where}.media_type: is empty" if quiet else
+                              f"artifact media_type is empty: {value}")
     if contract:
         for required in contract.get("required_files", []):
             _, path_error = _relative_artifact_path(required)
@@ -976,14 +1032,22 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
         # ORDER IS A SAFETY PROPERTY for the vendor-prepass contracts. Their verifier checks the
         # redaction receipt against the published bytes before it parses anything, so it runs
         # FIRST; if it (or the assembly of its caller facts) reports anything, no file of the
-        # attempt is parsed here at all: status.json and the result artifact stay unread and
-        # only the verifier's own, non-echoing errors are returned for the attempt.
+        # attempt is parsed here at all: status.json and the result artifact stay unread. What is returned then is the
+        # verifier's non-echoing errors plus the envelope errors above, which for these contracts
+        # quote a location or an artifact index and never an envelope value (`quiet`).
         verifier_errors: list[str] = []
         if contract.get("contract_id") in VENDOR_PREPASS_NODES:
+            # The verifiers quote what THE CALLER expected, so what they are given must be the
+            # caller's: the expected run and job and the attempt directory's name, never the
+            # envelope's restatement of them (a disagreement is already an error above). The
+            # node status has no source but the envelope, so it is passed only when it is one of
+            # the closed set of node statuses.
+            status = envelope.get("execution_status")
             verifier_errors = validate_vendor_prepass_attempt(
-                attempt_root, contract, run_id=envelope.get("run_id"),
-                job_id=envelope.get("job_id"), attempt_id=envelope.get("attempt_id"),
-                node_status=envelope.get("execution_status"), orchestration=orchestration)
+                attempt_root, contract, run_id=expected_run_id, job_id=expected_job_id,
+                attempt_id=attempt_root.name,
+                node_status=status if isinstance(status, str) and status in NODE_STATUSES else None,
+                orchestration=orchestration)
             errors.extend(verifier_errors)
         if not verifier_errors:
             errors.extend(_status_errors(attempt_root, contract, envelope))
