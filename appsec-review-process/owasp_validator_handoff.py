@@ -206,7 +206,7 @@ def _load_batching(run_id: str, reference: dict[str, Any]) -> tuple[
 
 def _load_config(reference: dict[str, Any]) -> tuple[dict[str, Any], str, str, str]:
     relative = _relative(reference["path"])
-    path = beneath(REPO_ROOT, REPO_ROOT.joinpath(*relative.parts))
+    path = owasp_batching.tracked_file(relative, REPO_ROOT, ROOT)
     if path.parent.absolute() != CONFIG_ROOT.absolute() or not path.is_file():
         raise ValueError("handoff config must be directly under the tracked OWASP handoff config directory")
     config = read_json(path)
@@ -249,7 +249,7 @@ def _load_config(reference: dict[str, Any]) -> tuple[dict[str, Any], str, str, s
             if set(tool["actions"]).intersection(config["prohibited_actions"]):
                 raise ValueError(f"{profile_id}: allowed action conflicts with prohibition")
     prompt_ref = _relative(config["prompt_path"])
-    prompt_path = beneath(REPO_ROOT, REPO_ROOT.joinpath(*prompt_ref.parts))
+    prompt_path = owasp_batching.tracked_file(prompt_ref, REPO_ROOT, ROOT)
     if prompt_path.parent.absolute() != CONFIG_ROOT.absolute() or not prompt_path.is_file():
         raise ValueError("handoff prompt must be directly under the tracked handoff config directory")
     prompt_bytes = prompt_path.read_bytes()

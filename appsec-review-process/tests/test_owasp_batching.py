@@ -278,5 +278,37 @@ class OwaspBatchingTests(unittest.TestCase):
             owasp_batching.build(self.run_id, self.request_path)
 
 
+class TrackedFileLayoutTests(unittest.TestCase):
+    """Linux baseline 2026-09-20: a request names its config by repository path, but the Dagster
+    code-server mounts this tree as /opt/process, so REPO_ROOT/appsec-review-process does not exist
+    there and T05-T09 could not run in the container. The identifier must resolve in both layouts."""
+
+    def test_a_repository_path_resolves_when_the_process_directory_has_another_name(self):
+        import tempfile
+        from pathlib import Path, PurePosixPath
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as base:
+            process = Path(base) / "process"          # the container's name for this directory
+            (process / "config" / "owasp-batching").mkdir(parents=True)
+            target = process / "config" / "owasp-batching" / "default-v1.json"
+            target.write_text("{}", encoding="utf-8")
+            (Path(base) / "data").mkdir()
+            (Path(base) / "data" / "x.json").write_text("{}", encoding="utf-8")
+            with mock.patch.object(owasp_batching, "ROOT", process), \
+                    mock.patch.object(owasp_batching, "REPO_ROOT", Path(base)):
+                found = owasp_batching.tracked_file(
+                    PurePosixPath("appsec-review-process/config/owasp-batching/default-v1.json"))
+                self.assertEqual(found.resolve(), target.resolve())
+                self.assertFalse((Path(base) / "appsec-review-process").exists())
+                other = owasp_batching.tracked_file(PurePosixPath("data/x.json"))
+                self.assertEqual(other.resolve(), (Path(base) / "data" / "x.json").resolve())
+
+    def test_the_host_layout_still_resolves_the_tracked_default(self):
+        from pathlib import PurePosixPath
+        found = owasp_batching.tracked_file(PurePosixPath("appsec-review-process/config/owasp-batching/default-v1.json"))
+        self.assertTrue(found.is_file())
+        self.assertEqual(found.parent.absolute(), owasp_batching.CONFIG_ROOT.absolute())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

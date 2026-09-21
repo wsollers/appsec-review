@@ -55,6 +55,27 @@ def _relative(value: str) -> PurePosixPath:
     return path
 
 
+PROCESS_DIRECTORY = "appsec-review-process"
+
+
+def tracked_file(relative: PurePosixPath, repo_root: Path | None = None, process_root: Path | None = None) -> Path:
+    """Resolve a repository-relative identifier used inside a request or a config.
+
+    Requests name tracked files by their repository path (``appsec-review-process/config/...``). On
+    a host checkout that is ``REPO_ROOT/appsec-review-process/...``. In the Dagster code-server the
+    same tree is mounted as ``/opt/process``, so ``REPO_ROOT/appsec-review-process`` does not exist
+    and every T05+ worker failed there. The identifier keeps its meaning: when the repository root
+    has no directory of that name, a path whose first segment is the process directory is resolved
+    against the process root, whatever it is called where the code runs. Callers pass their own
+    roots so that a module (or a test) that relocates them is honoured."""
+    repo_root = REPO_ROOT if repo_root is None else repo_root
+    process_root = ROOT if process_root is None else process_root
+    if (relative.parts and relative.parts[0] == PROCESS_DIRECTORY
+            and not (repo_root / PROCESS_DIRECTORY).is_dir()):
+        return beneath(process_root, process_root.joinpath(*relative.parts[1:]))
+    return beneath(repo_root, repo_root.joinpath(*relative.parts))
+
+
 def _run_file(data_root: Path, relative: str, expected_hash: str) -> Path:
     ref = _relative(relative)
     path = beneath(data_root, data_root.joinpath(*ref.parts))
@@ -138,7 +159,7 @@ def _load_applicability(run_id: str, reference: dict[str, Any]) -> dict[str, Any
 
 def _load_batch_config(reference: dict[str, Any]) -> tuple[dict[str, Any], str]:
     relative = _relative(reference["path"])
-    path = beneath(REPO_ROOT, REPO_ROOT.joinpath(*relative.parts))
+    path = tracked_file(relative)
     if path.parent.absolute() != CONFIG_ROOT.absolute() or not path.is_file():
         raise ValueError("batch config must be a tracked file directly under the OWASP batching config directory")
     config = read_json(path)
