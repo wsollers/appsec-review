@@ -18,9 +18,10 @@ The information base for the current architecture, partitioned by component. Sta
 | `decisions/` | Architecture decision records. | A decision's rationale matters. |
 | `proposals/` | Per-workbench task series and proposal fixtures (some are test-pinned; do not move them). | Working a workbench batch. |
 | `continuation-prompts/` | Session handoffs. Start from the newest dated one. | Continuing earlier work. |
+| `processes/` | How an engagement runs: starting one (`engagement-start.md`, draft under discussion); lifecycle and evidence discipline to follow. | Operating or changing the process. |
 | `TODO/` | Independent task chunks that finish this reorganization and fill the missing buckets. | Picking up docs work. |
 
-Not yet written (see `TODO/`): `review-lanes/`, `images-and-tools/`, `processes/`.
+Not yet written (see `TODO/`): `review-lanes/`, `images-and-tools/`; `processes/` has its first draft.
 
 Rules: a dated status log or engagement record belongs in `continuation-prompts/` or nowhere; a
 spec that a test ties to code says so in its first paragraph; every relative link must resolve.

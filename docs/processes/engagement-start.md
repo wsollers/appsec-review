@@ -1,0 +1,99 @@
+# Starting an engagement -- process flow and requirements
+
+Status: **DRAFT for the 2026-09 architecture discussion.** Describes what exists today, marks
+what is designed but unbuilt, and lists the decisions the discussion must settle. Once agreed it
+becomes the normative "how an engagement starts" doc and the diary parts move to `docs/TODO/`.
+
+An *engagement* is one review of one target revision under one business goal, scope, budget and
+permission set. Everything it produces is owned by one run id under
+`appsec-review-process/runs/<run_id>/` (`docs/dagster/run-data-and-job-execution.md`).
+
+## 1. Flow
+
+```mermaid
+flowchart TD
+  P0[Preconditions: Dagster stack up, images pinned, target mounted read-only] --> S1
+  S1[1. Create Linux-owned run and stage the artifact manifest] --> S2
+  S2[2. engagement_workflow: config -> intake -> 3 preparation branches -> validated join] --> G1{native code in scope?}
+  G1 -- yes --> S3[3. build_discovery -> build_execution: one sandboxed configure, compile database]
+  G1 -- no --> S4
+  S3 --> S4[4. Evidence collection: deterministic scanners, no judgment]
+  S4 --> S5[5. evidence_index: accepted searchable evidence]
+  S5 --> S6[6. LLM lanes over accepted evidence: characterization, threat model, specialist review]
+  S6 --> S7[7. Refutation, independent verification, scoring, synthesis, report / SARIF]
+```
+
+Built today: 1, 2, 3, 5 and the `critical_findings_sarif` publisher, all run-owned and validated.
+Step 4 runs only through the legacy `pipeline/engagement_job.*` path into `scratch/` and is then
+imported into the run; its run-owned replacement (the `02-*` graph nodes) is declared but 48 of the
+51 graph jobs have no worker. Steps 6-7 exist as the tracked prompt harness (`appsec-review-process/
+<lane>/`) dispatched by hand-off files, not as graph workers.
+
+## 2. What the operator must supply (step 1)
+
+`stage_artifacts.py` is the intake contract. Everything else is derived.
+
+| Input | Flag | Required | Notes |
+|---|---|---|---|
+| Run id | `--run-id` | yes | From `run_process.py --start`, created **inside the code-server** so the run is Linux-owned. |
+| Project name | `--project` | yes | Short id; names the run's directories and the target mount. |
+| Target path | `--target` | yes | The **container** path of a read-only bind mount declared in `orchestrator/dagster/compose.yaml` (e.g. `/targets/freeciv21`). A host path is rejected in effect. |
+| Business goal | `--business-goal` | yes | One sentence; the decision the review must inform. Lanes report against it. |
+| Target platforms | `--platform` (repeat) | yes | Describes the target (`Linux`, `Windows`, `Android`, ...), not the execution OS. |
+| Budget class | `--budget` | default `probe` | `probe` / `standard` / `full` (`appsec-review-process/budget-policy.md`). |
+| Scope | `--include` / `--exclude` (repeat) | no | Path globs; intake records the classification and never silently narrows scope. |
+| Permissions | `--permission` (repeat) | default `read-source` | Default deny. `read-source` allows only the trusted static inventory worker; target execution, network, dynamic testing, ptrace, credentials, package restore and target mutation are separate capabilities (`docs/adapters/permission-capabilities.md`) granted by a named human. |
+| Execution environment | `--execution-environment` | default `local-read-only` | Use `dagster-read-only-linux` for Dagster runs. |
+| Compile database | `--compile-db` | no | Only when a trusted one already exists; otherwise `build_discovery`/`build_execution` produce it. |
+| Legacy evidence | `--engagement-output` + `--import-legacy` | no | Hash-recorded import of a `scratch/<project>-engagement` tree into `data/imports/<import_id>/`. |
+
+Not supplied by the operator and deliberately so: tool versions (pinned in images), scanner
+selection (the graph), model identity (adapter config), and anything read from the target.
+
+## 3. What each step requires and produces
+
+| Step | Job | Requires | Produces (accepted pointer) | Gate to next |
+|---|---|---|---|---|
+| 1 | `run_process.py --start`, `stage_artifacts.py` | Running stack; mounted target | `inputs/artifact-manifest.json` | Manifest validates. |
+| 2 | `engagement_workflow` (`launch_job.py --run-id <id> --wait`) | Manifest; `engagement_run_id` tag | `data/jobs/00-intake/whole/accepted.json`: source revision + dirty/untracked fingerprints, language/workspace/build/deployment families, native compile/link-recipe plan, specialist routing; `data/workflows/engagement/accepted.json` after the join | Workflow `OK`. `QUEUED`/`STARTED` are not completion. Intake passing says nothing about native build coverage. |
+| 3 | `build_discovery` then `build_execution` | Accepted intake; native families present; no current `build-discovery.md` for this exact target | Cited build requirements and command arrays (no execution); then one sandboxed configure inside the hostile-build boundary (`docs/architecture/design-v3.md` §2.2) and `compile_commands.json` when produced | Feasibility gate (ADR-0001 Tier A/B/C) recorded; a missing compile database blocks native lanes, not the engagement. |
+| 4 | today: `pipeline/engagement_job.sh` / `.ps1` outside Dagster; target: `02-*` nodes | Target checkout; images; (today) manual import afterwards | Static prepass, native pregather, `assemble`, `correlate`, `deep_confirm`, retrieval plan, `job-status.json` with explicit degraded status | Every tool records exit/duration/log; a tool that did not run is a coverage gap, never "clean". |
+| 5 | `evidence_index` | Accepted intake (+ imports) | `data/jobs/02-evidence-index/whole/accepted.json`; bounded CLI / read-only MCP retrieval (`docs/evidence/evidence-retrieval.md`) | Index is a locator, never evidence authority. |
+| 6 | lane hand-offs (`create_handoff.py`) | Accepted evidence; persona/registry composition; budget | Lane outputs under the run; component-purpose map first (`01`), then `03`.. per `process-manifest.json` | Each lane states read / covered / excluded / next. |
+| 7 | `07` -> `08` -> `09` -> `12` -> `10`; `critical_findings_sarif` | Verified claims only | Report inputs; accepted SARIF | High/Critical needs lane `09`; nothing promotes a tool hit to a finding. |
+
+## 4. Preconditions (environment)
+
+- Docker with the Dagster stack (`orchestrator/dagster/compose.yaml`: PostgreSQL, code-server,
+  webserver, daemon) healthy; `python orchestrator/dagster/setup.py` after image/dependency changes.
+- Every tool image pinned by digest; digests are recorded in every manifest (`images/*/README.md`).
+- The target added as a read-only bind mount in `compose.yaml` while jobs are idle.
+- Linux or WSL2 with sources on the Linux filesystem for anything heavy (the Windows/UNC path is
+  validated but materially slower for `ir-facts` and CodeQL).
+- No network for workers unless a `fixed-network-destination` capability is granted.
+
+## 5. Decisions the discussion must settle
+
+1. **One evidence path.** Step 4 is the fork: the legacy pipeline (broad, proven, `scratch/`-owned,
+   imported after the fact) versus the run-owned `02-*` nodes (declared, contracts and validators
+   merged, workers unbuilt: M03/D09 READY, M04/M05 blocked). Do we (a) build the nodes and retire
+   `engagement_job.*` step by step (the ADR-0010 plan), or (b) wrap the legacy runner as one
+   pinned-container job now to get run ownership immediately and split later?
+2. **Where "start" ends.** Is an engagement "started" after step 2 (intake accepted), after step 5
+   (evidence indexed), or after `01-component-characterization`? This decides what `full_review`
+   must run before any LLM lane and what the go/no-go report contains.
+3. **Operator surface.** Today: three commands in two shells plus a compose edit per target. Target:
+   one `review_cli.py start` that creates, stages and submits, with the target mount declared in a
+   tracked engagement file rather than by editing `compose.yaml`?
+4. **Permission grants.** Who issues them, where the grant record lives per run, and whether `probe`
+   budget implies `read-source` only.
+5. **Windows host.** Keep it as a validated-but-slower path, or Linux-only for orchestration with
+   Windows targets reached through mounts?
+6. **What intake must prove before native work.** Whether `build_discovery` is mandatory for every
+   native family or only when no trusted compile database is supplied.
+
+Sources: `docs/dagster/dagster-launching.md`, `docs/dagster/run-data-and-job-execution.md`,
+`docs/dagster/operations.md`, `docs/build-discovery/build-discovery-integration.md`,
+`appsec-review-process/00-intake-recovery/config.md`, `pipeline/README.md`,
+`appsec-review-process/job-graph.json` (3 of 51 jobs implemented: `00-intake`,
+`02-ossf-scorecard`, `02-evidence-index`).
