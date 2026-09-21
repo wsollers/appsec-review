@@ -736,6 +736,46 @@ class UpstreamBindingTests(unittest.TestCase):
                                 error)
 
 
+    @unittest.skipUnless(t05.CAN_SYMLINK, "this host cannot create symbolic links")
+    def test_a_linked_accepted_or_latest_pointer_is_refused_though_it_reads_as_a_valid_pointer(self):
+        """The link's target is the GENUINE pointer, moved outside the run: followed, it would be
+        accepted. One spelling per file -- the pointer is read only beneath the run root."""
+        for name in ("accepted.json", "latest.json"):
+            with self.subTest(linked=name):
+                staged = stage(self, v05.LICENSE_CONTRACT_ID)
+                self.assertEqual(staged.validate(), [])
+                pointer = staged.jobs / "02-sbom-inventory" / "whole" / name
+                moved = staged.tmp / f"moved-{name}"
+                pointer.rename(moved)
+                pointer.symlink_to(moved)
+                self.assertEqual(json.loads(pointer.read_bytes()), json.loads(moved.read_bytes()))
+                self.assertEqual(staged.validate(), ["license-inventory cannot be validated: upstream job "
+                                                     "02-sbom-inventory has no readable accepted pointer in this run"])
+
+    def test_a_pointer_whose_envelope_path_leaves_the_accepted_attempt_is_refused(self):
+        """Forged pointers with a MATCHING envelope_sha256, so only containment can refuse them: the
+        envelope of another attempt of the job (`../<attempt>/result.json`) and an absolute path."""
+        staged = stage(self, v05.LICENSE_CONTRACT_ID)
+        self.assertEqual(staged.validate(), [])
+        base = staged.jobs / "02-sbom-inventory" / "whole"
+        accepted = json.loads((base / "accepted.json").read_bytes())
+        other = base / "attempts" / "sbom-node-attempt-0000"
+        other.mkdir()
+        atomic_json(other / "result.json", {"an": "envelope of another attempt"})
+        outside = staged.tmp / "outside-result.json"
+        atomic_json(outside, {"an": "envelope outside the run"})
+        for name, spelling, target in (("sibling", f"../{other.name}/result.json", other / "result.json"),
+                                       ("absolute", str(outside.absolute()), outside)):
+            with self.subTest(envelope_path=name):
+                atomic_json(base / "accepted.json", {**accepted, "envelope_path": spelling,
+                                                     "envelope_sha256": file_hash(target)})
+                self.assertEqual(staged.validate(), ["license-inventory cannot be validated: upstream job "
+                                                     "02-sbom-inventory accepted pointer does not resolve to an "
+                                                     "unlinked attempt of this run"])
+        atomic_json(base / "accepted.json", accepted)
+        self.assertEqual(staged.validate(), [])
+
+
 class RequiredArgumentTests(unittest.TestCase):
     def test_orchestration_is_required_by_the_entry_point(self):
         staged = stage(self, LEAK_INVENTORY_CONTRACT)
