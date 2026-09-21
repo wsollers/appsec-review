@@ -29,6 +29,22 @@ SCHEMA_FILES = ("persona-invocation-request.schema.json", "persona-invoker-outpu
 SUPPORTED_KEYWORDS = {"$schema", "$id", "title", "description", "type", "required", "properties",
                       "additionalProperties", "enum", "const", "pattern", "items", "minItems", "$ref"}
 OTHER_SHA = "sha256:" + "1" * 64
+# The reviewer's exact payload (PR 32): every member alone must be refused, as must the whole.
+REVIEW_PAYLOAD = {"final_severity": "critical", "severity": "high", "cvss_score": 9.8, "is_exploitable": True,
+                  "exploitability_verdict": "yes", "verified_finding": True, "remediation_status": "fixed",
+                  "compliance_verdict": "compliant"}
+SPELLED_JSON = ({"severity": "critical"}, {"isExploitable": True}, {"CVSSScore": 9.8}, {"cvss3": "9.8"},
+                {"severity": ["critical"]}, {"outer": [{"Severity": {"level": 1}}, {"exploitability": "yes"}]},
+                {"note": "verified_finding"}, {"note": "Verified-Finding"}, {"note": " compliance score "},
+                {"observedRuntimeState": 1}, {"x_malicious.intent_y": 1}, {"note": "CVSSv3 9.8"})
+SPELLED_BODIES = ("critical_severity\n", "highSeverity\n", "exploitability_is_high\n", "e\u0301xploitable\n",
+                  "\uff45xploitable\n", "the finding/is/confirmed\n")
+UNSCANNABLE_BODIES = (b"critical\x00severity explo\x00itable\n", b"explo\x1bitable\n", b"explo\x7fitable\n",
+                      "explo\u0085itable\n", "exploit\u200bable\n", "exploit\u00adable\n", "\ufeffbenign\n",
+                      "explo\u2060itable\n", "explo\u202eitable\n", "\u0435xploitable\n", "expl\u03bfitable\n")
+SCANNABLE_BODY = ("R\u00e9sum\u00e9 na\u00efve; \u0395\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac; "
+                  "\u0440\u0443\u0441\u0441\u043a\u0438\u0439 \u0442\u0435\u043a\u0441\u0442; 5 \u03bcm;\ttab\r\n"
+                  "No severity was assessed and no class such as a verified finding is asserted here.\n")
 
 with tempfile.TemporaryDirectory() as _probe:
     SYMLINKS = support.symlinks_supported(Path(_probe))
@@ -895,6 +911,13 @@ def hostile_invokers() -> dict[str, tuple]:
         (root / "is exploitable" / "note.md").write_text("benign\n", encoding="utf-8")
         relist(manifest, root)
 
+    # PR 32 review: identifier spellings, key/value splits, claim ids and unscannable byte forms.
+    def written(name, data):
+        def change(manifest, root, package):
+            (root / "notes" / name).write_bytes(data if isinstance(data, bytes) else data.encode("utf-8"))
+            relist(manifest, root)
+        return change
+
     def binary_suffix(manifest, root, package):
         (root / "notes" / "payload.bin").write_bytes(b"MZ")
         relist(manifest, root)
@@ -960,6 +983,13 @@ def hostile_invokers() -> dict[str, tuple]:
                              set_at("usage", "output_units", value=-1),
                              set_at("claims", 0, "file", value="notes/absent.json"),
                              set_at("claims", 0, "statement", value="line one\nline two"),
+                             *[written("form.md", data) for data in UNSCANNABLE_BODIES],
+                             written("form.json", b'{"note": "explo\\u0000itable"}'),
+                             written("form.json", b'{"note": "explo\\ud800itable"}'),
+                             written("form.json", '{"explo\u200bitable": true}'),
+                             set_at("limitations", value=["exploit\u200bable"]),
+                             set_at("claims", 0, "statement", value="This is \u0435xploitable."),
+                             set_at("claims", 0, "citations", 0, "locator", value="exploit\u00adable"),
                              lambda m, r, p: m["claims"].append(deepcopy(m["claims"][0]))],
         "IDENTITY_MISMATCH": [set_at("request_sha256", value=OTHER_SHA), set_at("invoker_id", value="other-invoker"),
                               set_at("persona_id", value="developer-engineer"),
@@ -974,7 +1004,16 @@ def hostile_invokers() -> dict[str, tuple]:
                              set_at("claims", 0, "claim_class", value="invented_class"),
                              prohibited_text, prohibited_file, assertion_in_file_name,
                              assertion_in_directory_name,
-                             set_at("limitations", value=["The system is fully compliant."])],
+                             set_at("limitations", value=["The system is fully compliant."]),
+                             written("assessment.json", json.dumps(REVIEW_PAYLOAD)),
+                             *[written("one.json", json.dumps({key: value})) for key, value in REVIEW_PAYLOAD.items()],
+                             *[written("spelled.json", json.dumps(document)) for document in SPELLED_JSON],
+                             *[written("spelled.md", body) for body in SPELLED_BODIES],
+                             written("final_severity.md", "benign\n"),
+                             set_at("claims", 0, "claim_id", value="exploitable"),
+                             set_at("claims", 0, "claim_id", value="cvss-9-8-certified"),
+                             set_at("claims", 0, "claim_id", value="verified_finding-1"),
+                             set_at("claims", 0, "citations", 0, "locator", value="critical_severity")],
         "UNDECLARED_CITATION": [cite(path="evidence/unlisted.json"), cite(sha256=OTHER_SHA), cite(root="other-root"),
                                 lambda m, r, p: m["injection_suspected"].append(
                                     {"root": "run-data", "path": "secrets/env", "sha256": OTHER_SHA, "locator": "x"})],
@@ -1030,6 +1069,31 @@ class OutcomeTests(Case):
                     result = self.ws.run(request, self.ws.runtime(invoker=invoker))
                     envelope = self.check(request, result, cause, "FAILED")
                     self.assertFalse(any(a["path"].startswith("outputs/") for a in envelope["artifacts"]))
+
+    def test_legitimate_text_in_other_scripts_and_a_disclaimer_is_still_ok(self):
+        """The form rules refuse evasions, not languages: whole words in another script, accents,
+        a two-letter unit and the permitted whitespace controls all publish."""
+        def honest(manifest, root, package):
+            (root / "notes" / "prose.md").write_bytes(SCANNABLE_BODY.encode("utf-8"))
+            (root / "notes" / "counts.json").write_text(
+                json.dumps({"reviewedControls": 3, "note": SCANNABLE_BODY}), encoding="utf-8")
+            relist(manifest, root)
+        request = self.ws.request()
+        self.check(request, self.ws.run(request, self.ws.runtime(invoker=Rewriting(honest))), None, "OK")
+
+    def test_every_scanned_text_gets_the_same_normalisation(self):
+        prohibited = set(pi.BASELINE_PROHIBITED)
+        for text in ("cvss_score", "cvssScore", "CVSS-Score", "is_exploitable", "isExploitable",
+                     "critical.severity", "criticalSeverity", "HIGHSeverity", "severity: critical",
+                     "verified_finding", "Verified Finding", "verifiedFinding", "compliance-score"):
+            with self.subTest(text=text):
+                self.assertTrue(pi._asserts_prohibited([text], prohibited, []))
+                self.assertTrue(pi._asserts_prohibited([], prohibited, [text]))
+        self.assertFalse(pi._asserts_prohibited(["no verified finding is claimed"], prohibited, []))
+        self.assertTrue(pi._asserts_prohibited([], prohibited, ["no_verified_finding_claimed"]))
+        self.assertFalse(pi._asserts_prohibited(["verified_finding"], {"final_severity"}, ["verified_finding"]))
+        for text in SCANNABLE_BODY.splitlines():
+            self.assertTrue(pi.text_form_ok(text))
 
     def test_an_invoker_that_edits_the_adapters_own_log_fails_and_the_attempt_never_verifies(self):
         def edit_request_copy(manifest, root, package):

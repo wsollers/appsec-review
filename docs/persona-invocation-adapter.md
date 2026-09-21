@@ -225,7 +225,7 @@ output root. `KeyboardInterrupt` and `SystemExit` are recorded as `CANCELED` and
 | `IDENTITY_MISMATCH` | `FAILED` | the manifest names another request, invoker, persona, persona hash or model |
 | `BUDGET_EXCEEDED` | `FAILED` | more files or bytes than the budget, or reported units or tool calls over their limits |
 | `UNDECLARED_TOOL` | `FAILED` | a reported tool id the request did not allow |
-| `PROHIBITED_CLAIM` | `FAILED` | a claim class outside `allowed_claim_classes`, or text matching a lexical rule of a prohibited class |
+| `PROHIBITED_CLAIM` | `FAILED` | a claim class outside `allowed_claim_classes`, or text matching a lexical rule of a prohibited class or naming its id |
 | `UNDECLARED_CITATION` | `FAILED` | a citation that is not a declared readable input at its pinned hash, or a verified invocation that is not a declared producer |
 | `SELF_VERIFICATION` | `FAILED` | see the independence section |
 
@@ -236,16 +236,34 @@ empty directory or a name outside the path alphabet; the manifest lists a path t
 `MALFORMED_RESULT` covers: a manifest that is missing, over 1 MiB, not UTF-8 JSON, not canonical or
 outside its closed schema; a listed file that is missing; an unlisted file; a wrong size or hash; a
 suffix outside the allow-list; a file that is not UTF-8, or not JSON when named `.json`; usage that
-disagrees with bytes on disk; duplicate claim ids.
+disagrees with bytes on disk; duplicate claim ids; published text in a form that cannot be scanned
+as it is read (detail below).
 
 The first failing rule, in the fixed order of `derive_output`, names the cause. A non-`OK` result
 lists no outputs, no usage and no claim classes.
 
-Every published file is a claim surface. The lexical rules (`CLAIM_TEXT_RULES`) run over every
-claim statement, limitation and locator in the manifest and over the full text of every output
-file, JSON keys included, and over every published output path (its `-`, `_`, `.` and `/` read as
-spaces). A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last
+Every published file is a claim surface. The scanned texts are: every claim statement, limitation
+and locator in the manifest; the full text of every output file; in a JSON output every string, and
+every scalar member read together with its nearest key (`{"level": "x"}` is read as `level: x`, also
+through arrays); every published output path. JSON keys, claim ids and path segments are scanned as
+identifiers. A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last
 value while a reader of the bytes sees both, so the first would be published unchecked.
+
+One normalisation (`scan_forms`) applies to every scanned text, whatever surface it came from. The
+lexical rules (`CLAIM_TEXT_RULES`) read two forms: the NFKC text as written, and that text with
+combining marks dropped and `-`, `_`, `.`, `/`, camelCase boundaries and letter/digit boundaries read
+as spaces, so snake_case, camelCase and dotted spellings meet the same rules as prose. In addition,
+a text whose normalised form **equals** a prohibited class id (the id normalised the same way), or
+an identifier that **contains** one, is `PROHIBITED_CLAIM`. Prose that merely mentions a class id
+inside a longer sentence is not refused by that rule.
+
+Text that cannot be scanned as it is read is `MALFORMED_RESULT` (`text_form_ok`), in file bodies,
+parsed JSON keys and strings, and manifest text alike: a control character other than newline,
+carriage return and tab (NUL, the other C0 and C1 controls, U+007F); any format character (category
+Cf: zero-width space and joiners, soft hyphen U+00AD, direction overrides, and the byte-order mark,
+so a file must not start with a BOM); a lone surrogate; and a word of three or more letters that
+mixes LATIN letters with CYRILLIC or GREEK ones (a homoglyph spelling, which NFKC does not fold).
+Whole words in another script, accented letters and two-letter unit symbols are accepted.
 
 ## Result and verification
 
@@ -311,7 +329,9 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
   in `design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
 - The lexical rules are a backstop, not a classifier. They fail closed on phrasing such as a
-  quoted severity word in a summary, and they do not recognise a paraphrase.
+  quoted severity word in a summary, and they do not recognise a paraphrase, a synonym, a key and
+  value separated by more than one level of nesting, or a confusable spelling inside one script
+  family (the mixed-script rule covers LATIN with CYRILLIC or GREEK only).
 - Whoever can rewrite every file of an attempt consistently can produce another valid attempt;
   nothing here is signed. The verifier guarantees agreement between the projections and with the
   expected request, registry and inputs.

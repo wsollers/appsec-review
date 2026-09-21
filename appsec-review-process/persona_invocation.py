@@ -32,6 +32,7 @@ import stat
 import sys
 import threading
 import time
+import unicodedata
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, runtime_checkable
 
@@ -111,7 +112,7 @@ CLAIM_TEXT_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "verified_finding": (r"\b(?:finding|vulnerability)\s+(?:is\s+)?(?:exists|confirmed|established|verified)\b",
                          r"\b(?:is|are|was|were)\s+(?:a\s+)?vulnerab"),
     "final_severity": (r"\b(?:critical|high|medium|low)\s+severity\b", r"\bseverity\s*(?:is|=|:)",
-                       r"\bcvss\b"),
+                       r"\bcvss"),
     "exploitability_verdict": (r"\bexploitable\b", r"\bexploitability\s*(?:is|=|:)"),
     "compliance_verdict": (r"\b(?:is|are)\s+(?:fully\s+)?(?:compliant|certified)\b", r"\bcertified\b"),
     "remediation_status": (r"\b(?:is|was|has\s+been)\s+(?:fixed|remediated)\b",),
@@ -120,6 +121,14 @@ CLAIM_TEXT_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({
 })
 _TEXT_RULES = {name: tuple(re.compile(p, re.IGNORECASE) for p in patterns)
                for name, patterns in CLAIM_TEXT_RULES.items()}
+# One normalisation for every scanned text (paths, JSON keys and values, file bodies, claim fields):
+# identifier separators and camelCase boundaries are read as spaces, so ``cvss_score``,
+# ``isExploitable`` and ``critical-severity`` meet the same rules as prose does.
+_SEPARATORS = re.compile(r"[-_./]+")
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=[0-9])|(?<=[0-9])(?=[A-Za-z])")
+_LETTER_RUN = re.compile(r"[^\W\d_]{3,}")
+_ASCII_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_CONFUSABLE_SCRIPTS = ("CYRILLIC", "GREEK")
 
 BLOCKED_CAUSES = ("PERMISSION_DENIED", "INVOKER_UNAVAILABLE")
 OUTPUT_CAUSES = ("OUTPUT_ESCAPE", "MALFORMED_RESULT", "IDENTITY_MISMATCH", "BUDGET_EXCEEDED",
@@ -143,11 +152,13 @@ SUMMARIES: Mapping[str | None, str] = MappingProxyType({
     "CANCELED": "the invocation was canceled; its output is not accepted",
     "INVOKER_EXCEPTION": "the invoker raised; its output is not accepted",
     "OUTPUT_ESCAPE": "something outside the output root changed, or the output root holds a link, a special file or a path that leaves it",
-    "MALFORMED_RESULT": "the invoker manifest or an output file is missing, extra, oversized, not UTF-8, not canonical or fails its closed schema",
+    "MALFORMED_RESULT": ("the invoker manifest or an output file is missing, extra, oversized, not UTF-8, not canonical, "
+                         "outside its closed schema or carries text in a form that cannot be scanned"),
     "IDENTITY_MISMATCH": "the invoker manifest names a different request, invoker, persona or model",
     "BUDGET_EXCEEDED": "the output or the reported usage exceeds the required budget",
     "UNDECLARED_TOOL": "the invoker manifest reports a tool that the request did not allow",
-    "PROHIBITED_CLAIM": "the output carries a claim class that is not allowed, or text that asserts a prohibited claim",
+    "PROHIBITED_CLAIM": ("the output carries a claim class that is not allowed, or text that asserts or names a "
+                         "prohibited claim class"),
     "UNDECLARED_CITATION": "a citation or a verified invocation is not a declared readable input or producer",
     "SELF_VERIFICATION": "the output claims to verify its own invocation, or a producing invocation claims a verification",
 })
@@ -888,16 +899,60 @@ def scan_output_tree(output_root: Path, budget: Mapping[str, int]
     return "regular", sorted(records, key=lambda record: record["path"]), contents
 
 
-def _strings(value: Any):
+def _scalar_text(value: Any) -> str:
+    return value if isinstance(value, str) else json.dumps(value)
+
+
+def _json_texts(value: Any, key: str | None, prose: list[str], identifiers: list[str]) -> None:
+    """Every text a reader of a JSON output sees. A key is an identifier; a string is prose; and a
+    scalar member is also read together with its nearest key (``{"severity": "critical"}`` reads
+    ``severity: critical``), because a rule that needs both words never meets them otherwise."""
     if isinstance(value, dict):
-        for key, item in value.items():
-            yield key
-            yield from _strings(item)
+        for name, item in value.items():
+            identifiers.append(name)
+            _json_texts(item, name, prose, identifiers)
     elif isinstance(value, list):
         for item in value:
-            yield from _strings(item)
-    elif isinstance(value, str):
-        yield value
+            _json_texts(item, key, prose, identifiers)
+    else:
+        if isinstance(value, str):
+            prose.append(value)
+        if key is not None:
+            prose.append(f"{key}: {_scalar_text(value)}")
+
+
+def text_form_ok(text: str) -> bool:
+    """Published text must be scannable as it is read. Refused: control characters other than
+    newline, carriage return and tab; format characters (category Cf: zero-width space and joiners,
+    soft hyphen, byte-order mark, direction overrides); lone surrogates; and a word of three or more
+    letters that mixes LATIN with CYRILLIC or GREEK letters (a homoglyph spelling; NFKC does not fold
+    those). Whole words in another script are fine."""
+    if text.isascii():
+        return not _ASCII_CONTROL.search(text)
+    for character in set(text):
+        if character not in "\n\r\t" and unicodedata.category(character) in ("Cc", "Cf", "Cs"):
+            return False
+    for word in _LETTER_RUN.findall(unicodedata.normalize("NFKC", text)):
+        if word.isascii():
+            continue
+        scripts = {unicodedata.name(letter, "").split(" ", 1)[0] for letter in set(word)}
+        if "LATIN" in scripts and scripts & set(_CONFUSABLE_SCRIPTS):
+            return False
+    return True
+
+
+def scan_forms(text: str) -> tuple[str, ...]:
+    """The forms the lexical rules read: the NFKC text as written, and the same text with combining
+    marks dropped and ``- _ . /`` and camelCase or letter/digit boundaries read as spaces."""
+    if text.isascii():
+        return text, _SEPARATORS.sub(" ", _CAMEL.sub(" ", text))
+    written = unicodedata.normalize("NFKC", text)
+    bare = "".join(c for c in unicodedata.normalize("NFKD", written) if unicodedata.category(c) != "Mn")
+    return written, _SEPARATORS.sub(" ", _CAMEL.sub(" ", bare))
+
+
+def _words(text: str) -> str:
+    return " ".join(scan_forms(text)[1].lower().split())
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -909,9 +964,20 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return dict(pairs)
 
 
-def _asserts_prohibited(texts, prohibited: set[str]) -> bool:
+def _asserts_prohibited(texts, prohibited: set[str], identifiers=()) -> bool:
+    """True when a text matches a lexical rule of a prohibited class in either scan form, when a
+    text IS a prohibited class id, or when an identifier (a JSON key, a claim id, a path segment)
+    contains one. Class ids are compared after the same normalisation as the text."""
     rules = [rule for name in sorted(prohibited) for rule in _TEXT_RULES.get(name, ())]
-    return any(rule.search(text) for text in texts for rule in rules)
+    names = {_words(name) for name in prohibited}
+    for position, group in enumerate((texts, identifiers)):
+        for text in group:
+            if any(rule.search(form) for form in scan_forms(text) for rule in rules):
+                return True
+            words = _words(text)
+            if words in names or (position == 1 and any(f" {name} " in f" {words} " for name in names)):
+                return True
+    return False
 
 
 def no_facts() -> dict[str, Any]:
@@ -955,15 +1021,17 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
     if (paths != sorted(set(paths)) or MANIFEST_FILE in paths or not all(_segments_ok(p) for p in paths)
             or set(paths) != set(on_disk) or any(on_disk[e["path"]] != e for e in listed)):
         return "MALFORMED_RESULT", empty
-    # A published path is published text too: its separators are read as spaces.
-    texts: list[str] = [re.sub(r"[-_./]+", " ", path) for path in paths]
+    # A published path is published text too, and each of its segments is an identifier.
+    texts: list[str] = list(paths)
+    names: list[str] = [segment for path in paths for segment in path.split("/")]
     for path in paths:
         if not path.lower().endswith(OUTPUT_SUFFIXES):
             return "MALFORMED_RESULT", empty
         try:
             text = contents[path].decode("utf-8")
-            texts.extend(_strings(json.loads(text, object_pairs_hook=_unique_object))
-                         if path.lower().endswith(".json") else [text])
+            if path.lower().endswith(".json"):
+                _json_texts(json.loads(text, object_pairs_hook=_unique_object), None, texts, names)
+            texts.append(text)
         except (ValueError, RecursionError):
             return "MALFORMED_RESULT", empty
     usage = manifest["usage"]
@@ -1001,7 +1069,10 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
     if any((c["root"], c["path"], c["sha256"]) not in declared for c in citations):
         return "UNDECLARED_CITATION", empty
     texts += [claim["statement"] for claim in claims] + manifest["limitations"] + [c["locator"] for c in citations]
-    if _asserts_prohibited(texts, set(request["prohibited_claim_classes"])):
+    names += identifiers
+    if not all(text_form_ok(text) for text in (*texts, *names)):
+        return "MALFORMED_RESULT", empty
+    if _asserts_prohibited(texts, set(request["prohibited_claim_classes"]), names):
         return "PROHIBITED_CLAIM", empty
     return None, {"output_manifest_sha256": _bytes_sha(raw), "outputs": tree, "usage": usage,
                   "claim_classes": sorted({claim["claim_class"] for claim in claims}),
