@@ -162,7 +162,7 @@ class Workspace:
                                allowed_claim_classes=list(limits["allowed"]),
                                prohibited_claim_classes=list(limits["prohibited"]),
                                permission=permission(job_id=ids["job_id"], run_id=ids["run_id"]))
-        runtime = self.runtime(allowed_models=(MODEL, OTHER_MODEL, model),
+        runtime = self.runtime(allowed_models=(model,),      # one (provider, model_id) has one family
                                **({"invoker": invoker} if invoker is not None else {}))
         result = pi.run_invocation(runtime, **ids, attempt_root=attempt, request=request)
         return {"name": name, "request": request, "result": pi.thaw(result)}

@@ -646,6 +646,32 @@ class IndependenceTests(Case):
         alias = self.ws.reviewing(declared={"model": {**support.OTHER_MODEL, "snapshot": "latest"}})
         self.rejected(alias, r"producers\[0\].model names a moving alias")
 
+    def test_one_model_has_one_family_so_renaming_a_family_buys_no_independence(self):
+        """PR 32 review: ``family`` is a label. Listing one (provider, model_id) under two family
+        names made a model independent of itself, and the verifier agreed."""
+        renamed = {**support.MODEL, "family": "fixture-family-renamed"}           # the reviewer's exact case
+        later = {**renamed, "snapshot": "2026-09-15"}
+        for label, models in (("same snapshot", (support.MODEL, renamed)), ("another snapshot", (support.MODEL, later)),
+                              ("not adjacent", (support.MODEL, support.OTHER_MODEL, later))):
+            with self.subTest(allow_list=label):
+                self.rejected(self.ws.request(), "one provider and model_id under two families",
+                              runtime=self.ws.runtime(invoker=support.Recording(), allowed_models=models))
+        pi.validate_runtime(self.ws.runtime(allowed_models=(support.MODEL, {**support.MODEL, "snapshot": "2026-09-15"})))
+        honest = self.ws.request()
+        self.ws.run(honest)
+        self.assertEqual(self.ws.verify(honest), [])
+        self.assertRegex(" ".join(self.ws.verify(honest, allowed_models=(support.MODEL, renamed))),
+                         "one provider and model_id under two families")
+        shutil.rmtree(self.ws.attempt)
+        self.ws.attempt.mkdir()
+        message = "self-verification: producers[0] is the same provider and model_id, whatever family it states"
+        for produced in (renamed, later):
+            with self.subTest(produced=produced["snapshot"]):
+                request = self.ws.reviewing(produced={"model": produced})
+                self.assertEqual([e for e in pi.request_errors(request, **support.IDS) if "self-verification" in e],
+                                 [message])
+                self.rejected(request, re.escape(message))
+
     def test_a_reviewer_must_name_and_read_every_producer_and_a_producer_names_none(self):
         golden = self.ws.reviewing()
         self.assertEqual([e["role"] for e in golden["readable_inputs"]],
@@ -750,6 +776,21 @@ class ProducerBindingTests(Case):
                 request = self.ws.reviewing(produced=produced, declared=declared)
                 self.assertEqual(pi.request_errors(request, **support.IDS), [], "the lie must look independent")
                 self.rejected(request, r"self-verification: the result of producers\[0\] " + pattern)
+
+    def test_the_same_model_under_another_family_name_is_refused_from_the_result_bytes(self):
+        renamed = {**support.MODEL, "family": "fixture-family-renamed", "snapshot": "2026-09-15"}
+        request = self.ws.reviewing(produced={"model": renamed}, declared={"model": deepcopy(support.OTHER_MODEL)})
+        self.assertEqual(pi.request_errors(request, **support.IDS), [], "the lie must look independent")
+        self.rejected(request, r"self-verification: the result of producers\[0\] is the same provider and model_id")
+
+    def test_a_producer_cannot_state_another_family_than_the_allow_list_gives_its_model(self):
+        relabelled = {**support.OTHER_MODEL, "family": "fixture-family-c"}
+        request = self.ws.reviewing(produced={"model": relabelled})
+        self.assertEqual(pi.request_errors(request, **support.IDS), [])
+        self.rejected(request, r"producers\[0\]: its producer result states another family than the runtime's")
+        unknown = self.ws.reviewing(produced={"name": "producer-unlisted", "model": {
+            **support.OTHER_MODEL, "model_id": "fixture-unlisted", "family": "fixture-family-c"}})
+        self.assertIsNone(self.ws.run(unknown)["cause"], "a model the allow-list does not know keeps its stated family")
 
     def test_each_declared_identity_field_must_equal_the_result_bytes(self):
         edits = {"run_id": "another-run", "job_id": "another-job", "attempt_id": "another-attempt",

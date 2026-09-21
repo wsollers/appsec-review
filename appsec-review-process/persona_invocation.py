@@ -415,12 +415,36 @@ def model_errors(model: Mapping[str, str], label: str) -> list[str]:
     return errors
 
 
+def model_key(model: Mapping[str, str]) -> tuple[str, str]:
+    """What a model IS for the independence rule: provider and model id. ``family`` is a label the
+    integrator's allow-list attaches to that pair, and ``snapshot`` is a version of it."""
+    return (model["provider"], model["model_id"])
+
+
+def checked_models(allowed_models: Any) -> dict[tuple[str, str], str]:
+    """The runtime's model allow-list as (provider, model_id) -> family. Each entry is one exact
+    model identity, and one (provider, model_id) has exactly one family, whatever its snapshot:
+    otherwise listing a model twice under two family names would make it independent of itself.
+    Shared by the adapter and the verifier."""
+    if not isinstance(allowed_models, tuple) or not allowed_models:
+        raise PersonaRequestError("runtime.allowed_models must be a non-empty tuple; there is no default model")
+    families: dict[tuple[str, str], str] = {}
+    for model in allowed_models:
+        if (not isinstance(model, Mapping) or validate_document(thaw(model), "persona-model-identity.schema.json")
+                or model_errors(thaw(model), "model")):
+            raise PersonaRequestError("runtime.allowed_models holds something that is not one exact model identity")
+        if families.setdefault(model_key(model), model["family"]) != model["family"]:
+            raise PersonaRequestError("runtime.allowed_models lists one provider and model_id under two families")
+    return families
+
+
 def independence_errors(request: Mapping[str, Any]) -> list[str]:
     """``appsec-review/persona-independence/1.0``.
 
     A producing invocation names no producer and reads no producer output. A reviewing invocation
     (verify, refute, judge) names every producer invocation whose output it reads, and for each:
-    it is a different attempt, a different persona and a different model family. Sources:
+    it is a different attempt, a different persona, a different model family and a different
+    model (provider and model id), whatever family either side states. Sources:
     design-v3 5.1 (not discovered, verified and adjudicated by the same agent), ADR-0008 claim
     limits (a different persona and, where B14 records it, a different model family; no cell
     verifies its own claim), design-parity plan (one worker result may not self-verify).
@@ -453,16 +477,21 @@ def independence_errors(request: Mapping[str, Any]) -> list[str]:
             errors.append(f"self-verification: producers[{index}] is the same persona")
         if producer["model"]["family"] == request["model"]["family"]:
             errors.append(f"self-verification: producers[{index}] is the same model family")
+        if model_key(producer["model"]) == model_key(request["model"]):
+            errors.append(f"self-verification: producers[{index}] is the same provider and model_id, "
+                          "whatever family it states")
         errors.extend(model_errors(producer["model"], f"producers[{index}].model"))
     return errors
 
 
-def producer_binding_errors(request: Mapping[str, Any], inputs: tuple) -> list[str]:
+def producer_binding_errors(request: Mapping[str, Any], inputs: tuple,
+                            families: Mapping[tuple[str, str], str]) -> list[str]:
     """Binds each declared producer to the bytes of that producer's own ``invocation-result.json``.
 
     The bytes are data: bounded, UTF-8, one reading per object, inside the result schema, in the
     canonical byte form, self-consistent (``result_sha256``) and ``OK``. The independence rule is
-    applied to the values READ FROM THOSE BYTES; the declared producer entry must then equal them,
+    applied to the values READ FROM THOSE BYTES (and a model the allow-list knows must state the
+    family the allow-list gives it); the declared producer entry must then equal them,
     and every ``producer_output`` input must be an output that result lists (sha256 and size). A
     producer may itself be a reviewing invocation. Fixed text: nothing read from the bytes is echoed.
     Results are unsigned, so this binds a declaration to bytes the integrator pinned, not to an
@@ -497,6 +526,12 @@ def producer_binding_errors(request: Mapping[str, Any], inputs: tuple) -> list[s
             errors.append(f"self-verification: the result of {label} is the same persona")
         if result["model"]["family"] == request["model"]["family"]:
             errors.append(f"self-verification: the result of {label} is the same model family")
+        if model_key(result["model"]) == model_key(request["model"]):
+            errors.append(f"self-verification: the result of {label} is the same provider and model_id, "
+                          "whatever family it states")
+        if families.get(model_key(result["model"]), result["model"]["family"]) != result["model"]["family"]:
+            errors.append(f"{label}: its producer result states another family than the runtime's model "
+                          "allow-list gives that provider and model_id")
         for field in ("run_id", "job_id", "attempt_id", "request_sha256", "persona_id", "model"):
             if result[field] != producer[field]:
                 errors.append(f"{label}.{field} is not what its producer result states")
@@ -687,6 +722,7 @@ def resolve_request(request: Any, *, run_id: str, job_id: str, attempt_id: str, 
     errors = request_errors(request, run_id=run_id, job_id=job_id, attempt_id=attempt_id)
     if errors:
         raise PersonaRequestError("persona request rejected: " + "; ".join(errors))
+    families = checked_models(allowed_models)
     if request["model"] not in [thaw(model) for model in allowed_models]:
         raise PersonaRequestError("model is not on the runtime's model allow-list")
     records = load_composition(registry_dir, request["persona"], SchemaStore())
@@ -732,7 +768,7 @@ def resolve_request(request: Any, *, run_id: str, job_id: str, attempt_id: str, 
         seen.add(identity)
         inputs.append(ReadableInput(entry["root"], entry["path"], entry["role"], entry["sha256"],
                                     entry["producer_request_sha256"], data))
-    errors = producer_binding_errors(request, tuple(inputs))
+    errors = producer_binding_errors(request, tuple(inputs), families)
     if errors:
         raise PersonaRequestError("persona request rejected: " + "; ".join(errors))
     decision = request["permission"]["decision"]
@@ -803,13 +839,7 @@ def validate_runtime(runtime: Any) -> None:
     if not isinstance(runtime.readable_roots, Mapping) or not runtime.readable_roots or not all(
             isinstance(path, Path) for path in runtime.readable_roots.values()):
         raise PersonaRequestError("runtime.readable_roots must map at least one id to a path")
-    models = runtime.allowed_models
-    if not isinstance(models, tuple) or not models:
-        raise PersonaRequestError("runtime.allowed_models must be a non-empty tuple; there is no default model")
-    for model in models:
-        if (not isinstance(model, Mapping) or validate_document(thaw(model), "persona-model-identity.schema.json")
-                or model_errors(thaw(model), "model")):
-            raise PersonaRequestError("runtime.allowed_models holds something that is not one exact model identity")
+    checked_models(runtime.allowed_models)
     if not isinstance(runtime.source_snapshot_sha256, str) or not _SHA_RE.match(runtime.source_snapshot_sha256):
         raise PersonaRequestError("runtime.source_snapshot_sha256 must be sha256:<64 hex>")
     if runtime.registry_ceiling is not None and not isinstance(runtime.registry_ceiling, list):
