@@ -26,7 +26,7 @@ here to dependency lifecycle instead.
 Usage:
     python3 analyze_dependency_lifecycle.py \\
         --sbom /evidence/sbom/sbom.cdx.json \\
-        --eol-reference /opt/scripts/eol-reference.json \\
+        --eol-reference /opt/data/eol-reference.json \\
         --scancode /evidence/license/scancode.json \\
         -o /evidence/sbom/dependency-lifecycle.json
 """

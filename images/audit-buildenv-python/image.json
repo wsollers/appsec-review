@@ -1,0 +1,15 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "audit-buildenv-python",
+      "tag": "audit-buildenv-python:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {},
+      "requires_images": [],
+      "prebuild": [],
+      "timeout_seconds": 3600
+    }
+  ]
+}

@@ -117,7 +117,7 @@ M06 semantic-index disposition ────────────────�
 - Exclusive paths: new `arp/evidence_redaction.py`, `schemas/redaction-receipt.schema.json`,
   `arp/tests/test_evidence_redaction.py`, `docs/evidence-redaction.md`.
 - Deliverables: deterministic redactor (entropy pass + secret-name-aware pass, ported in behavior
-  from `scripts/scrub_evidence.py`, not lifted verbatim) applied at the publication boundary; the
+  from `pipeline/scrub_evidence.py`, not lifted verbatim) applied at the publication boundary; the
   receipt described in the ADR; bounded input handling.
 - Acceptance: fixtures for machine tokens, human passwords, PEM blocks, SARIF snippet fields,
   oversized and malformed inputs; proof that no published file and no retained log contains a

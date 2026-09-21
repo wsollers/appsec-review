@@ -110,8 +110,8 @@ $runCodeql = -not $NoCodeQL
 $runCsa = -not $NoCsa
 
 if ($runStatic) {
-    $psStatic = Join-Path $Root "scripts/Invoke-VendorAuditPrePass.ps1"
-    $bashStatic = Join-Path $Root "scripts/Invoke-VendorAuditPrePass.sh"
+    $psStatic = Join-Path $Root "pipeline/Invoke-VendorAuditPrePass.ps1"
+    $bashStatic = Join-Path $Root "pipeline/Invoke-VendorAuditPrePass.sh"
     $bashPath = Get-BashPath
 
     if (($StaticRunner -eq "powershell") -or (($StaticRunner -eq "auto") -and (Test-Path $psStatic))) {

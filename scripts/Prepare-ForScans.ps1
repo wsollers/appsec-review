@@ -2,12 +2,12 @@
 .SYNOPSIS
     Step-0 host bootstrap for the appsec-review harness: checks and, with per-item
     confirmation, installs the command-line prerequisites via winget, verifies Docker
-    is actually usable (not just installed), and optionally hands off to the existing
-    scripts/Build-AuditImages.ps1 to build the pinned Docker images.
+    is actually usable (not just installed), and optionally hands off to
+    images/image_build.py to build the pinned Docker images.
 
 .DESCRIPTION
     This script only provisions the host. It does not build images itself (that is
-    scripts/Build-AuditImages.ps1's job, invoked here as an optional last step) and it
+    images/image_build.py's job, invoked here as an optional last step) and it
     is not the fast pre-run readiness check (that is appsec-review-process/review_cli.py
     check, which is non-mutating and safe to run before every driver invocation -- this
     script is the one-time/occasional step that actually changes the machine).
@@ -31,12 +31,13 @@
     Comma-separated subset of: git,ripgrep,7zip,gh,docker,claude-cli. Default: all.
 
 .PARAMETER BuildImages
-    After host tools are confirmed and Docker is confirmed usable, invoke
-    scripts/Build-AuditImages.ps1 (itself asked for confirmation unless -Yes is also
-    passed, since a full image build is long-running).
+    After host tools are confirmed and Docker is confirmed usable, run
+    `python -B images/image_build.py build` for the core images (asked for confirmation
+    unless -Yes is also passed, since a full image build is long-running). Needs Python 3
+    on PATH.
 
 .PARAMETER DockerContext
-    Passed through to Build-AuditImages.ps1 -DockerContext when -BuildImages is used.
+    Passed to images/image_build.py as --docker-context when -BuildImages is used.
 
 .EXAMPLE
     ./Prepare-ForScans.ps1 -CheckOnly
@@ -214,12 +215,18 @@ if ($BuildImages) {
             return
         }
     }
-    $go = $Yes -or (Read-Host "Run scripts/Build-AuditImages.ps1 now? This is long-running. [y/N]") -match '^[Yy]'
+    $go = $Yes -or (Read-Host "Build the core tool images with images/image_build.py now? This is long-running. [y/N]") -match '^[Yy]'
     if ($go) {
-        $buildArgs = @()
-        if ($DockerContext) { $buildArgs += @("-DockerContext", $DockerContext) }
-        & (Join-Path $RepoRoot "scripts\Build-AuditImages.ps1") @buildArgs
+        if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            Write-Warning "Skipping image build -- python is not on PATH."
+            return
+        }
+        $buildArgs = @("-B", (Join-Path $RepoRoot "images\image_build.py"), "build",
+                       "audit-static", "audit-native", "audit-codeql", "audit-iac",
+                       "audit-container", "audit-report", "scancode-toolkit")
+        if ($DockerContext) { $buildArgs += @("--docker-context", $DockerContext) }
+        & python @buildArgs
     } else {
-        Write-Host "Skipped image build. Run scripts\Build-AuditImages.ps1 yourself when ready."
+        Write-Host "Skipped image build. Run: python -B images\image_build.py build <image_id> when ready."
     }
 }

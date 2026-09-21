@@ -3,8 +3,14 @@
 | Phase | Script | LLM? | Output |
 |---|---|---|---|
 | engagement job | `engagement_job.sh` / `engagement_job.ps1` | no | broad static evidence, native scratch, LLM input index, coverage ledger |
-| static prepass | `scripts/Invoke-VendorAuditPrePass.sh` / `.ps1` | no | Semgrep, gitleaks, Trivy/config, SBOM/SCA, BinSkim, Joern, symbol/semantic indexes, `MANIFEST.json` |
+| static prepass | `pipeline/Invoke-VendorAuditPrePass.sh` / `.ps1` | no | Semgrep, gitleaks, Trivy/config, SBOM/SCA, BinSkim, Joern, symbol/semantic indexes, `MANIFEST.json` |
 | static summary | `summarize_evidence.py` (ported from `scripts/` 2026-09-19) | no | `SUMMARY.md`: mechanical per-tool rollup + `MANIFEST.json` status table |
+| repo profile | `profile_repo.py` (ported from `scripts/` 2026-09-21) | no | language/size/binary profile of a tree |
+| native binary fingerprints | `fingerprint_native_binaries.py` (ported 2026-09-21) | no | `binary-fingerprints.csv`/`.md` |
+| mobile source preflight | `check_mobile_source.py` (ported 2026-09-21) | no | mobile applicability signals |
+| layered SBOM | `build_layered_sbom.py` (ported 2026-09-21) | no | layered SBOM, OSV scan, native template |
+| build capture | `capture_build_commands.py` (ported 2026-09-21) | no | build/link command JSONL |
+| vendor candidates | `extract_vendor_candidates.py` (ported 2026-09-21; reads `data/native-libdir-reference.json`) | no | native vendored-dependency candidates |
 | SBOM component locations | `extract_component_locations.py` (ported from `scripts/` 2026-09-19) | no | CSV preserving Syft package locations and cataloger metadata, plus bounded path/no-location summaries |
 | pregather | `pregather.sh` / `pregather.ps1` (twins; logic in container scripts) | no | compile DB, feasibility, IR, linked modules, ir-facts, CSA, CodeQL traced DB + regular C/C++ SARIF + mythos custom-memory SARIF, `pregather-manifest.json` |
 | assemble | `assemble.py` (Python, one impl) | no | `bundle.json` + `bundle.md`: verified / unresolved / refuted with IR evidence and `needs` |
@@ -77,8 +83,8 @@ partial evidence after CodeQL/Semgrep/etc. failures, while still ending with an 
 degraded status instead of a quiet success.
 
 The static prepass has two host runners over the same Docker toolbox image:
-`scripts/Invoke-VendorAuditPrePass.sh` for bash/Linux/WSL and
-`scripts/Invoke-VendorAuditPrePass.ps1` for PowerShell/Windows. `engagement_job.sh`
+`pipeline/Invoke-VendorAuditPrePass.sh` for bash/Linux/WSL and
+`pipeline/Invoke-VendorAuditPrePass.ps1` for PowerShell/Windows. `engagement_job.sh`
 defaults to `--static-runner auto`, which prefers the bash runner. `engagement_job.ps1`
 also supports `-StaticRunner auto|bash|powershell` and prefers the PowerShell runner in
 `auto`, with bash available as an explicit or fallback path.
@@ -142,7 +148,7 @@ After replacing the monolithic semantic index invocation with
 `run-semantic-index-batched.sh`, the Windows path was smoke-tested with:
 
 ```powershell
-.\scripts\Invoke-VendorAuditPrePass.ps1 `
+.\pipeline\Invoke-VendorAuditPrePass.ps1 `
   -RepoPath scratch\semantic-index-smoke\repo `
   -EvidencePath scratch\semantic-index-smoke\evidence `
   -ImageTag vendor-audit-toolbox:latest `

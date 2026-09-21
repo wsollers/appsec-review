@@ -43,6 +43,13 @@ subsystem-specific detail.
 
 ## Independent work protocol
 
+Scope: this protocol applies only to changes to the Dagster runtime (`orchestrator/dagster/`,
+`dagster_workflow.py`, `launch_job.py`), the job graph (`job-graph.json`,
+`design-parity-manifest.json`) and the worker contracts (`worker-result-contract.json`, output
+contracts, validators). Changes under `pipeline/`, `scripts/`, `data/`, `images/` and `docs/` are
+the fast lane: no batch claim, no shared-surface lock, no qualification, only a normal pull
+request (see `AGENTS.md`).
+
 The batch IDs below are the executable backlog. An agent may claim exactly one `READY` batch at a
 time. The older subsystem lists later in this file explain context but are not standalone work
 orders unless a batch points to them.

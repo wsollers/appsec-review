@@ -134,7 +134,7 @@ shape, but it is slower for heavy `ir-facts` and CodeQL work.
 
 ## Build / Validation Order
 
-1. Build Docker images: `scripts/build-audit-images.sh` (WSL/Linux, preferred) or `scripts/Build-AuditImages.ps1` (native Windows PowerShell). Builds audit-static, audit-native, audit-codeql, audit-iac, audit-container, and audit-report from one entrypoint; `--only`/`-Only` builds a subset.
+1. Build Docker images: `python -B images/image_build.py list` shows every build declared in `images/<name>/image.json`; `python -B images/image_build.py build <image_id> [<image_id> ...]` builds one or more, each with its own lock, logs and result under `images/.build-state/`. Options: `--no-cache`, `--force`, `--tag`, `--build-arg K=V`, `--docker-context`, `--timeout-seconds`. Build `audit-native` before `audit-codeql-native` and `audit-buildenv-cpp`; an unchanged image is reused. Needs Python 3 and Docker on PATH; Linux is the tested host.
 2. Run static prepass smoke (`cloc`) to validate Docker mounts.
 3. Run native pregather without CodeQL/CSA to validate compile DB normalization, native SAST, feasibility, IR, link, and `ir-facts`.
 4. Run CodeQL-enabled pregather to validate regular security-extended and custom Mythos CodeQL.

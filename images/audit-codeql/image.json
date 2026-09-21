@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "audit-codeql",
+      "tag": "audit-codeql:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {},
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.0/codeql-bundle-linux64.tar.zst",
+          "dest": "codeql-bundle-linux64.tar.zst",
+          "sha256": "5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a",
+          "bytes": 553280102
+        }
+      ],
+      "timeout_seconds": 5400
+    },
+    {
+      "image_id": "audit-codeql-native",
+      "tag": "audit-codeql-native:local",
+      "dockerfile": "Dockerfile.native",
+      "context": ".",
+      "build_args": {},
+      "requires_images": [
+        "audit-native:local"
+      ],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.0/codeql-bundle-linux64.tar.zst",
+          "dest": "codeql-bundle-linux64.tar.zst",
+          "sha256": "5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a",
+          "bytes": 553280102
+        }
+      ],
+      "timeout_seconds": 5400
+    }
+  ]
+}

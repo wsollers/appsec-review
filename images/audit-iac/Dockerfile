@@ -21,7 +21,7 @@
 #               downstream scanners below read the checked-in HCL.
 #   checkov     pip, policy scanning across Terraform/CloudFormation/K8s/Dockerfile
 #   tfsec       go install — upstream-deprecated in favor of `trivy config` (see
-#               the `iac` step's own Note in scripts/Invoke-VendorAuditPrePass.*),
+#               the `iac` step's own Note in pipeline/Invoke-VendorAuditPrePass.*),
 #               left running for continuity, not a target for new coverage
 #   trivy       install script — `trivy config` against Terraform/K8s/CloudFormation
 #   kube-linter go install — Kubernetes manifests, Helm charts, Kustomize

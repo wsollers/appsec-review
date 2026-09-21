@@ -41,7 +41,9 @@ ENV CODEQL_LICENSE_BASIS=ghas \
     PATH="/opt/codeql:${PATH}" \
     CODEQL_BUNDLE=${CODEQL_BUNDLE}
 
-COPY run-codeql.sh replay_compile_commands.py smoke-test.sh /opt/scripts/
+
+# --- Repo-owned scripts, kept LAST so editing them rebuilds only this layer.
+COPY scripts/ /opt/scripts/
 RUN chmod +x /opt/scripts/*
 
 RUN useradd -m -u 10001 -s /bin/bash worker && mkdir -p /workspace /scratch && chown worker:worker /scratch

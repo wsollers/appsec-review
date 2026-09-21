@@ -133,7 +133,7 @@ silently drifting.
 | `03-threat-model-dfd-stride` | L6A | Matches. |
 | `04-asvs-masvs` | L2 | Matches. |
 | `05-native-memory` | subset of L3 | Narrower than L3: covers native memory-safety only, not the full native-build/SAST scope L3 describes. |
-| `06-cve-reachability` | L1 | Broadened 2026-09-17 to full L1 scope: dependency inventory, license inventory (re-surfacing the SBOM's own license field plus the pre-existing `scancode` license/copyright scan), best-effort EOL/abandonware signals (new `dependency-lifecycle` step against a small hand-curated, offline reference table — coverage is partial by design, see `scripts/eol-reference.json`), and CVE reachability triage. |
+| `06-cve-reachability` | L1 | Broadened 2026-09-17 to full L1 scope: dependency inventory, license inventory (re-surfacing the SBOM's own license field plus the pre-existing `scancode` license/copyright scan), best-effort EOL/abandonware signals (new `dependency-lifecycle` step against a small hand-curated, offline reference table — coverage is partial by design, see `data/eol-reference.json`), and CVE reachability triage. |
 | `07-red-team-adversarial` | L4 / L5 | Restructured 2026-09-17: every scenario is now tagged with its design lane (`L4` AppSec discovery or `L5` vendor/insider malfeasance) as a first-class axis alongside the existing general/known-list mode axis, run within one lane folder rather than split into two — matching how the harness already treats mode as a run parameter rather than a folder split. |
 | `08-blue-team-refutation` | L4B / L5B | Resolved 2026-09-17: added as a formal §4 row (`L4B`/`L5B`) rather than folded back into `07`, since the harness has run it as a dedicated lane and that was judged the better fit going forward. As of this revision it also carries the `L4`/`L5` design-lane tag through from `07`'s claims, so disposition can be reported per design lane. |
 | `09-independent-verification` | L7 | Matches. |
@@ -256,7 +256,7 @@ This section records the design decision; neither tier is implemented yet.
 Two scripts now exist in `scripts/` (commit `201d5b7`) implementing the first half of Tier B's
 pipeline, both tested against a real clang/ld toolchain (not just written blind):
 
-- **`scripts/capture_build_commands.py`** — command-line capture. Takes `compile_commands.json`
+- **`pipeline/capture_build_commands.py`** — command-line capture. Takes `compile_commands.json`
   (already a standard artifact this pipeline produces) and, per-entry, re-invokes the compile
   command with clang's `-###` flag appended, which prints the real `-cc1` subprocess argv without
   executing it — staying inside the hostile-build boundary's existing "compile or syntax-check"
@@ -266,7 +266,7 @@ pipeline, both tested against a real clang/ld toolchain (not just written blind)
   path and positional `.a`/`.so`/`.o` the link pulled in. Output: `build-commands.jsonl`, one JSON
   record per real subprocess invocation, tagged `kind` (compile/assemble/link/other) and `stage`
   (driver-level vs. `-###`-expanded).
-- **`scripts/extract_vendor_candidates.py`** — the heuristic pass. Parses `-I`/`-L`/`-l` and
+- **`pipeline/extract_vendor_candidates.py`** — the heuristic pass. Parses `-I`/`-L`/`-l` and
   positional object/library paths out of `build-commands.jsonl`, resolves them to absolute paths,
   classifies in-tree vs. out-of-tree against `--repo-root`, dedupes to distinct candidate
   directories, and runs a bounded walk (`--max-depth`, default 4, *from each candidate directory*,
@@ -360,7 +360,7 @@ uniformly:
 - **DISA STIGs/SRGs and NSA technical guidance** (general-release, unclassified only — not
   CAC/PKI-gated CUI compilations) — public-domain US federal works (17 U.S.C. §105), safe to vendor
   and quote directly, unlike CIS. A curated, version-pinned offline reference file (same convention
-  as `scripts/eol-reference.json`) may hold real control text for the specific STIGs a lane actually
+  as `data/eol-reference.json`) may hold real control text for the specific STIGs a lane actually
   uses, re-pinned when the source STIG revises.
 - **CIS Benchmarks** — restricted: the free PDFs carry CIS's own Terms of Use, which additionally
   prohibit derivative works and posting/mirroring beyond the underlying CC BY-NC-SA license. Control
@@ -587,7 +587,7 @@ The ledger is the authoritative chronological record of the review. Agents submi
 | verified-facts.jsonl | Compact normalized verified facts/edges consumed by L14; full evidence remains referenced by ID. |
 | build-isolation-manifest.json | Isolation mode, worker identity, input/output hashes, privilege/network settings, resource limits, and allowlisted artifacts imported from each build attempt. |
 
-All evidence passes through a secrets-scrubbing step (`scripts/scrub_evidence.py`) before it enters any LLM lane
+All evidence passes through a secrets-scrubbing step (`pipeline/scrub_evidence.py`) before it enters any LLM lane
 prompt or is written to the append-only ledger. Scrubbing records what was redacted (location, rule matched,
 count) as evidence metadata; it never writes the secret value itself to canonical evidence or the ledger.
 

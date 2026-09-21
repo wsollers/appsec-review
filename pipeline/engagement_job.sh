@@ -118,7 +118,7 @@ if [[ "$RUN_STATIC" == 1 ]]; then
     echo "--static-runner must be auto, bash, or powershell" >&2
     exit 2
   fi
-  BASH_STATIC="$ROOT/scripts/Invoke-VendorAuditPrePass.sh"
+  BASH_STATIC="$ROOT/pipeline/Invoke-VendorAuditPrePass.sh"
   PWSH_BIN=""
   if command -v pwsh >/dev/null 2>&1; then
     PWSH_BIN="pwsh"
@@ -136,7 +136,7 @@ if [[ "$RUN_STATIC" == 1 ]]; then
     if [[ "$PWSH_BIN" == *.exe ]]; then
       static_args+=("-ExecutionPolicy" "Bypass")
     fi
-    static_args+=("-File" "$ROOT/scripts/Invoke-VendorAuditPrePass.ps1" "$TARGET" "$STATIC_EVIDENCE" "-ImageTag" "$STATIC_IMAGE" "-CleanEvidence")
+    static_args+=("-File" "$ROOT/pipeline/Invoke-VendorAuditPrePass.ps1" "$TARGET" "$STATIC_EVIDENCE" "-ImageTag" "$STATIC_IMAGE" "-CleanEvidence")
     if [[ -n "$STATIC_STEPS" ]]; then
       static_args+=("-Steps" "$STATIC_STEPS")
     fi

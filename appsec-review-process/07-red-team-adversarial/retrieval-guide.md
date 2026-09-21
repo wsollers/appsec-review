@@ -57,11 +57,11 @@ not proof of exploitability.
 ## Semantic Index
 
 If `static-evidence/semantic-index/index.json` exists and is marked complete, use
-`scripts/query_semantic_index.py` for concept searches. Keep queries specific to the component and
+`scripts/audit-static/query_semantic_index.py` for concept searches. Keep queries specific to the component and
 attack class.
 
 ```bash
-python scripts/query_semantic_index.py \
+python scripts/audit-static/query_semantic_index.py \
   --index scratch/<project>-engagement/static-evidence/semantic-index \
   --query '<component purpose plus issue class>' \
   --top-k 10

@@ -76,7 +76,7 @@
 #    discussion in the harness doc).
 #
 # 3. THE ORCHESTRATOR STEPS (Invoke-VendorAuditPrePass.ps1/.sh's
-#    sast-multi-semgrep-* steps and scripts/run-sast-php.sh) ARE NOT CHANGED
+#    sast-multi-semgrep-* steps and scripts/audit-static/run-sast-php.sh) ARE NOT CHANGED
 #    BY THIS COMMIT. This file only builds the image. Pointing any real step
 #    at `audit-static-opengrep:local` instead of `audit-static:local`, and
 #    rewriting each step's Cmd array to use `-f /opt/rules/opengrep/<pack>`
@@ -152,8 +152,8 @@ RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
 
 # --- Rust + weggli + ast-grep (unchanged from images/audit-static) ---------
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && /root/.cargo/bin/cargo install weggli \
-    && /root/.cargo/bin/cargo install ast-grep --locked
+    && CARGO_BUILD_JOBS=4 /root/.cargo/bin/cargo install weggli \
+    && CARGO_BUILD_JOBS=4 /root/.cargo/bin/cargo install ast-grep --locked
 
 # --- Joern (unchanged from images/audit-static) -----------------------------
 RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \
@@ -241,17 +241,12 @@ ENV PATH="/root/.opengrep/cli/latest:${PATH}"
 # rules/parity-status.json for current state); this COPY will pick up real
 # rule content automatically as categories are authored, no Dockerfile
 # change needed when that happens.
-COPY images/audit-static-opengrep/rules/ /opt/rules/opengrep/
 
-# --- This repo's own evidence-shaping scripts (unchanged from images/audit-static) -----
-COPY scripts/build_symbol_index.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
-     scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh \
-     scripts/run-semantic-index-batched.sh \
-     scripts/analyze_dependency_lifecycle.py scripts/eol-reference.json \
-     /opt/scripts/
+# --- Repo-owned inputs that change often: kept LAST so editing them rebuilds only these layers.
+COPY rules/ /opt/rules/opengrep/
+COPY config/ /opt/config/
+COPY scripts/ /opt/scripts/
 RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
-
-COPY images/audit-static/psalm.xml /opt/config/psalm.xml
 
 WORKDIR /workspace
 CMD ["/bin/bash"]

@@ -25,7 +25,7 @@ persona entries: `iac-cloud-terraform-auditor`, `iac-k8s-helm-hardening-reviewer
 `iac-container-dockerfile-auditor`, `iac-network-iam-exposure-modeler`.
 
 One dependency is now resolved and one remains open. The curated DISA reference file
-(`scripts/disa-stig-reference.json`, added 2026-09-19) is built — but read its `scope_finding`
+(`data/disa-stig-reference.json`, added 2026-09-19) is built — but read its `scope_finding`
 entries before assuming it unblocks much: only 4 of the Kubernetes STIG's 91 rules are actually
 evaluable from static K8s-manifest evidence (the rest require a live cluster or control-plane host
 access, out of this lane's scope), and none of the Container Platform SRG's rules are evaluable from
@@ -47,7 +47,7 @@ and `iac-container-dockerfile-auditor`; `iac-network-iam-exposure-modeler` still
 personas' real output to compose over before it can be piloted.
 
 **Evidence gathered 2026-09-19** via
-`scripts/Invoke-VendorAuditPrePass.ps1 -RepoPath targets\iac-goof -EvidencePath
+`pipeline/Invoke-VendorAuditPrePass.ps1 -RepoPath targets\iac-goof -EvidencePath
 scratch\iac-goof-engagement\static-evidence -Steps
 iac-checkov,iac-trivy,iac-tfsec,sast-multi-semgrep-terraform,iac-k8s,dockerfile-lint,docker-base-images`,
 run by the repo owner directly on hal5000 (not through the device bridge, per the standing

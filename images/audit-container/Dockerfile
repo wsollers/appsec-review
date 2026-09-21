@@ -17,7 +17,7 @@
 #   hadolint    binary download, pinned — lints every Dockerfile in the tree
 #               directly from source (unpinned/floating base tags, ADD vs COPY,
 #               running as root, etc.), no `docker build` needed. Invoked via
-#               /opt/scripts/run-dockerfile-lint.sh (baked in below), same static
+#               /opt/scripts/run-dockerfile-lint.sh (COPYed last, below), same static
 #               argv-array Cmd pattern as every other step in this toolbox — see
 #               that script's own header for the PowerShell/docker.exe
 #               argv-marshalling bug it was written to avoid.
@@ -57,9 +57,9 @@ RUN curl -fsSL "https://github.com/hadolint/hadolint/releases/download/v${HADOLI
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
       | sh -s -- -b /usr/local/bin
 
-# --- This repo's own evidence-shaping script (moved from audit-static) ------
-COPY scripts/run-dockerfile-lint.sh /opt/scripts/run-dockerfile-lint.sh
-RUN chmod +x /opt/scripts/run-dockerfile-lint.sh
+# --- Repo-owned script, kept LAST so editing it rebuilds only this layer.
+COPY scripts/ /opt/scripts/
+RUN chmod +x /opt/scripts/*.sh
 
 WORKDIR /workspace
 # No ENTRYPOINT/CMD by design — the orchestrator runs one tool at a time via
