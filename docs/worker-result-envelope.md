@@ -39,9 +39,10 @@ runtime state. It is read-only: validation does not publish, redact, or repair a
 `worker_adapters.py` defines the narrow adapter protocol. It implements callable deterministic
 Python, read-only supplied-human-decision, and (B13) pinned-container argv adapters; the last is
 specified in [`pinned-container-adapter.md`](pinned-container-adapter.md) and no lifecycle worker
-uses it yet. Persona, pool-coordinator, and join/controller adapters remain explicit unsupported
-kinds until their isolation, provenance, rendezvous, and recovery contracts are implemented and
-qualified.
+uses it yet. The (B14) persona invocation adapter is the dispatch protocol only, specified in
+[`persona-invocation-adapter.md`](persona-invocation-adapter.md): it has no model client and no
+lifecycle persona job uses it. Pool-coordinator and join/controller adapters remain explicit
+unsupported kinds until their rendezvous and recovery contracts are implemented and qualified.
 
 `create_job_handoff.py` resolves registry compositions and records immutable template, record,
 prompt, contract, and bounded run-owned input hashes. `publish_job_output.py` is the separate
