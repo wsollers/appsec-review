@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 from pathlib import Path, PurePosixPath
 import re
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 import urllib.parse
 
-from execution_state import ROOT, beneath, file_hash, read_json
+import container_mobile_binary_contracts as _v07
+from evidence_redaction import DEFAULT_LIMITS
+from execution_state import ROOT, beneath, file_hash, identifier, read_json, tree_hashes
+import sbom_family_contracts as _v05
+from sca_nvd_snapshot import NO_AGE_LIMIT
 from schema_validate import SchemaStore, validate_document
+import secrets_iac_contracts as _v04
+from tool_instance_shapes import HEADER_FIELDS, NODE_STATUSES
 from worker_result import validate_immutable_reuse, validate_worker_result
 
 REGISTRY = ROOT / "registry"
@@ -453,10 +462,355 @@ def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]
     return errors
 
 
+# ---- ADR-0010 vendor-prepass contracts (V04, V07, V05) -----------------------------------------
+#
+# The nine family contracts have their own verifiers, and those verifiers deliberately take no
+# optional safety input: every fact that decides the answer is a required argument that must come
+# from OUTSIDE the attempt under validation. This section is the one place that says where each
+# fact comes from (docs/validator-vendor-prepass-dispatch.md has the table). A fact with no
+# authoritative source fails closed with a named error; it is never read from the attempt, an
+# environment variable or a default, and the verifier is never skipped in favour of the generic
+# schema check.
+
+# publish_job_output.ACCEPTED_SCHEMA. That module imports this one, so the value is repeated here
+# and tied to it by a test.
+ACCEPTED_POINTER_SCHEMA = "appsec-review/accepted-worker-result/1.0"
+# The validator is the CONSUMER of the redaction receipt, so the policy and bounds are its own.
+REDACTION_POLICY = "refuse"
+REDACTION_LIMITS = DEFAULT_LIMITS
+_RUNTIME_ID_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,127}\Z")
+_SNAPSHOT_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
+_UPSTREAM_STATUSES = ("OK", "OK_WITH_GAPS")  # the SBOM and licence nodes are never SKIPPED
+
+
+class _NoOrchestrationFacts:
+    """The explicit "this caller has no orchestration facts" value. It is never a default of
+    `validate_job_output`; with it every vendor-prepass contract fails closed."""
+
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "NO_ORCHESTRATION_FACTS"
+
+
+NO_ORCHESTRATION_FACTS = _NoOrchestrationFacts()
+
+
+@dataclass(frozen=True)
+class OrchestrationFacts:
+    """What only the publication boundary knows and the worker envelope does not carry.
+
+    `dagster_run_id` is the orchestrator run that PRODUCED the attempt (on reuse: the producing
+    run, not the run that is reusing it). `source_snapshot_sha256` is the intake source-snapshot
+    identity the node ran against. `now` is the caller's clock: nothing below reads the wall
+    clock. Every field is required."""
+
+    dagster_run_id: str
+    source_snapshot_sha256: str
+    now: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.dagster_run_id, str) or not _RUNTIME_ID_RE.match(self.dagster_run_id):
+            raise TypeError("dagster_run_id must be the orchestrator run id that produced the attempt")
+        if (not isinstance(self.source_snapshot_sha256, str) or
+                not _SNAPSHOT_RE.match(self.source_snapshot_sha256)):
+            raise TypeError("source_snapshot_sha256 must be 'sha256:<64 lowercase hex>'")
+        if not isinstance(self.now, datetime) or self.now.tzinfo is None:
+            raise TypeError("now must be a timezone-aware datetime")
+
+
+class BindingUnavailable(Exception):
+    """A caller fact has no authoritative source yet. The message names what is missing."""
+
+
+def vulnerability_database_bindings(run_root: Path) -> Mapping[str, Mapping[str, str]]:
+    """The Grype DB and OSV snapshot identities `verify_sca_attempt` must be given.
+
+    THE V18 SEAM. Task V18 (`BLOCKED(V16,V17)`) delivers the consumer bindings that resolve and
+    re-verify both databases offline. Until it lands there is no authoritative identity, so this
+    blocks; V18 replaces this body and nothing else. Never return an identity read from the
+    attempt, the environment or a constant."""
+    raise BindingUnavailable("no Grype DB / OSV consumer binding exists (V18)")
+
+
+def lifecycle_reference_table_binding(run_root: Path) -> tuple[Path, Mapping[str, str]]:
+    """(reference_table_path, expected_reference_table) for `verify_lifecycle_attempt`.
+
+    No task has published the curated end-of-life table or a consumer binding for it, so this
+    blocks. Whoever publishes the table replaces this body and nothing else."""
+    raise BindingUnavailable("no dependency-lifecycle reference-table publisher or consumer binding exists")
+
+
+def job_max_age(contract_id: str) -> Any:
+    """ADR-0010 M4: no age limit by default; a JOB may set a tighter `max_age`, and exceeding it is
+    FAILED. Nothing in the run inputs, the launch request or the registry carries a job-set limit
+    today, so "no limit" is stated here explicitly. When such a setting exists it is read here."""
+    return NO_AGE_LIMIT
+
+
+def _node(**fields: Any) -> MappingProxyType:
+    return MappingProxyType(fields)
+
+
+def _vendor_prepass_nodes() -> MappingProxyType:
+    v04, v05, v07 = _v04.CONTRACT_POLICIES, _v05.CONTRACT_POLICIES, _v07.CONTRACTS
+    # `declared_tool_ids`: no job template or tooling profile registers these nodes' tools yet
+    # (V10-V12 add them). Until then the ids are pinned here from the adopted ADR-0010 fixture
+    # (docs/proposals/vendor-prepass/job-nodes.proposal.json); a test fails on any drift.
+    tools = {
+        "secrets-inventory": ("gitleaks", "key-material-file-inventory"),
+        "iac-config-evidence": ("checkov", "trivy-config", "tfsec", "kube-linter", "hadolint",
+                                "dockerfile-base-image-inventory"),
+        "container-image-inventory": ("oci-archive-inventory", "image-package-and-config-inspection"),
+        "mobile-sast": ("mobsfscan-android", "mobsfscan-ios"),
+        "binary-hardening": ("binskim",),
+        "sbom-inventory": ("syft-directory",),
+        "sca-vulnerability-match": ("grype",),
+        "license-inventory": ("scancode-toolkit",),
+        "dependency-lifecycle": ("dependency-lifecycle-transform",),
+    }
+    nodes: dict[str, MappingProxyType] = {}
+    for contract_id, policy in v04.items():
+        nodes[contract_id] = _node(family="V04", job_id=policy["job_id"], result=policy["result_schema"][0],
+                                   permitted_node_statuses=tuple(policy["permitted_node_statuses"]))
+    for contract_id, policy in v07.items():
+        # V07 exports no permitted-status table; ADR-0010 lets all three nodes skip, so the set is
+        # every status a family node may have (V03). SKIPPED is still edge-authorized below.
+        nodes[contract_id] = _node(family="V07", job_id=policy["job_id"], result=policy["result"],
+                                   permitted_node_statuses=tuple(NODE_STATUSES))
+    for contract_id, policy in v05.items():
+        nodes[contract_id] = _node(family="V05", job_id=policy["job_id"], result=policy["result_schema"][0],
+                                   permitted_node_statuses=tuple(_v05.NEVER_SKIPS))
+    if set(nodes) != set(tools):
+        raise RuntimeError("vendor-prepass node table and verifier policy tables disagree")
+    return MappingProxyType({contract_id: _node(**node, declared_tool_ids=tools[contract_id])
+                             for contract_id, node in nodes.items()})
+
+
+VENDOR_PREPASS_NODES = _vendor_prepass_nodes()
+
+
+def _vendor_prepass_claim_policies() -> dict[str, dict[str, Any]]:
+    """Built from each module's exported policy table, never retyped -- except V07, whose module
+    exports no claim-class table: its three entries are pinned here and a test ties them to the
+    ADR fixture and the contract records."""
+    policies = {contract_id: {"claim_class_id": policy["claim_class_id"],
+                              "allowed_assertions": set(policy["allowed_assertions"])}
+                for table in (_v04.CONTRACT_POLICIES, _v05.CONTRACT_POLICIES)
+                for contract_id, policy in table.items()}
+    policies.update({
+        "container-image-inventory": {
+            "claim_class_id": "supplied_image_static_evidence",
+            "allowed_assertions": {"image-layer-package-inventory", "image-configuration-property",
+                                   "image-hardening-rule-hit", "scan-coverage-gap"}},
+        "mobile-sast": {
+            "claim_class_id": "mobile_static_lead",
+            "allowed_assertions": {"mobile-platform-marker-present", "mobile-rule-hit", "scan-coverage-gap"}},
+        "binary-hardening": {
+            "claim_class_id": "binary_hardening_property_evidence",
+            "allowed_assertions": {"static-hardening-property-observed", "static-hardening-rule-hit",
+                                   "binary-format-unsupported", "scan-coverage-gap"}},
+    })
+    return policies
+
+
+CLAIM_CLASS_POLICIES.update(_vendor_prepass_claim_policies())
+
+
+def _attempt_layout(attempt_root: Path, run_id: str, job_id: str) -> tuple[Path | None, Path | None, str | None]:
+    """(run root, data/jobs/<job_id>, error). The attempt must sit at
+    `<run>/data/jobs/<job_id>/<scope>/attempts/<attempt_id>` inside the run named `run_id`."""
+    owner = _owning_run_root(attempt_root, run_id)
+    if owner is None:
+        return None, None, "cannot locate the owning run manifest"
+    parents = attempt_root.parents
+    if (len(parents) < 4 or attempt_root.parent.name != "attempts" or parents[2].name != job_id or
+            parents[3] != owner / "data" / "jobs"):
+        return None, None, (f"the attempt is not at data/jobs/{job_id}/<scope>/attempts/<attempt_id> "
+                            "inside its run, so its tool outputs and upstream jobs cannot be located")
+    try:
+        beneath(owner, attempt_root)
+    except ValueError:
+        return None, None, "the attempt is reached through a linked directory of its run"
+    return owner, parents[2], None
+
+
+def _accepted_upstream(attempt_root: Path, run_root: Path, run_id: str,
+                       upstream_contract: str) -> tuple[Path | None, dict[str, str] | None, list[str]]:
+    """The SAME run's accepted attempt of an upstream node: (attempt root, {attempt_id, sha256}).
+
+    Both values come from the upstream job's `accepted.json`, which the publisher wrote outside the
+    attempt after validating it -- never from the document under validation. The pointer is checked
+    the way `publish_job_output.validate_published` checks one, minus what needs the upstream
+    job's own staged inputs (its input fingerprint). Every path is contained in the RUN root, so a
+    linked job, scope or attempt directory is refused: one spelling per file."""
+    node = VENDOR_PREPASS_NODES[upstream_contract]
+    job_id, artifact = node["job_id"], node["result"]
+    base = attempt_root.parents[3] / job_id / attempt_root.parents[1].name
+
+    def blocked(reason: str) -> tuple[None, None, list[str]]:
+        return None, None, [f"upstream job {job_id} {reason}"]
+
+    try:
+        if not (base / "accepted.json").is_file():
+            return blocked("has no accepted pointer in this run")
+        pointer = read_json(beneath(run_root, base / "accepted.json"))
+        latest = read_json(beneath(run_root, base / "latest.json"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return blocked("has no readable accepted pointer in this run")
+    if not isinstance(pointer, dict) or pointer.get("schema") != ACCEPTED_POINTER_SCHEMA:
+        return blocked("has no CURRENT accepted result (its newest attempt is pending, failed or legacy)")
+    hashes = pointer.get("hashes")
+    if (pointer.get("run_id") != run_id or pointer.get("job") != job_id or
+            pointer.get("status") not in _UPSTREAM_STATUSES or not isinstance(hashes, dict)):
+        return blocked(f"accepted pointer is not an {' or '.join(_UPSTREAM_STATUSES)} result of this run and job")
+    try:
+        attempt_id = identifier(pointer.get("attempt_id"))
+        upstream = beneath(run_root, base / "attempts" / attempt_id)
+        if not isinstance(latest, dict) or latest.get("attempt_id") != attempt_id:
+            return blocked("accepted attempt is not its newest attempt")
+        if not upstream.is_dir() or tree_hashes(upstream) != hashes:
+            return blocked("accepted attempt changed after it was accepted")
+        envelope_path = beneath(upstream, upstream / str(pointer.get("envelope_path", "")))
+        if not envelope_path.is_file() or file_hash(envelope_path) != pointer.get("envelope_sha256"):
+            return blocked("accepted worker-result envelope changed")
+    except (OSError, ValueError):
+        return blocked("accepted pointer does not resolve to an unlinked attempt of this run")
+    digest_value = hashes.get(artifact)
+    if not isinstance(digest_value, str) or not re.fullmatch(r"[0-9a-f]{64}", digest_value):
+        return blocked(f"accepted pointer does not record {artifact}")
+    return upstream, {"attempt_id": attempt_id, "sha256": "sha256:" + digest_value}, []
+
+
+def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any], *, run_id: Any,
+                                    job_id: Any, attempt_id: Any, node_status: Any,
+                                    orchestration: Any) -> list[str]:
+    """Assemble every caller fact from outside the attempt and run the contract's own verifier.
+
+    Every argument is required. `run_id`, `job_id`, `attempt_id` and `node_status` are the worker
+    ENVELOPE's values (which `validate_job_output` binds to its own expected run, job and attempt
+    directory); `orchestration` is `OrchestrationFacts` or the explicit `NO_ORCHESTRATION_FACTS`.
+    An empty list means the verifier ran and accepted the attempt. Anything that prevents the
+    verifier from running is an error: there is no schema-only fallback. Messages quote only
+    values the caller expected."""
+    contract_id = contract.get("contract_id")
+    node = VENDOR_PREPASS_NODES[contract_id]
+    prefix = f"{contract_id} cannot be validated: "
+    if orchestration is NO_ORCHESTRATION_FACTS:
+        return [prefix + "the caller supplied NO_ORCHESTRATION_FACTS; the orchestrator run id and the "
+                "source snapshot identity are never read from the attempt"]
+    if not isinstance(orchestration, OrchestrationFacts):
+        raise TypeError("orchestration must be OrchestrationFacts or NO_ORCHESTRATION_FACTS")
+    for name, value in (("run_id", run_id), ("job_id", job_id), ("attempt_id", attempt_id),
+                        ("execution_status", node_status)):
+        if not isinstance(value, str) or not value:
+            return [prefix + f"the worker envelope carries no usable {name}"]
+    if job_id != node["job_id"]:
+        return [prefix + f"the contract belongs to job {node['job_id']!r} and the envelope names another job"]
+    attempt_root = Path(attempt_root).absolute()
+    declaration = _v04.contract_declaration_errors if node["family"] == "V04" else (
+        _v05.contract_declaration_errors if node["family"] == "V05" else None)
+    if declaration is not None:
+        declared = declaration(contract)
+        if declared:
+            return [f"output contract record: {error}" for error in declared]
+    owner, tool_outputs_root, layout_error = _attempt_layout(attempt_root, run_id, node["job_id"])
+    if layout_error:
+        return [prefix + layout_error]
+
+    # Facts. Every problem is collected, so a caller sees all that is missing at once.
+    problems: list[str] = []
+    header = {"run_id": run_id, "job_id": node["job_id"], "attempt_id": attempt_id,
+              "source_snapshot_sha256": orchestration.source_snapshot_sha256}
+    common = {"node_status": node_status, "declared_tool_ids": list(node["declared_tool_ids"]),
+              "permitted_node_statuses": list(node["permitted_node_statuses"]),
+              "on_unhandled": REDACTION_POLICY, "limits": REDACTION_LIMITS,
+              "expected_dagster_run_id": orchestration.dagster_run_id}
+    source_root = None
+    if contract_id in {"sbom-inventory", "license-inventory", "mobile-sast", "binary-hardening"}:
+        source_root, source_errors = _source_root(attempt_root, run_id)
+        problems += source_errors
+    upstream: dict[str, tuple[Path | None, dict[str, str] | None]] = {}
+    wanted = {"sca-vulnerability-match": ("sbom-inventory",), "license-inventory": ("sbom-inventory",),
+              "dependency-lifecycle": ("sbom-inventory", "license-inventory")}.get(contract_id, ())
+    for upstream_contract in wanted:
+        root, expected, upstream_errors = _accepted_upstream(attempt_root, owner, run_id, upstream_contract)
+        upstream[upstream_contract] = (root, expected)
+        problems += upstream_errors
+    databases = table = None
+    try:
+        if contract_id == "sca-vulnerability-match":
+            databases = vulnerability_database_bindings(owner)
+        elif contract_id == "dependency-lifecycle":
+            table = lifecycle_reference_table_binding(owner)
+    except BindingUnavailable as unavailable:
+        problems.append(str(unavailable))
+    if problems:
+        return [prefix + problem for problem in problems]
+
+    family = node["family"]
+    try:
+        if family == "V04":
+            verifier = (_v04.validate_secrets_attempt if contract_id == _v04.SECRETS_CONTRACT_ID
+                        else _v04.validate_iac_attempt)
+            errors = verifier(attempt_root, tool_outputs_root=tool_outputs_root, **common)
+        elif family == "V07":
+            inputs_root = owner / "inputs" if contract_id == "container-image-inventory" else source_root
+            errors = _v07.verify_attempt(contract_id, attempt_root, inputs_root, expected_header=header, **common)
+        else:
+            common.update(tool_outputs_root=tool_outputs_root, expected_header=header)
+            sbom_root, expected_sbom = upstream.get("sbom-inventory", (None, None))
+            if contract_id == _v05.SBOM_CONTRACT_ID:
+                errors = _v05.verify_sbom_attempt(attempt_root, source_root=source_root, **common)
+            elif contract_id == _v05.SCA_CONTRACT_ID:
+                errors = _v05.verify_sca_attempt(
+                    attempt_root, sbom_attempt_root=sbom_root, expected_sbom=expected_sbom,
+                    expected_databases=databases, max_age=job_max_age(contract_id),
+                    now=orchestration.now, **common)
+            elif contract_id == _v05.LICENSE_CONTRACT_ID:
+                errors = _v05.verify_license_attempt(
+                    attempt_root, source_root=source_root, sbom_attempt_root=sbom_root,
+                    expected_sbom=expected_sbom, **common)
+            else:
+                license_root, expected_license = upstream["license-inventory"]
+                errors = _v05.verify_lifecycle_attempt(
+                    attempt_root, sbom_attempt_root=sbom_root, expected_sbom=expected_sbom,
+                    license_attempt_root=license_root, expected_license=expected_license,
+                    reference_table_path=table[0], expected_reference_table=table[1],
+                    max_age=job_max_age(contract_id), now=orchestration.now, **common)
+    except (TypeError, ValueError) as refused:
+        # A verifier raises when a CALLER fact is malformed. That is this module's problem, not the
+        # attempt's, and it must not become an accepted attempt or an unhandled crash.
+        return [prefix + f"the verifier refused its caller facts ({type(refused).__name__})"]
+    if errors:
+        return [f"{contract_id} verifier: {error}" for error in errors]
+
+    # The verifier accepted the attempt, so the receipt holds and the result may be parsed. V04's
+    # verifier takes no expected header: it proves the documents agree with EACH OTHER. Binding the
+    # result's header to the caller's facts here closes that for all nine alike.
+    try:
+        value = read_json(beneath(attempt_root, attempt_root / Path(*PurePosixPath(node["result"]).parts)))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [prefix + f"the verified result cannot be read ({type(exc).__name__})"]
+    return [f"{contract_id} result {field} is not the caller's expected {header[field]!r}"
+            for field in HEADER_FIELDS if not isinstance(value, dict) or value.get(field) != header[field]]
+
+
 def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
                              run_id: str, registry_root: Path = REGISTRY,
                              schemas_root: Path = SCHEMAS) -> list[str]:
-    """Validate only the one result artifact explicitly selected by an opted-in contract."""
+    """Validate only the one result artifact explicitly selected by an opted-in contract.
+
+    For an ADR-0010 vendor-prepass contract this is the GENERIC layer only (schema, secret and
+    claim-class checks over the result artifact). It parses that artifact without looking at the
+    redaction receipt and knows none of the caller facts, so on its own it is not acceptance:
+    `validate_job_output` runs `validate_vendor_prepass_attempt` first and reaches this function
+    only when that verifier accepted the attempt."""
     declaration = contract.get("result_schema")
     if declaration is None:
         return []
@@ -507,7 +861,13 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
                         registry_root: Path = REGISTRY, graph_path: Path = GRAPH,
                         consumer_job_id: str | None = None,
                         accepted_envelope: dict[str, Any] | None = None,
-                        reuse: bool = False, schemas_root: Path = SCHEMAS) -> list[str]:
+                        reuse: bool = False, schemas_root: Path = SCHEMAS, *,
+                        orchestration: Any) -> list[str]:
+    """`orchestration` is required and has no default: `OrchestrationFacts` when the caller knows
+    the producing orchestrator run and source snapshot, else the explicit
+    `NO_ORCHESTRATION_FACTS`, with which every vendor-prepass contract fails closed."""
+    if orchestration is not NO_ORCHESTRATION_FACTS and not isinstance(orchestration, OrchestrationFacts):
+        raise TypeError("orchestration must be OrchestrationFacts or NO_ORCHESTRATION_FACTS")
     errors: list[str] = []
     attempt_root = Path(attempt_root).absolute()
     if not attempt_root.is_dir():
@@ -581,10 +941,23 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
                 errors.append(f"output contract has unsafe required file {required!r}")
             elif required not in artifact_paths:
                 errors.append(f"required output is absent from the artifact manifest: {required}")
-        errors.extend(_status_errors(attempt_root, contract, envelope))
-        errors.extend(validate_contract_result(
-            attempt_root, contract, run_id=envelope.get("run_id", ""),
-            registry_root=Path(registry_root), schemas_root=Path(schemas_root)))
+        # ORDER IS A SAFETY PROPERTY for the vendor-prepass contracts. Their verifier checks the
+        # redaction receipt against the published bytes before it parses anything, so it runs
+        # FIRST; if it (or the assembly of its caller facts) reports anything, no file of the
+        # attempt is parsed here at all: status.json and the result artifact stay unread and
+        # only the verifier's own, non-echoing errors are returned for the attempt.
+        verifier_errors: list[str] = []
+        if contract.get("contract_id") in VENDOR_PREPASS_NODES:
+            verifier_errors = validate_vendor_prepass_attempt(
+                attempt_root, contract, run_id=envelope.get("run_id"),
+                job_id=envelope.get("job_id"), attempt_id=envelope.get("attempt_id"),
+                node_status=envelope.get("execution_status"), orchestration=orchestration)
+            errors.extend(verifier_errors)
+        if not verifier_errors:
+            errors.extend(_status_errors(attempt_root, contract, envelope))
+            errors.extend(validate_contract_result(
+                attempt_root, contract, run_id=envelope.get("run_id", ""),
+                registry_root=Path(registry_root), schemas_root=Path(schemas_root)))
     if reuse:
         if accepted_envelope is None:
             errors.append("reuse validation requires the accepted envelope")
@@ -605,13 +978,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--consumer-job")
     parser.add_argument("--accepted-envelope", type=Path)
     parser.add_argument("--reuse", action="store_true")
+    parser.add_argument("--dagster-run-id",
+                        help="orchestrator run that produced the attempt (vendor-prepass contracts)")
+    parser.add_argument("--source-snapshot-sha256",
+                        help="intake source snapshot identity, sha256:<hex> (vendor-prepass contracts)")
     args = parser.parse_args(argv)
+    if (args.dagster_run_id is None) != (args.source_snapshot_sha256 is None):
+        parser.error("--dagster-run-id and --source-snapshot-sha256 go together")
+    # The command line is the edge where the wall clock is read; nothing below reads it.
+    orchestration = NO_ORCHESTRATION_FACTS if args.dagster_run_id is None else OrchestrationFacts(
+        dagster_run_id=args.dagster_run_id, source_snapshot_sha256=args.source_snapshot_sha256,
+        now=datetime.now(timezone.utc))
     envelope = read_json(args.envelope)
     accepted = read_json(args.accepted_envelope) if args.accepted_envelope else None
     errors = validate_job_output(
         args.attempt_root, envelope, args.expected_input_fingerprint,
         expected_run_id=args.expected_run_id, expected_job_id=args.expected_job_id,
-        consumer_job_id=args.consumer_job, accepted_envelope=accepted, reuse=args.reuse)
+        consumer_job_id=args.consumer_job, accepted_envelope=accepted, reuse=args.reuse,
+        orchestration=orchestration)
     print(json.dumps({"status": "PASS" if not errors else "FAIL", "errors": errors}, indent=2))
     return 0 if not errors else 1
 
