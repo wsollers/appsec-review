@@ -252,3 +252,35 @@ remaining human gates.
 - No Dagster, lifecycle graph, registry, parity manifest, generated view, persona dispatch, target
   access, assessment update, result join, finding promotion, or `TODO.md` surface was activated.
   T10 dispatch, wait-all, and failure accounting is next and remains dependency-gated.
+
+## Implementation checkpoint — T10 dispatch, wait-all, and failure accounting — 2026-09-21
+
+- Implemented by Claude, not Codex, after the owner chose to build the real persona/pool
+  foundations first: B13 `container_execution.py`, B14 `persona_invocation.py`, B15
+  `resource_pools.py`, C01 `pool_specification.py` and C02 `pool_rendezvous.py`. T10 is
+  `appsec-review-process/owasp_dispatch.py` with a tracked versioned configuration and closed request,
+  configuration, attempt, status, pool, cell, row and accounting schemas.
+- One exact newest accepted T06 publication is re-validated through T07's own handoff loader. Each
+  `validator_contract_only` handoff becomes one C01 persona group in trusted code: no capability, no
+  tool, claim classes from the registry ceiling and only narrowed, the handoff and the evidence it
+  names as pinned bytes. `request_authoring_only` handoffs are never dispatched and are reported as
+  request-only.
+- Cells run through the real C01 expansion and C02 wait-all rendezvous and are read back only through
+  `load_verified_manifest`. A `succeeded` cell's output is only a candidate: it is submitted to T07,
+  and a row defers to a T07 result only when T07's own files show that exact candidate accepted.
+- The immutable accounting keeps every expected cell with its C02 state and an explicit mapping of
+  failed, canceled, timed-out, skipped, invalid and degraded, and accounts every T05 worklist row
+  exactly once as deferred, `not_assessed` with provenance, request-only or not a validator
+  assignment. It carries no timestamp, no free text and no T05-T07 identifier (those shapes do not
+  survive the V06 redactor; digests and ordinals are published instead).
+- A newer attempt never consults an older one; a blocked or failed newer attempt blocks the accepted
+  accounting without replacing its pointer; exact replay is reused only after full re-derivation and
+  only when no cell is left to retry; a killed coordinator is resumed through C02's restart semantics.
+  The producer and the read-only verifier share one accounting rule.
+- The tracked registry cannot dispatch anything yet: its only `owasp-validator` composition forbids
+  `control_verdict`, and T10 refuses it. The tests use a registry copy with that one claim limit
+  allowed. Registering a validator composition remains T14.
+- No Dagster, lifecycle graph, registry, parity manifest, generated view, real model client, target
+  access, result join, challenge resolution, dynamic/manual authorization, finding promotion, or
+  `TODO.md` surface was activated. T11 deterministic join and reporting is next and must read only
+  through `owasp_dispatch.load_verified_accounting`.

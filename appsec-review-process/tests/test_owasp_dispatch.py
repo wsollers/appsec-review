@@ -608,11 +608,20 @@ class ReuseTests(DispatchCase):
 
     def test_a_changed_prompt_byte_is_refused(self):
         self.dispatch()
-        relocated = self.base / "process"
-        prompt = Path("config") / "owasp-validator-handoff" / "validator-instructions-v1.txt"
-        (relocated / prompt).parent.mkdir(parents=True)
-        (relocated / prompt).write_bytes((od.ROOT / prompt).read_bytes() + b"\n")
-        with mock.patch.object(od, "ROOT", relocated):
+        # A relocated tracked tree (repository root, process root, configuration) that differs from
+        # the real one in exactly one prompt byte; it resolves the same way on a host checkout and
+        # in the code-server layout, where the process tree is not called by its repository name.
+        repo = self.base / "prompt-repo"
+        relocated = repo / "appsec-review-process"
+        for source in sorted((od.ROOT / "config").rglob("*")):       # by content: never a read-only mode
+            if source.is_file():
+                copy = relocated / source.relative_to(od.ROOT)
+                copy.parent.mkdir(parents=True, exist_ok=True)
+                copy.write_bytes(source.read_bytes())
+        prompt =relocated / "config" / "owasp-validator-handoff" / "validator-instructions-v1.txt"
+        prompt.write_bytes(prompt.read_bytes() + b"\n")
+        with mock.patch.object(od, "ROOT", relocated), mock.patch.object(od, "REPO_ROOT", repo), \
+                mock.patch.object(od, "CONFIG_ROOT", relocated / "config" / "owasp-dispatch"):
             self.changed("prompt_refused")
 
     def test_a_republished_handoff_is_a_new_dispatch(self):

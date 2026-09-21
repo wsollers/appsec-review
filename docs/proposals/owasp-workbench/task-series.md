@@ -395,9 +395,10 @@ documented in `schemas/README.md`. The standalone offline worker:
 T09 is not registered or dispatched and does not authorize or execute dynamic/manual work, ingest
 runtime evidence into an assessment, join results, resolve applicability/component challenges, or
 promote findings, severity, exploitability, compliance, remediation, or runtime claims. T10
-dispatch/wait-all/failure accounting is next and remains blocked on its persona/pool foundations.
+dispatch/wait-all/failure accounting was implemented afterwards on the persona/pool foundations
+(B13, B14, B15, C01, C02); T11 deterministic join and reporting is next.
 
-## T10 — Dispatch, Wait-All, And Failure Accounting
+## T10 — Dispatch, Wait-All, And Failure Accounting — IMPLEMENTED FOUNDATION
 
 After persona/pool foundations exist, dispatch bounded validator cells and require every expected
 cell to reach terminal state before join. Preserve failed, canceled, timed-out, skipped, invalid,
@@ -405,6 +406,86 @@ and degraded cells. Applicable rows without a valid result become `not_assessed`
 
 Test partial pool failure, timeout, cancellation, invalid output, worker loss, newer failed attempt,
 no fallback to an older result, and recovery/reuse only where the common lifecycle permits it.
+
+Implemented by `appsec-review-process/owasp_dispatch.py`, the tracked versioned configuration under
+`appsec-review-process/config/owasp-dispatch/`, and the closed T10 schemas documented in
+`schemas/README.md`. It was implemented by Claude on the pool foundations that now exist: B13
+`container_execution.py`, B14 `persona_invocation.py`, B15 `resource_pools.py`, C01
+`pool_specification.py` and C02 `pool_rendezvous.py`. The standalone worker:
+
+- consumes `runs/<run_id>/inputs/owasp-dispatch-request.json`, which pins one exact newest accepted
+  T06 pointer and handoff set, the tracked dispatch configuration digest and one exact model
+  identity; every handoff member is re-validated through T07's own `_load_handoff`, the rule
+  T07-T09 share, and a stale or superseded publication fails closed;
+- maps each `validator_contract_only` handoff to one validator cell in trusted code: one C01 persona
+  group with `count: 1`, `wait_all: true`, a B11 permission block that requires and grants no
+  capability (no network, no mount, no dynamic or manual execution), and an empty tool list. The
+  persona composition, its record hashes, the allowed and prohibited claim classes come from the
+  registry through B14 (`load_composition`, `claim_ceiling`); the configuration can only narrow the
+  allowed classes, and every T06 prohibited claim class must map to registry classes the cell
+  prohibits, or the dispatch is refused. The cell timeout is the smaller of the handoff's budget
+  and the configuration's ceiling, the C01 `budget_class` and `pool_budget` derive from the handoff's
+  versioned budget name, and the outer prompt is the tracked T06 instruction file, which must be the
+  bytes every handoff pins;
+- hands a cell only pinned bytes: the handoff (role `handoff`), the T06 pointer and handoff set that
+  publish it (role `reference`; T07 requires a candidate to state them) and exactly the accepted
+  inputs the handoff names (role `evidence`). Handoff and evidence text is data: nothing in it
+  selects a tool, a claim class, a permission, a persona, a model, a budget or a path;
+- never dispatches a `request_authoring_only` handoff: rows T05 routed to the dynamic boundary are
+  reported as `request_only`. More cells than one pool may hold are dispatched as consecutive waves,
+  each with its own C01 pool, C02 rendezvous and cancel event; zero dispatchable cells is one `EMPTY`
+  pool with a closed reason, a coverage statement that is never `OK`;
+- expands with `pool_specification.expand_pool`, launches and waits with
+  `pool_rendezvous.run_rendezvous`, and afterwards reads only through `load_verified_manifest`. Any
+  exception from a lower layer's verifier is a refusal: those cells are `not_assessed`, and the
+  accounting is still published;
+- treats a `succeeded` cell's `control-assessment-result.json` as a CANDIDATE only. The candidate
+  must be listed by B14's verified result, be read as the listed bytes, have exactly one JSON
+  reading and name the instance that wrote it; it is then submitted in place, by hash, to
+  `owasp_validator_result.publish`. T10 re-implements no T07 rule and uses neither T07's return value
+  nor its exception: a cell has a valid result only when T07's newest attempt for that batch is for
+  exactly that request, is accepted, publishes intact artifacts, and its result equals the candidate;
+- publishes one immutable, schema-closed `owasp-dispatch-accounting.json` without timestamp or free
+  text. Every expected cell keeps its C02 state, adapter status and cause, and a `terminal_class` that
+  maps the task vocabulary explicitly: failed (`failed`, `blocked`, `crashed`, `missing`), canceled
+  (`canceled`), timed out (`instance_timed_out`, `rendezvous_timed_out`), skipped
+  (`not_launched_canceled`, `not_launched_rendezvous_timeout`, and an `EMPTY` pool), invalid (`invalid`,
+  and a `succeeded` cell without a valid result), degraded (the `DEGRADED` outcome). Every T05
+  worklist row appears exactly once: each of its fragments defers to its cell's validated T07
+  result, is `not_assessed` with that cell's provenance, or is `request_only`, and a row is
+  `not_assessed` as soon as one dispatched fragment is. T10 issues no control status, so no fragment,
+  `obligation_fragment_only` or not, issues a final one;
+- publishes T05-T07 identifiers only as digests and ordinals, because the V06 redactor replaces the
+  `prefix-<hex>` shape those identifiers have; every published T10 document survives
+  `evidence_redaction.redact_tree` unchanged;
+- follows the T05-T09 attempt conventions: a job lock, immutable attempts, `latest.json` moved when
+  an attempt is allocated, `accepted.json` replaced only after the written attempt verified. A newer
+  attempt is a new specification attempt id, hence new pool roots and new T07 submissions: its
+  failed, canceled or degraded cells are `not_assessed` in the newest accounting and an older result
+  is never consulted. A blocked or failed newer attempt keeps a status with a closed refusal code,
+  never replaces the accepted pointer and blocks it, because `load_verified_accounting` requires the
+  accepted attempt to be the newest. An exact replay is reused only after the whole publication was
+  re-derived and only when no dispatched cell is left to retry; a coordinator that died is resumed
+  in its own attempt through C02's restart semantics;
+- shares ONE accounting rule, `derive_accounting`, between the producer and `verify_publication`,
+  which reads every file it accounts for and compares bytes; no hash on disk is an input.
+
+There is no command-line dispatch: the invoker is integrator-supplied (B14 `PersonaInvoker`) and this
+repository has no model client. The command line verifies an accepted accounting:
+
+```text
+python -B appsec-review-process/owasp_dispatch.py --run-id <run_id> --invoker-id <id> \
+  --source-snapshot-sha256 sha256:<digest> --registry-dir <registry>
+```
+
+With the tracked registry nothing can be dispatched yet: the only composition that names the
+`owasp-validator` persona, `04-owasp-validation-worklist`, uses the `owasp-worklist-builder` tooling
+profile, whose claim limits forbid `control_verdict`, and T10 refuses a composition that may not issue
+it. Registering a validator composition is T14. T10 is not registered in Dagster, the lifecycle
+graph, the registry or the parity manifest; it creates no control-satisfaction upgrade, finding,
+severity, exploitability, compliance, certification, remediation or runtime claim, joins nothing,
+resolves no challenge and authorizes no dynamic or manual work. T11 deterministic join and reporting
+is next: it must read only through `owasp_dispatch.load_verified_accounting`.
 
 ## T11 — Deterministic Join And Reporting
 
