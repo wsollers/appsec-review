@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pool-rendezvous-manifest.schema.json",
+  "title": "Terminal-instance manifest of one pool (C02)",
+  "description": "appsec-review/pool-rendezvous-manifest/1.0: terminal-instances.json, created exclusively and last by pool_rendezvous.run_rendezvous, only when every expected instance of the C01 expansion has a recorded terminal state. instances is the expansion's instance list, each once and in order; a worker that was not observed is never an empty success. outcome is a pure function of the instance states and only COMPLETE is a whole result set; EMPTY carries the expansion's reason. No timestamp, no host path and no free text, so one set of on-disk facts derives one byte sequence across a restart. manifest_sha256 is an integrity check, not an authenticator: the verifier re-derives the whole document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "classification",
+    "expansion",
+    "expansion_sha256",
+    "spec_sha256",
+    "pool_directory",
+    "pool_id",
+    "lane",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "wait_all",
+    "rendezvous_timeout_seconds",
+    "empty_pool_reason",
+    "expansion_state",
+    "outcome",
+    "counts",
+    "instances",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/pool-rendezvous-manifest/1.0"
+    },
+    "classification": {
+      "const": "appsec-review/pool-instance-classification/1.0"
+    },
+    "expansion": {
+      "const": "appsec-review/pool-expansion/1.0"
+    },
+    "expansion_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "spec_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "pool_directory": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "pool_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}\\Z"
+    },
+    "lane": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}\\Z"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}\\Z"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "wait_all": {
+      "const": true
+    },
+    "rendezvous_timeout_seconds": {
+      "type": "integer"
+    },
+    "empty_pool_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "no_applicable_work",
+        "scope_excluded",
+        "upstream_produced_no_work",
+        null
+      ]
+    },
+    "expansion_state": {
+      "type": "string",
+      "enum": [
+        "EMPTY",
+        "POPULATED"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "EMPTY",
+        "COMPLETE",
+        "DEGRADED",
+        "FAILED",
+        "CANCELED"
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instances",
+        "succeeded",
+        "failed",
+        "blocked",
+        "canceled",
+        "instance_timed_out",
+        "rendezvous_timed_out",
+        "crashed",
+        "invalid",
+        "not_launched_canceled",
+        "not_launched_rendezvous_timeout",
+        "missing"
+      ],
+      "properties": {
+        "instances": {
+          "type": "integer"
+        },
+        "succeeded": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "blocked": {
+          "type": "integer"
+        },
+        "canceled": {
+          "type": "integer"
+        },
+        "instance_timed_out": {
+          "type": "integer"
+        },
+        "rendezvous_timed_out": {
+          "type": "integer"
+        },
+        "crashed": {
+          "type": "integer"
+        },
+        "invalid": {
+          "type": "integer"
+        },
+        "not_launched_canceled": {
+          "type": "integer"
+        },
+        "not_launched_rendezvous_timeout": {
+          "type": "integer"
+        },
+        "missing": {
+          "type": "integer"
+        }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "$ref": "pool-rendezvous-instance.schema.json"
+      }
+    },
+    "manifest_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}
