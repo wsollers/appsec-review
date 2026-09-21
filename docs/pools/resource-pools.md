@@ -6,7 +6,7 @@ persona/LLM and dynamic-analysis work runs at once across every run and engageme
 and stay the outer limits: a pool can only make a ready step wait, it can never start one that the
 queue or the executor would not.
 
-Single source of truth: [`appsec-review-process/resource_pools.py`](../appsec-review-process/resource_pools.py).
+Single source of truth: [`appsec-review-process/resource_pools.py`](../../appsec-review-process/resource_pools.py).
 `dagster_workflow.py` and `orchestrator/dagster/definitions.py` take every `pool=` value from it;
 no pool id or limit is a constant anywhere else. A test ties the tables on this page to the module.
 
@@ -193,7 +193,7 @@ python -B /opt/process/resource_pools.py verify-state <file>
 `state` writes a `resource-pool-state` document (`appsec-review/resource-pool-state/1.1`; no 1.0
 document exists outside tests -- the id was raised when the required `pooled_steps_recorded` field
 was added, because a changed shape gets a new id; a 1.0 document fails the schema)
-([schema](../schemas/resource-pool-state.schema.json)): declared and observed limits, the floor,
+([schema](../../schemas/resource-pool-state.schema.json)): declared and observed limits, the floor,
 the outer limits, every op's pool or unassigned reason, and for the named runs each pooled step's
 start and end with the largest observed overlap per pool. It refuses to overwrite and refuses a
 run id given twice. Steps without a pool are not recorded, so a recorded step always names a
@@ -244,7 +244,7 @@ pointers become non-current and the first run of each engagement re-executes ins
    Then `exec -T code-server python -B /opt/process/resource_pools.py verify` exits 0 and the UI's
    Deployment > Concurrency page lists the six pools with 3/1/1/1/3/1.
 4. Per-pool limit and fairness, memory pool: stage two Linux-owned engagements (A, B) as in
-   `docs/dagster-launching.md`, run `engagement_workflow` for both, then launch
+   `docs/dagster/dagster-launching.md`, run `engagement_workflow` for both, then launch
    `--job evidence_index` for A and for B at the same time. Both runs are `STARTED` together
    (run queue 2), but only one `evidence_index_work` step runs; the other shows Dagster's
    pool-blocked message and starts when the first ends.
@@ -337,7 +337,7 @@ restart of the real services.
   on this page therefore bound each rendezvous, not the host: k concurrent rendezvous can run k
   containers and 3k persona invocations. The job whose op calls `run_rendezvous` (T10) must carry a
   run-level tag with a tag concurrency limit of 1; the aggregate inside an engagement closes when
-  instances are launched as dynamically mapped pooled ops ([pool rendezvous](pool-rendezvous.md),
+  instances are launched as dynamically mapped pooled ops ([pool rendezvous](../rendezvous/pool-rendezvous.md),
   "Constraint: one engagement at a time").
 - Pools count steps, not bytes or cores; `memory` 1 means one memory-heavy step, not a quota.
 - Waiting is first come first served within a priority, not proportional between engagements.

@@ -5,7 +5,7 @@ Engagement Phase 1 modernization is separately specified in
 run-owned `data/`, explicit validation jobs, idempotency and acceptance gates. The numbered registry
 phases below describe the older implementation breakdown, not engagement lifecycle phase numbers.
 Engagement Phase 1 is [ACCEPTED through A01-A16](../docs/phase-1-acceptance.md).
-Use the [operations guide](../docs/phase-1-operations.md); downstream dispatch remains planned.
+Use the [operations guide](../docs/dagster/operations.md); downstream dispatch remains planned.
 
 This plan consolidates the persona, intelligence, composable-template, and standards-checklist
 proposals into a repo structure that extends the current lane process without replacing it.

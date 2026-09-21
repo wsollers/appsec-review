@@ -1991,7 +1991,7 @@ class CrossSliceTests(unittest.TestCase):
                     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.")]
         paths = [ROOT / "sbom_family_contracts.py", Path(__file__), *[REPO / "schemas" / name for name in ALL_SCHEMAS],
                  *[CONTRACT_DIR / f"{contract_id}.json" for contract_id in contracts.CONTRACT_POLICIES]]
-        doc = REPO / "docs" / "sbom-family-contracts.md"
+        doc = REPO / "docs" / "evidence" / "sbom-family-contracts.md"
         for path in [*paths, *([doc] if doc.is_file() else [])]:
             text = path.read_text(encoding="utf-8")
             for scanner in scanners:

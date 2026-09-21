@@ -19,11 +19,11 @@ run-owned jobs. Do not implement or register any worker or tool in this batch.
 1. `AGENTS.md`
 2. `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`
 3. `appsec-review-process/TODO.md` — independent-work protocol and M01
-4. `docs/script-migration-inventory.md`
-5. `docs/design-parity-completion-plan.md`
-6. `docs/design-v3.md`
-7. `docs/run-data-and-job-execution.md`
-8. `docs/dagster-workflow.md`
+4. `docs/architecture/script-migration-inventory.md`
+5. `docs/design-parity/design-parity-completion-plan.md`
+6. `docs/architecture/design-v3.md`
+7. `docs/dagster/run-data-and-job-execution.md`
+8. `docs/dagster/dagster-workflow.md`
 9. `appsec-review-process/job-graph.json`
 10. `appsec-review-process/design-parity-manifest.json`
 11. `scripts/Invoke-VendorAuditPrePass.ps1`
@@ -38,7 +38,7 @@ This batch may change only:
 
 - a new `docs/decisions/ADR-0007-vendor-prepass-decomposition.md`;
 - new proposal fixtures under `docs/proposals/vendor-prepass/`;
-- `docs/script-migration-inventory.md`, only where the M01 decision makes a row more exact;
+- `docs/architecture/script-migration-inventory.md`, only where the M01 decision makes a row more exact;
 - this continuation file, only to append the final checkpoint.
 
 Do **not** change:
@@ -183,7 +183,7 @@ identity or behavior changed.
   `ast-grep-scan` is declared twice in PowerShell. Both runners use default Docker networking and
   mutable `:local` image tags.
 - Ten human gates (G1–G10) are open. M01 is **not** complete until the user answers them (task V01)
-  and the integrator lands V02. `docs/script-migration-inventory.md` was deliberately left
+  and the integrator lands V02. `docs/architecture/script-migration-inventory.md` was deliberately left
   unchanged because no row becomes more exact until the gates are answered.
 - Downstream owners: M03 (secrets, IaC, redactor), M05 (SBOM family, snapshot publisher), M04 with
   M02 (container image, mobile, binary hardening), D09 (source SAST), M06 (symbol/semantic index),

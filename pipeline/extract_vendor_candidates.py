@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 extract_vendor_candidates.py -- Tier B, pass 2 (heuristic pass) of the L12
-native-vendored-dependency-inference job (see docs/design-v3.md §4.2).
+native-vendored-dependency-inference job (see docs/architecture/design-v3.md §4.2).
 
 Deliberately dumb and deterministic. Does NOT call an LLM. Its whole job is
 to take the compile/assemble/link command lines a real build actually used

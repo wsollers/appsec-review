@@ -1,7 +1,7 @@
 # Mythos design-parity completion plan
 
 Status: active implementation backlog. This plan closes the gap between the architecture described
-in `docs/design-v3.md` and the executable, run-owned Dagster process. A registry record, prompt,
+in `docs/architecture/design-v3.md` and the executable, run-owned Dagster process. A registry record, prompt,
 diagram, or graph edge is not implementation. Parity requires an executable worker, a validated
 output contract, recovery behavior, and service-level qualification.
 
@@ -11,9 +11,9 @@ output contract, recovery behavior, and service-level qualification.
   `appsec-review-process/design-parity-manifest.json` (`appsec-review/design-parity-manifest/1.0`).
   `validate_design_parity.py` reconciles it against the graph, registry, Dagster definitions,
   launcher, sensors, entrypoints, contracts, schemas, queue limits, pools, and qualification
-  references. The deterministic human view is `docs/design-parity-report.md`; the lifecycle graph
-  and operator table are generated as `docs/full-review-workflow.mmd` and
-  `docs/design-parity-readiness.md` and are rejected when stale.
+  references. The deterministic human view is `docs/design-parity/design-parity-report.md`; the lifecycle graph
+  and operator table are generated as `docs/design-parity/full-review-workflow.mmd` and
+  `docs/design-parity/design-parity-readiness.md` and are rejected when stale.
 - The lifecycle graph declares 51 jobs. Only `00-intake`, `02-ossf-scorecard`, and
   `02-evidence-index` are currently marked implemented in `job-graph.json`.
 - Several useful standalone Dagster jobs exist, but standalone registration does not prove that

@@ -52,8 +52,8 @@ M06 semantic-index disposition ────────────────�
 ## V02 — Declare Nodes, Edges And Skip Reason — `INTEGRATION`, in review (branch `claude/v02-declare-vendor-prepass-nodes`)
 
 - Exclusive paths: `arp/job-graph.json`, `arp/design-parity-manifest.json`,
-  `arp/worker-result-contract.json`, generated parity views (`docs/design-parity-report.md`,
-  `docs/full-review-workflow.mmd`, `docs/design-parity-readiness.md`), `arp/TODO.md`.
+  `arp/worker-result-contract.json`, generated parity views (`docs/design-parity/design-parity-report.md`,
+  `docs/design-parity/full-review-workflow.mmd`, `docs/design-parity/design-parity-readiness.md`), `arp/TODO.md`.
 - Deliverables: the approved nodes as `implemented: false`, `template: null`, with `planned_scope`
   and `required_artifacts`; one `required` `02-evidence-assembly` edge per joining node with the
   approved `allowed_skip_reasons`; `not-applicable-no-matching-inputs` registered (G5 = A);
@@ -115,7 +115,7 @@ M06 semantic-index disposition ────────────────�
 ## V06 — Redactor And Redaction Receipt — done (PR #10; 1.1.0 in PR #17)
 
 - Exclusive paths: new `arp/evidence_redaction.py`, `schemas/redaction-receipt.schema.json`,
-  `arp/tests/test_evidence_redaction.py`, `docs/evidence-redaction.md`.
+  `arp/tests/test_evidence_redaction.py`, `docs/evidence/evidence-redaction.md`.
 - Deliverables: deterministic redactor (entropy pass + secret-name-aware pass, ported in behavior
   from `pipeline/scrub_evidence.py`, not lifted verbatim) applied at the publication boundary; the
   receipt described in the ADR; bounded input handling.
@@ -147,7 +147,7 @@ Decision G3 made the NVD copy under `/data` (published by `nvd_feed.py`) an offl
 made Grype the SCA matcher, so this binding is **no longer the matcher's source**: it serves
 `06-cve-reachability` enrichment and an independent cross-check. No network, no B11 capability.
 
-- Delivered: `appsec-review-process/sca_nvd_snapshot.py`, its tests, `docs/sca-nvd-snapshot-binding.md`,
+- Delivered: `appsec-review-process/sca_nvd_snapshot.py`, its tests, `docs/evidence/sca-nvd-snapshot-binding.md`,
   `schemas/vulnerability-database-identity.schema.json`.
 - Age policy (M4, supersedes the original "older than policy => `OK_WITH_GAPS`"): `max_age` is
   required and has no default; a job passes `NO_AGE_LIMIT` unless it or the engagement configured a
@@ -197,7 +197,7 @@ made Grype the SCA matcher, so this binding is **no longer the matcher's source*
 ## V14 — Retire And Delete The Runners (M07 slice) — `INTEGRATION`, `BLOCKED(V10,V11,V12,V13,V15,M06)`
 
 - Exclusive paths: `scripts/Invoke-VendorAuditPrePass.ps1`, `.sh`, helper scripts only they call,
-  engagement callers, `pipeline/README.md`, runbooks, `docs/script-migration-inventory.md`,
+  engagement callers, `pipeline/README.md`, runbooks, `docs/architecture/script-migration-inventory.md`,
   `arp/TODO.md`.
 - Acceptance: zero remaining steps, zero executable callers, no wrapper, inventory rows closed.
 

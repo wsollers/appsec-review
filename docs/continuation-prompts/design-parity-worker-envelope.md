@@ -37,9 +37,9 @@ new paths:
 - `appsec-review-process/qualify_worker_adoption.py`
 - `appsec-review-process/tests/test_deterministic_child.py` (new)
 - `appsec-review-process/tests/test_ossf_scorecard.py`
-- `docs/design-parity-completion-plan.md`
-- `docs/run-data-and-job-execution.md`
-- `docs/worker-result-envelope.md`
+- `docs/design-parity/design-parity-completion-plan.md`
+- `docs/dagster/run-data-and-job-execution.md`
+- `docs/adapters/worker-result-envelope.md`
 
 The dirty-worktree boundary is exactly 45 paths. Do not reset, clean, stash, checkout, or broadly
 rewrite any of them. Preserve later unrelated changes.
@@ -169,10 +169,10 @@ Implemented on branch `claude/b09-sarif-common-runtime` within the requested bou
 - `appsec-review-process/publish_job_output.py` (docstring only)
 - `appsec-review-process/TODO.md`
 - `docs/continuation-prompts/design-parity-worker-envelope.md`
-- `docs/critical-findings-sarif-job.md`
-- `docs/worker-result-envelope.md`
-- `docs/run-data-and-job-execution.md`
-- `docs/design-parity-completion-plan.md`
+- `docs/dagster/critical-findings-sarif-job.md`
+- `docs/adapters/worker-result-envelope.md`
+- `docs/dagster/run-data-and-job-execution.md`
+- `docs/design-parity/design-parity-completion-plan.md`
 
 ### Batch 9 qualification state
 

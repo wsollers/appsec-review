@@ -20,7 +20,7 @@ One request, one registry-pinned image, one argv array, one container, one termi
 
 Order is part of the contract: every hostile request is rejected before a directory is created or
 a process is started, and no value read from a request, the attempt or the container is echoed
-into an error message. See ``docs/pinned-container-adapter.md``.
+into an error message. See ``docs/adapters/pinned-container-adapter.md``.
 """
 from __future__ import annotations
 

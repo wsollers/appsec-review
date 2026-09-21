@@ -1827,7 +1827,7 @@ class AdapterTests(Case):
 # ---- documentation ------------------------------------------------------------------------------------------------
 
 class DocumentationTests(unittest.TestCase):
-    DOC = ROOT.parent / "docs" / "persona-invocation-adapter.md"
+    DOC = ROOT.parent / "docs" / "adapters" / "persona-invocation-adapter.md"
     SECTIONS = ["Status", "Protocol", "Request pins", "Registry composition, tool ids and claim ceiling",
                 "Untrusted text", "Independence and self-verification", "Invoker contract",
                 "Outcomes", "Result and verification", "Worker-result envelope", "Limitations",

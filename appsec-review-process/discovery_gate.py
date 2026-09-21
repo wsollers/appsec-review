@@ -20,7 +20,7 @@ Added 2026-09-19 to unblock 02-build-configure's real declared dependency chain
 (02-build-configure -> 02-dev-project-discovery -> 02-repository-partition-discovery) without
 inventing an in-Dagster LLM execution model or fabricating repository analysis. See the
 'KNOWN, DELIBERATE GAP' comment on build_configure_work in dagster_workflow.py and
-docs/build-discovery-integration.md's gap-status table for the full history.
+docs/build-discovery/build-discovery-integration.md's gap-status table for the full history.
 """
 from pathlib import Path
 import shutil

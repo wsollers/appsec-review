@@ -23,7 +23,7 @@ def code_identity():
         ROOT/'00-intake-recovery/config.md',ROOT/'00-intake-recovery/prompt.md',ROOT/'tooling/buildenv-catalog.json']
     paths += list((ROOT/'registry').rglob('*.json')) + list((REPO/'schemas').glob('*.json')) + list((ROOT/'tests').glob('*.py'))
     paths += [REPO/'orchestrator/dagster'/name for name in ('definitions.py','compose.yaml','Dockerfile','requirements.txt','requirements.lock.txt','dagster.yaml','workspace.yaml')]
-    paths += [REPO/'pipeline/engagement_job.ps1',REPO/'pipeline/engagement_job.sh',REPO/'docs/phase-1-job-graph.mmd']
+    paths += [REPO/'pipeline/engagement_job.ps1',REPO/'pipeline/engagement_job.sh',REPO/'docs/design-parity/job-graph.mmd']
     return {'base_revision':subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip(),
             'working_tree_files':{str(p.relative_to(REPO)):file_hash(p) for p in sorted(set(paths))}}
 
@@ -58,7 +58,7 @@ def contracts():
             if folder=='job-templates': composition(record)
             count+=1
     graph=load_graph()
-    if mermaid(graph) != (REPO/'docs/phase-1-job-graph.mmd').read_text(): raise ValueError('diagram drift')
+    if mermaid(graph) != (REPO/'docs/design-parity/job-graph.mmd').read_text(): raise ValueError('diagram drift')
     parity_manifest=read_json(ROOT/'design-parity-manifest.json')
     parity=validate_manifest(parity_manifest)
     if parity['errors']: raise ValueError('design parity validation failed: '+'; '.join(parity['errors']))
@@ -172,7 +172,7 @@ def main(argv=None):
       'A12':(['execution_state.py:ProcessTree/execute','phase1.py:Session.fail'],['tests-host','tests-linux']),
       'A13':(['stage_artifacts.py','create_handoff.py','review_cli.py','validate_lane_output.py','pipeline/engagement_job.*'],['tests-host','tests-linux','handoff-host','status-host','validate-host']),
       'A14':(['intake.py','qualify_dagster.py'],['intake-host','reuse-host','dagster']),
-      'A15':(['job-graph.json','docs/phase-1-job-graph.mmd','job_graph.py','review_cli.py'],['graph','status-host','dagster','tests-host','tests-linux']),
+      'A15':(['job-graph.json','docs/design-parity/job-graph.mmd','job_graph.py','review_cli.py'],['graph','status-host','dagster','tests-host','tests-linux']),
       'A16':(['qualify_phase1.py'],list(steps))}
     conditions={'A01':ok('contracts') and stable and vetted,'A02':all(ok(n) for n in ('dagster','restart','restart-check','runtime')) and healthy and web_ok and old_ok,
                 **{f'A{i:02}':tests_ok for i in range(3,14)},

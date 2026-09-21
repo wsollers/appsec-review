@@ -8,7 +8,7 @@ engagement's `data/orchestration/dagster/<dagster_run_id>/<job>/`. Its descendan
 Registration does not mean that a worker, its persona implementation or its output contract
 has been qualified. Missing lane templates remain visible blockers to implementation.
 
-The subsequent [parallel intelligence expansion](parallel-intelligence.md) adds build-gated IR,
+The subsequent [parallel intelligence expansion](../evidence/parallel-intelligence.md) adds build-gated IR,
 binary/CFG and test collection while letting source-only scans and consumers start independently.
 The original 26-job integration evidence below remains historical; the new graph has separate
 dependency qualification and its new workers remain unimplemented.
@@ -31,7 +31,7 @@ inside this project's isolated container.
 
 ## Submit
 
-Create and stage a Linux-owned engagement using [the submission guide](dagster-launching.md), then:
+Create and stage a Linux-owned engagement using [the submission guide](../dagster/dagster-launching.md), then:
 
 ```powershell
 python -B appsec-review-process/launch_job.py --run-id <run_id> --job build_discovery --wait
@@ -129,14 +129,14 @@ The qualifier stages Freeciv21 and uses the actual Dagster service to check cite
 both streams, immutable reuse, explicit full-graph failure and recovery. It preserves every launch
 and writes its report under the qualification owner's `data/qualification/`.
 
-The 2026-09-19 [live integration report](../appsec-review-process/runs/20260919T130744Z-a09a25/data/qualification/build-9bca14aa/report.json)
-passed all five checks. The [verification summary](../appsec-review-process/runs/20260919T130744Z-a09a25/data/verification-summary.json)
+The 2026-09-19 [live integration report](../../appsec-review-process/runs/20260919T130744Z-a09a25/data/qualification/build-9bca14aa/report.json)
+passed all five checks. The [verification summary](../../appsec-review-process/runs/20260919T130744Z-a09a25/data/verification-summary.json)
 records the tested identities and final follow-up checks. The full suites passed 52 host and 56
 Linux tests; final discovery/publication changes were covered by nine host and twelve Linux
 targeted tests and another actual Freeciv21 service execution. The qualification is a self-review.
 Evidence is ignored local run data and requires this workspace or its preserved archive.
 
-See the [Freeciv21 discovery results](../appsec-review-process/runs/20260919T130744Z-a09a25/data/freeciv21-build-discovery.md)
+See the [Freeciv21 discovery results](../../appsec-review-process/runs/20260919T130744Z-a09a25/data/freeciv21-build-discovery.md)
 for source citations and proposed commands. The stopped legacy stack's states and mounts were
 unchanged. Dagster event and compute-log snapshots were archived into the engagement's `data/`.
 
@@ -161,10 +161,10 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 
 ## Registered lifecycle jobs
 
-See the manifest-generated [lifecycle dependency flow](full-review-workflow.mmd). Build discovery
+See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
 is a supporting workflow op before partition discovery, distinct from the 51-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
-[design parity readiness view](design-parity-readiness.md); a test keeps this table naming every
+[design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
 
 | Job | Execution readiness | Registry template |
@@ -210,7 +210,7 @@ graph job.
 | `02-test-result-ingest` | Worker blocked | Missing |
 | `02-test-coverage-ingest` | Worker blocked | Missing |
 | `02-operations-doc-ingest` | Worker blocked | Missing |
-| `02-evidence-index` | Qualified worker (`evidence_index.py`); see [evidence retrieval](evidence-retrieval.md) | Present |
+| `02-evidence-index` | Qualified worker (`evidence_index.py`); see [evidence retrieval](../evidence/evidence-retrieval.md) | Present |
 | `02-secrets-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-iac-config-scan` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 | `02-container-image-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |

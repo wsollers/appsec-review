@@ -2,9 +2,9 @@
 
 ## New orchestrated engagements
 
-For new intake runs, follow [Phase 1 operations](../docs/phase-1-operations.md).
+For new intake runs, follow [Phase 1 operations](../docs/dagster/operations.md).
 Create/stage a Linux-owned run in the code-server, then submit `launch_job.py --run-id <run_id> --wait`.
-See [Dagster launching](../docs/dagster-launching.md). Dagster resolves configuration and executes
+See [Dagster launching](../docs/dagster/dagster-launching.md). Dagster resolves configuration and executes
 `engagement_workflow`: atomic intake, parallel preparation and a validated final join.
 Submit from the host; the guide includes CLI/UI configuration and the required engagement tag.
 Use `review_cli.py status --run-id <run_id>` for workflow status. Reattach with `--launch-id` to
@@ -12,7 +12,8 @@ monitor an existing execution; omit it for a new recovery launch after correctin
 Direct `phase1.py` intake is reserved for explicit adapter diagnostics.
 All generated evidence, extracted data, builds and diagnostics belong under that run's `data/`.
 Before evidence discovery, read the [LLM tooling addendum](tooling/llm-retrieval-addendum.md)
-and load the [evidence-retrieval skill](agent-skills/codex/evidence-retrieval/SKILL.md).
+and the [evidence retrieval guide](../docs/evidence/evidence-retrieval.md) (the former
+evidence-retrieval skill is archived under `skills/_archive/` pending the skills rework).
 Use the accepted full-text index, cited snapshot reads, ssdeep and qualified language servers
 where they fit the question. Check run-owned capability receipts and MCP tool discovery;
 installed tools are not automatically connected to every LLM client. Use bounded grep for gaps.

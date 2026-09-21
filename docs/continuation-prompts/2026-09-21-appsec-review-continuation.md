@@ -61,12 +61,12 @@ unrelated `compose-postgres` project also runs on this host; leave it alone.
 **Shared ignored data, all in the MAIN checkout — do not delete:** `targets/freeciv21` (rev
 `0ce1c60acf1140d6c5c5a5cd6bef2507bd072319`, remote `https://github.com/longturn/freeciv21`),
 `data/feeds/nvd/` snapshot, and `appsec-review-process/runs/` (21 runs, including the qualification
-reports whose sha256 values are recorded in `docs/evidence-index-metrics.md` and the baseline doc).
+reports whose sha256 values are recorded in `docs/evidence/evidence-index-metrics.md` and the baseline doc).
 
 **Other sessions' worktrees seen at the time of writing (not this coordinator's — leave alone):**
 - `.claude/worktrees/agent-a233808d8c5aa6b62` on **`claude/b13-pinned-container-adapter`** — B13 in
   progress: branch pushed at `99642d4`, plus a local merge of `main` and uncommitted edits
-  (`container_execution.py`, its tests, `docs/pinned-container-adapter.md`, `schemas/README.md`).
+  (`container_execution.py`, its tests, `docs/adapters/pinned-container-adapter.md`, `schemas/README.md`).
   No PR yet. `TODO.md` still marks B13 `BLOCKED(B11)`; the owner evidently started it anyway. B13
   unblocks `qualify_build_execution` and, with V02, the worker tasks V10–V13.
 - `.claude/worktrees/schemas-readme` (#28, merged — cleanable by its owner session or on request).
@@ -249,8 +249,8 @@ the owner has assigned such work readily when asked (#26, #27):
    the four worker tasks V10–V13. Requalify what the graph change touches; whole suite must stay 857+ OK.
 2. **Status hygiene (tiny, integrator-only):** task-series lines still say V04/V07 "in review" and
    V05/V15 `READY`; `TODO.md` closures for G01, M01, F01/V15 and M01 into S02's blockers;
-   `docs/evidence-retrieval.md` pointer to `docs/evidence-index-metrics.md`.
-3. **B11 wiring** (11 follow-ups in `docs/permission-capabilities.md`) → opens B14, B15, V16, V17.
+   `docs/evidence/evidence-retrieval.md` pointer to `docs/evidence/evidence-index-metrics.md`.
+3. **B11 wiring** (11 follow-ups in `docs/adapters/permission-capabilities.md`) → opens B14, B15, V16, V17.
 4. **B13** is being worked by another session (§1). When its PR appears and the owner asks, verify
    it like any slice; `qualify_build_execution` is its live acceptance test.
 

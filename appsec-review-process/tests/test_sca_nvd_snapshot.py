@@ -814,7 +814,7 @@ class InvariantTests(Base):
     def test_every_reason_is_reachable_or_documented(self):
         reached = {reason for _, _, reason in SCENARIOS.values()} | {"VERIFIED_NO_AGE_LIMIT", "VERIFIED_WITHIN_LIMIT", "SNAPSHOT_TOO_OLD"}
         self.assertEqual(set(binding.REASONS), reached)
-        doc = (ROOT.parent / "docs" / "sca-nvd-snapshot-binding.md").read_text()
+        doc = (ROOT.parent / "docs" / "evidence" / "sca-nvd-snapshot-binding.md").read_text()
         for reason in binding.REASONS:
             self.assertIn(f"`{reason}`", doc)
 

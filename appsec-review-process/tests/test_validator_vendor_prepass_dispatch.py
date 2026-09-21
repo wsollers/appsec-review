@@ -948,7 +948,7 @@ class ExistingContractRegressionTests(unittest.TestCase):
 class HygieneTests(unittest.TestCase):
     def test_no_secret_shaped_literal_is_tracked_in_this_module_the_validator_or_the_doc(self):
         paths = [Path(__file__), ROOT / "validate_job_output.py",
-                 SCHEMAS_DIR.parent / "docs" / "validator-vendor-prepass-dispatch.md"]
+                 SCHEMAS_DIR.parent / "docs" / "contracts" / "validator-vendor-prepass-dispatch.md"]
         for path in paths:
             text = path.read_text(encoding="utf-8")
             for label, pattern in validator.SECRET_PATTERNS:

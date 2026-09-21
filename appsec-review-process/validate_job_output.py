@@ -468,7 +468,7 @@ def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]
 # The nine family contracts have their own verifiers, and those verifiers deliberately take no
 # optional safety input: every fact that decides the answer is a required argument that must come
 # from OUTSIDE the attempt under validation. This section is the one place that says where each
-# fact comes from (docs/validator-vendor-prepass-dispatch.md has the table). A fact with no
+# fact comes from (docs/contracts/validator-vendor-prepass-dispatch.md has the table). A fact with no
 # authoritative source fails closed with a named error; it is never read from the attempt, an
 # environment variable or a default, and the verifier is never skipped in favour of the generic
 # schema check.
@@ -652,7 +652,7 @@ def _attempt_layout(attempt_root: Path, run_id: str, job_id: str) -> tuple[Path 
 #   outputs        directory   the verifier: manifest.json and the receipt close its file set,
 #                              including the raw tool outputs a V07 contract retains there
 # Nothing else: no `inputs.json`, no logs, no heartbeat or temporary file. The goldens of all three
-# families hold exactly this; docs/validator-vendor-prepass-dispatch.md has the consequence for the
+# families hold exactly this; docs/contracts/validator-vendor-prepass-dispatch.md has the consequence for the
 # common runtime's `allocate_attempt`.
 ATTEMPT_ROOT_FILES = ("status.json", "manifest.json", "result.json")
 ATTEMPT_ROOT_DIRECTORIES = ("outputs",)

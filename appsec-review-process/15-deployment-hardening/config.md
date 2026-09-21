@@ -1,6 +1,6 @@
 # Config — Static Deployment Hardening (L15)
 
-Design reference: docs/design-v3.md §4 (lane table), §12 (static deployment hardening specifics).
+Design reference: docs/architecture/design-v3.md §4 (lane table), §12 (static deployment hardening specifics).
 
 ## Required Inputs
 
@@ -14,7 +14,7 @@ Design reference: docs/design-v3.md §4 (lane table), §12 (static deployment ha
 
 ## Persona Pool (pilot, added 2026-09-19)
 
-This lane is the pilot for the persona-pool mechanism described in `docs/design-v3.md` §5.5
+This lane is the pilot for the persona-pool mechanism described in `docs/architecture/design-v3.md` §5.5
 (job config not yet built; `review_cli.py` has no `--persona` flag yet). Until the real launcher
 exists, dispatch one persona at a time by hand: give the dispatched instance the exact
 `persona_id` from `subprompts.md` to operate as, tell it to ignore the other persona entries in

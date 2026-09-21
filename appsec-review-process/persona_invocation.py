@@ -18,7 +18,7 @@ may write only beneath one output root that the adapter created.
 * The invoker's manifest is untrusted. The adapter re-derives or bounds every field, and a
   read-only verifier re-derives the whole attempt again from the expected request.
 
-See ``docs/persona-invocation-adapter.md``.
+See ``docs/adapters/persona-invocation-adapter.md``.
 """
 from __future__ import annotations
 

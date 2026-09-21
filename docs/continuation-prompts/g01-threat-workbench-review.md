@@ -22,13 +22,13 @@ dispatched safely and independently.
 2. `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`
 3. `docs/agent-reader.md`
 4. `appsec-review-process/TODO.md` — independent-work protocol, G01, S02, C01-C04, and B14
-5. `docs/design-parity-completion-plan.md` — Workstream G1 and pool/persona prerequisites
-6. `docs/design-v3.md` — DFD/STRIDE, L6A/L6B, evidence-qualified verification, static/offline boundary
-7. `docs/run-data-and-job-execution.md`
-8. `docs/dagster-workflow.md`
-9. `docs/persona-catalog.md`
+5. `docs/design-parity/design-parity-completion-plan.md` — Workstream G1 and pool/persona prerequisites
+6. `docs/architecture/design-v3.md` — DFD/STRIDE, L6A/L6B, evidence-qualified verification, static/offline boundary
+7. `docs/dagster/run-data-and-job-execution.md`
+8. `docs/dagster/dagster-workflow.md`
+9. `docs/personas-and-registry/persona-catalog.md`
 10. `docs/persona-pool-proposal.md`
-11. `docs/intelligence-sources-and-jobs.md`
+11. `docs/evidence/intelligence-sources-and-jobs.md`
 12. `appsec-review-process/03-threat-model-dfd-stride/prompt.md`
 13. `appsec-review-process/03-threat-model-dfd-stride/config.md`
 14. `appsec-review-process/03-threat-model-dfd-stride/subprompts.md`

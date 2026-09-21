@@ -6,7 +6,7 @@ and its granted permission kinds, the ADR-0008 Decision 6 persona budget classes
 functions that apply and verify the limits on a Dagster instance all live here. Nothing else in
 the repository may hold a pool id or a pool limit as a local constant: ``dagster_workflow.py``
 and ``orchestrator/dagster/definitions.py`` take their ``pool=`` values from this module, and
-``docs/resource-pools.md`` is tied to these constants by a test.
+``docs/pools/resource-pools.md`` is tied to these constants by a test.
 
 What Dagster 1.13.21 does (confirmed against the installed package, see the operator doc):
 
@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent
 
 STATE_SCHEMA_ID = "appsec-review/resource-pool-state/1.1"
 STATE_SCHEMA_FILE = "resource-pool-state.schema.json"
-# The Dagster release everything on docs/resource-pools.md was confirmed against; a test ties it to
+# The Dagster release everything on docs/pools/resource-pools.md was confirmed against; a test ties it to
 # orchestrator/dagster/requirements.txt. A pool-state document from another release is a FAIL.
 DAGSTER_VERSION = "1.13.21"
 
@@ -112,7 +112,7 @@ WORKER_KIND_POOLS = {
     "pinned_container": DOCKER,
     "persona": PERSONA_LLM,
 }
-# docs/permission-capabilities.md integration follow-up 8. `None` means the kind says nothing
+# docs/adapters/permission-capabilities.md integration follow-up 8. `None` means the kind says nothing
 # about which resource the work consumes. Every registered kind must appear here.
 PERMISSION_KIND_POOLS = {
     "fixed-network-destination": NETWORK,

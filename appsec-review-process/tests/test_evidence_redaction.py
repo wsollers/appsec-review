@@ -35,7 +35,7 @@ from schema_validate import SchemaStore, validate_document
 
 FIXTURES = ROOT / "tests" / "fixtures" / "evidence-redaction"
 SCHEMA_PATH = ROOT.parent / "schemas" / er.RECEIPT_SCHEMA
-DOC_PATH = ROOT.parent / "docs" / "evidence-redaction.md"
+DOC_PATH = ROOT.parent / "docs" / "evidence" / "evidence-redaction.md"
 LIMITS = er.Limits(max_file_bytes=65536, max_line_length=4096, max_files=40,
                    max_total_bytes=200000, max_json_depth=16, max_path_length=200)
 
@@ -966,7 +966,7 @@ class ReceiptTamperTests(RedactionTestCase):
     def test_honest_limit_withheld_claims_cannot_be_rederived_because_the_source_is_not_published(self):
         """Pinned on purpose: a resealed receipt may restate WHY a file was withheld, or drop the
         withheld record, and still verify. Verification proves the published bytes; it cannot prove
-        what was left behind. docs/evidence-redaction.md must say so."""
+        what was left behind. docs/evidence/evidence-redaction.md must say so."""
         held = self.index("d-blob.bin")
 
         def restate(receipt):

@@ -29,10 +29,10 @@ What this module guarantees to T10 and C03:
 * Threads are in-process and bounded. The caps here (persona slots, ``resource_pools.LIMITS``, the
   runtime's ``max_parallel``) can only be narrower than B15's WITHIN ONE RENDEZVOUS; they do not see
   other runs and do not replace Dagster pools, so at most one rendezvous may run on a host at a
-  time (``docs/pool-rendezvous.md``, "Constraint: one rendezvous at a time").
+  time (``docs/rendezvous/pool-rendezvous.md``, "Constraint: one rendezvous at a time").
   The op that calls this is ``resource_pools.unassigned('coordination_only')``.
 
-See ``docs/pool-rendezvous.md``.
+See ``docs/rendezvous/pool-rendezvous.md``.
 """
 from __future__ import annotations
 

@@ -47,7 +47,7 @@ class BuildDiscoveryTests(unittest.TestCase):
         self.assertEqual(before,state.tree_hashes(base/'attempts'/failed))
 
     # Registered job templates that are deliberately NOT full_review lifecycle nodes. 00-validation
-    # is the validator composition. docs/critical-findings-sarif-job.md: the SARIF transform "is a
+    # is the validator composition. docs/dagster/critical-findings-sarif-job.md: the SARIF transform "is a
     # standalone registered job rather than a completed full_review lifecycle node" -- its own Dagster
     # job, fed by a staged input, consumed by no graph node. This test was added in the same commit
     # as that template and failed from then on (Linux baseline 2026-09-20) because it exempted only

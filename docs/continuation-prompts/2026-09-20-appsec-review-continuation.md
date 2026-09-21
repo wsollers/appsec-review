@@ -191,7 +191,7 @@ there, say so plainly — do not guess. Then:
 **Integrator-only (shared surfaces — propose, do not do, unless the owner explicitly assigns it):**
 V02 (declare the nine nodes + the new skip reason); `CLAIM_CLASS_POLICIES` and dispatch entries in
 `validate_job_output.py` for the five new contracts (V04 ×2, V07 ×3); B11 wiring (11 follow-ups in
-`docs/permission-capabilities.md`); closing G01 and M01 and adding M01 to S02's blockers in `TODO.md`.
+`docs/adapters/permission-capabilities.md`); closing G01 and M01 and adding M01 to S02's blockers in `TODO.md`.
 
 **Blocked, and why:** T03 → needs V02/M01 producers · T04 → B14 · T05 → C01, C02, B15 · T07 → C03 ·
 T08–T10 chain off those · V10–V13 → V02 + B13 · V11 also → V16, V17, V18 · V16/V17 → B11 wiring ·

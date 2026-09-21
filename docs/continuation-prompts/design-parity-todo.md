@@ -30,8 +30,8 @@ Dagster `blocked_op`, documentation, or an out-of-band supplied-result gate.
 
 ## Current checkpoint
 
-- `docs/design-v3.md` is the design authority currently tracked in the repository.
-- `docs/design-parity-completion-plan.md` defines Workstreams A-H and the release criteria.
+- `docs/architecture/design-v3.md` is the design authority currently tracked in the repository.
+- `docs/design-parity/design-parity-completion-plan.md` defines Workstreams A-H and the release criteria.
 - `appsec-review-process/TODO.md` links that plan as the cross-cutting authoritative backlog.
 - `job-graph.json` currently declares **42** lifecycle jobs.
 - Registry/graph qualification currently reports **83 registry records / 42 graph jobs / PASS**.
@@ -69,20 +69,20 @@ Read these completely before editing:
 2. `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`
 3. `docs/agent-reader.md`
 4. `README.md`
-5. `docs/design-v3.md`
-6. `docs/design-parity-completion-plan.md`
+5. `docs/architecture/design-v3.md`
+6. `docs/design-parity/design-parity-completion-plan.md`
 7. `appsec-review-process/TODO.md`
-8. `docs/dagster-launching.md`
-9. `docs/dagster-workflow.md`
-10. `docs/run-data-and-job-execution.md`
-11. `docs/build-discovery-integration.md`
-12. `docs/parallel-intelligence.md`
-13. `docs/persona-catalog.md`
+8. `docs/dagster/dagster-launching.md`
+9. `docs/dagster/dagster-workflow.md`
+10. `docs/dagster/run-data-and-job-execution.md`
+11. `docs/build-discovery/build-discovery-integration.md`
+12. `docs/evidence/parallel-intelligence.md`
+13. `docs/personas-and-registry/persona-catalog.md`
 14. `docs/persona-pool-proposal.md`
 15. `docs/composable-review-template-proposal.md`
 16. `docs/standards-checklist-validation-proposal.md`
 17. `appsec-review-process/registry/README.md`
-18. `docs/evidence-retrieval.md`
+18. `docs/evidence/evidence-retrieval.md`
 19. `appsec-review-process/tooling/llm-retrieval-addendum.md`
 
 Inspect these executable sources before defining readiness fields:
@@ -200,9 +200,9 @@ qualification evidence.
 
 Update, only as supported by the new validator:
 
-- `docs/design-parity-completion-plan.md`;
+- `docs/design-parity/design-parity-completion-plan.md`;
 - `appsec-review-process/TODO.md`;
-- `docs/build-discovery-integration.md` readiness language;
+- `docs/build-discovery/build-discovery-integration.md` readiness language;
 - relevant agent/operator entry points.
 
 Check off a task only when its validator and focused tests pass. Do not mark pool, worker, persona,

@@ -70,12 +70,12 @@ inspected; statements about NVD's own record shape are marked as such.
 | Any purl↔CPE mapping, GHSA, OSV, distro data | **None.** Nothing in `/data/feeds` is ecosystem-keyed. | same |
 | Year coverage | 2002 through the UTC year of the bootstrap run. | `nvd_feed.py:34`, `:334`, `:356` |
 | Incremental semantics | Each later sync adds `api-last-modified` layers (≤119-day windows, 2000/page) over the immutable parent. Layers are **overlays, not merges**: a CVE modified after bootstrap exists in the yearly blob *and* in one or more delta pages; duplicate IDs at inclusive window boundaries are counted, not removed. | `nvd_feed.py:35-36`, `:368-419`, `:395-400` |
-| Merged view / reader | **None exists.** No code yields "current record per CVE". `iter_vulnerabilities` is used only for validation; the V09 binding does not decompress or parse blobs. A matcher must itself fold the chain (newest `lastModified` per CVE wins) and honour `vulnStatus` (e.g. rejected records). | `nvd_feed.py:144`, `:196`; `docs/sca-nvd-snapshot-binding.md:10`, `:227-228` |
-| Identity V09 exposes | `snapshot_id`, `manifest_sha256`, `content_sha256` (full sha256 over the ordered chain and every blob), `chain_snapshot_ids`, `cursor`, `age_seconds`, `max_age_seconds`, `freshness`, `match_basis`, `limitations`. Fingerprint component = kind, feed schema, the three hashes/ids, `match_basis`, `freshness`. | `docs/sca-nvd-snapshot-binding.md:168-172`, `:187-197` |
+| Merged view / reader | **None exists.** No code yields "current record per CVE". `iter_vulnerabilities` is used only for validation; the V09 binding does not decompress or parse blobs. A matcher must itself fold the chain (newest `lastModified` per CVE wins) and honour `vulnStatus` (e.g. rejected records). | `nvd_feed.py:144`, `:196`; `docs/evidence/sca-nvd-snapshot-binding.md:10`, `:227-228` |
+| Identity V09 exposes | `snapshot_id`, `manifest_sha256`, `content_sha256` (full sha256 over the ordered chain and every blob), `chain_snapshot_ids`, `cursor`, `age_seconds`, `max_age_seconds`, `freshness`, `match_basis`, `limitations`. Fingerprint component = kind, feed schema, the three hashes/ids, `match_basis`, `freshness`. | `docs/evidence/sca-nvd-snapshot-binding.md:168-172`, `:187-197` |
 | `match_basis` today | `const: "cpe"` in the schema and a module constant. | `schemas/vulnerability-database-identity.schema.json:30`; `sca_nvd_snapshot.py:34` |
-| Blob list for a matcher | `Resolution` exposes no file list; the doc tells the matcher to "re-resolve if it needs the file list" and to read only blobs reachable from the verified chain. | `docs/sca-nvd-snapshot-binding.md:70-71`, `:240-241` |
-| Publisher weaknesses V09 reported | Root is unsigned (a consistent full rewrite is undetectable); parents are bound by a 64-bit id; `published_at` is bound by nothing; every resolve re-hashes every blob. | `docs/sca-nvd-snapshot-binding.md:211-226` |
-| Freshness policy | No owner and no value. The NVD README refers to "the separately approved freshness policy"; V09 found no such record. | `data/feeds/nvd/README.md:28-29`; `docs/sca-nvd-snapshot-binding.md:243-244` |
+| Blob list for a matcher | `Resolution` exposes no file list; the doc tells the matcher to "re-resolve if it needs the file list" and to read only blobs reachable from the verified chain. | `docs/evidence/sca-nvd-snapshot-binding.md:70-71`, `:240-241` |
+| Publisher weaknesses V09 reported | Root is unsigned (a consistent full rewrite is undetectable); parents are bound by a 64-bit id; `published_at` is bound by nothing; every resolve re-hashes every blob. | `docs/evidence/sca-nvd-snapshot-binding.md:211-226` |
+| Freshness policy | No owner and no value. The NVD README refers to "the separately approved freshness policy"; V09 found no such record. | `data/feeds/nvd/README.md:28-29`; `docs/evidence/sca-nvd-snapshot-binding.md:243-244` |
 
 **Findings that matter for the choice.** (1) The snapshot has everything needed to *evaluate* a
 CPE range and nothing needed to *derive* a CPE from a purl. (2) Any consumer — in-repo or
@@ -279,7 +279,7 @@ To be done by the integrator / owning batch once the gates are answered — not 
   reconcile `match_basis: const "cpe"` with the enum in C.1 (rename to a database-level field or
   widen); `database_kind` const → enum if M2 ≠ C. Changes the fingerprint component version.
 - `appsec-review-process/sca_nvd_snapshot.py` — expose the verified, ordered blob list on
-  `Resolution` so the matcher does not re-derive it (`docs/sca-nvd-snapshot-binding.md:240-241`).
+  `Resolution` so the matcher does not re-derive it (`docs/evidence/sca-nvd-snapshot-binding.md:240-241`).
 - `appsec-review-process/nvd_feed.py` — V09's publisher weaknesses (unsigned root, 64-bit parent
   binding). No option here *depends* on fixing them, but B2 would copy unauthenticated data into a
   second database, widening the exposure. Separately: nothing records how many records lack

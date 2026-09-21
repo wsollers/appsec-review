@@ -1772,7 +1772,7 @@ class AdapterWiringTests(ScriptedCase):
 
 
 class DocumentationTests(unittest.TestCase):
-    DOC = ROOT.parent / "docs" / "pinned-container-adapter.md"
+    DOC = ROOT.parent / "docs" / "adapters" / "pinned-container-adapter.md"
     SECTIONS = ["Status", "Wrapper identity", "Boundary 1.0", "Request", "Image registry", "Mounts and paths",
                 "Permission gate and network", "Execution and outcomes", "Result and verification",
                 "Worker-result envelope", "Windows-host and Linux-worker parity", "Fixture image",

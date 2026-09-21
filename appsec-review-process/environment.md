@@ -2,9 +2,9 @@
 
 ## Stateful intake execution
 
-For new intake runs, follow [Phase 1 operations](../docs/phase-1-operations.md).
+For new intake runs, follow [Phase 1 operations](../docs/dagster/operations.md).
 Create/stage a Linux-owned run in the code-server, then submit `launch_job.py --run-id <run_id> --wait`.
-See [Dagster launching](../docs/dagster-launching.md). Dagster resolves configuration and executes
+See [Dagster launching](../docs/dagster/dagster-launching.md). Dagster resolves configuration and executes
 `engagement_workflow` with two queued runs globally, one per engagement and up to three parallel
 preparation steps per workflow. Create/stage inside the code-server and submit from the host.
 Direct `phase1.py` intake is reserved for explicit adapter diagnostics.

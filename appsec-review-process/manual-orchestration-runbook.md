@@ -2,7 +2,7 @@
 
 ## Submit and monitor the current workflow
 
-Use the [complete job submission guide](../docs/dagster-launching.md). It covers service startup,
+Use the [complete job submission guide](../docs/dagster/dagster-launching.md). It covers service startup,
 Linux run creation/staging, CLI and UI submission, status, reattachment, retries and cancellation.
 For a staged Linux-owned run, execute these commands from the repository root on the host:
 
@@ -18,9 +18,9 @@ Cancel server execution in Dagster; closing the initiating terminal only stops m
 
 ## Stateful Phase 1 commands
 
-For new intake runs, follow [Phase 1 operations](../docs/phase-1-operations.md).
+For new intake runs, follow [Phase 1 operations](../docs/dagster/operations.md).
 Create/stage a Linux-owned run in the code-server, then submit `launch_job.py --run-id <run_id> --wait`.
-See [Dagster launching](../docs/dagster-launching.md). Dagster resolves configuration and executes
+See [Dagster launching](../docs/dagster/dagster-launching.md). Dagster resolves configuration and executes
 the pre/work/post graph; direct `phase1.py` intake is reserved for explicit adapter diagnostics.
 All generated evidence, extracted data, builds and diagnostics belong under that run's `data/`.
 Read its recorded status/resume command after interruption; do not delete locks or mark it OK

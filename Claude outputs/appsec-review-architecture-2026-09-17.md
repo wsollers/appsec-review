@@ -1,6 +1,6 @@
 # AppSec Review — Current State Architecture
 
-Status as of 2026-09-17, based on `F:\repos\appsec-review` (design authority `docs/design-v3.md`,
+Status as of 2026-09-17, based on `F:\repos\appsec-review` (design authority `docs/architecture/design-v3.md`,
 current job/prompt architecture note `docs/appsec-review-architecture-and-jobs-2026-09-16.md`,
 status log `docs/status-2026-09-16.md`, and ADR-0001–0004/0006).
 
@@ -190,7 +190,7 @@ output's minimum shape).
 - **ADR-0003** — MSVC headers/libs for `clang-cl` on Linux default to `xwin` (fetched MSVC CRT +
   Windows SDK manifest), with real VS2013 headers as an available fallback; licensed inputs are
   mounted, never baked into an image layer.
-- **ADR-0004** — `docs/design-v3.md` is a markdown export of the governing Google Doc (exported
+- **ADR-0004** — `docs/architecture/design-v3.md` is a markdown export of the governing Google Doc (exported
   2026-09-11); the Doc remains canonical until this repo takes over editing.
 - **ADR-0006** — CodeQL is a pre-engagement, breadth-only evidence lane (license basis recorded per
   run), never the native memory-safety substrate.

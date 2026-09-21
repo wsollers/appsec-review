@@ -3,13 +3,13 @@
 This stack belongs to appsec-review. It runs the default `engagement_workflow`, the retained
 `phase1_intake` job and the original smoke diagnostic, with persistent queue and instance history. See
 [Phase 1 acceptance](../../docs/phase-1-acceptance.md) and the
-[operations guide](../../docs/phase-1-operations.md) for staging and launch configuration.
+[operations guide](../../docs/dagster/operations.md) for staging and launch configuration.
 The normal entry point is `python -B appsec-review-process/launch_job.py --run-id <run_id> --wait`.
-It now selects [engagement_workflow](../../docs/dagster-workflow.md): two concurrent runs globally,
+It now selects [engagement_workflow](../../docs/dagster/dagster-workflow.md): two concurrent runs globally,
 one per engagement, and up to three independent preparation steps per workflow. Use
 `--job phase1_intake` for the intake-only graph. The queue, monitoring and failure/cancellation
 sensors use the existing persistent instance; the stopped legacy stack is untouched.
-See [Dagster launching](../../docs/dagster-launching.md): the service runs the graph, while the
+See [Dagster launching](../../docs/dagster/dagster-launching.md): the service runs the graph, while the
 client only submits and monitors. Configuration resolution is a separate visible op.
 
 Services: PostgreSQL, user-code server, webserver, daemon. Only the webserver is published, at
@@ -21,7 +21,7 @@ and `pip check`. Git is version-pinned. Qualification records actual runtime ver
 
 ## Service setup and smoke diagnostic
 
-For normal engagements, follow the [submission guide](../../docs/dagster-launching.md).
+For normal engagements, follow the [submission guide](../../docs/dagster/dagster-launching.md).
 The smoke command below checks orchestration plumbing; it does not stage or review a target.
 From the repository root, initialize the ignored local password file once:
 
@@ -95,7 +95,7 @@ engagement. The former `lra-ingestion-harness` stack was stopped, not removed; s
 webserver on port 3000 while this stack is running would conflict.
 
 Follow the [Phase 1 prompt](../../appsec-review-process/phase-1-implementation-prompt.md),
-[run-data contract](../../docs/run-data-and-job-execution.md), and
+[run-data contract](../../docs/dagster/run-data-and-job-execution.md), and
 [flow diagram](../../docs/engagement-job-flow.md) for production job wiring.
 Dagster [asset-check documentation](https://docs.dagster.io/guides/test/asset-checks) explains that
 checks must be configured to block downstream execution; check visibility alone is not a gate.

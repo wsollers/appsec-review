@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "purpose": "Curated DISA STIG/SRG reference for the 15-deployment-hardening IaC persona pool (iac-k8s-helm-hardening-reviewer, iac-container-dockerfile-auditor), per docs/design-v3.md §5.4: DISA STIGs/SRGs are public-domain US federal works (17 U.S.C. §105), safe to vendor and quote directly -- unlike CIS, which this project never vendors. A finding may only set standard_refs.disa_stig_id when it was read from this file, never recalled from training knowledge.",
+    "purpose": "Curated DISA STIG/SRG reference for the 15-deployment-hardening IaC persona pool (iac-k8s-helm-hardening-reviewer, iac-container-dockerfile-auditor), per docs/architecture/design-v3.md §5.4: DISA STIGs/SRGs are public-domain US federal works (17 U.S.C. §105), safe to vendor and quote directly -- unlike CIS, which this project never vendors. A finding may only set standard_refs.disa_stig_id when it was read from this file, never recalled from training knowledge.",
     "documents": {
       "kubernetes_stig": {
         "title": "Kubernetes Security Technical Implementation Guide",

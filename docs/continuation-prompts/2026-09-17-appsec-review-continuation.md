@@ -12,7 +12,7 @@ view at `F:\repos\appsec-review` for this session, my actual WSL checkout is
 Claude project — read `claude/appsec-review-architecture-2026-09-17.md` (current-state
 architecture, includes a "Design vs. built — gap status" section that's the authoritative gap
 list) and `claude/TODO.md` (has a "Next cheap wins" section, ordered by leverage-per-effort) before
-doing anything else. `docs/design-v3.md` in the repo is the design authority; `docs/design-
+doing anything else. `docs/architecture/design-v3.md` in the repo is the design authority; `docs/design-
 review-2026-09-11.md` is its open-items checklist, seven "Smaller" items plus the refutation-lane
 item were already folded in as of 2026-09-17.
 
@@ -81,7 +81,7 @@ deeper standalone work (§19 recall/FP-budget/holdout-split criteria, final conf
   again at the end of this pass, the same way this session's summary was written back, so the next
   chat starts from an accurate state.
 
-Start by re-reading `docs/design-v3.md` §4.1 and `docs/design-review-2026-09-11.md` on the repo
+Start by re-reading `docs/architecture/design-v3.md` §4.1 and `docs/design-review-2026-09-11.md` on the repo
 directly (not just my project summary of them) to confirm nothing changed since 2026-09-17, then
 work through the "Next cheap wins" list above, checking with me before any item that turns out to
 need new scanner tooling rather than doc/prompt work.

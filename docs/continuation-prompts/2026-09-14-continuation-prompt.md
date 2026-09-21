@@ -104,7 +104,7 @@ write `validation/holdout-*.md`. Only then quote recall in the design doc.
   (transitive callee closure ⊆ CRT allowlist) for witness search on pure parsers.
 - ADR-0005 CTP_Nov2013 (`__resumable`/`__await`): shim vs Tier B — try the shim on the
   vendor tree and let the gate decide.
-- Fold measured numbers into `docs/design-v3.md` (seven review items still open there).
+- Fold measured numbers into `docs/architecture/design-v3.md` (seven review items still open there).
 - The fsh-client full pre-pass on the Windows desktop (old toolbox) is a separate track;
   its evidence feeds the engagement, not this repo.
 

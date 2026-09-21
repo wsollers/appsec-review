@@ -33,7 +33,7 @@ Remaining, none caused by this branch:
    `job-graph.json`.
 
 Previously failing in the container and now passing because `docs/` is mounted: the two
-`test_evidence_redaction` tests that read `docs/evidence-redaction.md`.
+`test_evidence_redaction` tests that read `docs/evidence/evidence-redaction.md`.
 
 ## Qualifiers
 
@@ -63,7 +63,7 @@ Windows. The Codex OWASP lane beyond its unit suites. Any worker that is not imp
   `job-graph.json`'s `implemented: false` was stale. **That was wrong.** It is a validated hand-off
   gate that does no analysis and blocks until a partition map is supplied; `implemented: false` is
   correct. Only the qualifier's expectation was stale, and it now asserts the hand-off.
-- Item 2 above is not a missing graph node. `docs/critical-findings-sarif-job.md` makes the SARIF
+- Item 2 above is not a missing graph node. `docs/dagster/critical-findings-sarif-job.md` makes the SARIF
   transform a deliberately standalone registered job; the test exempted only `00-validation`. The
   test now pins both standalone templates, in both directions.
 - Item 1 (T05 config path) is fixed by resolving the repository-path identifier against the process

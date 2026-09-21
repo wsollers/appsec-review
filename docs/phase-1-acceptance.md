@@ -3,11 +3,11 @@
 **ACCEPTED on 2026-09-19: A01-A16 PASS.** Qualification is a Codex self-review, not an independent review.
 
 Subsequent change: the normal CLI now submits to the Dagster service, and configuration resolution
-is an explicit fourth op. See [Dagster launcher verification](dagster-launching.md#verification)
+is an explicit fourth op. See [Dagster launcher verification](dagster/dagster-launching.md#verification)
 for the follow-up's exact code identity, 40 host/44 Linux tests and actual service-launch evidence.
 The original A01-A16 baseline and its hashes below remain preserved unchanged.
 
-The later [Dagster workflow migration](dagster-workflow.md) adds queued engagement concurrency,
+The later [Dagster workflow migration](dagster/dagster-workflow.md) adds queued engagement concurrency,
 parallel preparation, a validated join and branch recovery. Its separate qualification records
 the migration's tested identity and evidence; it does not claim downstream scanners are implemented.
 
@@ -47,7 +47,7 @@ transient edit reverted between checks. Recovery is explicit, with one attempt p
 Run evidence and logs belong under `runs/<run_id>/data/`; persistent Dagster service metadata and
 compute logs use dedicated project volumes.
 
-Use the [operations guide](phase-1-operations.md) for staging, execution, reuse, recovery and legacy
+Use the [operations guide](dagster/operations.md) for staging, execution, reuse, recovery and legacy
 imports. The [job flow](engagement-job-flow.md) links the checked machine graph and Mermaid.
 Documentation closeout hashes are recorded separately in the qualification's
 `documentation-closeout.json`; documentation updates do not alter the tested implementation.

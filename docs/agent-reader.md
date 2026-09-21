@@ -13,20 +13,20 @@ worker contracts (the full protocol in `AGENTS.md`). Work under `pipeline/`, `sc
 0. [`pipeline/README.md`](../pipeline/README.md) first for any review run: it describes the
    engagement path (prepass, pregather, assemble, correlate, LLM input) that runs today.
 1. [`README.md`](../README.md) for the repo purpose and current architecture.
-2. [`docs/dagster-launching.md`](dagster-launching.md) for creating, queueing, monitoring,
+2. [`docs/dagster/dagster-launching.md`](dagster/dagster-launching.md) for creating, queueing, monitoring,
    reconnecting, recovering and canceling jobs.
-3. [`docs/dagster-workflow.md`](dagster-workflow.md) for queue limits, workflow branches,
+3. [`docs/dagster/dagster-workflow.md`](dagster/dagster-workflow.md) for queue limits, workflow branches,
    parallelism, locking, recovery and where workflow state is written.
-4. [`docs/run-data-and-job-execution.md`](run-data-and-job-execution.md) for the run-owned data
+4. [`docs/dagster/run-data-and-job-execution.md`](dagster/run-data-and-job-execution.md) for the run-owned data
    contract and immutable attempt layout.
-5. [`docs/build-discovery-integration.md`](build-discovery-integration.md) before using
+5. [`docs/build-discovery/build-discovery-integration.md`](build-discovery/build-discovery-integration.md) before using
    `build_discovery`, `build_execution` or `full_review`.
-6. [`docs/evidence-retrieval.md`](evidence-retrieval.md) and
+6. [`docs/evidence/evidence-retrieval.md`](evidence/evidence-retrieval.md) and
    [`appsec-review-process/tooling/llm-retrieval-addendum.md`](../appsec-review-process/tooling/llm-retrieval-addendum.md)
    before reading indexed target evidence.
-7. [`docs/persona-catalog.md`](persona-catalog.md),
+7. [`docs/personas-and-registry/persona-catalog.md`](personas-and-registry/persona-catalog.md),
    [`appsec-review-process/registry/README.md`](../appsec-review-process/registry/README.md) and
-   [`docs/intelligence-sources-and-jobs.md`](intelligence-sources-and-jobs.md) when selecting
+   [`docs/evidence/intelligence-sources-and-jobs.md`](evidence/intelligence-sources-and-jobs.md) when selecting
    personas, roles, domains, tooling profiles, output contracts or intelligence-ingest jobs.
 8. [`appsec-review-process/initiate.md`](../appsec-review-process/initiate.md) only when starting
    or recovering a review lane, after reading the process docs it requires.
@@ -101,9 +101,9 @@ python -B appsec-review-process/validate_design_parity.py
 ```
 
 The source inventory is `appsec-review-process/design-parity-manifest.json`; its deterministic
-views are `docs/design-parity-report.md`, `docs/full-review-workflow.mmd`, and
-`docs/design-parity-readiness.md`. The common worker terminal contract is documented in
-`docs/worker-result-envelope.md`. An unassigned pool or missing qualification is a gap, not an
+views are `docs/design-parity/design-parity-report.md`, `docs/design-parity/full-review-workflow.mmd`, and
+`docs/design-parity/design-parity-readiness.md`. The common worker terminal contract is documented in
+`docs/adapters/worker-result-envelope.md`. An unassigned pool or missing qualification is a gap, not an
 implicit default or success.
 
 For a migrated worker attempt, validate without publishing:
@@ -123,7 +123,7 @@ For one of the nine ADR-0010 vendor-prepass contracts add BOTH
 `--dagster-run-id <orchestrator run that produced the attempt>` and
 `--source-snapshot-sha256 sha256:<digest>` (one without the other is a usage error). Without them
 those contracts fail closed with `... the caller supplied NO_ORCHESTRATION_FACTS ...`; every other
-contract ignores them. See `docs/validator-vendor-prepass-dispatch.md`.
+contract ignores them. See `docs/contracts/validator-vendor-prepass-dispatch.md`.
 This validator is read-only and does not make a legacy worker conform automatically.
 
 ## Persona And Registry Lookups
@@ -131,7 +131,7 @@ This validator is read-only and does not make a legacy worker conform automatica
 Personas are reviewer stances, not proof. Registry jobs compose a persona, role, domain, tooling
 profile and output contract. Before dispatching or interpreting persona work, check:
 
-- [`docs/persona-catalog.md`](persona-catalog.md) for the human-readable library.
+- [`docs/personas-and-registry/persona-catalog.md`](personas-and-registry/persona-catalog.md) for the human-readable library.
 - [`appsec-review-process/registry/README.md`](../appsec-review-process/registry/README.md) for
   record types and dispatch rules.
 - `appsec-review-process/registry/personas/` for machine records.

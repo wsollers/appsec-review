@@ -1,13 +1,13 @@
 # Dagster engagement workflow
 
 The additional `build_discovery` and `full_review` jobs are described in
-[build discovery and full-graph readiness](build-discovery-integration.md). The preparation workflow
+[build discovery and full-graph readiness](../build-discovery/build-discovery-integration.md). The preparation workflow
 below remains the default; registration of downstream jobs does not enable their missing workers.
 
 `launch_job.py` now submits `engagement_workflow` by default. Dagster owns the queue, dependency
 graph, multiprocessing, cancellation and run history. Python functions and subprocesses perform
 bounded units of work. See the [Mermaid graph](dagster-workflow.mmd) and the machine
-[workflow plan](../appsec-review-process/workflow-plan.json).
+[workflow plan](../../appsec-review-process/workflow-plan.json).
 
 ```powershell
 python -B appsec-review-process/launch_job.py --run-id <linux_run_id> --wait
@@ -23,7 +23,7 @@ and `review_cli.py intake` retain the smaller intake-only job for diagnostics an
 The persistent Dagster queue admits at most **two runs across this deployment** and **one run
 per engagement ID**. A duplicate submission waits, then performs validated reuse. Jobs for other
 engagements can run concurrently. These limits are configured in
-[`dagster.yaml`](../orchestrator/dagster/dagster.yaml), mounted read-only into each service.
+[`dagster.yaml`](../../orchestrator/dagster/dagster.yaml), mounted read-only into each service.
 The workflow requires its engagement tag to match its config; missing tags fail before work.
 
 The workflow graph runs:
@@ -40,7 +40,7 @@ The workflow graph runs:
 The multiprocessing executor permits at most three steps per workflow. Combined with the run
 queue, at most six workflow step processes can run at once, plus their bounded Python children
 and Dagster service processes. This is a concurrency bound, not a CPU/memory quota. Dedicated
-resource pools (B15, [resource pools](resource-pools.md)) bound pooled steps per resource beneath
+resource pools (B15, [resource pools](../pools/resource-pools.md)) bound pooled steps per resource beneath
 that; add isolated worker images before introducing heavy scanners or target builds.
 
 Scope and native checks derive validated views of accepted intake. Discovery handoffs resolve
@@ -104,8 +104,8 @@ siblings, and runs bounded Freeciv21 preparation. All fixtures and evidence stay
 run's `data/`; the stopped legacy stack is checked for changes.
 
 The 2026-09-19 qualification passed in run `20260919T123919Z-0b9e70`:
-[live queue/parallelism/recovery/Freeciv21 report](../appsec-review-process/runs/20260919T123919Z-0b9e70/data/qualification/workflow-11a97950/report.json).
+[live queue/parallelism/recovery/Freeciv21 report](../../appsec-review-process/runs/20260919T123919Z-0b9e70/data/qualification/workflow-11a97950/report.json).
 The complete initial suites passed 45 host and 49 Linux tests. The final publication/status
 hardening was then covered by seven focused workflow tests on each platform and another actual
-service execution/status check. The [verification summary](../appsec-review-process/runs/20260919T123919Z-0b9e70/data/verification/summary.json)
+service execution/status check. The [verification summary](../../appsec-review-process/runs/20260919T123919Z-0b9e70/data/verification/summary.json)
 records both tested identities and the follow-up changes. Evidence is ignored local run data.

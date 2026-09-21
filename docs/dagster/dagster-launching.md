@@ -62,10 +62,10 @@ is `read-source`; initial intake does not require scanner output or a compile da
 
 Freeciv21 is already mounted read-only at `/targets/freeciv21`. For another target, first add an
 explicit read-only target bind mount to the shared runtime in
-[compose.yaml](../orchestrator/dagster/compose.yaml), apply the Compose change when jobs are idle,
+[compose.yaml](../../orchestrator/dagster/compose.yaml), apply the Compose change when jobs are idle,
 and stage its **container path**. A host path such as `F:\targets\project` is not a container path.
 Do not repurpose a Windows-owned run for Dagster; create a Linux-owned run and explicitly import
-legacy evidence when needed. See [legacy imports](phase-1-operations.md#legacy-compatibility).
+legacy evidence when needed. See [legacy imports](operations.md#legacy-compatibility).
 
 ## 3. Submit the workflow
 
@@ -100,7 +100,7 @@ monitoring but leaves server execution running.
 `python -B appsec-review-process/review_cli.py intake --run-id $runId` selects the intake-only
 job and waits. Direct `phase1.py intake` remains an explicit host adapter diagnostic, not the normal
 workflow submission path. The launcher accepts the registered jobs listed above; it does not accept
-arbitrary scripts. See [build discovery and full-graph readiness](build-discovery-integration.md)
+arbitrary scripts. See [build discovery and full-graph readiness](../build-discovery/build-discovery-integration.md)
 before selecting `full_review`.
 
 ## 4. Check status and results
@@ -170,11 +170,11 @@ Current job boundaries matter:
 Dagster worker configuration is registry-driven. Registry jobs compose a persona, role, domain,
 tooling profile and output contract. Use these references before adding or dispatching work:
 
-- [persona catalog](persona-catalog.md) for human-readable reviewer stances
-- [registry README](../appsec-review-process/registry/README.md) for record types and dispatch rules
+- [persona catalog](../personas-and-registry/persona-catalog.md) for human-readable reviewer stances
+- [registry README](../../appsec-review-process/registry/README.md) for record types and dispatch rules
 - `appsec-review-process/registry/personas/` for machine persona records
 - `appsec-review-process/registry/job-templates/` for registered job compositions
-- [intelligence sources and jobs](intelligence-sources-and-jobs.md) for doc/API/test/binary
+- [intelligence sources and jobs](../evidence/intelligence-sources-and-jobs.md) for doc/API/test/binary
   intelligence ingestion
 
 Personas are a review stance and scope contract, not evidence by themselves. A completed persona
@@ -237,7 +237,7 @@ python -B appsec-review-process/launch_job.py --run-id <linux_run_id> --job evid
 ```
 
 This job prepares/reuses intake and build discovery automatically. Query via the
-[CLI or read-only MCP server](../appsec-review-process/tooling/llm-retrieval-addendum.md).
+[CLI or read-only MCP server](../../appsec-review-process/tooling/llm-retrieval-addendum.md).
 The UI uses the same `workflow_settings` configuration and engagement tag shown above.
 Its independent acceptance lives under `data/jobs/02-evidence-index/whole/`, not the preparation
 workflow's aggregate status. After abrupt worker loss, consult Dagster and retry the job; the
@@ -253,11 +253,11 @@ python -B appsec-review-process/launch_job.py --run-id <linux_run_id> --job ossf
 
 The accepted pointer is under `data/jobs/02-ossf-scorecard/whole/`. This fetches published JSON2;
 it does not run the Scorecard CLI against the repository. See
-[the job contract](ossf-scorecard-job.md).
+[the job contract](../evidence/ossf-scorecard-job.md).
 
 - [Workflow architecture, parallelism and qualification](dagster-workflow.md)
-- [Runtime limits, imports and adapter diagnostics](phase-1-operations.md)
-- [Service lifecycle and preserved smoke job](../orchestrator/dagster/README.md)
+- [Runtime limits, imports and adapter diagnostics](operations.md)
+- [Service lifecycle and preserved smoke job](../../orchestrator/dagster/README.md)
 
 ## Historical intake-only launcher verification
 
@@ -267,8 +267,8 @@ qualified Freeciv21 intake, reattachment to the same Dagster run, a second run r
 accepted output, and missing-permission failure before work. The live GraphQL graph matched all
 three dependency edges. The stopped legacy stack was unchanged.
 
-See [service qualification evidence](../appsec-review-process/runs/20260919T113744Z-fe2cdc/data/verification/launcher-qualification.json)
+See [service qualification evidence](../../appsec-review-process/runs/20260919T113744Z-fe2cdc/data/verification/launcher-qualification.json)
 for exact tested file hashes, run IDs and command results, and
-[verification summary](../appsec-review-process/runs/20260919T113744Z-fe2cdc/data/verification/summary.json)
+[verification summary](../../appsec-review-process/runs/20260919T113744Z-fe2cdc/data/verification/summary.json)
 for test and documentation hashes. These are ignored local evidence files. Initial interrupted
 test batches are preserved separately; the passing Linux result is `tests-linux-final`.

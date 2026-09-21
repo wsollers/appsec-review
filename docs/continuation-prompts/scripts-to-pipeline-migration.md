@@ -42,17 +42,17 @@ Read these completely before editing:
 
 - `AGENTS.md`
 - `README.md`
-- `docs/migration.md`
-- `docs/script-migration-inventory.md`
+- `docs/architecture/migration.md`
+- `docs/architecture/script-migration-inventory.md`
 - `pipeline/README.md`
-- `docs/dagster-launching.md`
-- `docs/dagster-workflow.md`
-- `docs/run-data-and-job-execution.md`
-- `docs/build-discovery-integration.md`
-- `docs/parallel-intelligence.md`
+- `docs/dagster/dagster-launching.md`
+- `docs/dagster/dagster-workflow.md`
+- `docs/dagster/run-data-and-job-execution.md`
+- `docs/build-discovery/build-discovery-integration.md`
+- `docs/evidence/parallel-intelligence.md`
 - `docs/agent-reader.md`
-- `docs/persona-catalog.md`
-- `docs/evidence-retrieval.md`
+- `docs/personas-and-registry/persona-catalog.md`
+- `docs/evidence/evidence-retrieval.md`
 - `appsec-review-process/tooling/llm-retrieval-addendum.md`
 - `appsec-review-process/README.md`
 - `appsec-review-process/TODO.md`
@@ -84,7 +84,7 @@ Before changing files:
    dirty before the completed SARIF batch.
 2. Enumerate every immediate child of `scripts/`, including directories. The expected live count at
    handoff is 37. Trust the live enumeration rather than this prose if they differ.
-3. Compare that set with `docs/script-migration-inventory.md`. Every live top-level item must have
+3. Compare that set with `docs/architecture/script-migration-inventory.md`. Every live top-level item must have
    exactly one inventory row. Keep the historical `md_to_sarif.py`, `fix-binskim.ps1`,
    `Get-ComponentLocations.ps1`, and `check_ossf_scorecard.py` rows as completed migration records
    even though the files are gone.
@@ -92,24 +92,24 @@ Before changing files:
    caller list.
 5. Review the completed SARIF batch rather than reimplementing it:
    - `appsec-review-process/critical_findings_sarif.py`
-   - `docs/critical-findings-sarif-job.md`
+   - `docs/dagster/critical-findings-sarif-job.md`
    - `appsec-review-process/tests/test_critical_findings_sarif.py`
    - its registry records
 6. Review the completed BinSkim patcher retirement rather than recreating it:
-   - the `fix-binskim.ps1` historical row in `docs/script-migration-inventory.md`
+   - the `fix-binskim.ps1` historical row in `docs/architecture/script-migration-inventory.md`
    - the BinSkim blocks in `images/audit-static/Dockerfile` and
      `images/audit-static-opengrep/Dockerfile`
-   - the completed-retirement notes in `docs/migration.md` and `appsec-review-process/TODO.md`
+   - the completed-retirement notes in `docs/architecture/migration.md` and `appsec-review-process/TODO.md`
 7. Review the completed component-location transform rather than recreating it:
    - `pipeline/extract_component_locations.py`
    - `pipeline/tests/test_extract_component_locations.py`
-   - the historical inventory row and completed notes in `docs/migration.md`, `pipeline/README.md`,
+   - the historical inventory row and completed notes in `docs/architecture/migration.md`, `pipeline/README.md`,
      and `appsec-review-process/TODO.md`
 8. Review the completed OpenSSF Scorecard migration rather than recreating it:
-   - the `check_ossf_scorecard.py` historical row in `docs/script-migration-inventory.md`
+   - the `check_ossf_scorecard.py` historical row in `docs/architecture/script-migration-inventory.md`
    - `appsec-review-process/ossf_scorecard.py`
    - `appsec-review-process/tests/test_ossf_scorecard.py`
-   - `docs/ossf-scorecard-job.md` and the job's registry records
+   - `docs/evidence/ossf-scorecard-job.md` and the job's registry records
 
 Useful starting commands:
 
@@ -257,7 +257,7 @@ the execution or isolation model to force a pass.
 
 ## Next Task
 
-Refresh `docs/script-migration-inventory.md`, then choose exactly one additional small,
+Refresh `docs/architecture/script-migration-inventory.md`, then choose exactly one additional small,
 independently contractible batch and finish it end to end. Do not migrate the static prepass
 monolith as one job.
 
@@ -314,7 +314,7 @@ child responsibility has a qualified owner and all callers have moved.
 
 Update only the relevant subset, keeping code, registry, graph, and docs consistent:
 
-- `docs/script-migration-inventory.md`
+- `docs/architecture/script-migration-inventory.md`
 - `appsec-review-process/job-graph.json`
 - `appsec-review-process/dagster_workflow.py`
 - `appsec-review-process/workflow.py`
@@ -326,11 +326,11 @@ Update only the relevant subset, keeping code, registry, graph, and docs consist
 - `appsec-review-process/registry/domains/*.json`
 - `appsec-review-process/registry/tooling-profiles/*.json`
 - `appsec-review-process/registry/output-contracts/*.json`
-- `docs/phase-1-job-graph.mmd`
-- `docs/full-review-workflow.mmd`
-- `docs/migration.md`
-- `docs/parallel-intelligence.md`
-- `docs/dagster-launching.md`
+- `docs/design-parity/job-graph.mmd`
+- `docs/design-parity/full-review-workflow.mmd`
+- `docs/architecture/migration.md`
+- `docs/evidence/parallel-intelligence.md`
+- `docs/dagster/dagster-launching.md`
 - `pipeline/README.md`
 - `appsec-review-process/README.md`
 - `appsec-review-process/TODO.md`
@@ -355,8 +355,8 @@ Pre-existing dirty work included changes to:
 - `appsec-review-process/phase1.py`
 - `appsec-review-process/tests/test_dagster.py`
 - `appsec-review-process/workflow.py`
-- `docs/build-discovery-integration.md`
-- `docs/migration.md`
+- `docs/build-discovery/build-discovery-integration.md`
+- `docs/architecture/migration.md`
 - `orchestrator/dagster/Dockerfile`
 - `orchestrator/dagster/definitions.py`
 - `pipeline/README.md`
@@ -373,14 +373,14 @@ The completed SARIF batch added or changed:
 - registry records for `verified-findings`, `10-critical-findings-sarif`,
   `critical-findings-sarif`, `report-artifact-publisher`, `sarif-exporter`, and
   `local-sarif-transform`
-- `docs/script-migration-inventory.md`
-- `docs/critical-findings-sarif-job.md`
-- `docs/dagster-launching.md`
+- `docs/architecture/script-migration-inventory.md`
+- `docs/dagster/critical-findings-sarif-job.md`
+- `docs/dagster/dagster-launching.md`
 - `appsec-review-process/README.md`
 - `appsec-review-process/registry/README.md`
 - the SARIF-specific portions of `README.md`, `appsec-review-process/TODO.md`,
   `appsec-review-process/dagster_workflow.py`, `appsec-review-process/launch_job.py`,
-  `appsec-review-process/tests/test_dagster.py`, `docs/migration.md`, and
+  `appsec-review-process/tests/test_dagster.py`, `docs/architecture/migration.md`, and
   `orchestrator/dagster/definitions.py`
 - removal of old converter references from `images/audit-static/Dockerfile`,
   `images/audit-static-opengrep/Dockerfile`, and the image builders that existed then (since
@@ -390,8 +390,8 @@ The completed SARIF batch added or changed:
 
 The completed BinSkim patcher-retirement batch added or changed:
 
-- the completed historical row and then-current 39-item checkpoint in `docs/script-migration-inventory.md`
-- the completed-retirement notes in `docs/migration.md` and `appsec-review-process/TODO.md`
+- the completed historical row and then-current 39-item checkpoint in `docs/architecture/script-migration-inventory.md`
+- the completed-retirement notes in `docs/architecture/migration.md` and `appsec-review-process/TODO.md`
 - removal of the stale historical filename analogy from `docs/toolbox-remediation-2026-09-01.md`
 - deletion of `scripts/fix-binskim.ps1`
 
@@ -399,20 +399,20 @@ The completed component-location batch added or changed:
 
 - `pipeline/extract_component_locations.py`
 - `pipeline/tests/test_extract_component_locations.py`
-- the 38-item checkpoint and completed historical row in `docs/script-migration-inventory.md`
+- the 38-item checkpoint and completed historical row in `docs/architecture/script-migration-inventory.md`
 - the transform entry in `pipeline/README.md`
-- completed-migration notes in `docs/migration.md` and `appsec-review-process/TODO.md`
+- completed-migration notes in `docs/architecture/migration.md` and `appsec-review-process/TODO.md`
 - deletion of `scripts/Get-ComponentLocations.ps1`
 
 The completed OpenSSF Scorecard migration batch added or changed:
 
-- the 37-item checkpoint and completed historical row in `docs/script-migration-inventory.md`
+- the 37-item checkpoint and completed historical row in `docs/architecture/script-migration-inventory.md`
 - `appsec-review-process/ossf_scorecard.py`
 - `appsec-review-process/tests/test_ossf_scorecard.py`
-- `docs/ossf-scorecard-job.md`
+- `docs/evidence/ossf-scorecard-job.md`
 - registry records for the job, persona, role, domain, tooling profile and output contract
 - graph, Dagster definition, launcher, sensor, diagram and documentation registration
-- the completed-migration notes in `docs/migration.md` and `appsec-review-process/TODO.md`
+- the completed-migration notes in `docs/architecture/migration.md` and `appsec-review-process/TODO.md`
 - this continuation checkpoint and qualification record
 - deletion of `scripts/check_ossf_scorecard.py`
 

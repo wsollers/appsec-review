@@ -4,7 +4,7 @@
 One shared redactor that every scanner-backed producer calls at its OWN publication boundary:
 `redact_tree(attempt_private_dir, to_be_published_dir, on_unhandled=..., limits=...)`. Nothing in
 this module is wired into a worker, the common publication runtime or `02-evidence-index`; V10-V13
-adopt it. See `docs/evidence-redaction.md`.
+adopt it. See `docs/evidence/evidence-redaction.md`.
 
 Contract in one paragraph: the source directory is never modified; every file is either published
 byte-identical (`unchanged`), published with stable `[REDACTED:<kind>:<n>]` markers (`redacted`),

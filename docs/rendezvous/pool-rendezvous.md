@@ -45,7 +45,7 @@ No argument is optional.
 B13's verifier builds the one docker argv a run of a request can have, so it requires
 `host_flavor`, `docker_host`, `docker_executable` and `container_user`; B14's requires the registry,
 prompt root, readable roots, allowed models, snapshot and ceiling. Since the review of PRs #34/#35
-(Q3) **all of them are `PoolContext` fields** (`docs/pool-specification.md`), and this module keeps
+(Q3) **all of them are `PoolContext` fields** (`docs/pools/pool-specification.md`), and this module keeps
 no second copy:
 
 - the coordinator builds both adapter runtimes with `context.container_runtime(clock=, cancel=)` and
@@ -268,7 +268,7 @@ The aggregate across concurrent rendezvous of one engagement stays open as the p
 `in_process_caps_do_not_see_other_rendezvous`. It closes when instances are launched as dynamically
 mapped POOLED ops with C02 as the collector (the target design; it changes this module's launch
 API, not its manifest): B15's pools then count across branches natively, and B15's cancellation and
-slot-release behaviour applies. `docs/resource-pools.md` states this under Limitations.
+slot-release behaviour applies. `docs/pools/resource-pools.md` states this under Limitations.
 
 ## Cancel, timeout, late finish
 
@@ -448,7 +448,7 @@ manifest is verified. Tracked as C02b / inside T10; parity gap `chain_independen
 ## Capability record
 
 The parity capability `wait-all-rendezvous` lives in
-`appsec-review-process/design-parity-manifest.json` (generated views: `docs/design-parity-report.md`
+`appsec-review-process/design-parity-manifest.json` (generated views: `docs/design-parity/design-parity-report.md`
 and the views `validate_design_parity.py --write-generated-views` writes), updated in this PR:
 
 | Field | Value |

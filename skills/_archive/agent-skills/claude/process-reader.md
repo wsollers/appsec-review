@@ -7,13 +7,13 @@ registry work.
 Read first:
 
 - `docs/agent-reader.md`
-- `docs/dagster-launching.md`
-- `docs/dagster-workflow.md`
-- `docs/run-data-and-job-execution.md`
-- `docs/build-discovery-integration.md` when build jobs or compile databases are involved
-- `docs/persona-catalog.md` and `appsec-review-process/registry/README.md` when personas or job
+- `docs/dagster/dagster-launching.md`
+- `docs/dagster/dagster-workflow.md`
+- `docs/dagster/run-data-and-job-execution.md`
+- `docs/build-discovery/build-discovery-integration.md` when build jobs or compile databases are involved
+- `docs/personas-and-registry/persona-catalog.md` and `appsec-review-process/registry/README.md` when personas or job
   templates are involved
-- `docs/evidence-retrieval.md` and `appsec-review-process/tooling/llm-retrieval-addendum.md`
+- `docs/evidence/evidence-retrieval.md` and `appsec-review-process/tooling/llm-retrieval-addendum.md`
   before reading indexed target evidence
 - `docs/continuation-prompts/README.md` when continuing, resuming or handing off work: every
   continuation prompt lives in that folder; start from the newest dated one and write new ones there

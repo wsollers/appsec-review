@@ -28,9 +28,9 @@ and descendant acceptance. Failures preserve partial evidence and the exact resu
 Never edit completed attempt bytes or delete lock files. Resume only after the previous owner has
 exited; OS locks release on crash. Runs remain bound to their original execution platform.
 
-See [runtime operations](../../docs/phase-1-operations.md) for limits, recovery and startup commands.
+See [runtime operations](../../docs/dagster/operations.md) for limits, recovery and startup commands.
 Do not start vulnerability analysis or a full scanner/build run in this lane.
 
-Submit and recover using [the job submission guide](../../docs/dagster-launching.md).
+Submit and recover using [the job submission guide](../../docs/dagster/dagster-launching.md).
 Reattach with the launch ID to monitor the same execution; omit it for a new recovery launch.
 Use `review_cli.py status` for workflow state and the Dagster run URL to cancel server work.

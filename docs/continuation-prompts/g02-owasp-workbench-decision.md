@@ -23,11 +23,11 @@ and control-status model.
 1. `AGENTS.md`
 2. `docs/agent-reader.md`
 3. `appsec-review-process/TODO.md` — G02 and S03
-4. `docs/design-parity-completion-plan.md` — G2
-5. `docs/design-v3.md`
+4. `docs/design-parity/design-parity-completion-plan.md` — G2
+5. `docs/architecture/design-v3.md`
 6. `docs/standards-checklist-validation-proposal.md`
-7. `docs/persona-catalog.md`
-8. `docs/intelligence-sources-and-jobs.md`
+7. `docs/personas-and-registry/persona-catalog.md`
+8. `docs/evidence/intelligence-sources-and-jobs.md`
 9. `appsec-review-process/04-asvs-masvs/prompt.md`
 10. `appsec-review-process/04-asvs-masvs/config.md`
 11. `appsec-review-process/04-asvs-masvs/subprompts.md`

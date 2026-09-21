@@ -63,7 +63,7 @@ source families in `docs/proposals/threat-workbench/input-sources.proposal.yaml`
   (`osv-scanner`) queries a live vulnerability service; the eight Semgrep steps fetch `p/...` rule
   packs from the Semgrep registry (the PS1 history records a registry 404 breaking a whole run);
   `checkov` and `trivy config` can download policy bundles. None of this is recorded as a
-  permission. Under `docs/design-v3.md` §2.1 and B11 default-deny, every one of these is a
+  permission. Under `docs/architecture/design-v3.md` §2.1 and B11 default-deny, every one of these is a
   decision, not an inherited behavior.
 - **Every image is a mutable local tag** (`audit-iac:local`, `audit-container:local`,
   `scancode-toolkit:local`, and the `-ImageTag` default). `images/audit-container/Dockerfile`
@@ -132,7 +132,7 @@ hiding a failed tool.
 
 ### G2 — Where SBOM / SCA / license / lifecycle live
 
-`docs/design-v3.md` §4 currently says `06-cve-reachability` was "broadened 2026-09-17 to full L1
+`docs/architecture/design-v3.md` §4 currently says `06-cve-reachability` was "broadened 2026-09-17 to full L1
 scope: dependency inventory, license inventory, … EOL/abandonware signals … and CVE reachability
 triage", and `06-cve-reachability/config.md` reads `static-evidence/sbom|sca|license/`.
 
@@ -498,7 +498,7 @@ a result.
    publishes a redaction receipt and no caller hands off a legacy evidence tree.
 4. Both scripts, plus `run-dockerfile-lint.sh`, `run-sast-php.sh` and the other helpers only they
    call, are deleted together when no step remains. No wrapper, shim or reduced runner is left
-   behind. `docs/script-migration-inventory.md` rows 44–45 are updated by the deleting batch.
+   behind. `docs/architecture/script-migration-inventory.md` rows 44–45 are updated by the deleting batch.
 
 ## Task Series
 
@@ -535,7 +535,7 @@ Full text: `docs/proposals/vendor-prepass/task-series.md`.
   complete for a full review — which is already true today (`implemented: false`); declaring the
   nodes makes the gap honest instead of hidden inside a future "source SAST success".
 - ADR-0008's T03 can name real producers as soon as V02 lands, before any worker is qualified.
-- `docs/design-v3.md` §4 (`06` "full L1 scope") and §17 (image contents) need wording follow-ups
+- `docs/architecture/design-v3.md` §4 (`06` "full L1 scope") and §17 (image contents) need wording follow-ups
   under G2-A; `06-cve-reachability/config.md` and `15-deployment-hardening/subprompts.md` need
   repointing by the deleting batches. Not done here.
 - One new skip reason and nine graph nodes are shared-surface changes, serialized through V02.
@@ -548,7 +548,7 @@ profile, job template, graph node, graph edge or skip reason; does not pin or ve
 image identity (M02/M03/M05); does not choose policy for G1–G10; does not authorize network,
 package restore, target execution or dynamic testing for any node; does not edit the
 threat-workbench or OWASP-workbench packets, `TODO.md`, `job-graph.json`,
-`design-parity-manifest.json` or `docs/script-migration-inventory.md`; does not decide M02 or M06;
+`design-parity-manifest.json` or `docs/architecture/script-migration-inventory.md`; does not decide M02 or M06;
 does not extend the `forbidden_promotions` enum; and leaves both legacy runners unchanged.
 
 ## Revision Notes

@@ -25,6 +25,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT.parent / "docs"
+PARITY = DOCS / "design-parity"
 sys.path.insert(0, str(ROOT))
 
 from execution_state import Blocked
@@ -496,21 +497,21 @@ class VendorPrepassGraphTests(unittest.TestCase):
 
     def test_generated_views_name_every_new_node_and_are_current(self):
         s = self.s
-        self.assertEqual((DOCS / "phase-1-job-graph.mmd").read_text(encoding="utf-8"), job_graph.mermaid(s.graph))
-        for name in ("phase-1-job-graph.mmd", "full-review-workflow.mmd", "design-parity-readiness.md",
+        self.assertEqual((PARITY / "job-graph.mmd").read_text(encoding="utf-8"), job_graph.mermaid(s.graph))
+        for name in ("job-graph.mmd", "full-review-workflow.mmd", "design-parity-readiness.md",
                      "design-parity-report.md"):
-            text = (DOCS / name).read_text(encoding="utf-8")
+            text = (PARITY / name).read_text(encoding="utf-8")
             for job in self.new:
                 self.assertIn(job, text, f"{name} does not show {job}")
-        planned = (DOCS / "phase-1-job-graph.mmd").read_text(encoding="utf-8")
+        planned = (PARITY / "job-graph.mmd").read_text(encoding="utf-8")
         for job in self.new:
             self.assertIn(f'["{job} (planned; not dispatched)"]', planned)
 
 
     def test_hand_written_job_table_names_every_graph_job(self):
-        """docs/build-discovery-integration.md states the graph's job count above a hand-written
+        """docs/build-discovery/build-discovery-integration.md states the graph's job count above a hand-written
         table; the table must name every graph job exactly once and nothing the graph lacks."""
-        text = (DOCS / "build-discovery-integration.md").read_text(encoding="utf-8")
+        text = (DOCS / "build-discovery" / "build-discovery-integration.md").read_text(encoding="utf-8")
         section = text.split("## Registered lifecycle jobs", 1)[1].split("\n## ", 1)[0]
         listed = re.findall(r"^\| `([^`]+)` \|", section, flags=re.MULTILINE)
         jobs = sorted(self.s.graph["jobs"])

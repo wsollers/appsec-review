@@ -53,7 +53,7 @@ class Fuzzy:
 
 # --- Language/size metrics (ADR-0010 G10 = B, task V15). Descriptive only. ---------------------
 # Pure functions of (indexed path, exact bytes). No clock, host path, locale or walk order reaches
-# the document; see docs/evidence-index-metrics.md. Changing any table below is a rules change:
+# the document; see docs/evidence/evidence-index-metrics.md. Changing any table below is a rules change:
 # bump METRICS_RULES_VERSION and update the schema enums in the same commit.
 METRICS_RULES_VERSION = '1'
 METRICS_SCHEMA_ID = 'appsec-review/evidence-index-metrics/0.1'

@@ -19,7 +19,7 @@ never falls back to an older success. Reuse and every query validate producer fr
 artifact hashes. An interrupted attempt receives a separate recovery record on retry.
 
 Full commands and tooling limits are in the
-[LLM addendum](../appsec-review-process/tooling/llm-retrieval-addendum.md). Both Codex and Claude
+[LLM addendum](../../appsec-review-process/tooling/llm-retrieval-addendum.md). Both Codex and Claude
 receive an `evidence-retrieval` repository skill; intake handoffs point to it and the addendum.
 MCP configuration is an explicit client operation. The same retrieval functions remain available
 through the CLI when the client has no connected MCP endpoint.

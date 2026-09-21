@@ -112,7 +112,7 @@ either snapshot-bound (compared) or re-derived (ignored), so a new field cannot 
 ## Outcomes
 
 The outcome set is closed and maps onto the v1.0 envelope terminal statuses
-(`docs/worker-result-envelope.md`).
+(`docs/adapters/worker-result-envelope.md`).
 
 | Outcome | Reason | Meaning |
 | --- | --- | --- |

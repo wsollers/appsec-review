@@ -30,7 +30,7 @@ is C02 and T10. What this module guarantees to them:
   and not a success.
 * No value read from a specification or from disk is echoed into a message.
 
-See ``docs/pool-specification.md``.
+See ``docs/pools/pool-specification.md``.
 """
 from __future__ import annotations
 

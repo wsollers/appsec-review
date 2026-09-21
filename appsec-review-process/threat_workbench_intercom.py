@@ -14,7 +14,7 @@ module owns the durable transcript and the rules that make it auditable:
   by its author; the integrator authors nothing; a write policy limits record types per workcell;
 - injection quarantine: record text that reads as an instruction to a reviewer is flagged
   ``injection_suspected`` and excluded from projections while staying in the transcript
-  (``docs/design-v3.md`` 6.1: detection, not just avoidance);
+  (``docs/architecture/design-v3.md`` 6.1: detection, not just avoidance);
 - projections that hand a cell only the record types its ``intercom_reads`` allows, in an order
   that does not depend on write order;
 - the open-record sweep the join copies into ``assumptions-and-gaps.json`` and ``dissent``.

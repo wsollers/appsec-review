@@ -10,7 +10,7 @@ caches, and does not select, wrap or invoke a matcher. It deliberately does NOT 
 `nvd_feed` or `execution_state`: both import `socket` (and `urllib` / `subprocess`), and the
 no-network claim of this binding is proven by import inspection. The few read-path helpers
 (`beneath`, snapshot-id derivation, file hashing) are re-implemented here and pinned to the
-publisher's behaviour by parity tests. See docs/sca-nvd-snapshot-binding.md.
+publisher's behaviour by parity tests. See docs/evidence/sca-nvd-snapshot-binding.md.
 """
 from __future__ import annotations
 

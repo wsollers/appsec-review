@@ -16,7 +16,7 @@ in the staged inputs denies the job before work. ``fingerprint_material.sha256``
 integrator folds into the job input fingerprint.
 
 Nothing here is wired into a worker, the launcher, the graph or the handoff builder. See
-``docs/permission-capabilities.md`` for the integration follow-ups.
+``docs/adapters/permission-capabilities.md`` for the integration follow-ups.
 
 Redaction rule: no string taken from a requirement or grant is echoed into a decision unless it
 passed a closed pattern or enum first. Reason subjects are built from indices and schema-known

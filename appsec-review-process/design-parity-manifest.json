@@ -1,6 +1,6 @@
 {
   "schema": "appsec-review/design-parity-manifest/1.0",
-  "design_authority": "docs/design-v3.md",
+  "design_authority": "docs/architecture/design-v3.md",
   "sources": [
     "appsec-review-process/job-graph.json",
     "appsec-review-process/dagster_workflow.py",
@@ -14,7 +14,7 @@
     "orchestrator/dagster/definitions.py",
     "orchestrator/dagster/dagster.yaml",
     "appsec-review-process/registry/",
-    "docs/design-parity-completion-plan.md"
+    "docs/design-parity/design-parity-completion-plan.md"
   ],
   "worker_result_contract": {
     "definition_file": "appsec-review-process/worker-result-contract.json",
@@ -25,8 +25,8 @@
     "dependency_kinds": ["required", "optional"]
   },
   "generated_views": {
-    "lifecycle_mermaid": "docs/full-review-workflow.mmd",
-    "readiness_table": "docs/design-parity-readiness.md"
+    "lifecycle_mermaid": "docs/design-parity/full-review-workflow.mmd",
+    "readiness_table": "docs/design-parity/design-parity-readiness.md"
   },
   "dagster_inventory": {
     "standalone_jobs": [
@@ -102,8 +102,8 @@
     {
       "id": "00-intake",
       "design_refs": [
-        "docs/design-v3.md#4-lane-architecture",
-        "docs/design-v3.md#8-lane-contracts-and-append-only-ledger"
+        "docs/architecture/design-v3.md#4-lane-architecture",
+        "docs/architecture/design-v3.md#8-lane-contracts-and-append-only-ledger"
       ],
       "graph": {
         "node": "00-intake",
@@ -162,13 +162,13 @@
         ]
       },
       "gaps": [],
-      "next_prerequisite": "Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/resource-pools.md step 8)."
+      "next_prerequisite": "Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/pools/resource-pools.md step 8)."
     },
     {
       "id": "02-ossf-scorecard",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-ossf-scorecard",
@@ -239,8 +239,8 @@
     {
       "id": "02-repository-partition-discovery",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-repository-partition-discovery",
@@ -309,8 +309,8 @@
     {
       "id": "02-dev-project-discovery",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-dev-project-discovery",
@@ -367,8 +367,8 @@
     {
       "id": "02-devops-project-discovery",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-devops-project-discovery",
@@ -427,8 +427,8 @@
     {
       "id": "02-sre-operations-topology",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-sre-operations-topology",
@@ -488,8 +488,8 @@
     {
       "id": "02-evidence-assembly",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-evidence-assembly",
@@ -568,7 +568,7 @@
     {
       "id": "01-component-characterization",
       "design_refs": [
-        "docs/design-v3.md#22-code-index-and-componentpurpose-mapping"
+        "docs/architecture/design-v3.md#22-code-index-and-componentpurpose-mapping"
       ],
       "graph": {
         "node": "01-component-characterization",
@@ -623,8 +623,8 @@
     {
       "id": "03-threat-model-dfd-stride",
       "design_refs": [
-        "docs/design-v3.md#4-lane-architecture",
-        "docs/design-parity-completion-plan.md#g1-threat-model"
+        "docs/architecture/design-v3.md#4-lane-architecture",
+        "docs/design-parity/design-parity-completion-plan.md#g1-threat-model"
       ],
       "graph": {
         "node": "03-threat-model-dfd-stride",
@@ -679,8 +679,8 @@
     {
       "id": "04-asvs-masvs",
       "design_refs": [
-        "docs/design-v3.md#4-lane-architecture",
-        "docs/design-parity-completion-plan.md#g2-owasp-checklist-and-verification-model"
+        "docs/architecture/design-v3.md#4-lane-architecture",
+        "docs/design-parity/design-parity-completion-plan.md#g2-owasp-checklist-and-verification-model"
       ],
       "graph": {
         "node": "04-asvs-masvs",
@@ -737,7 +737,7 @@
     {
       "id": "05-native-memory",
       "design_refs": [
-        "docs/design-v3.md#4-lane-architecture"
+        "docs/architecture/design-v3.md#4-lane-architecture"
       ],
       "graph": {
         "node": "05-native-memory",
@@ -792,7 +792,7 @@
     {
       "id": "06-cve-reachability",
       "design_refs": [
-        "docs/design-v3.md#4-lane-architecture"
+        "docs/architecture/design-v3.md#4-lane-architecture"
       ],
       "graph": {
         "node": "06-cve-reachability",
@@ -847,8 +847,8 @@
     {
       "id": "13-fuzz-target-triage",
       "design_refs": [
-        "docs/design-v3.md#141-static-protocolparser-boundary",
-        "docs/design-v3.md#15-escalation-model"
+        "docs/architecture/design-v3.md#141-static-protocolparser-boundary",
+        "docs/architecture/design-v3.md#15-escalation-model"
       ],
       "graph": {
         "node": "13-fuzz-target-triage",
@@ -906,8 +906,8 @@
     {
       "id": "15-deployment-hardening",
       "design_refs": [
-        "docs/design-v3.md#12-static-deployment-hardening-specifics",
-        "docs/design-parity-completion-plan.md#g3-disa-stigsrg-and-nsacisa-hardening"
+        "docs/architecture/design-v3.md#12-static-deployment-hardening-specifics",
+        "docs/design-parity/design-parity-completion-plan.md#g3-disa-stigsrg-and-nsacisa-hardening"
       ],
       "graph": {
         "node": "15-deployment-hardening",
@@ -963,7 +963,7 @@
     {
       "id": "07-red-team-adversarial",
       "design_refs": [
-        "docs/design-v3.md#5-multi-agent-operating-model"
+        "docs/architecture/design-v3.md#5-multi-agent-operating-model"
       ],
       "graph": {
         "node": "07-red-team-adversarial",
@@ -1024,7 +1024,7 @@
     {
       "id": "08-blue-team-refutation",
       "design_refs": [
-        "docs/design-v3.md#4-lane-architecture"
+        "docs/architecture/design-v3.md#4-lane-architecture"
       ],
       "graph": {
         "node": "08-blue-team-refutation",
@@ -1080,7 +1080,7 @@
     {
       "id": "09-independent-verification",
       "design_refs": [
-        "docs/design-v3.md#53-streaming-verification-and-staged-threat-modeling"
+        "docs/architecture/design-v3.md#53-streaming-verification-and-staged-threat-modeling"
       ],
       "graph": {
         "node": "09-independent-verification",
@@ -1136,7 +1136,7 @@
     {
       "id": "11-remediation-proposal",
       "design_refs": [
-        "docs/design-v3.md#161-remediation-validation"
+        "docs/architecture/design-v3.md#161-remediation-validation"
       ],
       "graph": {
         "node": "11-remediation-proposal",
@@ -1191,7 +1191,7 @@
     {
       "id": "12-scoring-prioritization",
       "design_refs": [
-        "docs/design-v3.md#14-standards-and-enrichment-backing"
+        "docs/architecture/design-v3.md#14-standards-and-enrichment-backing"
       ],
       "graph": {
         "node": "12-scoring-prioritization",
@@ -1248,8 +1248,8 @@
     {
       "id": "10-synthesis-report",
       "design_refs": [
-        "docs/design-v3.md#152-verified-fact-graph-for-l14-synthesis",
-        "docs/design-v3.md#20-finalization-gate"
+        "docs/architecture/design-v3.md#152-verified-fact-graph-for-l14-synthesis",
+        "docs/architecture/design-v3.md#20-finalization-gate"
       ],
       "graph": {
         "node": "10-synthesis-report",
@@ -1311,8 +1311,8 @@
     {
       "id": "02-api-collection-intelligence-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-api-collection-intelligence-ingest",
@@ -1372,8 +1372,8 @@
     {
       "id": "02-binary-intelligence-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-binary-intelligence-ingest",
@@ -1434,8 +1434,8 @@
     {
       "id": "02-doc-intelligence-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-doc-intelligence-ingest",
@@ -1495,8 +1495,8 @@
     {
       "id": "02-standards-source-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-standards-source-ingest",
@@ -1556,8 +1556,8 @@
     {
       "id": "02-test-intelligence-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-test-intelligence-ingest",
@@ -1617,8 +1617,8 @@
     {
       "id": "04-owasp-validation-worklist",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "04-owasp-validation-worklist",
@@ -1678,8 +1678,8 @@
     {
       "id": "15-stig-srg-validation-worklist",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "15-stig-srg-validation-worklist",
@@ -1739,8 +1739,8 @@
     {
       "id": "02-build-configure",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-build-configure",
@@ -1802,8 +1802,8 @@
     {
       "id": "02-native-build",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-native-build",
@@ -1858,8 +1858,8 @@
     {
       "id": "02-source-sast",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-source-sast",
@@ -1914,8 +1914,8 @@
     {
       "id": "02-native-sast",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-native-sast",
@@ -1970,8 +1970,8 @@
     {
       "id": "02-ir-capture",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-ir-capture",
@@ -2026,8 +2026,8 @@
     {
       "id": "02-ir-link",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-ir-link",
@@ -2082,8 +2082,8 @@
     {
       "id": "02-ir-facts",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-ir-facts",
@@ -2138,8 +2138,8 @@
     {
       "id": "02-debug-symbol-index",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-debug-symbol-index",
@@ -2194,8 +2194,8 @@
     {
       "id": "02-binary-triage",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-binary-triage",
@@ -2250,8 +2250,8 @@
     {
       "id": "02-binary-cfg",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-binary-cfg",
@@ -2307,8 +2307,8 @@
     {
       "id": "02-test-execution",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-test-execution",
@@ -2363,8 +2363,8 @@
     {
       "id": "02-test-result-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-test-result-ingest",
@@ -2419,8 +2419,8 @@
     {
       "id": "02-test-coverage-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-test-coverage-ingest",
@@ -2475,8 +2475,8 @@
     {
       "id": "02-operations-doc-ingest",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-operations-doc-ingest",
@@ -2531,8 +2531,8 @@
     {
       "id": "02-evidence-index",
       "design_refs": [
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-evidence-index",
@@ -2602,8 +2602,8 @@
       "id": "02-secrets-inventory",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-secrets-inventory",
@@ -2657,8 +2657,8 @@
       "id": "02-iac-config-scan",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-iac-config-scan",
@@ -2712,8 +2712,8 @@
       "id": "02-container-image-inventory",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-container-image-inventory",
@@ -2767,8 +2767,8 @@
       "id": "02-sbom-inventory",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-sbom-inventory",
@@ -2822,8 +2822,8 @@
       "id": "02-sca-vulnerability-match",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-sca-vulnerability-match",
@@ -2877,8 +2877,8 @@
       "id": "02-license-scan",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-license-scan",
@@ -2933,8 +2933,8 @@
       "id": "02-dependency-lifecycle",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-dependency-lifecycle",
@@ -2989,8 +2989,8 @@
       "id": "02-binary-hardening",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-binary-hardening",
@@ -3044,8 +3044,8 @@
       "id": "02-mobile-sast",
       "design_refs": [
         "docs/decisions/ADR-0010-vendor-prepass-decomposition.md#decision-in-force-as-recorded-in-decisions-above",
-        "docs/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/parallel-intelligence.md#dependency-flow"
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
       ],
       "graph": {
         "node": "02-mobile-sast",
@@ -3100,7 +3100,7 @@
     {
       "id": "common-worker-result-envelope",
       "design_refs": [
-        "docs/design-parity-completion-plan.md#workstream-a-parity-inventory-and-executable-contracts"
+        "docs/design-parity/design-parity-completion-plan.md#workstream-a-parity-inventory-and-executable-contracts"
       ],
       "jobs": [],
       "execution_mode": "none",
@@ -3133,7 +3133,7 @@
     {
       "id": "dedicated-resource-pools",
       "design_refs": [
-        "docs/design-parity-completion-plan.md#workstream-b-shared-dispatch-and-validation-runtime"
+        "docs/design-parity/design-parity-completion-plan.md#workstream-b-shared-dispatch-and-validation-runtime"
       ],
       "jobs": [],
       "execution_mode": "none",
@@ -3148,7 +3148,7 @@
         "references": [
           "appsec-review-process/tests/test_resource_pools.py",
           "appsec-review-process/tests/test_resource_pools_dagster.py",
-          "docs/resource-pools.md"
+          "docs/pools/resource-pools.md"
         ]
       },
       "gaps": [
@@ -3158,13 +3158,13 @@
         "no_load_evidence_limits_must_not_be_raised"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Run live qualification step 8 (kill -9 of a run worker; docs/resource-pools.md), then cross-check each manifest job pool against its op pool."
+      "next_prerequisite": "Run live qualification step 8 (kill -9 of a run worker; docs/pools/resource-pools.md), then cross-check each manifest job pool against its op pool."
     },
     {
       "id": "persona-tool-pool-dispatch",
       "design_refs": [
-        "docs/design-v3.md#55-pool-launcher-waiter-and-rendezvous",
-        "docs/design-parity-completion-plan.md#workstream-c-persona-and-tool-work-pools"
+        "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous",
+        "docs/design-parity/design-parity-completion-plan.md#workstream-c-persona-and-tool-work-pools"
       ],
       "jobs": [
         "07-red-team-adversarial",
@@ -3188,12 +3188,12 @@
         "no_lifecycle_job_consumes_pool_specification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "C02: build the wait-all rendezvous and launcher on the C01 pool specification and expansion (docs/pool-specification.md) before any fan-out."
+      "next_prerequisite": "C02: build the wait-all rendezvous and launcher on the C01 pool specification and expansion (docs/pools/pool-specification.md) before any fan-out."
     },
     {
       "id": "wait-all-rendezvous",
       "design_refs": [
-        "docs/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
+        "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
       ],
       "jobs": [
         "07-red-team-adversarial",
@@ -3219,12 +3219,12 @@
         "in_process_caps_do_not_see_other_rendezvous"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "C03/T10: typed merges over load_verified_manifest, and a Dagster op (coordination_only, one run at a time) that runs the rendezvous (docs/pool-rendezvous.md)."
+      "next_prerequisite": "C03/T10: typed merges over load_verified_manifest, and a Dagster op (coordination_only, one run at a time) that runs the rendezvous (docs/rendezvous/pool-rendezvous.md)."
     },
     {
       "id": "deterministic-pool-merge",
       "design_refs": [
-        "docs/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
+        "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
       ],
       "jobs": [
         "07-red-team-adversarial",
@@ -3250,7 +3250,7 @@
     {
       "id": "evidence-qualified-quorum",
       "design_refs": [
-        "docs/design-v3.md#52-evidence-qualified-quorum"
+        "docs/architecture/design-v3.md#52-evidence-qualified-quorum"
       ],
       "jobs": [
         "07-red-team-adversarial",
@@ -3276,8 +3276,8 @@
     {
       "id": "claim-ledger-routing",
       "design_refs": [
-        "docs/design-v3.md#82-append-only-review-event-ledger",
-        "docs/design-parity-completion-plan.md#workstream-f-claim-ledger-and-feedback-loops"
+        "docs/architecture/design-v3.md#82-append-only-review-event-ledger",
+        "docs/design-parity/design-parity-completion-plan.md#workstream-f-claim-ledger-and-feedback-loops"
       ],
       "jobs": [
         "07-red-team-adversarial",
@@ -3303,7 +3303,7 @@
     {
       "id": "remediation-retest-feedback",
       "design_refs": [
-        "docs/design-v3.md#235-l11-patch-validation-hardening"
+        "docs/architecture/design-v3.md#235-l11-patch-validation-hardening"
       ],
       "jobs": [
         "11-remediation-proposal",
@@ -3328,7 +3328,7 @@
     {
       "id": "dynamic-rescope",
       "design_refs": [
-        "docs/design-v3.md#232-l0a-classification-invalidation-and-dynamic-re-scoping"
+        "docs/architecture/design-v3.md#232-l0a-classification-invalidation-and-dynamic-re-scoping"
       ],
       "jobs": [
         "01-component-characterization"
@@ -3352,7 +3352,7 @@
     {
       "id": "completeness-feedback",
       "design_refs": [
-        "docs/design-v3.md#237-completion-validator-extensions"
+        "docs/architecture/design-v3.md#237-completion-validator-extensions"
       ],
       "jobs": [
         "10-synthesis-report"
@@ -3376,7 +3376,7 @@
     {
       "id": "synthetic-hypothesis-resynthesis",
       "design_refs": [
-        "docs/design-v3.md#233-l14-synthetic-hypotheses"
+        "docs/architecture/design-v3.md#233-l14-synthetic-hypotheses"
       ],
       "jobs": [
         "10-synthesis-report",
@@ -3401,7 +3401,7 @@
     {
       "id": "threat-model-standard",
       "design_refs": [
-        "docs/design-parity-completion-plan.md#g1-threat-model"
+        "docs/design-parity/design-parity-completion-plan.md#g1-threat-model"
       ],
       "jobs": [
         "03-threat-model-dfd-stride"
@@ -3426,7 +3426,7 @@
     {
       "id": "owasp-checklist-model",
       "design_refs": [
-        "docs/design-parity-completion-plan.md#g2-owasp-checklist-and-verification-model"
+        "docs/design-parity/design-parity-completion-plan.md#g2-owasp-checklist-and-verification-model"
       ],
       "jobs": [
         "04-owasp-validation-worklist",
@@ -3452,7 +3452,7 @@
     {
       "id": "disa-nsa-hardening-model",
       "design_refs": [
-        "docs/design-parity-completion-plan.md#g3-disa-stigsrg-and-nsacisa-hardening"
+        "docs/design-parity/design-parity-completion-plan.md#g3-disa-stigsrg-and-nsacisa-hardening"
       ],
       "jobs": [
         "15-stig-srg-validation-worklist",
@@ -3478,7 +3478,7 @@
     {
       "id": "final-publication-gate",
       "design_refs": [
-        "docs/design-v3.md#20-finalization-gate"
+        "docs/architecture/design-v3.md#20-finalization-gate"
       ],
       "jobs": [
         "10-synthesis-report"

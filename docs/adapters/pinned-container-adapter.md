@@ -17,7 +17,7 @@ container, and writes one terminal result that a read-only verifier re-derives f
 TODO B13 says the adapter "uses the maintained wrapper". That phrase is ambiguous in this
 repository, and the ambiguity is reported rather than resolved silently:
 
-- `images/audit-native/run.sh` is the wrapper `docs/design-v3.md` section 2.2.1 names as the
+- `images/audit-native/run.sh` is the wrapper `docs/architecture/design-v3.md` section 2.2.1 names as the
   implementation of the hostile-build boundary.
 - `images/audit-buildenv-common/run.sh` is the wrapper the only container-running worker
   (`build_execution.py`) actually calls. It differs: `ALLOW_NETWORK=1` switches to

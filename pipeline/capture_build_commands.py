@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 capture_build_commands.py -- Tier B, pass 1 (command-line capture) of the
-L12 native-vendored-dependency-inference job (see docs/design-v3.md §4.2).
+L12 native-vendored-dependency-inference job (see docs/architecture/design-v3.md §4.2).
 
 Produces build-commands.jsonl: one JSON record per real compiler/linker
 subprocess invocation, for extract_vendor_candidates.py to parse. Records

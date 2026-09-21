@@ -1722,7 +1722,7 @@ class ZeroCountTests(Case):
 
 
 class DocumentationTests(unittest.TestCase):
-    DOC = ROOT.parent / "docs" / "pool-specification.md"
+    DOC = ROOT.parent / "docs" / "pools" / "pool-specification.md"
 
     def test_the_document_states_the_modules_constants(self):
         text = self.DOC.read_text(encoding="utf-8")

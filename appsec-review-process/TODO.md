@@ -33,8 +33,8 @@ This list is ordered by the current Dagster/run-owned architecture. New work sho
 rule that accepted evidence lives under `runs/<run_id>/data/`, with immutable attempts and explicit
 publication through `accepted.json`.
 
-The cross-cutting implementation and acceptance backlog for parity with `docs/design-v3.md` is
-[`docs/design-parity-completion-plan.md`](../docs/design-parity-completion-plan.md). It is the
+The cross-cutting implementation and acceptance backlog for parity with `docs/architecture/design-v3.md` is
+[`docs/design-parity/design-parity-completion-plan.md`](../docs/design-parity/design-parity-completion-plan.md). It is the
 authoritative checklist for pools, all lifecycle jobs, personas, feedback loops, standards decision
 gates, and final end-to-end qualification. Continue the next bounded Workstream B batch with
 [`docs/continuation-prompts/design-parity-worker-envelope.md`](../docs/continuation-prompts/design-parity-worker-envelope.md).
@@ -59,7 +59,7 @@ For every batch:
 - Start from current `origin/main` on a dedicated branch. Do not commit directly to `main` and do
   not merge the branch. Report the branch and commit so the integrator can review it.
 - Read `AGENTS.md`, `docs/agent-reader.md`,
-  `docs/run-data-and-job-execution.md`, and the batch's named source documents before editing.
+  `docs/dagster/run-data-and-job-execution.md`, and the batch's named source documents before editing.
 - Preserve unrelated work and ignored run evidence. Never reset, clean, stash, rewrite historical
   attempts, delete locks, or make old evidence look current.
 - Treat every path listed under **Shared surfaces** as exclusive. Only one active batch may edit
@@ -189,7 +189,7 @@ Cross-cutting capability ownership is explicit:
   `expected_result_sha256` (the hash `run_container` returned, kept where the attempt cannot reach).
   Today the verifier's checks are consistency checks: an edit to the result or to any one file is
   caught, a consistent rewrite of every file in the log directory is not
-  (`docs/pinned-container-adapter.md`). Decide before C02 or the first migrated worker calls the
+  (`docs/adapters/pinned-container-adapter.md`). Decide before C02 or the first migrated worker calls the
   verifier; adding a required argument afterwards touches every caller.
 
 #### B14 — Persona invocation adapter — DONE (PR #32, merged 2026-09-21; dispatch protocol only)
@@ -215,7 +215,7 @@ Cross-cutting capability ownership is explicit:
   unchanged engagement serialization; record load evidence before any limit increase.
 - Status 2026-09-21: six pools, the explicit unassigned state, the guard sensor and the pool-state
   evidence document are implemented; the parity manifest assigns the six jobs that have workers.
-  Live service qualification run on the Linux host (`docs/resource-pools.md`, record of
+  Live service qualification run on the Linux host (`docs/pools/resource-pools.md`, record of
   2026-09-21): per-pool limits, fairness, engagement serialization, cancellation, restart, drift and
   the evidence document PASS. Owed: step 8 (`kill -9` of a run worker and its step child), which
   the coordinator session was not permitted to run. Finding: a terminated run that holds a slot
@@ -231,7 +231,7 @@ Cross-cutting capability ownership is explicit:
 - Primary paths: new pool schema/runtime/tests and parity capability record.
 - Acceptance: zero/one/many, duplicates, mixed kinds, invalid counts/scopes, ID collisions, and
   cross-instance path access.
-- Status 2026-09-21: `pool_specification.py`, its four schemas and `docs/pool-specification.md`
+- Status 2026-09-21: `pool_specification.py`, its four schemas and `docs/pools/pool-specification.md`
   deliver the specification, the deterministic expansion and its verifier; the parity capability
   `persona-tool-pool-dispatch` records qualification level `unit` and stays
   `missing_prerequisites` (no launcher; no lifecycle job consumes a pool specification). Portable
@@ -249,7 +249,7 @@ Cross-cutting capability ownership is explicit:
   of the pinned producer results, not only the direct producers B14 checks.
 - TODO: consider how to enforce that (refuse at dispatch, or record and let C04 discount), and
   whether B14 should additionally walk pinned producer results recursively.
-- Status 2026-09-21: `pool_rendezvous.py`, its two schemas and `docs/pool-rendezvous.md` deliver the
+- Status 2026-09-21: `pool_rendezvous.py`, its two schemas and `docs/rendezvous/pool-rendezvous.md` deliver the
   launch, the wait, the classification rule (eleven states, closed `state_reason`) and the
   terminal-instance manifest with its verifier and reader; the parity capability
   `wait-all-rendezvous` records qualification level `unit` and stays `missing_prerequisites`.
@@ -465,7 +465,7 @@ Cross-cutting capability ownership is explicit:
   immutable reuse, and CLI/MCP retrieval qualification.
 - Slice done 2026-09-20: ADR-0010 task V15 (G10 = B), the language/size metrics enrichment that
   replaces the legacy `cloc` and `scc` steps, merged in PR #25 and `02-evidence-index` was
-  requalified on Linux (`docs/evidence-index-metrics.md`); Windows verification is outstanding.
+  requalified on Linux (`docs/evidence/evidence-index-metrics.md`); Windows verification is outstanding.
   The rest of F01 (derived intelligence and partition maps) is unchanged and still blocked.
 
 #### F02 — Evidence assembly rendezvous — BLOCKED(D02,D03,D04,D05,D06,D07,D08,D09,E03,E05,E08,E10,F01,S01)
@@ -644,7 +644,7 @@ Cross-cutting capability ownership is explicit:
   `inputs.json` is never an allowance. These workers therefore get their OWN attempt allocation,
   which keeps the input record outside the attempt and writes only the closed set; they do not
   publish through `allocate_attempt` / `persist_terminal_current` as those stand
-  (`docs/validator-vendor-prepass-dispatch.md`, known limits).
+  (`docs/contracts/validator-vendor-prepass-dispatch.md`, known limits).
 
 #### M04 — Container, mobile, and binary-hardening jobs — BLOCKED(M02,B13)
 
@@ -677,7 +677,7 @@ Cross-cutting capability ownership is explicit:
   `inputs.json` is never an allowance. These workers therefore get their OWN attempt allocation,
   which keeps the input record outside the attempt and writes only the closed set; they do not
   publish through `allocate_attempt` / `persist_terminal_current` as those stand
-  (`docs/validator-vendor-prepass-dispatch.md`, known limits).
+  (`docs/contracts/validator-vendor-prepass-dispatch.md`, known limits).
 
 #### M06 — Semantic-index disposition — READY
 
@@ -734,7 +734,7 @@ Cross-cutting capability ownership is explicit:
 
 - [x] Re-vet and implement Phase 1 intake: [A01-A16 PASS](../docs/phase-1-acceptance.md).
 - [x] Add the persistent Dagster run queue, per-engagement serialization, parallel preparation,
-  validated final join and branch recovery: [workflow documentation](../docs/dagster-workflow.md).
+  validated final join and branch recovery: [workflow documentation](../docs/dagster/dagster-workflow.md).
 - [x] Enforce run-owned `runs/<run_id>/data/`, immutable attempts, validated reuse and explicit
   legacy imports.
 - [x] Register lifecycle/registry jobs in the full Dagster graph with explicit missing-worker gates.
@@ -776,7 +776,7 @@ Cross-cutting capability ownership is explicit:
 ## 2. Build and collection graph
 
 - [x] Implement and qualify bounded `build_discovery`: separate streams, immutable reuse,
-  full-graph failure and recovery. See [build discovery](../docs/build-discovery-integration.md).
+  full-graph failure and recovery. See [build discovery](../docs/build-discovery/build-discovery-integration.md).
 - [ ] Implement successful-build manifests with separate Debug, RelWithDebInfo and Release
   provenance, matching symbols, generated inputs, binary hashes and compile databases. Configure
   success alone is insufficient.
@@ -795,7 +795,7 @@ Cross-cutting capability ownership is explicit:
 
 - [x] Implement the Dagster source evidence index, immutable snapshots, ssdeep, FTS5 retrieval,
   bounded read-only MCP tools and Codex/Claude retrieval skills:
-  [retrieval guide](../docs/evidence-retrieval.md).
+  [retrieval guide](../docs/evidence/evidence-retrieval.md).
 - [x] Add repeatable LSP and MCP filesystem/memory protocol probes with image identities and
   run-owned receipts.
 - [ ] Qualify language-server semantic references against accepted compile databases/build variants;
@@ -815,7 +815,7 @@ Cross-cutting capability ownership is explicit:
   writes an actionable `handoff.md`/`handoff.json` and fails clearly if none is supplied yet. This
   is deliberately not a worker that performs the partition analysis itself -- that requires real
   judgment about the specific target that a script cannot honestly fabricate. See
-  [build discovery](../docs/build-discovery-integration.md)'s new hand-off-gate section.
+  [build discovery](../docs/build-discovery/build-discovery-integration.md)'s new hand-off-gate section.
 - [ ] Have a human or agent actually produce and supply a schema-valid
   `02-repository-partition-discovery` / `02-dev-project-discovery` result for a real engagement,
   so `02-build-configure`'s dependency chain resolves end to end in `full_review` (currently wired
@@ -837,7 +837,7 @@ Cross-cutting capability ownership is explicit:
 
 - [x] Declare parallel source SAST, doc, API and test consumers; build-gated IR and binary analysis;
   separate test-result/coverage consumers; and an evidence rendezvous:
-  [collection plan](../docs/parallel-intelligence.md).
+  [collection plan](../docs/evidence/parallel-intelligence.md).
 - [ ] Implement doc intelligence ingestion with run-owned outputs and safe summary/search records.
 - [ ] Implement API collection ingestion for Postman, Bruno, Insomnia and OpenAPI artifacts,
   including environment redaction.
@@ -867,7 +867,7 @@ Cross-cutting capability ownership is explicit:
 ## 7. Standards and validation hardening
 
 - [ ] Complete and record the threat-model, OWASP, and DISA/NSA decision gates in the
-  [design-parity plan](../docs/design-parity-completion-plan.md#workstream-g-required-design-discussions-for-standards-work)
+  [design-parity plan](../docs/design-parity/design-parity-completion-plan.md#workstream-g-required-design-discussions-for-standards-work)
   before implementing those workers. Do not infer versions, applicability, evidence thresholds,
   crosswalk semantics, or static/runtime claim rules from the existing prompts.
 - [ ] Populate per-control standards source directories with upstream lineage, hashes and license
@@ -881,7 +881,7 @@ Cross-cutting capability ownership is explicit:
 
 ## 8. Script migration (`scripts/` -> `pipeline/` or Dagster workers)
 
-Per the 2026-09-19 script migration rule (`AGENTS.md`, `README.md`, `docs/migration.md`): no new
+Per the 2026-09-19 script migration rule (`AGENTS.md`, `README.md`, `docs/architecture/migration.md`): no new
 review-work logic in `scripts/`; port active review scripts, qualify, update callers, delete the
 old script outright (no thin wrapper). Full script-by-script survey and priority tiers:
 `docs/continuation-prompts/scripts-to-pipeline-migration.md`.
@@ -918,7 +918,7 @@ old script outright (no thin wrapper). Full script-by-script survey and priority
 - [ ] Break `scripts/Invoke-VendorAuditPrePass.ps1` / `.sh` (the big legacy audit orchestrator) apart
   into separate per-tool Dagster jobs under `appsec-review-process/` -- **corrected 2026-09-19,
   repo owner's direct instruction**: NOT a single `orchestrator/` Python replacement (superseded
-  `docs/migration.md` planned-change #5). Each tool becomes a job that communicates like every
+  `docs/architecture/migration.md` planned-change #5). Each tool becomes a job that communicates like every
   other job in the graph (`accepted.json`/`attempts/<id>/`), orchestrated by Dagster. Source-SAST
   tools map onto the already-declared `02-source-sast` node; secrets, IaC, SBOM/SCA, BinSkim and
   mobile SAST had no declared `job-graph.json` node and needed a decision on new nodes/contracts
@@ -937,7 +937,7 @@ old script outright (no thin wrapper). Full script-by-script survey and priority
 ## 9. Design-parity release gate
 
 - [ ] Complete Workstreams A-H in the
-  [design-parity completion plan](../docs/design-parity-completion-plan.md).
+  [design-parity completion plan](../docs/design-parity/design-parity-completion-plan.md).
 - [ ] Generate the machine-readable parity report and prove every enabled graph node has a worker,
   validator, registry composition, output contract, recovery policy, resource-pool assignment, and
   service-level qualification.
@@ -946,4 +946,4 @@ old script outright (no thin wrapper). Full script-by-script survey and priority
 - [ ] Run an actual `full_review` with zero applicable `WORKER_NOT_IMPLEMENTED` results; preserve
   explicit accepted skip/gap receipts for inapplicable or unavailable evidence.
 - [ ] Obtain independent review of the qualification manifest and residual design deviations before
-  claiming parity with `docs/design-v3.md`.
+  claiming parity with `docs/architecture/design-v3.md`.

@@ -1,6 +1,6 @@
 # Subprompts — Static Deployment Hardening (L15) Persona Pool
 
-Pilot of the persona-pool mechanism from `docs/design-v3.md` §5.5, piloted here per
+Pilot of the persona-pool mechanism from `docs/architecture/design-v3.md` §5.5, piloted here per
 `claude/TODO.md`'s decided sequencing (schemas → persona pool piloted on IaC, cheap/fast to
 iterate → generalize into the real launcher). `review_cli.py` has no `--persona` flag yet — see
 `config.md`'s "Persona Pool (pilot)" section for how to dispatch one of these manually today.
@@ -17,7 +17,7 @@ Every persona:
   `static-hardening` values (`hardened` / `hardening-gap-confirmed` /
   `hardening-baseline-assessment` / `image-artifact-not-provided` / `declared-exposure-only` /
   `cannot-verify`).
-- Follows `docs/design-v3.md` §5.4's standards-reference discipline without exception:
+- Follows `docs/architecture/design-v3.md` §5.4's standards-reference discipline without exception:
   `standard_refs.cis_benchmark_id` may only be set when the underlying tool's own output already
   states the CIS mapping (checkov/trivy) — never recalled from training knowledge, never
   reconstructed from a remembered control number. `standard_refs.disa_stig_id` /
@@ -237,7 +237,7 @@ that no single tool or persona sees on its own.
   composing the other three personas' individual findings, not by re-deriving them from raw
   scanner output this persona doesn't itself hold.
 - Because this persona runs after (or reasons over the results of) the other three, per the
-  `wait_all` rendezvous rule in `docs/design-v3.md` §5.5, it must not run — or must explicitly
+  `wait_all` rendezvous rule in `docs/architecture/design-v3.md` §5.5, it must not run — or must explicitly
   report `cannot-verify` for anything composition-dependent — if one of the three sibling personas'
   outputs is missing or incomplete for this run. A composed exposure/IAM claim built on a gap in an
   upstream persona is worse than no claim.

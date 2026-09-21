@@ -2,7 +2,7 @@
 
 Phase 1 intake uses the shared `phase1.py` adapter. Normal submission selects the Dagster
 `engagement_workflow`, which adds parallel preparation and a validated final join. The retained
-`phase1_intake` job performs intake alone. See [job submission](../../docs/dagster-launching.md).
+`phase1_intake` job performs intake alone. See [job submission](../../docs/dagster/dagster-launching.md).
 Acceptance is recorded separately in the run-scoped A01–A16 report; a successful intake alone
 is not implementation acceptance.
 

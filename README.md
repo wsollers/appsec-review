@@ -5,7 +5,7 @@ evidence gathering → LLM-assisted discovery → refutation → independent ver
 cross-lane synthesis. The current implementation combines Dockerized scanner/native
 evidence jobs with a tracked prompt/process harness under `appsec-review-process/`.
 
-Design authority: `docs/design-v3.md` (exported from the Google Doc on 2026-09-11; the Doc
+Design authority: `docs/architecture/design-v3.md` (exported from the Google Doc on 2026-09-11; the Doc
 remains the editing surface until this repo takes over — see `docs/decisions/ADR-0004`).
 
 Agent entrypoints live in [`AGENTS.md`](AGENTS.md). Agents should use
@@ -14,7 +14,7 @@ registry and evidence-retrieval docs before operating on a run.
 
 ## Submit a job
 
-Follow the [job submission guide](docs/dagster-launching.md) to create and stage a Linux-owned
+Follow the [job submission guide](docs/dagster/dagster-launching.md) to create and stage a Linux-owned
 engagement, submit from the host, inspect results, reconnect, recover or cancel. For a staged run:
 
 ```powershell
@@ -27,7 +27,7 @@ then a validated final join. Use `--job phase1_intake` only when requesting inta
 
 Use `--job build_discovery` for the first build-discovery integration. `--job full_review` exposes
 all lifecycle and registry jobs with explicit blockers for missing workers. See
-[build discovery and readiness](docs/build-discovery-integration.md).
+[build discovery and readiness](docs/build-discovery/build-discovery-integration.md).
 
 Use `--job critical_findings_sarif` after staging validated finding Markdown at
 `runs/<run_id>/inputs/critical-findings.md`. The job is a format transform, not finding
@@ -36,17 +36,17 @@ verification; it publishes only after strict input, SARIF, freshness and hash ch
 Use `--job ossf_scorecard` only after staging a fixed project list and granting
 `network:api.scorecard.dev`. It ingests published OpenSSF Scorecard JSON2 results with immutable
 response provenance; it is not a live repository scan or a finding verdict. See
-[the Scorecard job guide](docs/ossf-scorecard-job.md).
+[the Scorecard job guide](docs/evidence/ossf-scorecard-job.md).
 
 Job requirements, queue semantics, monitoring, run-owned output locations and persona/registry
-lookups are documented in [Dagster launching](docs/dagster-launching.md) and the
+lookups are documented in [Dagster launching](docs/dagster/dagster-launching.md) and the
 [agent reader](docs/agent-reader.md).
 
 ## Layout
 
 Phase 1 stateful intake is [accepted through A01-A16](docs/phase-1-acceptance.md).
-Use the [Dagster launcher](docs/dagster-launching.md) to submit staged intake to the running service.
-The default [engagement workflow](docs/dagster-workflow.md) queues concurrent engagements and runs
+Use the [Dagster launcher](docs/dagster/dagster-launching.md) to submit staged intake to the running service.
+The default [engagement workflow](docs/dagster/dagster-workflow.md) queues concurrent engagements and runs
 independent preparation steps in separate processes, with a validated final join.
 Dagster resolves configuration and owns the pre/work/post transitions; Python performs the bounded
 work. The shared adapter provides immutable attempts, freshness-checked reuse, explicit
@@ -57,7 +57,7 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 | Path | Contents |
 |---|---|
 | `docs/` | Design doc, review notes, ADRs, migration notes |
-| `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `docs/migration.md` |
+| `images/audit-static/` | Existing toolbox Dockerfile (Semgrep, gitleaks, syft, trivy, IaC linters, Joern, BinSkim, PHP analyzers) — copied as-is, see `docs/architecture/migration.md` |
 | `images/audit-native/` | Pinned native-analysis image for clang-tidy/cppcheck, compile feasibility, IR emit/link, `ir-facts`, and CSA/CTU. Runs only inside the hostile-build boundary. |
 | `images/audit-codeql/` | CodeQL bundle (pinned), offline; pre-engagement security-extended suites per language; license gate (ADR-0006) |
 | `images/audit-iac/` | Terraform/Kubernetes/Helm/Kustomize policy scanning (checkov, tfsec, trivy config, kube-linter) — split out of `audit-static` 2026-09-17 |
@@ -76,24 +76,24 @@ below are legacy workflows, with explicit imports required for new orchestrated 
 
 Top-level process docs now live under `docs/`:
 
-- [`docs/migration.md`](docs/migration.md)
-- [`docs/persona-catalog.md`](docs/persona-catalog.md)
+- [`docs/architecture/migration.md`](docs/architecture/migration.md)
+- [`docs/personas-and-registry/persona-catalog.md`](docs/personas-and-registry/persona-catalog.md)
 - [`docs/persona-pool-proposal.md`](docs/persona-pool-proposal.md)
 - [`docs/composable-review-template-proposal.md`](docs/composable-review-template-proposal.md)
-- [`docs/intelligence-sources-and-jobs.md`](docs/intelligence-sources-and-jobs.md)
+- [`docs/evidence/intelligence-sources-and-jobs.md`](docs/evidence/intelligence-sources-and-jobs.md)
 - [`docs/standards-checklist-validation-proposal.md`](docs/standards-checklist-validation-proposal.md)
-- [`docs/design-parity-completion-plan.md`](docs/design-parity-completion-plan.md)
-- [`docs/critical-findings-sarif-job.md`](docs/critical-findings-sarif-job.md)
+- [`docs/design-parity/design-parity-completion-plan.md`](docs/design-parity/design-parity-completion-plan.md)
+- [`docs/dagster/critical-findings-sarif-job.md`](docs/dagster/critical-findings-sarif-job.md)
 
 The active process TODO list is [`appsec-review-process/TODO.md`](appsec-review-process/TODO.md).
 Machine-readable implementation readiness lives in
 [`appsec-review-process/design-parity-manifest.json`](appsec-review-process/design-parity-manifest.json).
 Validate it with `python -B appsec-review-process/validate_design_parity.py`; generated stable
-views are the [parity report](docs/design-parity-report.md),
-[lifecycle graph](docs/full-review-workflow.mmd), and
-[operator readiness table](docs/design-parity-readiness.md). The shared terminal result/state
+views are the [parity report](docs/design-parity/design-parity-report.md),
+[lifecycle graph](docs/design-parity/full-review-workflow.mmd), and
+[operator readiness table](docs/design-parity/design-parity-readiness.md). The shared terminal result/state
 contract and read-only validation boundary are described in
-[the worker-result envelope](docs/worker-result-envelope.md).
+[the worker-result envelope](docs/adapters/worker-result-envelope.md).
 
 Script migration policy: review-work scripts currently under `scripts/` should be treated as
 temporary compatibility surfaces. The target home for deterministic review work is `pipeline/` for
@@ -105,7 +105,7 @@ maintain two implementations.
 
 Dagster is the normal orchestration layer. It queues jobs, serializes submissions for the same
 engagement, runs independent preparation steps in parallel and records failures/recovery. The
-[current workflow](docs/dagster-workflow.md) implements intake and preparation; downstream scanner
+[current workflow](docs/dagster/dagster-workflow.md) implements intake and preparation; downstream scanner
 and specialist execution remains planned.
 
 The separate legacy deterministic evidence layer is run by:
@@ -207,4 +207,4 @@ Windows validation against EASTL completed with:
 Submit `evidence_index` through Dagster to collect accepted source/discovery evidence, compute
 ssdeep fingerprints and publish a cited SQLite full-text index. See the
 [LLM tooling addendum](appsec-review-process/tooling/llm-retrieval-addendum.md) for CLI/MCP queries,
-language servers, capability probes and recovery, and [qualification](docs/evidence-retrieval.md).
+language servers, capability probes and recovery, and [qualification](docs/evidence/evidence-retrieval.md).

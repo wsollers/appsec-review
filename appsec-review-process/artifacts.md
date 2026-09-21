@@ -7,9 +7,9 @@ Evidence, extracted files, builds, attempts, validation results and logs belong 
 Submission requests live in `data/orchestration/launches/<launch_id>/`; workflow state and
 aggregate acceptance live in `data/workflows/engagement/`. Parallel preparation attempts live in
 `data/jobs/00-workflow-preparation/<branch>/attempts/<attempt_id>/`. See the
-[submission guide's output table](../docs/dagster-launching.md#4-check-status-and-results).
+[submission guide's output table](../docs/dagster/dagster-launching.md#4-check-status-and-results).
 The root `run-status.json` retains the intake/lane view, not the whole-workflow verdict.
-See [operations](../docs/phase-1-operations.md) and [data contract](../docs/run-data-and-job-execution.md).
+See [operations](../docs/dagster/operations.md) and [data contract](../docs/dagster/run-data-and-job-execution.md).
 `inputs/artifact-manifest.json` contains scope/source identity, selected job plans, build-discovery
 provenance, accepted hashes and producer attempt IDs. Restaging preserves history and invalidates
 stale derived references. `outputs/` is a compatibility surface, never authoritative discovery.

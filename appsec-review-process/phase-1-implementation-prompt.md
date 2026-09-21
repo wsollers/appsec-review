@@ -15,7 +15,7 @@ Read `initiate.md`, `environment.md`, `artifacts.md`, `budget-policy.md`,
 `manual-orchestration-runbook.md`, `process-manifest.json`, `00-intake-recovery/{config,prompt}.md`,
 `registry/AUTHORING-TEMPLATE.md`, `registry/job-templates/`, `tooling/buildenv-catalog.json`,
 `../docs/decisions/ADR-0002-orchestrator-in-python.md`,
-`../docs/engagement-job-flow.md`, and `../docs/run-data-and-job-execution.md`.
+`../docs/engagement-job-flow.md`, and `../docs/dagster/run-data-and-job-execution.md`.
 Inspect `run_process.py`, `stage_artifacts.py`, `create_handoff.py`, `validate_lane_output.py`,
 `review_cli.py`, and the engagement pipeline before changing contracts. Preserve unrelated edits.
 
@@ -64,7 +64,7 @@ Dagster visualizes a code-defined graph; do not promise a drag-and-drop workflow
 
 ## Task 3: implement durable run and attempt ownership
 
-Follow `../docs/run-data-and-job-execution.md`. Resolve all engagement data below
+Follow `../docs/dagster/run-data-and-job-execution.md`. Resolve all engagement data below
 `appsec-review-process/runs/<run_id>/data/`. Keep immutable per-attempt evidence/build/extraction
 directories and an atomically published manifest selecting accepted outputs. No job may consume
 another run's data by searching a shared project directory or choosing the newest file.

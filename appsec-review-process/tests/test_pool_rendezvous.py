@@ -1818,7 +1818,7 @@ class VerifierTests(Case):
         with self.assertRaises(ps.PoolSpecError):                  # the trap the doc now names
             ps.load_verified_expansion(pool_root, expected_spec=spec, context=context)
 
-        # ---- C03's first ten lines (docs/pool-rendezvous.md, "Reading a rendezvous") ----
+        # ---- C03's first ten lines (docs/rendezvous/pool-rendezvous.md, "Reading a rendezvous") ----
         verified = pr.load_verified_manifest(pool_root, expected_spec=spec, context=context,
                                              rendezvous_parent=parent)
         if verified.outcome not in (pr.COMPLETE, pr.DEGRADED):

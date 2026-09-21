@@ -65,7 +65,7 @@ class SuppliedHumanDecisionAdapter:
 
 
 class PinnedContainerAdapter:
-    """B13 ``appsec-review/pinned-container-adapter/1.0``; see docs/pinned-container-adapter.md.
+    """B13 ``appsec-review/pinned-container-adapter/1.0``; see docs/adapters/pinned-container-adapter.md.
 
     ``runtime`` is the trusted, integrator-built ``container_execution.ContainerRuntime``; the
     container request is ``request.inputs["container_request"]``. No lifecycle worker uses it yet.
@@ -89,7 +89,7 @@ class PinnedContainerAdapter:
 
 
 class PersonaInvocationAdapter:
-    """B14 ``appsec-review/persona-invocation-adapter/1.0``; see docs/persona-invocation-adapter.md.
+    """B14 ``appsec-review/persona-invocation-adapter/1.0``; see docs/adapters/persona-invocation-adapter.md.
 
     ``runtime`` is the trusted, integrator-built ``persona_invocation.PersonaRuntime`` (it carries
     the invoker); the invocation request is ``request.inputs["persona_request"]``. Dispatch

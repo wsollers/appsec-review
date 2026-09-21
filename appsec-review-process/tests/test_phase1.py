@@ -430,7 +430,7 @@ class Phase1Tests(unittest.TestCase):
         with self.assertRaises(ValueError): run_process.mark_process(self.run_id,'00-intake-recovery','OK')
 
     def test_A15_graph_and_status_consistency(self):
-        self.assertEqual(job_graph.mermaid(job_graph.load_graph()),(ROOT.parent/'docs/phase-1-job-graph.mmd').read_text())
+        self.assertEqual(job_graph.mermaid(job_graph.load_graph()),(ROOT.parent/'docs/design-parity/job-graph.mmd').read_text())
         result,_=self.run_job()
         status=state.read_json(state.run_path(self.run_id)/'run-status.json')
         lane=state.read_json(state.run_path(self.run_id)/'processes/00-intake-recovery/status.json')

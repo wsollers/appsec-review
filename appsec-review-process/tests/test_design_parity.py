@@ -43,15 +43,16 @@ class DesignParityTests(unittest.TestCase):
         shutil.copytree(ROOT, repo / "appsec-review-process", ignore=shutil.ignore_patterns("runs", "__pycache__"))
         shutil.copytree(resolve_repo_path("orchestrator/dagster"), repo / "orchestrator/dagster")
         shutil.copytree(resolve_repo_path("schemas"), repo / "schemas")
-        (repo / "docs").mkdir()
-        outputs = {"full-review-workflow.mmd": render_mermaid(self.manifest),
-                   "design-parity-readiness.md": render_readiness(self.manifest)}
-        for name, content in outputs.items():
-            source = REPO / "docs" / name
+        views = self.manifest["generated_views"]
+        outputs = {views["lifecycle_mermaid"]: render_mermaid(self.manifest),
+                   views["readiness_table"]: render_readiness(self.manifest)}
+        for relative, content in outputs.items():
+            source = REPO / relative
+            (repo / relative).parent.mkdir(parents=True, exist_ok=True)
             if source.is_file():
-                shutil.copy2(source, repo / "docs" / name)
+                shutil.copy2(source, repo / relative)
             else:
-                (repo / "docs" / name).write_text(content, encoding="utf-8")
+                (repo / relative).write_text(content, encoding="utf-8")
         return repo
 
     def test_current_honest_baseline(self):
@@ -255,13 +256,13 @@ class DesignParityTests(unittest.TestCase):
         self.assertEqual(mermaid, render_mermaid(deepcopy(self.manifest)))
         self.assertEqual(readiness, render_readiness(deepcopy(self.manifest)))
         if (REPO / "appsec-review-process").is_dir():
-            self.assertEqual((REPO / "docs/full-review-workflow.mmd").read_text(encoding="utf-8"), mermaid)
-            self.assertEqual((REPO / "docs/design-parity-readiness.md").read_text(encoding="utf-8"), readiness)
+            self.assertEqual((REPO / "docs/design-parity/full-review-workflow.mmd").read_text(encoding="utf-8"), mermaid)
+            self.assertEqual((REPO / "docs/design-parity/design-parity-readiness.md").read_text(encoding="utf-8"), readiness)
 
     def test_stale_generated_view_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = self.copy_repo(temporary)
-            path = repo / "docs/full-review-workflow.mmd"
+            path = repo / "docs/design-parity/full-review-workflow.mmd"
             path.write_text(path.read_text(encoding="utf-8") + "%% stale\n", encoding="utf-8")
             self.assertIn("stale generated lifecycle_mermaid", self.errors(self.mutated(), repo))
 

@@ -555,7 +555,7 @@ def main(argv=None):
         if args.action == 'pipeline-out':
             print(pipeline_out(args.run_id,args.attempt_id,args.out,args.reserve)); return 0
         if args.action == 'graph':
-            text = mermaid(load_graph()); path = ROOT.parent/'docs/phase-1-job-graph.mmd'
+            text = mermaid(load_graph()); path = ROOT.parent/'docs/design-parity/job-graph.mmd'
             if args.check:
                 if path.read_text() != text:
                     raise ValueError('Mermaid differs from machine graph')

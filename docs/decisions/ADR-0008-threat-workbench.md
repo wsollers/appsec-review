@@ -31,7 +31,7 @@ of the review system. The threat model needs to account for system architecture,
 deployment context, abuse scenarios, attack trees, persona disagreement, and ranked STRIDE pressure
 without turning unsupported hypotheses into findings.
 
-`docs/design-parity-completion-plan.md` Workstream G1 lists five open decisions: primary artifact
+`docs/design-parity/design-parity-completion-plan.md` Workstream G1 lists five open decisions: primary artifact
 shape; required DFD schema; representation of intent versus static versus test versus binary versus
 observed evidence; applicability, completeness and rescope; and approval authority plus the handling
 of disagreement. `TODO.md` G01 requires options, tradeoffs, a recommendation, explicit questions, a
@@ -43,7 +43,7 @@ golden/mutation fixture plan, and no worker or readiness claim. This ADR is that
 `01-component-characterization` (contract `component-map`, `allowed_skip_reasons: []`).
 `01-component-characterization` itself requires `02-evidence-assembly` (contract `pregather`), which
 is the join of every pregather/intelligence job. So the workbench runs **after the full pregather
-barrier**, not "immediately after intake" as `docs/design-v3.md` §5.3 describes L6A. The graph is
+barrier**, not "immediately after intake" as `docs/architecture/design-v3.md` §5.3 describes L6A. The graph is
 authoritative; §5.3/§22.8 of design-v3 are stale on this point and a follow-up task records that.
 L6B (reconciliation against verified evidence) is an unbuilt lane and is out of scope here.
 

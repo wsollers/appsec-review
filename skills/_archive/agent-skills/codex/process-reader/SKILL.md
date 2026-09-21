@@ -12,13 +12,13 @@ before dispatching persona or registry work.
 
 1. `pipeline/README.md` (the engagement path for review runs)
 2. `docs/agent-reader.md`
-3. `docs/dagster-launching.md`
-4. `docs/dagster-workflow.md`
-5. `docs/run-data-and-job-execution.md`
-6. `docs/build-discovery-integration.md` when build jobs or compile databases are involved
-7. `docs/persona-catalog.md` and `appsec-review-process/registry/README.md` when personas or
+3. `docs/dagster/dagster-launching.md`
+4. `docs/dagster/dagster-workflow.md`
+5. `docs/dagster/run-data-and-job-execution.md`
+6. `docs/build-discovery/build-discovery-integration.md` when build jobs or compile databases are involved
+7. `docs/personas-and-registry/persona-catalog.md` and `appsec-review-process/registry/README.md` when personas or
    job templates are involved
-8. `docs/evidence-retrieval.md` and
+8. `docs/evidence/evidence-retrieval.md` and
    `appsec-review-process/tooling/llm-retrieval-addendum.md` before reading indexed target evidence
 8. `docs/continuation-prompts/README.md` when continuing, resuming or handing off work: every
    continuation prompt lives in that folder; start from the newest dated one and write new ones there

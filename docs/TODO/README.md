@@ -21,14 +21,14 @@ Order that avoids conflicts: 01 -> 02 -> (03, 04, 05 in any order) -> (06, 07, 0
 
 | Chunk | Status |
 |---|---|
-| 01-docs-reorg-execute | ready |
-| 02-remove-disposed-docs | blocked on 01 |
-| 03-design-v3-split-and-adr-0004 | blocked on 01 |
-| 04-port-design-review-open-items | blocked on 01 |
-| 05-refresh-stale-trackers | blocked on 01 |
-| 06-write-review-lanes-docs | blocked on 01 |
-| 07-write-images-and-tools-docs | blocked on 01 |
-| 08-write-processes-overview | blocked on 01 |
+| 01-docs-reorg-execute | done 2026-09-21 |
+| 02-remove-disposed-docs | ready |
+| 03-design-v3-split-and-adr-0004 | ready |
+| 04-port-design-review-open-items | ready |
+| 05-refresh-stale-trackers | ready |
+| 06-write-review-lanes-docs | ready |
+| 07-write-images-and-tools-docs | ready |
+| 08-write-processes-overview | ready |
 | 09-skills-rework | blocked on 08 |
 | 10-agent-reader-refresh | blocked on 06, 07, 08, 09 |
 | 11-docs-index-and-link-check | blocked on 10 |

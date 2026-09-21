@@ -12,12 +12,12 @@ The numbered folders are the process lanes. Each lane owns its config, primary p
 Phase 1 intake modernization is specified in
 [`phase-1-implementation-prompt.md`](phase-1-implementation-prompt.md), with explicit acceptance
 gates and prompt vetting. See the [job-flow diagram](../docs/engagement-job-flow.md),
-[run-owned data contract](../docs/run-data-and-job-execution.md), and
+[run-owned data contract](../docs/dagster/run-data-and-job-execution.md), and
 [Dagster runner](../orchestrator/dagster/README.md). Phase 1 intake is
 [accepted through A01-A16](../docs/phase-1-acceptance.md); use the
-[operations guide](../docs/phase-1-operations.md) for new runs and recovery.
+[operations guide](../docs/dagster/operations.md) for new runs and recovery.
 The normal CLI submits to the service with `launch_job.py --run-id <run_id> --wait`;
-[Dagster launching](../docs/dagster-launching.md) explains configuration, transitions and recovery.
+[Dagster launching](../docs/dagster/dagster-launching.md) explains configuration, transitions and recovery.
 It selects `engagement_workflow`, including parallel preparation and the final join.
 Create/stage inside the code-server, submit from the host, then use `review_cli.py status`.
 The guide includes a complete Freeciv21 example and Dagster UI config/tag instructions.
@@ -27,12 +27,12 @@ collection and review jobs remain planned; their presence in the graph does not 
 The independently registered `critical_findings_sarif` job is available after a verification or
 synthesis task stages `inputs/critical-findings.md`. It is a strict run-owned format transform,
 not a finding aggregator or verifier. See
-[`docs/critical-findings-sarif-job.md`](../docs/critical-findings-sarif-job.md).
+[`docs/dagster/critical-findings-sarif-job.md`](../docs/dagster/critical-findings-sarif-job.md).
 
 The independently registered `ossf_scorecard` job ingests published OpenSSF Scorecard JSON2 only
 when the run supplies a fixed project list and explicit `network:api.scorecard.dev` permission.
 It preserves raw response provenance and coverage gaps; it is not a live scan or finding verdict.
-See [`docs/ossf-scorecard-job.md`](../docs/ossf-scorecard-job.md).
+See [`docs/evidence/ossf-scorecard-job.md`](../docs/evidence/ossf-scorecard-job.md).
 
 | Path | Purpose |
 |---|---|

@@ -280,7 +280,7 @@ decide whether to declare `02-evidence-assembly` and `02-evidence-index` edges o
 transitive; never add `15-deployment-hardening` or `06-cve-reachability`), `design-parity-manifest.json`
 (capability `threat-model-standard`, resource pool assignment, qualification record), registry
 composition for the lifecycle job, `dagster_workflow.py` binding replacing the `blocked_op`,
-generated readiness/graph docs, `TODO.md` G01/S02 status, `docs/design-v3.md` §5.3 L6A placement
+generated readiness/graph docs, `TODO.md` G01/S02 status, `docs/architecture/design-v3.md` §5.3 L6A placement
 note (F03 below).
 
 Acceptance: `full_review` reaches `03-threat-model-dfd-stride` and honestly blocks or passes;

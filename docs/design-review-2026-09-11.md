@@ -1,7 +1,7 @@
 # Design review of v3 — 2026-09-11
 
 Open items from the 2026-09-11 review, ordered by expected cost in a real engagement.
-Each becomes a doc section or ADR; check off when folded into `design-v3.md`.
+Each becomes a doc section or ADR; check off when folded into `architecture/design-v3.md`.
 
 ## Must address before first run
 

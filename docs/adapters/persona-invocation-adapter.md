@@ -129,7 +129,7 @@ carry it. That job is deterministic, so the default-deny is reported rather than
 
 ## Untrusted text
 
-Prompt text, evidence bytes and invoker output are data (`design-v3.md` section 6.1). They cannot
+Prompt text, evidence bytes and invoker output are data (`../architecture/design-v3.md` section 6.1). They cannot
 change scope, permissions, claim class, output path, persona, model or budget, because none of
 those is ever read from them: each comes from the request and is re-derived from the registry, the
 B11 gate or bytes on disk. Capability-looking text in a prompt or in evidence has no trusted
@@ -187,7 +187,7 @@ Rule id `appsec-review/persona-independence/1.0`, written into every result.
   producing invocation, is `SELF_VERIFICATION`. An entry that is not a declared producer is
   `UNDECLARED_CITATION`.
 
-Sources: `design-v3.md` section 5.1 (an observation may not be discovered, verified and adjudicated
+Sources: `../architecture/design-v3.md` section 5.1 (an observation may not be discovered, verified and adjudicated
 by the same agent); ADR-0008 claim limits ("a different persona and, where B14 records it, a
 different model family from the cell it challenges; no cell verifies its own claim"); the
 design-parity plan ("prevent one worker result from self-verifying"). Panel-level diversity
@@ -340,13 +340,13 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
   recognised as producer output.
 - Independence is checked against **direct producers only**, not transitively: persona P1 may
   produce, P2 may verify that, and P1 may then judge P2's result, because P2's result names P1 only
-  inside bytes this adapter does not follow. That meets the letter of `design-v3.md` section 5.1
+  inside bytes this adapter does not follow. That meets the letter of `../architecture/design-v3.md` section 5.1
   (no single invocation discovers, verifies and adjudicates). **Owner decision 2026-09-21:** this
   is accepted for B14, which sees one request at a time; independence of a whole chain is a stated
   requirement of C02 (which builds a reviewer's producers and sees the chain) and C04 (which
   accounts for diversity), with a `TODO.md` item to consider enforcing it there.
 - Requiring a different model family for every reviewer is stricter than the panel-level minimum
-  in `design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
+  in `../architecture/design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
 - The lexical rules are a backstop, not a classifier. They fail closed on phrasing such as a
   quoted severity word in a summary, and they do not recognise a paraphrase, a synonym, a claim
@@ -382,5 +382,5 @@ Shared surfaces, to be done sequentially by whoever owns them. None were edited 
    assigns it to the persona pool.
 6. `validate_job_output.py` / `publish_job_output.py`: call the verifier before publication and
    route outputs through the redactor.
-7. `appsec-review-process/TODO.md`, `docs/design-parity-completion-plan.md` and the parity
+7. `appsec-review-process/TODO.md`, `docs/design-parity/design-parity-completion-plan.md` and the parity
    manifest: mark B14 done once reviewed.

@@ -156,4 +156,4 @@ python -B appsec-review-process/qualify_phase1.py --run-id <qualification_run_id
 
 The command records argv, exit codes, hashes, tested code identity, limits, gate results and resume
 commands under the run's `data/acceptance/`. It performs bounded tests and Freeciv21 intake only.
-Use `phase1.py graph --check` to verify `docs/phase-1-job-graph.mmd` against `job-graph.json`.
+Use `phase1.py graph --check` to verify `docs/design-parity/job-graph.mmd` against `job-graph.json`.

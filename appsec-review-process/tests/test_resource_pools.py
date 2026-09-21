@@ -29,7 +29,7 @@ WORKFLOW_SOURCE = ROOT / "dagster_workflow.py"
 DEFINITIONS_SOURCE = ORCHESTRATION / "definitions.py"
 DAGSTER_YAML = ORCHESTRATION / "dagster.yaml"
 REQUIREMENTS = ORCHESTRATION / "requirements.txt"
-DOC = ROOT.parent / "docs" / "resource-pools.md"
+DOC = ROOT.parent / "docs" / "pools" / "resource-pools.md"
 SUPPORTED_KEYWORDS = {"$schema", "$id", "title", "description", "type", "required", "properties",
                       "additionalProperties", "enum", "const", "pattern", "items", "minItems", "$ref"}
 # The executor caps as they were before B15. Pools may not be an excuse to change one.
@@ -307,7 +307,7 @@ class SourceTies(unittest.TestCase):
         # `blocked_op` out of this file by AST and exec it in a hand-built namespace. A module
         # global that the factory starts to use is a NameError there, not here. This pins the exact
         # set per factory: when one changes, every such namespace has to supply the new name (see
-        # docs/resource-pools.md, "After PR #30 merges").
+        # docs/pools/resource-pools.md, "After PR #30 merges").
         tree = ast.parse(WORKFLOW_SOURCE.read_text(encoding="utf-8"))
         defined = set()
         for node in tree.body:

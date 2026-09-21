@@ -7,8 +7,8 @@ staged run configuration (for example `network:api.scorecard.dev`) remain the on
 The [integration follow-ups](#integration-follow-ups) list exactly what an integrator must touch.
 
 The design boundary is unchanged: the review process is static/offline by default
-([design-v3 §2.1](design-v3.md)), and target repositories, generated evidence and retrieved
-content are untrusted data ([§6.1](design-v3.md)). This model is how a bounded exception to that
+([design-v3 §2.1](../architecture/design-v3.md)), and target repositories, generated evidence and retrieved
+content are untrusted data ([§6.1](../architecture/design-v3.md)). This model is how a bounded exception to that
 default is requested, granted by a human, checked before work and bound into the input
 fingerprint. It grants nothing by itself.
 
@@ -254,5 +254,5 @@ Shared surfaces, to be done sequentially by whoever owns them. None were edited 
 9. `ossf_scorecard.py`: replace the `NETWORK_PERMISSION` string check with `require_granted`
    (worker migration; needs live requalification).
 10. B12 `review_cli.py status`: show `ui_safe_projection(decision)` — never the tracked decision.
-11. `appsec-review-process/TODO.md`, `docs/design-parity-completion-plan.md`: mark B11 done and
+11. `appsec-review-process/TODO.md`, `docs/design-parity/design-parity-completion-plan.md`: mark B11 done and
     unblock B13/B14/B15 once reviewed.

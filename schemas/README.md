@@ -12,7 +12,7 @@ JSON Schema for the common finding/evidence/interjob-transfer format (added 2026
 - `handoff-transfer.schema.json` -- what create_handoff.py should validate before naming an upstream artifact as available in a ## Upstream Outputs section (the "validate on read" half of the schema-validator wiring).
 - `worker-result-envelope.schema.json` -- the versioned terminal result shared by deterministic, container, persona, pool, controller, and supplied-decision workers. Cross-field skip, gap, retry, acceptance, and supersession rules are enforced by `worker_result.py`; `validate_job_output.py` adds run/job ownership, input freshness, in-attempt artifact hashes, registry-required files, and exact-edge skip authorization.
 - `ossf-scorecard-results.schema.json` -- normalized published-results ingestion records. Contract-specific validation additionally ties records to staged requests and raw response hashes.
-- `critical-findings-sarif.schema.json` -- the exact SARIF 2.1.0 document emitted by `critical_findings_sarif.py`, a standalone registered format-transform job and deliberately not a `full_review` graph node (`docs/critical-findings-sarif-job.md`). Identity, level, location and structure are pinned; free-text copied verbatim from the validated finding document is intentionally unconstrained. Conversion success is never proof that a finding was verified.
+- `critical-findings-sarif.schema.json` -- the exact SARIF 2.1.0 document emitted by `critical_findings_sarif.py`, a standalone registered format-transform job and deliberately not a `full_review` graph node (`docs/dagster/critical-findings-sarif-job.md`). Identity, level, location and structure are pinned; free-text copied verbatim from the validated finding document is intentionally unconstrained. Conversion success is never proof that a finding was verified.
 - `verdict-taxonomies.json` -- not a JSON Schema itself, a curated registry of named verdict vocabularies (adversarial-verdict, static-hardening, memory-safety-disposition, cve-reachability) that finding.classification is checked against, keyed by finding.classification_taxonomy. Different lane families genuinely need different verdict language; this keeps that real difference structured instead of forcing one global enum or letting each lane's prose drift independently.
 
 Composable review schemas (added for the registry/worklist layer):
@@ -128,7 +128,7 @@ registry record or validator is implemented by these files):
 Cross-record id resolution, the completeness invariant, index-only citation rejection and claim-limit checks are lane-validator responsibilities, not expressible here.
 
 Permission-capability schemas (backlog batch B11; model and validator only -- no worker, launcher,
-graph, manifest or handoff consumes them yet, see `docs/permission-capabilities.md`):
+graph, manifest or handoff consumes them yet, see `docs/adapters/permission-capabilities.md`):
 
 - `permission-capability.schema.json` -- versioned capability *definition* (closed kind enum: target execution, fixed network destination, dynamic testing, debugger/ptrace, credential use, package restore, target mutation), its required typed parameters and `default_decision: DENY`. Records live in `appsec-review-process/registry/permission-capabilities/`.
 - `permission-capability-parameters.schema.json` and `permission-capability-entry.schema.json` -- the closed, all-nullable exact parameter set (one scheme/host/port, one repository-relative path, a `cred:` reference id and never a value) and one capability instance with its required `origin`. `kind` and `origin` deliberately admit unknown and target-controlled values so `permission_capabilities.py` can reject them by name.
@@ -219,7 +219,7 @@ free-text property.
   `sca-vulnerability-match.schema.json` (+ `-record`, `-database`, `-database-identities`,
   `-coverage-gaps`, `-gap-summary`), `license-inventory.schema.json` (+ `-record`) and
   `dependency-lifecycle.schema.json` (+ `-entry`, `-reference-table-identity`, `-reference-table`)
-  -- the V05 SBOM-family contracts (ADR-0010 M1-M5; see `docs/sbom-family-contracts.md`). No
+  -- the V05 SBOM-family contracts (ADR-0010 M1-M5; see `docs/evidence/sbom-family-contracts.md`). No
   severity, score, reachability, exploitability, fix or legal-conclusion property exists. An SCA
   match carries the database identity per citation, `match_basis` is `purl | cpe`, aliases are
   collapsed, and every SBOM component is either `evaluated` or a record in `sca-coverage-gaps.json`
@@ -237,7 +237,7 @@ hold a short identifier-shaped string, so rule ids must come from a pinned rule 
 target's own tool configuration.
 
 Evidence-index metrics (ADR-0010 G10 = B, task V15; consumed by `02-evidence-index`, see
-`docs/evidence-index-metrics.md`):
+`docs/evidence/evidence-index-metrics.md`):
 
 - `evidence-index-metrics.schema.json` -- the `metrics` member of an `02-evidence-index`
   `manifest.json`, not a separate file: aggregate file, byte and line counts of the indexed
@@ -262,19 +262,19 @@ shape). Those need orchestrator/ to exist first; the four files above do not -- 
 review_cli.py/create_handoff.py today.
 
 Redaction receipt (ADR-0010 Decision G9-A, task V06; module and validator only -- no worker,
-publication runtime or `02-evidence-index` code consumes it yet, see `docs/evidence-redaction.md`):
+publication runtime or `02-evidence-index` code consumes it yet, see `docs/evidence/evidence-redaction.md`):
 
 - `redaction-receipt.schema.json` -- the `redaction-receipt.json` that `appsec-review-process/evidence_redaction.py` writes last into the directory it redacted: redactor identity (module version plus ruleset sha256), the required fail-closed policy, the limits in force, per-file records (path, `unchanged`/`redacted`/`withheld`, withheld reason, parser mode, hashes, redaction counts by kind, pre-existing markers), totals, the `unredacted_file_in_published_set: false` statement and `receipt_sha256`. Closed objects, every property required. Deliberately no property for a value, fragment, per-value hash, value length, line text or timestamp, and `source_sha256` is non-null only for an unchanged file (a source hash of a redacted file is an oracle for the removed value).
 
 Disposition consistency, totals, ordering, the exact published file set and the fixed-point re-run over published bytes are `evidence_redaction.verify_receipt` responsibilities, not expressible here. `receipt_sha256` is an integrity check, not an authenticator.
 
 SCA vulnerability-database identity (vendor pre-pass V09, ADR-0010 G3; resolver only -- no worker,
-graph, manifest or contract consumes it yet, see `docs/sca-nvd-snapshot-binding.md`):
+graph, manifest or contract consumes it yet, see `docs/evidence/sca-nvd-snapshot-binding.md`):
 
 - `vulnerability-database-identity.schema.json` -- the verified identity of the published NVD snapshot that `02-sca-vulnerability-match` fingerprints and publishes as `outputs/vulnerability-database-identity.json`: snapshot id and chain, manifest and content sha256, retrieval timestamp and cursor, file count and bytes, age and the job's age policy (`no-limit` by default, or `within-limit` of a `max_age` the job set; a snapshot older than that limit is `FAILED` and has no identity record -- ADR-0010 M4; schema id `/2`), `match_basis: cpe` (true of the NVD database; the SCA match-record basis is V05's) and mandatory limitations. Since ADR-0010 M1 this database is no longer the SCA matcher's source; it serves `06-cve-reachability` enrichment and cross-checking. Closed, every property required. Produced only by `appsec-review-process/sca_nvd_snapshot.py` after a full offline re-hash; the hash, chain, containment and age-policy checks are that module's responsibility, not expressible here. It reads `nvd-current-pointer.schema.json` and `nvd-snapshot-manifest.schema.json` unchanged.
 
 Pinned-container argv adapter (backlog batch B13; adapter and validators only -- no lifecycle worker,
-graph, manifest or launcher consumes it yet, see `docs/pinned-container-adapter.md`):
+graph, manifest or launcher consumes it yet, see `docs/adapters/pinned-container-adapter.md`):
 
 - `container-image.schema.json` -- one registered image identity under `appsec-review-process/registry/container-images/`: fully qualified `repository` and immutable `sha256:` `digest` (index or manifest), purpose and provenance. There is deliberately no tag property and the repository pattern admits no tag.
 - `pinned-container-request.schema.json` -- everything a caller may say to `container_execution.run_container`: run/job/attempt identity, `{image_id, digest}`, an `argv` array, an allow-listed `environment`, read-only `target_mounts` (`/workspace` or `/inputs/<name>`), run-owned `scratch_path`/`log_path`, `network` (`none` or exact granted destinations), the B11 `permission` block (`$ref` to the requirement, grant and decision schemas) and seven required integer `limits`. Closed, every property required; no property for a docker option, capability, device, user, working directory or writable target.
@@ -284,7 +284,7 @@ Argv/limit/port bounds, path identity (device+inode), registry resolution, the p
 
 Persona invocation adapter (backlog batch B14; dispatch protocol and validators only -- no model
 client, and no lifecycle persona job, graph, manifest or launcher consumes it yet, see
-`docs/persona-invocation-adapter.md`):
+`docs/adapters/persona-invocation-adapter.md`):
 
 - `persona-invocation-request.schema.json` -- everything a caller may say to `persona_invocation.run_invocation`: run/job/attempt identity, `invocation_role`, the pinned `invoker_id`, `outer_prompt` `{path, sha256, bytes}`, the `persona` composition (job template, persona, role, domain, tooling profile and output contract ids with record hashes), `model`, derived `tools` ids, seven required integer `budget` limits, exact `readable_inputs` (roles `handoff`, `evidence`, `reference`, `producer_output`, `producer_result`), run-owned `output_root`/`log_path`, allowed and prohibited claim classes, `producers` for the independence rule, the B11 `permission` block (`$ref` to the requirement, grant and decision schemas) and `permission_fingerprint_sha256`. Closed, every property required; no property for prompt text, a free-text tool, an absolute path, a permission string or a default model.
 - `persona-model-identity.schema.json` -- `{provider, family, model_id, snapshot}`, all required. `persona-invocation-file.schema.json` -- `{path, sha256, bytes}` for one file by its single relative spelling.
@@ -295,7 +295,7 @@ client, and no lifecycle persona job, graph, manifest or launcher consumes it ye
 Budget bounds, the model allow-list and alias rule, registry composition, derived tool ids and the claim-class ceiling, path identity (device+inode, one spelling), the independence rule and the binding of each declared producer to its pinned `invocation-result.json` bytes, the permission gate, the lexical prohibited-claim rules, cause precedence and the on-disk re-derivation (agreement of the result, `invocation.json`, the invoker manifest and the output root) are `persona_invocation.py` responsibilities (`request_errors`, `resolve_request`, `derive_output`, `verify_invocation_result`), not expressible here. `result_sha256` is an integrity check, not an authenticator.
 
 Resource pool state (backlog batch B15; qualification evidence only -- no worker, graph, manifest or
-launcher consumes it, see `docs/resource-pools.md`):
+launcher consumes it, see `docs/pools/resource-pools.md`):
 
 - `resource-pool-state.schema.json` -- the document `appsec-review-process/resource_pools.py state` writes for a Dagster instance: declaration hash, Dagster version, the default pool limit and slot-release setting (expected and observed), the unchanged outer run-queue limits, the six pools in declared order with expected and observed limit, `from_default`, claimed slots, pending steps and a closed `state` enum (`OK`, `MISSING`, `DEFAULTED`, `DRIFT`), undeclared pools, every registered op as pooled or `unassigned` with a closed reason, the named Dagster runs with each pooled step's start and end, `pooled_steps_recorded` (false means the document is not contention evidence), the largest observed overlap per pool, errors, `result` and `state_sha256`. Closed, every property required; no property for log text, run configuration or an environment value.
 
@@ -303,7 +303,7 @@ Unique JSON keys and finite numbers, the declaration hash (the verifying `resour
 
 Pool specification and deterministic instance expansion (backlog batch C01; specification and
 expansion only -- no launcher, waiter, merge, lifecycle job, graph or manifest consumes it yet, see
-`docs/pool-specification.md`):
+`docs/pools/pool-specification.md`):
 
 - `pool-specification.schema.json` -- one pool job as a recorded configuration (`appsec-review/pool-specification/1.0`): `pool_id`, `lane`, run/job/attempt identity, `budget_class` (`probe`, `standard`, `deep`), the author's `pool_budget` ceilings, `resource_pool_policy.allowed_pools` (a pool-id shape, never a pool id), `wait_all` (required, and only `true`: a pool that does not wait for every expected instance is not expressible in 1.0), `rendezvous_timeout_seconds`, `empty_pool_reason` (a closed reason, required exactly for a pool of zero instances) and `worker_groups`. Closed, every property required.
 - `pool-worker-group.schema.json` -- one worker group: `group_id`, `worker_kind` (`persona` or `pinned_container`), `count`, `memory_heavy`, the B11 `permission` block (`$ref` to the requirement, grant and decision schemas) and exactly one request template, the other being `null`. `persona_request` and `tool_request` are the B14 and B13 request schemas minus what the expander assigns (ids, every writable path, the permission block and its fingerprint pin); a test ties each copied property to the adapter's own schema. The one property that is not a copy is `tool_request.target_mounts[]`: `{mount_root_id, relative_path, container_path}` -- a declared mount-root id resolved from the integrator's `PoolContext.mount_roots` and one relative spelling inside it (`null` for the root itself) instead of B13's absolute `host_path`, so no specification holds a host path (review of PR #34, question 1: coordinator's recommendation, owner to confirm; the shape changed before anything of C01 was merged, so the id stays `1.0`). No property for a resource pool, an output path, a host path or an instance id.
@@ -314,7 +314,7 @@ Count, total and budget bounds, group order, the permission re-derivation, image
 
 Wait-all rendezvous and terminal-instance manifest (backlog batch C02; in-process launch, wait and
 publication only -- no Dagster op, merge, quorum, lifecycle job, graph or manifest consumes it yet,
-see `docs/pool-rendezvous.md`):
+see `docs/rendezvous/pool-rendezvous.md`):
 
 - `pool-rendezvous-manifest.schema.json` -- `terminal-instances.json`, created exclusively and last by `pool_rendezvous.run_rendezvous` (`appsec-review/pool-rendezvous-manifest/1.0`): the classification rule id, the expansion and specification hashes, the pool identity, `wait_all` (only `true`), `rendezvous_timeout_seconds`, `expansion_state` with `empty_pool_reason`, the pool `outcome` (`EMPTY`, `COMPLETE`, `DEGRADED`, `FAILED`, `CANCELED`; only `COMPLETE` is a whole result set), `counts` with one integer per state, the ordered `instances` and `manifest_sha256`. No timestamp, no host path and no free text, so one set of on-disk facts derives one byte sequence across a restart.
 - `pool-rendezvous-instance.schema.json` -- one instance's terminal record: the expansion's identity fields (`instance_id`, group, ordinal, worker kind, `attempt_root`, `resource_pool`, `request_sha256`, `input_fingerprint`), a closed `state` of eleven values (`succeeded`, `failed`, `blocked`, `canceled`, `instance_timed_out`, `rendezvous_timed_out`, `crashed`, `invalid`, `not_launched_canceled`, `not_launched_rendezvous_timeout`, `missing`), a required closed `state_reason` that says which of a state's causes applied (fourteen values, `pool_rendezvous.STATE_REASONS`; added in the review of PR #35 before anything of C02 was merged, so the id stays `1.0`), and, exactly for the five states that adopt a verified adapter result, `adapter_status`, the closed `adapter_cause` (the B13 and B14 causes), `result_file` `{path, sha256, bytes}` and `invoker_stopped` or `container_removed`; `worker_stopped` exactly for `rendezvous_timed_out`. No property for log text, a container name or an adapter message.
