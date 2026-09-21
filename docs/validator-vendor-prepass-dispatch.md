@@ -106,3 +106,16 @@ consumer (`--consumer-job 02-evidence-assembly`).
   fields, so a vendor-prepass worker cannot publish through that helper as it stands.
 - V07 exports no claim-class or permitted-status table; its three claim classes are typed in the
   validator and tied to the ADR fixture and the records by a test.
+
+## The job is bound to its contract
+
+The envelope states both `job_id` and `output_contract`, and the contract selects every check in
+this document. Until this change nothing bound the two, for any job: a `02-secrets-inventory`
+attempt that published `verified_findings` was accepted by claiming `evidence-index` (no result
+schema; two dummy files satisfy its required files). `_job_contract_errors` now takes the contract a
+job publishes from what registers the job, never from the envelope: the job template's
+`composition.output_contract_id`, the graph node's `contract`, and the vendor-prepass node table.
+Every source that knows the job must name the claimed contract; sources that disagree with each
+other are an error; a job no source knows is left as it was (synthetic and preparation jobs). Found
+by a coordinator probe after the slice was green: the suite proved "contract ⇒ job" and never asked
+"job ⇒ contract".

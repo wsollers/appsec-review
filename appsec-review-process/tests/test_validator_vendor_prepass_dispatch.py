@@ -911,5 +911,69 @@ class HygieneTests(unittest.TestCase):
         self.assertNotIn("appsec-review-" + "process/", source.replace("appsec-review-" + "process/tests/", ""))
 
 
+class JobContractBindingTests(unittest.TestCase):
+    """Coordinator probe, after the slice was green: the envelope states both the job and the output
+    contract, the contract selects every check, and nothing bound the two. The suite proved "one of
+    the nine contracts => its job"; nobody asked the reverse. Pre-existing for every job, but it is
+    this slice's strict verifiers that it let a producer walk around."""
+
+    def test_a_vendor_prepass_job_cannot_pick_a_laxer_contract_to_escape_its_verifier(self):
+        staged = stage(self, v04.SECRETS_CONTRACT_ID)
+        lax = contract_record("evidence-index")
+        self.assertIsNone(lax.get("result_schema"))
+        document = staged.attempt / "outputs" / "secrets-inventory.redacted.json"
+        value = json.loads(document.read_bytes())
+        value["verified_findings"] = [{"severity": "critical"}]
+        document.write_bytes(dump(value))
+        for relative in lax["required_files"]:
+            path = staged.attempt / relative
+            if not path.exists():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"{}" if relative.endswith(".json") else b"x")
+        self.assertTrue(staged.validate())  # its own contract refuses it
+        errors = staged.validate(staged.envelope(contract_id="evidence-index"))
+        self.assertEqual(errors, ["output contract is not the one this job publishes; expected 'secrets-inventory'"])
+
+    def test_every_vendor_prepass_job_is_bound_to_exactly_its_contract(self):
+        import validate_job_output as validator
+        graph = {"jobs": {}}  # V02 has not declared the nodes on this base: the vendor table must suffice
+        for contract_id in NINE:
+            job_id = node(contract_id)["job_id"]
+            with self.subTest(job=job_id):
+                self.assertEqual(validator._job_contract_errors(job_id, contract_id, graph, REGISTRY), [])
+                for other in ("evidence-index", "intake", *[c for c in NINE if c != contract_id][:2]):
+                    self.assertEqual(validator._job_contract_errors(job_id, other, graph, REGISTRY),
+                                     [f"output contract is not the one this job publishes; expected {contract_id!r}"])
+
+    def test_registered_jobs_are_bound_by_their_template_and_their_graph_node(self):
+        import validate_job_output as validator
+        graph = json.loads((ROOT / "job-graph.json").read_text(encoding="utf-8"))
+        checked = 0
+        for template in sorted((REGISTRY / "job-templates").glob("*.json")):
+            record = json.loads(template.read_text(encoding="utf-8"))
+            job_id, contract_id = record["job_template_id"], record["composition"]["output_contract_id"]
+            with self.subTest(job=job_id):
+                self.assertEqual(validator._job_contract_errors(job_id, contract_id, graph, REGISTRY), [])
+                self.assertTrue(validator._job_contract_errors(job_id, "evidence-index" if contract_id != "evidence-index"
+                                                               else "intake", graph, REGISTRY))
+                checked += 1
+        self.assertGreaterEqual(checked, 16)
+        planned = next(job for job, item in graph["jobs"].items()
+                       if not (REGISTRY / "job-templates" / f"{job}.json").is_file())
+        self.assertTrue(validator._job_contract_errors(planned, "evidence-index", graph, REGISTRY))
+        self.assertEqual(validator._job_contract_errors(planned, graph["jobs"][planned]["contract"], graph, REGISTRY), [])
+
+    def test_sources_that_disagree_are_an_error_and_an_unknown_job_is_left_as_it_was(self):
+        import validate_job_output as validator
+        job_id = node(v04.SECRETS_CONTRACT_ID)["job_id"]
+        graph = {"jobs": {job_id: {"contract": "evidence-index"}}}
+        for claimed in (v04.SECRETS_CONTRACT_ID, "evidence-index"):
+            self.assertEqual(validator._job_contract_errors(job_id, claimed, graph, REGISTRY),
+                             ["the registry, the graph and the vendor-prepass table disagree about this job's output contract"])
+        self.assertEqual(validator._job_contract_errors("job-nobody-registered", "evidence-index", {"jobs": {}}, REGISTRY), [])
+        for hostile in ("../x", "", None, 7, "a/b"):
+            self.assertEqual(validator._job_contract_errors(hostile, "evidence-index", {"jobs": {}}, REGISTRY), [])
+
+
 if __name__ == "__main__":
     unittest.main()

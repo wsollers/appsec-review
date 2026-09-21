@@ -854,6 +854,37 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
     return errors
 
 
+def _job_contract_errors(job_id: Any, contract_id: Any, graph: dict[str, Any], registry_root: Path) -> list[str]:
+    """The envelope states both the job and the output contract, and the contract selects every
+    check below -- so a producer that may choose it freely chooses its own validator. A
+    `02-secrets-inventory` attempt publishing `verified_findings` was ACCEPTED by claiming
+    `evidence-index` (no result schema, two dummy files). The contract a job publishes is therefore
+    taken from what registers the job, never from the envelope: its job template's composition, its
+    graph node, and the vendor-prepass node table. Every source that knows the job must name the
+    claimed contract. A job no source knows (a synthetic or standalone preparation job) is left as
+    it was. Only the expected value is quoted."""
+    if not isinstance(job_id, str) or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._-]*", job_id):
+        return []  # reported as a job identity error elsewhere
+    expected: set[str] = set()
+    template = Path(registry_root) / "job-templates" / f"{job_id}.json"
+    if template.is_file():
+        try:
+            declared = read_json(template).get("composition", {}).get("output_contract_id")
+        except (OSError, ValueError, AttributeError):
+            return ["job template cannot be read to determine the job's output contract"]
+        if isinstance(declared, str):
+            expected.add(declared)
+    node = graph.get("jobs", {}).get(job_id) if isinstance(graph, dict) else None
+    if isinstance(node, dict) and isinstance(node.get("contract"), str):
+        expected.add(node["contract"])
+    expected.update(contract for contract, vendor in VENDOR_PREPASS_NODES.items() if vendor["job_id"] == job_id)
+    if len(expected) > 1:
+        return ["the registry, the graph and the vendor-prepass table disagree about this job's output contract"]
+    if expected and contract_id not in expected:
+        return [f"output contract is not the one this job publishes; expected {sorted(expected)[0]!r}"]
+    return []
+
+
 def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
                         expected_input_fingerprint: str,
                         expected_run_id: str | None = None,
@@ -896,6 +927,7 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
             if contract.get("contract_id") != contract_id:
                 errors.append("registry output contract identity mismatch")
     graph = read_json(graph_path)
+    errors.extend(_job_contract_errors(envelope.get("job_id"), contract_id, graph, Path(registry_root)))
     allowed_skips: set[str] | None = None
     if envelope.get("execution_status") == "SKIPPED":
         allowed_skips, edge_errors = _skip_reasons(
