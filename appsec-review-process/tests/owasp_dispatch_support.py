@@ -219,7 +219,7 @@ class DispatchCase(unittest.TestCase):
                 "standard_family": "owasp_asvs", "obligation_ids": [], "control_ids": [],
                 "domain_ids": list(domains), "all_controls": not domains, "component_ids": [],
                 "all_components": True}, **fields, "linked_test_ids": []}
-        rules = [rule("static-route", (), STATIC)]
+        rules = [rule("static-route", (), STATIC)] if self.chapters else []
         if self.dynamic_chapters:
             rules.append(rule("dynamic-route", self.dynamic_chapters, DYNAMIC))
         return rules
@@ -421,6 +421,47 @@ class DispatchCase(unittest.TestCase):
                 raise AssertionError("a pool worker thread is still alive")
 
 
+    def plan(self, **facts) -> od.Plan:
+        return od.load_plan(self.run_id, self.request, self.facts(**facts))
+
+    def specifications(self, pointer: dict) -> tuple:
+        return od.build_specifications(self.plan(), self.facts(), attempt_id=pointer["attempt_id"], decided_at=NOW)
+
+    def published_files(self, pointer: dict) -> dict:
+        """Every document T10 itself publishes for an accepted attempt (not C01's, C02's, B14's or
+        T07's files, and not the T07 requests, which must carry T07's own identifiers)."""
+        attempt = self.attempt(pointer)
+        paths = [attempt / od.ATTEMPT_FILE, attempt / od.INPUTS_FILE, attempt / od.STATUS_FILE,
+                 self.accounting_path(pointer), self.job_root / "accepted.json", self.job_root / "latest.json"]
+        return {path.relative_to(self.job_root).as_posix(): path.read_bytes() for path in paths}
+
+    # -- a coordinator in its own process, so that it can really die --------------------------------
+
+    def coordinator_command(self, block_at: int) -> list:
+        arguments = {"runs": str(execution_state.RUNS), "run_id": self.run_id, "registry": str(self.registry),
+                     "request": str(self.request_path), "block_at": block_at}
+        return [sys.executable, "-B", str(Path(__file__).resolve()), json.dumps(arguments)]
+
+
+class _BlockForever(ValidatorInvoker):
+    def invoke(self, package, *, output_root, cancel):
+        print("BLOCKED", flush=True)
+        threading.Event().wait()
+
+
+def _coordinator(arguments: dict) -> None:
+    """A real, sequential dispatch over the parent's run that blocks forever inside one cell after
+    printing one line. The parent reads that line and kills this process."""
+    execution_state.RUNS = Path(arguments["runs"])
+    runtime = od.DispatchRuntime(
+        facts=od.DispatchFacts(registry_dir=Path(arguments["registry"]), allowed_models=(b14.MODEL, b14.OTHER_MODEL),
+                               invoker_id=pi.FixtureInvoker.invoker_id, source_snapshot_sha256=SNAPSHOT,
+                               registry_ceiling=None),
+        invoker=Routed({arguments["block_at"]: _BlockForever()}), clock=lambda: NOW, cancel=pr.PoolCancel(),
+        stop_grace_seconds=2, max_parallel=1, wait_limit_seconds=HANG_SECONDS, drain_seconds=5)
+    od.dispatch(arguments["run_id"], Path(arguments["request"]), runtime=runtime, force=False)
+
+
 def every_text(node) -> list:
     """Every string, key and scalar of a JSON-like structure, for marker searches."""
     if isinstance(node, dict):
@@ -432,3 +473,7 @@ def every_text(node) -> list:
 
 def tree_bytes(root: Path) -> dict:
     return {path.relative_to(root).as_posix(): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+
+
+if __name__ == "__main__":
+    _coordinator(json.loads(sys.argv[1]))

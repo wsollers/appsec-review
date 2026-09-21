@@ -595,6 +595,16 @@ def _validation_request(plan: Plan, cell: Cell, candidate: Mapping[str, Any]) ->
             "candidate": {"path": candidate["run_path"], "sha256": candidate["sha256_hex"]}}
 
 
+def _adapter_result(instance_root: Path, entry: Mapping[str, Any], item: ps.InstanceRequest,
+                    context: ps.PoolContext) -> Mapping[str, Any]:
+    """B14's own verifier for one instance's ids and the request the specification derives."""
+    return pi.load_verified_result(
+        instance_root, run_id=entry["run_id"], job_id=entry["job_id"], attempt_id=entry["attempt_id"],
+        request=item.request, registry_dir=context.registry_dir, prompt_root=context.prompt_root,
+        readable_roots=context.readable_roots, allowed_models=context.allowed_models,
+        source_snapshot_sha256=context.source_snapshot_sha256, registry_ceiling=context.registry_ceiling)
+
+
 def _cell_candidate(plan: Plan, attempt: Path, wave: int, pool_directory: str, item: ps.InstanceRequest,
                     entry: Mapping[str, Any], recorded: Mapping[str, Any], context: ps.PoolContext) -> tuple:
     """(candidate, reason) for a ``succeeded`` instance. The adapter's own verifier decides first;
@@ -602,11 +612,7 @@ def _cell_candidate(plan: Plan, attempt: Path, wave: int, pool_directory: str, i
     hashed, parsed and bound to this instance."""
     instance_root = context.pool_parent / pool_directory / PurePosixPath(entry["attempt_root"])
     try:
-        result = pi.load_verified_result(
-            instance_root, run_id=entry["run_id"], job_id=entry["job_id"], attempt_id=entry["attempt_id"],
-            request=item.request, registry_dir=context.registry_dir, prompt_root=context.prompt_root,
-            readable_roots=context.readable_roots, allowed_models=context.allowed_models,
-            source_snapshot_sha256=context.source_snapshot_sha256, registry_ceiling=context.registry_ceiling)
+        result = _adapter_result(instance_root, entry, item, context)
         log = instance_root.joinpath(*entry["log_path"].split("/")) / pi.RESULT_FILE
         if (result["execution_status"] != "OK" or recorded["result_file"] is None
                 or pi._bytes_sha(_read_regular(instance_root, log)) != recorded["result_file"]["sha256"]):
@@ -681,6 +687,48 @@ def terminal_class(state: str | None, valid: bool) -> str:
     return _STATE_CLASS.get(state, "invalid")        # succeeded without a valid result, or unverifiable
 
 
+def account_rows(worklist: Mapping[str, Any], cells: tuple, entries: list) -> list:
+    """Every T05 worklist row, exactly once. A fragment defers to its cell's validated T07 result,
+    is ``not_assessed`` with that cell's provenance, or is ``request_only``; a row is ``not_assessed``
+    as soon as one of its dispatched fragments is. T10 never issues a control status, so no fragment
+    (``obligation_fragment_only`` or not) issues a final one here: that is the T11 join."""
+    by_fragment: dict = {}
+    for cell, entry in zip(cells, entries):
+        valid, validation = entry["valid_result"], entry["validation"]
+        for position, (fragment_id, assignment_id, authority) in enumerate(cell.fragments):
+            disposition = ("request_only" if cell.disposition == REQUEST_ONLY
+                           else "deferred_to_validated_result" if valid else "not_assessed")
+            by_fragment.setdefault(assignment_id, []).append({
+                "fragment_digest": id_digest("fragment", fragment_id), "cell_ordinal": cell.ordinal,
+                "fragment_index": position, "final_control_status_authority": authority,
+                "disposition": disposition, "not_assessed_reason": entry["not_assessed_reason"],
+                "instance_id": entry["instance_id"], "state": entry["state"],
+                "adapter_status": entry["adapter_status"], "adapter_cause": entry["adapter_cause"],
+                "validation_attempt_id": validation["attempt_id"] if valid else None,
+                "result_sha256": validation["result_sha256"] if valid else None})
+    rows = []
+    for index, assignment in enumerate(worklist["assignments"]):
+        fragments = sorted(by_fragment.get(assignment["assignment_id"], []),
+                           key=lambda item: (item["cell_ordinal"], item["fragment_index"]))
+        found = {fragment["disposition"] for fragment in fragments}
+        if assignment["disposition"] != "validator_assignment":
+            row = "not_a_validator_assignment"
+        elif "not_assessed" in found or not fragments:
+            row = "not_assessed"
+        elif found == {"request_only"}:
+            row = "request_only"
+        elif "request_only" in found:
+            row = "deferred_with_request_only_fragments"
+        else:
+            row = "deferred_to_validated_results"
+        rows.append({"row_index": index, "assignment_digest": id_digest("assignment", assignment["assignment_id"]),
+                     "source_row_hash": assignment["source_row_hash"],
+                     "applicability_status": assignment["applicability_status"],
+                     "worklist_disposition": assignment["disposition"], "join_required": assignment["join_required"],
+                     "fragments": fragments, "row_disposition": row, "final_control_status_issued": False})
+    return rows
+
+
 def derive_accounting(plan: Plan, facts: DispatchFacts, *, attempt: Path, attempt_id: str,
                       specifications: tuple) -> dict:
     """THE rule. A pure function of the plan, the specifications and the disk now: C02's verified
@@ -722,7 +770,7 @@ def derive_accounting(plan: Plan, facts: DispatchFacts, *, attempt: Path, attemp
                                                     expansion.manifest["instances"][position], record, context)
             observed[index] = (record, candidate, reason)
 
-    cells, by_fragment = [], {}
+    cells = []
     for index, cell in enumerate(plan.cells):
         record, candidate, reason = observed.get(index, (None, None, None))
         validation = {"job_id": RESULT_JOB, "outcome": "not_submitted", "attempt_id": None, "status": None,
@@ -748,38 +796,7 @@ def derive_accounting(plan: Plan, facts: DispatchFacts, *, attempt: Path, attemp
             "validation": validation, "valid_result": valid,
             "not_assessed_reason": None if valid or cell.disposition == REQUEST_ONLY else reason}
         cells.append(entry)
-        for position, (fragment_id, assignment_id, authority) in enumerate(cell.fragments):
-            disposition = ("request_only" if cell.disposition == REQUEST_ONLY
-                           else "deferred_to_validated_result" if valid else "not_assessed")
-            by_fragment.setdefault(assignment_id, []).append({
-                "fragment_digest": id_digest("fragment", fragment_id), "cell_ordinal": cell.ordinal,
-                "fragment_index": position, "final_control_status_authority": authority,
-                "disposition": disposition, "not_assessed_reason": entry["not_assessed_reason"],
-                "instance_id": entry["instance_id"], "state": state, "adapter_status": entry["adapter_status"],
-                "adapter_cause": entry["adapter_cause"],
-                "validation_attempt_id": validation["attempt_id"] if valid else None,
-                "result_sha256": validation["result_sha256"] if valid else None})
-
-    rows = []
-    for index, assignment in enumerate(plan.worklist["assignments"]):
-        fragments = sorted(by_fragment.get(assignment["assignment_id"], []),
-                           key=lambda item: (item["cell_ordinal"], item["fragment_index"]))
-        found = {fragment["disposition"] for fragment in fragments}
-        if assignment["disposition"] != "validator_assignment":
-            row = "not_a_validator_assignment"
-        elif "not_assessed" in found or not fragments:
-            row = "not_assessed"
-        elif found == {"request_only"}:
-            row = "request_only"
-        elif "request_only" in found:
-            row = "deferred_with_request_only_fragments"
-        else:
-            row = "deferred_to_validated_results"
-        rows.append({"row_index": index, "assignment_digest": id_digest("assignment", assignment["assignment_id"]),
-                     "source_row_hash": assignment["source_row_hash"],
-                     "applicability_status": assignment["applicability_status"],
-                     "worklist_disposition": assignment["disposition"], "join_required": assignment["join_required"],
-                     "fragments": fragments, "row_disposition": row, "final_control_status_issued": False})
+    rows = account_rows(plan.worklist, plan.cells, cells)
 
     dispatched = [entry for entry in cells if entry["disposition"] == DISPATCHED]
     outcome = pr.pool_outcome([entry["state"] or pr.INVALID for entry in dispatched])
@@ -885,7 +902,8 @@ def _verify(run_id: str, attempt_id: Any, facts: Any) -> tuple:
     if _listing(attempt) != sorted(ATTEMPT_ENTRIES):
         return ["the attempt directory does not hold exactly the files of a published dispatch attempt"], None
     try:
-        record = ps.parse_document(_read_regular(attempt, attempt / ATTEMPT_FILE))
+        record_bytes = _read_regular(attempt, attempt / ATTEMPT_FILE)
+        record = ps.parse_document(record_bytes)
         request_bytes = _read_regular(attempt, attempt / INPUTS_FILE)
         request = ps.parse_document(request_bytes)
     except Exception:      # noqa: BLE001
@@ -893,7 +911,7 @@ def _verify(run_id: str, attempt_id: Any, facts: Any) -> tuple:
     if validate_document(record, ATTEMPT_SCHEMA) or validate_document(request, REQUEST_SCHEMA):
         return ["attempt.json or inputs.json fails its closed schema"], None
     if (record["run_id"], record["job_id"], record["attempt_id"]) != (run_id, JOB_ID, attempt_id) or (
-            request["run_id"] != run_id):
+            request["run_id"] != run_id) or record_bytes != _json_bytes(record):
         return ["attempt.json or inputs.json is bound to another run, job or attempt"], None
     try:
         plan = load_plan(run_id, request, facts)
@@ -930,6 +948,13 @@ def _verify(run_id: str, attempt_id: Any, facts: Any) -> tuple:
         if (_listing(attempt / POOLS_DIR / wave_name(wave)) != names[:1]
                 or _listing(attempt / RENDEZVOUS_DIR / wave_name(wave)) != names):
             errors.append("a wave directory holds something other than its one pool and its lock")
+            continue
+        try:        # execution_state.Lock writes exactly one NUL; a lock file carries nothing else
+            lock = _read_regular(attempt, attempt / RENDEZVOUS_DIR / wave_name(wave) / names[1])
+        except Exception:      # noqa: BLE001
+            lock = None
+        if lock != b"\0":
+            errors.append("a rendezvous lock file holds something other than the lock byte")
     return sorted(set(errors)), (found if not errors else None)
 
 
