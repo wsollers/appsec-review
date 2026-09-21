@@ -274,6 +274,11 @@ def validate_context(context: Any) -> None:
     if not _real_directory(parent) or os.path.realpath(parent) != str(parent):
         raise PoolSpecError("context.pool_parent must be an absolute, existing, non-link directory in its "
                             "one real spelling")
+    for ancestor in (parent, *parent.parents):
+        # A pool root is private to its instances: a second pool created beneath one would sit
+        # inside an instance's root (or beside the manifest) and change that attempt under it.
+        if any(os.path.lexists(ancestor / name) for name in (EXPANSION_FILE, SPEC_FILE)):
+            raise PoolSpecError("context.pool_parent lies inside another pool root")
     for name in ("registry_dir", "prompt_root", "images_dir"):
         if not isinstance(getattr(context, name), Path):
             raise PoolSpecError(f"context.{name} must be a path")

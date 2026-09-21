@@ -134,8 +134,11 @@ create them and refuse if they exist. Request files are kept **outside** the ins
 worker's private root holds only what its adapter wrote.
 
 `context.pool_parent` is a run-owned directory dedicated to expansions of this pool job, and it is
-the privacy boundary. The adapters' own rules are applied with the pool parent where an attempt
-root will be, before anything exists:
+the privacy boundary. It may not lie inside another pool root (no ancestor may hold an
+`expansion.json` or `specification.json`): a pool created beneath a launched instance's private
+root would change that attempt underneath its adapter. Sibling pools beneath one parent are fine.
+The adapters' own rules are applied with the pool parent where an attempt root will be, before
+anything exists:
 
 - a tool target mount may not be, contain or lie beneath the pool parent
   (`request_mount_sources`, device and inode), and must lie in a declared `context.mount_roots`

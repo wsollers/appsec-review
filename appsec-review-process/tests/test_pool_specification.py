@@ -1171,6 +1171,22 @@ class VerifierTests(Case):
                     ps.plan_expansion(self.spec, context=self.ws.context(**{name: value}))
                 self.assertIn(f"context.{name}", str(caught.exception))
 
+    def test_a_pool_parent_inside_another_pool_root_is_refused(self):
+        # Found in verification: a second pool could be expanded inside a launched instance's
+        # private root (or beside a manifest), changing that attempt underneath its adapter.
+        plan, root = self.plan, self.root
+        inside_instance = self.ws.instance_root(plan, 0) / "nested"
+        inside_instance.mkdir()
+        beside_manifest = root / ps.REQUESTS_DIR
+        second = self.ws.spec([self.ws.tool_group("later", 1)], attempt_id="attempt-later")
+        for parent in (inside_instance, beside_manifest, root):
+            with self.subTest(parent=parent.name), self.assertRaises(ps.PoolSpecError) as caught:
+                ps.expand_pool(second, context=self.ws.context(pool_parent=parent))
+            self.assertIn("inside another pool root", str(caught.exception))
+        self.assertEqual(ps.verify_expansion(root, expected_spec=self.spec, context=self.ws.context()), [])
+        # a sibling pool beneath the same parent is still fine
+        ps.expand_pool(second, context=self.ws.context())
+
 
 class DefenceInDepthTests(Case):
     """Checks that a first line of defence normally hides. Each test removes that first line (a
