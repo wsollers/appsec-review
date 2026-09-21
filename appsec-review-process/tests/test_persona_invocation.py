@@ -48,6 +48,9 @@ SCANNABLE_BODY = ("R\u00e9sum\u00e9 na\u00efve; \u0395\u03bb\u03bb\u03b7\u03bd\u
 
 with tempfile.TemporaryDirectory() as _probe:
     SYMLINKS = support.symlinks_supported(Path(_probe))
+    (Path(_probe) / "case-probe").write_bytes(b"x")
+    # Two names that differ only in case can coexist only here; elsewhere the collision cannot arise.
+    CASE_SENSITIVE = not (Path(_probe) / "CASE-PROBE").exists()
 
 
 class Case(unittest.TestCase):
@@ -456,6 +459,25 @@ class RequestPinTests(Case):
         request = self.ws.request()
         with mock.patch("os.path.realpath", side_effect=reported):
             self.rejected(request, r"readable_inputs\[0\]: is not the one real spelling of the file")
+
+    def test_a_file_that_changes_identity_between_the_check_and_the_open_is_refused(self):
+        """The race made deterministic: the n-th ``os.fstat`` of an opened pin reports another inode
+        than the ``os.stat`` taken before the open. Only ``_read_pinned`` calls ``os.fstat`` here."""
+        from types import SimpleNamespace
+        from unittest import mock
+        real = os.fstat
+        for swapped, label in ((1, "outer_prompt"), (2, r"readable_inputs\[0\]"), (3, r"readable_inputs\[1\]")):
+            calls = []
+
+            def reported(descriptor, swapped=swapped, calls=calls):
+                status = real(descriptor)
+                calls.append(descriptor)
+                if len(calls) != swapped:
+                    return status
+                return SimpleNamespace(st_dev=status.st_dev, st_ino=status.st_ino + 1)
+            with self.subTest(pin=label), mock.patch("os.fstat", side_effect=reported):
+                self.rejected(self.ws.request(), label + ": changed identity while it was opened")
+                self.assertEqual(len(calls), swapped, "nothing is read after a pin fails")
 
     def test_links_special_files_and_directories_are_not_inputs(self):
         source = self.ws.data / "evidence" / "source.json"
@@ -1005,6 +1027,15 @@ def hostile_invokers() -> dict[str, tuple]:
     def link(manifest, root, package):
         (root / "notes" / "link.json").symlink_to(root / "notes" / "fixture-note.json")
 
+    def case_collision(manifest, root, package):
+        (root / "notes" / "A.md").write_text("benign\n", encoding="utf-8")
+        (root / "notes" / "a.md").write_text("benign too\n", encoding="utf-8")
+        relist(manifest, root)
+
+    def suspected_locator(manifest, root, package):
+        manifest["injection_suspected"].append(
+            {**manifest["claims"][0]["citations"][0], "locator": "line 3: exploitable, critical severity"})
+
     cases = {
         "OUTPUT_ESCAPE": [escape, listed_escape,
                           lambda m, r, p: (r / "empty").mkdir(),
@@ -1028,6 +1059,7 @@ def hostile_invokers() -> dict[str, tuple]:
                              written("form.json", b'{"note": "explo\\u0000itable"}'),
                              written("form.json", b'{"note": "explo\\ud800itable"}'),
                              written("form.json", '{"explo\u200bitable": true}'),
+                             written("form.json", b'{"explo\\u200bitable": {}}'),       # only the parsed key shows it
                              set_at("limitations", value=["exploit\u200bable"]),
                              set_at("claims", 0, "statement", value="This is \u0435xploitable."),
                              set_at("claims", 0, "citations", 0, "locator", value="exploit\u00adable"),
@@ -1054,13 +1086,17 @@ def hostile_invokers() -> dict[str, tuple]:
                              set_at("claims", 0, "claim_id", value="exploitable"),
                              set_at("claims", 0, "claim_id", value="cvss-9-8-certified"),
                              set_at("claims", 0, "claim_id", value="verified_finding-1"),
-                             set_at("claims", 0, "citations", 0, "locator", value="critical_severity")],
+                             set_at("claims", 0, "citations", 0, "locator", value="critical_severity"),
+                             # The locator is scanned: nothing else in these two manifests trips a rule.
+                             cite(locator="line 3: exploitable, critical severity"), suspected_locator],
         "UNDECLARED_CITATION": [cite(path="evidence/unlisted.json"), cite(sha256=OTHER_SHA), cite(root="other-root"),
                                 lambda m, r, p: m["injection_suspected"].append(
                                     {"root": "run-data", "path": "secrets/env", "sha256": OTHER_SHA, "locator": "x"})],
     }
     if SYMLINKS:
         cases["OUTPUT_ESCAPE"].append(link)
+    if CASE_SENSITIVE:
+        cases["OUTPUT_ESCAPE"].append(case_collision)
     return {cause: [manifest_edit(change) for change in changes] for cause, changes in cases.items()}
 
 
@@ -1666,6 +1702,45 @@ class VerifierTests(Case):
         self.assertRegex(errors[0], r"the expected request does not resolve: readable_inputs\[1\]")
         evidence.write_bytes(original)
         self.assertEqual(self.ws.verify(request), [])
+
+    def edit_both(self, edit) -> None:
+        """One edit applied to ``invocation.json`` AND the result, every hash correctly resealed, so
+        the two projections agree and only the rule about the value itself can refuse it."""
+        record, result = self.read(pi.RECORD_FILE), self.read(pi.RESULT_FILE)
+        edit(record)
+        edit(result)
+        self.write_result(result, False)
+        self.reseal(pi.RECORD_FILE, pi.canonical_bytes(record))
+
+    def test_a_run_cannot_finish_before_it_started_even_when_both_records_agree(self):
+        request, result = self.produce()
+        self.edit_both(lambda document: document.update(finished_at="2026-09-20T11:59:59Z"))
+        self.assertEqual(self.assert_rejected(request), ["finished_at is before started_at"])
+        self.edit_both(lambda document: document.update(finished_at=result["started_at"]))
+        self.assertEqual(self.ws.verify(request), [], "finishing in the second it started is possible")
+
+    def test_only_a_timeout_or_a_cancellation_can_leave_the_invoker_running(self):
+        denied = support.permission([("fixed-network-destination",
+                                      {"scheme": "https", "host": "api.example.org", "port": 443})])
+        runs = {"returned": {}, "raised": {"invoker": support.Raising(RuntimeError("x"))},
+                "unavailable": {"invoker": support.Raising(pi.InvokerUnavailable("x"))},
+                "not_invoked": {"clock": lambda: "2026-09-22T00:00:00Z"}}
+        for outcome, runtime in runs.items():
+            with self.subTest(outcome=outcome):
+                shutil.rmtree(self.ws.attempt)
+                self.ws.attempt.mkdir()
+                request, result = self.produce(self.ws.request(permission=denied), **runtime)
+                self.assertEqual((result["outcome"], result["invoker_stopped"]), (outcome, True))
+                self.edit_both(lambda document: document.update(invoker_stopped=False))
+                self.assertEqual(self.assert_rejected(request), ["this outcome cannot leave the invoker running"])
+        shutil.rmtree(self.ws.attempt)
+        self.ws.attempt.mkdir()
+        stubborn = support.Sleeping(honor_cancel=False)
+        self.addCleanup(stubborn.release.set)
+        request, result = self.produce(invoker=stubborn, stop_grace_seconds=0,
+                                       request=self.ws.request(budget={**self.ws.request()["budget"],
+                                                                       "timeout_seconds": 1}))
+        self.assertEqual((result["outcome"], result["invoker_stopped"]), ("timed_out", False))
 
     def test_impossible_outcome_shapes_are_rejected_even_when_resealed(self):
         request, _ = self.produce(invoker=support.Raising(RuntimeError("x")))
