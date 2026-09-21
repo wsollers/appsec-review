@@ -16,8 +16,8 @@ are updated in a follow-up. Live service qualification is a separate, owner-run 
 
 ### After PR #30 merges
 
-PR #30 (vendor pre-pass nodes) and B15 merge without a textual conflict but not without a change:
-whichever merges second has to make it, in the same merge.
+PR #30 (vendor pre-pass nodes) merged first (2026-09-21), so B15 makes the change: `main` is merged
+into this branch and the first item below is done in that merge. The manifest item is still owed.
 
 - `tests/test_vendor_prepass_graph.py` (PR #30) cuts `blocked_op` out of `dagster_workflow.py` by
   AST and execs it in a hand-built namespace. B15 made `blocked_op` use the module global
