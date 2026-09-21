@@ -1023,6 +1023,180 @@ class JobContractBindingTests(unittest.TestCase):
             self.assertEqual(validator._job_contract_errors(hostile, "evidence-index", {"jobs": {}}, REGISTRY), [])
 
 
+class ClosedAttemptTests(unittest.TestCase):
+    """Review P1: the verifiers close `outputs/`; nothing closed the ATTEMPT, and the publisher pins
+    every file of it into accepted.json. A file beside `outputs/` was accepted and published."""
+
+    TOKEN = "gh" + "p_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"  # assembled at run time
+    EXTRA = ("gitleaks-raw.json", "notes/x.json", f".{MARKER}.json", f"{MARKER}/{MARKER}.json")
+
+    @staticmethod
+    def closure(contract_id: str, count: int = 1) -> str:
+        return (f"{contract_id} attempt-not-closed: the attempt holds {count} entr{'y' if count == 1 else 'ies'} other "
+                "than status.json, manifest.json, result.json and outputs/; every file of an accepted attempt is "
+                "published, so none may be unverified")
+
+    def publish(self, staged: Staged, envelope: dict) -> dict:
+        publish.mark_attempt_started(staged.base, staged.attempt_id, FINGERPRINT)
+        (staged.attempt / "result.json").unlink(missing_ok=True)
+        atomic_json(staged.attempt / "result.json", envelope)
+        with bindings(staged.world):
+            return publish.publish_validated(staged.base, staged.attempt, staged.attempt / "result.json", FINGERPRINT,
+                                             expected_run_id=staged.run_id, expected_job_id=staged.job_id,
+                                             orchestration=staged.facts)
+
+    def refused(self, staged: Staged, expected: list[str], *, listed: bool = True) -> None:
+        """Through BOTH entry points; `listed`: the envelope names (and hashes) the added entries."""
+        (staged.attempt / "result.json").unlink(missing_ok=True)
+        envelope = staged.envelope() if listed else self.honest
+        with bindings(staged.world):
+            self.assertEqual(staged.validate(envelope), expected)
+        with self.assertRaises(publish.Blocked) as blocked:
+            self.publish(staged, envelope)
+        self.assertEqual(str(blocked.exception), "worker result validation failed: " + "; ".join(expected))
+        self.assertEqual(json.loads((staged.base / "accepted.json").read_bytes())["status"], "PENDING")
+
+    def test_a_file_beside_outputs_is_refused_listed_or_not_and_never_published(self):
+        payload = dump({"verified_findings": [{"severity": "critical", "exploitable": True}], "api_key": self.TOKEN})
+        for contract_id in NINE:
+            staged = stage(self, contract_id)
+            self.honest = staged.envelope()
+            for relative, listed in itertools.product(self.EXTRA, (True, False)):
+                with self.subTest(contract=contract_id, extra=relative.replace(MARKER, "<marker>"), listed=listed):
+                    extra = staged.attempt / relative
+                    extra.parent.mkdir(exist_ok=True)
+                    extra.write_bytes(payload)
+                    self.refused(staged, [self.closure(contract_id)], listed=listed)
+                    extra.unlink()
+                    if extra.parent != staged.attempt:
+                        extra.parent.rmdir()
+            # The control: the same attempt without the added file is published, and what the pointer
+            # pins is exactly the closed set.
+            with self.subTest(contract=contract_id, control=True):
+                pointer = self.publish(staged, self.honest)
+                self.assertEqual({name.split("/")[0] for name in pointer["hashes"]},
+                                 {*validator.ATTEMPT_ROOT_FILES, *validator.ATTEMPT_ROOT_DIRECTORIES})
+
+    def test_several_added_entries_are_counted_not_named(self):
+        staged = stage(self, LEAK_INVENTORY_CONTRACT)
+        self.honest = staged.envelope()
+        for name in ("a.json", f"{MARKER}.log", "heartbeat"):
+            (staged.attempt / name).write_bytes(b"{}")
+        (staged.attempt / "logs").mkdir()  # an empty directory is an entry too
+        self.refused(staged, [self.closure(LEAK_INVENTORY_CONTRACT, 4)], listed=False)
+
+    def test_an_allowed_name_of_the_wrong_kind_is_refused(self):
+        staged = stage(self, "mobile-sast")
+        self.honest = staged.envelope()
+        (staged.attempt / "manifest.json").unlink()
+        (staged.attempt / "manifest.json").mkdir()
+        (staged.attempt / "manifest.json" / "x.json").write_bytes(b"{}")
+        self.assertEqual(staged.validate(self.honest)[-1], self.closure("mobile-sast"))
+
+    @unittest.skipUnless(t05.CAN_SYMLINK, "this host cannot create symbolic links")
+    def test_a_link_anywhere_in_the_attempt_is_refused(self):
+        message = " attempt-not-closed: 1 entry of the attempt are links or special files"
+        for contract_id in NINE:
+            for where in ("root", "outputs", "status"):
+                with self.subTest(contract=contract_id, link=where):
+                    staged = stage(self, contract_id)
+                    self.honest = staged.envelope()
+                    target = staged.tmp / "linked-target.json"
+                    target.write_bytes((staged.attempt / "status.json").read_bytes())
+                    if where == "status":  # an allowed name, the same bytes, but a link
+                        (staged.attempt / "status.json").unlink()
+                    link = {"root": staged.attempt / f"{MARKER}.json", "outputs": staged.attempt / "outputs" / "linked.json",
+                            "status": staged.attempt / "status.json"}[where]
+                    link.symlink_to(target)
+                    expected = [contract_id + message]
+                    if where == "status":  # the honest envelope lists status.json, by index
+                        index = [artifact["path"] for artifact in self.honest["artifacts"]].index("status.json")
+                        expected.insert(0, f"$.artifacts[{index}].path: escapes the attempt or is reached through a link")
+                    self.refused(staged, expected, listed=False)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "this platform has no named pipes")
+    def test_a_special_file_is_refused_without_being_opened(self):
+        staged = stage(self, v05.SBOM_CONTRACT_ID)
+        self.honest = staged.envelope()
+        os.mkfifo(staged.attempt / "outputs" / "pipe")  # opening it would block for ever
+        self.refused(staged, ["sbom-inventory attempt-not-closed: 1 entry of the attempt are links or special files"],
+                     listed=False)
+
+    def test_an_empty_directory_beneath_outputs_is_refused(self):
+        staged = stage(self, "binary-hardening")
+        self.honest = staged.envelope()
+        (staged.attempt / "outputs" / MARKER).mkdir()
+        self.refused(staged, ["binary-hardening attempt-not-closed: 1 directory of the attempt hold nothing"])
+
+    def test_the_closure_runs_before_the_verifier_and_opens_no_file(self):
+        staged = stage(self, LEAK_INVENTORY_CONTRACT)
+        (staged.attempt / "gitleaks-raw.json").write_bytes(b"{}")
+        envelope = staged.envelope()
+        opened: list[str] = []
+        real_open = Path.open
+
+        def spy(path, *args, **kwargs):
+            opened.append(str(path))
+            return real_open(path, *args, **kwargs)
+        with mock.patch.object(validator._v04, "validate_secrets_attempt", side_effect=AssertionError("verifier ran")), \
+                mock.patch.object(Path, "open", spy):
+            errors = validator.attempt_closure_errors(staged.attempt)
+            self.assertEqual(opened, [])
+            self.assertEqual([f"{LEAK_INVENTORY_CONTRACT} {error}" for error in errors],
+                             [self.closure(LEAK_INVENTORY_CONTRACT)])
+            self.assertEqual(staged.validate(envelope), [self.closure(LEAK_INVENTORY_CONTRACT)])
+        record = contract_record(LEAK_INVENTORY_CONTRACT)  # a direct caller of the dispatch is covered too
+        self.assertEqual(validate_vendor_prepass_attempt(
+            staged.attempt, record, run_id=staged.run_id, job_id=staged.job_id, attempt_id=staged.attempt_id,
+            node_status=staged.status, orchestration=staged.facts), [self.closure(LEAK_INVENTORY_CONTRACT)])
+
+    def test_the_allowance_table_is_exactly_what_every_golden_holds(self):
+        cases = [(contract_id, None) for contract_id in NINE] + list(SKIPPED_GOLDEN.items())
+        cases.append((LEAK_INVENTORY_CONTRACT, "secrets-tool-failed"))
+        seen: set[tuple[str, bool]] = set()
+        for contract_id, golden in cases:
+            staged = stage(self, contract_id, golden=golden)
+            entries = {(entry.name, entry.is_dir()) for entry in staged.attempt.iterdir()}
+            self.assertEqual(entries, {("status.json", False), ("manifest.json", False), ("outputs", True)},
+                             (contract_id, golden))
+            self.assertEqual(validator.attempt_closure_errors(staged.attempt), [], (contract_id, golden))
+            seen |= entries
+        # result.json is the one addition: the envelope, persisted by the worker before publication.
+        self.assertEqual({name for name, is_dir in seen if not is_dir} | {"result.json"}, set(validator.ATTEMPT_ROOT_FILES))
+        self.assertEqual({name for name, is_dir in seen if is_dir}, set(validator.ATTEMPT_ROOT_DIRECTORIES))
+
+    def test_the_common_runtimes_inputs_json_is_not_an_allowance(self):
+        """KNOWN LIMIT, stated in the doc: `publish_job_output.allocate_attempt` writes `inputs.json`
+        into every attempt. Nothing verifies that file, so for the nine it is refused like any
+        other; the V10-V12 workers must not leave it in a vendor-prepass attempt."""
+        staged = stage(self, LEAK_INVENTORY_CONTRACT)
+        golden = staged.tmp / "golden"
+        staged.attempt.rename(golden)
+        allocation = publish.allocate_attempt(
+            staged.base, run_id=staged.run_id, job_id=staged.job_id, dagster_run_id=staged.facts.dagster_run_id,
+            worker_kind="pinned_container", output_contract=LEAK_INVENTORY_CONTRACT, input_record={"fixture": True},
+            input_fingerprint=FINGERPRINT, resume_command="resume", attempt_id_factory=lambda: staged.attempt_id)
+        self.assertEqual(allocation["attempt"], staged.attempt)
+        self.assertEqual(sorted(path.name for path in staged.attempt.iterdir()), ["inputs.json", "status.json"])
+        shutil.copytree(golden, staged.attempt, dirs_exist_ok=True)
+        self.assertEqual(staged.validate(), [self.closure(LEAK_INVENTORY_CONTRACT)])
+        (staged.attempt / "inputs.json").unlink()
+        atomic_json(staged.attempt / "result.json", staged.envelope())
+        pointer = publish.publish_validated(staged.base, staged.attempt, staged.attempt / "result.json", FINGERPRINT,
+                                            expected_run_id=staged.run_id, expected_job_id=staged.job_id,
+                                            orchestration=staged.facts)
+        self.assertNotIn("inputs.json", pointer["hashes"])
+
+    def test_the_three_live_contracts_keep_their_open_attempt(self):
+        """The generic layer is NOT closed (their attempts hold an unlisted inputs.json): stated in
+        the doc as its known limit."""
+        for contract_id in ExistingContractRegressionTests.LEGACY:
+            self.assertNotIn(contract_id, validator.VENDOR_PREPASS_NODES)
+        source = inspect.getsource(validate_job_output)
+        self.assertNotIn("attempt_closure_errors", source)
+        self.assertIn("attempt_closure_errors", inspect.getsource(validate_vendor_prepass_attempt))
+
+
 class EnvelopeEchoTests(unittest.TestCase):
     """Review P2: the envelope is the attempt's result.json. Its values were quoted by the artifact
     loop and by the envelope schema errors, before the verifier ran."""

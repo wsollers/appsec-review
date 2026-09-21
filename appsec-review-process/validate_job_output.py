@@ -6,6 +6,7 @@ import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 from types import MappingProxyType
@@ -640,6 +641,81 @@ def _attempt_layout(attempt_root: Path, run_id: str, job_id: str) -> tuple[Path 
     return owner, parents[2], None
 
 
+# THE ATTEMPT TREE IS CLOSED for the nine contracts. The publisher pins EVERY regular file of the
+# attempt into accepted.json (`tree_hashes`), while the verifiers close the file set of `outputs/`
+# only (manifest.json + the redaction receipt). So what may sit beside `outputs/` is stated here,
+# and it is everything: a name that is not in this table is refused whatever the envelope lists.
+#   entry          kind        who checks its content
+#   status.json    file        the verifier (exact registered fields, each bound)
+#   manifest.json  file        the verifier (names exactly the files beneath outputs/)
+#   result.json    file        the envelope under validation (absent until the worker persists it)
+#   outputs        directory   the verifier: manifest.json and the receipt close its file set,
+#                              including the raw tool outputs a V07 contract retains there
+# Nothing else: no `inputs.json`, no logs, no heartbeat or temporary file. The goldens of all three
+# families hold exactly this; docs/validator-vendor-prepass-dispatch.md has the consequence for the
+# common runtime's `allocate_attempt`.
+ATTEMPT_ROOT_FILES = ("status.json", "manifest.json", "result.json")
+ATTEMPT_ROOT_DIRECTORIES = ("outputs",)
+
+
+def _entry_kind(entry: os.DirEntry) -> str:
+    """"file", "directory" or "other" (a link, junction, reparse point, device, socket, fifo).
+    No link is followed."""
+    if entry.is_symlink() or (hasattr(entry, "is_junction") and entry.is_junction()):
+        return "other"
+    if getattr(entry.stat(follow_symlinks=False), "st_reparse_tag", 0):
+        return "other"
+    if entry.is_dir(follow_symlinks=False):
+        return "directory"
+    return "file" if entry.is_file(follow_symlinks=False) else "other"
+
+
+def attempt_closure_errors(attempt_root: Path) -> list[str]:
+    """Enumerate the attempt's directory entries (names and kinds only: no file is opened, no link
+    followed) and refuse anything the table above does not allow. A name comes from the attempt,
+    so messages carry counts, never names."""
+    allowed = {**{name: "file" for name in ATTEMPT_ROOT_FILES},
+               **{name: "directory" for name in ATTEMPT_ROOT_DIRECTORIES}}
+    unlisted = other = empty = 0
+    try:
+        with os.scandir(attempt_root) as entries:
+            pending = []
+            for entry in entries:
+                kind = _entry_kind(entry)
+                if kind == "other":
+                    other += 1
+                elif allowed.get(entry.name) != kind:
+                    unlisted += 1
+                elif kind == "directory":
+                    pending.append(entry.path)
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                count = 0
+                for entry in entries:
+                    count += 1
+                    kind = _entry_kind(entry)
+                    if kind == "other":
+                        other += 1
+                    elif kind == "directory":
+                        pending.append(entry.path)
+                empty += count == 0
+    except OSError as exc:
+        return [f"attempt-not-closed: the attempt cannot be enumerated ({type(exc).__name__})"]
+    expected = ", ".join(ATTEMPT_ROOT_FILES) + " and " + ", ".join(f"{name}/" for name in ATTEMPT_ROOT_DIRECTORIES)
+    errors = []
+    if unlisted:
+        errors.append(f"attempt-not-closed: the attempt holds {unlisted} entr{'y' if unlisted == 1 else 'ies'} "
+                      f"other than {expected}; every file of an accepted attempt is published, so none may "
+                      "be unverified")
+    if other:
+        errors.append(f"attempt-not-closed: {other} entr{'y' if other == 1 else 'ies'} of the attempt "
+                      "are links or special files")
+    if empty:
+        errors.append(f"attempt-not-closed: {empty} director{'y' if empty == 1 else 'ies'} of the attempt "
+                      "hold nothing")
+    return errors
+
+
 def _accepted_upstream(attempt_root: Path, run_root: Path, run_id: str,
                        upstream_contract: str) -> tuple[Path | None, dict[str, str] | None, list[str]]:
     """The SAME run's accepted attempt of an upstream node: (attempt root, {attempt_id, sha256}).
@@ -716,6 +792,9 @@ def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any]
     if job_id != node["job_id"]:
         return [prefix + f"the contract belongs to job {node['job_id']!r} and the envelope names another job"]
     attempt_root = Path(attempt_root).absolute()
+    closure = attempt_closure_errors(attempt_root)
+    if closure:
+        return [f"{contract_id} {error}" for error in closure]
     declaration = _v04.contract_declaration_errors if node["family"] == "V04" else (
         _v05.contract_declaration_errors if node["family"] == "V05" else None)
     if declaration is not None:
@@ -1031,8 +1110,9 @@ def validate_job_output(attempt_root: Path, envelope: dict[str, Any],
                 errors.append(f"required output is absent from the artifact manifest: {required}")
         # ORDER IS A SAFETY PROPERTY for the vendor-prepass contracts. Their verifier checks the
         # redaction receipt against the published bytes before it parses anything, so it runs
-        # FIRST; if it (or the assembly of its caller facts) reports anything, no file of the
-        # attempt is parsed here at all: status.json and the result artifact stay unread. What is returned then is the
+        # FIRST (after the attempt's entries were enumerated and found closed); if it (or the
+        # assembly of its caller facts) reports anything, no file of the attempt is parsed here
+        # at all: status.json and the result artifact stay unread. What is returned then is the
         # verifier's non-echoing errors plus the envelope errors above, which for these contracts
         # quote a location or an artifact index and never an envelope value (`quiet`).
         verifier_errors: list[str] = []

@@ -55,7 +55,9 @@ For V04 and V05 the registry record is also checked with the module's
 For the nine contracts `validate_job_output`:
 
 1. checks the envelope, the artifact list and hashes (files are hashed, never parsed);
-2. runs `validate_vendor_prepass_attempt`. The verifier checks the redaction receipt against the
+2. runs `validate_vendor_prepass_attempt`, which first enumerates the attempt's directory entries
+   (names and kinds; no file is opened, no link followed) and refuses an attempt that is not closed
+   (next section), then runs the verifier. The verifier checks the redaction receipt against the
    published bytes before it parses anything;
 3. **only if that returned nothing** parses `status.json` (`_status_errors`) and the result
    artifact (`validate_contract_result`: schema, `_secret_errors`, `_claim_class_errors`).
@@ -89,6 +91,26 @@ Every other contract keeps its messages, which other suites pin. `Staged.validat
 module asserts on every validation that no planted value, the envelope marker included, is in any
 error; `EnvelopeEchoTests` plants the marker in every string field, property name and artifact
 field and checks both `validate_job_output` and the `Blocked` text of `publish_validated`.
+
+## The attempt tree is closed
+
+`publish_validated` pins EVERY regular file of the attempt into `accepted.json`
+(`tree_hashes`), but the verifiers close the file set of `outputs/` only (`manifest.json` and the
+redaction receipt). A file beside `outputs/` was therefore accepted and published unverified,
+whether or not the envelope listed it. For the nine, `attempt_closure_errors` allows exactly:
+
+| Entry of the attempt | Kind | Who verifies its content | Test |
+|---|---|---|---|
+| `status.json` | file | the verifier: exact registered fields, each bound | `test_the_allowance_table_is_exactly_what_every_golden_holds` |
+| `manifest.json` | file | the verifier: names exactly the files beneath `outputs/` | same |
+| `result.json` | file | it is the envelope under validation (absent until the worker persists it) | `test_a_file_beside_outputs_is_refused_listed_or_not_and_never_published` (control) |
+| `outputs/` | directory | the verifier: manifest + receipt close its file set, including the raw tool outputs a V07 contract retains there (`outputs/binskim.sarif`, ...) | same |
+
+Anything else is refused with a COUNT, never a name: another file or directory at the root (listed
+in the envelope or not, dot-files included), an allowed name of the wrong kind, any link, junction,
+reparse point or special file anywhere in the tree (never opened or followed), and an empty
+directory. There is no allowance for logs, heartbeat or temporary files: no golden of the three
+families holds one, and nothing would verify it.
 
 ## What fails closed today
 
@@ -128,8 +150,20 @@ consumer (`--consumer-job 02-evidence-assembly`).
 - `publish_job_output.persist_terminal_current` writes a canonical `status.json` with `job`,
   `started_at`, `ended_at` and `fingerprint`. All three verifiers reject unregistered status
   fields, so a vendor-prepass worker cannot publish through that helper as it stands.
+- `publish_job_output.allocate_attempt` writes `inputs.json` into every attempt it allocates.
+  Nothing verifies that file, so the closed attempt tree refuses it like any other
+  (`test_the_common_runtimes_inputs_json_is_not_an_allowance`). Together with the previous item:
+  the V10-V12 workers need either their own allocation that keeps the input record outside the
+  attempt, or an owner decision to allow `inputs.json` WITH a check that binds its bytes.
+- The closure is a rule of the nine, not of the generic layer. The three live jobs (`02-ossf-scorecard`,
+  `10-critical-findings-sarif`, `02-repository-partition-discovery`) are allocated by
+  `allocate_attempt` and keep attempts that hold an `inputs.json` their envelopes do not list, so "file set == envelope
+  artifacts + result.json" would refuse every one of them today; for them an unlisted file is
+  still pinned into `accepted.json` unverified.
 - `publish_validated` raises `ValueError` (not `Blocked`) quoting the envelope's `attempt_id` when
   it is not an identifier; that is the publisher's pre-existing behaviour for every contract.
+- A leftover `.<hex>.tmp` of an interrupted `atomic_json` inside the attempt refuses the attempt
+  (fail closed) until it is removed.
 - V07 exports no claim-class or permitted-status table; its three claim classes are typed in the
   validator and tied to the ADR fixture and the records by a test.
 
