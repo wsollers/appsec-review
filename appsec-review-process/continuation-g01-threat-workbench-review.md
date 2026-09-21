@@ -19,7 +19,7 @@ dispatched safely and independently.
 ## Read first
 
 1. `AGENTS.md`
-2. `appsec-review-process/agent-skills/claude/process-reader.md`
+2. `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`
 3. `docs/agent-reader.md`
 4. `appsec-review-process/TODO.md` — independent-work protocol, G01, S02, C01-C04, and B14
 5. `docs/design-parity-completion-plan.md` — Workstream G1 and pool/persona prerequisites

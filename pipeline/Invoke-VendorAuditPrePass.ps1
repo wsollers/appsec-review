@@ -5,8 +5,8 @@
     for the Phase 1+ LLM prompts.
 
 .DESCRIPTION
-    Orchestrates the vendor-audit-toolbox container (see Dockerfile /
-    Build-AuditToolbox.ps1) one tool at a time, mounting the target repo
+    Orchestrates the vendor-audit-toolbox container (see images/audit-static/Dockerfile /
+    images/image_build.py) one tool at a time, mounting the target repo
     read-only and an evidence directory read-write, and lays results out as
 
         <EvidencePath>/
@@ -170,7 +170,7 @@
     time this script was written. These tools update their CLIs across
     releases more often than you'd like - before trusting an unattended run,
     do one `docker run --rm <image> <tool> --help` per tool you care about
-    and confirm the flags below still match the version Build-AuditToolbox.ps1
+    and confirm the flags below still match the version images/image_build.py
     actually built.
 
     2026-09-04 remediation note (real run against fsh-server surfaced a
@@ -272,7 +272,7 @@
 
 .PARAMETER ImageTag
     Toolbox image tag to run. Defaults to vendor-audit-toolbox:latest - build
-    it first with Build-AuditToolbox.ps1.
+    it first with `python -B images/image_build.py build audit-static`.
 
 .PARAMETER Steps
     Optional list of step names to run instead of everything (see the $steps
@@ -425,11 +425,14 @@ function Get-BaseDockerArgs([string]$Image = $ImageTag) {
             $envArgs += @("-e", "$name=$value")
         }
     }
+    # pipeline/ and data/eol-reference.json are mounted read-only for the steps that run repo scripts in-image.
+    $toolsRoot = Split-Path -Parent $PSScriptRoot
+    $mounts = @("-v", "${toolsRoot}/pipeline:/opt/pipeline:ro",
+                "-v", "${toolsRoot}/data/eol-reference.json:/opt/data/eol-reference.json:ro")
     return @("run", "--rm") + $envArgs + @(
         "-v", "${RepoPath}:/workspace:ro",
-        "-v", "${EvidencePath}:/evidence",
-        $Image
-    )
+        "-v", "${EvidencePath}:/evidence"
+    ) + $mounts + @($Image)
 }
 
 # Exit codes that mean "the shell itself never got the tool to run" (bash
@@ -1284,26 +1287,26 @@ $allSteps = @(
         CaptureStdout = $false
         AllowNonZeroExit = $true
         ExpectedOutput = "license/scancode.json"
-        Note = "ScanCode Toolkit - license/copyright/package-origin detection, run from its own separately-built image rather than baked into the main toolbox - deliberately kept out of that image per the Dockerfile's own note (heavy dependency footprint). IMPORTANT: there is no publishable ghcr.io/aboutcode-org/scancode-toolkit image to pull (verified directly - anonymous manifest pull returns 'denied', and ScanCode's own docs confirm you must build it yourself); Build-AuditImages.ps1 / build-audit-images.sh now build the local scancode-toolkit:local tag this step references as part of their normal 'scancode' step (added 2026-09-18, run once, reused on later builds), or run Build-ScanCodeImage.ps1 / Build-ScanCodeImage.sh standalone if you only want this one image. Either way, if scancode-toolkit:local doesn't exist yet this step will fail with 'Unable to find image'. Note the image's own ENTRYPOINT already runs scancode, so Cmd here is scancode's arguments only, not the word 'scancode' itself. Can be slow on a large tree (-clip = copyright+license+info+package); consider a narrower -RepoPath for fsh-client given its size before running this against the whole thing."
+        Note = "ScanCode Toolkit - license/copyright/package-origin detection, run from its own separately-built image rather than baked into the main toolbox - deliberately kept out of that image per the Dockerfile's own note (heavy dependency footprint). IMPORTANT: there is no publishable ghcr.io/aboutcode-org/scancode-toolkit image to pull (verified directly - anonymous manifest pull returns 'denied', and ScanCode's own docs confirm you must build it yourself); `python -B images/image_build.py build scancode-toolkit` builds the local scancode-toolkit:local tag this step references (it clones the source into images/scancode-toolkit/src, and reuses the image on later runs when nothing changed). Either way, if scancode-toolkit:local doesn't exist yet this step will fail with 'Unable to find image'. Note the image's own ENTRYPOINT already runs scancode, so Cmd here is scancode's arguments only, not the word 'scancode' itself. Can be slow on a large tree (-clip = copyright+license+info+package); consider a narrower -RepoPath for fsh-client given its size before running this against the whole thing."
     },
     [PSCustomObject]@{
         Name = "dependency-lifecycle"
         EvidenceSubdir = "sbom"
-        Cmd = @("python3", "/opt/scripts/analyze_dependency_lifecycle.py",
+        Cmd = @("python3", "/opt/pipeline/analyze_dependency_lifecycle.py",
                 "--sbom", "/evidence/sbom/sbom.cdx.json",
-                "--eol-reference", "/opt/scripts/eol-reference.json",
+                "--eol-reference", "/opt/data/eol-reference.json",
                 "--scancode", "/evidence/license/scancode.json",
                 "-o", "/evidence/sbom/dependency-lifecycle.json")
         CaptureStdout = $false
         AllowNonZeroExit = $true
         ExpectedOutput = "sbom/dependency-lifecycle.json"
         DependsOn = "sbom"
-        Note = "2026-09-17, added for design-v3.md L1 broadening (full SBOM/dependency/EOL/license scope, not just CVE reachability): cross-references the sbom step's CycloneDX component list against a small hand-curated, offline EOL/abandonware reference table (scripts/eol-reference.json) and re-surfaces the SBOM's own per-component license data, which syft already produces for free but no lane previously consumed. Does NOT call any live EOL-tracking API by design -- see eol-reference.json's own header for why a live lookup here would break the pipeline's run-to-run determinism. --scancode points at the scancode step's deeper license/copyright scan for cross-reference if that step has also run; this step degrades gracefully (a note in the output, not a failure) if scancode.json is absent. Anything not covered by the reference table is reported as 'unknown', never inferred as current -- same discipline the rest of the pipeline applies to code coverage."
+        Note = "2026-09-17, added for design-v3.md L1 broadening (full SBOM/dependency/EOL/license scope, not just CVE reachability): cross-references the sbom step's CycloneDX component list against a small hand-curated, offline EOL/abandonware reference table (data/eol-reference.json) and re-surfaces the SBOM's own per-component license data, which syft already produces for free but no lane previously consumed. Does NOT call any live EOL-tracking API by design -- see eol-reference.json's own header for why a live lookup here would break the pipeline's run-to-run determinism. --scancode points at the scancode step's deeper license/copyright scan for cross-reference if that step has also run; this step degrades gracefully (a note in the output, not a failure) if scancode.json is absent. Anything not covered by the reference table is reported as 'unknown', never inferred as current -- same discipline the rest of the pipeline applies to code coverage."
     },
     [PSCustomObject]@{
         Name = "evidence-scrub"
         EvidenceSubdir = "_shareable"
-        Cmd = @("python3", "/opt/scripts/scrub_evidence.py", "/evidence", "-o", "/evidence/_shareable")
+        Cmd = @("python3", "/opt/pipeline/scrub_evidence.py", "/evidence", "-o", "/evidence/_shareable")
         CaptureStdout = $false
         AllowNonZeroExit = $true
         Note = "E4-1 fix (2026-09-01 adversarial process review + verification follow-up): gitleaks' --redact protects gitleaks' OWN output only. Verified live: semgrep and mobsfscan SARIF both embed the raw matched source line - including, when that line is a hardcoded-secret finding, the literal secret value - by default. This step (deliberately run LAST, after every other step has written its evidence) produces a redacted copy of the whole tree under /evidence/_shareable, using TWO passes: a high-entropy substring filter (catches machine keys/tokens) AND a secret-name-aware value redactor (catches human passwords like a hardcoded db_password that the entropy filter alone missed - that gap was found and fixed during verification). ONLY /evidence/_shareable is safe to zip and hand off; the rest of /evidence, including this step's own input, is internal-only and may contain plaintext secret values. If you use -Steps to run a subset, this step does not run implicitly - add it explicitly, last, whenever you intend to hand evidence off. No ExpectedOutput enforced here since its own input is every other step's evidence - an unusually clean run legitimately has little to scrub; check /evidence/_shareable by hand before a real handoff regardless."

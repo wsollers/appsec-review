@@ -2,7 +2,7 @@
 """
 profile_repo.py — recursive filesystem fingerprinter for the Vendor Code
 Audit Playbook. Run this FIRST, before anything else in the pipeline
-(before Build-AuditToolbox.ps1, before Phase 0 scope decisions are even
+(before the tool images are built, before Phase 0 scope decisions are even
 final) — it's the answer to "what am I actually looking at" for a vendor
 drop you haven't reviewed yet.
 

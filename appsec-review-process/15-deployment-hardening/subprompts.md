@@ -122,7 +122,7 @@ using only static lint evidence.
    present) rather than a hardening verdict with nothing behind it.
 
 **Standards discipline (current status, updated 2026-09-19 — reference file now built).**
-`scripts/disa-stig-reference.json#kubernetes_stig` is the curated, version-pinned Kubernetes STIG
+`data/disa-stig-reference.json#kubernetes_stig` is the curated, version-pinned Kubernetes STIG
 V2R1 reference (91 rules, fetched directly from DISA's published rule text, not recalled from
 memory). Read its `scope_finding` before using it: the large majority of the 91 rules are
 control-plane/cluster-operator checks (their own check-text runs `kubectl` against a live cluster,
@@ -165,7 +165,7 @@ image hygiene using static lint evidence, not runtime image inspection.
 - Flag Dockerfile construction issues hadolint reports (root user, unpinned base image tags,
   missing `HEALTHCHECK`, secrets baked into layers, unnecessary package residue, `ADD` vs `COPY`
   misuse) at the severity hadolint itself assigns.
-- Cross-reference `base-images.txt`'s inventory against `scripts/eol-reference.json` (already
+- Cross-reference `base-images.txt`'s inventory against `data/eol-reference.json` (already
   built, curated, version-pinned) to flag any base image tag with a known EOL/abandonware status —
   this reuses existing tooling rather than inventing a new lifecycle check.
 - Where an image reference cannot be resolved to an actual pulled/available image artifact, report
@@ -189,7 +189,7 @@ image hygiene using static lint evidence, not runtime image inspection.
 
 **Standards discipline (current status, updated 2026-09-19 — reference file
 built, with a materially different outcome than expected).**
-`scripts/disa-stig-reference.json#container_platform_srg` is the curated Container Platform SRG
+`data/disa-stig-reference.json#container_platform_srg` is the curated Container Platform SRG
 V2R1 reference. Reading it matters more than usual here: every one of the six Dockerfile-adjacent
 candidate rules pulled and read in full (V-233127, V-233163, V-233064, V-233065, V-233192,
 V-233231) turned out to be a CONTAINER PLATFORM / REGISTRY / RUNTIME configuration requirement

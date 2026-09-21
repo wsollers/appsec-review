@@ -384,8 +384,8 @@ The completed SARIF batch added or changed:
   `appsec-review-process/tests/test_dagster.py`, `docs/migration.md`, and
   `orchestrator/dagster/definitions.py`
 - removal of old converter references from `images/audit-static/Dockerfile`,
-  `images/audit-static-opengrep/Dockerfile`, `scripts/build-audit-images.sh`,
-  `scripts/Build-AuditImages.ps1`, and `scripts/Build-AuditToolbox.ps1`
+  `images/audit-static-opengrep/Dockerfile`, and the image builders that existed then (since
+  replaced by `images/image_build.py`)
 - historical notes in `scripts/vendor-audit-playbook.html`
 - deletion of `scripts/md_to_sarif.py`
 

@@ -1,0 +1,17 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "audit-buildenv-cpp",
+      "tag": "audit-buildenv-cpp:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {},
+      "requires_images": [
+        "audit-native:local"
+      ],
+      "prebuild": [],
+      "timeout_seconds": 3600
+    }
+  ]
+}

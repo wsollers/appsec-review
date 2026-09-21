@@ -77,9 +77,6 @@ RUN curl -fsSL "$JAVA_DOWNLOAD_URL" -o /tmp/jdk.tar.gz \
     && curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin \
     && curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
-COPY analyze-binary.sh /usr/local/bin/analyze-binary
-COPY binary-summary.py /usr/local/bin/binary-summary
-COPY angr-summary.py /usr/local/bin/angr-summary
 COPY --from=cwe-checker /home/cwe/cwe_checker /usr/local/bin/cwe_checker
 COPY --from=cwe-checker /home/cwe/.config/cwe_checker /opt/cwe_checker_config
 
@@ -95,7 +92,7 @@ RUN python3 -m venv /opt/binary-analysis-venv \
       pefile \
       pyelftools \
     && npm install -g @modelcontextprotocol/server-filesystem @modelcontextprotocol/server-memory \
-    && chmod +x /usr/local/bin/analyze-binary /usr/local/bin/binary-summary /usr/local/bin/angr-summary /usr/local/bin/cwe_checker \
+    && chmod +x /usr/local/bin/cwe_checker \
     && ln -sfn /usr/local/bin/cwe_checker /usr/local/bin/check_cwe \
     && ln -sfn /opt/binary-analysis-venv/bin/frida /usr/local/bin/frida \
     && ln -sfn /opt/binary-analysis-venv/bin/frida-ps /usr/local/bin/frida-ps \
@@ -108,6 +105,12 @@ RUN python3 -m venv /opt/binary-analysis-venv \
     && cp -R /opt/cwe_checker_config /home/worker/.config/cwe_checker \
     && mkdir -p /workspace /scratch \
     && chown -R worker:worker /home/worker/.config /scratch
+
+# --- Repo-owned scripts, kept LAST so editing them rebuilds only these layers.
+COPY scripts/analyze-binary.sh /usr/local/bin/analyze-binary
+COPY scripts/binary-summary.py /usr/local/bin/binary-summary
+COPY scripts/angr-summary.py /usr/local/bin/angr-summary
+RUN chmod +x /usr/local/bin/analyze-binary /usr/local/bin/binary-summary /usr/local/bin/angr-summary
 
 USER worker
 WORKDIR /scratch

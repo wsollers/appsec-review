@@ -26,9 +26,8 @@
 #     (corrected 2026-09-01): there is NO publishable
 #     ghcr.io/aboutcode-org/scancode-toolkit image to `docker run` — an
 #     anonymous manifest pull returns "denied", and ScanCode's own docs say
-#     to build it yourself. Build-AuditImages.ps1 / build-audit-images.sh now
-#     build it automatically as part of their normal "scancode" step (added
-#     2026-09-18); or build it standalone with Build-ScanCodeImage.ps1/.sh.
+#     to build it yourself: `python -B images/image_build.py build scancode-toolkit`
+#     clones the source into images/scancode-toolkit/src and builds it.
 #     Either way it produces the local `scancode-toolkit:local` tag; the
 #     orchestrator's
 #     `scancode` step runs against that local image. The built image's own
@@ -132,7 +131,7 @@ ENV LANG=C.UTF-8 \
     PATH="/usr/local/go/bin:/root/go/bin:/root/.cargo/bin:/root/.composer/vendor/bin:${PATH}"
 
 # --- Base OS packages -------------------------------------------------------
-# 2026-09-10 fix (confirmed live against a real `Build-AuditToolbox.ps1` build
+# 2026-09-10 fix (confirmed live against a real build
 # log — not guessed): the Joern install step below (`./joern-install.sh`)
 # failed at its own line 215 with `sudo: not found`. Root-caused by fetching
 # and reading the actual upstream joern-install.sh from the same URL this
@@ -201,8 +200,8 @@ RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
 # it; ast-grep is cheap (pure Rust, no extra runtime) and used across every
 # language track, not just C++, so keep it.
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && /root/.cargo/bin/cargo install weggli \
-    && /root/.cargo/bin/cargo install ast-grep --locked
+    && CARGO_BUILD_JOBS=4 /root/.cargo/bin/cargo install weggli \
+    && CARGO_BUILD_JOBS=4 /root/.cargo/bin/cargo install ast-grep --locked
 
 # --- Joern (Code Property Graph analysis — primary C++ semantic/taint tool,
 #     genuinely open source, no build-availability requirement like CodeQL) -
@@ -382,14 +381,6 @@ RUN pip3 install --no-cache-dir \
       fastembed \
       mobsfscan==${MOBSFSCAN_VERSION}
 
-# --- This repo's own evidence-shaping scripts --------------------------------
-COPY scripts/build_symbol_index.py scripts/build_semantic_index.py scripts/query_semantic_index.py \
-     scripts/scrub_evidence.py scripts/php_parse_coverage.py scripts/run-sast-php.sh \
-     scripts/run-semantic-index-batched.sh \
-     scripts/analyze_dependency_lifecycle.py scripts/eol-reference.json \
-     /opt/scripts/
-RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
-
 # 2026-09-08 fix #3 (confirmed live against a real container, via sast-php's
 # own real stderr.log — not guessed): psalm hard-requires a config file in
 # the project it analyzes and refuses to run at all without one
@@ -406,11 +397,14 @@ RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
 # hit joern-parse and ast-grep-scan twice elsewhere in this toolbox).
 # psalm.xml's own schema was confirmed against Psalm's documented minimal
 # example, not guessed.
-COPY images/audit-static/psalm.xml /opt/config/psalm.xml
-
 # dockerfile-lint's fix history (the PowerShell-to-docker.exe argv-marshalling
 # bug, and its static-script fix) now lives with the step itself in
-# `images/audit-container/Dockerfile` and `scripts/run-dockerfile-lint.sh`.
+# `images/audit-container/Dockerfile` and `scripts/audit-container/run-dockerfile-lint.sh`.
+
+# --- Repo-owned inputs that change often: kept LAST so editing them rebuilds only these layers.
+COPY config/ /opt/config/
+COPY scripts/ /opt/scripts/
+RUN chmod +x /opt/scripts/*.py /opt/scripts/*.sh
 
 WORKDIR /workspace
 # No ENTRYPOINT/CMD by design — the orchestrator (Invoke-VendorAuditPrePass.ps1)

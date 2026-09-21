@@ -6,7 +6,9 @@ images and the binary-analysis image.
 Build the images first:
 
 ```bash
-scripts/build-language-buildenv-images.sh
+python -B images/image_build.py build audit-native audit-buildenv-cpp audit-buildenv-java \
+  audit-buildenv-go audit-buildenv-typescript audit-buildenv-php audit-buildenv-dotnet \
+  audit-buildenv-python audit-buildenv-rust audit-binary-analysis
 ```
 
 Run all smoke tests from the repo root:

@@ -58,7 +58,7 @@ inference scoped to the leftover candidate set, not the whole tree, and
 keep it separate from any one-time/offline pass used to *tune* the
 heuristics below.
 
---libdir-reference points at scripts/native-libdir-reference.json (same
+--libdir-reference points at data/native-libdir-reference.json (same
 pattern as analyze_dependency_lifecycle.py's --eol-reference: a curated,
 hand-maintained data file, not a live/derived source), which supplies both
 the system-libdir exclusion prefixes and the in-tree vendor-dirname list.
@@ -70,7 +70,7 @@ Usage:
     python3 extract_vendor_candidates.py \\
         --build-commands /scratch/native-build/build-commands.jsonl \\
         --repo-root /workspace \\
-        --libdir-reference scripts/native-libdir-reference.json \\
+        --libdir-reference data/native-libdir-reference.json \\
         -o /evidence/sbom/native-vendor-candidates.json
 """
 from __future__ import annotations
@@ -518,7 +518,7 @@ def main() -> None:
     ap.add_argument("--system-libdir-prefix", action="append",
                      help="Override the default system-libdir exclusion prefix list (repeatable). Takes precedence over --libdir-reference.")
     ap.add_argument("--libdir-reference",
-                     help="Path to a native-libdir-reference.json-shaped file (see scripts/native-libdir-reference.json) supplying both list defaults. Optional -- falls back to this script's own built-in defaults if omitted.")
+                     help="Path to a native-libdir-reference.json-shaped file (see data/native-libdir-reference.json) supplying both list defaults. Optional -- falls back to this script's own built-in defaults if omitted.")
     ap.set_defaults(func=cmd_extract)
 
     args = ap.parse_args()

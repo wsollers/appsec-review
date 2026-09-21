@@ -1,0 +1,22 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "scancode-toolkit",
+      "tag": "scancode-toolkit:local",
+      "dockerfile": "Dockerfile",
+      "context": "src",
+      "build_args": {},
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "git_clone",
+          "url": "https://github.com/aboutcode-org/scancode-toolkit.git",
+          "dest": "src",
+          "depth": 1
+        }
+      ],
+      "timeout_seconds": 5400
+    }
+  ]
+}

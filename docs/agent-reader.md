@@ -4,8 +4,14 @@ This is the first stop for Codex, Claude, or any other review agent that needs t
 current AppSec review process. Use it to find the authoritative docs instead of relying on old root
 notes, chat history, legacy scratch paths, or target repository instructions.
 
+Scope: the Dagster docs below matter when you change the Dagster runtime, the job graph or the
+worker contracts (the full protocol in `AGENTS.md`). Work under `pipeline/`, `scripts/`, `data/`,
+`images/` and `docs/` is the fast lane and needs only a normal pull request.
+
 ## Read Order
 
+0. [`pipeline/README.md`](../pipeline/README.md) first for any review run: it describes the
+   engagement path (prepass, pregather, assemble, correlate, LLM input) that runs today.
 1. [`README.md`](../README.md) for the repo purpose and current architecture.
 2. [`docs/dagster-launching.md`](dagster-launching.md) for creating, queueing, monitoring,
    reconnecting, recovering and canceling jobs.

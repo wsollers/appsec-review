@@ -14,7 +14,7 @@ SKIP_DOCKER_CHECK=0
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/Invoke-VendorAuditPrePass.sh REPO_PATH EVIDENCE_PATH [options]
+  pipeline/Invoke-VendorAuditPrePass.sh REPO_PATH EVIDENCE_PATH [options]
 
 Options:
   --image-tag TAG       Toolbox image tag. Default: vendor-audit-toolbox:latest
@@ -61,6 +61,13 @@ EVIDENCE_PATH=$(realpath "$EVIDENCE_PATH")
 MANIFEST="$EVIDENCE_PATH/MANIFEST.json"
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
+TOOLS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# pipeline/ and data/eol-reference.json are mounted read-only for the steps that run repo scripts
+# in-image (evidence-scrub, dependency-lifecycle). Image-owned scripts live in the image (images/<name>/scripts).
+tool_mount_args() {
+  MOUNT_ARGS=(-v "$TOOLS_ROOT/pipeline:/opt/pipeline:ro" -v "$TOOLS_ROOT/data/eol-reference.json:/opt/data/eol-reference.json:ro")
+}
 
 docker_clean_path() {
   local mount_path="$1"
@@ -164,7 +171,8 @@ docker_base_args() {
       env_args+=(-e "$name=${!name}")
     fi
   done
-  printf '%s\0' run --rm --user "$HOST_UID:$HOST_GID" "${env_args[@]}" -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image"
+  tool_mount_args "$image"
+  printf '%s\0' run --rm --user "$HOST_UID:$HOST_GID" "${env_args[@]}" -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "${MOUNT_ARGS[@]}" "$image"
 }
 
 run_container() {
@@ -176,7 +184,8 @@ run_container() {
       env_args+=(-e "$name=${!name}")
     fi
   done
-  docker run --rm --user "$HOST_UID:$HOST_GID" "${env_args[@]}" -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "$image" "$@"
+  tool_mount_args "$image"
+  docker run --rm --user "$HOST_UID:$HOST_GID" "${env_args[@]}" -w /tmp -v "$REPO_PATH:/workspace:ro" -v "$EVIDENCE_PATH:/evidence" "${MOUNT_ARGS[@]}" "$image" "$@"
 }
 
 write_post_success() {
@@ -266,8 +275,8 @@ step_meta() {
     dockerfile-lint) SUBDIR=iac-docker; ALLOW_NONZERO=1; IMAGE=audit-container:local; CMD=(bash /opt/scripts/run-dockerfile-lint.sh);;
     docker-base-images) SUBDIR=iac-docker; ALLOW_NONZERO=1; IMAGE=audit-container:local; CMD=(bash -lc "find /workspace -iname 'Dockerfile*' -type f -print0 | xargs -0 -r awk 'BEGIN{IGNORECASE=1} /^FROM[[:space:]]+/ {print FILENAME \":\" NR \":\" \$0}' > /evidence/iac-docker/base-images.txt");;
     scancode) SUBDIR=license; ALLOW_NONZERO=1; EXPECTED=license/scancode.json; IMAGE=scancode-toolkit:local; CMD=(-clip --json-pp /evidence/license/scancode.json /workspace);;
-    dependency-lifecycle) SUBDIR=sbom; ALLOW_NONZERO=1; EXPECTED=sbom/dependency-lifecycle.json; CMD=(python3 /opt/scripts/analyze_dependency_lifecycle.py --sbom /evidence/sbom/sbom.cdx.json --eol-reference /opt/scripts/eol-reference.json --scancode /evidence/license/scancode.json -o /evidence/sbom/dependency-lifecycle.json);;
-    evidence-scrub) SUBDIR=_shareable; ALLOW_NONZERO=1; CMD=(python3 /opt/scripts/scrub_evidence.py /evidence -o /evidence/_shareable);;
+    dependency-lifecycle) SUBDIR=sbom; ALLOW_NONZERO=1; EXPECTED=sbom/dependency-lifecycle.json; CMD=(python3 /opt/pipeline/analyze_dependency_lifecycle.py --sbom /evidence/sbom/sbom.cdx.json --eol-reference /opt/data/eol-reference.json --scancode /evidence/license/scancode.json -o /evidence/sbom/dependency-lifecycle.json);;
+    evidence-scrub) SUBDIR=_shareable; ALLOW_NONZERO=1; CMD=(python3 /opt/pipeline/scrub_evidence.py /evidence -o /evidence/_shareable);;
     *) return 1;;
   esac
 }

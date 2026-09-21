@@ -7,7 +7,7 @@
 # fair test. CodeQL documents clang-cl tracing as preliminary — record what it does.
 #
 #   docker build -t audit-native:local images/audit-native          # first
-#   docker build -t audit-codeql-native:local -f images/audit-codeql/Dockerfile.native images/audit-codeql
+#   docker build -t audit-codeql-native:local -f Dockerfile.native images/audit-codeql
 #
 # Runs under the same run.sh boundary; the tracer executes the compiler, i.e. this is
 # hostile-build territory exactly like audit-native itself.
@@ -25,10 +25,12 @@ RUN cd /opt \
     && tar --zstd -xf bundle.tar.zst && rm bundle.tar.zst \
     && chmod -R a+rX /opt/codeql \
     && /opt/codeql/codeql version --format=json | head -3
-COPY run-codeql.sh replay_compile_commands.py smoke-test.sh /opt/scripts/
-RUN chmod +x /opt/scripts/run-codeql.sh /opt/scripts/replay_compile_commands.py /opt/scripts/smoke-test.sh
 ENV CODEQL_LICENSE_BASIS=ghas \
     PATH="/opt/codeql:${PATH}" \
     CODEQL_BUNDLE=codeql-bundle-v2.27.0
+# --- Repo-owned scripts, kept LAST so editing them rebuilds only this layer.
+COPY scripts/ /opt/scripts/
+RUN chmod +x /opt/scripts/run-codeql.sh /opt/scripts/replay_compile_commands.py /opt/scripts/smoke-test.sh
+
 USER worker
 WORKDIR /scratch

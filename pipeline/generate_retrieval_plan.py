@@ -112,7 +112,7 @@ def main() -> int:
     for q in SECURITY_QUERIES:
         semantic_queries.append({
             "query": q,
-            "command": f"python3 scripts/query_semantic_index.py {semantic_index_dir} {json.dumps(q)} --limit 10 --json",
+            "command": f"python3 scripts/audit-static/query_semantic_index.py {semantic_index_dir} {json.dumps(q)} --limit 10 --json",
             "available": semantic_available,
         })
 

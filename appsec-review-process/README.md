@@ -294,16 +294,13 @@ tooling. Static binary intelligence belongs in `02-evidence-pregather`; executio
 debugging, Frida instrumentation, and networked vulnerability DB updates require explicit
 authorization and the approved wrapper flags.
 
-Agent skill prompts live under `appsec-review-process/agent-skills/`. They are local guidance for
-Codex and Claude-style agents; they do not override user scope, process rules, or the untrusted-data
-boundary.
+Agent skill prompts live under `appsec-review-process/agent-skills/` (one copy of each skill; the
+directory is named `codex` for historical reasons and is used by every agent). They are local
+guidance; they do not override user scope, process rules, or the untrusted-data boundary.
 
-Use the process reader first:
+Use the process reader first: `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`.
 
-- Codex: `appsec-review-process/agent-skills/codex/process-reader/SKILL.md`
-- Claude: `appsec-review-process/agent-skills/claude/process-reader.md`
-
-Both point to `docs/agent-reader.md`, which links the current Dagster submission, queueing,
+It points to `docs/agent-reader.md`, which links the current Dagster submission, queueing,
 monitoring, output-location, job-requirement, persona, registry and evidence-retrieval docs.
 
 ## Relationship to Older Project Context

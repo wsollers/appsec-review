@@ -137,8 +137,6 @@ Skills:
 
 - `appsec-review-process/agent-skills/codex/repo-project-engineer/SKILL.md` describes how Codex
   should discover projects, choose language worker images, and route binary/debug artifacts.
-- `appsec-review-process/agent-skills/claude/repo-project-engineer.md` provides the same project
-  discovery and binary-analysis routing guidance for Claude-style agents.
 - These skills are guidance for agent behavior; they do not grant permission to execute untrusted
   scripts, restore dependencies, use the network, attach debuggers, or mutate target repositories.
 
@@ -150,14 +148,10 @@ MCP:
 - MCP servers are intended for bounded local context over mounted workspaces and scratch outputs,
   not for bypassing the evidence contract or trust boundary.
 
-Build entrypoints:
+Build entrypoint (one independent build per image; `list` shows them all):
 
 ```bash
-scripts/build-language-buildenv-images.sh
-```
-
-```powershell
-.\scripts\Build-LanguageBuildEnvImages.ps1
+python -B images/image_build.py build audit-native audit-buildenv-cpp audit-buildenv-java
 ```
 
 Runtime entrypoints:

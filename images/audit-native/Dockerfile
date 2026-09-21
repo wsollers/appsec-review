@@ -187,12 +187,6 @@ RUN python3 -m venv /opt/codechecker-venv \
     && ln -s /opt/codechecker-venv/bin/CodeChecker /usr/local/bin/CodeChecker \
     && CodeChecker version
 
-# --- This image's scripts ------------------------------------------------------
-COPY scripts/ /opt/scripts/
-RUN find /opt/scripts -type f \( -name '*.py' -o -name '*.sh' \) -print0 \
-      | xargs -0 sed -i 's/\r$//' \
-    && chmod +x /opt/scripts/*.py /opt/scripts/*.sh
-
 # --- Non-root worker user, fixed mount points ----------------------------------
 # /workspace : vendor source, read-only
 # /msvc      : MSVC CRT + Windows SDK (licensed input), read-only  (ADR-0003)
@@ -200,6 +194,12 @@ RUN find /opt/scripts -type f \( -name '*.py' -o -name '*.sh' \) -print0 \
 RUN useradd -m -u 10001 -s /bin/bash worker \
     && mkdir -p /workspace /msvc /scratch \
     && chown worker:worker /scratch
+# --- This image's scripts (edited often: kept LAST so only these layers rebuild) ------------------------------------------------------
+COPY scripts/ /opt/scripts/
+RUN find /opt/scripts -type f \( -name '*.py' -o -name '*.sh' \) -print0 \
+      | xargs -0 sed -i 's/\r$//' \
+    && chmod +x /opt/scripts/*.py /opt/scripts/*.sh
+
 USER worker
 WORKDIR /scratch
 

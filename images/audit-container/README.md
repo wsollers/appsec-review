@@ -11,7 +11,7 @@ README for the reasoning.
 
 ## Build
 
-This image `COPY`s `scripts/run-dockerfile-lint.sh`, so it must be built with the **repo root** as
+This image no longer copies `run-dockerfile-lint.sh`; the prepass mounts `scripts/audit-container/` at `/opt/scripts` read-only. Previously it had to be built with the **repo root** as
 context, not `images/audit-container`:
 
 ```bash
