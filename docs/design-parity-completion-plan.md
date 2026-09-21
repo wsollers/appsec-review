@@ -14,7 +14,7 @@ output contract, recovery behavior, and service-level qualification.
   references. The deterministic human view is `docs/design-parity-report.md`; the lifecycle graph
   and operator table are generated as `docs/full-review-workflow.mmd` and
   `docs/design-parity-readiness.md` and are rejected when stale.
-- The lifecycle graph declares 42 jobs. Only `00-intake`, `02-ossf-scorecard`, and
+- The lifecycle graph declares 51 jobs. Only `00-intake`, `02-ossf-scorecard`, and
   `02-evidence-index` are currently marked implemented in `job-graph.json`.
 - Several useful standalone Dagster jobs exist, but standalone registration does not prove that
   their corresponding lifecycle node is reachable through `full_review`.
