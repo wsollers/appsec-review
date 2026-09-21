@@ -188,7 +188,9 @@ python -B /opt/process/resource_pools.py state --out <new file> --run-id <dagste
 python -B /opt/process/resource_pools.py verify-state <file>
 ```
 
-`state` writes a `resource-pool-state` document
+`state` writes a `resource-pool-state` document (`appsec-review/resource-pool-state/1.1`; no 1.0
+document exists outside tests -- the id was raised when the required `pooled_steps_recorded` field
+was added, because a changed shape gets a new id; a 1.0 document fails the schema)
 ([schema](../schemas/resource-pool-state.schema.json)): declared and observed limits, the floor,
 the outer limits, every op's pool or unassigned reason, and for the named runs each pooled step's
 start and end with the largest observed overlap per pool. It refuses to overwrite and refuses a
