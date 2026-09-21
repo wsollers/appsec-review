@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pinned-container-result.schema.json",
+  "title": "Pinned-container adapter terminal result",
+  "description": "The container-result.json the adapter writes last into its run-owned log directory. It carries codes, counts, hashes and adapter-derived identities only: no container output, no docker error text and no free text. It is a cache: container_execution.verify_container_result re-derives every field from the expected request, the image registry and the bytes on disk.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "adapter",
+    "boundary",
+    "boundary_sha256",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "request_sha256",
+    "image_reference",
+    "image_record_sha256",
+    "permission_fingerprint_sha256",
+    "container_name",
+    "execution_status",
+    "cause",
+    "exit_code",
+    "started_at",
+    "finished_at",
+    "scratch_path",
+    "log_path",
+    "streams",
+    "files",
+    "container_removed",
+    "result_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/pinned-container-result/1.0"
+    },
+    "adapter": {
+      "const": "appsec-review/pinned-container-adapter/1.0"
+    },
+    "boundary": {
+      "const": "appsec-review/container-boundary/1.0"
+    },
+    "boundary_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "request_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "image_reference": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:/-]{0,254}@sha256:[0-9a-f]{64}\\Z"
+    },
+    "image_record_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "permission_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "container_name": {
+      "type": "string",
+      "pattern": "^appsec-[0-9a-f]{32}\\Z"
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "FAILED",
+        "BLOCKED",
+        "CANCELED"
+      ]
+    },
+    "cause": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "PERMISSION_DENIED",
+        "NETWORK_NOT_GRANTED",
+        "NETWORK_ENFORCEMENT_UNAVAILABLE",
+        "DOCKER_UNAVAILABLE",
+        "IMAGE_NOT_PROVISIONED",
+        "CONTAINER_START_FAILED",
+        "CONTAINER_EXIT_NONZERO",
+        "TIMEOUT",
+        "CANCELED",
+        "WORKER_LOST",
+        "OOM_KILLED",
+        "LOG_WRITE_FAILED",
+        "CLEANUP_FAILED"
+      ]
+    },
+    "exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "finished_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"
+    },
+    "scratch_path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9][A-Za-z0-9._-]{0,63}){0,7}\\Z"
+    },
+    "log_path": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(/[A-Za-z0-9][A-Za-z0-9._-]{0,63}){0,7}\\Z"
+    },
+    "streams": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "stdout",
+        "stderr"
+      ],
+      "properties": {
+        "stdout": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observed_bytes",
+            "written_bytes",
+            "dropped_bytes",
+            "truncated"
+          ],
+          "properties": {
+            "observed_bytes": {
+              "type": "integer"
+            },
+            "written_bytes": {
+              "type": "integer"
+            },
+            "dropped_bytes": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          }
+        },
+        "stderr": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observed_bytes",
+            "written_bytes",
+            "dropped_bytes",
+            "truncated"
+          ],
+          "properties": {
+            "observed_bytes": {
+              "type": "integer"
+            },
+            "written_bytes": {
+              "type": "integer"
+            },
+            "dropped_bytes": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "bytes"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "enum": [
+              "command.json",
+              "events.jsonl",
+              "request.json",
+              "stderr.log",
+              "stdout.log"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}\\Z"
+          },
+          "bytes": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "container_removed": {
+      "type": "boolean"
+    },
+    "result_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}

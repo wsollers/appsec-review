@@ -1,0 +1,9 @@
+{
+  "schema": "appsec-review/container-image/1.0",
+  "image_id": "fixture-harmless",
+  "repository": "docker.io/library/alpine",
+  "digest": "sha256:f71a5f071694a785e064f05fed657bf8277f1b2113a8ed70c90ad486d6ee54dc",
+  "digest_kind": "image-index",
+  "purpose": "Harmless busybox fixture for the pinned-container adapter's live tests; runs no review tool.",
+  "provenance": "Docker Official Image alpine 3.17 image index digest; see images/fixture-harmless/README.md."
+}

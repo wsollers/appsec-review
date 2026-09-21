@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "container-image.schema.json",
+  "title": "Registered pinned container image",
+  "description": "One immutable image identity the pinned-container adapter may run. The adapter builds the image reference from repository and digest only; a tag is never part of a record and never reaches docker.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "image_id",
+    "repository",
+    "digest",
+    "digest_kind",
+    "purpose",
+    "provenance"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/container-image/1.0"
+    },
+    "image_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}\\Z"
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?){1,6}\\Z"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "digest_kind": {
+      "type": "string",
+      "enum": [
+        "image-index",
+        "image-manifest"
+      ]
+    },
+    "purpose": {
+      "type": "string",
+      "pattern": "^[ -~]{1,240}\\Z"
+    },
+    "provenance": {
+      "type": "string",
+      "pattern": "^[ -~]{1,240}\\Z"
+    }
+  }
+}
