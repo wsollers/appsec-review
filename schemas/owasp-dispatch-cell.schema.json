@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dispatch-cell.schema.json",
+  "title": "One expected validator cell (one T06 handoff) with its C02 state and its T07 validation outcome (T10)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "cell_ordinal",
+    "member_sha256",
+    "handoff_digest",
+    "batch_digest",
+    "handoff_mode",
+    "disposition",
+    "fragments",
+    "wave",
+    "group_id",
+    "instance_id",
+    "state",
+    "state_reason",
+    "adapter_status",
+    "adapter_cause",
+    "invoker_stopped",
+    "worker_stopped",
+    "result_file",
+    "terminal_class",
+    "candidate",
+    "validation",
+    "valid_result",
+    "not_assessed_reason"
+  ],
+  "properties": {
+    "cell_ordinal": {
+      "type": "integer"
+    },
+    "member_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "handoff_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "batch_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}\\Z"
+    },
+    "handoff_mode": {
+      "enum": [
+        "validator_contract_only",
+        "request_authoring_only"
+      ]
+    },
+    "disposition": {
+      "enum": [
+        "dispatched",
+        "request_only_not_dispatched"
+      ]
+    },
+    "fragments": {
+      "type": "integer"
+    },
+    "wave": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "group_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}\\Z"
+    },
+    "instance_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "state": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "canceled",
+        "instance_timed_out",
+        "rendezvous_timed_out",
+        "crashed",
+        "invalid",
+        "not_launched_canceled",
+        "not_launched_rendezvous_timeout",
+        "missing",
+        null
+      ]
+    },
+    "state_reason": {
+      "enum": [
+        "verified_adapter_result",
+        "worker_stopped_after_the_wait_ended",
+        "worker_still_running_after_the_drain",
+        "attempt_evidence_without_adapter_result",
+        "adapter_verifier_refused_the_result",
+        "instance_root_not_a_private_directory",
+        "evidence_nobody_launched",
+        "ok_result_whose_writer_has_not_stopped",
+        "adapter_status_not_classifiable",
+        "pool_canceled_before_launch",
+        "wait_ended_before_launch",
+        "instance_root_absent",
+        "adapter_left_no_evidence",
+        "worker_thread_not_started",
+        null
+      ]
+    },
+    "adapter_status": {
+      "enum": [
+        "OK",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED",
+        null
+      ]
+    },
+    "adapter_cause": {
+      "enum": [
+        "BUDGET_EXCEEDED",
+        "CANCELED",
+        "IDENTITY_MISMATCH",
+        "INVOKER_EXCEPTION",
+        "INVOKER_UNAVAILABLE",
+        "MALFORMED_RESULT",
+        "OUTPUT_ESCAPE",
+        "PERMISSION_DENIED",
+        "PROHIBITED_CLAIM",
+        "SELF_VERIFICATION",
+        "TIMEOUT",
+        "UNDECLARED_CITATION",
+        "UNDECLARED_TOOL",
+        null
+      ]
+    },
+    "invoker_stopped": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "worker_stopped": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "result_file": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "terminal_class": {
+      "enum": [
+        "valid_result",
+        "failed",
+        "canceled",
+        "timed_out",
+        "skipped",
+        "invalid",
+        "request_only"
+      ]
+    },
+    "candidate": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "outcome",
+        "attempt_id",
+        "status",
+        "accepted_pointer_sha256",
+        "result_sha256"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+        },
+        "outcome": {
+          "enum": [
+            "accepted",
+            "refused",
+            "unavailable",
+            "not_submitted"
+          ]
+        },
+        "attempt_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{32}\\Z"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "OK_WITH_GAPS",
+            "INVALID",
+            "BLOCKED",
+            null
+          ]
+        },
+        "accepted_pointer_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}\\Z"
+        },
+        "result_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "valid_result": {
+      "type": "boolean"
+    },
+    "not_assessed_reason": {
+      "enum": [
+        "cell_state",
+        "pool_unverifiable",
+        "adapter_result_unverifiable",
+        "candidate_missing",
+        "candidate_unreadable",
+        "candidate_identity",
+        "validation_refused",
+        "validation_unavailable",
+        null
+      ]
+    }
+  }
+}

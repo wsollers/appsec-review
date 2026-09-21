@@ -1,8 +1,8 @@
 # ADR-0009: OWASP Control Workbench
 
-Status: Proposed; T02 reference publishers and bounded T03–T09 lane-in, applicability, batching,
-validator-handoff, validator-result, structured-intercom, and request-lifecycle foundations implemented;
-report/finding-promotion and per-engagement scope decisions remain
+Status: Proposed; T02 reference publishers and bounded T03–T10 lane-in, applicability, batching,
+validator-handoff, validator-result, structured-intercom, request-lifecycle, and dispatch/wait-all
+accounting foundations implemented; report/finding-promotion and per-engagement scope decisions remain
 
 Date: 2026-09-20
 
@@ -578,5 +578,10 @@ handoff and tool contracts are implemented as an offline, non-dispatching founda
 only explicitly supplied candidate results and publishes evidence-sufficient batch assessments; it
 does not dispatch validators, join control fragments, or create findings. T08 adds communication
 provenance without evidence or authority, and T09 adds only the fail-closed offline request ledger
-described above. Later lifecycle tasks remain subject to their dependencies and the named human
-decisions above.
+described above. T10 (`appsec-review-process/owasp_dispatch.py`) was no longer gated once the
+persona/pool foundations B13, B14, B15, C01 and C02 existed: it is an unregistered standalone worker
+that dispatches validator cells only through an integrator-supplied invoker, waits for all of them,
+submits their output to T07 as candidates and publishes the wait-all failure accounting. It approves
+no registry composition: with the tracked registry, whose only `owasp-validator` composition forbids
+`control_verdict`, it refuses to dispatch. Later lifecycle tasks remain subject to their dependencies
+and the named human decisions above.

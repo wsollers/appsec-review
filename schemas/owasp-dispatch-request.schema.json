@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-dispatch-request.schema.json",
+  "title": "OWASP validator dispatch request for one exact newest accepted T06 handoff publication (T10)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "handoffs",
+    "dispatch_config",
+    "model"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/owasp-dispatch-request/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "handoffs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt_id",
+        "accepted_pointer_path",
+        "accepted_pointer_sha256",
+        "handoff_set_path",
+        "handoff_set_sha256"
+      ],
+      "properties": {
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+        },
+        "accepted_pointer_path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+        },
+        "accepted_pointer_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        },
+        "handoff_set_path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+        },
+        "handoff_set_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "dispatch_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "config_digest"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
+        },
+        "config_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}\\Z"
+        }
+      }
+    },
+    "model": {
+      "$ref": "persona-model-identity.schema.json"
+    }
+  }
+}
