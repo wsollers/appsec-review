@@ -183,6 +183,52 @@ one engagement overlap. `state_sha256` is an integrity check, not an authenticat
 Stuck slot: `dagster instance concurrency get --all` shows holders; a slot held by a finished run
 is freed by the daemon after 120 seconds, or at once with the UI's "free slots for run".
 
+## Live service qualification (owner-run, not yet done)
+
+B15 changes Dagster registration (a sensor, op pools, a load-time check) and `dagster.yaml`, so it
+needs the bounded live qualification that `TODO.md` requires. `dagster.yaml` and `definitions.py`
+are part of every job's runtime fingerprint (as is any new `schemas/*.schema.json`): accepted
+pointers become non-current and the first run of each engagement re-executes instead of reusing.
+
+1. Idle check: `docker compose -f orchestrator/dagster/compose.yaml ps`, and no `STARTED` or
+   `QUEUED` run in the UI. Record `docker image inspect appsec-review-dagster:local --format '{{.Id}}'`
+   and the commit under test.
+2. Restart the stack from the checkout under test so the mounted `dagster.yaml`, `definitions.py`
+   and `/opt/process` are this branch (`up -d`; rebuild only if the image must carry the same files).
+   All four services healthy; the code location loads (a load error here means an op without a
+   pool state).
+3. Within a minute the `resource_pool_guard` sensor shows a successful tick
+   (`resource pools verified; corrected=6` the first time on this storage, `corrected=0` after).
+   Then `exec -T code-server python -B /opt/process/resource_pools.py verify` exits 0 and the UI's
+   Deployment > Concurrency page lists the six pools with 3/1/1/1/3/1.
+4. Per-pool limit and fairness, memory pool: stage two Linux-owned engagements (A, B) as in
+   `docs/dagster-launching.md`, run `engagement_workflow` for both, then launch
+   `--job evidence_index` for A and for B at the same time. Both runs are `STARTED` together
+   (run queue 2), but only one `evidence_index_work` step runs; the other shows Dagster's
+   pool-blocked message and starts when the first ends.
+5. CPU pool: launch `engagement_workflow --force` for A and B at the same time. At most three
+   `cpu` steps run across both runs; within a run the branches still overlap
+   (`qualify_workflow.py` still passes its branch-overlap and queue assertions).
+6. Unchanged engagement serialization: submit a second job for A while A runs; it stays `QUEUED`
+   until A's run ends, with or without free pool slots.
+7. Cancellation: while B waits for the memory slot in step 4 (or holds it), terminate B from the
+   UI. B becomes `CANCELED`, the `reconcile_workflow_cancellation` sensor marks the workflow
+   `FAILED`, `verify` shows no slot held by B, and the next waiting step proceeds.
+8. Failure injection, lost run worker: during a pooled step, find the run worker with
+   `exec code-server ps -ef` and `kill -9` it and its step child (killing a whole service is too
+   broad; an orphaned step child would otherwise keep working without a slot record). The slot
+   stays claimed; run monitoring fails the run; about 120 seconds after that the daemon log shows
+   `Freed ... slots for run ...` and the next step proceeds.
+9. Restart: with one pooled step running and one waiting, `docker compose restart daemon webserver`.
+   Limits are unchanged (`verify` exit 0), the running step finishes, the waiting step gets its
+   slot, no slot is leaked. Then `docker compose restart code-server` when idle and re-check 3.
+10. Drift: set the docker pool to 5 in the UI; within 30 seconds the guard logs the correction and
+    `verify` exits 0 again. Add a pool `gpu` in the UI; the guard tick fails visibly; delete it.
+11. Evidence: `resource_pools.py state --out /runs/<A>/data/qualification/resource-pools-<id>/resource-pool-state.json --run-id <each Dagster run id>`
+    (result `PASS`, overlaps within limits), then `verify-state` on the host copy. Record the
+    engagement and Dagster run ids, attempt ids, the state document path and its `file_sha256`,
+    the image id, the commit, the injected failures and the observed recovery.
+
 ## Tests
 
 `tests/test_resource_pools.py` is pure and runs anywhere. `tests/test_resource_pools_dagster.py`
