@@ -39,8 +39,9 @@ The workflow graph runs:
 
 The multiprocessing executor permits at most three steps per workflow. Combined with the run
 queue, at most six workflow step processes can run at once, plus their bounded Python children
-and Dagster service processes. This is a concurrency bound, not a CPU/memory quota. Add dedicated
-resource pools and isolated worker images before introducing heavy scanners or target builds.
+and Dagster service processes. This is a concurrency bound, not a CPU/memory quota. Dedicated
+resource pools (B15, [resource pools](resource-pools.md)) bound pooled steps per resource beneath
+that; add isolated worker images before introducing heavy scanners or target builds.
 
 Scope and native checks derive validated views of accepted intake. Discovery handoffs resolve
 configured persona/role/domain/tooling/output contracts and preserve partition-before-specialist
