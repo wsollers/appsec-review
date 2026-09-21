@@ -223,7 +223,7 @@ check, not an authenticator.
 Stuck slot: `dagster instance concurrency get --all` shows holders; a slot held by a finished run
 is freed by the daemon after 120 seconds, or at once with the UI's "free slots for run".
 
-## Live service qualification (owner-run, not yet done)
+## Live service qualification (run 2026-09-21; step 8 still owed)
 
 B15 changes Dagster registration (a sensor, op pools, a load-time check) and `dagster.yaml`, so it
 needs the bounded live qualification that `TODO.md` requires. `dagster.yaml` and `definitions.py`
@@ -271,6 +271,40 @@ pointers become non-current and the first run of each engagement re-executes ins
     engagement and Dagster run ids, attempt ids, the state document path and its `file_sha256`,
     the image id, the commit, the injected failures and the observed recovery.
 
+### Record of the 2026-09-21 run
+
+Run by the coordinator on the owner's instruction, on the Linux host, with the shared stack restarted
+from this branch at commit `4cfa2f5` (image `sha256:0373f1c871f472e02f5e452f45e3644517ce5d2c9a21890232f9c035b57fed5d`,
+Dagster 1.13.21, Postgres storage) and returned to the main checkout afterwards. UI actions were
+made through the same GraphQL mutations the UI calls (`terminateRun`, `setConcurrencyLimit`,
+`deleteConcurrencyLimit`). Engagements: A `20260921T081929Z-ce1886`, B `20260921T081930Z-939b69`.
+
+| Step | Result | Observation |
+|---|---|---|
+| 1 | PASS | four services healthy, no `STARTED`/`QUEUED` run |
+| 2 | PASS | `/opt/process` mounted from this branch; code location `LOADED` (so every op of the 51-node graph has a pool or an unassigned record) |
+| 3 | PASS | guard tick `corrected=6`, then `corrected=0`; `verify` exit 0 with 3/1/1/1/3/1 |
+| 4 | PASS | `evidence_index` for A and B (`1ed199d5`, `404f210e`): both runs `STARTED`, one `evidence_index_work` claimed, the other pending until the first ended (97 samples) |
+| 5 | PASS | `engagement_workflow --force` for A and B (`cbf2b330`, `651ce7d2`): at most 3 `cpu` claims across both runs, both runs holding `cpu` together, two `cpu` steps inside one run. `qualify_workflow.py` PASS on this stack (report sha256 `11f84caa61afb00f67695dda6f752b103a37e71eedb22bdda5d86e99e69f3a15`) |
+| 6 | PASS | a second job for A (`997c86aa`) stayed `QUEUED` for the whole of A's run (`e18e0db7`) and started when it ended |
+| 7 | PASS, with a finding | B (`679bd3ca`) terminated while waiting for `memory`: `CANCELED`, its pending claim gone, the next step proceeded. A workflow-owning run (`80c042cd`) terminated while HOLDING a `cpu` slot: `CANCELED`, `reconcile_workflow_cancellation` marked the workflow `FAILED` within 10 s -- **but the slot stayed claimed for about 150 s**, until the daemon's free-slots pass. See below |
+| 8 | **NOT RUN** | `kill -9` of the run worker and its step child inside the shared code-server was refused by the coordinator session's permission system. The pids were identified; nothing was killed. Owed by the owner |
+| 9 | PASS | `restart daemon webserver` with one `memory` step running (`6f869abb`) and one waiting (`bfc21b69`): limits unchanged, the running step finished, the waiter got the slot, nothing leaked. `restart code-server` when idle: `verify` exit 0 |
+| 10 | PASS | `docker` set to 5: `verify` reported the drift, the guard corrected it within 40 s. Pool `gpu` added: the guard tick was a visible `FAILURE` and `verify` named it; deleted: next tick clean |
+| 11 | PASS | `runs/20260921T081929Z-ce1886/data/qualification/resource-pools-20260921T084124Z/resource-pool-state.json`, `file_sha256` `813b4ae44379775df506511d8c52479f74106606992aa0e701ac6bf55041b27a`: result `PASS`, `pooled_steps_recorded` true, 14 runs, largest overlap `cpu` 3 of 3 and `memory` 1 of 1; `verify-state` on the host copy from the same commit: no problems |
+
+Only `cpu` and `memory` have pooled ops that a bounded run reaches on this host; `docker`, `network`,
+`persona_llm` and `dynamic_analysis` were verified as limits, not under contention.
+
+**Finding (step 7): a terminated run that holds a slot does not free it at once.** In the test
+suite a `SIGINT`ed run worker frees its slot. On the live service `terminateRun` ended the run
+`CANCELED` with its `cpu` slot still recorded as claimed; it was returned about 150 seconds later
+by `run_monitoring.free_slots_after_run_end_seconds` (120 s plus the monitoring interval). That is
+the same path as a lost run worker. Consequence: on a limit-1 pool, cancelling the run that holds
+the slot can delay the next step by up to about two and a half minutes. It is not a deadlock, and
+it is why `free_slots_after_run_end_seconds` must stay set. Until step 8 is run, this is also the
+only live evidence that the free-slots pass returns a leaked slot.
+
 ## Tests
 
 `tests/test_resource_pools.py` is pure and runs anywhere; it includes the `verify_state_file`
@@ -281,7 +315,8 @@ needs Dagster, skips only when Dagster is not importable, and runs in the code-s
 temporary SQLite instance built from the repository's own `dagster.yaml` sections. It proves: each
 pool admits its limit and not one more with limit+1 contenders; a saturated pool does not delay
 another pool; the executor cap still binds below a pool limit; an unapplied pool gets the floor;
-two engagements take turns on one pool; failed, killed and canceled work releases its slot; a
+two engagements take turns on one pool; failed, killed and canceled work releases its slot (on the live service a terminated run's slot
+came back only through the free-slots pass: see the 2026-09-21 record); a
 killed run worker leaks its slot until run monitoring frees it; limits survive an instance
 re-open; drift is reported and corrected; silent or malformed op states are errors.
 
