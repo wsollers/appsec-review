@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import dataclasses
 import inspect
 import json
 import os
@@ -106,7 +107,10 @@ class SchemaTests(unittest.TestCase):
             theirs = self.load(adapter)
             mine = group[template]
             self.assertEqual(tuple(mine["properties"]), fields)
-            for field in fields:
+            copied = ps.TOOL_COPIED_FIELDS if template == "tool_request" else fields
+            self.assertEqual(set(fields) - set(copied),
+                             {"target_mounts"} if template == "tool_request" else set())
+            for field in copied:
                 self.assertEqual(mine["properties"][field], theirs["properties"][field], field)
             assigned = set(theirs["properties"]) - set(fields)
             self.assertEqual(assigned - {"permission"}, {
@@ -114,6 +118,15 @@ class SchemaTests(unittest.TestCase):
                 *(("output_root", "permission_fingerprint_sha256") if template == "persona_request"
                   else ("scratch_path",))})
             self.assertEqual(group["permission"], theirs["properties"]["permission"])
+        # The one property that is NOT a copy: a portable mount. It keeps the adapter's own
+        # container_path rule, names a root the way a persona input does, and has no host path.
+        mount = group["tool_request"]["properties"]["target_mounts"]["items"]["properties"]
+        theirs = self.load(ce.REQUEST_SCHEMA)["properties"]["target_mounts"]["items"]["properties"]
+        persona_input = group["persona_request"]["properties"]["readable_inputs"]["items"]["properties"]
+        self.assertEqual(sorted(mount), ["container_path", "mount_root_id", "relative_path"])
+        self.assertEqual(mount["container_path"], theirs["container_path"])
+        self.assertEqual(mount["mount_root_id"], persona_input["root"])
+        self.assertEqual(mount["relative_path"], {**persona_input["path"], "type": ["string", "null"]})
 
     def test_closed_vocabularies_are_the_modules_own(self):
         spec, expansion = self.load(ps.SPEC_SCHEMA), self.load(ps.EXPANSION_SCHEMA)
@@ -723,16 +736,39 @@ class PersonaScopeTests(Case):
 
 
 class ToolScopeTests(Case):
-    def mounted(self, host_path: str) -> dict:
+    def mounted(self, relative_path, **mount_over) -> dict:
         group = self.ws.tool_group()
-        group["tool_request"]["target_mounts"][0]["host_path"] = host_path
+        group["tool_request"]["target_mounts"] = [self.ws.mount(relative_path, **mount_over)]
         return self.ws.spec([group])
 
-    def test_relative_dotted_and_missing_mounts_are_refused(self):
-        for label, path in (("relative", "targets/repo"), ("parent", str(self.ws.targets / "x" / ".." / "repo")),
-                            ("dot", str(self.ws.targets) + "/./repo"), ("trailing slash", str(self.ws.target) + "/"),
-                            ("missing", str(self.ws.targets / "absent")), ("marker", "/" + MARKER),
-                            ("a file", str(self.ws.target / "main.c"))):
+    def test_a_mount_is_a_declared_root_id_and_one_relative_spelling(self):
+        for label, path in (("absolute", str(self.ws.target)), ("absolute marker", "/" + MARKER),
+                            ("parent", "x/../repo"), ("leading parent", "../targets/repo"), ("dot", "./repo"),
+                            ("inner dot", "repo/./src"), ("trailing slash", "repo/"), ("empty segment", "repo//src"),
+                            ("empty", ""), ("backslash", "repo\\src"), ("drive", "C:/repo"), ("number", 7)):
+            with self.subTest(case=label):
+                self.refused(self.mounted(path), "pool specification rejected"
+                             if not isinstance(path, str) or not path or "\\" in path or ":" in path
+                             else "relative_path is not one normalized relative spelling")
+        for label, root in (("undeclared", "elsewhere"), ("marker", MARKER)):
+            with self.subTest(case=label):
+                self.refused(self.mounted("repo", mount_root_id=root), "mount_root_id is not a declared mount root")
+        self.refused(self.mounted("repo", mount_root_id="Not An Id"), "fails its closed schema")
+        self.refused(self.mounted("repo"), "mount_root_id is not a declared mount root", mount_roots={})
+
+    def test_the_resolved_mount_is_the_adapters_absolute_host_path(self):
+        (self.ws.target / "src").mkdir()
+        for relative, host in ((None, self.ws.targets), ("repo", self.ws.target), ("repo/src", self.ws.target / "src")):
+            with self.subTest(relative=relative):
+                plan = ps.plan_expansion(self.mounted(relative), context=self.ws.context())
+                self.assertEqual(ps.thaw(plan.requests[0].request["target_mounts"]),
+                                 [{"host_path": str(host), "container_path": "/workspace"}])
+                self.assertEqual(ps.thaw(plan.specification["worker_groups"][0]["tool_request"]["target_mounts"][0]),
+                                 {"mount_root_id": support.MOUNT_ROOT, "relative_path": relative,
+                                  "container_path": "/workspace"})
+
+    def test_missing_and_non_directory_mounts_are_refused(self):
+        for label, path in (("missing", "absent"), ("a file", "repo/main.c"), ("marker", MARKER)):
             with self.subTest(case=label):
                 self.refused(self.mounted(path), "refuses this scope")
 
@@ -740,30 +776,40 @@ class ToolScopeTests(Case):
         if not SYMLINKS:
             self.skipTest("this host cannot create symbolic links")
         (self.ws.targets / "alias").symlink_to(self.ws.target)
-        self.refused(self.mounted(str(self.ws.targets / "alias")), "refuses this scope")
+        self.refused(self.mounted("alias"), "refuses this scope")
+        (self.ws.base / "outside").mkdir()
+        (self.ws.targets / "escape").symlink_to(self.ws.base / "outside")
+        self.refused(self.mounted("escape"), "refuses this scope")
         (self.ws.base / "via").symlink_to(self.ws.targets)
-        self.refused(self.mounted(str(self.ws.base / "via" / "repo")), "refuses this scope")
+        with self.assertRaises(ps.PoolSpecError) as caught:       # a mount root has one real spelling
+            ps.plan_expansion(self.mounted("repo"), context=self.ws.context(
+                mount_roots={support.MOUNT_ROOT: self.ws.base / "via"}))
+        self.assertIn("context.mount_roots", str(caught.exception))
 
-    def test_a_mount_outside_every_declared_mount_root_is_refused(self):
+    def test_a_resolved_mount_outside_its_declared_root_is_refused(self):
+        # Defence in depth: the path is built from the root and validated segments, so this rule can
+        # only fire if resolution is ever bypassed. It must still be there.
         outside = self.ws.base / "undeclared"
         outside.mkdir()
-        self.refused(self.mounted(str(outside)), "target_mounts[0] is outside every declared mount root")
-        self.refused(self.mounted(str(self.ws.target)), "outside every declared mount root", mount_roots=())
-        ps.plan_expansion(self.mounted(str(self.ws.target)), context=self.ws.context(mount_roots=(self.ws.target,)))
+        with mock.patch.object(ps, "resolve_target_mounts", return_value=[
+                {"host_path": str(outside), "container_path": "/workspace"}]):
+            self.refused(self.mounted("repo"), "target_mounts[0] is outside every declared mount root")
 
     def test_nothing_that_is_contains_or_lies_beneath_the_pool_parent_is_mountable(self):
         first = self.expand(self.ws.mixed(attempt_id="attempt-first"))
         sibling = self.ws.instance_root(first, 3)
         (sibling / "scratch").mkdir()
-        everything = (self.ws.base,)          # even when every directory is a declared mount root
+        everything = {"everything": self.ws.base}          # even when every directory is declared mountable
         for label, path in (("the pool parent", self.ws.pool_parent), ("an ancestor of it", self.ws.data),
                             ("a sibling pool root", self.ws.root(first)),
                             ("a sibling pool's instances directory", self.ws.root(first) / ps.INSTANCES_DIR),
                             ("a sibling pool's requests directory", self.ws.root(first) / ps.REQUESTS_DIR),
-                            ("another instance's root", sibling), ("another instance's scratch", sibling / "scratch")):
+                            ("another instance's root", sibling), ("another instance's scratch", sibling / "scratch"),
+                            ("the declared root itself, which contains it", None)):
             with self.subTest(case=label):
-                self.refused(self.mounted(str(path)), "applied at the pool parent, refuses this scope",
-                             mount_roots=everything)
+                relative = None if path is None else path.relative_to(self.ws.base).as_posix()
+                self.refused(self.mounted(relative, mount_root_id="everything"),
+                             "applied at the pool parent, refuses this scope", mount_roots=everything)
 
     def test_the_adapters_other_refusals_reach_the_specification(self):
         shell = self.ws.tool_group()
@@ -850,27 +896,31 @@ class CrossInstanceAccessTests(Case):
         """Producible state: the real B14 adapter (fixture invoker) and the real B13 adapter
         (scripted docker) accept the expanded requests as they are, each in its private root."""
         import test_container_execution as b13_tests
-        for index, item in enumerate(self.plan.requests):
-            request, root = ps.thaw(item.request), self.roots[index]
+        import threading
+        # The context is the ONE carrier: both runtimes and both verifiers' host facts come from
+        # it, and from nothing else (what C02 does).
+        launch = {"clock": lambda: b14.NOW, "cancel": threading.Event()}
+        personas = self.context.persona_runtime(invoker=pi.FixtureInvoker(), stop_grace_seconds=2, **launch)
+        containers = self.context.container_runtime(**launch)
+        root_of = self.ws.root(self.plan)
+        for instance in self.plan.instances:
+            index, item = instance.index, instance.request
+            request, root = ps.thaw(item.request), instance.attempt_root_path(root_of)
+            self.assertEqual((root, instance.ids), (self.roots[index], self.ids(index)))
             if item.worker_kind == ps.PERSONA:
-                runtime = self.ws.persona.runtime(readable_roots=dict(self.context.readable_roots))
-                result = pi.run_invocation(runtime, **self.ids(index), attempt_root=root, request=request)
+                result = pi.run_invocation(personas, **instance.ids, attempt_root=root, request=request)
                 self.assertEqual((result["execution_status"], result["cause"]), ("OK", None))
-                fields = self.ws.persona.runtime_fields(readable_roots=dict(self.context.readable_roots))
                 self.assertEqual(pi.verify_invocation_result(
-                    root, **self.ids(index), request=request,
-                    **{name: fields[name] for name in ("registry_dir", "prompt_root", "readable_roots",
-                                                       "allowed_models", "source_snapshot_sha256",
-                                                       "registry_ceiling")}), [])
+                    root, **instance.ids, request=request, **self.context.persona_verification_arguments()), [])
                 self.assertEqual((root / "logs" / "persona" / pi.REQUEST_FILE).read_bytes(), item.data)
             else:
                 first, second = b13_tests.ScriptedDocker().patches()
                 with first, second:
-                    result = ce.run_container(b13.runtime(), **self.ids(index), attempt_root=root, request=request)
+                    result = ce.run_container(containers, **instance.ids, attempt_root=root, request=request)
                 self.assertEqual((result["execution_status"], result["container_name"]),
-                                 ("OK", ce.container_name(**self.ids(index))))
+                                 ("OK", ce.container_name(**instance.ids)))
                 self.assertEqual(ce.verify_container_result(
-                    root, **self.ids(index), request=request, images_dir=ce.IMAGES_DIR, **b13.host_facts()), [])
+                    root, **instance.ids, request=request, **self.context.container_verification_arguments()), [])
                 self.assertEqual((root / "logs" / "container" / ce.REQUEST_FILE).read_bytes(), item.data)
             self.assertEqual(sorted(p.name for p in root.iterdir()),
                              sorted({path.split("/")[0] for path in self.entries[index]["writable_paths"]}))
@@ -1037,7 +1087,7 @@ class VerifierTests(Case):
     def test_the_expander_and_the_verifier_share_one_rule(self):
         source = inspect.getsource(ps)
         self.assertEqual(source.count("plan_expansion(spec, context=context)"), 1)
-        self.assertEqual(source.count("plan_expansion(expected_spec, context=context)"), 2)
+        self.assertEqual(source.count("plan_expansion(expected_spec, context=context)"), 1)
         with mock.patch.object(ps, "plan_expansion", side_effect=ps.PoolSpecError("refused")) as rule:
             with self.assertRaises(ps.PoolSpecError):
                 ps.expand_pool(self.spec, context=self.ws.context())
@@ -1077,7 +1127,7 @@ class VerifierTests(Case):
         first, second = self.root / entries[0]["attempt_root"], self.root / entries[1]["attempt_root"]
         first.rmdir()
         first.symlink_to(second, target_is_directory=True)
-        self.assertEqual(self.errors(), ["an instance root is a link, is not a directory, or two roots are one directory"])
+        self.assertEqual(self.errors(), ["the private root of instances[0] is a link or is not a directory"])
         first.unlink()
         first.mkdir()
         self.assertEqual(self.errors(), [])
@@ -1161,7 +1211,9 @@ class VerifierTests(Case):
             "registry_dir": [str(pi.REGISTRY_DIR)], "prompt_root": [None], "images_dir": [str(ce.IMAGES_DIR)],
             "readable_roots": [[], {"run-data": str(self.ws.data)}], "allowed_models": [[b14.MODEL]],
             "invoker_id": ["Not An Id", 7], "host_flavor": ["plan9"], "docker_host": [7],
-            "mount_roots": [[self.ws.targets], (self.ws.base / "absent",), (str(self.ws.targets),)],
+            "docker_executable": [str(b13.runtime().docker_executable), Path("docker")], "container_user": [1000],
+            "mount_roots": [(self.ws.targets,), {"targets": self.ws.base / "absent"}, {"targets": str(self.ws.targets)},
+                            {"Not An Id": self.ws.targets}, {"targets": self.ws.targets / "x" / ".."}],
             "source_snapshot_sha256": ["sha256:short", None], "registry_ceiling": ["none", ()],
         }
         self.assertEqual(sorted(hostile), sorted(self.ws.context_fields()))
@@ -1320,6 +1372,355 @@ class HostileTextTests(Case):
             self.assertNotIn("max_instances", str(caught.exception))
 
 
+# ---- review of PR 34: what C01 hands to its consumers ----------------------------------------------
+
+class ContextCarrierTests(Case):
+    """[P2-1] The context is the single carrier of the adapters' host facts."""
+
+    def test_the_context_covers_every_non_launch_field_of_both_runtimes(self):
+        mine = {field.name for field in dataclasses.fields(ps.PoolContext)}
+        for runtime, launch_only in ((ce.ContainerRuntime, ps.CONTAINER_LAUNCH_ONLY_FIELDS),
+                                     (pi.PersonaRuntime, ps.PERSONA_LAUNCH_ONLY_FIELDS)):
+            theirs = {field.name for field in dataclasses.fields(runtime)}
+            with self.subTest(runtime=runtime.__name__):
+                self.assertLessEqual(set(launch_only), theirs, "an exclusion names a field that no longer exists")
+                self.assertEqual(theirs - set(launch_only) - mine, set(),
+                                 "an adapter runtime has a host fact the PoolContext does not carry")
+        # The exclusions are closed and justified in the module: objects of one launch, the invoker
+        # (carried as its fact, invoker_id) and the launcher's stop policy. Nothing else.
+        self.assertEqual(ps.CONTAINER_LAUNCH_ONLY_FIELDS, ("cancel", "clock"))
+        self.assertEqual(ps.PERSONA_LAUNCH_ONLY_FIELDS, ("cancel", "clock", "invoker", "stop_grace_seconds"))
+        self.assertIn("invoker_id", mine)
+        self.assertLessEqual({"docker_executable", "container_user"}, mine)          # the reviewer's two
+
+    def test_the_verification_arguments_are_exactly_what_the_adapters_verifiers_require(self):
+        context = self.ws.context()
+        instance = set(ps.VERIFIER_INSTANCE_ARGUMENTS)
+        for functions, arguments in (
+                ((ce.verify_container_result, ce.load_verified_result), context.container_verification_arguments()),
+                ((pi.verify_invocation_result, pi.load_verified_result), context.persona_verification_arguments())):
+            for function in functions:
+                with self.subTest(function=function.__module__ + "." + function.__name__):
+                    self.assertEqual(set(inspect.signature(function).parameters) - instance, set(arguments))
+        self.assertLess(set(context.container_verification_arguments()),
+                        set(inspect.signature(ce.to_worker_envelope).parameters))
+        self.assertLess(set(context.persona_verification_arguments()),
+                        set(inspect.signature(pi.to_worker_envelope).parameters))
+        for name, value in {**context.container_verification_arguments(),
+                            **context.persona_verification_arguments()}.items():
+            self.assertIs(value, getattr(context, name))
+
+    def test_the_runtimes_are_the_contexts_facts_plus_the_launch_only_objects(self):
+        import threading
+        context, cancel = self.ws.context(), threading.Event()
+        clock = lambda: b14.NOW                                                      # noqa: E731
+        invoker = pi.FixtureInvoker()
+        tool = context.container_runtime(clock=clock, cancel=cancel)
+        persona = context.persona_runtime(invoker=invoker, clock=clock, cancel=cancel, stop_grace_seconds=2)
+        self.assertIsInstance(tool, ce.ContainerRuntime)
+        self.assertIsInstance(persona, pi.PersonaRuntime)
+        for runtime, given in ((tool, {"clock": clock, "cancel": cancel}),
+                               (persona, {"clock": clock, "cancel": cancel, "invoker": invoker,
+                                          "stop_grace_seconds": 2})):
+            for field in dataclasses.fields(runtime):
+                expected = given[field.name] if field.name in given else getattr(context, field.name)
+                self.assertIs(getattr(runtime, field.name), expected, field.name)
+
+        class Other:
+            invoker_id = "some-other-invoker"
+            invoke = staticmethod(lambda *a, **k: None)
+        for label, build in (
+                ("another invoker", lambda: context.persona_runtime(
+                    invoker=Other(), clock=clock, cancel=cancel, stop_grace_seconds=2)),
+                ("no invoker id", lambda: self.ws.context(invoker_id=None).persona_runtime(
+                    invoker=invoker, clock=clock, cancel=cancel, stop_grace_seconds=2)),
+                ("the adapter's stop bound", lambda: context.persona_runtime(
+                    invoker=invoker, clock=clock, cancel=cancel, stop_grace_seconds=-1)),
+                ("a root container user", lambda: self.ws.context(container_user="0:0").container_runtime(
+                    clock=clock, cancel=cancel)),
+                ("a docker executable that is not a file", lambda: self.ws.context(
+                    docker_executable=self.ws.base / "absent").container_runtime(clock=clock, cancel=cancel)),
+                ("no docker executable", lambda: self.ws.context(docker_executable=None).container_runtime(
+                    clock=clock, cancel=cancel)),
+                ("no container user", lambda: self.ws.context(
+                    container_user=None).container_verification_arguments())):
+            with self.subTest(case=label), self.assertRaises(ps.PoolSpecError) as caught:
+                build()
+            self.assertNotIn("some-other-invoker", str(caught.exception))
+        for method in (context.container_runtime, context.persona_runtime):
+            with self.assertRaises(TypeError):                   # no optional safety input
+                method()
+
+    def test_a_pinned_container_group_needs_the_container_facts_and_a_persona_pool_does_not(self):
+        for name in ("docker_executable", "container_user"):
+            with self.subTest(field=name):
+                self.refused(self.ws.spec([self.ws.tool_group()]), "are required for a pinned-container instance",
+                             **{name: None})
+                self.refused(self.ws.spec([self.ws.tool_group(count=0)]),
+                             "are required for a pinned-container instance", **{name: None})
+        personas = self.ws.spec([self.ws.persona_group("reviewers", 2)])
+        plan = self.expand(personas, docker_executable=None, container_user=None, mount_roots={})
+        self.assertEqual(self.verify(plan, personas, docker_executable=None, container_user=None, mount_roots={}), [])
+
+
+class ConsumerApiTests(Case):
+    """[P2-2] What the next consumer (C02) needs is public, paired and coded."""
+
+    def setUp(self):
+        super().setUp()
+        self.spec = self.ws.mixed(2, 2)
+        self.plan = self.expand(self.spec)
+        self.root = self.ws.root(self.plan)
+
+    def check(self) -> ps.ExpansionCheck:
+        result = ps.check_expansion(self.root, expected_spec=self.spec, context=self.ws.context())
+        self.assertNotIn(MARKER, json.dumps(result.messages))
+        self.assertEqual(result.messages, ps.verify_expansion(self.root, expected_spec=self.spec,
+                                                              context=self.ws.context()))
+        self.assertLessEqual({finding.code for finding in result.findings}, set(ps.FINDING_CODES))
+        return result
+
+    def codes(self) -> list:
+        return [(finding.code, finding.instance_index) for finding in self.check().findings]
+
+    def test_the_path_and_identity_helpers_are_public_and_documented(self):
+        for public, private in (("real_directory", "_real_directory"), ("directory_listing", "_listing"),
+                                ("path_identity", "_identity"), ("identity_chain", "_chain"),
+                                ("read_regular_file", "_read_regular")):
+            with self.subTest(helper=public):
+                self.assertIs(getattr(ps, public), getattr(ps, private))
+                self.assertTrue(getattr(ps, public).__doc__)
+        self.assertTrue(ps.real_directory(self.root))
+        self.assertFalse(ps.real_directory(self.root / ps.EXPANSION_FILE))
+        self.assertFalse(ps.real_directory(str(self.root)))
+        self.assertEqual(ps.directory_listing(self.root), sorted(ps.POOL_ROOT_ENTRIES))
+        self.assertIsNone(ps.directory_listing(self.root / "absent"))
+        self.assertIn(ps.path_identity(self.ws.pool_parent), ps.identity_chain(self.root))
+        self.assertNotIn(ps.path_identity(self.root), ps.identity_chain(self.ws.pool_parent))
+        self.assertEqual(ps.read_regular_file(self.root, self.root / ps.EXPANSION_FILE), self.plan.manifest_bytes)
+        self.assertIsNone(ps.read_regular_file(self.root, self.ws.pool_parent / "elsewhere"))
+        if SYMLINKS:
+            link = self.ws.base / "link"
+            link.symlink_to(self.root, target_is_directory=True)
+            self.assertFalse(ps.real_directory(link))
+            self.assertNotEqual(ps.path_identity(link), ps.path_identity(self.root))
+
+    def test_a_plan_pairs_each_instance_with_its_entry_its_request_and_its_root(self):
+        self.assertEqual(len(self.plan.instances), 4)
+        self.assertEqual(self.plan.pool_root(self.ws.context()), self.root)
+        for index, instance in enumerate(self.plan.instances):
+            self.assertIsInstance(instance, ps.PlannedInstance)
+            self.assertEqual(instance.index, index)
+            self.assertIs(instance.entry, self.plan.manifest["instances"][index])
+            self.assertIs(instance.request, self.plan.requests[index])
+            self.assertEqual(instance.instance_id, instance.request.instance_id)
+            self.assertEqual(instance.worker_kind, instance.request.worker_kind)
+            self.assertEqual(instance.ids, {"run_id": support.RUN, "job_id": support.JOB,
+                                            "attempt_id": instance.instance_id})
+            self.assertEqual(instance.attempt_root_path(self.root), self.root / ps.INSTANCES_DIR / instance.instance_id)
+            self.assertTrue(ps.real_directory(instance.attempt_root_path(self.root)))
+            self.assertEqual(instance.request_path(self.root).read_bytes(), instance.request.data)
+            self.assertIs(self.plan.instance(instance.instance_id), instance)
+            with self.assertRaises(Exception):                   # frozen
+                instance.index = 9
+        with self.assertRaises(KeyError) as caught:
+            self.plan.instance(MARKER)
+        self.assertNotIn(MARKER, str(caught.exception))
+
+    def test_findings_have_stable_codes_and_instance_root_damage_is_told_apart(self):
+        """C02's exact need: tolerate ONLY an expected root that is missing, linked or replaced;
+        still see an unexpected extra root and an ``instances`` that is not a real directory."""
+        self.assertEqual(len(set(ps.FINDING_CODES)), len(ps.FINDING_CODES))
+        self.assertEqual(ps.INSTANCE_ROOT_DAMAGE_CODES,
+                         {ps.CODE_INSTANCE_ROOT_MISSING, ps.CODE_INSTANCE_ROOT_NOT_PRIVATE})
+        self.assertEqual(self.codes(), [])
+        roots = [instance.attempt_root_path(self.root) for instance in self.plan.instances]
+        roots[1].rmdir()
+        self.assertEqual(self.codes(), [(ps.CODE_INSTANCE_ROOT_MISSING, 1)])
+        roots[2].rmdir()
+        roots[2].write_bytes(b"")
+        self.assertEqual(self.codes(), [(ps.CODE_INSTANCE_ROOT_MISSING, 1), (ps.CODE_INSTANCE_ROOT_NOT_PRIVATE, 2)])
+        if SYMLINKS:
+            roots[3].rmdir()
+            roots[3].symlink_to(roots[0], target_is_directory=True)
+            self.assertEqual(self.codes(), [(ps.CODE_INSTANCE_ROOT_MISSING, 1), (ps.CODE_INSTANCE_ROOT_NOT_PRIVATE, 2),
+                                            (ps.CODE_INSTANCE_ROOT_NOT_PRIVATE, 3)])
+        tolerated = [f for f in self.check().findings if f.code not in ps.INSTANCE_ROOT_DAMAGE_CODES]
+        self.assertEqual(tolerated, [])
+        (self.root / ps.INSTANCES_DIR / MARKER).mkdir()              # an unexpected extra root is NOT tolerable
+        remaining = [f.code for f in self.check().findings if f.code not in ps.INSTANCE_ROOT_DAMAGE_CODES]
+        self.assertEqual(remaining, [ps.CODE_INSTANCE_ROOT_UNEXPECTED])
+        (self.root / ps.INSTANCES_DIR / MARKER).rmdir()
+        moved = self.ws.base / "moved-instances"
+        (self.root / ps.INSTANCES_DIR).rename(moved)
+        for label, replace in (("absent", None), ("a file", lambda path: path.write_bytes(b"")),
+                               *([("a link", lambda path: path.symlink_to(moved, target_is_directory=True))]
+                                 if SYMLINKS else [])):
+            with self.subTest(instances=label):
+                if replace:
+                    replace(self.root / ps.INSTANCES_DIR)
+                found = [f.code for f in ps.check_expansion(self.root, expected_spec=self.spec,
+                                                            context=self.ws.context()).findings]
+                self.assertTrue(found)
+                self.assertFalse(set(found) & ps.INSTANCE_ROOT_DAMAGE_CODES)
+                self.assertIn(found[-1], (ps.CODE_INSTANCES_NOT_DIRECTORY, ps.CODE_POOL_ROOT_LISTING))
+                if replace:
+                    (self.root / ps.INSTANCES_DIR).unlink()
+
+    def test_every_other_damage_has_its_own_code(self):
+        first = self.plan.instances[0]
+        cases = (
+            (ps.CODE_POOL_ROOT_LISTING, lambda: (self.root / "notes.txt").write_bytes(b"x"),
+             lambda: (self.root / "notes.txt").unlink()),
+            (ps.CODE_MANIFEST_MISMATCH, lambda: (self.root / ps.EXPANSION_FILE).write_bytes(b"{}"),
+             lambda: (self.root / ps.EXPANSION_FILE).write_bytes(self.plan.manifest_bytes)),
+            (ps.CODE_SPECIFICATION_FILE_MISMATCH, lambda: (self.root / ps.SPEC_FILE).write_bytes(b"{}"),
+             lambda: (self.root / ps.SPEC_FILE).write_bytes(self.plan.specification_bytes)),
+            (ps.CODE_REQUEST_FILE_MISMATCH, lambda: first.request_path(self.root).write_bytes(b"{}"),
+             lambda: first.request_path(self.root).write_bytes(first.request.data)),
+            (ps.CODE_REQUESTS_LISTING, lambda: (self.root / ps.REQUESTS_DIR / "extra.json").write_bytes(b"{}"),
+             lambda: (self.root / ps.REQUESTS_DIR / "extra.json").unlink()))
+        for code, damage, repair in cases:
+            with self.subTest(code=code):
+                damage()
+                self.assertEqual([found for found, _ in self.codes()], [code] * len(self.codes()))
+                self.assertTrue(self.codes())
+                repair()
+                self.assertEqual(self.codes(), [])
+        other = self.ws.mixed(1, 1, attempt_id="attempt-other")
+        self.assertEqual([f.code for f in ps.check_expansion(
+            self.root, expected_spec=other, context=self.ws.context()).findings], [ps.CODE_POOL_ROOT_NOT_DERIVED])
+        refused = ps.check_expansion(self.root, expected_spec={**self.spec, "wait_all": False},
+                                     context=self.ws.context())
+        self.assertEqual(([f.code for f in refused.findings], refused.plan),
+                         ([ps.CODE_SPECIFICATION_NOT_EXPANDABLE], None))
+
+    def test_the_plan_returned_is_the_plan_that_was_verified_and_is_derived_once(self):
+        real, made = ps.plan_expansion, []
+
+        def counting(spec, *, context):
+            made.append(real(spec, context=context))
+            return made[-1]
+        with mock.patch.object(ps, "plan_expansion", side_effect=counting):
+            loaded = ps.load_verified_expansion(self.root, expected_spec=self.spec, context=self.ws.context())
+            self.assertEqual(len(made), 1)
+            self.assertIs(loaded, made[0])
+            checked = ps.check_expansion(self.root, expected_spec=self.spec, context=self.ws.context())
+            self.assertEqual(len(made), 2)
+            self.assertIs(checked.plan, made[1])
+            second = self.ws.mixed(1, 1, attempt_id="attempt-second")
+            expanded = ps.expand_pool(second, context=self.ws.context())
+            self.assertEqual(len(made), 3, "expand_pool derived the specification more than once")
+            self.assertIs(expanded, made[2])
+        self.plan.instances[0].attempt_root_path(self.root).rmdir()
+        with self.assertRaises(ps.PoolSpecError):
+            ps.load_verified_expansion(self.root, expected_spec=self.spec, context=self.ws.context())
+
+
+class ExpiredGrantTests(Case):
+    """[Q3] Behaviour kept and documented: expansion has no clock; the adapter's gate has."""
+
+    def test_an_expired_grant_expands_and_every_instance_is_then_denied_at_launch(self):
+        import test_container_execution as b13_tests
+        import threading
+        spec = self.ws.spec([self.ws.persona_group("reviewers", 1, capabilities=NETWORK),
+                             self.ws.tool_group("scanners", 1, capabilities=NETWORK)])
+        expires = spec["worker_groups"][0]["permission"]["grants"][0]["expires_at"]
+        after = "2026-09-22T00:00:00Z"
+        self.assertLess(expires, after)
+        plan = self.expand(spec)
+        self.assertEqual(self.verify(plan, spec), [])
+        context, root = self.ws.context(), self.ws.root(plan)
+        launch = {"clock": lambda: after, "cancel": threading.Event()}
+        for instance in plan.instances:
+            attempt, request = instance.attempt_root_path(root), ps.thaw(instance.request.request)
+            if instance.worker_kind == ps.PERSONA:
+                runtime = context.persona_runtime(invoker=pi.FixtureInvoker(), stop_grace_seconds=2, **launch)
+                result = pi.run_invocation(runtime, **instance.ids, attempt_root=attempt, request=request)
+                verified = pi.load_verified_result(attempt, **instance.ids, request=request,
+                                                   **context.persona_verification_arguments())
+            else:
+                first, second = b13_tests.ScriptedDocker().patches()
+                with first, second:
+                    result = ce.run_container(context.container_runtime(**launch), **instance.ids,
+                                              attempt_root=attempt, request=request)
+                verified = ce.load_verified_result(attempt, **instance.ids, request=request,
+                                                   **context.container_verification_arguments())
+            self.assertEqual((result["execution_status"], result["cause"]), ("BLOCKED", "PERMISSION_DENIED"))
+            self.assertEqual(verified["cause"], "PERMISSION_DENIED")
+        self.assertEqual(self.verify(plan, spec), [])
+
+
+class ZeroCountTests(Case):
+    """[Q4] A group means the same thing at count 0 and count 1."""
+
+    def test_a_zero_count_template_is_validated_by_its_adapter(self):
+        def persona(edit):
+            group = self.ws.persona_group("reviewers", 0)
+            edit(group["persona_request"])
+            return self.ws.spec([group])
+
+        def tool(edit):
+            group = self.ws.tool_group("scanners", 0)
+            edit(group["tool_request"])
+            return self.ws.spec([group])
+        everything = {"everything": self.ws.base}
+        parent = self.ws.pool_parent.relative_to(self.ws.base).as_posix()
+        cases = (
+            ("an unallowed model", persona(lambda t: t["model"].update(model_id="not-an-allowed-model")),
+             "the persona invocation adapter", {}),
+            ("the wrong invoker", persona(lambda t: t.update(invoker_id="some-other-invoker")),
+             "invoker_id is not the invoker this context will launch", {}),
+            ("an unregistered image", tool(lambda t: t["image"].update(image_id="unregistered-image")),
+             "worker_groups[0] template", {}),
+            ("a mount of the pool parent", tool(lambda t: t.update(target_mounts=[
+                self.ws.mount(parent, mount_root_id="everything")])),
+             "applied at the pool parent, refuses this scope", {"mount_roots": everything}),
+            ("an undeclared mount root", tool(lambda t: t.update(target_mounts=[
+                self.ws.mount("repo", mount_root_id="elsewhere")])), "is not a declared mount root", {}),
+        )
+        for label, spec, fragment, context_over in cases:
+            with self.subTest(case=label):
+                self.assertEqual(sum(group["count"] for group in spec["worker_groups"]), 0)
+                message = self.refused(spec, fragment, **context_over)
+                for value in ("not-an-allowed-model", "some-other-invoker", "unregistered-image"):
+                    self.assertNotIn(value, message)
+        # The reviewer's exact specification: all four at once, in one EMPTY pool.
+        group = self.ws.persona_group("reviewers", 0)
+        group["persona_request"]["model"]["model_id"] = "not-an-allowed-model"
+        group["persona_request"]["invoker_id"] = "some-other-invoker"
+        scanners = self.ws.tool_group("scanners", 0)
+        scanners["tool_request"]["image"]["image_id"] = "unregistered-image"
+        scanners["tool_request"]["target_mounts"] = [self.ws.mount(parent, mount_root_id="everything")]
+        self.refused(self.ws.spec([group, scanners]), "worker_groups[0] template", mount_roots=everything)
+
+    def test_a_group_identity_is_the_same_record_at_count_zero_and_count_one(self):
+        for label, build in (("persona", self.ws.persona_group), ("tool", self.ws.tool_group)):
+            with self.subTest(kind=label):
+                identities = []
+                for count in (0, 1, 3):
+                    plan = ps.plan_expansion(self.ws.spec([build("workers", count)]), context=self.ws.context())
+                    self.assertEqual(len(plan.instances), count)
+                    self.assertEqual(plan.manifest["groups"][0]["instance_ids"],
+                                     tuple(item.instance_id for item in plan.instances))
+                    identities.append(plan.manifest["groups"][0]["identity_sha256"])
+                self.assertEqual(len(set(identities)), 1)
+        other = self.ws.persona_group("workers", 0)
+        other["persona_request"]["model"] = deepcopy(b14.OTHER_MODEL)
+        changed = ps.plan_expansion(self.ws.spec([other]), context=self.ws.context())
+        plain = ps.plan_expansion(self.ws.spec([self.ws.persona_group("workers", 0)]), context=self.ws.context())
+        self.assertNotEqual(changed.manifest["groups"][0]["identity_sha256"],
+                            plain.manifest["groups"][0]["identity_sha256"])
+
+    def test_an_empty_pool_still_creates_nothing_for_the_probe(self):
+        spec = self.ws.spec([self.ws.persona_group("reviewers", 0), self.ws.tool_group("scanners", 0)])
+        plan = self.expand(spec)
+        self.assertEqual((plan.manifest["state"], plan.requests, plan.instances), (ps.EMPTY, (), ()))
+        self.assertEqual(support.tree(self.ws.root(plan)),
+                         sorted([ps.EXPANSION_FILE, ps.INSTANCES_DIR, ps.REQUESTS_DIR, ps.SPEC_FILE]))
+        self.assertEqual(self.verify(plan, spec), [])
+
+
 class DocumentationTests(unittest.TestCase):
     DOC = ROOT.parent / "docs" / "pool-specification.md"
 
@@ -1332,8 +1733,21 @@ class DocumentationTests(unittest.TestCase):
                       f"`MAX_GROUP_COUNT` | {ps.MAX_GROUP_COUNT}",
                       f"`MAX_TOTAL_TIMEOUT_SECONDS` | {ps.MAX_TOTAL_TIMEOUT_SECONDS}",
                       "plan_expansion", "expand_pool", "verify_expansion", "load_verified_expansion",
-                      "parse_document"):
+                      "parse_document", "check_expansion", "resolve_target_mounts", "INSTANCE_ROOT_DAMAGE_CODES",
+                      *(f"`{code}`" for code in ps.FINDING_CODES),
+                      *(f"`{name}`" for name in vars(ps) if name.startswith("CODE_")),
+                      *(f"`{name}`" for name in (*ps.CONTAINER_LAUNCH_ONLY_FIELDS, *ps.PERSONA_LAUNCH_ONLY_FIELDS)),
+                      *(f"`{field.name}`" for field in dataclasses.fields(ps.PoolContext)),
+                      "container_runtime(", "persona_runtime(", "container_verification_arguments()",
+                      "persona_verification_arguments()", "attempt_root_path(pool_root)",
+                      "real_directory", "directory_listing", "path_identity", "identity_chain",
+                      "read_regular_file", "coordinator's recommendation", "owner to confirm",
+                      "PERMISSION_DENIED"):
             self.assertIn(value, text)
+        self.assertEqual(sorted(name for name in vars(ps) if name.startswith("CODE_")),
+                         sorted(name for name in vars(ps) if name.startswith("CODE_")
+                                and getattr(ps, name) in ps.FINDING_CODES))
+        self.assertEqual(len([name for name in vars(ps) if name.startswith("CODE_")]), len(ps.FINDING_CODES))
         readme = (schema_validate.SCHEMAS_DIR / "README.md").read_text(encoding="utf-8")
         for name in SCHEMAS:
             self.assertIn(name, readme)

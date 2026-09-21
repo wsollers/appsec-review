@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "pool-expansion-instance.schema.json",
   "title": "Pool expansion instance (C01)",
-  "description": "One expected instance of an expanded pool: deterministic id, worker kind, private attempt root, the adapter request file, the derived resource pool and the fingerprints. Every value is re-derived from the expected specification by pool_specification.verify_expansion.",
+  "description": "One expected instance of an expanded pool: deterministic id, worker kind, private attempt root, the adapter request file, the derived resource pool and the fingerprints. Every value is re-derived from the expected specification by pool_specification.check_expansion (verify_expansion is its message list).",
   "type": "object",
   "additionalProperties": false,
   "required": [
