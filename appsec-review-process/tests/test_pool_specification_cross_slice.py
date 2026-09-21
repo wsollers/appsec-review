@@ -31,25 +31,96 @@ class Case(unittest.TestCase):
         self.ws = support.PoolWorkspace(Path(self.temporary.name).resolve())
 
 
+# A host directory spelled like this repository's own run ids: exactly where real targets are mounted
+# from, and a spelling the V06 redactor's high-entropy rule fires on (review of PR 34, finding 3).
+RUN_ID_SHAPED = "runs-20260921T101500Z-4f3a9c2e"
+
+
 class RedactionSurvivalTests(Case):
     """The redactor replaces the VALUE under any secret-looking key and any secret-shaped string.
-    A pool root that changed when published would stop verifying."""
+    A pool root that changed when published would stop verifying.
 
-    def test_every_published_document_survives_the_redactor_unchanged(self):
+    What is claimed, exactly: ``specification.json``, ``expansion.json`` and every persona
+    ``requests/<id>.json`` hold no host path and survive under ANY spelling of the host's
+    directories. A pinned-container ``requests/<id>.json`` is B13's request byte for byte and so
+    holds the absolute ``host_path``: it survives exactly when that one string does."""
+
+    def publish(self, ws, label, capabilities):
+        spec = ws.spec([ws.persona_group("reviewers", 2, capabilities=capabilities),
+                        ws.tool_group("scanners", 2, capabilities=capabilities)],
+                       attempt_id="attempt-" + label.split()[0])
+        plan = ps.expand_pool(spec, context=ws.context())
+        published = ws.base / ("published-" + label.split()[0])
+        receipt = evidence_redaction.redact_tree(ws.root(plan), published, on_unhandled="refuse",
+                                                 limits=evidence_redaction.DEFAULT_LIMITS)
+        return plan, published, {record["path"]: record["disposition"] for record in receipt["files"]}
+
+    def host_path_disposition(self, ws) -> str:
+        """What the redactor does to a document that holds nothing but the mounted host path."""
+        source, out = ws.base / "probe-source", ws.base / "probe-published"
+        source.mkdir()
+        (source / "probe.json").write_bytes(ps.canonical_bytes({"host_path": str(ws.target)}))
+        receipt = evidence_redaction.redact_tree(source, out, on_unhandled="refuse",
+                                                 limits=evidence_redaction.DEFAULT_LIMITS)
+        return receipt["files"][0]["disposition"]
+
+    def check(self, ws, tool_requests: str):
         for label, capabilities in (("empty grant set", None), ("granted network capability", NETWORK)):
             with self.subTest(case=label):
-                spec = self.ws.spec([self.ws.persona_group("reviewers", 2, capabilities=capabilities),
-                                     self.ws.tool_group("scanners", 2, capabilities=capabilities)],
-                                    attempt_id="attempt-" + label.split()[0])
-                plan = ps.expand_pool(spec, context=self.ws.context())
-                published = self.ws.base / ("published-" + label.split()[0])
-                receipt = evidence_redaction.redact_tree(self.ws.root(plan), published, on_unhandled="refuse",
-                                                         limits=evidence_redaction.DEFAULT_LIMITS)
-                expected = sorted([ps.EXPANSION_FILE, ps.SPEC_FILE, *(item.relative_path for item in plan.requests)])
-                self.assertEqual([(r["path"], r["disposition"]) for r in receipt["files"]],
-                                 [(name, "unchanged") for name in expected])
-                for name in expected:
-                    self.assertEqual((published / name).read_bytes(), (self.ws.root(plan) / name).read_bytes())
+                plan, published, dispositions = self.publish(ws, label, capabilities)
+                portable = [ps.EXPANSION_FILE, ps.SPEC_FILE,
+                            *(i.request.relative_path for i in plan.instances if i.worker_kind == ps.PERSONA)]
+                tools = [i.request.relative_path for i in plan.instances if i.worker_kind == ps.PINNED_CONTAINER]
+                self.assertEqual(sorted(dispositions), sorted(portable + tools))
+                for name in portable:
+                    self.assertEqual(dispositions[name], "unchanged", name)
+                    self.assertEqual((published / name).read_bytes(), (ws.root(plan) / name).read_bytes())
+                    self.assertNotIn(str(ws.base).encode(), (ws.root(plan) / name).read_bytes(), name)
+                for instance in plan.instances:
+                    if instance.worker_kind != ps.PINNED_CONTAINER:
+                        continue
+                    name = instance.request.relative_path
+                    self.assertEqual(dispositions[name], tool_requests, name)
+                    # The ONLY thing a tool request can lose is its host path string.
+                    after = json.loads((published / name).read_text(encoding="utf-8"))
+                    before = ps.thaw(instance.request.request)
+                    for mount, original in zip(after["target_mounts"], before["target_mounts"]):
+                        mount["host_path"] = original["host_path"]
+                    self.assertEqual(after, before)
+
+    def test_every_published_document_survives_the_redactor_unchanged(self):
+        # Wherever the suite's temporary directory is: a tool request fares as its host path does.
+        self.check(self.ws, self.host_path_disposition(self.ws))
+
+    def test_a_run_id_shaped_host_path_reaches_only_the_pinned_container_requests(self):
+        """The reviewer's exact case, built here rather than taken from TMPDIR."""
+        base = Path(self.temporary.name).resolve() / RUN_ID_SHAPED
+        base.mkdir()
+        ws = support.PoolWorkspace(base)
+        self.assertEqual(self.host_path_disposition(ws), "redacted", "this spelling no longer trips the redactor: "
+                         "pick one that does, or the test proves nothing")
+        self.check(ws, "redacted")
+
+    def test_a_specification_and_its_instance_ids_are_the_same_on_another_host(self):
+        here = self.ws
+        there_base = Path(self.temporary.name).resolve() / RUN_ID_SHAPED / "another-host"
+        there_base.mkdir(parents=True)
+        there = support.PoolWorkspace(there_base)
+        spec = here.mixed(2, 2)
+        self.assertEqual(spec, there.mixed(2, 2))
+        first = ps.plan_expansion(spec, context=here.context())
+        second = ps.plan_expansion(spec, context=there.context())
+        self.assertEqual(first.specification_bytes, second.specification_bytes)
+        self.assertEqual((first.spec_sha256, first.pool_directory), (second.spec_sha256, second.pool_directory))
+        self.assertEqual([i.instance_id for i in first.instances], [i.instance_id for i in second.instances])
+        host_bound = {"adapter_fingerprint_sha256", "input_fingerprint", "request_file", "request_sha256"}
+        for mine, theirs in zip(first.instances, second.instances):
+            differing = {name for name in mine.entry if mine.entry[name] != theirs.entry[name]}
+            self.assertEqual(differing, host_bound if mine.worker_kind == ps.PINNED_CONTAINER else set())
+        for plan, ws in ((first, here), (second, there)):
+            for text in (plan.specification_bytes, plan.manifest_bytes):
+                self.assertNotIn(str(ws.base).encode(), text)
+                self.assertNotIn(RUN_ID_SHAPED.encode(), text)
 
     def test_no_property_name_in_the_manifest_is_secret_looking(self):
         plan = ps.plan_expansion(self.ws.mixed(), context=self.ws.context())

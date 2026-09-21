@@ -28,7 +28,7 @@ Closed, every property required, `schema_validate.py` subset only.
 | persona identity | `worker_groups[].persona_request.persona` (the six-record composition with hashes), `.model`, `.invoker_id`, `.invocation_role` |
 | tool identity | `worker_groups[].tool_request.image` `{image_id, digest}`, resolved against `registry/container-images/` |
 | count | `worker_groups[].count`, 0 to 32 |
-| scope, inputs | `persona_request.readable_inputs` and `.outer_prompt`; `tool_request.target_mounts` |
+| scope, inputs | `persona_request.readable_inputs` and `.outer_prompt`; `tool_request.target_mounts` (`{mount_root_id, relative_path, container_path}`) |
 | budget | `persona_request.budget`; `tool_request.limits`; pool level `budget_class` and `pool_budget` |
 | permissions | `worker_groups[].permission` `{requirement, grants, decision}` (B11) |
 | timeout | `persona_request.budget.timeout_seconds`; `tool_request.limits.timeout_seconds`; pool level `rendezvous_timeout_seconds` |
@@ -43,9 +43,28 @@ A worker group carries exactly the request template of its kind; the other is `n
 is the B13 or B14 request schema **minus what the expander assigns**: `schema`, `run_id`, `job_id`,
 `attempt_id`, every writable path, the permission block and (B14) its fingerprint pin. A test ties
 every copied property to the adapter's own schema, so the templates cannot drift from the adapters.
+The one template property that is **not** a copy is `tool_request.target_mounts`, see
+[Portable target mounts](#portable-target-mounts).
 Persona and tool groups sit side by side in one pool; kinds are retained in every record and are
 never flattened. `worker_groups` is sorted by `group_id` and a `group_id` appears once, so one pool
 has one spelling.
+
+### Portable target mounts
+
+A B13 request states an absolute `host_path`. A specification does not: a target mount is
+`{mount_root_id, relative_path, container_path}`, the way a persona input is a root id and a
+relative path. `mount_root_id` names an entry of `context.mount_roots` (a mapping of registry-style
+ids to absolute, existing, non-link directories in their one real spelling); `relative_path` is ONE
+spelling of a path inside it ('/'-separated; no `.`, `..`, empty or leading-slash segment, no
+backslash, no drive) or `null` for the mount root itself; `container_path` is B13's own rule.
+`resolve_target_mounts` builds the absolute path, and B13's own mount rule then decides whether it
+is a real, unlinked directory outside the pool parent. So `specification.json`, `expansion.json`,
+the pool directory and every instance id carry **no host path** and are the same on every host.
+
+This is the **coordinator's recommendation (review of PR #34, question 1), owner to confirm**. It
+changed the shape of `pool-worker-group.schema.json` before anything of C01 was merged or released;
+the ids stay `1.0` because no document of the earlier shape exists outside the unmerged branches
+stacked on this one (C02, T10), which are rebuilt on it.
 
 `empty_pool_reason` is `null` for a populated pool and one of `no_applicable_work`, `scope_excluded`,
 `upstream_produced_no_work` for a pool that expands to zero instances. It is required exactly then.
@@ -78,16 +97,51 @@ the prompt and the pinned inputs and creates nothing. In order:
 1. The context is validated; the specification is round-tripped through JSON, then `spec_errors`
    (closed schema, then the bounds above).
 2. Per group, the permission block: see [Permissions](#permissions-and-resource-pools).
-3. Per instance, the adapter request is built and handed to **the adapter's own validators** with
-   that instance's ids: `container_execution.request_errors`, `resolve_image` and
-   `request_mount_sources`; `persona_invocation.resolve_request`. A request the adapter would
-   refuse is not expandable.
+3. Per instance, the adapter request is built (target mounts resolved from `context.mount_roots`)
+   and handed to **the adapter's own validators** with that instance's ids:
+   `container_execution.request_errors`, `resolve_image` and `request_mount_sources`;
+   `persona_invocation.resolve_request`. A request the adapter would refuse is not expandable.
+   A group with `count: 0` is validated **exactly the same way**: the request instance 0 would be
+   handed is built and put through the same rules, and nothing of that probe is recorded. An
+   unallowed model, the wrong invoker, an unregistered image, an undeclared mount root or a mount
+   of the pool parent is refused at count 0 as at count 1.
 4. Collisions, pool totals, and the manifest's own closed schema.
+
+### `PoolContext`: the one carrier of host facts
 
 `PoolContext` is a frozen dataclass with no defaulted field: `pool_parent`, `registry_dir`,
 `prompt_root`, `readable_roots`, `allowed_models`, `invoker_id`, `images_dir`, `host_flavor`,
-`docker_host`, `mount_roots`, `source_snapshot_sha256`, `registry_ceiling`. They are the facts the
-B13, B14 and B11 runtimes will be given at launch, plus the two that belong to the pool.
+`docker_host`, `docker_executable`, `container_user`, `mount_roots`, `source_snapshot_sha256`,
+`registry_ceiling`. It holds **every field of B13's `ContainerRuntime` and B14's `PersonaRuntime`
+under the adapter's own name**, except the launch-only ones, plus `invoker_id`, `pool_parent` and
+`mount_roots`. A test derives both field sets by introspection, so a new required adapter fact
+fails the suite until the context carries it.
+
+| Launch-only field (not in the context) | Why |
+|---|---|
+| `clock`, `cancel` (both runtimes) | objects of one launch: the launcher's clock and the pool's cancel event. No verifier takes them. |
+| `invoker` (`PersonaRuntime`) | the callable that reaches a model. The context carries its fact, `invoker_id`, and `persona_runtime` binds the two. |
+| `stop_grace_seconds` (`PersonaRuntime`) | launcher policy: no verifier takes it and no recorded byte depends on it. |
+
+A consumer never keeps a second copy of a fact, and never compares a runtime with the context field
+by field. It asks the context:
+
+| Method | Gives |
+|---|---|
+| `context.container_runtime(clock=, cancel=)` | the `ContainerRuntime` for this pool's launches, validated by `container_execution.validate_runtime` |
+| `context.persona_runtime(invoker=, clock=, cancel=, stop_grace_seconds=)` | the `PersonaRuntime`; refused unless `invoker.invoker_id` is `context.invoker_id`; validated by `persona_invocation.validate_runtime` |
+| `context.container_verification_arguments()` | exactly the host-fact keyword arguments of `verify_container_result` / `load_verified_result` (`images_dir`, `host_flavor`, `docker_host`, `docker_executable`, `container_user`); `to_worker_envelope` takes these plus its envelope fields |
+| `context.persona_verification_arguments()` | exactly those of `verify_invocation_result` / `load_verified_result` (`registry_dir`, `prompt_root`, `readable_roots`, `allowed_models`, `source_snapshot_sha256`, `registry_ceiling`) |
+
+A test compares both argument sets with the verifiers' signatures. `docker_executable` and
+`container_user` may be `None` only in a context that never expands, launches or verifies a
+pinned-container instance (a tool group, at any count, is refused without them); `invoker_id`
+likewise for personas.
+
+The adapters export their runtimes only as whole records that include the launch-only objects, so
+the context re-declares the field names and the introspection test keeps them in step. A frozen
+host-facts record exported by B13 and B14 themselves would remove the re-declaration; that is a
+follow-up in those modules, outside C01's boundary.
 
 ## Deterministic identity
 
@@ -100,9 +154,15 @@ instance id    = first 32 hex of sha256(["appsec-review/pool-instance-id/1.0",
 
 The specification hash covers run, job, attempt, pool id, lane and every group, so a retry (a new
 `attempt_id`) and any other genuinely different pool derive different ids and a different pool
-root. There is no clock, no host path, no random value and no iteration order in the derivation:
-the same specification derives a byte-identical `expansion.json` on any host, in any process, in
-any dict order. `count: 4` of one persona is four instances with four ids, four roots, four
+root. There is no clock, no host path, no random value and no iteration order in the derivation of
+the specification hash, the pool directory and the instance ids: they are the same on any host, in
+any process, in any dict order, and a test expands one specification beneath two differently
+spelled host trees to prove it. `expansion.json` holds no host path either, but four fields of a
+**pinned-container** instance are hashes over the B13 request, which holds the resolved absolute
+`host_path`: `request_file`, `request_sha256`, `adapter_fingerprint_sha256` and `input_fingerprint`.
+They are B13's own fingerprint and must equal what the adapter records at launch, so they are bound
+to the host's mount roots; everything else in the manifest, and every persona instance, is not.
+One specification and one context derive one byte sequence. `count: 4` of one persona is four instances with four ids, four roots, four
 requests and four fingerprints.
 
 Both names are **bare hex of a digest length** on purpose. The V06 redactor
@@ -110,6 +170,17 @@ Both names are **bare hex of a digest length** on purpose. The V06 redactor
 a published path alike, and exempts a bare digest-length hex run. An id such as `pi-<hex>` made
 `redact_tree` refuse the pool root (`unsafe-path`). For the same reason the manifest does **not**
 record the B13 container name (`appsec-<32 hex>`); it is derived when needed.
+
+**Which published documents can hold a host path, exactly.** `specification.json`, `expansion.json`
+and every persona `requests/<id>.json`: never, and they pass through the redactor unchanged under
+any spelling of the host's directories. A pinned-container `requests/<id>.json`: always, because it
+is byte for byte the request B13 is handed (`target_mounts[].host_path`). It survives the redactor
+exactly when that one string does. A mount root spelled like this repository's run ids
+(`.../runs-20260921T101500Z-4f3a9c2e/...`) trips V06's high-entropy rule; the published copy of that
+request is then `redacted`, the host path is the only value it loses, and a published copy of such a
+pool root no longer verifies as a pool. A test builds exactly that path. Verify a pool root where
+it was expanded; do not rely on a published copy of a pool with tool groups (a published B13 attempt
+has the same limit on `main`, tracked separately).
 
 An instance's worker identity is `run_id` and `job_id` of the pool and **`attempt_id` = instance
 id**. The B13 container name is `container_name(run_id, job_id, attempt_id)`, so it is unique when
@@ -140,15 +211,15 @@ root would change that attempt underneath its adapter. Sibling pools beneath one
 The adapters' own rules are applied with the pool parent where an attempt root will be, before
 anything exists:
 
-- a tool target mount may not be, contain or lie beneath the pool parent
-  (`request_mount_sources`, device and inode), and must lie in a declared `context.mount_roots`
-  directory;
+- a tool target mount is resolved inside a declared `context.mount_roots` directory and may not
+  be, contain or lie beneath the pool parent (`request_mount_sources`, device and inode);
 - a persona prompt or readable input may not lie beneath the pool parent (`resolve_request`), even
   when a readable root contains it, which is the normal layout.
 
 So no instance can be given the pool root, the manifest, a request file, another instance's root
-or anything in a sibling pool of the same parent. Absolute, `.`/`..`, linked, hard-linked and
-undeclared-root scopes are the adapters' refusals and arrive unchanged. A test proves, for every
+or anything in a sibling pool of the same parent. An absolute or `.`/`..` mount path and an
+undeclared mount root are refused here; linked, missing and non-directory mounts and every persona
+scope refusal are the adapters' and arrive unchanged. A test proves, for every
 ordered pair of a mixed pool and against real directories, that the honest request reaches nothing
 of the other instance and that a forged one is refused by the adapter. An integrator that wants
 wave N+1 to read wave N gives each wave its own pool parent.
@@ -160,8 +231,16 @@ Each instance carries its own copy of its group's B11 block, bound to the instan
 grants for this run, this job and `context.source_snapshot_sha256` at the decision's own
 `evaluated_at` and requires the **whole record** to be equal. An edited capability set with every
 hash resealed is refused. A `DENIED` decision is not expandable, because B11 gives only a `GRANTED`
-decision an input fingerprint; expansion says nothing about expiry, and the adapters gate again at
-launch. A tool network destination must be in the decision's granted set.
+decision an input fingerprint. A tool network destination must be in the decision's granted set.
+
+**Expired grants (review question 3: behaviour kept).** A decision is evaluated at its own
+`evaluated_at`, never at the time of expansion: the context has no clock. A specification whose
+grants have already expired therefore expands and verifies, and **every instance is then denied by
+its adapter's permission gate at launch**. What C02 sees is a fully terminal pool in which every
+instance has a verified adapter result with `execution_status: "BLOCKED"` and cause
+`PERMISSION_DENIED`, and nothing ran (a test launches such an instance). C02 must
+make a whole pool of denials obvious in its terminal-instance manifest and outcome, and must not
+report it as an empty pool or as a pool of ordinary worker failures.
 
 The resource pool of an instance is `resource_pools.derive_pool(worker_kind, granted_kinds,
 memory_heavy=...)` over the kinds of the decision's capability set. It is never a literal: the
@@ -183,12 +262,15 @@ Per instance: id, group, ordinal, worker kind, ids, `attempt_root`, `request_sch
 derived pool and the adapter's whole `fingerprint_material`. `totals` records instances per kind
 and per resource pool, the persona slot request, the persona unit sums and the timeout sum and
 maximum. There is no timestamp and no host path. `expansion_sha256` is an integrity check, not an
-authenticator.
+authenticator. A group record's `identity_sha256` is the hash of the group's **adapter identity**
+(persona: composition, model, invoker id and invocation role; tool: the resolved image reference
+and image record hash) at every count, zero included.
 
 ### Zero instances
 
 A pool that expands to nothing is a **recorded state**: `state: "EMPTY"`, the `empty_pool_reason`,
-`instances: []`, typed groups with `count: 0`, and a complete pool root with empty `requests/` and
+`instances: []`, typed groups with `count: 0` (each validated by its adapter, with the same
+`identity_sha256` it would have at count 1), and a complete pool root with empty `requests/` and
 `instances/`. It is not an error and it is not a success. **C02 must** verify it like any other
 expansion, publish a terminal-instance manifest that carries `EMPTY` and the reason, and never map
 it to an `OK` result set: the lane turns it into a coverage statement (skipped with that reason, or
@@ -197,21 +279,62 @@ different states, and only the last one may end a rendezvous without waiting.
 
 ## Verification
 
-`verify_expansion(pool_root, *, expected_spec, context)` is read-only and has no optional argument.
-It re-derives the whole expansion with `plan_expansion` and compares bytes: `expansion.json`,
-`specification.json` and every `requests/<id>.json` are **read** and must equal what the expected
-specification derives; the pool root, `requests/` and `instances/` must hold exactly the expected
-names; every instance root is a real directory, and all directories are pairwise distinct by device
-and inode. No hash on disk is an input, so a producer who edits a request and reseals every hash is
-refused. Files are regular, singly linked, bounded and reached without crossing a link. A manifest
-that is not the derived bytes is then parsed only to say which rule it breaks, with
-`parse_document`: bounded UTF-8 JSON without NaN in which no object repeats a key. Messages are
-fixed text; nothing read from disk or from a specification is echoed. What an instance root
-contains is not this verifier's business, so an expansion still verifies after launch.
+`check_expansion(pool_root, *, expected_spec, context)` is read-only and has no optional argument.
+It re-derives the whole expansion with `plan_expansion` **once** and compares bytes:
+`expansion.json`, `specification.json` and every `requests/<id>.json` are **read** and must equal
+what the expected specification derives; the pool root, `requests/` and `instances/` must hold
+exactly the expected names; every instance root is a real directory, and all directories are
+pairwise distinct by device and inode. No hash on disk is an input, so a producer who edits a
+request and reseals every hash is refused. Files are regular, singly linked, bounded and reached
+without crossing a link. A manifest that is not the derived bytes is then parsed only to say which
+rule it breaks, with `parse_document`: bounded UTF-8 JSON without NaN in which no object repeats a
+key. What an instance root contains is not this verifier's business, so an expansion still verifies
+after launch.
 
-`load_verified_expansion` verifies and returns the re-derived, deeply immutable `ExpansionPlan`
-(`specification`, `spec_sha256`, `pool_directory`, `manifest`, `manifest_bytes`, and `requests`: one
-`InstanceRequest` per instance with the frozen request and its bytes).
+It returns an `ExpansionCheck`: `plan` (the plan the findings were computed against; `None` only
+when the expected specification is not expandable), `findings` and `messages`. A finding is a frozen
+`ExpansionFinding(code, message, instance_index)`. **Codes are the public API; messages are fixed
+text for people**, echo nothing read from disk or from a specification, and may be reworded. A
+consumer filters by code, never by message.
+
+| Code constant | Value | Meaning |
+|---|---|---|
+| `CODE_SPECIFICATION_NOT_EXPANDABLE` | `specification_not_expandable` | `plan_expansion` refuses the expected specification |
+| `CODE_POOL_ROOT_NOT_DERIVED` | `pool_root_not_derived` | `pool_root` is not `context.pool_parent / pool_directory` |
+| `CODE_POOL_ROOT_NOT_DIRECTORY` | `pool_root_not_a_directory` | missing, a link or not a directory |
+| `CODE_POOL_ROOT_LISTING` | `pool_root_listing` | the pool root does not hold exactly its four entries |
+| `CODE_MANIFEST_UNREADABLE` | `manifest_unreadable` | `expansion.json` missing, linked, hard-linked, oversized |
+| `CODE_MANIFEST_MISMATCH` | `manifest_mismatch` | `expansion.json` is not the derived bytes (one finding per broken rule) |
+| `CODE_SPECIFICATION_FILE_MISMATCH` | `specification_file_mismatch` | `specification.json` is not the canonical expected specification |
+| `CODE_REQUESTS_LISTING` | `requests_listing` | `requests/` does not hold exactly one file per instance |
+| `CODE_REQUEST_FILE_MISMATCH` | `request_file_mismatch` | per instance: the request file is not the derived request |
+| `CODE_INSTANCES_NOT_DIRECTORY` | `instances_not_a_directory` | `instances/` is missing, a link or not a directory |
+| `CODE_INSTANCE_ROOT_UNEXPECTED` | `instance_root_unexpected` | `instances/` holds an entry that is no expected instance's root |
+| `CODE_INSTANCE_ROOT_MISSING` | `instance_root_missing` | per instance: the expected root is not there |
+| `CODE_INSTANCE_ROOT_NOT_PRIVATE` | `instance_root_not_a_private_directory` | per instance: the expected root is a link or not a directory |
+| `CODE_INSTANCE_ROOTS_SHARED` | `instance_roots_shared` | two roots of the pool are one directory (device and inode) |
+
+`INSTANCE_ROOT_DAMAGE_CODES` is `{instance_root_missing, instance_root_not_a_private_directory}`:
+what can happen to ONE expected instance root after a verified expansion. Those are the only
+findings a rendezvous may turn into an instance outcome (`missing`, `invalid`); an unexpected extra
+root, an `instances/` that is not a real directory and shared roots are never tolerable.
+
+`verify_expansion(...)` is `check_expansion(...).messages`: the `list[str]` form every verifier in
+this repository returns, empty when verified. `load_verified_expansion` raises unless there is no
+finding and returns **the plan that was verified** (one derivation), a deeply immutable
+`ExpansionPlan`: `specification`, `spec_sha256`, `pool_directory`, `manifest`, `manifest_bytes`,
+`requests` (one `InstanceRequest` per instance with the frozen request and its bytes) and
+`instances`. `expand_pool` also derives once: it compares what it wrote with the plan it returns.
+
+`plan.instances` is one `PlannedInstance` per expected instance, in order: `index`, `entry` (the
+manifest entry), `request` (the `InstanceRequest`), `instance_id`, `worker_kind`, `ids`
+(`run_id`, `job_id`, `attempt_id`: the adapters' keyword arguments), `attempt_root_path(pool_root)`
+and `request_path(pool_root)`. `plan.instance(instance_id)` looks one up; `plan.pool_root(context)`
+is the one pool root the plan can have. Nobody pairs two lists by index or splits `attempt_root`.
+
+Path and identity helpers a consumer needs to apply the same rules to its own directories are
+public: `real_directory`, `directory_listing`, `path_identity`, `identity_chain`,
+`read_regular_file`.
 
 ## Differences from design-v3 5.5
 
@@ -247,23 +370,42 @@ ADR-0008 T05 names `cells/<wave>/<instance_id>/`; with `pool_parent = cells/<wav
   capability fingerprint inside `input_fingerprint` deliberately does not change.
 - A crashed expansion leaves a pool root without `expansion.json`. It is never repaired or removed
   here; a new `attempt_id` derives a new pool root.
-- A tool mount `host_path` is absolute, so a specification with tool groups is host-specific. The
-  manifest is not.
+- A pinned-container request holds the resolved absolute `host_path`, so `requests/<id>.json` of a
+  tool instance, and the four request-derived hashes of its manifest entry, are bound to the host's
+  mount roots; see [Deterministic identity](#deterministic-identity) for what does and does not
+  survive the redactor. The specification, the pool directory and the instance ids are portable.
+- A zero-count group costs one adapter validation (a persona group reads its prompt and pinned
+  inputs once), so an `EMPTY` pool whose templates no longer resolve is refused, not recorded.
 - Windows behavior is covered by the adapters' pure path rules only.
 
 ## What C02 and T10 need
 
 - `load_verified_expansion(pool_root, *, expected_spec, context)` before anything is launched or
-  counted. `plan.manifest["instances"]` is every expected instance, in order; a worker that is not
-  observed is missing, never an empty success.
-- Launch instance `i` with `WorkerRequest(run_id, job_id, attempt_id=instance_id,
-  attempt_root=pool_root / attempt_root, inputs={"persona_request" | "container_request":
-  plan.requests[i].request})` through `worker_adapters`, in the Dagster pool `resource_pool`, holding
-  at most `totals.persona_slot_request` persona slots.
+  counted. `plan.instances` is every expected instance, in order; a worker that is not observed is
+  missing, never an empty success.
+- The `PoolContext` is the only carrier of host facts. Build the adapter runtimes with
+  `context.container_runtime(clock=, cancel=)` and `context.persona_runtime(invoker=, clock=,
+  cancel=, stop_grace_seconds=)`; do not accept ready-made runtimes and compare them with the
+  context, and do not define another host-facts record.
+- Launch an instance with `WorkerRequest(**instance.ids,
+  attempt_root=instance.attempt_root_path(pool_root), inputs={"persona_request" |
+  "container_request": instance.request.request})` through `worker_adapters`, in the Dagster pool
+  `instance.entry["resource_pool"]`, holding at most `totals.persona_slot_request` persona slots.
 - The adapter's own `request.json` in `log_path` is byte-identical to `requests/<id>.json`.
-- Terminal means the adapter's verifier passes (`verify_container_result`,
-  `verify_invocation_result`) for that instance's ids and request.
+- Terminal means the adapter's verifier passes for that instance:
+  `container_execution.load_verified_result(root, **instance.ids, request=instance.request.request,
+  **context.container_verification_arguments())` (this includes `docker_executable` and
+  `container_user`, which B13's verifier requires), or
+  `persona_invocation.load_verified_result(..., **context.persona_verification_arguments())`.
+- To verify a pool after launch while recording damaged instance roots, call `check_expansion` once,
+  keep its `plan`, and drop only findings whose `code` is in `INSTANCE_ROOT_DAMAGE_CODES`; their
+  `instance_index` says which instance. Never match message text.
+- A specification whose grants have expired expands; every instance is then denied at launch (see
+  [Permissions](#permissions-and-resource-pools)). Make a whole pool of denials obvious.
 - T10 maps a T06 handoff to a persona group in trusted code: the handoff travels as a readable
   input with role `handoff`; its tool contract, budget and prohibited claims become pins. Read any
-  specification file with `parse_document`.
-- The parity capability record for `persona-tool-pool-dispatch` is an integrator follow-up.
+  specification file with `parse_document`. A persona-only context passes `docker_executable=None`,
+  `container_user=None` and `mount_roots={}`.
+- The parity manifest records this batch under `persona-tool-pool-dispatch` (qualification level
+  `unit`; still `missing_prerequisites`: no launcher, and no lifecycle job consumes a pool
+  specification). The next prerequisite is C02.

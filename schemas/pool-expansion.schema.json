@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "pool-expansion.schema.json",
   "title": "Pool expansion manifest (C01)",
-  "description": "appsec-review/pool-expansion/1.0: expansion.json, written last into a pool root. THE ordered definition of every expected instance of one pool. It carries no timestamp and no host path, so one specification derives one byte sequence on any host. state EMPTY is a recorded state with a reason, never a success. expansion_sha256 is an integrity check, not an authenticator: the verifier re-derives the whole document from the expected specification.",
+  "description": "appsec-review/pool-expansion/1.0: expansion.json, written last into a pool root. THE ordered definition of every expected instance of one pool. It carries no timestamp and no host path; one specification and one context derive one byte sequence. The specification hash, the pool directory and every instance id are the same on any host; the request-derived hashes of a pinned-container instance cover B13's resolved absolute host_path and are bound to the host's mount roots. state EMPTY is a recorded state with a reason, never a success. expansion_sha256 is an integrity check, not an authenticator: the verifier re-derives the whole document from the expected specification.",
   "type": "object",
   "additionalProperties": false,
   "required": [

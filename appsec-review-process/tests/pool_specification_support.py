@@ -26,6 +26,7 @@ RUN, JOB, ATTEMPT = "run-c01", "job-c01", "attempt-c01"
 SNAPSHOT = b14.SNAPSHOT
 # Never echoed: hostile values carry this marker and every message is searched for it.
 MARKER = "zq-hostile-marker"
+MOUNT_ROOT = "targets"
 NETWORK = [("fixed-network-destination", {"scheme": "https", "host": "api.example.org", "port": 443})]
 
 symlinks_supported = b14.symlinks_supported
@@ -57,7 +58,9 @@ class PoolWorkspace:
             "prompt_root": self.persona.prompts, "readable_roots": {"run-data": self.data},
             "allowed_models": (b14.MODEL, b14.OTHER_MODEL), "invoker_id": pi.FixtureInvoker.invoker_id,
             "images_dir": ce.IMAGES_DIR, "host_flavor": b13.runtime().host_flavor, "docker_host": None,
-            "mount_roots": (self.targets,), "source_snapshot_sha256": SNAPSHOT, "registry_ceiling": None,
+            "docker_executable": b13.runtime().docker_executable, "container_user": b13.runtime().container_user,
+            "mount_roots": {MOUNT_ROOT: self.targets}, "source_snapshot_sha256": SNAPSHOT,
+            "registry_ceiling": None,
         }
         fields.update(over)
         return fields
@@ -73,9 +76,17 @@ class PoolWorkspace:
                 "persona_request": {name: request[name] for name in ps.PERSONA_TEMPLATE_FIELDS},
                 "tool_request": None}
 
+    def mount(self, relative_path: str | None = "repo", *, mount_root_id: str = MOUNT_ROOT,
+              container_path: str = "/workspace") -> dict:
+        """The portable form of a target mount: a declared root id and a path inside it."""
+        return {"mount_root_id": mount_root_id, "relative_path": relative_path, "container_path": container_path}
+
     def tool_group(self, group_id: str = "scanners", count: int = 1, *, capabilities=None,
                    memory_heavy: bool = False, target: Path | None = None, **template_over) -> dict:
         request = b13.request(self.target if target is None else target, ["/bin/echo", "hello"], **template_over)
+        relative = (self.target if target is None else target).relative_to(self.targets).as_posix()
+        # B13's builder states the absolute host path; a specification states where it is declared.
+        request["target_mounts"] = [self.mount(None if relative == "." else relative)]
         return {"group_id": group_id, "worker_kind": ps.PINNED_CONTAINER, "count": count,
                 "memory_heavy": memory_heavy, "permission": permission(capabilities),
                 "persona_request": None,
