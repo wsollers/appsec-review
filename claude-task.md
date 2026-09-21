@@ -24,7 +24,7 @@ Do not bind it to synthesis yet.
 - `AGENTS.md`
 - `appsec-review-process/agent-skills/claude/process-reader.md`
 - `appsec-review-process/TODO.md` — B09 and the independent-work protocol
-- `appsec-review-process/continuation-design-parity-worker-envelope.md`
+- `docs/continuation-prompts/design-parity-worker-envelope.md`
 - `docs/run-data-and-job-execution.md`
 - `docs/worker-result-envelope.md`
 - `docs/critical-findings-sarif-job.md`

@@ -7,7 +7,7 @@
 - [x] Adopt the common envelope and separated publication boundary in exactly
   `02-ossf-scorecard` and supplied `02-repository-partition-discovery`.
 - [x] Qualify Windows/Linux validation plus live Dagster publication, reuse, newer-failure
-  blocking, and recovery. See `continuation-design-parity-worker-envelope.md` for run IDs.
+  blocking, and recovery. See `docs/continuation-prompts/design-parity-worker-envelope.md` for run IDs.
 - [x] Centralize collision-safe allocation, fail-closed `PENDING`/`latest.json` movement,
   interrupted-attempt recovery, and durable `BLOCKED`/`FAILED`/`CANCELED` envelopes for exactly
   the same two adopted workers. Worker execution and process control remain local.
@@ -37,7 +37,7 @@ The cross-cutting implementation and acceptance backlog for parity with `docs/de
 [`docs/design-parity-completion-plan.md`](../docs/design-parity-completion-plan.md). It is the
 authoritative checklist for pools, all lifecycle jobs, personas, feedback loops, standards decision
 gates, and final end-to-end qualification. Continue the next bounded Workstream B batch with
-[`continuation-design-parity-worker-envelope.md`](continuation-design-parity-worker-envelope.md).
+[`docs/continuation-prompts/design-parity-worker-envelope.md`](../docs/continuation-prompts/design-parity-worker-envelope.md).
 The sections below retain
 subsystem-specific detail.
 
@@ -216,7 +216,7 @@ Cross-cutting capability ownership is explicit:
 
 ### Pool runtime
 
-#### C01 — Pool specification and deterministic instance expansion — BLOCKED(B15)
+#### C01 — Pool specification and deterministic instance expansion — IMPLEMENTED_NOT_QUALIFIED (PR #34 in review; unit level, no consumer yet)
 
 - Deliver: versioned pool schema covering lane, worker kind, persona/tool identity, count, scope,
   inputs, budget, permissions, timeout, pool, and `wait_all`; deterministic unique instance IDs and
@@ -224,8 +224,14 @@ Cross-cutting capability ownership is explicit:
 - Primary paths: new pool schema/runtime/tests and parity capability record.
 - Acceptance: zero/one/many, duplicates, mixed kinds, invalid counts/scopes, ID collisions, and
   cross-instance path access.
+- Status 2026-09-21: `pool_specification.py`, its four schemas and `docs/pool-specification.md`
+  deliver the specification, the deterministic expansion and its verifier; the parity capability
+  `persona-tool-pool-dispatch` records qualification level `unit` and stays
+  `missing_prerequisites` (no launcher; no lifecycle job consumes a pool specification). Portable
+  tool mounts (`mount_root_id` + relative path) are the coordinator's recommendation, owner to
+  confirm. Next: C02.
 
-#### C02 — Wait-all rendezvous and terminal-instance manifest — BLOCKED(C01)
+#### C02 — Wait-all rendezvous and terminal-instance manifest — IMPLEMENTED_NOT_QUALIFIED (PR #35 in review; unit level, no Dagster op yet)
 
 - Deliver: bounded non-busy waiter that observes every expected instance to a terminal state and
   publishes a manifest without treating missing workers as empty success.
@@ -236,6 +242,26 @@ Cross-cutting capability ownership is explicit:
   of the pinned producer results, not only the direct producers B14 checks.
 - TODO: consider how to enforce that (refuse at dispatch, or record and let C04 discount), and
   whether B14 should additionally walk pinned producer results recursively.
+- Status 2026-09-21: `pool_rendezvous.py`, its two schemas and `docs/pool-rendezvous.md` deliver the
+  launch, the wait, the classification rule (eleven states, closed `state_reason`) and the
+  terminal-instance manifest with its verifier and reader; the parity capability
+  `wait-all-rendezvous` records qualification level `unit` and stays `missing_prerequisites`.
+  NOT done: no Dagster op runs it; producers and chain independence (the requirement above) are not
+  implemented (C02b/T10); in-process caps see only their own rendezvous (see the owner
+  decision below) until instances are pooled ops.
+  `state_reason` is the coordinator's recommendation, owner to confirm. Next: C03 / T10.
+- Owner decision 2026-09-21 (PR #35 review, Q2, clarified the same day): **one engagement at a time
+  for now** -- the review processes themselves are not concurrent, so there are never two OWASP
+  pools at once. INSIDE an engagement concurrency is fine: forked branches may each run their own
+  rendezvous (OWASP review in A, red/blue team in B). T10 must put a run-level tag with a tag
+  concurrency limit of 1 on the job whose op calls `run_rendezvous`, and does not merge without it;
+  until then this is an operating rule (the run queue still admits two engagements).
+- TODO (open gap `in_process_caps_do_not_see_other_rendezvous`): pool lanes launch in-process and
+  are invisible to B15's pools, and each rendezvous sees only itself, so k concurrent rendezvous of
+  one engagement can run k containers (`docker` limit 1) and 3k persona invocations (`persona_llm`
+  limit 3), and `persona_slot_request` is taken per pool rather than per run. Closes when instances
+  are dynamically mapped pooled ops with C02 as the collector (target design). Decide whether that
+  lands before the first engagement forks two pool lanes.
 
 #### C03 — Deterministic typed merges — BLOCKED(C02)
 
@@ -851,7 +877,7 @@ Cross-cutting capability ownership is explicit:
 Per the 2026-09-19 script migration rule (`AGENTS.md`, `README.md`, `docs/migration.md`): no new
 review-work logic in `scripts/`; port active review scripts, qualify, update callers, delete the
 old script outright (no thin wrapper). Full script-by-script survey and priority tiers:
-`appsec-review-process/continuation-scripts-to-pipeline-migration.md`.
+`docs/continuation-prompts/scripts-to-pipeline-migration.md`.
 
 - [x] Port `scripts/summarize_evidence.py` -> `pipeline/summarize_evidence.py` (2026-09-19,
   verbatim copy -- the script had no dependency on anything else under `scripts/`). Updated both

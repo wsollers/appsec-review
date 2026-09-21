@@ -2,7 +2,12 @@
 
 The daemon is probed once (B13's probe). These tests skip ONLY when no daemon answers (for example
 inside the code-server, which deliberately has no docker socket); they import cleanly everywhere.
-Every test ends by proving that no container carrying the adapter label is left behind.
+
+Hermetic on a shared host (review of PR #35, F3): every pool of a test carries a pool id made at run
+time, so its instance ids -- and with them B13's derived container names -- belong to this test
+alone, and a test ends by proving that none of ITS OWN containers is left. What any other session
+runs under the adapter label can neither fail nor block a test here; the one host-wide look at the
+label is advisory and only prints.
 """
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ import threading
 import time
 import unittest
 from unittest import mock
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -33,17 +39,41 @@ DAEMON_ABSENT = b13_live.DAEMON_ABSENT
 class LiveRendezvousTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        b13_live.LiveBoundaryTests.setUpClass.__func__(cls)      # fixture image by digest; no leftovers to hide
+        reference = ce.image_reference(b13_live.support.fixture_record())
+        if b13_live.docker_command("image", "inspect", reference).returncode != 0:
+            pulled = b13_live.docker_command("pull", reference, timeout=600)       # by digest, never by tag
+            if pulled.returncode != 0:
+                raise RuntimeError("the digest-pinned fixture image is absent and could not be pulled by digest")
+
+    @classmethod
+    def tearDownClass(cls):
+        # Advisory only: the label is host-wide, so these may be another session's. Never a failure.
+        others = b13_live.labelled_containers()
+        if others:
+            print(f"note: {len(others)} container(s) with the adapter label exist on this host; none is "
+                  "one of this module's (each test proved that for its own names)", file=sys.stderr)
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.ws = support.RendezvousWorkspace(Path(self.temporary.name).resolve())
+        self.plans: list = []
+
+    def own_containers(self) -> list:
+        """Exactly the container names B13 derives for this test's pinned-container instances."""
+        return [ce.container_name(**instance.ids) for plan in self.plans for instance in plan.instances
+                if instance.worker_kind == ps.PINNED_CONTAINER]
+
+    def left_behind(self) -> list:
+        return [name for name in self.own_containers() if b13_live.docker_command(
+            "ps", "--all", "--quiet", "--filter", f"name=^/{name}$").stdout.strip()]
 
     def tearDown(self):
         support.join_pool_threads()
-        left = b13_live.labelled_containers()
+        left = self.left_behind()
+        for name in left:                # never leave one of ours behind, even when the test failed
+            b13_live.docker_command("rm", "--force", "--volumes", name)
         self.temporary.cleanup()
-        self.assertEqual(left, [], "a container was left behind")
+        self.assertEqual(left, [], "one of this test's own containers was left behind")
 
     def pool(self, *tool_argvs, personas: int = 1, **over):
         groups = []
@@ -53,8 +83,36 @@ class LiveRendezvousTests(unittest.TestCase):
             groups.append(group)
         if personas:
             groups.append(self.ws.persona_group("reviewers", personas))
-        spec = self.ws.spec(groups, **over)
-        return spec, self.ws.expand(spec)
+        # a pool id nobody else has: the specification hash, every instance id and every derived
+        # container name are this test's own, whatever else runs on the host
+        spec = self.ws.spec(groups, **{"pool_id": "live-" + uuid.uuid4().hex[:24], **over})
+        plan = self.ws.expand(spec)
+        self.plans.append(plan)
+        return spec, plan
+
+    def test_the_leftover_check_sees_only_this_test_s_own_containers(self):
+        """F3's regression, without needing a second session: a labelled container that is NOT one of
+        this test's (the reviewer's run 4 had another reviewer's) cannot fail this test's teardown,
+        while one of its own names would."""
+        spec, plan = self.pool(["/bin/echo", "hello"], personas=0)
+        _, other_plan = self.pool(["/bin/echo", "hello"], personas=0)
+        self.plans.remove(other_plan)                # "another session": same adapter, same label, not ours
+        foreign = ce.container_name(**other_plan.instances[0].ids)
+        self.assertNotIn(foreign, self.own_containers())
+        self.assertEqual(len(set(self.own_containers())), 1)
+        reference = ce.image_reference(b13_live.support.fixture_record())
+        created = b13_live.docker_command("create", "--pull", "never", "--name", foreign, "--label",
+                                          b13_live.LABEL, reference, "/bin/true")
+        self.assertEqual(created.returncode, 0, created.stderr.decode("utf-8", "replace")[-500:])
+        try:
+            self.assertIn(created.stdout.decode("utf-8").strip()[:12], b13_live.labelled_containers())
+            self.assertEqual(self.ws.run(spec, plan)["outcome"], pr.COMPLETE)
+            self.assertEqual(self.left_behind(), [], "another session's container was counted as ours")
+            self.plans.append(other_plan)            # ... and had it been ours, it WOULD have been seen
+            self.assertEqual(self.left_behind(), [foreign])
+            self.plans.remove(other_plan)
+        finally:
+            b13_live.docker_command("rm", "--force", "--volumes", foreign)
 
     def test_a_mixed_live_pool_keeps_every_outcome_and_verifies_from_disk(self):
         spec, plan = self.pool(["/bin/echo", "hello"], ["/bin/false"], ["/bin/touch", "/scratch/made"], personas=2)
@@ -79,7 +137,7 @@ class LiveRendezvousTests(unittest.TestCase):
             return real(child_spec, cancel=cancel, observer=observer)
         box: dict = {}
         with mock.patch.object(ce.deterministic_child, "execute_child", side_effect=child):
-            thread = threading.Thread(target=lambda: box.update(manifest=self.ws.run(spec, plan, persona_runtime=None)))
+            thread = threading.Thread(target=lambda: box.update(manifest=self.ws.run(spec, plan)))
             thread.start()
             self.assertTrue(started.wait(HANG_SECONDS))
             self.ws.cancel.set()
@@ -120,7 +178,7 @@ class LiveRendezvousTests(unittest.TestCase):
         self.assertTrue(b13_live.docker_command("ps", "--quiet", "--filter", f"name=^/{name}$").stdout.strip(),
                         "the killed coordinator's container should still be running")
 
-        manifest = self.ws.run(spec, plan, persona_runtime=None)
+        manifest = self.ws.run(spec, plan)
         self.assertEqual(support.states(manifest), [pr.CRASHED, pr.SUCCEEDED])
         self.assertEqual(b13_live.docker_command("ps", "--all", "--quiet", "--filter", f"name=^/{name}$").stdout, b"")
         self.assertEqual(self.ws.verify(spec, plan), [])

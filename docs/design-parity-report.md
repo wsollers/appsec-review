@@ -1,6 +1,6 @@
 # Mythos design-parity report
 
-Status: **FAIL**
+Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
 Lifecycle jobs: **51**
@@ -485,8 +485,8 @@ Design capabilities: **15**
 - final-publication-gate: resource pool unassigned
 - owasp-checklist-model: owasp_versions_profiles_applicability_and_promotion_rules_undecided
 - owasp-checklist-model: resource pool unassigned
+- persona-tool-pool-dispatch: no_lifecycle_job_consumes_pool_specification
 - persona-tool-pool-dispatch: pool_launcher_missing
-- persona-tool-pool-dispatch: pool_schema_missing
 - persona-tool-pool-dispatch: resource pool unassigned
 - remediation-retest-feedback: fix_reverification_loop_missing
 - remediation-retest-feedback: resource pool unassigned
@@ -496,10 +496,11 @@ Design capabilities: **15**
 - synthetic-hypothesis-resynthesis: synthetic_hypothesis_routing_missing
 - threat-model-standard: resource pool unassigned
 - threat-model-standard: threat_model_schema_and_scope_undecided
+- wait-all-rendezvous: chain_independence_not_implemented
+- wait-all-rendezvous: in_process_caps_do_not_see_other_rendezvous
+- wait-all-rendezvous: no_dagster_op_runs_the_rendezvous
 - wait-all-rendezvous: resource pool unassigned
-- wait-all-rendezvous: terminal_instance_manifest_missing
-- wait-all-rendezvous: waiter_missing
 
 ## Validation errors
 
-- stale generated readiness_table: docs/design-parity-readiness.md
+- None.

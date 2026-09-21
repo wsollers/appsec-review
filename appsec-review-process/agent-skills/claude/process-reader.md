@@ -15,6 +15,8 @@ Read first:
   templates are involved
 - `docs/evidence-retrieval.md` and `appsec-review-process/tooling/llm-retrieval-addendum.md`
   before reading indexed target evidence
+- `docs/continuation-prompts/README.md` when continuing, resuming or handing off work: every
+  continuation prompt lives in that folder; start from the newest dated one and write new ones there
 
 Rules:
 

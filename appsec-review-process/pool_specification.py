@@ -19,7 +19,13 @@ is C02 and T10. What this module guarantees to them:
   ``persona_invocation.resolve_request``), evaluated with ``context.pool_parent`` as the privacy
   boundary: nothing that is, contains, or lies beneath the pool parent is a mount or a readable
   input. Every pool root, instance root, request file and manifest lives beneath it.
-* The manifest carries no timestamp and no host path. One specification derives one byte sequence.
+* ``specification.json`` and ``expansion.json`` carry no timestamp and no host path: a tool mount is
+  a declared mount-root id plus a relative path, resolved from ``context.mount_roots``. Only a
+  pinned-container instance's ``requests/<id>.json`` holds an absolute host path, because it is
+  byte for byte the request B13 is handed. One specification and one context derive one byte
+  sequence.
+* :class:`PoolContext` is the ONE carrier of the host facts both adapters need, for launch and for
+  later verification: it builds their runtimes and their verifiers' keyword arguments.
 * A pool with zero instances is a recorded state (``EMPTY`` plus a closed reason), not an error
   and not a success.
 * No value read from a specification or from disk is echoed into a message.
@@ -28,7 +34,7 @@ See ``docs/pool-specification.md``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields as dataclass_fields
 import json
 import os
 from pathlib import Path
@@ -46,6 +52,7 @@ import permission_capabilities as pc  # noqa: E402
 import persona_invocation as pi  # noqa: E402
 import resource_pools as rp  # noqa: E402
 from schema_validate import SchemaStore, validate_document  # noqa: E402
+from tool_instance_shapes import output_path_errors  # noqa: E402
 
 SPEC_ID = "appsec-review/pool-specification/1.0"
 EXPANSION_ID = "appsec-review/pool-expansion/1.0"
@@ -71,6 +78,9 @@ PERSONA_TEMPLATE_FIELDS = ("invocation_role", "invoker_id", "outer_prompt", "per
                            "budget", "readable_inputs", "allowed_claim_classes", "prohibited_claim_classes",
                            "producers")
 TOOL_TEMPLATE_FIELDS = ("image", "argv", "environment", "target_mounts", "network", "limits")
+# Copied verbatim into the B13 request. ``target_mounts`` is not: a specification names a declared
+# mount root and a relative path, and the expander resolves the absolute host path from the context.
+TOOL_COPIED_FIELDS = tuple(name for name in TOOL_TEMPLATE_FIELDS if name != "target_mounts")
 # Writable paths inside an instance root are constants: a specification cannot choose them.
 TOOL_SCRATCH_PATH = "scratch"
 TOOL_LOG_PATH = "logs/container"
@@ -116,15 +126,40 @@ class PoolExpansionError(RuntimeError):
     without a verified ``expansion.json`` is not an expansion."""
 
 
+# Fields of the adapters' runtimes a PoolContext deliberately does NOT carry, each because it
+# exists only while something is being launched. Every other field of ``ContainerRuntime`` and
+# ``PersonaRuntime`` must be a PoolContext field of the same name (a test derives both field sets by
+# introspection, so a new required adapter fact cannot be missed):
+#   clock, cancel        -- the launcher's clock and the pool's cancel event: objects, not facts;
+#                           no verifier takes them.
+#   invoker              -- the callable that reaches a model. The context carries its FACT,
+#                           ``invoker_id``; :meth:`PoolContext.persona_runtime` binds the two.
+#   stop_grace_seconds   -- how long the launcher waits after cancel: launch policy; no verifier
+#                           takes it and no recorded byte depends on it.
+CONTAINER_LAUNCH_ONLY_FIELDS = ("cancel", "clock")
+PERSONA_LAUNCH_ONLY_FIELDS = ("cancel", "clock", "invoker", "stop_grace_seconds")
+# What each adapter's verifier is given besides the context's facts.
+VERIFIER_INSTANCE_ARGUMENTS = ("attempt_root", "run_id", "job_id", "attempt_id", "request")
+
+
 @dataclass(frozen=True)
 class PoolContext:
-    """Trusted, integrator-supplied side of one expansion or verification. Every field is
+    """Trusted, integrator-supplied side of one expansion, launch or verification. Every field is
     required; there is no default anywhere.
+
+    THE one carrier of host facts for a pool. It holds every field of B13's ``ContainerRuntime``
+    and B14's ``PersonaRuntime`` under the adapter's own name, except the launch-only ones listed
+    in ``CONTAINER_LAUNCH_ONLY_FIELDS`` / ``PERSONA_LAUNCH_ONLY_FIELDS``. A consumer never keeps a
+    second copy: it builds the runtimes with :meth:`container_runtime` / :meth:`persona_runtime`
+    and the verifiers' keyword arguments with :meth:`container_verification_arguments` /
+    :meth:`persona_verification_arguments`, so what runs is what is later verified.
 
     ``pool_parent`` is a run-owned directory dedicated to expansions of this pool job. It is the
     privacy boundary: no instance may mount or read anything that is, contains or lies beneath it.
-    ``mount_roots`` are the declared directories a tool target mount must lie in. The remaining
-    fields are the B14, B13 and B11 facts the adapters themselves will be given at launch.
+    ``mount_roots`` maps a mount-root id to the declared directory a tool target mount is resolved
+    in (as ``readable_roots`` does for persona inputs), so no specification holds a host path.
+    ``docker_executable`` and ``container_user`` may be ``None`` only for a context that will never
+    expand, launch or verify a pinned-container instance; ``invoker_id`` likewise for personas.
     """
     pool_parent: Path
     registry_dir: Path
@@ -135,9 +170,60 @@ class PoolContext:
     images_dir: Path
     host_flavor: str
     docker_host: str | None
-    mount_roots: tuple
+    docker_executable: Path | None
+    container_user: str | None
+    mount_roots: Mapping[str, Path]
     source_snapshot_sha256: str
     registry_ceiling: list | None
+
+    def _facts(self, names: Any) -> dict:
+        return {name: getattr(self, name) for name in names}
+
+    def container_verification_arguments(self) -> dict:
+        """Exactly the host-fact keyword arguments of ``container_execution.verify_container_result``
+        and ``load_verified_result`` (``to_worker_envelope`` takes these plus its envelope fields)."""
+        self.require_container_facts()
+        return self._facts(("images_dir", "host_flavor", "docker_host", "docker_executable", "container_user"))
+
+    def persona_verification_arguments(self) -> dict:
+        """Exactly the host-fact keyword arguments of ``persona_invocation.verify_invocation_result``
+        and ``load_verified_result`` (``to_worker_envelope`` takes these plus its envelope fields)."""
+        return self._facts(("registry_dir", "prompt_root", "readable_roots", "allowed_models",
+                            "source_snapshot_sha256", "registry_ceiling"))
+
+    def require_container_facts(self) -> None:
+        if self.docker_executable is None or self.container_user is None:
+            raise PoolSpecError("context.docker_executable and context.container_user are required for a "
+                                "pinned-container instance")
+
+    def container_runtime(self, *, clock: Any, cancel: Any) -> "ce.ContainerRuntime":
+        """The B13 runtime for this pool's launches: the context's facts plus the launch-only
+        objects, validated by the adapter's own ``validate_runtime``."""
+        self.require_container_facts()
+        names = [field.name for field in dataclass_fields(ce.ContainerRuntime)
+                 if field.name not in CONTAINER_LAUNCH_ONLY_FIELDS]
+        runtime = ce.ContainerRuntime(**self._facts(names), clock=clock, cancel=cancel)
+        try:
+            ce.validate_runtime(runtime)
+        except ce.ContainerRequestError as exc:
+            raise PoolSpecError(f"the pinned-container adapter refuses this context: {exc}") from None
+        return runtime
+
+    def persona_runtime(self, *, invoker: Any, clock: Any, cancel: Any,
+                        stop_grace_seconds: int) -> "pi.PersonaRuntime":
+        """The B14 runtime for this pool's launches. The invoker must be the one ``invoker_id``
+        names: every persona request of the expansion was validated against that id."""
+        if self.invoker_id is None or getattr(invoker, "invoker_id", None) != self.invoker_id:
+            raise PoolSpecError("the invoker is not the invoker context.invoker_id names")
+        names = [field.name for field in dataclass_fields(pi.PersonaRuntime)
+                 if field.name not in PERSONA_LAUNCH_ONLY_FIELDS]
+        runtime = pi.PersonaRuntime(**self._facts(names), invoker=invoker, clock=clock, cancel=cancel,
+                                    stop_grace_seconds=stop_grace_seconds)
+        try:
+            pi.validate_runtime(runtime)
+        except pi.PersonaRequestError as exc:
+            raise PoolSpecError(f"the persona invocation adapter refuses this context: {exc}") from None
+        return runtime
 
 
 @dataclass(frozen=True)
@@ -150,6 +236,36 @@ class InstanceRequest:
 
 
 @dataclass(frozen=True)
+class PlannedInstance:
+    """One expected instance as a consumer needs it: its position, its manifest entry and its
+    request, already paired. Nobody pairs ``manifest["instances"]`` with ``requests`` by index or
+    splits ``attempt_root`` by hand."""
+    index: int
+    entry: Mapping[str, Any]
+    request: InstanceRequest
+
+    @property
+    def instance_id(self) -> str:
+        return self.entry["instance_id"]
+
+    @property
+    def worker_kind(self) -> str:
+        return self.entry["worker_kind"]
+
+    @property
+    def ids(self) -> dict:
+        """``run_id``, ``job_id`` and ``attempt_id``: the keyword arguments both adapters take."""
+        return {name: self.entry[name] for name in ("run_id", "job_id", "attempt_id")}
+
+    def attempt_root_path(self, pool_root: Path) -> Path:
+        """The instance's private root beneath ``pool_root``. Pure: nothing is touched."""
+        return Path(pool_root).joinpath(*self.entry["attempt_root"].split("/"))
+
+    def request_path(self, pool_root: Path) -> Path:
+        return Path(pool_root).joinpath(*self.request.relative_path.split("/"))
+
+
+@dataclass(frozen=True)
 class ExpansionPlan:
     """The whole expansion of one specification, derived without touching the pool root."""
     specification: Mapping[str, Any]
@@ -159,6 +275,70 @@ class ExpansionPlan:
     manifest: Mapping[str, Any]
     manifest_bytes: bytes
     requests: tuple
+    instances: tuple
+
+    def instance(self, instance_id: str) -> PlannedInstance:
+        """The planned instance of this id. ``KeyError`` with fixed text for any other value."""
+        for item in self.instances:
+            if item.instance_id == instance_id:
+                return item
+        raise KeyError("no such instance in this expansion")
+
+    def pool_root(self, context: PoolContext) -> Path:
+        """The one pool root this expansion can have beneath ``context.pool_parent``."""
+        return context.pool_parent / self.pool_directory
+
+
+# ---- verifier findings ---------------------------------------------------------------------------
+# A consumer filters findings by CODE. Messages are fixed text for people and may be reworded;
+# codes are part of the public API and may not.
+CODE_SPECIFICATION_NOT_EXPANDABLE = "specification_not_expandable"
+CODE_POOL_ROOT_NOT_DERIVED = "pool_root_not_derived"
+CODE_POOL_ROOT_NOT_DIRECTORY = "pool_root_not_a_directory"
+CODE_POOL_ROOT_LISTING = "pool_root_listing"
+CODE_MANIFEST_UNREADABLE = "manifest_unreadable"
+CODE_MANIFEST_MISMATCH = "manifest_mismatch"
+CODE_SPECIFICATION_FILE_MISMATCH = "specification_file_mismatch"
+CODE_REQUESTS_LISTING = "requests_listing"
+CODE_REQUEST_FILE_MISMATCH = "request_file_mismatch"
+CODE_INSTANCES_NOT_DIRECTORY = "instances_not_a_directory"
+CODE_INSTANCE_ROOT_UNEXPECTED = "instance_root_unexpected"
+CODE_INSTANCE_ROOT_MISSING = "instance_root_missing"
+CODE_INSTANCE_ROOT_NOT_PRIVATE = "instance_root_not_a_private_directory"
+CODE_INSTANCE_ROOTS_SHARED = "instance_roots_shared"
+FINDING_CODES = (
+    CODE_SPECIFICATION_NOT_EXPANDABLE, CODE_POOL_ROOT_NOT_DERIVED, CODE_POOL_ROOT_NOT_DIRECTORY,
+    CODE_POOL_ROOT_LISTING, CODE_MANIFEST_UNREADABLE, CODE_MANIFEST_MISMATCH,
+    CODE_SPECIFICATION_FILE_MISMATCH, CODE_REQUESTS_LISTING, CODE_REQUEST_FILE_MISMATCH,
+    CODE_INSTANCES_NOT_DIRECTORY, CODE_INSTANCE_ROOT_UNEXPECTED, CODE_INSTANCE_ROOT_MISSING,
+    CODE_INSTANCE_ROOT_NOT_PRIVATE, CODE_INSTANCE_ROOTS_SHARED)
+# What happens to ONE expected instance root after a verified expansion: it was deleted, or it was
+# replaced by a link or a non-directory. A rendezvous records such an instance (missing, invalid)
+# instead of refusing the pool. Every other code, an unexpected extra root and an ``instances``
+# that is not a real directory included, is never an instance outcome.
+INSTANCE_ROOT_DAMAGE_CODES = frozenset({CODE_INSTANCE_ROOT_MISSING, CODE_INSTANCE_ROOT_NOT_PRIVATE})
+
+
+@dataclass(frozen=True)
+class ExpansionFinding:
+    """One thing the verifier refuses. ``code`` is one of ``FINDING_CODES``; ``message`` is fixed
+    text that echoes nothing read from disk or from a specification; ``instance_index`` is the
+    position in ``plan.instances`` for a per-instance code and ``None`` otherwise."""
+    code: str
+    message: str
+    instance_index: int | None
+
+
+@dataclass(frozen=True)
+class ExpansionCheck:
+    """The result of ONE derivation and ONE comparison with disk. ``plan`` is the plan the findings
+    were computed against (``None`` only when the expected specification is not expandable)."""
+    plan: ExpansionPlan | None
+    findings: tuple
+
+    @property
+    def messages(self) -> list:
+        return [finding.message for finding in self.findings]
 
 
 # ---- small helpers -------------------------------------------------------------------------------
@@ -215,7 +395,9 @@ def _schema_locations(errors: list) -> str:
     return f"{len(errors)} errors at " + ", ".join(safe[:8]) if safe else f"{len(errors)} errors"
 
 
-def _identity(path: Path) -> tuple | None:
+def path_identity(path: Path) -> tuple | None:
+    """``(device, inode)`` of the path itself, never of a link's target; ``None`` if it cannot be
+    read. Identity, not spelling, decides whether two paths are one place."""
     try:
         status = os.stat(path, follow_symlinks=False)
     except OSError:
@@ -223,8 +405,9 @@ def _identity(path: Path) -> tuple | None:
     return (status.st_dev, status.st_ino)
 
 
-def _chain(path: Path) -> set:
-    """Identities of a path and every existing ancestor."""
+def identity_chain(path: Path) -> set:
+    """Identities of a path and every existing ancestor: ``path_identity(a) in identity_chain(b)``
+    is "b is, or lies beneath, a"."""
     found = set()
     for part in [path, *path.parents]:
         identity = _identity(part)
@@ -233,7 +416,8 @@ def _chain(path: Path) -> set:
     return found
 
 
-def _real_directory(path: Any) -> bool:
+def real_directory(path: Any) -> bool:
+    """An absolute ``Path`` that is a directory itself, not a link to one."""
     if not isinstance(path, Path) or not path.is_absolute():
         return False
     try:
@@ -241,6 +425,12 @@ def _real_directory(path: Any) -> bool:
     except OSError:
         return False
     return stat.S_ISDIR(status.st_mode)
+
+
+# Private spellings the module's own code (and a test that patches one) uses.
+_identity = path_identity
+_chain = identity_chain
+_real_directory = real_directory
 
 
 # ---- identity ------------------------------------------------------------------------------------
@@ -295,8 +485,17 @@ def validate_context(context: Any) -> None:
         raise PoolSpecError("context.host_flavor must be 'posix' or 'windows'")
     if context.docker_host is not None and not isinstance(context.docker_host, str):
         raise PoolSpecError("context.docker_host must be null or one docker endpoint URL")
-    if not isinstance(context.mount_roots, tuple) or not all(_real_directory(path) for path in context.mount_roots):
-        raise PoolSpecError("context.mount_roots must be a tuple of absolute, existing, non-link directories")
+    docker = context.docker_executable
+    if docker is not None and (not isinstance(docker, Path) or not docker.is_absolute()):
+        raise PoolSpecError("context.docker_executable must be null or an absolute path")
+    if context.container_user is not None and not isinstance(context.container_user, str):
+        raise PoolSpecError("context.container_user must be null or a uid:gid string")
+    mounts = context.mount_roots
+    if not isinstance(mounts, Mapping) or not all(
+            isinstance(key, str) and _REG_RE.match(key) and _real_directory(path)
+            and os.path.realpath(path) == str(path) for key, path in mounts.items()):
+        raise PoolSpecError("context.mount_roots must map registry-style mount root ids to absolute, existing, "
+                            "non-link directories in their one real spelling")
     if not isinstance(context.source_snapshot_sha256, str) or not _SHA_RE.match(context.source_snapshot_sha256):
         raise PoolSpecError("context.source_snapshot_sha256 must be sha256:<64 hex>")
     if context.registry_ceiling is not None and not isinstance(context.registry_ceiling, list):
@@ -385,7 +584,28 @@ def _permission_errors(permission: Mapping[str, Any], *, run_id: str, job_id: st
     return []
 
 
-def _build_request(spec: Mapping[str, Any], group: Mapping[str, Any], attempt_id: str) -> dict:
+def resolve_target_mounts(mounts: Any, *, context: PoolContext, label: str) -> list:
+    """Portable ``{mount_root_id, relative_path, container_path}`` records -> the B13 request's
+    ``{host_path, container_path}``. ``relative_path`` is ``null`` for the mount root itself, else
+    ONE spelling of a path inside it ('/'-separated; no '.', '..', empty or leading-slash segment).
+    Whether the result is a real, unlinked directory outside the pool parent is the adapter's own
+    mount rule, applied next; this only builds the path and proves it lies in its declared root."""
+    resolved = []
+    for index, mount in enumerate(mounts):
+        root = context.mount_roots.get(mount["mount_root_id"])
+        if root is None:
+            raise PoolSpecError(f"{label}: target_mounts[{index}].mount_root_id is not a declared mount root")
+        relative = mount["relative_path"]
+        if relative is not None and (output_path_errors(relative) or "\\" in relative or ":" in relative):
+            raise PoolSpecError(f"{label}: target_mounts[{index}].relative_path is not one normalized relative "
+                                "spelling (no '.', '..', empty or leading-slash segment)")
+        host = root if relative is None else root.joinpath(*relative.split("/"))
+        resolved.append({"host_path": str(host), "container_path": mount["container_path"]})
+    return resolved
+
+
+def _build_request(spec: Mapping[str, Any], group: Mapping[str, Any], attempt_id: str, *,
+                   context: PoolContext, label: str) -> dict:
     ids = {"run_id": spec["run_id"], "job_id": spec["job_id"], "attempt_id": attempt_id}
     if group["worker_kind"] == PERSONA:
         template = group["persona_request"]
@@ -396,7 +616,8 @@ def _build_request(spec: Mapping[str, Any], group: Mapping[str, Any], attempt_id
                 "permission_fingerprint_sha256": group["permission"]["decision"]["fingerprint_material"]["sha256"]}
     template = group["tool_request"]
     return {"schema": ce.REQUEST_ID, **ids,
-            **{name: thaw(template[name]) for name in TOOL_TEMPLATE_FIELDS},
+            **{name: (resolve_target_mounts(template[name], context=context, label=label)
+                      if name == "target_mounts" else thaw(template[name])) for name in TOOL_TEMPLATE_FIELDS},
             "scratch_path": TOOL_SCRATCH_PATH, "log_path": TOOL_LOG_PATH,
             "permission": thaw(group["permission"])}
 
@@ -405,6 +626,10 @@ def _tool_instance(request: dict, *, ids: Mapping[str, str], granted: list, regi
                    mount_roots: set, context: PoolContext, label: str) -> tuple:
     """The B13 adapter's own rules for this instance, then the pool's. Returns (fingerprint
     material, identity, timeout)."""
+    try:
+        context.require_container_facts()
+    except PoolSpecError as exc:
+        raise PoolSpecError(f"{label}: {exc}") from None
     errors = ce.request_errors(request, **ids)
     if errors:
         raise PoolSpecError(f"{label}: the pinned-container adapter refuses this request: " + "; ".join(errors))
@@ -467,7 +692,8 @@ def plan_expansion(spec: Any, *, context: PoolContext) -> ExpansionPlan:
     digest = spec_sha256(spec)
     slots = rp.persona_slot_request(spec["budget_class"])
     allowed_pools = set(spec["resource_pool_policy"]["allowed_pools"])
-    mount_roots = {identity for identity in (_identity(path) for path in context.mount_roots) if identity}
+    mount_roots = {identity for identity in (_identity(path) for path in context.mount_roots.values())
+                   if identity}
     registry = None
     groups, instances, requests = [], [], []
     for index, group in enumerate(spec["worker_groups"]):
@@ -493,11 +719,17 @@ def plan_expansion(spec: Any, *, context: PoolContext) -> ExpansionPlan:
                 raise PoolSpecError("context.images_dir is not a valid container image registry") from None
         identity: dict | None = None
         members = []
-        for ordinal in range(group["count"]):
+        # A group means the same thing at count 0 and count 1: with no instance, the template is
+        # still built into the request instance 0 WOULD be handed and put through its adapter's
+        # own rules (model, invoker, image, network, mounts, the pool-parent boundary). Nothing of
+        # that probe is recorded except the group identity, which is therefore the same record --
+        # the adapter identity -- at every count.
+        for ordinal in range(max(group["count"], 1)):
+            recorded = ordinal < group["count"]
             name = instance_id(digest, group["group_id"], ordinal)
-            where = f"{label} instance {ordinal}"
+            where = f"{label} instance {ordinal}" if recorded else f"{label} template"
             ids = {"run_id": spec["run_id"], "job_id": spec["job_id"], "attempt_id": name}
-            request = _build_request(spec, group, name)
+            request = _build_request(spec, group, name, context=context, label=where)
             if kind == PERSONA:
                 material, identity, timeout = _persona_instance(request, ids=ids, context=context, label=where)
                 writable = sorted((PERSONA_LOG_PATH, PERSONA_OUTPUT_ROOT))
@@ -506,6 +738,8 @@ def plan_expansion(spec: Any, *, context: PoolContext) -> ExpansionPlan:
                     request, ids=ids, granted=decision["capabilities"], registry=registry,
                     mount_roots=mount_roots, context=context, label=where)
                 writable = sorted((TOOL_LOG_PATH, TOOL_SCRATCH_PATH))
+            if not recorded:
+                break
             data = canonical_bytes(request)
             relative = f"{REQUESTS_DIR}/{name}.json"
             fingerprint = {"schema": FINGERPRINT_ID, "spec_sha256": digest, "instance_id": name,
@@ -527,9 +761,6 @@ def plan_expansion(spec: Any, *, context: PoolContext) -> ExpansionPlan:
                 "input_fingerprint": _sha(fingerprint)})
             requests.append(InstanceRequest(name, kind, relative, freeze(request), data))
             members.append(name)
-        if identity is None:       # a group of zero instances is still a recorded, typed group
-            identity = {"worker_kind": kind, "template_sha256": _sha(
-                group["persona_request"] if kind == PERSONA else group["tool_request"])}
         groups.append({"group_id": group["group_id"], "worker_kind": kind, "count": group["count"],
                        "identity_sha256": _sha(identity), "instance_ids": members})
     _collision_errors(instances)
@@ -550,9 +781,15 @@ def plan_expansion(spec: Any, *, context: PoolContext) -> ExpansionPlan:
     if schema_errors:
         raise PoolSpecError("the derived expansion is outside its own closed schema ("
                             + _schema_locations(schema_errors) + ")")
+    frozen = freeze(manifest)
+    planned = tuple(PlannedInstance(index, entry, item)
+                    for index, (entry, item) in enumerate(zip(frozen["instances"], requests)))
+    if len(planned) != len(requests) or any(item.entry["instance_id"] != item.request.instance_id
+                                            for item in planned):
+        raise PoolSpecError("the derived instances and requests do not pair: the expansion fails closed")
     return ExpansionPlan(specification=freeze(spec), spec_sha256=digest, specification_bytes=specification_bytes,
-                         pool_directory=manifest["pool_directory"], manifest=freeze(manifest),
-                         manifest_bytes=canonical_bytes(manifest), requests=tuple(requests))
+                         pool_directory=manifest["pool_directory"], manifest=frozen,
+                         manifest_bytes=canonical_bytes(manifest), requests=tuple(requests), instances=planned)
 
 
 def _collision_errors(instances: list) -> None:
@@ -628,29 +865,33 @@ def expand_pool(spec: Any, *, context: PoolContext) -> ExpansionPlan:
         for name in (INSTANCES_DIR, REQUESTS_DIR):
             os.mkdir(root / name, 0o700)
             created.append(root / name)
-        for entry in plan.manifest["instances"]:
-            path = root.joinpath(*entry["attempt_root"].split("/"))
+        for instance in plan.instances:
+            path = instance.attempt_root_path(root)
             os.mkdir(path, 0o700)
             created.append(path)
         identities = [_identity(path) for path in created]
         if None in identities or len(set(identities)) != len(identities) or not all(
                 _real_directory(path) for path in created):
             raise PoolExpansionError("two created roots are one directory, or a created root is not a directory")
-        for item in plan.requests:
-            atomic_bytes(root.joinpath(*item.relative_path.split("/")), item.data)
+        for instance in plan.instances:
+            atomic_bytes(instance.request_path(root), instance.request.data)
         atomic_bytes(root / SPEC_FILE, plan.specification_bytes)
         atomic_bytes(root / EXPANSION_FILE, plan.manifest_bytes)
     except OSError as exc:
         raise PoolExpansionError("the pool root could not be completed; it has no verified expansion.json "
                                  "and is not an expansion") from exc
-    errors = verify_expansion(root, expected_spec=spec, context=context)
-    if errors:
-        raise PoolExpansionError("the pool root does not verify after it was written: " + "; ".join(errors))
+    # Against THIS plan: the specification is derived once per expansion, and the plan returned is
+    # the plan the written bytes were compared with.
+    findings = _compare_with_disk(plan, root, context)
+    if findings:
+        raise PoolExpansionError("the pool root does not verify after it was written: "
+                                 + "; ".join(finding.message for finding in findings))
     return plan
 
 
-def _read_regular(root: Path, path: Path) -> bytes | None:
-    """One regular, singly linked file beneath ``root``, reached without crossing a link."""
+def read_regular_file(root: Path, path: Path) -> bytes | None:
+    """The bytes of one regular, singly linked, bounded file beneath ``root``, reached without
+    crossing a link; ``None`` for anything else. The reader for every document of a pool."""
     try:
         beneath(root, path)
         before = os.stat(path, follow_symlinks=False)
@@ -666,12 +907,18 @@ def _read_regular(root: Path, path: Path) -> bytes | None:
     return data
 
 
-def _listing(path: Path) -> list | None:
+def directory_listing(path: Path) -> list | None:
+    """Sorted entry names of a directory, or ``None`` if it cannot be listed. It follows a link:
+    ask :func:`real_directory` first."""
     try:
         with os.scandir(path) as entries:
             return sorted(entry.name for entry in entries)
     except OSError:
         return None
+
+
+_read_regular = read_regular_file
+_listing = directory_listing
 
 
 def _manifest_errors(raw: bytes, plan: ExpansionPlan) -> list:
@@ -695,56 +942,96 @@ def _manifest_errors(raw: bytes, plan: ExpansionPlan) -> list:
     return errors or ["expansion.json is not the byte sequence the expected specification derives"]
 
 
-def verify_expansion(pool_root: Path, *, expected_spec: Any, context: PoolContext) -> list:
-    """Re-derives the whole expansion from the expected specification and compares it with the
+def _compare_with_disk(plan: ExpansionPlan, pool_root: Any, context: PoolContext) -> tuple:
+    """THE comparison of one derived plan with the bytes on disk. Read-only."""
+    def one(code: str, message: str, index: int | None = None) -> ExpansionFinding:
+        return ExpansionFinding(code, message, index)
+
+    if not isinstance(pool_root, Path) or pool_root != plan.pool_root(context):
+        return (one(CODE_POOL_ROOT_NOT_DERIVED, "pool_root is not the pool directory the expected "
+                    "specification derives beneath context.pool_parent"),)
+    if not _real_directory(pool_root) or _identity(pool_root.parent) != _identity(context.pool_parent):
+        return (one(CODE_POOL_ROOT_NOT_DIRECTORY, "the pool root is missing, is a link or is not a directory"),)
+    if _listing(pool_root) != sorted(POOL_ROOT_ENTRIES):
+        return (one(CODE_POOL_ROOT_LISTING, "the pool root does not hold exactly expansion.json, "
+                    "specification.json, instances and requests"),)
+    found: list = []
+    raw = _read_regular(pool_root, pool_root / EXPANSION_FILE)
+    if raw is None:
+        found.append(one(CODE_MANIFEST_UNREADABLE,
+                         "expansion.json is missing, linked, hard-linked, oversized or unreadable"))
+    elif raw != plan.manifest_bytes:
+        found.extend(one(CODE_MANIFEST_MISMATCH, message) for message in _manifest_errors(raw, plan))
+    if _read_regular(pool_root, pool_root / SPEC_FILE) != plan.specification_bytes:
+        found.append(one(CODE_SPECIFICATION_FILE_MISMATCH,
+                         "specification.json is not the canonical bytes of the expected specification"))
+    requests_dir, instances_dir = pool_root / REQUESTS_DIR, pool_root / INSTANCES_DIR
+    if not _real_directory(requests_dir) or _listing(requests_dir) != sorted(
+            instance.request_path(pool_root).name for instance in plan.instances):
+        found.append(one(CODE_REQUESTS_LISTING,
+                         "the requests directory does not hold exactly one request file per expected instance"))
+    else:
+        for instance in plan.instances:
+            if _read_regular(pool_root, instance.request_path(pool_root)) != instance.request.data:
+                found.append(one(CODE_REQUEST_FILE_MISMATCH, f"the request file of instances[{instance.index}] "
+                                 "is not the request the expected specification derives", instance.index))
+    listing = _listing(instances_dir) if _real_directory(instances_dir) else None
+    if listing is None:
+        found.append(one(CODE_INSTANCES_NOT_DIRECTORY,
+                         "the instances directory is missing, is a link or is not a directory"))
+        return tuple(found)
+    roots = [instance.attempt_root_path(pool_root) for instance in plan.instances]
+    if set(listing) - {path.name for path in roots}:
+        found.append(one(CODE_INSTANCE_ROOT_UNEXPECTED,
+                         "the instances directory holds an entry that is not an expected instance's root"))
+    private = []
+    for instance, path in zip(plan.instances, roots):
+        if path.name not in listing:
+            found.append(one(CODE_INSTANCE_ROOT_MISSING,
+                             f"the private root of instances[{instance.index}] is missing", instance.index))
+        elif not _real_directory(path):
+            found.append(one(CODE_INSTANCE_ROOT_NOT_PRIVATE, f"the private root of instances[{instance.index}] "
+                             "is a link or is not a directory", instance.index))
+        else:
+            private.append(path)
+    identities = [_identity(path) for path in (pool_root, requests_dir, instances_dir, *private)]
+    if None in identities or len(set(identities)) != len(identities):
+        found.append(one(CODE_INSTANCE_ROOTS_SHARED,
+                         "two roots of the pool are one directory, or a root's identity cannot be read"))
+    return tuple(found)
+
+
+def check_expansion(pool_root: Path, *, expected_spec: Any, context: PoolContext) -> ExpansionCheck:
+    """Re-derives the whole expansion from the expected specification ONCE and compares it with the
     bytes on disk. Read-only. Every argument is required.
 
     Every file the manifest hashes is READ and compared with the bytes the specification derives:
     ``specification.json``, every ``requests/<id>.json`` and ``expansion.json`` itself. A producer
     who edits one file and reseals every hash is refused, because no hash on disk is an input.
-    Messages are fixed text: nothing read from the pool root is echoed."""
+
+    Returns the plan together with the findings computed against it. A consumer that tolerates
+    some findings (C02 records an instance whose root was deleted or replaced) filters by
+    ``finding.code`` -- see ``INSTANCE_ROOT_DAMAGE_CODES`` -- and never by message text."""
     try:
         plan = plan_expansion(expected_spec, context=context)
     except PoolSpecError as exc:
-        return [f"the expected specification is not expandable, so no expansion of it can exist: {exc}"]
-    if not isinstance(pool_root, Path) or pool_root != context.pool_parent / plan.pool_directory:
-        return ["pool_root is not the pool directory the expected specification derives beneath "
-                "context.pool_parent"]
-    if not _real_directory(pool_root) or _identity(pool_root.parent) != _identity(context.pool_parent):
-        return ["the pool root is missing, is a link or is not a directory"]
-    if _listing(pool_root) != sorted(POOL_ROOT_ENTRIES):
-        return ["the pool root does not hold exactly expansion.json, specification.json, instances and requests"]
-    errors: list = []
-    raw = _read_regular(pool_root, pool_root / EXPANSION_FILE)
-    if raw is None:
-        errors.append("expansion.json is missing, linked, hard-linked, oversized or unreadable")
-    elif raw != plan.manifest_bytes:
-        errors.extend(_manifest_errors(raw, plan))
-    if _read_regular(pool_root, pool_root / SPEC_FILE) != plan.specification_bytes:
-        errors.append("specification.json is not the canonical bytes of the expected specification")
-    requests_dir, instances_dir = pool_root / REQUESTS_DIR, pool_root / INSTANCES_DIR
-    if not _real_directory(requests_dir) or _listing(requests_dir) != sorted(
-            item.relative_path.split("/")[1] for item in plan.requests):
-        errors.append("the requests directory does not hold exactly one request file per expected instance")
-    else:
-        for index, item in enumerate(plan.requests):
-            if _read_regular(pool_root, pool_root.joinpath(*item.relative_path.split("/"))) != item.data:
-                errors.append(f"the request file of instances[{index}] is not the request the expected "
-                              "specification derives")
-    roots = [pool_root.joinpath(*entry["attempt_root"].split("/")) for entry in plan.manifest["instances"]]
-    if not _real_directory(instances_dir) or _listing(instances_dir) != sorted(path.name for path in roots):
-        errors.append("the instances directory does not hold exactly one private root per expected instance")
-    else:
-        identities = [_identity(path) for path in (pool_root, requests_dir, instances_dir, *roots)]
-        if not all(_real_directory(path) for path in roots) or len(set(identities)) != len(identities):
-            errors.append("an instance root is a link, is not a directory, or two roots are one directory")
-    return errors
+        return ExpansionCheck(None, (ExpansionFinding(
+            CODE_SPECIFICATION_NOT_EXPANDABLE,
+            f"the expected specification is not expandable, so no expansion of it can exist: {exc}", None),))
+    return ExpansionCheck(plan, _compare_with_disk(plan, pool_root, context))
+
+
+def verify_expansion(pool_root: Path, *, expected_spec: Any, context: PoolContext) -> list:
+    """:func:`check_expansion` as the list of fixed-text messages every verifier in this repository
+    returns; empty means verified. Messages echo nothing read from the pool root. To act on a
+    particular finding use :func:`check_expansion` and its codes."""
+    return check_expansion(pool_root, expected_spec=expected_spec, context=context).messages
 
 
 def load_verified_expansion(pool_root: Path, *, expected_spec: Any, context: PoolContext) -> ExpansionPlan:
-    """The expansion C02 may rely on: verified against disk, returned from the re-derivation
-    (deeply immutable), never from a caller's copy or from the file."""
-    errors = verify_expansion(pool_root, expected_spec=expected_spec, context=context)
-    if errors:
-        raise PoolSpecError("pool expansion rejected: " + "; ".join(errors))
-    return plan_expansion(expected_spec, context=context)
+    """The expansion C02 may rely on: THE plan that was verified against disk (one derivation,
+    deeply immutable), never a caller's copy, the file, or a second derivation."""
+    check = check_expansion(pool_root, expected_spec=expected_spec, context=context)
+    if check.findings:
+        raise PoolSpecError("pool expansion rejected: " + "; ".join(check.messages))
+    return check.plan

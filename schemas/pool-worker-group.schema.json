@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "pool-worker-group.schema.json",
   "title": "Pool worker group (C01)",
-  "description": "One worker group of a pool specification: a worker kind, a count, the B11 permission block every instance of the group carries, and the adapter request template of that kind (the other template is null). A template is the B13 / B14 request schema minus what the expander assigns (run, job and attempt ids, every writable path, the permission block and its fingerprint pin); a test ties each copied property to the adapter's own schema.",
+  "description": "One worker group of a pool specification: a worker kind, a count, the B11 permission block every instance of the group carries, and the adapter request template of that kind (the other template is null). A template is the B13 / B14 request schema minus what the expander assigns (run, job and attempt ids, every writable path, the permission block and its fingerprint pin); a test ties each copied property to the adapter's own schema. The one property that is not a copy is tool_request.target_mounts: a specification names a declared mount root (mount_root_id, resolved from the integrator's PoolContext.mount_roots) and a relative_path inside it (null for the root itself) instead of B13's absolute host_path, so no specification holds a host path.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -387,12 +387,21 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-              "host_path",
+              "mount_root_id",
+              "relative_path",
               "container_path"
             ],
             "properties": {
-              "host_path": {
-                "type": "string"
+              "mount_root_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{0,95}\\Z"
+              },
+              "relative_path": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z0-9._ /-]{1,512}\\Z"
               },
               "container_path": {
                 "type": "string",

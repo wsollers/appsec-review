@@ -41,8 +41,8 @@ See [`docs/ossf-scorecard-job.md`](../docs/ossf-scorecard-job.md).
 | `artifacts.md` | Artifact locations, staging rules, and lane output contract. |
 | `budget-policy.md` | Probe/standard/full budget contracts for subtasks. |
 | `manual-orchestration-runbook.md` | How to operate the process before a full orchestrator exists. |
-| `continuation-remediation-rt-fc04-002.md` | Fresh-task continuation prompt for the EASTL remediation probe. |
-| `continuation-doom3-bfg-full-static-analysis.md` | Fresh-task continuation prompt for Doom 3 BFG full static-analysis pregather. |
+| `docs/continuation-prompts/remediation-rt-fc04-002.md` | Fresh-task continuation prompt for the EASTL remediation probe. |
+| `docs/continuation-prompts/doom3-bfg-full-static-analysis.md` | Fresh-task continuation prompt for Doom 3 BFG full static-analysis pregather. |
 | `initial-idsoftware-game-repo-compile-and-review.md` | Fresh-task starter prompt for selecting, cloning, building, and staging an id Software game/engine repo. |
 | `process-manifest.json` | Machine-readable lane order and global artifact expectations. |
 | `registry/` | Composable persona, role, domain, tooling-profile, output-contract, and job-template records. |

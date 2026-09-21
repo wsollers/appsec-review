@@ -3176,16 +3176,19 @@
       "resource_pool": "unassigned",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_pool_specification.py",
+          "appsec-review-process/tests/test_pool_specification_cross_slice.py"
+        ]
       },
       "gaps": [
-        "pool_schema_missing",
-        "pool_launcher_missing"
+        "pool_launcher_missing",
+        "no_lifecycle_job_consumes_pool_specification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement the shared dispatch runtime before fan-out."
+      "next_prerequisite": "C02: build the wait-all rendezvous and launcher on the C01 pool specification and expansion (docs/pool-specification.md) before any fan-out."
     },
     {
       "id": "wait-all-rendezvous",
@@ -3202,16 +3205,21 @@
       "resource_pool": "unassigned",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_pool_rendezvous.py",
+          "appsec-review-process/tests/test_pool_rendezvous_cross_slice.py",
+          "appsec-review-process/tests/test_pool_rendezvous_live.py"
+        ]
       },
       "gaps": [
-        "waiter_missing",
-        "terminal_instance_manifest_missing"
+        "no_dagster_op_runs_the_rendezvous",
+        "chain_independence_not_implemented",
+        "in_process_caps_do_not_see_other_rendezvous"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement durable instance expansion and wait_all."
+      "next_prerequisite": "C03/T10: typed merges over load_verified_manifest, and a Dagster op (coordination_only, one run at a time) that runs the rendezvous (docs/pool-rendezvous.md)."
     },
     {
       "id": "deterministic-pool-merge",
