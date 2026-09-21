@@ -231,7 +231,7 @@ Cross-cutting capability ownership is explicit:
   tool mounts (`mount_root_id` + relative path) are the coordinator's recommendation, owner to
   confirm. Next: C02.
 
-#### C02 — Wait-all rendezvous and terminal-instance manifest — BLOCKED(C01)
+#### C02 — Wait-all rendezvous and terminal-instance manifest — IMPLEMENTED_NOT_QUALIFIED (PR #35 in review; unit level, no Dagster op yet)
 
 - Deliver: bounded non-busy waiter that observes every expected instance to a terminal state and
   publishes a manifest without treating missing workers as empty success.
@@ -242,6 +242,15 @@ Cross-cutting capability ownership is explicit:
   of the pinned producer results, not only the direct producers B14 checks.
 - TODO: consider how to enforce that (refuse at dispatch, or record and let C04 discount), and
   whether B14 should additionally walk pinned producer results recursively.
+- Status 2026-09-21: `pool_rendezvous.py`, its two schemas and `docs/pool-rendezvous.md` deliver the
+  launch, the wait, the classification rule (eleven states, closed `state_reason`) and the
+  terminal-instance manifest with its verifier and reader; the parity capability
+  `wait-all-rendezvous` records qualification level `unit` and stays `missing_prerequisites`.
+  NOT done: no Dagster op runs it; producers and chain independence (the requirement above) are not
+  implemented (C02b/T10); in-process caps do not see other runs, so at most one rendezvous may run on
+  a host at a time until instances are pooled ops (enforce by a run-level tag limit in T10).
+  `state_reason` and the one-at-a-time constraint are the coordinator's recommendations, owner to
+  confirm. Next: C03 / T10.
 
 #### C03 — Deterministic typed merges — BLOCKED(C02)
 

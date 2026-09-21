@@ -496,9 +496,10 @@ Design capabilities: **15**
 - synthetic-hypothesis-resynthesis: synthetic_hypothesis_routing_missing
 - threat-model-standard: resource pool unassigned
 - threat-model-standard: threat_model_schema_and_scope_undecided
+- wait-all-rendezvous: chain_independence_not_implemented
+- wait-all-rendezvous: in_process_caps_do_not_see_other_runs
+- wait-all-rendezvous: no_dagster_op_runs_the_rendezvous
 - wait-all-rendezvous: resource pool unassigned
-- wait-all-rendezvous: terminal_instance_manifest_missing
-- wait-all-rendezvous: waiter_missing
 
 ## Validation errors
 
