@@ -48,7 +48,7 @@ bound to what it is derived from, and a test edits that pin alone.
 | `run_id`, `job_id`, `attempt_id` | the worker request it arrived in |
 | `outer_prompt` `{path, sha256, bytes}` | exact UTF-8 bytes beneath `runtime.prompt_root`; see the note under this table |
 | `persona` (six ids, six hashes) | the named job template and the five records **that template composes**; see the note under this table |
-| `model` `{provider, family, model_id, snapshot}` | `runtime.allowed_models`; all four parts required, no default, no alias (note below) |
+| `model` `{provider, family, model_id, snapshot}` | `runtime.allowed_models`, in which one `(provider, model_id)` has exactly one `family`; all four parts required, no default, no alias (note below) |
 | `invoker_id` | `runtime.invoker.invoker_id` |
 | `tools` | tool ids derived from the tooling profile (next section); never text |
 | `budget` | seven required integers with bounds (below) |
@@ -163,10 +163,19 @@ Rule id `appsec-review/persona-independence/1.0`, written into every result.
   most 4 MiB, UTF-8 JSON in which no object repeats a key, inside the result schema, in the
   canonical byte form, `result_sha256` matching, `execution_status` `OK` and no cause.
 - For each producer, the reviewer is refused when it is **the same attempt**, **the same persona**,
-  or **the same model family**, judged on the values **read from the producer result bytes**
+  **the same model family**, or **the same `(provider, model_id)` whatever family either side
+  states**, judged on the values **read from the producer result bytes**
   (`self-verification: the result of producers[i] ...`). The pure request check applies the same
   rule to the declared values first, so an honest declaration of a dependent producer never reaches
   the disk.
+- **What `family` rests on.** `family` is a label, not a measured property: nothing in this adapter
+  can tell whether two models share weights or training. Its only authority is the integrator's
+  `runtime.allowed_models`. The adapter and the verifier both refuse an allow-list that gives one
+  `(provider, model_id)` two families (any snapshots), so renaming a family cannot make a model
+  independent of itself; and a producer result whose `(provider, model_id)` is on the reviewer's
+  allow-list must state the family that list gives it. A producer model the allow-list does not
+  know keeps the family its pinned result states. Two different `model_id` values that are in
+  truth one model under two names are not detectable here: the allow-list must be right.
 - The declared `run_id`, `job_id`, `attempt_id`, `request_sha256`, `persona_id` and `model` must then
   each **equal** the producer result, and every `producer_output` input naming that producer must
   match, by sha256 and size, an entry of that result's `outputs`.
@@ -328,6 +337,11 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
   attempt or re-run its verifier, so C02 must pin only results that passed
   `verify_invocation_result`. A producer output that an integrator labels `evidence` is not
   recognised as producer output.
+- Independence is checked against **direct producers only**, not transitively: persona P1 may
+  produce, P2 may verify that, and P1 may then judge P2's result, because P2's result names P1 only
+  inside bytes this adapter does not follow. That meets the letter of `design-v3.md` section 5.1
+  (no single invocation discovers, verifies and adjudicates); whether a chain must be independent
+  end to end is an open owner decision for C02/C04.
 - Requiring a different model family for every reviewer is stricter than the panel-level minimum
   in `design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
