@@ -10,14 +10,16 @@ Single source of truth: [`appsec-review-process/resource_pools.py`](../appsec-re
 `dagster_workflow.py` and `orchestrator/dagster/definitions.py` take every `pool=` value from it;
 no pool id or limit is a constant anywhere else. A test ties the tables on this page to the module.
 
-Not done in B15 (shared surfaces owned by another open change): the parity manifest still records
-`resource_pools: []` and every job as `unassigned`; the manifest, generated views and `TODO.md`
-are updated in a follow-up. Live service qualification is a separate, owner-run step (below).
+The parity manifest names the six pools and assigns the six jobs that have workers (`00-intake`,
+`02-repository-partition-discovery`, `02-dev-project-discovery` cpu; `02-ossf-scorecard` network;
+`02-build-configure` docker; `02-evidence-index` memory); every other job stays `unassigned` and is
+reported as a gap. The capability `dedicated-resource-pools` is `implemented_not_qualified`: the
+live service qualification below was run on 2026-09-21 except its worker-loss step.
 
 ### After PR #30 merges
 
 PR #30 (vendor pre-pass nodes) merged first (2026-09-21), so B15 makes the change: `main` is merged
-into this branch and the first item below is done in that merge. The manifest item is still owed.
+into this branch and every item below is done on it.
 
 - `tests/test_vendor_prepass_graph.py` (PR #30) cuts `blocked_op` out of `dagster_workflow.py` by
   AST and execs it in a hand-built namespace. B15 made `blocked_op` use the module global
