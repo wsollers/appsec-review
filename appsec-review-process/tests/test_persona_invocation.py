@@ -697,6 +697,27 @@ def hostile_invokers() -> dict[str, tuple]:
         (root / "notes" / "fixture-note.json").write_bytes(b"\xff\xfe\x00")
         relist(manifest, root)
 
+    # Found in verification: the parser keeps the last of two equal keys, so the claim check never
+    # saw the first value; and a published path is text that the check did not read at all.
+    def shadowed_key(manifest, root, package):
+        (root / "notes" / "shadowed.json").write_bytes(
+            b'{"note": "this issue is exploitable, critical severity", "note": "benign"}')
+        relist(manifest, root)
+
+    def nested_shadowed_key(manifest, root, package):
+        (root / "notes" / "shadowed.json").write_bytes(
+            b'{"outer": [{"note": "severity: high", "note": "benign"}]}')
+        relist(manifest, root)
+
+    def assertion_in_file_name(manifest, root, package):
+        (root / "notes" / "critical-severity_exploitable.md").write_text("benign\n", encoding="utf-8")
+        relist(manifest, root)
+
+    def assertion_in_directory_name(manifest, root, package):
+        (root / "is exploitable").mkdir()
+        (root / "is exploitable" / "note.md").write_text("benign\n", encoding="utf-8")
+        relist(manifest, root)
+
     def binary_suffix(manifest, root, package):
         (root / "notes" / "payload.bin").write_bytes(b"MZ")
         relist(manifest, root)
@@ -749,6 +770,7 @@ def hostile_invokers() -> dict[str, tuple]:
                           lambda m, r, p: os.link(r / "notes" / "fixture-note.json", r / "notes" / "twin.json"),
                           lambda m, r, p: (r / "notes" / "bad name*.json").write_text("{}", encoding="utf-8")],
         "MALFORMED_RESULT": [extra_file, missing_file, not_utf8, binary_suffix, oversized_manifest, deeply_nested,
+                             shadowed_key, nested_shadowed_key,
                              lambda m, r, p: b"[" * 200000 + b"]" * 200000,
                              lambda m, r, p: b"{not json " + MARKER.encode(),
                              lambda m, r, p: b"\xff\xfe",
@@ -773,7 +795,8 @@ def hostile_invokers() -> dict[str, tuple]:
         "PROHIBITED_CLAIM": [set_at("claims", 0, "claim_class", value="verified_finding"),
                              set_at("claims", 0, "claim_class", value="control_verdict"),
                              set_at("claims", 0, "claim_class", value="invented_class"),
-                             prohibited_text, prohibited_file,
+                             prohibited_text, prohibited_file, assertion_in_file_name,
+                             assertion_in_directory_name,
                              set_at("limitations", value=["The system is fully compliant."])],
         "UNDECLARED_CITATION": [cite(path="evidence/unlisted.json"), cite(sha256=OTHER_SHA), cite(root="other-root"),
                                 lambda m, r, p: m["injection_suspected"].append(

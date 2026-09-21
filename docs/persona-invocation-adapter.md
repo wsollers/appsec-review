@@ -226,7 +226,9 @@ lists no outputs, no usage and no claim classes.
 
 Every published file is a claim surface. The lexical rules (`CLAIM_TEXT_RULES`) run over every
 claim statement, limitation and locator in the manifest and over the full text of every output
-file, JSON keys included.
+file, JSON keys included, and over every published output path (its `-`, `_`, `.` and `/` read as
+spaces). A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last
+value while a reader of the bytes sees both, so the first would be published unchecked.
 
 ## Result and verification
 

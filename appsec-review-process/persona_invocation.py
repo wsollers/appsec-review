@@ -839,6 +839,15 @@ def _strings(value: Any):
         yield value
 
 
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """A JSON object that repeats a key has two readings: the parser keeps the last value, a reader
+    of the bytes sees both. Text that the claim check never saw must not be published."""
+    keys = [key for key, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
 def _asserts_prohibited(texts, prohibited: set[str]) -> bool:
     rules = [rule for name in sorted(prohibited) for rule in _TEXT_RULES.get(name, ())]
     return any(rule.search(text) for text in texts for rule in rules)
@@ -885,13 +894,15 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
     if (paths != sorted(set(paths)) or MANIFEST_FILE in paths or not all(_segments_ok(p) for p in paths)
             or set(paths) != set(on_disk) or any(on_disk[e["path"]] != e for e in listed)):
         return "MALFORMED_RESULT", empty
-    texts: list[str] = []
+    # A published path is published text too: its separators are read as spaces.
+    texts: list[str] = [re.sub(r"[-_./]+", " ", path) for path in paths]
     for path in paths:
         if not path.lower().endswith(OUTPUT_SUFFIXES):
             return "MALFORMED_RESULT", empty
         try:
             text = contents[path].decode("utf-8")
-            texts.extend(_strings(json.loads(text)) if path.lower().endswith(".json") else [text])
+            texts.extend(_strings(json.loads(text, object_pairs_hook=_unique_object))
+                         if path.lower().endswith(".json") else [text])
         except (ValueError, RecursionError):
             return "MALFORMED_RESULT", empty
     usage = manifest["usage"]
