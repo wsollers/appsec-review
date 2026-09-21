@@ -156,9 +156,7 @@ class SchemaConventionTests(unittest.TestCase):
 
 class RegistryTests(Case):
     def copy_registry(self) -> Path:
-        target = self.base / "registry"
-        shutil.copytree(pi.REGISTRY_DIR, target)
-        return target
+        return support.copy_registry(self.base / "registry")
 
     def edit(self, registry: Path, directory: str, name: str, change) -> None:
         path = registry / directory / (name + ".json")
@@ -285,8 +283,7 @@ class RequestPinTests(Case):
                 self.rejected(edited, f"persona.{name}_id is not what the named job template composes")
 
     def test_a_registry_record_edited_after_the_request_was_built_is_refused(self):
-        registry = self.base / "registry"
-        shutil.copytree(pi.REGISTRY_DIR, registry)
+        registry = support.copy_registry(self.base / "registry")
         request = self.ws.request()
         path = registry / "personas" / "owasp-validator.json"
         record = json.loads(path.read_text(encoding="utf-8"))

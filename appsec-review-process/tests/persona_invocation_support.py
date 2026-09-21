@@ -51,6 +51,15 @@ def symlinks_supported(directory: Path) -> bool:
         return False
 
 
+def copy_registry(target: Path, source: Path = pi.REGISTRY_DIR) -> Path:
+    """A writable copy by content. `shutil.copytree` would carry a read-only mount's modes along."""
+    for path in sorted(source.rglob("*.json")):
+        copy = target / path.relative_to(source)
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_bytes(path.read_bytes())
+    return target
+
+
 def file_pin(path: Path, relative: str) -> dict:
     data = path.read_bytes()
     return {"path": relative, "sha256": pi._bytes_sha(data), "bytes": len(data)}
