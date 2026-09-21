@@ -1,0 +1,236 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pool-expansion.schema.json",
+  "title": "Pool expansion manifest (C01)",
+  "description": "appsec-review/pool-expansion/1.0: expansion.json, written last into a pool root. THE ordered definition of every expected instance of one pool. It carries no timestamp and no host path; one specification and one context derive one byte sequence. The specification hash, the pool directory and every instance id are the same on any host; the request-derived hashes of a pinned-container instance cover B13's resolved absolute host_path and are bound to the host's mount roots. state EMPTY is a recorded state with a reason, never a success. expansion_sha256 is an integrity check, not an authenticator: the verifier re-derives the whole document from the expected specification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "specification",
+    "spec_sha256",
+    "specification_file",
+    "id_derivation",
+    "pool_directory",
+    "pool_id",
+    "lane",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "budget_class",
+    "wait_all",
+    "rendezvous_timeout_seconds",
+    "state",
+    "empty_pool_reason",
+    "groups",
+    "instances",
+    "totals",
+    "expansion_sha256"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/pool-expansion/1.0"
+    },
+    "specification": {
+      "const": "appsec-review/pool-specification/1.0"
+    },
+    "spec_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "specification_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z]+(/[0-9a-f]{32})?\\.json\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "id_derivation": {
+      "const": "appsec-review/pool-instance-id/1.0"
+    },
+    "pool_directory": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "pool_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}\\Z"
+    },
+    "lane": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}\\Z"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}\\Z"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"
+    },
+    "budget_class": {
+      "type": "string",
+      "enum": [
+        "probe",
+        "standard",
+        "deep"
+      ]
+    },
+    "wait_all": {
+      "const": true
+    },
+    "rendezvous_timeout_seconds": {
+      "type": "integer"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "EMPTY",
+        "POPULATED"
+      ]
+    },
+    "empty_pool_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "no_applicable_work",
+        "scope_excluded",
+        "upstream_produced_no_work",
+        null
+      ]
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "group_id",
+          "worker_kind",
+          "count",
+          "identity_sha256",
+          "instance_ids"
+        ],
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}\\Z"
+          },
+          "worker_kind": {
+            "type": "string",
+            "enum": [
+              "persona",
+              "pinned_container"
+            ]
+          },
+          "count": {
+            "type": "integer"
+          },
+          "identity_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}\\Z"
+          },
+          "instance_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}\\Z"
+            }
+          }
+        }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "$ref": "pool-expansion-instance.schema.json"
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instances",
+        "persona_instances",
+        "pinned_container_instances",
+        "persona_slot_request",
+        "persona_input_units",
+        "persona_output_units",
+        "timeout_seconds_sum",
+        "timeout_seconds_max",
+        "resource_pools"
+      ],
+      "properties": {
+        "instances": {
+          "type": "integer"
+        },
+        "persona_instances": {
+          "type": "integer"
+        },
+        "pinned_container_instances": {
+          "type": "integer"
+        },
+        "persona_slot_request": {
+          "type": "integer"
+        },
+        "persona_input_units": {
+          "type": "integer"
+        },
+        "persona_output_units": {
+          "type": "integer"
+        },
+        "timeout_seconds_sum": {
+          "type": "integer"
+        },
+        "timeout_seconds_max": {
+          "type": "integer"
+        },
+        "resource_pools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "resource_pool",
+              "instances"
+            ],
+            "properties": {
+              "resource_pool": {
+                "type": "string",
+                "pattern": "^[a-z][a-z_]{1,31}\\Z"
+              },
+              "instances": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "expansion_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}

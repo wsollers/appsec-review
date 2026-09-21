@@ -3176,16 +3176,19 @@
       "resource_pool": "unassigned",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_pool_specification.py",
+          "appsec-review-process/tests/test_pool_specification_cross_slice.py"
+        ]
       },
       "gaps": [
-        "pool_schema_missing",
-        "pool_launcher_missing"
+        "pool_launcher_missing",
+        "no_lifecycle_job_consumes_pool_specification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement the shared dispatch runtime before fan-out."
+      "next_prerequisite": "C02: build the wait-all rendezvous and launcher on the C01 pool specification and expansion (docs/pool-specification.md) before any fan-out."
     },
     {
       "id": "wait-all-rendezvous",

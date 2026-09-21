@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pool-expansion-instance.schema.json",
+  "title": "Pool expansion instance (C01)",
+  "description": "One expected instance of an expanded pool: deterministic id, worker kind, private attempt root, the adapter request file, the derived resource pool and the fingerprints. Every value is re-derived from the expected specification by pool_specification.check_expansion (verify_expansion is its message list).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instance_id",
+    "group_id",
+    "ordinal",
+    "worker_kind",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "attempt_root",
+    "request_schema",
+    "request_file",
+    "request_sha256",
+    "writable_paths",
+    "log_path",
+    "resource_pool",
+    "granted_permission_kinds",
+    "memory_heavy",
+    "persona_slot_request",
+    "timeout_seconds",
+    "permission_fingerprint_sha256",
+    "adapter_fingerprint_sha256",
+    "input_fingerprint"
+  ],
+  "properties": {
+    "instance_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "group_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}\\Z"
+    },
+    "ordinal": {
+      "type": "integer"
+    },
+    "worker_kind": {
+      "type": "string",
+      "enum": [
+        "persona",
+        "pinned_container"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}\\Z"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,95}\\Z"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "attempt_root": {
+      "type": "string",
+      "pattern": "^instances/[0-9a-f]{32}\\Z"
+    },
+    "request_schema": {
+      "type": "string",
+      "enum": [
+        "appsec-review/persona-invocation-request/1.0",
+        "appsec-review/pinned-container-request/1.0"
+      ]
+    },
+    "request_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z]+(/[0-9a-f]{32})?\\.json\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "request_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "writable_paths": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z]+(/[a-z]+)?\\Z"
+      }
+    },
+    "log_path": {
+      "type": "string",
+      "pattern": "^logs/[a-z]+\\Z"
+    },
+    "resource_pool": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]{1,31}\\Z"
+    },
+    "granted_permission_kinds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z-]{1,63}\\Z"
+      }
+    },
+    "memory_heavy": {
+      "type": "boolean"
+    },
+    "persona_slot_request": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "timeout_seconds": {
+      "type": "integer"
+    },
+    "permission_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "adapter_fingerprint_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "input_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    }
+  }
+}

@@ -216,7 +216,7 @@ Cross-cutting capability ownership is explicit:
 
 ### Pool runtime
 
-#### C01 — Pool specification and deterministic instance expansion — BLOCKED(B15)
+#### C01 — Pool specification and deterministic instance expansion — IMPLEMENTED_NOT_QUALIFIED (PR #34 in review; unit level, no consumer yet)
 
 - Deliver: versioned pool schema covering lane, worker kind, persona/tool identity, count, scope,
   inputs, budget, permissions, timeout, pool, and `wait_all`; deterministic unique instance IDs and
@@ -224,6 +224,12 @@ Cross-cutting capability ownership is explicit:
 - Primary paths: new pool schema/runtime/tests and parity capability record.
 - Acceptance: zero/one/many, duplicates, mixed kinds, invalid counts/scopes, ID collisions, and
   cross-instance path access.
+- Status 2026-09-21: `pool_specification.py`, its four schemas and `docs/pool-specification.md`
+  deliver the specification, the deterministic expansion and its verifier; the parity capability
+  `persona-tool-pool-dispatch` records qualification level `unit` and stays
+  `missing_prerequisites` (no launcher; no lifecycle job consumes a pool specification). Portable
+  tool mounts (`mount_root_id` + relative path) are the coordinator's recommendation, owner to
+  confirm. Next: C02.
 
 #### C02 — Wait-all rendezvous and terminal-instance manifest — BLOCKED(C01)
 
