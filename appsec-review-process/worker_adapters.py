@@ -1,7 +1,7 @@
 """Narrow worker adapter protocol for the first Workstream B runtime slice.
 
-Only deterministic Python and supplied-human-decision adapters are executable here. Container,
-persona, pool and controller adapters remain explicit future kinds and raise before work.
+Deterministic Python, supplied-human-decision and (B13) pinned-container adapters are executable
+here. Persona, pool and controller adapters remain explicit future kinds and raise before work.
 """
 from __future__ import annotations
 
@@ -61,6 +61,30 @@ class SuppliedHumanDecisionAdapter:
         if not isinstance(value, dict) or not value:
             raise ValueError("supplied human decision must be a non-empty JSON object")
         return value
+
+
+class PinnedContainerAdapter:
+    """B13 ``appsec-review/pinned-container-adapter/1.0``; see docs/pinned-container-adapter.md.
+
+    ``runtime`` is the trusted, integrator-built ``container_execution.ContainerRuntime``; the
+    container request is ``request.inputs["container_request"]``. No lifecycle worker uses it yet.
+    """
+    kind = "pinned_container"
+
+    def __init__(self, runtime: Any) -> None:
+        import container_execution
+        container_execution.validate_runtime(runtime)
+        self.runtime = runtime
+
+    def execute(self, request: WorkerRequest) -> Mapping[str, Any]:
+        import container_execution
+        if not isinstance(request.inputs, Mapping) or "container_request" not in request.inputs:
+            raise container_execution.ContainerRequestError(
+                "worker request inputs must carry 'container_request'")
+        return container_execution.run_container(
+            self.runtime, run_id=request.run_id, job_id=request.job_id,
+            attempt_id=request.attempt_id, attempt_root=request.attempt_root,
+            request=request.inputs["container_request"])
 
 
 class UnsupportedWorkerAdapter:
