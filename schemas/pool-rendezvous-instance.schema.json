@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pool-rendezvous-instance.schema.json",
+  "title": "Terminal state of one pool instance (C02)",
+  "description": "One entry of appsec-review/pool-rendezvous-manifest/1.0, derived by pool_rendezvous.classify_instance (appsec-review/pool-instance-classification/1.0). The identity fields are the expansion's. state is a closed vocabulary of eleven states; state_reason is a closed vocabulary saying which of a state's causes applied (pool_rendezvous.REASONS_BY_STATE; which reasons a state may carry is enforced in code). adapter_status, adapter_cause, result_file and invoker_stopped or container_removed are present exactly for the five states that adopt a verified adapter result, and are read from the attempt on disk through the adapter's own verifier. worker_stopped is present exactly for rendezvous_timed_out. No timestamp, no host path, no free text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instance_id",
+    "group_id",
+    "ordinal",
+    "worker_kind",
+    "attempt_root",
+    "resource_pool",
+    "request_sha256",
+    "input_fingerprint",
+    "state",
+    "state_reason",
+    "adapter_status",
+    "adapter_cause",
+    "result_file",
+    "invoker_stopped",
+    "container_removed",
+    "worker_stopped"
+  ],
+  "properties": {
+    "instance_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}\\Z"
+    },
+    "group_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}\\Z"
+    },
+    "ordinal": {
+      "type": "integer"
+    },
+    "worker_kind": {
+      "type": "string",
+      "enum": [
+        "persona",
+        "pinned_container"
+      ]
+    },
+    "attempt_root": {
+      "type": "string",
+      "pattern": "^instances/[0-9a-f]{32}\\Z"
+    },
+    "resource_pool": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]{1,31}\\Z"
+    },
+    "request_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "input_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "canceled",
+        "instance_timed_out",
+        "rendezvous_timed_out",
+        "crashed",
+        "invalid",
+        "not_launched_canceled",
+        "not_launched_rendezvous_timeout",
+        "missing"
+      ]
+    },
+    "state_reason": {
+      "type": "string",
+      "enum": [
+        "verified_adapter_result",
+        "worker_stopped_after_the_wait_ended",
+        "worker_still_running_after_the_drain",
+        "attempt_evidence_without_adapter_result",
+        "adapter_verifier_refused_the_result",
+        "instance_root_not_a_private_directory",
+        "evidence_nobody_launched",
+        "ok_result_whose_writer_has_not_stopped",
+        "adapter_status_not_classifiable",
+        "pool_canceled_before_launch",
+        "wait_ended_before_launch",
+        "instance_root_absent",
+        "adapter_left_no_evidence",
+        "worker_thread_not_started"
+      ]
+    },
+    "adapter_status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "OK",
+        "BLOCKED",
+        "FAILED",
+        "CANCELED",
+        null
+      ]
+    },
+    "adapter_cause": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "BUDGET_EXCEEDED",
+        "CANCELED",
+        "CLEANUP_FAILED",
+        "CONTAINER_EXIT_NONZERO",
+        "CONTAINER_START_FAILED",
+        "DOCKER_UNAVAILABLE",
+        "IDENTITY_MISMATCH",
+        "IMAGE_NOT_PROVISIONED",
+        "INVOKER_EXCEPTION",
+        "INVOKER_UNAVAILABLE",
+        "LOG_WRITE_FAILED",
+        "MALFORMED_RESULT",
+        "NETWORK_ENFORCEMENT_UNAVAILABLE",
+        "NETWORK_NOT_GRANTED",
+        "OOM_KILLED",
+        "OUTPUT_ESCAPE",
+        "PERMISSION_DENIED",
+        "PROHIBITED_CLAIM",
+        "SELF_VERIFICATION",
+        "TIMEOUT",
+        "UNDECLARED_CITATION",
+        "UNDECLARED_TOOL",
+        "WORKER_LOST",
+        null
+      ]
+    },
+    "result_file": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^instances/[0-9a-f]{32}/logs/(persona/invocation-result|container/container-result)\\.json\\Z"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}\\Z"
+        },
+        "bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "invoker_stopped": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "container_removed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "worker_stopped": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  }
+}

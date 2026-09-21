@@ -231,7 +231,7 @@ Cross-cutting capability ownership is explicit:
   tool mounts (`mount_root_id` + relative path) are the coordinator's recommendation, owner to
   confirm. Next: C02.
 
-#### C02 — Wait-all rendezvous and terminal-instance manifest — BLOCKED(C01)
+#### C02 — Wait-all rendezvous and terminal-instance manifest — IMPLEMENTED_NOT_QUALIFIED (PR #35 in review; unit level, no Dagster op yet)
 
 - Deliver: bounded non-busy waiter that observes every expected instance to a terminal state and
   publishes a manifest without treating missing workers as empty success.
@@ -242,6 +242,26 @@ Cross-cutting capability ownership is explicit:
   of the pinned producer results, not only the direct producers B14 checks.
 - TODO: consider how to enforce that (refuse at dispatch, or record and let C04 discount), and
   whether B14 should additionally walk pinned producer results recursively.
+- Status 2026-09-21: `pool_rendezvous.py`, its two schemas and `docs/pool-rendezvous.md` deliver the
+  launch, the wait, the classification rule (eleven states, closed `state_reason`) and the
+  terminal-instance manifest with its verifier and reader; the parity capability
+  `wait-all-rendezvous` records qualification level `unit` and stays `missing_prerequisites`.
+  NOT done: no Dagster op runs it; producers and chain independence (the requirement above) are not
+  implemented (C02b/T10); in-process caps see only their own rendezvous (see the owner
+  decision below) until instances are pooled ops.
+  `state_reason` is the coordinator's recommendation, owner to confirm. Next: C03 / T10.
+- Owner decision 2026-09-21 (PR #35 review, Q2, clarified the same day): **one engagement at a time
+  for now** -- the review processes themselves are not concurrent, so there are never two OWASP
+  pools at once. INSIDE an engagement concurrency is fine: forked branches may each run their own
+  rendezvous (OWASP review in A, red/blue team in B). T10 must put a run-level tag with a tag
+  concurrency limit of 1 on the job whose op calls `run_rendezvous`, and does not merge without it;
+  until then this is an operating rule (the run queue still admits two engagements).
+- TODO (open gap `in_process_caps_do_not_see_other_rendezvous`): pool lanes launch in-process and
+  are invisible to B15's pools, and each rendezvous sees only itself, so k concurrent rendezvous of
+  one engagement can run k containers (`docker` limit 1) and 3k persona invocations (`persona_llm`
+  limit 3), and `persona_slot_request` is taken per pool rather than per run. Closes when instances
+  are dynamically mapped pooled ops with C02 as the collector (target design). Decide whether that
+  lands before the first engagement forks two pool lanes.
 
 #### C03 — Deterministic typed merges — BLOCKED(C02)
 
