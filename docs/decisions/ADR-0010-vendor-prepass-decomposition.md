@@ -354,13 +354,13 @@ runtime-state]`. Assertion IDs match the schema pattern `^[a-z0-9][a-z0-9-]*$`.
 | Contract | Required `outputs/` files | `claim_class_id` | `allowed_assertions` |
 |---|---|---|---|
 | `secrets-inventory` | `secrets-inventory.redacted.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `secret_exposure_lead` | `candidate-secret-location`, `credential-store-file-present`, `private-key-header-present`, `redaction-applied`, `scan-coverage-gap` |
-| `iac-config-evidence` | `iac-config-evidence.json`, `base-image-inventory.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `declared_configuration_evidence` | `declared-configuration-rule-hit`, `declared-base-image-reference`, `declared-exposure-lead`, `scan-coverage-gap` |
-| `container-image-inventory` | `container-image-inventory.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `supplied_image_static_evidence` | `image-layer-package-inventory`, `image-configuration-property`, `image-hardening-rule-hit`, `scan-coverage-gap` |
+| `iac-config-evidence` | `iac-config-evidence.json`, `base-image-inventory.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json`, `applicability-probe-receipt.json` | `declared_configuration_evidence` | `declared-configuration-rule-hit`, `declared-base-image-reference`, `declared-exposure-lead`, `scan-coverage-gap` |
+| `container-image-inventory` | `container-image-inventory.json`, `container-image-applicability.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `supplied_image_static_evidence` | `image-layer-package-inventory`, `image-configuration-property`, `image-hardening-rule-hit`, `scan-coverage-gap` |
 | `sbom-inventory` | `sbom.cdx.json`, `sbom-manifest.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `dependency_inventory_evidence` | `declared-component-present`, `component-version-unknown`, `inventory-coverage-gap` |
 | `sca-vulnerability-match` | `sca-vulnerability-match.json`, `vulnerability-database-identities.json`, `sca-coverage-gaps.json`, `coverage-gap-summary.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `known_vulnerability_match_lead` | `advisory-matches-declared-version`, `database-snapshot-identity`, `match-coverage-gap` |
 | `license-inventory` | `license-inventory.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `license_detection_evidence` | `license-text-detected`, `copyright-statement-detected`, `vendored-component-inferred`, `scan-coverage-gap` |
 | `dependency-lifecycle` | `dependency-lifecycle.json`, `reference-table-identity.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `dependency_lifecycle_evidence` | `reference-table-eol-match`, `lifecycle-unknown`, `license-field-resurfaced` |
-| `binary-hardening` | `binary-hardening.json`, `binskim.sarif`, `tool-results.json`, `coverage.json` | `binary_hardening_property_evidence` | `static-hardening-property-observed`, `static-hardening-rule-hit`, `binary-format-unsupported`, `scan-coverage-gap` |
+| `binary-hardening` | `binary-hardening.json`, `binary-hardening-applicability.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` (the BinSkim SARIF file is conditional, not required: a SKIPPED node never ran BinSkim) | `binary_hardening_property_evidence` | `static-hardening-property-observed`, `static-hardening-rule-hit`, `binary-format-unsupported`, `scan-coverage-gap` |
 | `mobile-sast` | `mobile-applicability.json`, `mobile-sast.json`, `redaction-receipt.json`, `tool-results.json`, `coverage.json` | `mobile_static_lead` | `mobile-platform-marker-present`, `mobile-rule-hit`, `scan-coverage-gap` |
 
 For `02-source-sast` (existing node, no contract file yet) this packet only recommends to D09 the
@@ -584,3 +584,12 @@ the NVD snapshot; it reads the Grype DB mirror and the OSV snapshot (M1/M2). Ite
 left stale by PR #20, which recorded M1–M5 in the decision table but not in these two tables. A test
 in `test_sbom_family_contracts.py` now reads this file and fails if the tables and the registry
 disagree again.
+
+2026-09-20 (V02): the contract table is reconciled with the three V04/V07 contract records that
+merged with files this table did not list (PRs #18, #19), found when V02 copied `required_files`
+into the graph. `iac-config-evidence` and `container-image-inventory` publish an applicability
+receipt because their nodes may be `SKIPPED`; `binary-hardening` requires its applicability receipt
+and a redaction receipt, and its BinSkim SARIF file is conditional rather than required. The fixture
+`job-nodes.proposal.json` changes with it. Nothing is decided here: the contracts were reviewed and
+merged; this table and the fixture had not followed. The task table below still shows historical
+statuses; `docs/proposals/vendor-prepass/task-series.md` carries the current ones.

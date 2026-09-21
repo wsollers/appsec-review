@@ -3,8 +3,9 @@
 Nothing here carries a copy of the answer. The expected nodes, dependencies, assembly edges, skip
 reasons and file lists are read from the accepted ADR's tables, from the three fixtures under
 ``docs/proposals/vendor-prepass/`` and from the merged output-contract records, and the declared graph
-must agree with all of them at once. The one pinned constant is ``CONTRACT_FILES_NOT_IN_THE_ADR``: a
-known, already-merged divergence that has to be written down rather than appear silently.
+must agree with all of them at once. ``CONTRACT_FILES_NOT_IN_THE_ADR`` is empty: three V04/V07
+contracts had merged with files the ADR table and the fixture did not list; V02 reconciled both, and
+the pin stays so that any future divergence has to be written down rather than appear silently.
 
 Files are located from the module ``ROOT`` (``/opt/process`` in the code-server, whose siblings are
 ``/opt/docs`` and ``/opt/schemas``), never through a ``<repo>/appsec-review-process`` literal. A
@@ -42,17 +43,10 @@ ASSEMBLY = "02-evidence-assembly"
 NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
                 "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
 
-# V04 and V07 merged (PR 18, 19, 21) with contract files the ADR's contract table and the node fixture
-# do not list: the probe receipt every skippable node needs, and for binary-hardening a redaction
-# receipt, with binskim.sarif made conditional because a SKIPPED node never ran BinSkim. Their own
-# suites pin the same differences. The graph follows the contract records; this pin makes the
-# divergence explicit and fails when either side is reconciled, so that it is then deleted.
-CONTRACT_FILES_NOT_IN_THE_ADR = {
-    "iac-config-evidence": ({"outputs/applicability-probe-receipt.json"}, set()),
-    "container-image-inventory": ({"outputs/container-image-applicability.json"}, set()),
-    "binary-hardening": ({"outputs/binary-hardening-applicability.json", "outputs/redaction-receipt.json"},
-                         {"outputs/binskim.sarif"}),
-}
+# Files a merged contract record requires that the ADR contract table / node fixture do not list,
+# as {contract_id: (added, dropped)}. History: the V04/V07 probe receipts, binary-hardening's
+# redaction receipt and its conditional BinSkim SARIF were such a divergence until V02.
+CONTRACT_FILES_NOT_IN_THE_ADR = {}  # reconciled in this change: ADR table == fixture == contract records
 
 
 def read_json(path):
