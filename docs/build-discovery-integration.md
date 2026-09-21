@@ -163,7 +163,9 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 
 See the manifest-generated [lifecycle dependency flow](full-review-workflow.mmd). Build discovery
 is a supporting workflow op before partition discovery, distinct from the 51-node lifecycle view
-and from full developer project discovery.
+and from full developer project discovery. The authoritative per-job readiness is the generated
+[design parity readiness view](design-parity-readiness.md); a test keeps this table naming every
+graph job.
 
 | Job | Execution readiness | Registry template |
 |---|---|---|
@@ -208,6 +210,16 @@ and from full developer project discovery.
 | `02-test-result-ingest` | Worker blocked | Missing |
 | `02-test-coverage-ingest` | Worker blocked | Missing |
 | `02-operations-doc-ingest` | Worker blocked | Missing |
+| `02-evidence-index` | Qualified worker (`evidence_index.py`); see [evidence retrieval](evidence-retrieval.md) | Present |
+| `02-secrets-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-iac-config-scan` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-container-image-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-sbom-inventory` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-sca-vulnerability-match` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-license-scan` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-dependency-lifecycle` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-binary-hardening` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
+| `02-mobile-sast` | Worker blocked (vendor pre-pass, ADR-0010; declared by V02) | Missing |
 
 ## Discovery hand-off gate (02-repository-partition-discovery, 02-dev-project-discovery)
 

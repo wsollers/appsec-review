@@ -504,5 +504,17 @@ class VendorPrepassGraphTests(unittest.TestCase):
             self.assertIn(f'["{job} (planned; not dispatched)"]', planned)
 
 
+    def test_hand_written_job_table_names_every_graph_job(self):
+        """docs/build-discovery-integration.md states the graph's job count above a hand-written
+        table; the table must name every graph job exactly once and nothing the graph lacks."""
+        text = (DOCS / "build-discovery-integration.md").read_text(encoding="utf-8")
+        section = text.split("## Registered lifecycle jobs", 1)[1].split("\n## ", 1)[0]
+        listed = re.findall(r"^\| `([^`]+)` \|", section, flags=re.MULTILINE)
+        jobs = sorted(self.s.graph["jobs"])
+        self.assertEqual(sorted(listed), jobs)
+        self.assertIn(f"the {len(jobs)}-node lifecycle view", " ".join(section.split()))
+        self.assertIn(f"exposes {len(jobs)} lifecycle and registry jobs", " ".join(text.split()))
+
+
 if __name__ == "__main__":
     unittest.main()
