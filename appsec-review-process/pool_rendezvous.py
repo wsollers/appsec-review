@@ -190,8 +190,8 @@ def validate_runtime(runtime: Any) -> None:
     if not _is_int(runtime.max_parallel) or not 1 <= runtime.max_parallel <= MAX_PARALLEL:
         raise RendezvousError(f"runtime.max_parallel must be an integer within 1..{MAX_PARALLEL}")
     limit = runtime.wait_limit_seconds
-    if (isinstance(limit, bool) or not isinstance(limit, _NUMBER) or not limit == limit
-            or not 0 < limit <= ps.MAX_TOTAL_TIMEOUT_SECONDS):
+    if (isinstance(limit, bool) or not isinstance(limit, _NUMBER)
+            or not 0 < limit <= ps.MAX_TOTAL_TIMEOUT_SECONDS):       # NaN fails the comparison too
         raise RendezvousError("runtime.wait_limit_seconds must be a number greater than 0 and at most "
                               f"{ps.MAX_TOTAL_TIMEOUT_SECONDS}")
     low, high = DRAIN_BOUNDS

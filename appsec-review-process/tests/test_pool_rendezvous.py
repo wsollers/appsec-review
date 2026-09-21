@@ -267,19 +267,23 @@ class ContractTests(Case):
             "max_parallel": [0, pr.MAX_PARALLEL + 1, True, 1.5, "2", None],
             "wait_limit_seconds": [0, -1, float("nan"), float("inf"), True, "1", ps.MAX_TOTAL_TIMEOUT_SECONDS + 1],
             "drain_seconds": [-1, pr.DRAIN_BOUNDS[1] + 1, 1.5, True, None],
-            "cancel": [threading.Event(), None],
         }
         for name, values in hostile.items():
             for value in values:
                 with self.subTest(field=name, value=repr(value)):
                     self.refused(spec, plan, "runtime." + name, **{name: value})
+        plain = threading.Event()       # the adapters would accept it; it cannot wake the waiter
+        self.refused(spec, plan, "runtime.cancel must be a PoolCancel", cancel=plain,
+                     container_runtime=self.ws.container_runtime(cancel=plain),
+                     persona_runtime=self.ws.persona_runtime(cancel=plain))
 
     def test_the_rendezvous_parent_may_not_be_reachable_by_a_worker(self):
         spec, plan = self.personas(1)
         inside = self.ws.pool_parent / "manifests"
         inside.mkdir()
         hostile = [self.ws.pool_parent, self.ws.data, self.ws.base, Path("relative"), self.ws.base / "absent",
-                   str(self.ws.rendezvous_parent), self.ws.rendezvous_parent / "." / "x" / ".."]
+                   str(self.ws.rendezvous_parent), self.ws.rendezvous_parent / "." / "x" / "..",
+                   self.ws.base / "targets" / ".." / "rendezvous"]
         if SYMLINKS:
             link = self.ws.base / "rendezvous-link"
             link.symlink_to(self.ws.rendezvous_parent, target_is_directory=True)
@@ -939,8 +943,10 @@ class DuplicateTerminalTests(Case):
         self.ws.run(spec, plan)
         before, stamp = self.raw(plan), os.stat(self.ws.manifest_path(plan))
         invoker = Routed()
-        with self.assertRaises(pr.RendezvousPublishedError) as caught:
+        with mock.patch.object(pr, "_wait", wraps=pr._wait) as waited, \
+                self.assertRaises(pr.RendezvousPublishedError) as caught:
             self.ws.run(spec, plan, invoker)
+        self.assertEqual(waited.call_count, 0, "refused only at the link, after waiting again")
         self.assertIn("never replaced", str(caught.exception))
         after = os.stat(self.ws.manifest_path(plan))
         self.assertEqual((self.raw(plan), invoker.invoked), (before, []))
@@ -1055,7 +1061,16 @@ class MissingInstanceTests(Case):
                     self.ws.instance_root(plan, 2).symlink_to(elsewhere, target_is_directory=True)
                 super().invoke(package, output_root=output_root, cancel=cancel)
         invoker = Routed({ids[0]: Replacing()})
-        manifest = self.ws.run(spec, plan, invoker)
+        executed = []
+        original = worker_adapters.PersonaInvocationAdapter.execute
+
+        def execute(adapter, request):
+            executed.append(request.attempt_id)
+            return original(adapter, request)
+        with mock.patch.object(worker_adapters.PersonaInvocationAdapter, "execute", autospec=True,
+                               side_effect=execute):
+            manifest = self.ws.run(spec, plan, invoker)
+        self.assertEqual(executed, ids[:1] if SYMLINKS else [ids[0], ids[2]], "an adapter was handed a bad root")
         self.assertEqual(support.states(manifest), [pr.SUCCEEDED, pr.CRASHED, pr.INVALID if SYMLINKS else pr.SUCCEEDED])
         self.assertEqual(invoker.invoked, ids[:1] if SYMLINKS else [ids[0], ids[2]])
         self.assertEqual(os.listdir(elsewhere), [])
@@ -1167,7 +1182,9 @@ class ConcurrencyTests(Case):
                     waits.append(timeout)
                 return super().wait(timeout)
         gate = Gated()
-        with mock.patch.object(pr.threading, "Condition", Recording):
+        # with the backstop out of reach, only a worker's own notification can move the pool on
+        with mock.patch.object(pr.threading, "Condition", Recording), \
+                mock.patch.object(pr, "LIVENESS_BACKSTOP_SECONDS", HANG_SECONDS * 10):
             running = Background(lambda: self.ws.run(spec, plan, Routed({support.ids(plan)[3]: gate})))
             wait_for(gate.started)
             idle = len(waits)
@@ -1177,7 +1194,7 @@ class ConcurrencyTests(Case):
             manifest = running.result()
         self.assertEqual(manifest["outcome"], pr.COMPLETE)
         self.assertLessEqual(len(waits), 2 * 4, "more wake-ups than worker events")
-        self.assertTrue(all(0 < timeout <= pr.LIVENESS_BACKSTOP_SECONDS for timeout in waits), waits)
+        self.assertTrue(all(0 < timeout <= HANG_SECONDS for timeout in waits), waits)      # never a spin, never past the deadline
 
     def test_a_cancel_wakes_the_waiter_without_waiting_for_the_backstop(self):
         cancel = pr.PoolCancel()
@@ -1192,6 +1209,7 @@ class ConcurrencyTests(Case):
         with mock.patch.object(pr, "LIVENESS_BACKSTOP_SECONDS", HANG_SECONDS * 10):
             running = Background(lambda: self.ws.run(spec, plan, gate))
             wait_for(gate.started)
+            self.assertEqual(len(self.ws.cancel._listeners), 1, "the waiter is not subscribed to the cancel")
             self.ws.cancel.set()
             self.assertEqual(support.states(running.result()), [pr.CANCELED])
         self.assertEqual(self.ws.cancel._listeners, [], "the coordinator left a listener behind")
@@ -1240,7 +1258,9 @@ class VerifierTests(Case):
         for name, value in hostile.items():
             with self.subTest(field=name):
                 self.reseal(self.plan, lambda m, name=name, value=value: m.__setitem__(name, value))
-                self.refuted(name)
+                errors = self.refuted(name)
+                if name == "wait_all":          # the schema subset's `const: true` admits 1; the module does not
+                    self.assertEqual(errors, ["wait_all must be the JSON value true"])
                 self.restore()
         path = self.ws.manifest_path(self.plan)
         manifest["manifest_sha256"] = ZERO_SHA
