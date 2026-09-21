@@ -461,7 +461,10 @@ class StateVerifier(unittest.TestCase):
     """Host-runnable: `verify_state_file` needs no Dagster."""
 
     def setUp(self):
-        self.directory = tempfile.TemporaryDirectory(dir=os.environ.get("PHASE1_TEST_DATA"))
+        location = os.environ.get("PHASE1_TEST_DATA")
+        if location:
+            Path(location).mkdir(parents=True, exist_ok=True)
+        self.directory = tempfile.TemporaryDirectory(dir=location)
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "state.json"
 
