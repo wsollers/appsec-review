@@ -1172,6 +1172,76 @@ class VerifierTests(Case):
                 self.assertIn(f"context.{name}", str(caught.exception))
 
 
+class DefenceInDepthTests(Case):
+    """Checks that a first line of defence normally hides. Each test removes that first line (a
+    mutation probe found every one of these unobserved) and proves the second one holds."""
+
+    def test_a_derived_manifest_outside_its_own_schema_is_refused(self):
+        with mock.patch.object(ps, "ID_HEX_CHARS", 8):          # no collision, but not an instance id
+            self.refused(self.ws.mixed(1, 1), "the derived expansion is outside its own closed schema")
+
+    def test_the_pool_root_is_created_exclusively_even_if_the_existence_check_is_raced(self):
+        spec = self.ws.mixed(1, 1)
+        plan = ps.plan_expansion(spec, context=self.ws.context())
+        self.ws.root(plan).mkdir()
+        (self.ws.root(plan) / "squatter").write_bytes(b"x")
+        with mock.patch.object(ps.os.path, "lexists", return_value=False):
+            with self.assertRaises(ps.PoolSpecError) as caught:
+                self.expand(spec)
+        self.assertIn("could not be created exclusively", str(caught.exception))
+        self.assertEqual(support.tree(self.ws.root(plan)), ["squatter"])
+
+    def test_two_created_roots_that_are_one_directory_fail_closed(self):
+        spec = self.ws.spec([self.ws.persona_group("reviewers", 2)])
+        with mock.patch.object(ps, "_identity", return_value=(1, 1)):
+            with self.assertRaises(ps.PoolExpansionError) as caught:
+                self.expand(spec)
+        self.assertIn("two created roots are one directory", str(caught.exception))
+        plan = ps.plan_expansion(spec, context=self.ws.context())
+        self.assertFalse((self.ws.root(plan) / ps.EXPANSION_FILE).exists(), "an unproven root got a manifest")
+        self.assertTrue(self.verify(plan, spec))
+
+    def test_the_expander_verifies_what_it_wrote(self):
+        spec = self.ws.mixed(1, 1)
+        honest = ps.atomic_bytes
+
+        def torn(path, value):
+            honest(path, value[:-2] if Path(path).parent.name == ps.REQUESTS_DIR else value)
+        with mock.patch.object(ps, "atomic_bytes", side_effect=torn):
+            with self.assertRaises(ps.PoolExpansionError) as caught:
+                self.expand(spec)
+        self.assertIn("does not verify after it was written", str(caught.exception))
+
+    def test_a_pool_parent_reached_through_a_link_is_not_its_one_spelling(self):
+        if not SYMLINKS:
+            self.skipTest("this host cannot create symbolic links")
+        (self.ws.base / "via").symlink_to(self.ws.data, target_is_directory=True)
+        aliased = self.ws.base / "via" / "pools" / "wave-1"
+        self.assertTrue(aliased.is_dir() and not aliased.is_symlink())
+        self.refused(self.ws.mixed(1, 1), "context.pool_parent must be", pool_parent=aliased)
+
+    def test_a_specification_that_is_not_json_is_refused_before_the_schema(self):
+        for label, edit in (("NaN", lambda s: s.update(rendezvous_timeout_seconds=float("nan"))),
+                            ("a set", lambda s: s["resource_pool_policy"].update(allowed_pools={rp.DOCKER})),
+                            ("bytes", lambda s: s.update(lane=b"07-red-team-adversarial"))):
+            with self.subTest(case=label):
+                spec = self.ws.mixed(1, 1)
+                edit(spec)
+                self.refused(spec, "specification is not a JSON document")
+
+    def test_the_manifest_diagnosis_names_the_rule_that_is_broken(self):
+        spec = self.ws.mixed(1, 1)
+        plan = self.expand(spec)
+        manifest = json.loads(plan.manifest_bytes)
+        manifest["expansion_sha256"] = "sha256:" + "0" * 64
+        (self.ws.root(plan) / ps.EXPANSION_FILE).write_bytes(ps.canonical_bytes(manifest))
+        self.assertEqual(self.verify(plan, spec), [
+            "expansion_sha256 does not match the expansion record",
+            "expansion.json field expansion_sha256 is not what the expected specification derives"])
+        self.assertEqual(ps._manifest_errors(plan.manifest_bytes, plan),
+                         ["expansion.json is not the byte sequence the expected specification derives"])
+
+
 class HostileTextTests(Case):
     def test_no_specification_value_reaches_a_message(self):
         """Every string position of a valid specification, one at a time, becomes the marker."""
