@@ -177,6 +177,13 @@ Cross-cutting capability ownership is explicit:
   docs, permission integration. Do not migrate a lifecycle worker in this batch.
 - Acceptance: hostile argv/mount/image/network/capability cases, timeout/cancel/worker-loss/log
   failure, Windows-host/Linux-worker parity, and a harmless pinned fixture container.
+- TODO (owner, 2026-09-21; from the PR #29 review): decide whether `verify_container_result` /
+  `load_verified_result` / `to_worker_envelope` should REQUIRE an externally held
+  `expected_result_sha256` (the hash `run_container` returned, kept where the attempt cannot reach).
+  Today the verifier's checks are consistency checks: an edit to the result or to any one file is
+  caught, a consistent rewrite of every file in the log directory is not
+  (`docs/pinned-container-adapter.md`). Decide before C02 or the first migrated worker calls the
+  verifier; adding a required argument afterwards touches every caller.
 
 #### B14 — Persona invocation adapter — BLOCKED(B11)
 
@@ -187,6 +194,9 @@ Cross-cutting capability ownership is explicit:
   validation, and docs.
 - Acceptance: hostile prompt/evidence cannot widen scope, permissions, claim class, or output path;
   missing model identity, unbounded context, self-verification, and malformed result fail closed.
+- Owner decision 2026-09-21 (PR #32 review): B14 checks independence against DIRECT producers only
+  and that is accepted -- the adapter sees one request at a time. Independence of a whole chain
+  (P1 produces, P2 verifies, P1 judges P2's result) is a requirement of C02 and C04, below.
 
 #### B15 — Dedicated resource pools — BLOCKED(B11)
 
@@ -214,6 +224,11 @@ Cross-cutting capability ownership is explicit:
   publishes a manifest without treating missing workers as empty success.
 - Acceptance: late finish, failure, timeout, cancel, crash, restart, duplicate terminal, and missing
   instance; publication never occurs early.
+- Requirement (owner decision 2026-09-21): C02 builds a reviewer's producers from verified results
+  and is the first component that sees a chain. It owns chain independence: consider every ancestor
+  of the pinned producer results, not only the direct producers B14 checks.
+- TODO: consider how to enforce that (refuse at dispatch, or record and let C04 discount), and
+  whether B14 should additionally walk pinned producer results recursively.
 
 #### C03 — Deterministic typed merges — BLOCKED(C02)
 
@@ -228,6 +243,8 @@ Cross-cutting capability ownership is explicit:
   diversity without inferring independence from worker count.
 - Acceptance: duplicate personas/models, conflicting claims, missing citations, minority dissent,
   insufficient quorum, and deterministic recomputation.
+- Requirement (owner decision 2026-09-21): a persona or model that appears earlier in a claim's
+  chain is never counted as independent of it (see C02); add the transitive case to acceptance.
 
 ### Decision gates (can run independently; implementation remains blocked on user approval)
 
@@ -582,6 +599,12 @@ Cross-cutting capability ownership is explicit:
 - Deliver: separate run-owned secrets and IaC jobs/contracts/schemas, safe redaction, pinned images,
   and legacy-step deletion after parity. Scanner hits remain evidence leads.
 - Acceptance: clean/hit/secret-output/tool-error/timeout/cancel/reuse/recovery and bounded live runs.
+- Owner decision 2026-09-21 (PR #31 review): the validator closes the attempt tree for the nine
+  vendor-prepass contracts (`status.json`, `manifest.json`, `result.json`, `outputs/` only) and
+  `inputs.json` is never an allowance. These workers therefore get their OWN attempt allocation,
+  which keeps the input record outside the attempt and writes only the closed set; they do not
+  publish through `allocate_attempt` / `persist_terminal_current` as those stand
+  (`docs/validator-vendor-prepass-dispatch.md`, known limits).
 
 #### M04 — Container, mobile, and binary-hardening jobs — BLOCKED(M02,B13)
 
@@ -593,6 +616,8 @@ Cross-cutting capability ownership is explicit:
   semantics; remove replaced legacy steps without wrappers.
 - Acceptance: applicable/inapplicable/unsupported artifacts, tool failure, permissions, partial
   coverage, reuse/recovery, and bounded live qualification.
+- Owner decision 2026-09-21 (PR #31 review), as under M03: these workers get their own attempt
+  allocation that writes only the closed set; `inputs.json` is never an allowance.
 
 #### M05 — SBOM/SCA evidence jobs — BLOCKED(B13,V16,V17,V18)
 
@@ -607,6 +632,12 @@ Cross-cutting capability ownership is explicit:
   component/version/source/database timestamps and hashes; do not claim reachability.
 - Acceptance: lockfile/binary/vendor cases, offline/stale DB, unknown version, duplicate component,
   tool failure, reuse/recovery, and bounded live qualification.
+- Owner decision 2026-09-21 (PR #31 review), as under M03: the validator closes the attempt tree for the nine
+  vendor-prepass contracts (`status.json`, `manifest.json`, `result.json`, `outputs/` only) and
+  `inputs.json` is never an allowance. These workers therefore get their OWN attempt allocation,
+  which keeps the input record outside the attempt and writes only the closed set; they do not
+  publish through `allocate_attempt` / `persist_terminal_current` as those stand
+  (`docs/validator-vendor-prepass-dispatch.md`, known limits).
 
 #### M06 — Semantic-index disposition — READY
 
