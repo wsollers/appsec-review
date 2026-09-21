@@ -867,7 +867,7 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
         return "MALFORMED_RESULT", empty
     try:
         manifest = json.loads(raw.decode("utf-8"))
-    except ValueError:
+    except (ValueError, RecursionError):
         return "MALFORMED_RESULT", empty
     if validate_document(manifest, OUTPUT_SCHEMA) or raw != canonical_bytes(manifest):
         return "MALFORMED_RESULT", empty
@@ -892,7 +892,7 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
         try:
             text = contents[path].decode("utf-8")
             texts.extend(_strings(json.loads(text)) if path.lower().endswith(".json") else [text])
-        except ValueError:
+        except (ValueError, RecursionError):
             return "MALFORMED_RESULT", empty
     usage = manifest["usage"]
     output_bytes = sum(entry["bytes"] for entry in listed)
@@ -1094,7 +1094,7 @@ def _read_document(path: Path, schema: str, limit: int, label: str) -> tuple[dic
         return None, raw, [f"{label} is larger than the adapter ever writes"]
     try:
         document = json.loads(raw.decode("utf-8"))
-    except ValueError:
+    except (ValueError, RecursionError):
         return None, raw, [f"{label} is not UTF-8 JSON"]
     errors = validate_document(document, schema)
     if errors:
