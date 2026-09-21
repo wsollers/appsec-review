@@ -578,6 +578,12 @@ class Documentation(unittest.TestCase):
         self.assertIn(" > ".join(f"`{pool}`" for pool in rp.PRECEDENCE), text)
         for kind, pool in rp.PERMISSION_KIND_POOLS.items():
             self.assertRegex(text, rf"\| `{kind}` \| (`{pool}`|none) \|" if pool else rf"\| `{kind}` \| none \|")
+        kinds = re.findall(r"^\| `([a-z_]+)` \| `([a-z_]+)`( \(`([a-z_]+)` when `memory_heavy`\))? \|$", text, re.M)
+        self.assertEqual([row[0] for row in kinds], list(rp.WORKER_KIND_POOLS))
+        for kind, pool, _, heavy in kinds:
+            self.assertEqual(rp.derive_pool(kind, (), memory_heavy=False), pool, kind)
+            # A row that names no memory-heavy pool claims the pool is the same either way.
+            self.assertEqual(rp.derive_pool(kind, (), memory_heavy=True), heavy or pool, kind)
         for reason in rp.UNASSIGNED_REASONS:
             self.assertIn(f"`{reason}`", text)
         self.assertIn(f"default_op_concurrency_limit: {rp.DEFAULT_POOL_LIMIT}", text)

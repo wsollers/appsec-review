@@ -66,7 +66,7 @@ string such as `network:api.scorecard.dev`, or a string where a list belongs rai
 | Worker kind | Pool |
 |---|---|
 | `deterministic_python` | `cpu` (`memory` when `memory_heavy`) |
-| `supplied_human_decision` | `cpu` |
+| `supplied_human_decision` | `cpu` (`memory` when `memory_heavy`) |
 | `pinned_container` | `docker` |
 | `persona` | `persona_llm` |
 
