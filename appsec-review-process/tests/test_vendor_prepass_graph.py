@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from execution_state import Blocked
 import job_graph
+import resource_pools
 import validate_job_output
 from validate_design_parity import validate_manifest
 from worker_result import load_contract, validate_worker_result
@@ -454,6 +455,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as scratch:
             namespace = {"op": op, "In": lambda kind: kind, "Failure": Failure, "MetadataValue": MetadataValue,
+                         "NOT_IMPLEMENTED": resource_pools.unassigned("worker_not_implemented"),
                          "now": lambda: "2026-09-20T00:00:00+00:00",
                          "data_path": lambda run_id, *parts: Path(scratch, run_id, *parts),
                          "atomic_json": lambda path, value: written.__setitem__(str(path), deepcopy(value))}
@@ -464,6 +466,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
                     stub = namespace["blocked_op"](job, self.s.jobs[job])
                     self.assertEqual(stub.declared["name"], "job_" + job.replace("-", "_"))
                     self.assertIn("BLOCKED: worker not implemented", stub.declared["description"])
+                    self.assertEqual(stub.declared["tags"], resource_pools.unassigned("worker_not_implemented"))
                     upstream = [{"status": "OK"}] * len(self.s.jobs[job]["dependencies"])
                     with self.assertRaisesRegex(Failure, re.escape(job) + ": WORKER_NOT_IMPLEMENTED; no downstream acceptance"):
                         stub(Context(), {"engagement_run_id": "run-v02"}, upstream)

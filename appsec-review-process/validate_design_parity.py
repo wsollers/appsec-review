@@ -12,6 +12,7 @@ from typing import Any
 
 from execution_state import ROOT, read_json
 from job_graph import composition
+import resource_pools
 from schema_validate import validate_document
 from worker_result import validate_worker_result
 
@@ -324,6 +325,9 @@ def validate_manifest(manifest: dict[str, Any], repo: Path = REPO) -> dict[str, 
         errors.append("workflow concurrent-step limit mismatch")
     if pools and "pool=" not in workflow_text:
         errors.append("manifest declares resource pools but Dagster ops have no pool assignments")
+    # B15: the pool vocabulary has one source of truth; the manifest may not invent or omit a pool.
+    if pools and (len(set(pools)) != len(pools) or sorted(pools) != sorted(resource_pools.POOL_IDS)):
+        errors.append("manifest resource pools do not match resource_pools.POOL_IDS")
     for job_id in sorted(set(records) & set(graph_jobs)):
         record = records[job_id]
         node = graph_jobs[job_id]

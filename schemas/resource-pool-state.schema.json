@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "resource-pool-state.schema.json",
+  "title": "Resource pool state (B15 qualification evidence)",
+  "description": "Written by appsec-review-process/resource_pools.py `state`; re-derived from disk by `verify-state`. Closed, every property required.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "dagster_version", "declaration_sha256", "default_pool_limit",
+               "free_slots_after_run_end_seconds", "outer_limits", "pools", "foreign_pools", "assignments",
+               "runs", "pooled_steps_recorded", "observed_overlap", "errors", "result", "state_sha256"],
+  "properties": {
+    "schema": {"const": "appsec-review/resource-pool-state/1.1"},
+    "generated_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?\\+00:00\\Z"},
+    "dagster_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\Z"},
+    "declaration_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
+    "default_pool_limit": {
+      "type": "object", "additionalProperties": false, "required": ["expected", "observed"],
+      "properties": {"expected": {"type": "integer"}, "observed": {"type": ["integer", "null"]}}
+    },
+    "free_slots_after_run_end_seconds": {
+      "type": "object", "additionalProperties": false, "required": ["expected", "observed"],
+      "properties": {"expected": {"type": "integer"}, "observed": {"type": ["integer", "null"]}}
+    },
+    "outer_limits": {
+      "type": "object", "additionalProperties": false, "required": ["expected", "observed"],
+      "properties": {
+        "expected": {
+          "type": "object", "additionalProperties": false,
+          "required": ["max_concurrent_runs", "per_engagement_limit", "nvd_feed_limit"],
+          "properties": {"max_concurrent_runs": {"type": "integer"}, "per_engagement_limit": {"type": "integer"},
+                         "nvd_feed_limit": {"type": "integer"}}
+        },
+        "observed": {
+          "type": "object", "additionalProperties": false,
+          "required": ["max_concurrent_runs", "per_engagement_limit", "nvd_feed_limit"],
+          "properties": {"max_concurrent_runs": {"type": ["integer", "null"]},
+                         "per_engagement_limit": {"type": ["integer", "null"]},
+                         "nvd_feed_limit": {"type": ["integer", "null"]}}
+        }
+      }
+    },
+    "pools": {
+      "type": "array", "minItems": 6,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["pool_id", "expected_limit", "observed_limit", "from_default", "claimed_slots",
+                     "pending_steps", "state"],
+        "properties": {
+          "pool_id": {"enum": ["cpu", "memory", "docker", "network", "persona_llm", "dynamic_analysis"]},
+          "expected_limit": {"type": "integer"},
+          "observed_limit": {"type": ["integer", "null"]},
+          "from_default": {"type": ["boolean", "null"]},
+          "claimed_slots": {"type": "integer"},
+          "pending_steps": {"type": "integer"},
+          "state": {"enum": ["OK", "MISSING", "DEFAULTED", "DRIFT"]}
+        }
+      }
+    },
+    "foreign_pools": {"type": "array", "items": {"type": "string", "pattern": "^\\S{1,200}\\Z"}},
+    "assignments": {
+      "type": "object", "additionalProperties": false, "required": ["pooled", "unassigned", "errors"],
+      "properties": {
+        "pooled": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["job", "op", "pool_id"],
+            "properties": {
+              "job": {"type": "string", "pattern": "^[A-Za-z0-9_]{1,200}\\Z"},
+              "op": {"type": "string", "pattern": "^[A-Za-z0-9_]{1,200}\\Z"},
+              "pool_id": {"enum": ["cpu", "memory", "docker", "network", "persona_llm", "dynamic_analysis"]}
+            }
+          }
+        },
+        "unassigned": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["job", "op", "reason"],
+            "properties": {
+              "job": {"type": "string", "pattern": "^[A-Za-z0-9_]{1,200}\\Z"},
+              "op": {"type": "string", "pattern": "^[A-Za-z0-9_]{1,200}\\Z"},
+              "reason": {"enum": ["coordination_only", "worker_not_implemented", "bootstrap_diagnostic"]}
+            }
+          }
+        },
+        "errors": {"type": "array", "items": {"type": "string", "pattern": "^[ -~]{1,400}\\Z"}}
+      }
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["dagster_run_id", "job", "status", "engagement_run_id", "steps"],
+        "properties": {
+          "dagster_run_id": {"type": "string", "pattern": "^[0-9a-f-]{36}\\Z"},
+          "job": {"type": "string", "pattern": "^[A-Za-z0-9_]{1,200}\\Z"},
+          "status": {"enum": ["QUEUED", "NOT_STARTED", "MANAGED", "STARTING", "STARTED", "SUCCESS", "FAILURE",
+                              "CANCELING", "CANCELED"]},
+          "engagement_run_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}\\Z"},
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["step_key", "pool_id", "started", "ended"],
+              "properties": {
+                "step_key": {"type": "string", "pattern": "^[A-Za-z0-9_.\\[\\]]{1,300}\\Z"},
+                "pool_id": {"type": "string", "pattern": "^\\S{1,200}\\Z"},
+                "started": {"type": "number"},
+                "ended": {"type": ["number", "null"]}
+              }
+            }
+          }
+        }
+      }
+    },
+    "pooled_steps_recorded": {"type": "boolean"},
+    "observed_overlap": {
+      "type": "array", "minItems": 6,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["pool_id", "limit", "max_concurrent_steps"],
+        "properties": {
+          "pool_id": {"enum": ["cpu", "memory", "docker", "network", "persona_llm", "dynamic_analysis"]},
+          "limit": {"type": "integer"},
+          "max_concurrent_steps": {"type": "integer"}
+        }
+      }
+    },
+    "errors": {"type": "array", "items": {"type": "string", "pattern": "^[ -~]{1,400}\\Z"}},
+    "result": {"enum": ["PASS", "FAIL"]},
+    "state_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"}
+  }
+}

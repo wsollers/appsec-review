@@ -13,6 +13,10 @@ from datetime import datetime, timezone
 from dagster import (DefaultScheduleStatus, Definitions, Failure, job, op, resource,
                      in_process_executor, MetadataValue, RetryPolicy, ScheduleDefinition)
 
+# B15: pool ids, limits and the explicit unassigned state come from resource_pools.py only.
+sys.path.insert(0, '/opt/process')
+import resource_pools
+
 
 def write_json(path, value):
     temporary = path.with_suffix('.tmp')
@@ -42,7 +46,7 @@ def record(context, path, status, message, **details):
     context.log.info('%s: %s', status, message)
 
 
-@op
+@op(tags=resource_pools.unassigned('bootstrap_diagnostic'))
 def pre_validation(context):
     path = step_dir(context)
     try:
@@ -56,7 +60,7 @@ def pre_validation(context):
         raise
 
 
-@op(config_schema={'fail_work': bool})
+@op(config_schema={'fail_work': bool}, tags=resource_pools.unassigned('bootstrap_diagnostic'))
 def smoke_work(context, validated_input: str):
     path = step_dir(context)
     try:
@@ -86,7 +90,7 @@ def smoke_work(context, validated_input: str):
         raise
 
 
-@op
+@op(tags=resource_pools.unassigned('bootstrap_diagnostic'))
 def post_validation(context, work_output: str):
     path = step_dir(context)
     try:
@@ -164,7 +168,7 @@ def intake_session(context):
         yield session
 
 
-@op(required_resource_keys={'session'})
+@op(required_resource_keys={'session'}, tags=resource_pools.unassigned('coordination_only'))
 def intake_config(context):
     def gather():
         plan = context.resources.session.configure()
@@ -177,7 +181,7 @@ def intake_config(context):
     return transition(context, 'intake_config', gather)
 
 
-@op(required_resource_keys={'session'})
+@op(required_resource_keys={'session'}, tags=resource_pools.unassigned('coordination_only'))
 def intake_pre_validation(context, configured: str):
     def validate():
         if digest(context.resources.session.configure()) != configured:
@@ -187,7 +191,7 @@ def intake_pre_validation(context, configured: str):
     return transition(context, 'intake_pre_validation', validate)
 
 
-@op(required_resource_keys={'session'})
+@op(required_resource_keys={'session'}, pool=resource_pools.derive_pool('deterministic_python', (), memory_heavy=False))
 def intake_work(context, prepared: str):
     transition(context, 'intake_work', context.resources.session.work)
     session = context.resources.session
@@ -199,7 +203,7 @@ def intake_work(context, prepared: str):
     return prepared
 
 
-@op(required_resource_keys={'session'})
+@op(required_resource_keys={'session'}, tags=resource_pools.unassigned('coordination_only'))
 def intake_post_validation(context, worked: str):
     result = transition(context, 'intake_post_validation', context.resources.session.publish)
     context.log.info('Accepted engagement %s attempt %s after post-validation', result['run_id'], worked)
@@ -212,7 +216,7 @@ def phase1_intake():
     intake_post_validation(intake_work(intake_pre_validation(intake_config())))
 
 
-@op
+@op(pool=resource_pools.derive_pool('deterministic_python', ('fixed-network-destination',), memory_heavy=False))
 def nvd_sync_work(context):
     """Publish one immutable NVD snapshot outside every engagement run."""
     result = sync_nvd(coordinator_id=context.run_id)
@@ -246,4 +250,7 @@ defs = Definitions(jobs=[orchestration_smoke, phase1_intake, nvd_reference_sync,
                          evidence_index, critical_findings_sarif, ossf_scorecard,
                          repository_partition_discovery, full_review],
                    schedules=[nvd_reference_schedule],
-                   sensors=[reconcile_workflow_failure, reconcile_workflow_cancellation])
+                   sensors=[reconcile_workflow_failure, reconcile_workflow_cancellation,
+                            resource_pools.build_guard_sensor()])
+# A new op without a pool or an explicit unassigned record fails the code location load.
+resource_pools.require_explicit_assignments(defs)

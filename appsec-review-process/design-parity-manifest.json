@@ -89,7 +89,14 @@
       "per_engagement_limit": 1,
       "workflow_max_concurrent_steps": 3
     },
-    "resource_pools": []
+    "resource_pools": [
+      "cpu",
+      "memory",
+      "docker",
+      "network",
+      "persona_llm",
+      "dynamic_analysis"
+    ]
   },
   "jobs": [
     {
@@ -140,7 +147,7 @@
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
+      "resource_pool": "cpu",
       "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
@@ -154,10 +161,8 @@
           "appsec-review-process/qualify_phase1.py"
         ]
       },
-      "gaps": [
-        "unassigned_resource_pool"
-      ],
-      "next_prerequisite": "Assign a dedicated resource pool when Workstream B defines pools."
+      "gaps": [],
+      "next_prerequisite": "Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/resource-pools.md step 8)."
     },
     {
       "id": "02-ossf-scorecard",
@@ -212,7 +217,7 @@
           "ossf_scorecard"
         ]
       },
-      "resource_pool": "unassigned",
+      "resource_pool": "network",
       "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
@@ -228,10 +233,8 @@
           "appsec-review-process/qualify_worker_adoption.py"
         ]
       },
-      "gaps": [
-        "unassigned_resource_pool"
-      ],
-      "next_prerequisite": "Assign a dedicated resource pool when Workstream B defines pools."
+      "gaps": [],
+      "next_prerequisite": "Pool assigned (network, B15); the network pool has not been observed under contention."
     },
     {
       "id": "02-repository-partition-discovery",
@@ -282,7 +285,7 @@
           "repository_partition_discovery"
         ]
       },
-      "resource_pool": "unassigned",
+      "resource_pool": "cpu",
       "readiness": "supplied_artifact_gate",
       "qualification": {
         "levels": [
@@ -299,8 +302,7 @@
       },
       "gaps": [
         "not_automatic_analysis_dispatch",
-        "supplied_result_required",
-        "unassigned_resource_pool"
+        "supplied_result_required"
       ],
       "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
     },
@@ -348,7 +350,7 @@
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
+      "resource_pool": "cpu",
       "readiness": "supplied_artifact_gate",
       "qualification": {
         "levels": [
@@ -358,8 +360,7 @@
       },
       "gaps": [
         "not_automatic_analysis_dispatch",
-        "supplied_result_required",
-        "unassigned_resource_pool"
+        "supplied_result_required"
       ],
       "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
     },
@@ -1781,7 +1782,7 @@
           "build_execution"
         ]
       },
-      "resource_pool": "unassigned",
+      "resource_pool": "docker",
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
@@ -1794,8 +1795,7 @@
         "missing_dedicated_output_schema",
         "missing_output_contract",
         "missing_registry_composition",
-        "no_live_full_review_qualification",
-        "unassigned_resource_pool"
+        "no_live_full_review_qualification"
       ],
       "next_prerequisite": "Add registry composition and output contract, then run live full_review qualification."
     },
@@ -2579,7 +2579,7 @@
           "evidence_index"
         ]
       },
-      "resource_pool": "unassigned",
+      "resource_pool": "memory",
       "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
@@ -2594,10 +2594,9 @@
         ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "unassigned_resource_pool"
+        "missing_dedicated_output_schema"
       ],
-      "next_prerequisite": "Assign a dedicated resource pool when Workstream B defines pools."
+      "next_prerequisite": "Pool assigned (memory, B15). Add a dedicated output schema."
     },
     {
       "id": "02-secrets-inventory",
@@ -3138,19 +3137,28 @@
       ],
       "jobs": [],
       "execution_mode": "none",
-      "readiness": "missing_prerequisites",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "unassigned",
       "qualification": {
         "levels": [
-          "none"
+          "unit",
+          "linux_integration",
+          "live_dagster"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_resource_pools.py",
+          "appsec-review-process/tests/test_resource_pools_dagster.py",
+          "docs/resource-pools.md"
+        ]
       },
       "gaps": [
-        "no_dedicated_dagster_resource_pools"
+        "live_worker_loss_injection_pending",
+        "lifecycle_jobs_without_workers_remain_unassigned",
+        "manifest_job_pool_not_cross_checked_against_op_pool",
+        "no_load_evidence_limits_must_not_be_raised"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Define CPU, memory, Docker, network, persona, and dynamic-analysis pools."
+      "next_prerequisite": "Run live qualification step 8 (kill -9 of a run worker; docs/resource-pools.md), then cross-check each manifest job pool against its op pool."
     },
     {
       "id": "persona-tool-pool-dispatch",

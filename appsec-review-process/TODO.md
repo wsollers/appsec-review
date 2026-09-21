@@ -175,7 +175,7 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: current, pending, failed-newer, canceled, corrupt, stale, and missing-prerequisite
   fixtures on Windows/Linux; status remains read-only.
 
-#### B13 — Pinned-container argv adapter — BLOCKED(B11)
+#### B13 — Pinned-container argv adapter — DONE (PR #29, merged 2026-09-21; no lifecycle worker migrated yet)
 
 - Deliver: one versioned adapter that accepts only registry-resolved image digests and argv arrays,
   uses the maintained wrapper, read-only target mounts, run-owned writable scratch, disabled network
@@ -192,7 +192,7 @@ Cross-cutting capability ownership is explicit:
   (`docs/pinned-container-adapter.md`). Decide before C02 or the first migrated worker calls the
   verifier; adding a required argument afterwards touches every caller.
 
-#### B14 — Persona invocation adapter — BLOCKED(B11)
+#### B14 — Persona invocation adapter — DONE (PR #32, merged 2026-09-21; dispatch protocol only)
 
 - Deliver: isolated invocation request/result contract pinning outer prompt, selected persona,
   model/tool identity, budget, exact readable inputs, writable output root, and prohibited claims.
@@ -205,7 +205,7 @@ Cross-cutting capability ownership is explicit:
   and that is accepted -- the adapter sees one request at a time. Independence of a whole chain
   (P1 produces, P2 verifies, P1 judges P2's result) is a requirement of C02 and C04, below.
 
-#### B15 — Dedicated resource pools — BLOCKED(B11)
+#### B15 — Dedicated resource pools — IMPLEMENTED_NOT_QUALIFIED (PR #33; live qualification step 8 owed)
 
 - Deliver: named Dagster pools for CPU, memory, Docker, network, persona/LLM, and dynamic-analysis
   work while preserving global and per-engagement outer limits. Record an explicit unassigned state.
@@ -213,10 +213,17 @@ Cross-cutting capability ownership is explicit:
   docs. Do not raise concurrency until measured.
 - Acceptance: service tests prove per-pool limits, fairness, cancellation, restart behavior, and
   unchanged engagement serialization; record load evidence before any limit increase.
+- Status 2026-09-21: six pools, the explicit unassigned state, the guard sensor and the pool-state
+  evidence document are implemented; the parity manifest assigns the six jobs that have workers.
+  Live service qualification run on the Linux host (`docs/resource-pools.md`, record of
+  2026-09-21): per-pool limits, fairness, engagement serialization, cancellation, restart, drift and
+  the evidence document PASS. Owed: step 8 (`kill -9` of a run worker and its step child), which
+  the coordinator session was not permitted to run. Finding: a terminated run that holds a slot
+  frees it only through `free_slots_after_run_end_seconds` (about 150 s), so that setting must stay.
 
 ### Pool runtime
 
-#### C01 — Pool specification and deterministic instance expansion — BLOCKED(B13,B14,B15)
+#### C01 — Pool specification and deterministic instance expansion — BLOCKED(B15)
 
 - Deliver: versioned pool schema covering lane, worker kind, persona/tool identity, count, scope,
   inputs, budget, permissions, timeout, pool, and `wait_all`; deterministic unique instance IDs and
