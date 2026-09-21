@@ -48,7 +48,7 @@ bound to what it is derived from, and a test edits that pin alone.
 | `run_id`, `job_id`, `attempt_id` | the worker request it arrived in |
 | `outer_prompt` `{path, sha256, bytes}` | exact UTF-8 bytes beneath `runtime.prompt_root`; see the note under this table |
 | `persona` (six ids, six hashes) | the named job template and the five records **that template composes**; see the note under this table |
-| `model` `{provider, family, model_id, snapshot}` | `runtime.allowed_models`; all four parts required, no default, no alias (note below) |
+| `model` `{provider, family, model_id, snapshot}` | `runtime.allowed_models`, in which one `(provider, model_id)` has exactly one `family`; all four parts required, no default, no alias (note below) |
 | `invoker_id` | `runtime.invoker.invoker_id` |
 | `tools` | tool ids derived from the tooling profile (next section); never text |
 | `budget` | seven required integers with bounds (below) |
@@ -163,10 +163,19 @@ Rule id `appsec-review/persona-independence/1.0`, written into every result.
   most 4 MiB, UTF-8 JSON in which no object repeats a key, inside the result schema, in the
   canonical byte form, `result_sha256` matching, `execution_status` `OK` and no cause.
 - For each producer, the reviewer is refused when it is **the same attempt**, **the same persona**,
-  or **the same model family**, judged on the values **read from the producer result bytes**
+  **the same model family**, or **the same `(provider, model_id)` whatever family either side
+  states**, judged on the values **read from the producer result bytes**
   (`self-verification: the result of producers[i] ...`). The pure request check applies the same
   rule to the declared values first, so an honest declaration of a dependent producer never reaches
   the disk.
+- **What `family` rests on.** `family` is a label, not a measured property: nothing in this adapter
+  can tell whether two models share weights or training. Its only authority is the integrator's
+  `runtime.allowed_models`. The adapter and the verifier both refuse an allow-list that gives one
+  `(provider, model_id)` two families (any snapshots), so renaming a family cannot make a model
+  independent of itself; and a producer result whose `(provider, model_id)` is on the reviewer's
+  allow-list must state the family that list gives it. A producer model the allow-list does not
+  know keeps the family its pinned result states. Two different `model_id` values that are in
+  truth one model under two names are not detectable here: the allow-list must be right.
 - The declared `run_id`, `job_id`, `attempt_id`, `request_sha256`, `persona_id` and `model` must then
   each **equal** the producer result, and every `producer_output` input naming that producer must
   match, by sha256 and size, an entry of that result's `outputs`.
@@ -225,27 +234,49 @@ output root. `KeyboardInterrupt` and `SystemExit` are recorded as `CANCELED` and
 | `IDENTITY_MISMATCH` | `FAILED` | the manifest names another request, invoker, persona, persona hash or model |
 | `BUDGET_EXCEEDED` | `FAILED` | more files or bytes than the budget, or reported units or tool calls over their limits |
 | `UNDECLARED_TOOL` | `FAILED` | a reported tool id the request did not allow |
-| `PROHIBITED_CLAIM` | `FAILED` | a claim class outside `allowed_claim_classes`, or text matching a lexical rule of a prohibited class |
+| `PROHIBITED_CLAIM` | `FAILED` | a claim class outside `allowed_claim_classes`, or text matching a lexical rule of a prohibited class or naming its id |
 | `UNDECLARED_CITATION` | `FAILED` | a citation that is not a declared readable input at its pinned hash, or a verified invocation that is not a declared producer |
 | `SELF_VERIFICATION` | `FAILED` | see the independence section |
 
-`OUTPUT_ESCAPE` covers: the attempt changed outside the output root; the prompt or a readable
-input changed during the call; the output root holds a link, a hard-linked or special file, an
-empty directory or a name outside the path alphabet; the manifest lists a path that leaves the root.
+`OUTPUT_ESCAPE` covers: the attempt changed outside the output root, or holds a directory that
+cannot be listed, so that it cannot be compared; the prompt or a readable input changed during the
+call; the output root holds a link, a hard-linked or special file, an empty directory, a directory
+that cannot be listed, a file that cannot be read or a name outside the path alphabet; the manifest
+lists a path that leaves the root. A directory that cannot be listed is never skipped: what it
+hides would otherwise be neither listed nor counted as unlisted.
 
 `MALFORMED_RESULT` covers: a manifest that is missing, over 1 MiB, not UTF-8 JSON, not canonical or
 outside its closed schema; a listed file that is missing; an unlisted file; a wrong size or hash; a
 suffix outside the allow-list; a file that is not UTF-8, or not JSON when named `.json`; usage that
-disagrees with bytes on disk; duplicate claim ids.
+disagrees with bytes on disk; duplicate claim ids; published text in a form that cannot be scanned
+as it is read (detail below).
 
 The first failing rule, in the fixed order of `derive_output`, names the cause. A non-`OK` result
 lists no outputs, no usage and no claim classes.
 
-Every published file is a claim surface. The lexical rules (`CLAIM_TEXT_RULES`) run over every
-claim statement, limitation and locator in the manifest and over the full text of every output
-file, JSON keys included, and over every published output path (its `-`, `_`, `.` and `/` read as
-spaces). A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last
+Every published file is a claim surface. The scanned texts are: every claim statement, limitation
+and locator in the manifest; the full text of every output file; in a JSON output every string, and
+every scalar member read together with its nearest key, its outermost key and its whole key path
+(`{"outer": {"level": "x"}}` is read as `level: x`, `outer: x` and `outer level: x`, also
+through arrays); every published output path. JSON keys, claim ids and path segments are scanned as
+identifiers. A JSON output whose objects repeat a key is `MALFORMED_RESULT`: a parser keeps the last
 value while a reader of the bytes sees both, so the first would be published unchecked.
+
+One normalisation (`scan_forms`) applies to every scanned text, whatever surface it came from. The
+lexical rules (`CLAIM_TEXT_RULES`) read two forms: the NFKC text as written, and that text with
+combining marks dropped and `-`, `_`, `.`, `/`, camelCase boundaries and letter/digit boundaries read
+as spaces, so snake_case, camelCase and dotted spellings meet the same rules as prose. In addition,
+a text whose normalised form **equals** a prohibited class id (the id normalised the same way), or
+an identifier that **contains** one, is `PROHIBITED_CLAIM`. Prose that merely mentions a class id
+inside a longer sentence is not refused by that rule.
+
+Text that cannot be scanned as it is read is `MALFORMED_RESULT` (`text_form_ok`), in file bodies,
+parsed JSON keys and strings, and manifest text alike: a control character other than newline,
+carriage return and tab (NUL, the other C0 and C1 controls, U+007F); any format character (category
+Cf: zero-width space and joiners, soft hyphen U+00AD, direction overrides, and the byte-order mark,
+so a file must not start with a BOM); a lone surrogate; and a word of three or more letters that
+mixes LATIN letters with CYRILLIC or GREEK ones (a homoglyph spelling, which NFKC does not fold).
+Whole words in another script, accented letters and two-letter unit symbols are accepted.
 
 ## Result and verification
 
@@ -307,11 +338,18 @@ unchanged, and no property name of theirs matches the redactor's secret-ish key 
   attempt or re-run its verifier, so C02 must pin only results that passed
   `verify_invocation_result`. A producer output that an integrator labels `evidence` is not
   recognised as producer output.
+- Independence is checked against **direct producers only**, not transitively: persona P1 may
+  produce, P2 may verify that, and P1 may then judge P2's result, because P2's result names P1 only
+  inside bytes this adapter does not follow. That meets the letter of `design-v3.md` section 5.1
+  (no single invocation discovers, verifies and adjudicates); whether a chain must be independent
+  end to end is an open owner decision for C02/C04.
 - Requiring a different model family for every reviewer is stricter than the panel-level minimum
   in `design-v3.md` section 5.1. It follows the ADR-0008 sentence that names B14. A deployment with
   one model family cannot run reviewing invocations.
 - The lexical rules are a backstop, not a classifier. They fail closed on phrasing such as a
-  quoted severity word in a summary, and they do not recognise a paraphrase.
+  quoted severity word in a summary, and they do not recognise a paraphrase, a synonym, a claim
+  split between sibling members or files, or a confusable spelling inside one script
+  family (the mixed-script rule covers LATIN with CYRILLIC or GREEK only).
 - Whoever can rewrite every file of an attempt consistently can produce another valid attempt;
   nothing here is signed. The verifier guarantees agreement between the projections and with the
   expected request, registry and inputs.

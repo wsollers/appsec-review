@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -88,7 +89,7 @@ class LiveBoundaryTests(unittest.TestCase):
     def run_argv(self, argv, runtime=None, **over):
         request = support.request(self.target, argv, **over)
         result = support.run(runtime or support.runtime(), self.attempt, request)
-        self.assertEqual(support.verify(self.attempt, request), [])
+        self.assertEqual(support.verify(self.attempt, request, **support.host_facts(runtime)), [])
         self.assertEqual(docker_command("ps", "--all", "--quiet", "--filter", f"name=^/{self.name}$").stdout, b"")
         return request, result
 
@@ -263,6 +264,99 @@ class LiveBoundaryTests(unittest.TestCase):
         result = support.run(runtime, self.attempt, request)
         self.assertEqual((result["execution_status"], result["cause"]), ("BLOCKED", "DOCKER_UNAVAILABLE"))
         self.assertEqual(support.verify(self.attempt, request), [])
+
+    # -- PR 29 review, round 2: every completed run verifies; a resealed attempt does not
+
+    def test_every_completed_run_verifies_with_keyword_paths_and_option_shaped_argv(self):
+        cases = (("attempt", "scratch", ["/bin/echo", "--mount", "x"]),
+                 ("attempt", "secret-scan/scratch", ["/bin/echo", "--user", "0:0"]),
+                 ("attempt", "token-audit", ["/bin/echo", "--network", "host"]),
+                 ("secrets-detection/attempt", "scratch", ["/bin/true"]),
+                 ("02-secrets-inventory/attempt", "api-key/password", ["/bin/echo", "--password", "p"]))
+        for root, scratch, argv in cases:
+            with self.subTest(root=root, scratch=scratch, argv=argv):
+                self.attempt = self.root.joinpath(*root.split("/"))
+                if self.attempt.exists():
+                    shutil.rmtree(self.attempt)
+                self.attempt.mkdir(parents=True)
+                _, result = self.run_argv(argv, scratch_path=scratch)
+                self.assertEqual(result["execution_status"], "OK")
+                self.assertTrue((self.attempt.joinpath(*scratch.split("/"))).is_dir())
+
+    def reseal(self, log_dir: Path, edit_result=None):
+        path = log_dir / ce.RESULT_FILE
+        result = json.loads(path.read_text(encoding="utf-8"))
+        for entry in result["files"]:
+            data = (log_dir / entry["path"]).read_bytes()
+            entry.update(sha256=ce._bytes_sha(data), bytes=len(data))
+        if edit_result:
+            edit_result(result)
+        result["result_sha256"] = ce.result_sha256(result)
+        path.write_bytes(ce.canonical_request_bytes(result))
+
+    def assert_uncertifiable(self, request):
+        facts = support.host_facts()
+        self.assertTrue(support.verify(self.attempt, request))
+        with self.assertRaises(ce.ContainerRequestError):
+            ce.load_verified_result(self.attempt, **support.IDS, request=request,
+                                    images_dir=ce.IMAGES_DIR, **facts)
+        with self.assertRaises(ce.ContainerRequestError):
+            ce.to_worker_envelope(self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR,
+                                  **facts, input_fingerprint="sha256:" + "b" * 64, output_contract="none",
+                                  output_paths=[], resume_command=None)
+
+    def test_a_real_run_resealed_with_a_forged_writable_mount_executable_or_user_is_rejected(self):
+        request, _ = self.run_argv(["/bin/true"])
+        log_dir = self.attempt / "logs" / "container"
+        genuine = (log_dir / "command.json").read_bytes()
+        for source in ("/etc/scratch", str(Path.home() / ".ssh" / "scratch"),
+                       "/var/run/docker.sock/scratch", "/scratch"):
+            with self.subTest(writable_source=source):
+                command = json.loads(genuine)
+                at = max(k for k, v in enumerate(command["argv"]) if v == "--mount")
+                command["argv"][at + 1] = f"type=bind,source={source},target=/scratch"
+                (log_dir / "command.json").write_text(json.dumps(command), encoding="utf-8")
+                self.reseal(log_dir)
+                self.assert_uncertifiable(request)
+        command = json.loads(genuine)
+        command["argv"][0] = "/tmp/evil/docker"
+        command["argv"][command["argv"].index("--user") + 1] = "1:0"
+        (log_dir / "command.json").write_text(json.dumps(command), encoding="utf-8")
+        self.reseal(log_dir)
+        self.assert_uncertifiable(request)
+        (log_dir / "command.json").write_bytes(genuine)
+        self.reseal(log_dir)
+        self.assertEqual(support.verify(self.attempt, request), [])
+
+    def test_a_real_exit_one_run_and_its_logs_cannot_be_resealed_into_something_else(self):
+        request, result = self.run_argv(["/bin/false"])
+        self.assertEqual((result["cause"], result["exit_code"]), ("CONTAINER_EXIT_NONZERO", 1))
+        log_dir = self.attempt / "logs" / "container"
+        for cause, code in (("CANCELED", None), ("WORKER_LOST", 0), ("OOM_KILLED", 0), ("WORKER_LOST", None),
+                            (None, 0)):
+            with self.subTest(cause=cause, exit_code=code):
+                self.reseal(log_dir, lambda r: r.update(
+                    cause=cause, execution_status=ce.STATUS_BY_CAUSE[cause], exit_code=code))
+                self.assert_uncertifiable(request)
+        self.reseal(log_dir, lambda r: r.update(cause="CONTAINER_EXIT_NONZERO", execution_status="FAILED",
+                                                exit_code=1))
+        self.assertEqual(support.verify(self.attempt, request), [])
+        for name, data in (("events.jsonl", b"not json at all\n"), ("events.jsonl", b"")):
+            with self.subTest(file=name, size=len(data)):
+                original = (log_dir / name).read_bytes()
+                (log_dir / name).write_bytes(data)
+                self.reseal(log_dir)
+                self.assert_uncertifiable(request)
+                (log_dir / name).write_bytes(original)
+                self.reseal(log_dir)
+
+    def test_a_same_length_forgery_of_real_container_output_is_rejected(self):
+        request, _ = self.run_argv(["/bin/echo", "finding: none"])
+        path = self.attempt / "logs" / "container" / "stdout.log"
+        self.assertEqual(path.read_bytes(), b"finding: none\n")
+        path.write_bytes(b"finding: RCE!\n")
+        self.reseal(path.parent)
+        self.assert_uncertifiable(request)
 
     # -- adapter protocol, on-disk verifier and envelope against a real attempt
 

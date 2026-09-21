@@ -62,6 +62,11 @@ WORKER_KIND = "pinned_container"
 RESULT_FILE = "container-result.json"
 REQUEST_FILE = "request.json"
 CHILD_FILES = ("command.json", "events.jsonl", "stderr.log", "stdout.log")
+# The adapter's own account of what it saw around the child: whether it was interrupted, the
+# docker-side container state it read, whether removal was proven, and a hash of each retained log.
+OBSERVATION_FILE = "observation.json"
+OBSERVATION_ID = "appsec-review/pinned-container-observation/1.0"
+ATTEMPT_FILES = tuple(sorted((REQUEST_FILE, OBSERVATION_FILE, *CHILD_FILES)))
 
 SCRATCH_TARGET = "/scratch"
 CONTAINER_HOME = "/tmp"
@@ -147,7 +152,7 @@ SUMMARIES: Mapping[str | None, str] = MappingProxyType({
 _ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,119}\Z")
 _SHA_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _TS_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
-_USER_RE = re.compile(r"[1-9][0-9]{0,9}:[0-9]{1,10}\Z")
+_USER_RE = re.compile(r"[1-9][0-9]{0,9}:[1-9][0-9]{0,9}\Z")   # neither uid 0 nor gid 0
 _PATH_FORBIDDEN_RE = re.compile(r"[\x00-\x1f\x7f,\"]")
 _WINDOWS_FORBIDDEN_RE = re.compile(r"[<>|?*:/]")
 _WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *[f"COM{i}" for i in range(10)],
@@ -433,7 +438,7 @@ def build_docker_argv(*, docker_executable: str, name: str, user: str, image_ref
     if not re.match(r"appsec-[0-9a-f]{32}\Z", name):
         raise ContainerRequestError("container name is not run-owned")
     if not isinstance(user, str) or not _USER_RE.match(user):
-        raise ContainerRequestError("container user must be a numeric non-root uid:gid")
+        raise ContainerRequestError("container user must be a numeric uid:gid with neither uid 0 nor gid 0")
     if not re.match(r"[a-z0-9][a-z0-9._:/-]{0,254}@sha256:[0-9a-f]{64}\Z", image_ref):
         raise ContainerRequestError("image reference is not repository@sha256:digest")
     command = [
@@ -519,17 +524,41 @@ def _chain(path: Path) -> set[tuple[int, int]]:
     return found
 
 
-def sensitive_locations(*, home: Path | None, attempt_root: Path, docker_host: str | None
+def host_homes() -> tuple[Path, ...]:
+    """Every directory that may be this account's home: the password-database entry (POSIX only;
+    it does not depend on the environment) AND ``Path.home()`` (``$HOME`` / ``USERPROFILE``). The
+    mount rule refuses the union, so a service environment that points ``HOME`` elsewhere cannot
+    make the account's real home, ``~/.ssh`` or ``~/.docker`` mountable (PR 29 review, round 2)."""
+    found: list[Path] = []
+    try:
+        import pwd
+        found.append(Path(pwd.getpwuid(os.getuid()).pw_dir))
+    except (ImportError, KeyError, OSError):        # Windows, or an account with no database entry
+        pass
+    try:
+        found.append(Path.home())
+    except (RuntimeError, OSError):
+        pass
+    homes: list[Path] = []
+    for home in found:
+        if home.is_absolute() and home not in homes:
+            homes.append(home)
+    return tuple(homes)
+
+
+def sensitive_locations(*, homes: Iterable[Path], attempt_root: Path, docker_host: str | None
                         ) -> tuple[list[Path], list[Path]]:
     """(never expose, never enter). A mount may not be, or contain, anything in the first list,
-    and may not be, or be inside, anything in the second."""
+    and may not be, or be inside, anything in the second. ``homes`` is every candidate host home
+    (see :func:`host_homes`); an empty collection protects none."""
     sockets = [Path("/var/run/docker.sock"), Path("/run/docker.sock")]
     if docker_host and docker_host.startswith("unix://"):
         sockets.append(Path(docker_host[len("unix://"):]))
     expose = [attempt_root, *sockets]
     enter = [attempt_root, Path("/proc"), Path("/sys"), Path("/dev"), Path("/etc"), Path("/run"),
              Path("/var/run")]
-    if home is not None:
+    for home in homes:
+        home = Path(home)
         expose.append(home)
         enter += [home / name for name in (".ssh", ".aws", ".docker", ".gnupg", ".kube", ".config",
                                            ".azure", ".netrc")]
@@ -583,8 +612,9 @@ def request_mount_sources(request: Mapping[str, Any], *, attempt_root: Path, hos
     certified a self-consistent attempt whose request mounted ``/etc``, the host home, the attempt
     itself or the docker socket -- states the adapter can never produce. Two callers, one
     definition: they cannot drift. Identity is device+inode on THIS host at THIS moment; a mount
-    source that has since vanished or become sensitive fails closed."""
-    expose, enter = sensitive_locations(home=Path.home(), attempt_root=Path(attempt_root),
+    source that has since vanished or become sensitive fails closed. The host home is the union
+    :func:`host_homes` returns, never ``$HOME`` alone."""
+    expose, enter = sensitive_locations(homes=host_homes(), attempt_root=Path(attempt_root),
                                         docker_host=docker_host)
     return checked_mount_sources(request["target_mounts"], flavor=host_flavor, expose=expose, enter=enter)
 
@@ -615,7 +645,8 @@ def validate_runtime(runtime: Any) -> None:
     if runtime.host_flavor not in ("posix", "windows"):
         raise ContainerRequestError("runtime.host_flavor must be 'posix' or 'windows'")
     if not isinstance(runtime.container_user, str) or not _USER_RE.match(runtime.container_user):
-        raise ContainerRequestError("runtime.container_user must be a numeric non-root uid:gid")
+        raise ContainerRequestError(
+            "runtime.container_user must be a numeric non-root uid:gid (neither uid 0 nor gid 0)")
     if not isinstance(runtime.images_dir, Path):
         raise ContainerRequestError("runtime.images_dir must be a path")
     if not isinstance(runtime.source_snapshot_sha256, str) or not _SHA_RE.match(runtime.source_snapshot_sha256):
@@ -703,9 +734,52 @@ def _classify(metadata: Mapping[str, Any] | None, state: Mapping[str, Any] | Non
     return "CONTAINER_EXIT_NONZERO", state["exit_code"]
 
 
+def _outcome(metadata: Mapping[str, Any] | None, state: Mapping[str, Any] | None, *,
+             interrupted: bool, removed: bool, stream_sha256: Mapping[str, str | None]
+             ) -> tuple[str | None, int | None]:
+    """The ONE definition of a run's cause and exit code, from everything the adapter observed.
+    ``run_container`` calls it with what it saw; the verifier calls it with what the attempt
+    recorded (``command.json`` and ``observation.json``) and demands the same answer, so a cause
+    is re-derived, never looked up in a table of what a cause 'allows'."""
+    if not removed:
+        return "CLEANUP_FAILED", None
+    cause, exit_code = _classify(metadata, state, interrupted)
+    if cause != "CANCELED" and None in (stream_sha256["stdout"], stream_sha256["stderr"]):
+        return "LOG_WRITE_FAILED", None          # a retained log the adapter could not read back
+    return cause, exit_code
+
+
+def attempt_paths(attempt_root: Path, request: Mapping[str, Any], host_flavor: str
+                  ) -> tuple[Path, Path, str]:
+    """(scratch directory, log directory, docker source of the one writable mount), derived from
+    the attempt root, the request and the host flavor alone. Execution and verification share it:
+    the verifier computes the scratch source; it never reads one out of the attempt."""
+    attempt_root = Path(attempt_root)
+    if not attempt_root.is_absolute() or not attempt_root.is_dir() or attempt_root.is_symlink():
+        raise ContainerRequestError("attempt_root must be an absolute, existing, non-link directory")
+    try:
+        scratch = beneath(attempt_root, attempt_root.joinpath(*request["scratch_path"].split("/")))
+        log_dir = beneath(attempt_root, attempt_root.joinpath(*request["log_path"].split("/")))
+        scratch_source = translate_host_path(str(scratch), host_flavor)
+    except ValueError:
+        raise ContainerRequestError(
+            "scratch_path or log_path leaves the attempt, crosses a link or is not mountable") from None
+    return scratch, log_dir, scratch_source
+
+
+def _stream_sha256(log_dir: Path) -> dict[str, str | None]:
+    hashes: dict[str, str | None] = {}
+    for stream in ("stdout", "stderr"):
+        try:
+            hashes[stream] = _bytes_sha(beneath(log_dir, log_dir / f"{stream}.log").read_bytes())
+        except (OSError, ValueError):
+            hashes[stream] = None
+    return hashes
+
+
 def _log_files(log_dir: Path) -> list[dict[str, Any]]:
     records = []
-    for name in sorted((REQUEST_FILE, *CHILD_FILES)):
+    for name in ATTEMPT_FILES:
         path = log_dir / name
         if path.is_file() and not path.is_symlink():
             data = beneath(log_dir, path).read_bytes()
@@ -729,15 +803,7 @@ def run_container(runtime: ContainerRuntime, *, run_id: str, job_id: str, attemp
     name = container_name(run_id, job_id, attempt_id)
 
     attempt_root = Path(attempt_root)
-    if not attempt_root.is_absolute() or not attempt_root.is_dir() or attempt_root.is_symlink():
-        raise ContainerRequestError("attempt_root must be an absolute, existing, non-link directory")
-    try:
-        scratch = beneath(attempt_root, attempt_root.joinpath(*request["scratch_path"].split("/")))
-        log_dir = beneath(attempt_root, attempt_root.joinpath(*request["log_path"].split("/")))
-        scratch_source = translate_host_path(str(scratch), runtime.host_flavor)
-    except ValueError:
-        raise ContainerRequestError(
-            "scratch_path or log_path leaves the attempt, crosses a link or is not mountable") from None
+    scratch, log_dir, scratch_source = attempt_paths(attempt_root, request, runtime.host_flavor)
     if os.path.lexists(scratch) or os.path.lexists(log_dir):
         raise ContainerRequestError("scratch_path and log_path must not exist: the adapter creates them")
     mounts = request_mount_sources(request, attempt_root=attempt_root, host_flavor=runtime.host_flavor,
@@ -821,9 +887,16 @@ def run_container(runtime: ContainerRuntime, *, run_id: str, job_id: str, attemp
             state = container_state(runtime, name)
     finally:
         removed = remove_container(runtime, name)
-    cause, exit_code = _classify(metadata, state, interrupt is not None)
-    if not removed:
-        cause, exit_code = "CLEANUP_FAILED", None
+    stream_sha256 = _stream_sha256(log_dir)
+    observation = {"schema": OBSERVATION_ID, "interrupted": interrupt is not None, "state": state,
+                   "removed": removed, "stream_sha256": stream_sha256}
+    cause, exit_code = _outcome(metadata, state, interrupted=interrupt is not None, removed=removed,
+                                stream_sha256=stream_sha256)
+    try:
+        atomic_bytes(log_dir / OBSERVATION_FILE, canonical_request_bytes(observation))
+    except Exception:                       # the evidence the verifier re-derives from is missing
+        if removed:
+            cause, exit_code = "LOG_WRITE_FAILED", None
     streams = None
     if metadata is not None and isinstance(metadata.get("streams"), dict):
         streams = {stream: {key: metadata["streams"][stream][key] for key in
@@ -842,80 +915,171 @@ def result_sha256(result: Mapping[str, Any]) -> str:
     return _sha({key: value for key, value in thaw(result).items() if key != "result_sha256"})
 
 
-def _command_record_errors(path: Path, *, request: Mapping[str, Any], image_ref: str, name: str,
-                           cause: str | None, exit_code: int | None, streams: Any) -> list[str]:
-    """``command.json`` is the child runner's own account of the docker client it ran. The result
-    and that account are two projections of one run and must agree: the recorded docker argv is
-    re-derived from the expected request (only the docker executable, the container user and the
-    scratch source are host facts taken from the record, and each is re-validated), and the
-    outcome the result claims must be one the recorded client exit allows."""
-    from execution_state import redact_argv
+_COUNT_KEYS = ("observed_bytes", "written_bytes", "dropped_bytes", "truncated")
+# What the child runner knows when it writes its START event; everything else arrives by END.
+_START_KEYS = ("schema", "argv", "argv_prefix", "cwd", "started_at", "timeout_seconds", "log_limits",
+               "environment_keys")
+_START_OUTCOME = MappingProxyType({"exit_code": None, "signal": None, "timed_out": False,
+                                   "cancelled": False})
+
+
+def _read_command_record(path: Path) -> dict[str, Any] | None:
+    """``command.json`` parsed and shape-checked, or None. Only typed values leave this function."""
     try:
         command = json.loads(path.read_bytes().decode("utf-8"))
-        recorded = command["argv"]
-        if not isinstance(recorded, list) or not all(isinstance(item, str) for item in recorded):
-            raise ValueError
-        user = recorded[recorded.index("--user") + 1]
-        mounts = [recorded[at + 1] for at, item in enumerate(recorded[:-1]) if item == "--mount"]
-        prefix, suffix = "type=bind,source=", ",target=" + SCRATCH_TARGET
-        if not mounts or not mounts[-1].startswith(prefix) or not mounts[-1].endswith(suffix):
-            raise ValueError
-        scratch_source = mounts[-1][len(prefix):-len(suffix)]
-        if re.split(r"[\\/]", scratch_source)[-len(request["scratch_path"].split("/")):] != \
-                request["scratch_path"].split("/"):
-            raise ValueError
-        expected = build_docker_argv(
-            docker_executable=recorded[0], name=name, user=user, image_ref=image_ref,
-            limits=request["limits"], environment=request["environment"],
-            mounts=[(mount["host_path"], mount["container_path"]) for mount in request["target_mounts"]],
-            scratch_source=scratch_source, argv=request["argv"])
-        client_exit, timed_out, cancelled = command["exit_code"], command["timed_out"], command["cancelled"]
-        recorded_streams = {stream: {key: command["streams"][stream][key] for key in
-                                     ("observed_bytes", "written_bytes", "dropped_bytes", "truncated")}
-                            for stream in ("stdout", "stderr")}
-        limits = (command["timeout_seconds"], command["log_limits"]["stdout"], command["log_limits"]["stderr"])
-    except (OSError, ValueError, KeyError, IndexError, TypeError, ContainerRequestError):
-        return ["command.json is not the child runner's record of a boundary docker run"]
+        argv = command["argv"]
+        if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+            return None
+        if not isinstance(command["timed_out"], bool) or not isinstance(command["cancelled"], bool):
+            return None
+        if command["exit_code"] is not None and not _is_int(command["exit_code"]):
+            return None
+        if "error" in command and not isinstance(command["error"], str):
+            return None
+        for stream in ("stdout", "stderr"):
+            counts = command["streams"][stream]
+            if (not all(_is_int(counts[key]) for key in _COUNT_KEYS[:3])
+                    or not isinstance(counts["truncated"], bool)):
+                return None
+            if not _is_int(command["log_limits"][stream]):
+                return None
+        if not isinstance(command["timeout_seconds"], (int, float)) or isinstance(command["timeout_seconds"], bool):
+            return None
+        if (not isinstance(command["environment_keys"], list)
+                or not all(isinstance(item, str) for item in command["environment_keys"])):
+            return None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return command
+
+
+def _command_record_errors(command: Mapping[str, Any], *, request: Mapping[str, Any],
+                           expected_argv: tuple[str, ...], docker_host: str | None,
+                           cause: str | None, streams: Any) -> list[str]:
+    """``command.json`` is the child runner's own account of the docker client it ran. The WHOLE
+    recorded argv must equal the redacted form of an argv the verifier builds itself, from the
+    expected request, the registry, the boundary and caller-supplied host facts (docker
+    executable, container user, host flavor, attempt root). Nothing read from the record feeds the
+    expectation -- not the scratch source, not the executable, not the user (PR 29 review, round
+    2: all three used to be lifted from the record, so the record agreed with itself)."""
+    from execution_state import redact_argv
     errors: list[str] = []
-    if recorded != redact_argv(list(expected)):
-        errors.append("command.json does not record the docker argv the expected request derives")
+    if command["argv"] != redact_argv(list(expected_argv)):
+        errors.append("command.json does not record the docker argv that the expected request and "
+                      "the caller's host facts derive")
+    limits = (command["timeout_seconds"], command["log_limits"]["stdout"], command["log_limits"]["stderr"])
     if limits != (request["limits"]["timeout_seconds"], request["limits"]["stdout_limit_bytes"],
                   request["limits"]["stderr_limit_bytes"]):
         errors.append("command.json does not record the required timeout and retention limits")
+    keys = command["environment_keys"]
+    if (keys != sorted(set(keys)) or not set(keys) <= {*CLIENT_ENVIRONMENT_NAMES, "DOCKER_HOST"}
+            or ("DOCKER_HOST" in keys) != (docker_host is not None)):
+        errors.append("command.json records a docker client environment the adapter never builds")
+    recorded_streams = {stream: {key: command["streams"][stream][key] for key in _COUNT_KEYS}
+                        for stream in ("stdout", "stderr")}
     if cause != "LOG_WRITE_FAILED" and streams is not None and thaw(streams) != recorded_streams:
         errors.append("stream counts disagree with command.json")
-    agrees = {
-        None: client_exit == 0 and not timed_out and not cancelled,
-        "CONTAINER_EXIT_NONZERO": client_exit == exit_code and not timed_out and not cancelled,
-        "CONTAINER_START_FAILED": client_exit in (125, 126, 127) and not timed_out and not cancelled,
-        "TIMEOUT": timed_out is True,
-    }.get(cause, True)
-    if not agrees:
-        errors.append("the claimed outcome is not one the recorded docker client exit allows")
     return errors
+
+
+def _events_errors(path: Path, *, command: Mapping[str, Any] | None,
+                   expected_argv: tuple[str, ...]) -> list[str]:
+    """``events.jsonl`` is read, not just hashed. With ``command.json`` beside it, it is an optional
+    START event followed by exactly one END event; END carries the same document as
+    ``command.json`` and START carries its start-time projection. Without ``command.json`` (the
+    child runner failed while persisting) only complete START/END lines for the expected argv, and
+    at most one torn final line, are tolerated."""
+    from execution_state import redact_argv
+    message = ["events.jsonl is not the child runner's START/END record of this run"]
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except (OSError, ValueError):
+        return message
+    lines = text.split("\n")
+    torn = lines.pop()                       # "" when the file ends with a newline
+    if torn and command is not None:
+        return message
+    events = []
+    for line in lines:
+        try:
+            item = json.loads(line)
+        except ValueError:
+            return message
+        if (not isinstance(item, dict) or not isinstance(item.get("time"), str)
+                or item.get("event") not in ("START", "END")):
+            return message
+        events.append((item["event"], {key: value for key, value in item.items()
+                                       if key not in ("time", "event")}))
+    kinds = [kind for kind, _ in events]
+    if kinds not in (([], ["START"], ["END"], ["START", "END"]) if command is None
+                     else (["END"], ["START", "END"])):
+        return message
+    redacted = redact_argv(list(expected_argv))
+    for kind, details in events:
+        if details.get("argv") != redacted:
+            return message
+        if command is not None:
+            wanted = (dict(command) if kind == "END" else
+                      {**{key: command.get(key) for key in _START_KEYS}, **_START_OUTCOME})
+            if details != wanted:
+                return message
+    return []
+
+
+def _read_observation(path: Path) -> dict[str, Any] | None:
+    """``observation.json`` parsed and checked against its closed shape, or None."""
+    try:
+        raw = path.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (not isinstance(value, dict) or raw != canonical_request_bytes(value)
+            or set(value) != {"schema", "interrupted", "state", "removed", "stream_sha256"}
+            or value["schema"] != OBSERVATION_ID
+            or not isinstance(value["interrupted"], bool) or not isinstance(value["removed"], bool)):
+        return None
+    state, hashes = value["state"], value["stream_sha256"]
+    if state is not None and (
+            not isinstance(state, dict) or set(state) != {"exit_code", "exited", "created", "oom_killed"}
+            or not _is_int(state["exit_code"])
+            or not all(isinstance(state[key], bool) for key in ("exited", "created", "oom_killed"))):
+        return None
+    if (not isinstance(hashes, dict) or set(hashes) != {"stdout", "stderr"}
+            or not all(item is None or (isinstance(item, str) and _SHA_RE.match(item))
+                       for item in hashes.values())):
+        return None
+    return value
 
 
 def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
                             request: Any, images_dir: Path, host_flavor: str,
-                            docker_host: str | None) -> list[str]:
+                            docker_host: str | None, docker_executable: Path,
+                            container_user: str) -> list[str]:
     """Re-derives the on-disk result from the expected request, the registry and the bytes.
 
     Every argument is required. Messages are fixed text: nothing read from the attempt is echoed.
-    ``host_flavor`` and ``docker_host`` are the integrator's host facts (``ContainerRuntime``'s),
-    needed to apply the same target-mount rule ``run_container`` applies: a request the adapter
-    would refuse to run cannot have a verifiable result.
+    ``host_flavor``, ``docker_host``, ``docker_executable`` and ``container_user`` are the
+    integrator's host facts (the ``ContainerRuntime`` fields of the same names). The first two
+    apply the target-mount rule ``run_container`` applies; all four, with ``attempt_root``, let the
+    verifier build the one docker argv a run of this request can have, so the attempt's own record
+    never supplies a value it is then compared with. ``attempt_root`` must be the spelling the run
+    was given: the scratch mount source is derived from it as a string.
     """
     if host_flavor not in ("posix", "windows"):
         raise TypeError("host_flavor must be one of the adapter's host flavors")
     if docker_host is not None and not isinstance(docker_host, str):
         raise TypeError("docker_host must be a string or None")
+    if not isinstance(docker_executable, Path) or not docker_executable.is_absolute():
+        raise TypeError("docker_executable must be an absolute Path")
+    if not isinstance(container_user, str) or not _USER_RE.match(container_user):
+        raise TypeError("container_user must be a numeric uid:gid with neither uid 0 nor gid 0")
     request = thaw(request)
     errors = request_errors(request, run_id=run_id, job_id=job_id, attempt_id=attempt_id)
     if errors:
         return ["the expected request is itself invalid: " + "; ".join(errors)]
     try:
-        request_mount_sources(request, attempt_root=Path(attempt_root), host_flavor=host_flavor,
-                              docker_host=docker_host)
+        mounts = request_mount_sources(request, attempt_root=Path(attempt_root),
+                                       host_flavor=host_flavor, docker_host=docker_host)
     except ContainerRequestError:
         return ["the expected request mounts a host directory the adapter refuses to mount "
                 "(missing, linked, sensitive, or the same directory twice): no run of it can exist"]
@@ -924,8 +1088,18 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
     except ContainerRequestError:
         return ["the expected request names an image the registry does not hold at that digest"]
     attempt_root = Path(attempt_root)
+    name = container_name(run_id, job_id, attempt_id)
     try:
-        log_dir = beneath(attempt_root, attempt_root.joinpath(*request["log_path"].split("/")))
+        _, log_dir, scratch_source = attempt_paths(attempt_root, request, host_flavor)
+        expected_argv = build_docker_argv(
+            docker_executable=str(docker_executable), name=name, user=container_user,
+            image_ref=image_reference(record), limits=request["limits"],
+            environment=request["environment"], mounts=mounts, scratch_source=scratch_source,
+            argv=request["argv"])
+    except ContainerRequestError:
+        return ["the attempt root, the expected request and the host facts do not derive a docker "
+                "run the adapter could have made"]
+    try:
         present = set()
         for path in sorted(log_dir.iterdir()):
             beneath(log_dir, path)
@@ -956,7 +1130,7 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
         "image_reference": image_reference(record), "image_record_sha256": _sha(record),
         "permission_fingerprint_sha256": pc.fingerprint_material(
             decision["decision"], decision["capabilities"])["sha256"],
-        "container_name": container_name(run_id, job_id, attempt_id),
+        "container_name": name,
         "scratch_path": request["scratch_path"], "log_path": request["log_path"],
     }
     for field, value in expected.items():
@@ -977,37 +1151,60 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
     if result["finished_at"] < result["started_at"]:
         errors.append("finished_at is before started_at")
     names = [entry["path"] for entry in result["files"]]
-    full = sorted((REQUEST_FILE, *CHILD_FILES))
+    full = list(ATTEMPT_FILES)
     if cause in BLOCKED_CAUSES:
         shaped = names == [REQUEST_FILE] and streams is None
     elif cause in ("LOG_WRITE_FAILED", "CLEANUP_FAILED", "CANCELED"):
         # The only outcomes that may end without the child runner returning its counts (a
         # persistence failure, a pre-start cleanup failure, a re-raised interrupt).
         shaped = (REQUEST_FILE in names and names == sorted(set(names))
-                  and (streams is None or names == full))
+                  and (streams is None or set(CHILD_FILES) <= set(names)))
+        if cause != "LOG_WRITE_FAILED" and OBSERVATION_FILE not in names:
+            # Without the adapter's observation only a pre-start cleanup failure is derivable.
+            shaped = shaped and cause == "CLEANUP_FAILED" and names == [REQUEST_FILE]
     else:
         shaped = names == full and streams is not None
     if not shaped:
         errors.append("files and streams are not the adapter's shape for this cause")
     if present != {*names, RESULT_FILE}:
         errors.append("the log directory does not hold exactly the listed files and the result")
-    sizes = {}
+    sizes, hashes = {}, {}
     for entry in result["files"]:
         try:
             data = beneath(log_dir, log_dir / entry["path"]).read_bytes()
         except (OSError, ValueError):
             errors.append("a listed file is missing, linked or unreadable")
             continue
-        sizes[entry["path"]] = len(data)
+        sizes[entry["path"]], hashes[entry["path"]] = len(data), _bytes_sha(data)
         if entry["bytes"] != len(data) or entry["sha256"] != _bytes_sha(data):
             errors.append("a listed file does not have its recorded size and hash")
         if entry["path"] == REQUEST_FILE and data != canonical_request_bytes(request):
             errors.append("request.json is not the expected request")
+    # Every listed file is read, not just hashed, and the cause is re-derived from what they say.
+    command = None
     if "command.json" in sizes:
-        errors.extend(_command_record_errors(
-            log_dir / "command.json", request=request, image_ref=image_reference(record),
-            name=container_name(run_id, job_id, attempt_id), cause=cause, exit_code=exit_code,
-            streams=streams))
+        command = _read_command_record(log_dir / "command.json")
+        if command is None:
+            errors.append("command.json is not the child runner's record of a docker run")
+            return errors
+        errors.extend(_command_record_errors(command, request=request, expected_argv=expected_argv,
+                                             docker_host=docker_host, cause=cause, streams=streams))
+    if "events.jsonl" in sizes:
+        errors.extend(_events_errors(log_dir / "events.jsonl", command=command,
+                                     expected_argv=expected_argv))
+    if OBSERVATION_FILE in sizes:
+        observation = _read_observation(log_dir / OBSERVATION_FILE)
+        if observation is None:
+            errors.append("observation.json is not the adapter's closed observation record")
+            return errors
+        for stream in ("stdout", "stderr"):
+            if hashes.get(f"{stream}.log") != observation["stream_sha256"][stream]:
+                errors.append(f"{stream}.log is not the retained log the adapter hashed after the run")
+        if (cause, exit_code) != _outcome(
+                command, observation["state"], interrupted=observation["interrupted"],
+                removed=observation["removed"], stream_sha256=observation["stream_sha256"]):
+            errors.append("cause and exit_code are not what the recorded docker client outcome and "
+                          "the adapter's observation derive")
     if streams is not None:
         for stream in ("stdout", "stderr"):
             counts = streams[stream]
@@ -1025,10 +1222,13 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
 
 def load_verified_result(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
                          request: Any, images_dir: Path, host_flavor: str,
-                         docker_host: str | None) -> Mapping[str, Any]:
+                         docker_host: str | None, docker_executable: Path,
+                         container_user: str) -> Mapping[str, Any]:
     errors = verify_container_result(attempt_root, run_id=run_id, job_id=job_id,
                                      attempt_id=attempt_id, request=request, images_dir=images_dir,
-                                     host_flavor=host_flavor, docker_host=docker_host)
+                                     host_flavor=host_flavor, docker_host=docker_host,
+                                     docker_executable=docker_executable,
+                                     container_user=container_user)
     if errors:
         raise ContainerRequestError("container result rejected: " + "; ".join(errors))
     request = thaw(request)
@@ -1040,6 +1240,7 @@ def load_verified_result(attempt_root: Path, *, run_id: str, job_id: str, attemp
 
 def to_worker_envelope(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
                        request: Any, images_dir: Path, host_flavor: str, docker_host: str | None,
+                       docker_executable: Path, container_user: str,
                        input_fingerprint: str, output_contract: str, output_paths: list[str],
                        resume_command: str | None) -> dict[str, Any]:
     """Maps the verified on-disk result into ``worker-result-envelope/1.0``.
@@ -1050,7 +1251,8 @@ def to_worker_envelope(attempt_root: Path, *, run_id: str, job_id: str, attempt_
     from worker_result import artifact_records, terminal_envelope, validate_worker_result
     result = load_verified_result(attempt_root, run_id=run_id, job_id=job_id, attempt_id=attempt_id,
                                   request=request, images_dir=images_dir, host_flavor=host_flavor,
-                                  docker_host=docker_host)
+                                  docker_host=docker_host, docker_executable=docker_executable,
+                                  container_user=container_user)
     attempt_root = Path(attempt_root)
     relative = [f"{result['log_path']}/{entry['path']}" for entry in result["files"]]
     relative.append(f"{result['log_path']}/{RESULT_FILE}")

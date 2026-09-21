@@ -56,7 +56,7 @@ image reference, then `argv[1:]`. Docker stops parsing options at the image, so 
 | `--cap-drop ALL` | no Linux capabilities; nothing can add one |
 | `--security-opt no-new-privileges` | no setuid escalation |
 | `--workdir /scratch`, `--env HOME=/tmp` | fixed; not request properties |
-| `--user` | numeric non-root `uid:gid` chosen by the trusted runtime (host uid on POSIX so scratch is writable) |
+| `--user` | numeric `uid:gid`, neither uid 0 nor gid 0, chosen by the trusted runtime (host uid on POSIX so scratch is writable) |
 | `--pids-limit`, `--memory`, `--memory-swap` (equal to memory), `--cpus` | from required request limits |
 | `--tmpfs /tmp:rw,noexec,nosuid,nodev,size=<tmpfs_bytes>` | the only other writable place, never executable |
 
@@ -115,7 +115,8 @@ record (`repository@digest`), never from request text, and the record hash is pa
   suffix that means anything. It must be an existing directory that is not a link and is not
   reached through a link.
 - Identity is device and inode, not the string. A mount may not be, or contain, the attempt root,
-  the host home, the docker socket or a filesystem root; it may not be inside the attempt, a
+  a host home (the password-database home and `$HOME`/`USERPROFILE`, both), the docker socket or a
+  filesystem root; it may not be inside the attempt, a
   credential directory (`.ssh`, `.aws`, `.docker`, `.gnupg`, `.kube`, `.config`, ...) or `/proc`,
   `/sys`, `/dev`, `/etc`, `/run`, `/var/run`; and two mounts may not be one directory.
 - A link *inside* a target is not followed by the host: the container resolves it in its own mount
@@ -187,28 +188,60 @@ discarded.
 `schemas/pinned-container-result.schema.json` (`appsec-review/pinned-container-result/1.0`) holds
 codes, counts, hashes and adapter-derived identities only. The returned mapping is deeply
 immutable. The record is a cache: `verify_container_result(attempt_root, run_id=, job_id=,
-attempt_id=, request=, images_dir=, host_flavor=, docker_host=)` takes the *expected* request and re-derives the identity
-fields, the request hash, the image reference and record hash, the capability fingerprint, the
-container name and the paths; checks status against cause, exit-code and removal rules, canonical
-bytes and `result_sha256`; requires the log directory to hold exactly the listed regular files
-with their sizes and hashes; requires `request.json` to be the expected request byte for byte; and
-ties stream counts to the retained logs and the required limits. It also reads `command.json`, the
-child runner's own record of the docker client: the recorded (redacted) docker argv must equal the
-argv that the expected request, registry and boundary derive -- only the docker executable, the
-container user and the scratch source are host facts taken from the record, each re-validated --
-its timeout and retention limits must be the required ones, its stream counts must equal the
-result's, and the claimed outcome must be one the recorded client exit allows (an `OK` result needs
-client exit 0 with no timeout or cancellation). A result can therefore not be resealed against the
-files beside it. `result_sha256` is an integrity check, not an authenticator: a party able to
-rewrite every file in the log directory consistently is outside what 1.0 detects. The adapter does not hash scratch: worker outputs are validated by
-their output contract.
+attempt_id=, request=, images_dir=, host_flavor=, docker_host=, docker_executable=, container_user=)`
+takes the *expected* request and the integrator's host facts and re-derives the identity fields, the
+request hash, the image reference and record hash, the capability fingerprint, the container name
+and the paths; checks status against cause, exit-code and removal rules, canonical bytes and
+`result_sha256`; requires the log directory to hold exactly the listed regular files with their
+sizes and hashes; requires `request.json` to be the expected request byte for byte; and ties stream
+counts to the retained logs and the required limits. Every listed file is read, not only hashed:
+
+- **`command.json`** (the child runner's record of the docker client). The verifier builds the one
+  docker argv a run of this request can have -- from the expected request, the registry, the
+  boundary, `attempt_root` (the scratch source is `attempt_root/scratch_path`, translated for
+  `host_flavor`) and the caller's `docker_executable` and `container_user` -- and the WHOLE recorded
+  argv must equal its redacted form. **Nothing read from the record feeds the expectation.** Round
+  2 of the PR 29 review found the scratch source, the executable and the user being lifted from the
+  record and fed back, so a record naming `/etc/scratch` as the writable mount agreed with itself.
+  The timeout, the retention limits, the client environment names and the stream counts are checked
+  too. `container_user` must have neither uid 0 nor gid 0, in execution and verification alike.
+- **`events.jsonl`**: an optional `START` event then exactly one `END` event; `END` carries the same
+  document as `command.json`, `START` its start-time projection. Without `command.json` (the child
+  runner failed while persisting) only complete `START`/`END` lines for the expected argv, plus at
+  most one torn final line, are tolerated.
+- **`observation.json`** (`appsec-review/pinned-container-observation/1.0`, closed, canonical
+  bytes): the adapter's own account of what it saw around the child -- `interrupted`, the docker
+  `state` it read (`exit_code`, `exited`, `created`, `oom_killed`, or null), `removed`, and a
+  `stream_sha256` of each retained log as the adapter read it back. Each retained log must have
+  that hash, so a same-length edit of `stdout.log` no longer survives a resealed result.
+- **The outcome is re-derived, not looked up.** `_outcome(command record, state, interrupted,
+  removed, stream hashes)` is the one function `run_container` classifies with; the verifier calls
+  it on the recorded inputs and requires exactly the result's `(cause, exit_code)`. There is no
+  table of what a cause "allows" and therefore no default row. A result without `observation.json`
+  can only be a BLOCKED cause, a pre-start `CLEANUP_FAILED`, or `LOG_WRITE_FAILED`.
+
+What this does and does not give. These are **consistency** checks between several files and
+caller-supplied facts: editing the result alone, or any one file, is detected. `result_sha256` and
+`stream_sha256` are integrity checks, not authenticators: the container's output is whatever the
+container wrote, no caller-supplied fact predicts it, and a party able to rewrite every file in the
+log directory consistently (logs, `observation.json`, `command.json`, `events.jsonl` and the result)
+is outside what 1.0 detects. A caller that needs more must keep the `result_sha256` that
+`run_container` returned and compare it. Where the shared redactor rewrites an argument (a path or
+argv member containing `password`, `token`, `secret` or `api_key`) the record holds less than the
+argv; the comparison binds what remains, and the expectation never comes from the record, so such
+runs verify like any other. `attempt_root` must be given in the spelling the run used: the scratch
+source is derived from it as a string. The adapter does not hash scratch: worker outputs are
+validated by their output contract.
 
 **Execution and verification apply one mount rule.** `request_mount_sources` is the single
 definition of which host directories a request may mount; `run_container` and
 `verify_container_result` both call it (so do `load_verified_result` and `to_worker_envelope`, which
 go through the verifier). `host_flavor` and `docker_host` are therefore required by all three
-verification functions: they are the integrator's host facts, the same two `ContainerRuntime` fields
-execution reads. Before this (PR 29 review), the verifier checked the request's shape but not its
+verification functions, as are `docker_executable` and `container_user` (for the argv above): they
+are the integrator's host facts, the same four `ContainerRuntime` fields execution reads. The "host
+home" of the rule is the union of the account's password-database home (POSIX; independent of the
+environment) and `Path.home()` (`$HOME`/`USERPROFILE`), so a service environment that points `HOME`
+elsewhere cannot make the real home, `~/.ssh` or `~/.docker` mountable. Before this (PR 29 review), the verifier checked the request's shape but not its
 mounts, and certified a self-consistent attempt whose request mounted `/etc`, the host home, the
 attempt itself or the docker socket — states the adapter can never produce. A persisted "mount
 proof" was rejected as a fix: the attempt would be vouching for itself. Consequences, stated: the
@@ -260,14 +293,16 @@ prove after every test that no labelled container remains.
   environment values must not carry secrets.
 - Exit 137 without an out-of-memory flag is reported as `WORKER_LOST` even if the process killed
   itself.
-- `LOG_WRITE_FAILED` and interrupt results carry weaker stream-count binding than other causes.
+- `LOG_WRITE_FAILED` results carry weaker binding than other causes: stream counts are not tied to
+  the logs, and `observation.json` or child files may be absent.
 - A host that reaches docker through `DOCKER_HOST` or a context must say so in
   `ContainerRuntime.docker_host`; the host variable is ignored on purpose.
 - Windows behavior is covered by pure tests only; no live Windows run was made in this batch.
 - Scratch is a host bind mount without a disk quota: `tmpfs_bytes` bounds `/tmp` only, and a
   container can fill the filesystem that holds the attempt until its memory or time limit ends it.
 - `attempt_root` must itself be a real directory, but an ancestor may be a link; identity checks
-  use device and inode, and the scratch mount source is the resolved spelling.
+  use device and inode. The scratch mount source is `attempt_root/scratch_path` in the spelling
+  the caller gave, not a resolved one, and verification derives it the same way.
 
 ## Integration follow-ups
 
