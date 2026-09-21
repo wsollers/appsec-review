@@ -140,8 +140,7 @@ class ForeignDocumentTests(Case):
                         if value:
                             self.assertNotIn(value, errors[0])
                     with self.assertRaises(pr.RendezvousError):
-                        pr.load_verified_manifest(self.ws.root(plan), **self.ws.arguments(spec),
-                                                  rendezvous_parent=self.ws.rendezvous_parent)
+                        self.ws.load(spec, plan)
         path.unlink()
         path.write_bytes(honest)
         self.assertEqual(self.ws.verify(spec, plan), [])
@@ -162,7 +161,7 @@ class ForeignDocumentTests(Case):
             self.ws.result_path(plan, index).write_bytes(pr.canonical_bytes(manifest))
         errors = self.ws.verify(spec, plan)
         self.assertEqual(len(errors), 2)
-        records = [pr.classify_instance(plan, index, pool_root=self.ws.root(plan), context=self.ws.context(),
+        records = [pr.classify_instance(plan, index, **self.ws.classifier_arguments(plan),
                                         observation=pr.REPORTED) for index in (0, 1)]
         self.assertEqual([record["state"] for record in records], [pr.INVALID, pr.INVALID])
         self.assertEqual(ce.RESULT_FILE, "container-result.json")

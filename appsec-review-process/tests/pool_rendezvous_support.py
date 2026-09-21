@@ -63,9 +63,22 @@ class RendezvousWorkspace(c01.PoolWorkspace):
     def run(self, spec: dict, plan: ps.ExpansionPlan, invoker=None, **over):
         return pr.run_rendezvous(self.root(plan), **self.arguments(spec), runtime=self.runtime(invoker, **over))
 
+    def host_facts(self) -> pr.ContainerHostFacts:
+        """What every launch in these tests uses: the facts of ``container_runtime()``."""
+        return pr.host_facts_of(self.container_runtime())
+
+    def reader_arguments(self, spec: dict, **over) -> dict:
+        return {**self.arguments(spec), "rendezvous_parent": self.rendezvous_parent,
+                "host_facts": self.host_facts(), **over}
+
+    def classifier_arguments(self, plan: ps.ExpansionPlan) -> dict:
+        return {"pool_root": self.root(plan), "context": self.context(), "host_facts": self.host_facts()}
+
     def verify(self, spec: dict, plan: ps.ExpansionPlan, **over) -> list:
-        return pr.verify_manifest(self.root(plan), **{**self.arguments(spec),
-                                                     "rendezvous_parent": self.rendezvous_parent, **over})
+        return pr.verify_manifest(self.root(plan), **self.reader_arguments(spec, **over))
+
+    def load(self, spec: dict, plan: ps.ExpansionPlan, **over):
+        return pr.load_verified_manifest(self.root(plan), **self.reader_arguments(spec, **over))
 
     def manifest_path(self, plan: ps.ExpansionPlan) -> Path:
         return pr.rendezvous_root(plan, self.rendezvous_parent) / pr.MANIFEST_FILE

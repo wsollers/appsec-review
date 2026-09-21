@@ -22,13 +22,37 @@ verified expansion --> launch (bounded threads) --> wait (condition) --> classif
 | Call | What it does |
 |---|---|
 | `run_rendezvous(pool_root, *, expected_spec, context, runtime)` | verifies the expansion, launches, waits, publishes once; returns the frozen manifest |
-| `verify_manifest(pool_root, *, expected_spec, context, rendezvous_parent)` | read-only; re-derives the manifest from the expected specification, the expansion and the attempts on disk; returns fixed-text errors |
+| `verify_manifest(pool_root, *, expected_spec, context, rendezvous_parent, host_facts)` | read-only; re-derives the manifest from the expected specification, the expansion and the attempts on disk; returns fixed-text errors |
 | `load_verified_manifest(...)` (same arguments) | the frozen manifest, parsed from the very bytes that were verified |
-| `classify_instance(plan, index, *, pool_root, context, observation)` | THE rule: one instance's manifest entry |
-| `derive_manifest(plan, *, pool_root, context, observations)` | the whole manifest for one observation per instance |
+| `classify_instance(plan, index, *, pool_root, context, host_facts, observation)` | THE rule: one instance's manifest entry |
+| `derive_manifest(plan, *, pool_root, context, host_facts, observations)` | the whole manifest for one observation per instance |
 | `pool_outcome(states)` | the pool-level outcome |
 
-No argument is optional. `RendezvousRuntime` is a frozen dataclass with no defaulted field:
+No argument is optional.
+
+### Container host facts
+
+B13's verifier (after its PR 29 review) builds the one docker argv a run of a request can have, so
+it requires four host facts: `host_flavor`, `docker_host`, `docker_executable`, `container_user`.
+A `PoolContext` carries the first two. The other two travel as `ContainerHostFacts(docker_executable,
+container_user)`, a frozen dataclass with no default:
+
+- `run_rendezvous` takes them from `runtime.container_runtime` (`host_facts_of`), so the facts it
+  classifies with ARE the facts the launch used;
+- every reader (`verify_manifest`, `load_verified_manifest`, `classify_instance`,
+  `derive_manifest`) takes `host_facts` as a required argument. `None` is accepted only for an
+  expansion without pinned-container instances; anything that is not `ContainerHostFacts` with an
+  absolute `Path` and a string is refused. With other facts than the launch used, exactly the
+  container instances stop verifying.
+
+They are never defaulted (`container_execution.host_defaults()` is not called here) and never read
+from an attempt. C01 follow-up (not required by this module): adding `docker_executable` and
+`container_user` to `PoolContext` would make the context the single carrier and let `host_facts`
+disappear from these signatures.
+
+### Runtime
+
+`RendezvousRuntime` is a frozen dataclass with no defaulted field:
 
 | Field | Meaning |
 |---|---|
@@ -79,7 +103,11 @@ Closed vocabulary (`STATES`). Exactly the first five adopt an adapter result.
 | `missing` | no attempt evidence at all: the root is gone, or a worker reported and left nothing | disk |
 
 "Verified" means the adapter's own `load_verified_result` passes for that instance's ids and the
-request the expected specification derives (`container_execution`, `persona_invocation`). A value
+request the expected specification derives (`container_execution`, `persona_invocation`). **Any
+exception from an adapter's verifier is a refusal** (`invalid`), a `TypeError` from a changed
+adapter signature included: it never propagates out of the coordinator or the verifier, never
+passes, and its text is never kept. This happened for real when B13's verifier gained required
+arguments: every container instance became `invalid` and no pool was `COMPLETE`. A value
 an adapter returned and a worker thread's report are never read for state: a worker that returns
 `OK` and leaves nothing on disk is `missing`. `adapter_status` and `adapter_cause` are the verified
 result's `execution_status` and `cause`; `result_file` is `{path, sha256, bytes}` of the adopted
@@ -253,7 +281,8 @@ a producer who edits one file and reseals every hash is refused. Messages are fi
 
 - Expand one pool per wave with C01, then `run_rendezvous`, from an op tagged
   `resource_pools.unassigned('coordination_only')`. Afterwards, and in any later process, read only
-  through `load_verified_manifest`. A `RendezvousError` there means **no instance of that pool may
+  through `load_verified_manifest`, with the `ContainerHostFacts` of the runtime that launched
+  (`host_facts_of(container_runtime)`). A `RendezvousError` there means **no instance of that pool may
   be treated as assessed**.
 - Invariants a consumer may rely on: `instances` is the expansion's list, same ids, same order,
   each once; `counts` sum to `instances`; `outcome == pool_outcome(states)`; `result_file` is

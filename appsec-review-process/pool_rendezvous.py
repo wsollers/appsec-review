@@ -7,6 +7,9 @@ invocation), waits without busy polling until every instance is terminal or the 
 publishes exactly one immutable ``appsec-review/pool-rendezvous-manifest/1.0``: LAST, atomically,
 created exclusively. :func:`verify_manifest` is the read-only counterpart.
 
+Readers need the launch's :class:`ContainerHostFacts` as well as the ``PoolContext``: B13's verifier
+requires the docker executable and container user, and the context does not carry them.
+
 What this module guarantees to T10 and C03:
 
 * :func:`classify_instance` is THE rule for "what state is this instance in". The coordinator and
@@ -170,6 +173,37 @@ class RendezvousRuntime:
     drain_seconds: int
 
 
+@dataclass(frozen=True)
+class ContainerHostFacts:
+    """The two B13 host facts a ``PoolContext`` does not carry and B13's verifier requires: the
+    docker executable and the container user the launch used (``ContainerRuntime`` fields of the
+    same names). With the context's ``host_flavor`` and ``docker_host`` they let B13's verifier
+    build the one docker argv a run can have. Required wherever an attempt is classified; ``None``
+    only for an expansion without pinned-container instances. Never defaulted, never read from an
+    attempt."""
+    docker_executable: Path
+    container_user: str
+
+
+def host_facts_of(runtime: Any) -> ContainerHostFacts | None:
+    """The facts a launch through this ``ContainerRuntime`` uses; what its verifier must be given."""
+    if runtime is None:
+        return None
+    return ContainerHostFacts(docker_executable=runtime.docker_executable, container_user=runtime.container_user)
+
+
+def _host_facts_errors(plan: ps.ExpansionPlan, host_facts: Any) -> list:
+    tools = any(entry["worker_kind"] == ps.PINNED_CONTAINER for entry in plan.manifest["instances"])
+    if host_facts is None:
+        return (["the expansion has pinned-container instances and no container host facts were supplied"]
+                if tools else [])
+    if (not isinstance(host_facts, ContainerHostFacts) or not isinstance(host_facts.docker_executable, Path)
+            or not host_facts.docker_executable.is_absolute() or not isinstance(host_facts.container_user, str)):
+        return ["host_facts must be ContainerHostFacts with an absolute docker_executable path and a "
+                "container_user string"]
+    return []
+
+
 def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -252,8 +286,12 @@ _ROOT_ABSENT, _ROOT_NOT_PRIVATE, _NO_EVIDENCE, _NO_RESULT, _RESULT_REFUSED, _VER
 
 
 def _load_result(item: ps.InstanceRequest, entry: Mapping[str, Any], attempt_root: Path,
-                 context: ps.PoolContext) -> Mapping[str, Any] | None:
-    """The adapter's own verifier, for this instance's ids and request. None means refused."""
+                 context: ps.PoolContext, host_facts: Any) -> Mapping[str, Any] | None:
+    """The adapter's own verifier, for this instance's ids and request. None means refused.
+
+    ANY exception is a refusal, a ``TypeError`` from a changed adapter signature included: an
+    adapter verifier that cannot be called has verified nothing. It never propagates, never
+    passes, and its text is never kept."""
     ids = {"run_id": entry["run_id"], "job_id": entry["job_id"], "attempt_id": entry["attempt_id"]}
     try:
         if item.worker_kind == ps.PERSONA:
@@ -265,12 +303,14 @@ def _load_result(item: ps.InstanceRequest, entry: Mapping[str, Any], attempt_roo
                 registry_ceiling=context.registry_ceiling)
         return ce.load_verified_result(
             attempt_root, **ids, request=item.request, images_dir=context.images_dir,
-            host_flavor=context.host_flavor, docker_host=context.docker_host)
+            host_flavor=context.host_flavor, docker_host=context.docker_host,
+            docker_executable=host_facts.docker_executable, container_user=host_facts.container_user)
     except Exception:      # noqa: BLE001 - a refusal of any kind is a refusal; its text is never kept
         return None
 
 
-def _disk_facts(plan: ps.ExpansionPlan, index: int, pool_root: Path, context: ps.PoolContext) -> tuple:
+def _disk_facts(plan: ps.ExpansionPlan, index: int, pool_root: Path, context: ps.PoolContext,
+                host_facts: Any) -> tuple:
     entry, item = plan.manifest["instances"][index], plan.requests[index]
     attempt_root = pool_root.joinpath(*entry["attempt_root"].split("/"))
     if not os.path.lexists(attempt_root):
@@ -283,7 +323,7 @@ def _disk_facts(plan: ps.ExpansionPlan, index: int, pool_root: Path, context: ps
     file_name = pi.RESULT_FILE if item.worker_kind == ps.PERSONA else ce.RESULT_FILE
     if not os.path.lexists(attempt_root.joinpath(*entry["log_path"].split("/"), file_name)):
         return _NO_RESULT, None
-    result = _load_result(item, entry, attempt_root, context)
+    result = _load_result(item, entry, attempt_root, context, host_facts)
     return (_VERIFIED, result) if result is not None else (_RESULT_REFUSED, None)
 
 
@@ -300,9 +340,12 @@ def _result_state(status: Any, cause: Any) -> str | None:
 
 
 def classify_instance(plan: ps.ExpansionPlan, index: int, *, pool_root: Path, context: ps.PoolContext,
-                      observation: str) -> dict:
+                      host_facts: Any, observation: str) -> dict:
     """The manifest entry of one instance: :func:`_disk_facts` now, then :func:`_entry`."""
-    return _entry(plan, index, _disk_facts(plan, index, pool_root, context), observation)
+    errors = _host_facts_errors(plan, host_facts)
+    if errors:
+        raise RendezvousError("; ".join(errors))
+    return _entry(plan, index, _disk_facts(plan, index, pool_root, context, host_facts), observation)
 
 
 def _entry(plan: ps.ExpansionPlan, index: int, facts: tuple, observation: str) -> dict:
@@ -394,10 +437,14 @@ def manifest_sha256(manifest: Mapping[str, Any]) -> str:
 
 
 def derive_manifest(plan: ps.ExpansionPlan, *, pool_root: Path, context: ps.PoolContext,
-                    observations: Any) -> dict:
+                    host_facts: Any, observations: Any) -> dict:
     """The whole manifest from the expansion, the disk and one observation per instance, in the
     expansion's order. No clock, no host path, no free text."""
-    facts = [_disk_facts(plan, index, pool_root, context) for index in range(len(plan.manifest["instances"]))]
+    errors = _host_facts_errors(plan, host_facts)
+    if errors:
+        raise RendezvousError("; ".join(errors))
+    facts = [_disk_facts(plan, index, pool_root, context, host_facts)
+             for index in range(len(plan.manifest["instances"]))]
     return _derive(plan, facts, observations)
 
 
@@ -493,7 +540,7 @@ def _wait(plan: ps.ExpansionPlan, pool_root: Path, context: ps.PoolContext,
     # with an earlier coordinator. It is classified from disk and NEVER launched into.
     pending = []
     for index, entry in enumerate(entries):
-        kind, _ = _disk_facts(plan, index, pool_root, context)
+        kind, _ = _disk_facts(plan, index, pool_root, context, host_facts_of(runtime.container_runtime))
         if kind == _NO_EVIDENCE:
             pending.append(index)
             continue
@@ -675,9 +722,12 @@ def run_rendezvous(pool_root: Path, *, expected_spec: Any, context: ps.PoolConte
     try:
         _prepare_root(root)
         observations, interrupt = _wait(plan, pool_root, context, runtime)
-        manifest = derive_manifest(plan, pool_root=pool_root, context=context, observations=observations)
+        # The facts the launch used ARE the runtime's; the verifier must later be given the same.
+        host_facts = host_facts_of(runtime.container_runtime)
+        manifest = derive_manifest(plan, pool_root=pool_root, context=context, host_facts=host_facts,
+                                   observations=observations)
         data = canonical_bytes(manifest)
-        errors = manifest_errors(data, plan, pool_root=pool_root, context=context)
+        errors = manifest_errors(data, plan, pool_root=pool_root, context=context, host_facts=host_facts)
         if errors:
             raise RendezvousError("the derived manifest does not verify, so it is not published: "
                                   + "; ".join(errors))
@@ -704,12 +754,16 @@ def expansion_errors(pool_root: Path, *, expected_spec: Any, context: ps.PoolCon
             if error not in (_ROOTS_LISTING, _ROOTS_IDENTITY)]
 
 
-def manifest_errors(raw: Any, plan: ps.ExpansionPlan, *, pool_root: Path, context: ps.PoolContext) -> list:
+def manifest_errors(raw: Any, plan: ps.ExpansionPlan, *, pool_root: Path, context: ps.PoolContext,
+                    host_facts: Any) -> list:
     """THE acceptance rule for manifest bytes, used before publication and by the verifier.
 
     Per instance, the recorded entry must be exactly what :func:`classify_instance` derives NOW for
     one of the observations a coordinator can make; then the whole document must be the bytes
     :func:`derive_manifest` derives for those observations. No hash in the manifest is an input."""
+    errors = _host_facts_errors(plan, host_facts)
+    if errors:
+        return errors
     try:
         found = ps.parse_document(raw)
     except ps.PoolSpecError:
@@ -725,7 +779,7 @@ def manifest_errors(raw: Any, plan: ps.ExpansionPlan, *, pool_root: Path, contex
                 "duplicate, unknown, reordered or absent instance is refused"]
     errors: list = []
     observations = []
-    facts = [_disk_facts(plan, index, pool_root, context) for index in range(len(expected))]
+    facts = [_disk_facts(plan, index, pool_root, context, host_facts) for index in range(len(expected))]
     for index, record in enumerate(found["instances"]):
         for observation in OBSERVATIONS:
             if _entry(plan, index, facts[index], observation) == record:
@@ -748,7 +802,8 @@ def manifest_errors(raw: Any, plan: ps.ExpansionPlan, *, pool_root: Path, contex
     return errors
 
 
-def _verify(pool_root: Path, expected_spec: Any, context: ps.PoolContext, rendezvous_parent: Path) -> tuple:
+def _verify(pool_root: Path, expected_spec: Any, context: ps.PoolContext, rendezvous_parent: Path,
+            host_facts: Any) -> tuple:
     """(errors, the bytes those errors are about)."""
     errors = expansion_errors(pool_root, expected_spec=expected_spec, context=context)
     if errors:
@@ -765,20 +820,20 @@ def _verify(pool_root: Path, expected_spec: Any, context: ps.PoolContext, rendez
     raw = ps._read_regular(root, root / MANIFEST_FILE)
     if raw is None:
         return ["the manifest is missing, linked, hard-linked, oversized or unreadable"], None
-    return manifest_errors(raw, plan, pool_root=pool_root, context=context), raw
+    return manifest_errors(raw, plan, pool_root=pool_root, context=context, host_facts=host_facts), raw
 
 
 def verify_manifest(pool_root: Path, *, expected_spec: Any, context: ps.PoolContext,
-                    rendezvous_parent: Path) -> list:
+                    rendezvous_parent: Path, host_facts: Any) -> list:
     """Re-derives the published manifest from the expected specification, the expansion and the
     instance attempts on disk. Read-only. Every argument is required. Messages are fixed text."""
-    return _verify(pool_root, expected_spec, context, rendezvous_parent)[0]
+    return _verify(pool_root, expected_spec, context, rendezvous_parent, host_facts)[0]
 
 
 def load_verified_manifest(pool_root: Path, *, expected_spec: Any, context: ps.PoolContext,
-                           rendezvous_parent: Path) -> Mapping[str, Any]:
+                           rendezvous_parent: Path, host_facts: Any) -> Mapping[str, Any]:
     """The manifest T10 and C03 may rely on: verified against disk, deeply immutable."""
-    errors, raw = _verify(pool_root, expected_spec, context, rendezvous_parent)
+    errors, raw = _verify(pool_root, expected_spec, context, rendezvous_parent, host_facts)
     if errors:
         raise RendezvousError("terminal-instance manifest rejected: " + "; ".join(errors))
     return freeze(ps.parse_document(raw))       # the very bytes that were verified

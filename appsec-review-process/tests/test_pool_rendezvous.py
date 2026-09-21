@@ -122,8 +122,7 @@ class Case(unittest.TestCase):
     def published(self, spec, plan):
         """The manifest on disk verifies, equals what load_verified_manifest returns, and holds."""
         self.assertEqual(self.ws.verify(spec, plan), [])
-        loaded = pr.load_verified_manifest(self.ws.root(plan), **self.ws.arguments(spec),
-                                           rendezvous_parent=self.ws.rendezvous_parent)
+        loaded = self.ws.load(spec, plan)
         self.assertEqual(pr.canonical_bytes(pr.thaw(loaded)), self.raw(plan))
         self.assert_invariants(loaded, plan)
         return loaded
@@ -223,20 +222,21 @@ class ContractTests(Case):
             del arguments[name]
             with self.subTest(run=name), self.assertRaises(TypeError):
                 pr.run_rendezvous(root, **arguments)
-        full = {**self.ws.arguments(spec), "rendezvous_parent": self.ws.rendezvous_parent}
+        full = self.ws.reader_arguments(spec)
+        self.assertIn("host_facts", full)
         for call in (pr.verify_manifest, pr.load_verified_manifest):
             for name in full:
                 arguments = dict(full)
                 del arguments[name]
                 with self.subTest(call=call.__name__, omitted=name), self.assertRaises(TypeError):
                     call(root, **arguments)
-        full = {"pool_root": root, "context": self.ws.context(), "observation": pr.REPORTED}
+        full = {**self.ws.classifier_arguments(plan), "observation": pr.REPORTED}
         for name in full:
             arguments = dict(full)
             del arguments[name]
             with self.subTest(classify=name), self.assertRaises(TypeError):
                 pr.classify_instance(plan, 0, **arguments)
-        full = {"pool_root": root, "context": self.ws.context(), "observations": [pr.REPORTED]}
+        full = {**self.ws.classifier_arguments(plan), "observations": [pr.REPORTED]}
         for name in full:
             arguments = dict(full)
             del arguments[name]
@@ -562,6 +562,42 @@ class AdapterOutcomeTests(Case):
                 self.assertEqual(manifest["outcome"], pr.POOL_FAILED)
                 self.published(spec, plan)
 
+    def test_any_exception_from_an_adapter_s_verifier_is_invalid_in_the_coordinator_and_the_verifier(self):
+        """The general rule behind a real regression: B13's verifier gained required arguments, the
+        old call raised TypeError, and every container instance had to become `invalid` -- never a
+        propagated exception, never a pass. Simulated here with a seam on each adapter's verifier."""
+        self.scripted()
+        errors = {"a changed signature": TypeError("load_verified_result() missing 1 required argument: " + MARKER),
+                  "a refusal": ce.ContainerRequestError(MARKER), "an OS error": OSError(MARKER),
+                  "a bug": ZeroDivisionError(MARKER)}
+        for number, (label, error) in enumerate(errors.items()):
+            for module, kind_index in ((pi, 0), (ce, 1)):
+                with self.subTest(error=label, adapter=module.__name__):
+                    spec, plan = self.mixed(1, 1, attempt_id=f"attempt-{number}-{kind_index}")
+                    with mock.patch.object(module, "load_verified_result", side_effect=error):
+                        manifest = self.ws.run(spec, plan)            # the coordinator: no exception escapes
+                        expected = [pr.SUCCEEDED, pr.SUCCEEDED]
+                        expected[kind_index] = pr.INVALID
+                        self.assertEqual(support.states(manifest), expected)
+                        self.assertNotEqual(manifest["outcome"], pr.COMPLETE)
+                        self.assertIsNone(manifest["instances"][kind_index]["result_file"])
+                        self.assertNotIn(MARKER, self.raw(plan).decode("utf-8"))
+                        self.assertEqual(self.ws.verify(spec, plan), [])
+                    # the verifier, against an honest manifest, when ITS adapter call starts to raise
+                    other, other_plan = self.mixed(1, 1, attempt_id=f"attempt-{number}-{kind_index}-honest")
+                    self.assertEqual(self.ws.run(other, other_plan)["outcome"], pr.COMPLETE)
+                    with mock.patch.object(module, "load_verified_result", side_effect=error):
+                        found = self.ws.verify(other, other_plan)
+                        self.assertEqual(len(found), 1)
+                        self.assertIn(f"instances[{kind_index}]", found[0])
+                        self.assertNotIn(MARKER, found[0])
+                        with self.assertRaises(pr.RendezvousError) as caught:
+                            self.ws.load(other, other_plan)
+                        self.assertNotIn(MARKER, str(caught.exception))
+                        record = pr.classify_instance(other_plan, kind_index, observation=pr.REPORTED,
+                                                      **self.ws.classifier_arguments(other_plan))
+                        self.assertEqual(record["state"], pr.INVALID)
+
     def test_a_success_whose_invoker_or_container_may_still_be_writing_is_never_adopted(self):
         """Second line of defence: B14 and B13 never record an OK with a live invoker or a container
         they could not remove. Should one ever verify, it is still not a success here."""
@@ -570,11 +606,12 @@ class AdapterOutcomeTests(Case):
         self.ws.run(spec, plan)
         real = pr._load_result
         for index, field in ((0, "invoker_stopped"), (1, "container_removed")):
-            def doctored(item, entry, attempt_root, context, field=field, wanted=support.ids(plan)[index]):
-                result = pr.thaw(real(item, entry, attempt_root, context))
+            def doctored(item, entry, attempt_root, context, host_facts, field=field,
+                         wanted=support.ids(plan)[index]):
+                result = pr.thaw(real(item, entry, attempt_root, context, host_facts))
                 return pr.freeze({**result, field: False} if entry["instance_id"] == wanted else result)
             with self.subTest(field=field), mock.patch.object(pr, "_load_result", side_effect=doctored):
-                record = pr.classify_instance(plan, index, pool_root=self.ws.root(plan), context=self.ws.context(),
+                record = pr.classify_instance(plan, index, **self.ws.classifier_arguments(plan),
                                               observation=pr.REPORTED)
                 self.assertEqual((record["state"], record["result_file"]), (pr.INVALID, None))
 
@@ -699,7 +736,9 @@ class LateFinishTests(Case):
         self.assertEqual(ce.verify_container_result(
             self.ws.instance_root(plan, 1), run_id=entry["run_id"], job_id=entry["job_id"],
             attempt_id=entry["attempt_id"], request=plan.requests[1].request, images_dir=ce.IMAGES_DIR,
-            host_flavor=self.ws.context().host_flavor, docker_host=None), [])
+            host_flavor=self.ws.context().host_flavor, docker_host=None,
+            docker_executable=self.ws.host_facts().docker_executable,
+            container_user=self.ws.host_facts().container_user), [])
         self.assertEqual(json.loads(self.ws.result_path(plan, 1).read_text(encoding="utf-8"))["execution_status"], "OK")
         self.assertEqual(self.raw(plan), before, "the published manifest changed")
         loaded = self.published(spec, plan)
@@ -799,8 +838,7 @@ class PublicationTests(Case):
                 self.assertEqual(os.listdir(root), [], "a partial manifest or a temporary file was left")
                 self.assertNotEqual(self.ws.verify(spec, plan), [])
                 with self.assertRaises(pr.RendezvousError):
-                    pr.load_verified_manifest(self.ws.root(plan), **self.ws.arguments(spec),
-                                              rendezvous_parent=self.ws.rendezvous_parent)
+                    self.ws.load(spec, plan)
         invoker = Routed()
         manifest = self.ws.run(spec, plan, invoker)          # the restart publishes what is on disk
         self.assertEqual((support.states(manifest), invoker.invoked), ([pr.SUCCEEDED] * 2, []))
@@ -858,7 +896,7 @@ class RestartTests(Case):
         self.assertEqual(support.c01.tree(self.ws.instance_root(plan, 2)), half, "relaunched into a half-written root")
         self.assertEqual(manifest["outcome"], pr.DEGRADED)
         self.published(spec, plan)
-        derived = pr.derive_manifest(plan, pool_root=self.ws.root(plan), context=self.ws.context(),
+        derived = pr.derive_manifest(plan, **self.ws.classifier_arguments(plan),
                                      observations=[pr.REPORTED] * 4)
         self.assertEqual(self.raw(plan), pr.canonical_bytes(derived))
 
@@ -1240,8 +1278,7 @@ class VerifierTests(Case):
             self.assertNotIn(MARKER, error)
             self.assertNotIn(str(self.ws.base), error)
         with self.assertRaises(pr.RendezvousError):
-            pr.load_verified_manifest(self.ws.root(self.plan), **self.ws.arguments(self.spec),
-                                      rendezvous_parent=self.ws.rendezvous_parent)
+            self.ws.load(self.spec, self.plan)
         return errors
 
     def test_every_top_level_field_is_bound_even_when_the_hash_is_resealed(self):
@@ -1377,8 +1414,7 @@ class VerifierTests(Case):
     def test_the_wrong_party_and_the_wrong_pool_are_refused(self):
         other = deepcopy(self.spec)
         other["attempt_id"] = "attempt-other"
-        errors = pr.verify_manifest(self.ws.root(self.plan), expected_spec=other, context=self.ws.context(),
-                                    rendezvous_parent=self.ws.rendezvous_parent)
+        errors = pr.verify_manifest(self.ws.root(self.plan), **self.ws.reader_arguments(other))
         self.assertEqual(len(errors), 1)
         self.assertIn("the pool expansion does not verify", errors[0])
         other_plan = self.ws.expand(other)                   # a real sibling pool that never had a rendezvous
@@ -1413,7 +1449,7 @@ class VerifierTests(Case):
         (nothing is signed). So the claims it accepts for an instance are exactly what the rule
         derives for SOME observation: for a verified OK attempt that is the success itself or a
         state that adopts no result. Never another result, and never a success without one."""
-        arguments = {"pool_root": self.ws.root(self.plan), "context": self.ws.context()}
+        arguments = self.ws.classifier_arguments(self.plan)
         for index, honest in ((0, pr.SUCCEEDED), (1, pr.FAILED)):
             claims = [pr.classify_instance(self.plan, index, **arguments, observation=observation)
                       for observation in pr.OBSERVATIONS]
@@ -1422,6 +1458,48 @@ class VerifierTests(Case):
                 if record["state"] != honest:
                     self.assertEqual([record[name] for name in ("adapter_status", "adapter_cause", "result_file",
                                                                 "invoker_stopped", "container_removed")], [None] * 5)
+
+    def test_the_container_host_facts_are_required_and_are_the_ones_the_launch_used(self):
+        """B13's verifier builds the one docker argv a run can have from host facts a PoolContext
+        does not carry. They are an argument, never a default and never read from the attempt."""
+        honest = self.ws.host_facts()
+        hostile = {
+            "another docker executable": pr.ContainerHostFacts(Path("/usr/local/bin/other-docker"), honest.container_user),
+            "another container user": pr.ContainerHostFacts(honest.docker_executable, "4242:4242"),
+        }
+        for label, facts in hostile.items():
+            with self.subTest(facts=label):
+                errors = self.ws.verify(self.spec, self.plan, host_facts=facts)
+                self.assertEqual(len(errors), 2, "exactly the two pinned-container instances stop verifying")
+                self.assertTrue(all("instances[3]" in e or "instances[4]" in e for e in errors), errors)
+                with self.assertRaises(pr.RendezvousError):
+                    self.ws.load(self.spec, self.plan, host_facts=facts)
+        for label, facts in (("none", None), ("a mapping", {"docker_executable": honest.docker_executable,
+                                                            "container_user": honest.container_user}),
+                             ("a relative path", pr.ContainerHostFacts(Path("docker"), honest.container_user)),
+                             ("a string path", pr.ContainerHostFacts(str(honest.docker_executable), honest.container_user)),
+                             ("no user", pr.ContainerHostFacts(honest.docker_executable, None))):
+            with self.subTest(facts=label):
+                errors = self.ws.verify(self.spec, self.plan, host_facts=facts)
+                self.assertEqual(len(errors), 1)
+                self.assertIn("host facts" if facts is None else "host_facts", errors[0])
+                with self.assertRaises(pr.RendezvousError):
+                    pr.classify_instance(self.plan, 3, **{**self.ws.classifier_arguments(self.plan), "host_facts": facts},
+                                         observation=pr.REPORTED)
+                with self.assertRaises(pr.RendezvousError):
+                    pr.derive_manifest(self.plan, **{**self.ws.classifier_arguments(self.plan), "host_facts": facts},
+                                       observations=[pr.REPORTED] * 5)
+        for name in ("docker_executable", "container_user"):
+            with self.assertRaises(TypeError):
+                pr.ContainerHostFacts(**{name: getattr(honest, name)})
+        runtime = self.ws.container_runtime()
+        self.assertEqual(pr.host_facts_of(runtime), pr.ContainerHostFacts(runtime.docker_executable, runtime.container_user))
+        self.assertIsNone(pr.host_facts_of(None))
+
+    def test_a_pool_without_containers_needs_no_container_host_facts(self):
+        spec, plan = self.personas(1, attempt_id="attempt-personas-only")
+        self.ws.run(spec, plan, container_runtime=None)
+        self.assertEqual(self.ws.verify(spec, plan, host_facts=None), [])
 
     def test_one_wait_cannot_have_ended_both_ways(self):
         spec, plan = self.personas(2, attempt_id="attempt-both")
@@ -1437,7 +1515,7 @@ class VerifierTests(Case):
         self.assertIn("both by cancel and by timeout", errors[0])
 
     def test_classification_refuses_an_unknown_observation_and_a_short_observation_list(self):
-        arguments = {"pool_root": self.ws.root(self.plan), "context": self.ws.context()}
+        arguments = self.ws.classifier_arguments(self.plan)
         with self.assertRaises(pr.RendezvousError):
             pr.classify_instance(self.plan, 0, **arguments, observation="succeeded")
         with self.assertRaises(pr.RendezvousError):
