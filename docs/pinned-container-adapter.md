@@ -187,7 +187,7 @@ discarded.
 `schemas/pinned-container-result.schema.json` (`appsec-review/pinned-container-result/1.0`) holds
 codes, counts, hashes and adapter-derived identities only. The returned mapping is deeply
 immutable. The record is a cache: `verify_container_result(attempt_root, run_id=, job_id=,
-attempt_id=, request=, images_dir=)` takes the *expected* request and re-derives the identity
+attempt_id=, request=, images_dir=, host_flavor=, docker_host=)` takes the *expected* request and re-derives the identity
 fields, the request hash, the image reference and record hash, the capability fingerprint, the
 container name and the paths; checks status against cause, exit-code and removal rules, canonical
 bytes and `result_sha256`; requires the log directory to hold exactly the listed regular files
@@ -202,6 +202,19 @@ client exit 0 with no timeout or cancellation). A result can therefore not be re
 files beside it. `result_sha256` is an integrity check, not an authenticator: a party able to
 rewrite every file in the log directory consistently is outside what 1.0 detects. The adapter does not hash scratch: worker outputs are validated by
 their output contract.
+
+**Execution and verification apply one mount rule.** `request_mount_sources` is the single
+definition of which host directories a request may mount; `run_container` and
+`verify_container_result` both call it (so do `load_verified_result` and `to_worker_envelope`, which
+go through the verifier). `host_flavor` and `docker_host` are therefore required by all three
+verification functions: they are the integrator's host facts, the same two `ContainerRuntime` fields
+execution reads. Before this (PR 29 review), the verifier checked the request's shape but not its
+mounts, and certified a self-consistent attempt whose request mounted `/etc`, the host home, the
+attempt itself or the docker socket — states the adapter can never produce. A persisted "mount
+proof" was rejected as a fix: the attempt would be vouching for itself. Consequences, stated: the
+rule is evaluated against **this host at verification time** (device+inode identity), so a mount
+source that has since been removed, or has become sensitive, fails closed; and verification must
+run where the mount sources are visible (the worker host), not from an arbitrary machine.
 
 ## Worker-result envelope
 
