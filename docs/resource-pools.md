@@ -329,6 +329,14 @@ restart of the real services.
 ## Limitations
 
 - One pool per op (Dagster). Secondary resource use is not metered.
+- Pool lanes are outside these pools for now. `pool_rendezvous.run_rendezvous` (C02) launches its
+  instances as threads inside one `unassigned('coordination_only')` op, so its containers and
+  persona invocations claim no slot here and its own caps see only their own process. **Owner
+  decision 2026-09-21: one engagement at a time for now**, so at most one rendezvous runs on the host
+  and those caps are the host-wide ones. The job whose op calls `run_rendezvous` (T10) must carry a
+  run-level tag with a tag concurrency limit of 1; the target design launches instances as
+  dynamically mapped pooled ops ([pool rendezvous](pool-rendezvous.md), "Constraint: one rendezvous
+  at a time").
 - Pools count steps, not bytes or cores; `memory` 1 means one memory-heavy step, not a quota.
 - Waiting is first come first served within a priority, not proportional between engagements.
   An engagement that asks first with many ready steps is served first for all of them.

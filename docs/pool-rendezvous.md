@@ -231,7 +231,10 @@ launched only into the still empty, real directory the expansion created.
 
 ## Constraint: one rendezvous at a time
 
-(Review of PR #35, Q2, option (a): coordinator's recommendation, owner to confirm.)
+**Owner decision 2026-09-21** (review of PR #35, Q2): option (a) is adopted, and more strictly than
+it was proposed -- **one engagement at a time for now.** While pool lanes launch their instances
+in-process, the deployment is operated with a single engagement in flight, which makes "one
+rendezvous on the host" true by construction. Option (b) below remains the target design.
 
 The concurrency caps are counters inside one Python process. **They do not see any other run.** The
 op that will call `run_rendezvous` is `resource_pools.unassigned('coordination_only')`: it holds no
@@ -251,8 +254,11 @@ rendezvous may run on a host at a time**. Nothing in this module can enforce tha
 (the per-pool lock only excludes a second coordinator of the SAME pool). It is to be enforced where
 the calling op is written (T10): the job that contains the rendezvous op gets a run-level tag and a
 tag concurrency limit of 1 in the run coordinator's configuration, so a second such run queues.
-That op, that tag and that limit do not exist yet, and `docs/resource-pools.md` does not state the
-constraint yet; both are T10's to add. The parity gap `in_process_caps_do_not_see_other_runs` stays
+That op, that tag and that limit do not exist yet; they are T10's to add, and T10 does not merge
+without them. Until then the constraint is an operating rule, not an enforced one: the run queue
+still admits two runs of two engagements (`max_concurrent_runs: 2`, one per engagement), which is
+what `qualify_workflow.py` asserts, so nothing stops a second engagement being submitted.
+`docs/resource-pools.md` states the constraint under Limitations. The parity gap `in_process_caps_do_not_see_other_runs` stays
 open until option (b) lands.
 
 ## Cancel, timeout, late finish

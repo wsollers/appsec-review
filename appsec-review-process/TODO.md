@@ -249,8 +249,13 @@ Cross-cutting capability ownership is explicit:
   NOT done: no Dagster op runs it; producers and chain independence (the requirement above) are not
   implemented (C02b/T10); in-process caps do not see other runs, so at most one rendezvous may run on
   a host at a time until instances are pooled ops (enforce by a run-level tag limit in T10).
-  `state_reason` and the one-at-a-time constraint are the coordinator's recommendations, owner to
-  confirm. Next: C03 / T10.
+  `state_reason` is the coordinator's recommendation, owner to confirm. Next: C03 / T10.
+- Owner decision 2026-09-21 (PR #35 review, Q2): **one engagement at a time for now.** Pool lanes
+  launch in-process and are invisible to B15's pools, so the deployment runs a single engagement
+  until instances are launched as dynamically mapped pooled ops with C02 as the collector (target
+  design). T10 must put a run-level tag with a tag concurrency limit of 1 on the job whose op calls
+  `run_rendezvous`, and does not merge without it. Until then this is an operating rule: the run
+  queue still admits two engagements.
 
 #### C03 — Deterministic typed merges — BLOCKED(C02)
 
