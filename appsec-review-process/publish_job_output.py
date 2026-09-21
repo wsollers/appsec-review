@@ -12,7 +12,7 @@ import uuid
 
 from execution_state import (Blocked, Lock, atomic_json, file_hash, identifier, now, read_json,
                              tree_hashes)
-from validate_job_output import validate_job_output
+from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
 
 ACCEPTED_SCHEMA = "appsec-review/accepted-worker-result/1.0"
@@ -309,9 +309,12 @@ def publish_validated(base: Path, attempt_root: Path, envelope_path: Path,
                       expected_input_fingerprint: str, *, expected_run_id: str,
                       expected_job_id: str, consumer_job_id: str | None = None,
                       registry_root: Path | None = None, graph_path: Path | None = None,
-                      pre_publish_validate: Callable[[Path, dict[str, Any]], None] | None = None
-                      ) -> dict[str, Any]:
-    """Validate a durable envelope and atomically publish its compatibility pointer."""
+                      pre_publish_validate: Callable[[Path, dict[str, Any]], None] | None = None,
+                      orchestration: Any = NO_ORCHESTRATION_FACTS) -> dict[str, Any]:
+    """Validate a durable envelope and atomically publish its compatibility pointer.
+
+    `orchestration` defaults to the FAIL-CLOSED value: without `OrchestrationFacts` no ADR-0010
+    vendor-prepass contract can be published. Every other contract ignores it."""
     base, attempt_root, envelope_path = Path(base), Path(attempt_root), Path(envelope_path)
     envelope = read_json(envelope_path)
     attempt_id = identifier(envelope.get("attempt_id"))
@@ -321,7 +324,7 @@ def publish_validated(base: Path, attempt_root: Path, envelope_path: Path,
         raise Blocked("publishable envelope must be the attempt's result.json")
     _latest_matches(base, attempt_id)
     _pending_matches(base, attempt_id)
-    kwargs: dict[str, Any] = {"consumer_job_id": consumer_job_id}
+    kwargs: dict[str, Any] = {"consumer_job_id": consumer_job_id, "orchestration": orchestration}
     if registry_root is not None:
         kwargs["registry_root"] = registry_root
     if graph_path is not None:
@@ -359,8 +362,12 @@ def validate_published(base: Path, pointer: dict[str, Any], expected_input_finge
                        *, expected_run_id: str, expected_job_id: str,
                        consumer_job_id: str | None = None,
                        registry_root: Path | None = None, graph_path: Path | None = None,
-                       reuse: bool = False) -> tuple[Path, dict[str, Any]]:
-    """Read and validate a published common result without modifying it."""
+                       reuse: bool = False,
+                       orchestration: Any = NO_ORCHESTRATION_FACTS) -> tuple[Path, dict[str, Any]]:
+    """Read and validate a published common result without modifying it.
+
+    `orchestration` defaults to the FAIL-CLOSED value (see `publish_validated`). For a reused
+    vendor-prepass attempt it must name the orchestrator run that PRODUCED the attempt."""
     if not common_pointer(pointer):
         raise Blocked("accepted pointer does not use the common worker-result publication format")
     required = {"run_id", "job", "attempt_id", "fingerprint", "status", "envelope_path",
@@ -384,7 +391,8 @@ def validate_published(base: Path, pointer: dict[str, Any], expected_input_finge
     if (envelope.get("attempt_id") != attempt_id or
             envelope.get("execution_status") != pointer["status"]):
         raise Blocked("accepted pointer and worker-result envelope disagree")
-    kwargs: dict[str, Any] = {"consumer_job_id": consumer_job_id, "reuse": reuse}
+    kwargs: dict[str, Any] = {"consumer_job_id": consumer_job_id, "reuse": reuse,
+                              "orchestration": orchestration}
     if reuse:
         kwargs["accepted_envelope"] = envelope
     if registry_root is not None:

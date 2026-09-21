@@ -54,6 +54,7 @@
   "skip_reasons": [
     "no-debug-symbols",
     "not-applicable-after-partition-review",
+    "not-applicable-no-matching-inputs",
     "not-applicable-non-native",
     "not-requested",
     "not-requested-no-scorecard-projects"

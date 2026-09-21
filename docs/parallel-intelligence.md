@@ -1,6 +1,6 @@
 # Parallel build and intelligence collection
 
-The machine graph now declares 42 lifecycle/registry jobs. Source evidence indexing is runnable
+The machine graph now declares 51 lifecycle/registry jobs. Source evidence indexing is runnable
 ([retrieval guide](evidence-retrieval.md)), as is explicitly authorized published OpenSSF Scorecard
 JSON2 ingestion ([job guide](ossf-scorecard-job.md)); the native/scanner collection workers remain
 explicitly blocked until implemented and qualified. Dagster can schedule the dependency graph;

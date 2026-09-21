@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from execution_state import file_hash
-from validate_job_output import validate_job_output
+from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
 from worker_adapters import (
     DeterministicPythonAdapter,
     SuppliedHumanDecisionAdapter,
@@ -74,7 +74,8 @@ class WorkerResultRuntimeTests(unittest.TestCase):
         return validate_job_output(
             self.attempt, envelope or self.envelope, self.fingerprint,
             expected_run_id="run-1", expected_job_id="producer-job",
-            registry_root=self.registry, graph_path=self.graph, **kwargs)
+            registry_root=self.registry, graph_path=self.graph,
+            orchestration=NO_ORCHESTRATION_FACTS, **kwargs)
 
     def test_valid_current_result(self):
         self.assertEqual(self.errors(), [])
@@ -137,7 +138,8 @@ class WorkerResultRuntimeTests(unittest.TestCase):
         errors = validate_job_output(
             self.attempt, self.envelope, "sha256:" + "b" * 64,
             expected_run_id="run-1", expected_job_id="producer-job",
-            registry_root=self.registry, graph_path=self.graph)
+            registry_root=self.registry, graph_path=self.graph,
+            orchestration=NO_ORCHESTRATION_FACTS)
         self.assertIn("stale input fingerprint", "\n".join(errors))
 
     def test_supersession_is_acceptance_only_and_names_replacement(self):
@@ -151,7 +153,8 @@ class WorkerResultRuntimeTests(unittest.TestCase):
         errors = validate_job_output(
             self.attempt, self.envelope, self.fingerprint,
             expected_run_id="other-run", expected_job_id="other-job",
-            registry_root=self.registry, graph_path=self.graph)
+            registry_root=self.registry, graph_path=self.graph,
+            orchestration=NO_ORCHESTRATION_FACTS)
         joined = "\n".join(errors)
         self.assertIn("run_id does not match", joined)
         self.assertIn("job_id does not match", joined)
@@ -276,7 +279,8 @@ class ContractSpecificValidatorTests(unittest.TestCase):
         }
         return validate_job_output(
             self.attempt, envelope, self.fingerprint, expected_run_id="run-1",
-            expected_job_id="producer", registry_root=self.registry, graph_path=self.graph)
+            expected_job_id="producer", registry_root=self.registry, graph_path=self.graph,
+            orchestration=NO_ORCHESTRATION_FACTS)
 
     def test_schema_citations_paths_and_cross_record_ids_pass(self):
         self.assertEqual(self.errors(), [])

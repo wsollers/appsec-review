@@ -221,6 +221,68 @@
           "allowed_skip_reasons": [
             "not-requested-no-scorecard-projects"
           ]
+        },
+        {
+          "job": "02-secrets-inventory",
+          "kind": "required",
+          "contract": "secrets-inventory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-iac-config-scan",
+          "kind": "required",
+          "contract": "iac-config-evidence",
+          "allowed_skip_reasons": [
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
+          "job": "02-container-image-inventory",
+          "kind": "required",
+          "contract": "container-image-inventory",
+          "allowed_skip_reasons": [
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-sca-vulnerability-match",
+          "kind": "required",
+          "contract": "sca-vulnerability-match",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-license-scan",
+          "kind": "required",
+          "contract": "license-inventory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-dependency-lifecycle",
+          "kind": "required",
+          "contract": "dependency-lifecycle",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-binary-hardening",
+          "kind": "required",
+          "contract": "binary-hardening",
+          "allowed_skip_reasons": [
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
+          "job": "02-mobile-sast",
+          "kind": "required",
+          "contract": "mobile-sast",
+          "allowed_skip_reasons": [
+            "not-applicable-no-matching-inputs"
+          ]
         }
       ],
       "join_policy": {
@@ -1019,6 +1081,244 @@
       ],
       "preparation_dependencies": [
         "build_discovery"
+      ]
+    },
+    "02-secrets-inventory": {
+      "lane": "02-evidence-pregather",
+      "contract": "secrets-inventory",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-secrets-inventory",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Redacted secret and key-material location inventory (ADR-0010). Static and offline; raw values never leave the attempt; evidence leads only.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/secrets-inventory.redacted.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ]
+    },
+    "02-iac-config-scan": {
+      "lane": "02-evidence-pregather",
+      "contract": "iac-config-evidence",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-iac-config-scan",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Declared IaC, Kubernetes and Dockerfile configuration evidence plus base-image references (ADR-0010). Offline, policy bundles baked in; declared exposure only; skipped only with a zero-input probe receipt.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/iac-config-evidence.json",
+        "outputs/base-image-inventory.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json",
+        "outputs/applicability-probe-receipt.json"
+      ]
+    },
+    "02-container-image-inventory": {
+      "lane": "02-evidence-pregather",
+      "contract": "container-image-inventory",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-container-image-inventory",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Static inventory of OCI/docker image archives supplied as run inputs (ADR-0010 G8). No registry pull, build or container start; skipped only with a zero-input probe receipt.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/container-image-inventory.json",
+        "outputs/container-image-applicability.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ]
+    },
+    "02-sbom-inventory": {
+      "lane": "02-evidence-pregather",
+      "contract": "sbom-inventory",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-sbom-inventory",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "CycloneDX dependency inventory from checked-in manifests and lockfiles (ADR-0010 G4). Offline, no package restore; unresolved ecosystems are explicit gaps.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/sbom.cdx.json",
+        "outputs/sbom-manifest.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ]
+    },
+    "02-sca-vulnerability-match": {
+      "lane": "02-evidence-pregather",
+      "contract": "sca-vulnerability-match",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-sca-vulnerability-match",
+      "dependencies": [
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Known-vulnerability matches for the accepted SBOM using Grype over the mirrored vendor database plus the OSV snapshot (ADR-0010 M1-M5). Offline; a match is a lead, not reachability.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/sca-vulnerability-match.json",
+        "outputs/vulnerability-database-identities.json",
+        "outputs/sca-coverage-gaps.json",
+        "outputs/coverage-gap-summary.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ]
+    },
+    "02-license-scan": {
+      "lane": "02-evidence-pregather",
+      "contract": "license-inventory",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-license-scan",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "License and copyright detection whose component references resolve into the accepted SBOM (ADR-0010, PR 23 decision). Offline; inferred vendored components are never promoted to declared ones.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/license-inventory.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ]
+    },
+    "02-dependency-lifecycle": {
+      "lane": "02-evidence-pregather",
+      "contract": "dependency-lifecycle",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-dependency-lifecycle",
+      "dependencies": [
+        {
+          "job": "02-sbom-inventory",
+          "kind": "required",
+          "contract": "sbom-inventory",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-license-scan",
+          "kind": "required",
+          "contract": "license-inventory",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Deterministic end-of-life and lifecycle transform over the accepted SBOM and license inventory against an identified reference table (ADR-0010). Absence from the table is unknown, never supported.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/dependency-lifecycle.json",
+        "outputs/reference-table-identity.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ]
+    },
+    "02-binary-hardening": {
+      "lane": "02-evidence-pregather",
+      "contract": "binary-hardening",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-binary-hardening",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Static hardening properties of binaries supplied in the source snapshot (ADR-0010 G7); built binaries stay with 02-binary-triage. No execution, debugger or symbol server; skipped only with a zero-input probe receipt.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/binary-hardening.json",
+        "outputs/binary-hardening-applicability.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
+      ]
+    },
+    "02-mobile-sast": {
+      "lane": "02-evidence-pregather",
+      "contract": "mobile-sast",
+      "template": null,
+      "implemented": false,
+      "namespace": "02-mobile-sast",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Mobile static leads gated by an in-worker platform-marker probe (ADR-0010 G6); bare Java, Kotlin or Objective-C files are not a marker. Offline; skipped only with a zero-marker probe receipt.",
+      "required_artifacts": [
+        "manifest.json",
+        "status.json",
+        "outputs/mobile-applicability.json",
+        "outputs/mobile-sast.json",
+        "outputs/redaction-receipt.json",
+        "outputs/tool-results.json",
+        "outputs/coverage.json"
       ]
     }
   }

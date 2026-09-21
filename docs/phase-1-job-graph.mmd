@@ -31,6 +31,15 @@ flowchart TD
   02_operations_doc_ingest -->|required| 02_evidence_assembly
   02_evidence_index_post -->|required| 02_evidence_assembly
   02_ossf_scorecard_post -->|required| 02_evidence_assembly
+  02_secrets_inventory -->|required| 02_evidence_assembly
+  02_iac_config_scan -->|required| 02_evidence_assembly
+  02_container_image_inventory -->|required| 02_evidence_assembly
+  02_sbom_inventory -->|required| 02_evidence_assembly
+  02_sca_vulnerability_match -->|required| 02_evidence_assembly
+  02_license_scan -->|required| 02_evidence_assembly
+  02_dependency_lifecycle -->|required| 02_evidence_assembly
+  02_binary_hardening -->|required| 02_evidence_assembly
+  02_mobile_sast -->|required| 02_evidence_assembly
   01_component_characterization["01-component-characterization (planned; not dispatched)"]
   02_evidence_assembly -->|required| 01_component_characterization
   03_threat_model_dfd_stride["03-threat-model-dfd-stride (planned; not dispatched)"]
@@ -128,3 +137,23 @@ flowchart TD
   02_evidence_index_pre --> 02_evidence_index["02-evidence-index: work or reuse"]
   02_evidence_index --> 02_evidence_index_post["02-evidence-index: post-validation and publish"]
   00_intake_post -->|required| 02_evidence_index_config
+  02_secrets_inventory["02-secrets-inventory (planned; not dispatched)"]
+  00_intake_post -->|required| 02_secrets_inventory
+  02_iac_config_scan["02-iac-config-scan (planned; not dispatched)"]
+  00_intake_post -->|required| 02_iac_config_scan
+  02_container_image_inventory["02-container-image-inventory (planned; not dispatched)"]
+  00_intake_post -->|required| 02_container_image_inventory
+  02_sbom_inventory["02-sbom-inventory (planned; not dispatched)"]
+  00_intake_post -->|required| 02_sbom_inventory
+  02_sca_vulnerability_match["02-sca-vulnerability-match (planned; not dispatched)"]
+  02_sbom_inventory -->|required| 02_sca_vulnerability_match
+  02_license_scan["02-license-scan (planned; not dispatched)"]
+  00_intake_post -->|required| 02_license_scan
+  02_sbom_inventory -->|required| 02_license_scan
+  02_dependency_lifecycle["02-dependency-lifecycle (planned; not dispatched)"]
+  02_sbom_inventory -->|required| 02_dependency_lifecycle
+  02_license_scan -->|required| 02_dependency_lifecycle
+  02_binary_hardening["02-binary-hardening (planned; not dispatched)"]
+  00_intake_post -->|required| 02_binary_hardening
+  02_mobile_sast["02-mobile-sast (planned; not dispatched)"]
+  00_intake_post -->|required| 02_mobile_sast
