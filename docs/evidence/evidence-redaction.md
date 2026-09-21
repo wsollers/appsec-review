@@ -1,8 +1,10 @@
 # Evidence Redaction And The Redaction Receipt
 
-Status: module, schema and tests only (ADR-0010 Decision G9-A, task V06). **No worker, launcher,
-graph node, publication runtime or `02-evidence-index` code calls it yet**; adoption is V10-V13.
-Until a producer adopts it, legacy `evidence-scrub` remains the only scrub and its limits stand.
+Status: module, schema, tests and one consumer (ADR-0010 Decision G9-A, task V06).
+`validate_job_output.py` consumes the redaction receipt for the nine vendor-prepass contracts
+(PR #31; policy `refuse`, limits `DEFAULT_LIMITS`). **No worker, launcher, graph node, publication
+runtime or `02-evidence-index` code produces a receipt yet**; producer adoption is V10-V13. Until a
+producer adopts it, legacy `evidence-scrub` remains the only scrub and its limits stand.
 
 - Module: `appsec-review-process/evidence_redaction.py` (imports only the standard library,
   `execution_state` and `schema_validate`; no logging, no subprocess, no third-party package).

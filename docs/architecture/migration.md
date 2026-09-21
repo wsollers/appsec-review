@@ -12,13 +12,10 @@ outright. No thin compatibility wrapper, no deprecation shim -- no tech debt.
 
 ## Known breakage in the as-copied state
 
-- **`images/audit-static/Dockerfile` `COPY` paths are wrong for this layout.** It expects
-  `build_symbol_index.py`, `build_semantic_index.py`,
-  `query_semantic_index.py`, `scrub_evidence.py`, `php_parse_coverage.py`, `run-sast-php.sh`,
-  `run-dockerfile-lint.sh`, and `psalm.xml` at the build-context root. They now live in
-  `scripts/` (and `psalm.xml` alongside the Dockerfile). Fix: change the `COPY` lines to
-  `scripts/...` and build with the repo root as context, or move the scripts the image
-  needs into `images/audit-static/`. Do not build until this is fixed.
+- ~~`images/audit-static/Dockerfile` `COPY` paths are wrong for this layout.~~ **Fixed.** The
+  image now copies `config/` and `scripts/` from its own directory (`images/audit-static/config/`,
+  `images/audit-static/scripts/`; `COPY` lines near the end of the Dockerfile), so it builds with
+  `images/audit-static/` as the context.
 - `scripts/Build-AuditToolbox.ps1` and `scripts/Invoke-VendorAuditPrePass.ps1` assume the
   old flat directory and the image tag from the old build. Treat them as reference for step
   semantics only until the Python orchestrator exists.
@@ -31,7 +28,7 @@ outright. No thin compatibility wrapper, no deprecation shim -- no tech debt.
 | 2 | Pin Joern to a release tag (currently `releases/latest`) | Joern is the Tier C fallback; its C frontend changes between releases | ADR-0001 |
 | 3 | Pin Trivy and Syft to release versions (currently `curl \| sh` from `main`) | Reproducibility | header note in Dockerfile |
 | 4 | Pin the remaining Go/pip floats (gosec, osv-scanner, govulncheck, scc, bandit, pip-audit, lizard, code2flow in `audit-static`; tfsec, kube-linter, checkov in `audit-iac`; Trivy in `audit-iac`/`audit-container`) | Same | same |
-| 5 | **Corrected 2026-09-19**: `Invoke-VendorAuditPrePass.ps1`/`.sh` is not replaced by a single `orchestrator/` Python component. It is broken apart into separate per-tool Dagster jobs under `appsec-review-process/` that communicate the same way every other job in the graph does (`accepted.json`/`attempts/<id>/` immutable evidence, `job-graph.json` dependencies), orchestrated by Dagster like `build_discovery`/`build_execution`. Language-SAST tools (Semgrep, Bandit, gosec, cppcheck, PHP parse coverage) map onto the already-declared `02-source-sast` node. Secrets (gitleaks, binary cert/key inventory), IaC (checkov, tfsec, trivy-config, kube-linter, hadolint, base-image inventory), SBOM/SCA (osv-scanner), binary hardening (BinSkim) and mobile SAST (mobsfscan) have **no declared `job-graph.json` node yet** -- deciding whether each becomes its own node or folds into an existing one's contract is open work, not yet decided. | Linux-host requirement; PowerShell→docker.exe argv marshalling bit four steps | ADR-0002 |
+| 5 | **Corrected 2026-09-19**: `Invoke-VendorAuditPrePass.ps1`/`.sh` is not replaced by a single `orchestrator/` Python component. It is broken apart into separate per-tool Dagster jobs under `appsec-review-process/` that communicate the same way every other job in the graph does (`accepted.json`/`attempts/<id>/` immutable evidence, `job-graph.json` dependencies), orchestrated by Dagster like `build_discovery`/`build_execution`. Language-SAST tools (Semgrep, Bandit, gosec, cppcheck, PHP parse coverage) map onto the already-declared `02-source-sast` node. Secrets (gitleaks, binary cert/key inventory), IaC (checkov, tfsec, trivy-config, kube-linter, hadolint, base-image inventory), SBOM/SCA (osv-scanner), binary hardening (BinSkim) and mobile SAST (mobsfscan) map onto the nine `02-*` nodes ADR-0010 decided and task V02 declared in `job-graph.json` on 2026-09-21 (`02-secrets-inventory`, `02-iac-config-scan`, `02-sbom-inventory`, `02-sca-vulnerability-match`, `02-license-scan`, `02-dependency-lifecycle`, `02-container-image-inventory`, `02-mobile-sast`, `02-binary-hardening`); the nodes are declared, not implemented (batches M03/M04/M05, tasks V10-V12). | Linux-host requirement; PowerShell→docker.exe argv marshalling bit four steps | ADR-0002 |
 | 6 | `build_symbol_index.py` and Joern parse move to `audit-native` | They read C/C++ semantics; keep `audit-static` language-agnostic | §17 |
 | 7 | ~~Split `audit-iac` (terraform, checkov, tfsec, kube-linter, hadolint) out of `audit-static`~~ — **done 2026-09-17**, split into two images instead of one: `audit-iac` (terraform, checkov, tfsec, kube-linter, trivy config) and `audit-container` (hadolint, docker-base-images), matching how the README's build-order table already scaffolded them separately | Image-per-lane matches §17 | §17 |
 | 8 | Retire `scripts/build_symbol_index.py`'s C++ handling in favor of Joern/SVF outputs from `audit-native` | Symbol index is now a byproduct of the native pipeline | ADR-0001 |

@@ -101,6 +101,8 @@ Completed subset:
 - [x] Narrow deterministic Python and supplied-human-decision adapter protocol and implementations.
 - [ ] Broader contract migration, pinned-container argv, persona invocation, pool, and controller
   adapters.
+  - Done part: the pinned-container argv adapter (B13, PR #29) and the persona invocation adapter
+    (B14, PR #32, dispatch protocol only); no lifecycle worker is migrated to either.
 - [ ] Centralize attempt allocation, locking, timeout, cancellation, stream draining, child cleanup,
   publication, reuse, and newer-failure blocking so new workers do not reimplement the state model.
   Atomic publication, reuse validation, collision-safe allocation, interrupted-attempt recovery,
@@ -119,8 +121,9 @@ Completed subset:
   repository-partition discovery has no child, and no broader worker was migrated.
 - [ ] Add permission capabilities for target execution, network destinations, dynamic testing,
   debugger/ptrace, credentials, package restore, and target mutation.
-- [ ] Add Dagster resource pools for CPU-heavy, memory-heavy, Docker, network, LLM/persona, and
+- [x] Add Dagster resource pools for CPU-heavy, memory-heavy, Docker, network, LLM/persona, and
   dynamic-analysis work. Preserve the global and per-engagement queue limits as outer bounds.
+  (implemented, B15, PR #33; live qualification step 8 owed; gaps tracked in the parity manifest)
 - [ ] Make status reporting show job, pool, worker instance, attempt, upstream generation,
   permission decision, coverage state, and actionable resume prerequisite.
 
@@ -135,15 +138,20 @@ Validation:
 
 ## Workstream C: persona and tool work pools
 
-- [ ] Finalize the pool-job schema: lane, worker kind, persona/tool identity, count, scope, inputs,
+- [x] Finalize the pool-job schema: lane, worker kind, persona/tool identity, count, scope, inputs,
   budget, permissions, timeout, resource pool, and `wait_all` rendezvous.
-- [ ] Implement deterministic expansion from worker specifications to unique immutable instance
+  (implemented, C01, PR #34; unit level, no consumer yet; gaps tracked in the parity manifest)
+- [x] Implement deterministic expansion from worker specifications to unique immutable instance
   IDs and output roots.
-- [ ] Implement persona dispatch with isolated context, exact scoped paths, fixed outer lane prompt,
+  (implemented, C01, PR #34; qualification gaps tracked in the parity manifest)
+- [x] Implement persona dispatch with isolated context, exact scoped paths, fixed outer lane prompt,
   selected persona prompt, evidence-retrieval instructions, and recorded model/invocation identity.
-- [ ] Implement tool dispatch as pinned-image argv arrays with no legacy-script shell-out.
-- [ ] Implement a waiter that observes every expected instance to a terminal state without busy
+  (implemented, B14, PR #32; dispatch protocol only, no lifecycle persona job enabled)
+- [x] Implement tool dispatch as pinned-image argv arrays with no legacy-script shell-out.
+  (implemented, B13, PR #29; no lifecycle worker migrated yet)
+- [x] Implement a waiter that observes every expected instance to a terminal state without busy
   polling, handles cancellation, and never treats a missing worker as an empty result.
+  (implemented, C02, PR #35; unit level, no Dagster op runs it; gaps tracked in the parity manifest)
 - [ ] Implement separate deterministic merges for persona findings, scanner evidence, and coverage
   receipts. Mixed pools must not flatten these into one untyped output.
 - [ ] Implement evidence-qualified quorum keyed by claim and persona identity. Record when model or

@@ -16,22 +16,6 @@ The parity manifest names the six pools and assigns the six jobs that have worke
 reported as a gap. The capability `dedicated-resource-pools` is `implemented_not_qualified`: the
 live service qualification below was run on 2026-09-21 except its worker-loss step.
 
-### After PR #30 merges
-
-PR #30 (vendor pre-pass nodes) merged first (2026-09-21), so B15 makes the change: `main` is merged
-into this branch and every item below is done on it.
-
-- `tests/test_vendor_prepass_graph.py` (PR #30) cuts `blocked_op` out of `dagster_workflow.py` by
-  AST and execs it in a hand-built namespace. B15 made `blocked_op` use the module global
-  `NOT_IMPLEMENTED`, so that namespace must supply
-  `"NOT_IMPLEMENTED": resource_pools.unassigned("worker_not_implemented")`, and the test must
-  assert that each new stub's declared tags equal that value. Without it the module fails with
-  `NameError: name 'NOT_IMPLEMENTED' is not defined`. `blocked_op` is not to be restructured to
-  avoid this. `SourceTies.test_op_factories_use_only_these_module_globals` pins the module globals
-  each op factory uses, so the next one is noticed on this side.
-- The counts in this change's description become 45 `blocked_op` stubs and 61 unassigned ops.
-- The manifest (`resource_pools`, each job's `resource_pool`), the generated views and `TODO.md`.
-
 ## Pools
 
 | Pool | Limit | Work | Why this number |

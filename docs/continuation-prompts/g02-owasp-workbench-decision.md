@@ -2,8 +2,12 @@
 
 Continue from branch `codex/g02-owasp-workbench-decision`.
 
-This is a documentation/proposal-only G02 task. Do not edit runtime code, schemas, registry records,
-graph/parity surfaces, generated views, tests, validators, Dockerfiles, launchers, or `TODO.md`.
+The original task (2026-09-19) was documentation/proposal-only: no runtime code, schemas, registry
+records, graph/parity surfaces, generated views, tests, validators, Dockerfiles, launchers or
+`TODO.md`. The checkpoints appended below record the later implementation of the offline T03-T09
+slices (reference snapshots, the NVD publisher, validators and ledgers); the file boundary that
+still holds for every checkpoint is that no Dagster, lifecycle graph, registry, parity manifest,
+generated view or `TODO.md` surface is activated.
 
 ## Task
 

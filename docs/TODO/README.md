@@ -23,9 +23,9 @@ Order that avoids conflicts: 01 -> 02 -> (03, 04, 05 in any order) -> (06, 07, 0
 |---|---|
 | 01-docs-reorg-execute | done 2026-09-21 |
 | 02-remove-disposed-docs | done 2026-09-21 |
-| 03-design-v3-split-and-adr-0004 | ready |
+| 03-design-v3-split-and-adr-0004 | done 2026-09-21 |
 | 04-port-design-review-open-items | done 2026-09-21 |
-| 05-refresh-stale-trackers | ready |
+| 05-refresh-stale-trackers | done 2026-09-21 |
 | 06-write-review-lanes-docs | ready |
 | 07-write-images-and-tools-docs | ready |
 | 08-write-processes-overview | ready |

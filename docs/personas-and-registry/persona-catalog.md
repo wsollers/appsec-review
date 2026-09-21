@@ -21,21 +21,28 @@ that matches the target, evidence package, decision gate, and budget.
 
 ## Persona Shape
 
-Each persona should eventually become a structured registry entry with:
+A persona that an enabled job uses is a JSON record under
+`appsec-review-process/registry/personas/<persona_id>.json` (schema `appsec-review/persona/0.1`).
+The keys, taken from `owasp-validator.json`:
 
-```yaml
-persona_id: string
-category: attacker | defender | verifier | domain-specialist | evidence-ingestion | stakeholder-output | synthesis
-primary_failure_mode_caught: string
-best_used_in_lanes:
-  - process name
-required_inputs:
-  - artifact or evidence type
-outputs:
-  - artifact or decision product
-must_not:
-  - hard boundary
+```json
+{
+  "schema": "appsec-review/persona/0.1",
+  "persona_id": "owasp-validator",
+  "display_name": "OWASP Validator",
+  "category": "standards-validator",
+  "primary_failure_mode_caught": "OWASP controls are used as vague labels instead of explicit evidence-backed checklist work.",
+  "best_used_in_lanes": ["04-asvs-masvs", "09-independent-verification", "10-synthesis-report"],
+  "assumptions": {"posture": "...", "verdicts": ["satisfied", "partially_satisfied", "..."]},
+  "required_inputs": ["standards-intel/applicable-controls.json", "..."],
+  "outputs": ["per-control OWASP verdicts", "..."],
+  "must_not": ["invent OWASP mappings without loaded standard context", "..."]
+}
 ```
+
+`best_used_in_lanes` holds job-graph node IDs and is optional; `assumptions` is a free-form object
+whose keys vary by persona. The prose entries below are the human-readable source for records
+that do not exist yet in the registry.
 
 ## Core Attacker And Abuse Personas
 
@@ -1253,10 +1260,12 @@ Outputs:
 The process should treat QA artifacts and design documents as evidence inputs, not merely
 attachments.
 
-For new Dagster-orchestrated runs, persona and intelligence outputs belong under the owning
-`appsec-review-process/runs/<run_id>/data/jobs/.../attempts/<attempt_id>/` path and are published
-through the job's output contract. Legacy `scratch/<project>-engagement/` examples below describe
-the older evidence shape and should not be used as implicit inputs for a new run.
+Persona and intelligence outputs belong under the owning job's run-owned attempt path,
+`runs/<run_id>/data/jobs/<job>/whole/attempts/<attempt_id>/`, and are published through the job's
+output contract. Search over collected evidence is the `02-evidence-index` job (SHA-256 objects,
+ssdeep fingerprints, SQLite FTS5 chunks) described in
+[`docs/evidence/evidence-retrieval.md`](../evidence/evidence-retrieval.md); there is no
+`scratch/` layout.
 
 Add to full-text or semantic search when appropriate:
 
@@ -1287,41 +1296,21 @@ Do not index by default:
 
 Preferred pipeline:
 
-1. Ingest raw doc/test artifact into run-owned evidence. Use legacy scratch only when it has been
-   explicitly imported.
+1. Ingest raw doc/test artifact into run-owned evidence.
 2. Redact or strip secrets.
 3. Normalize into structured JSON.
 4. Produce a concise Markdown intelligence summary.
 5. Add the summary and safe structured fields to full-text search.
 6. Preserve raw artifact path and hash for evidence lineage.
 
-Legacy suggested outputs:
-
-```text
-scratch/<project>-engagement/doc-intel/
-  functional-doc-summary.md
-  functional-doc-facts.json
-  pii-flow-seeds.json
-  dfd-seeds.json
-  network-topology-seeds.json
-
-scratch/<project>-engagement/qa-intel/
-  api-collection-inventory.json
-  api-collection-summary.md
-  security-test-coverage.json
-  candidate-verification-requests.json
-  test-inventory.json
-  test-intelligence-summary.md
-  test-to-component-map.json
-  test-to-route-map.json
-  test-to-control-map.json
-  untested-security-surfaces.json
-  unit-test-facts.json
-  integration-test-flows.json
-  acceptance-flow-inventory.json
-  smoke-release-gates.json
-  load-abuse-capacity-notes.json
-```
+Suggested output files (each under the owning job's attempt directory, in the output contract's
+`required_artifacts`): doc-intel `functional-doc-summary.md`, `functional-doc-facts.json`,
+`pii-flow-seeds.json`, `dfd-seeds.json`, `network-topology-seeds.json`; qa-intel
+`api-collection-inventory.json`, `api-collection-summary.md`, `security-test-coverage.json`,
+`candidate-verification-requests.json`, `test-inventory.json`, `test-intelligence-summary.md`,
+`test-to-component-map.json`, `test-to-route-map.json`, `test-to-control-map.json`,
+`untested-security-surfaces.json`, `unit-test-facts.json`, `integration-test-flows.json`,
+`acceptance-flow-inventory.json`, `smoke-release-gates.json`, `load-abuse-capacity-notes.json`.
 
 ## Recommended Initial Catalog For Broad Reviews
 

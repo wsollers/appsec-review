@@ -49,7 +49,7 @@ M06 semantic-index disposition ────────────────�
 - Acceptance: no gate left open; fixtures and ADR agree; step-set equality check still passes.
 - Reviewer focus: no answer silently widens a permission; node IDs match the chosen G1/G6/G8 shape.
 
-## V02 — Declare Nodes, Edges And Skip Reason — `INTEGRATION`, in review (branch `claude/v02-declare-vendor-prepass-nodes`)
+## V02 — Declare Nodes, Edges And Skip Reason — `INTEGRATION` → done 2026-09-21 (PR #30)
 
 - Exclusive paths: `arp/job-graph.json`, `arp/design-parity-manifest.json`,
   `arp/worker-result-contract.json`, generated parity views (`docs/design-parity/design-parity-report.md`,
@@ -133,7 +133,7 @@ M06 semantic-index disposition ────────────────�
   `mobile-applicability.json`, and a hardening "pass" for an unsupported format.
 - Reviewer focus: no contract implies a registry pull or container start.
 
-## V08 — Fill Threat-Workbench Producers — `BLOCKED(V02)`
+## V08 — Fill Threat-Workbench Producers — `READY` (V02 done)
 
 - Owner: the ADR-0008 T03 owner. Exclusive paths:
   `docs/proposals/threat-workbench/input-sources.proposal.yaml`.
@@ -158,7 +158,7 @@ made Grype the SCA matcher, so this binding is **no longer the matcher's source*
 - `match_basis: cpe` in its identity record is true of the NVD database. The SCA match-record
   basis (`purl`, `cpe`) is V05's.
 
-## V10 — Secrets And IaC Workers (M03) — `BLOCKED(V02,V04,V06,B13)`
+## V10 — Secrets And IaC Workers (M03) — `READY` (V02, V04, V06 and B13 done)
 
 - Exclusive paths: new worker modules, job templates, tooling profiles and tests for
   `02-secrets-inventory` and `02-iac-config-scan`. Registration edits go to the integration owner.
@@ -167,7 +167,7 @@ made Grype the SCA matcher, so this binding is **no longer the matcher's source*
   and deletion of the eight mapped steps from **both** runners.
 - Reviewer focus: no `|| true`; a tool that needs network is `BLOCKED`, not excepted.
 
-## V11 — SBOM-Family Workers (M05) — `BLOCKED(V02,V05,V16,V17,V18,B13)`
+## V11 — SBOM-Family Workers (M05) — `BLOCKED(V16,V17,V18)`
 
 - Exclusive paths: new worker modules/templates/profiles/tests for the four nodes.
 - Matcher: a pinned image carrying syft and Grype (digest-pinned per B13), reading the mirrored
@@ -181,13 +181,13 @@ made Grype the SCA matcher, so this binding is **no longer the matcher's source*
   CycloneDX version pin recorded; no package restore; `06-cve-reachability/config.md` repointed
   (it still names `static-evidence/sca/osv-scanner.json`); four steps deleted from both runners.
 
-## V12 — Container, Mobile And Binary-Hardening Workers (M04) — `BLOCKED(V02,V06,V07,M02,B13)`
+## V12 — Container, Mobile And Binary-Hardening Workers (M04) — `BLOCKED(M02)`
 
 - Exclusive paths: new worker modules/templates/profiles/tests for the three nodes.
 - Acceptance: M04's list plus the marker-based mobile probe (server-side Java must not count),
   archive-only image input, three steps deleted from both runners.
 
-## V13 — Source SAST (D09) — `BLOCKED(B13,V01,V06)`
+## V13 — Source SAST (D09) — `READY` (B13, V01 and V06 done)
 
 - Exclusive paths: D09's. This series adds only the requirements listed under
   `existing_nodes_receiving_legacy_steps` in `job-nodes.proposal.json`.

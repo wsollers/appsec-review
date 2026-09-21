@@ -31,10 +31,10 @@ separate `run.ps1` exists), and use `--rm`, which removes the evidence needed to
 out-of-memory kill or an external kill from an ordinary exit.
 
 So the wrapper identity for this adapter is the versioned constant
-`container_execution.BOUNDARY_FLAGS`, id `appsec-review/container-boundary/1.0`, built as a list in
-Python and executed without a shell. It is equivalent to `images/audit-native/run.sh` (the stricter
-of the two), and a test reads that script and asserts that every boundary flag it carries is also
-in the built argv. `boundary_sha256()` hashes the flags, the environment allow-list, the scratch
+`container_execution.BOUNDARY_FLAGS`, id `appsec-review/container-boundary/1.0`, a tuple of argv
+words in Python, executed without a shell. It is equivalent to `images/audit-native/run.sh` (the
+stricter of the two), and a test reads that script and asserts that every boundary flag it
+carries is also in the built argv. `boundary_sha256()` hashes the flags, the environment allow-list, the scratch
 target and the limit bounds; it is written into every result and into the fingerprint material, so
 a boundary change invalidates accepted work.
 

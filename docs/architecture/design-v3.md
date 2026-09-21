@@ -2,7 +2,9 @@
 
 **v3 — Static-First, Evidence-Qualified, Secure Build Isolation, Streaming Verification, Cross-Lane Synthesis**
 
-Design document • September 2026. Exported from Google Doc 2026-09-11 (see ADR-0004).
+Design document • September 2026. This file is the canonical, maintained design (ADR-0004); it began as
+a Google Doc export on 2026-09-11 and is edited here by pull request like any other doc. §24 holds the
+dated decision log.
 
 ## 1. Executive design summary
 
@@ -46,7 +48,7 @@ Permitted:
 - Destroy the worker after execution. Only explicitly allowlisted artifacts and logs may cross the import boundary.
 - The trusted orchestrator validates imported artifacts, hashes them, registers them, and alone may append canonical ledger events.
 
-### 2.2.1 Current implementation (Linux/WSL/Docker host) — added 2026-09-17
+### 2.2.1 Current implementation (Linux/WSL/Docker host)
 
 `images/audit-native/run.sh` is the host-side wrapper enforcing this boundary today for one
 audit-native step at a time (the orchestrator calls it with a static argv; see the non-negotiables
@@ -79,7 +81,7 @@ validated. Writing one is a moderate-risk task, not a pure doc change: an incorr
 profile fails silently or noisily mid-build depending on which syscall it blocks, and validating one
 requires running it against a real audit-native container across every tool in the image — something
 that needs to happen in an environment that can actually execute Docker builds against this image,
-not as a paper exercise. Tracked as a follow-up in the project TODO rather than attempted blind here.
+not as a paper exercise. Tracked in `docs/design-parity/design-parity-completion-plan.md` (Workstream D2).
 
 **Not yet implemented: Windows/Hyper-V isolation.** The profile above is the Linux/WSL/Docker path.
 The 2026-09-16 status log (git history) and the architecture doc confirm Windows PowerShell + Docker is a
@@ -88,7 +90,7 @@ snapshot-revert or Hyper-V isolation boundary has been designed or documented fo
 step specifically when run from that host path. This is a genuine open design gap, not just an
 undocumented existing thing — noting it here so it isn't lost, but it needs its own design pass
 (likely a Hyper-V checkpoint/revert wrapper analogous to `run.sh`, or accepting Docker Desktop's own
-Linux-VM boundary as sufficient and documenting why) rather than a one-line fix.
+Linux-VM boundary as sufficient and documenting why) rather than a one-line fix. Also tracked in Workstream D2.
 
 ## 3. Review flow and process
 
@@ -118,212 +120,79 @@ The review begins with a seeded validation gate and deterministic pregather, mov
 | L14 | Cross-lane synthesis | Small integrator team correlates only verified facts into attack/control chains and escalations. |
 | L15 | Static deployment hardening | Container/cloud/IaC hardening, declared network exposure, IAM, datastore, crypto, backup/recovery, logging. |
 
-### 4.1 Current harness mapping (00–11 lanes)
+### 4.1 Current harness mapping
 
-The tracked process harness under `appsec-review-process/` currently runs as eleven numbered lanes
-(`00`–`11`) rather than the eighteen slots above (`L0`–`L15`, with `L6` split `L6A`/`L6B`). This section
-records the mapping as it exists today so the two documents can be reconciled incrementally instead of
-silently drifting.
+Two things implement this table today, and neither is this document:
 
-| Harness lane | Design lane(s) | Status |
+- The **lane folders** under `appsec-review-process/` (`00`-`15`, each with `config.md`, `prompt.md`
+  and usually `subprompts.md`) are the tracked LLM prompt harness. The mapping from a lane folder to
+  the design lanes above is fixed and recorded here.
+- The **Dagster job graph** (`appsec-review-process/job-graph.json`, 51 jobs) and the design-parity
+  manifest are the authoritative record of which of those lanes is a real, qualified worker. Read
+  `docs/design-parity/design-parity-readiness.md` (generated) for build status; do not infer it from
+  this section.
+
+| Harness lane | Design lane(s) | Note |
 |---|---|---|
-| `00-intake-recovery` | L0 | Matches. |
-| `01-component-characterization` | L0A | Matches (see §22). |
-| `02-evidence-pregather` | — (infrastructure) | Runs the deterministic pipeline; not itself an L-lane. |
-| `03-threat-model-dfd-stride` | L6A | Matches. |
-| `04-asvs-masvs` | L2 | Matches. |
-| `05-native-memory` | subset of L3 | Narrower than L3: covers native memory-safety only, not the full native-build/SAST scope L3 describes. |
-| `06-cve-reachability` | L1 | Broadened 2026-09-17 to full L1 scope: dependency inventory, license inventory (re-surfacing the SBOM's own license field plus the pre-existing `scancode` license/copyright scan), best-effort EOL/abandonware signals (new `dependency-lifecycle` step against a small hand-curated, offline reference table — coverage is partial by design, see `data/eol-reference.json`), and CVE reachability triage. |
-| `07-red-team-adversarial` | L4 / L5 | Restructured 2026-09-17: every scenario is now tagged with its design lane (`L4` AppSec discovery or `L5` vendor/insider malfeasance) as a first-class axis alongside the existing general/known-list mode axis, run within one lane folder rather than split into two — matching how the harness already treats mode as a run parameter rather than a folder split. |
-| `08-blue-team-refutation` | L4B / L5B | Resolved 2026-09-17: added as a formal §4 row (`L4B`/`L5B`) rather than folded back into `07`, since the harness has run it as a dedicated lane and that was judged the better fit going forward. As of this revision it also carries the `L4`/`L5` design-lane tag through from `07`'s claims, so disposition can be reported per design lane. |
-| `09-independent-verification` | L7 | Matches. |
-| `10-synthesis-report` | subset of L9 / L14 | Covers report assembly and cross-lane synthesis; no longer scores findings itself (see next row). |
-| `12-scoring-prioritization` | L8 | Added 2026-09-17: extracts CVSS 4.0 scoring, EPSS/KEV annotation, and priority ranking out of `10-synthesis-report` into its own step ahead of synthesis, using the §14 deterministic-derivation mapping. Runs after `09`/`11`, before `10` (see `process-manifest.json`'s `process_order`). |
-| `11-remediation-proposal` | L11 | Matches. |
-| `15-deployment-hardening` | L15 | Matches (added 2026-09-17; reuses `audit-iac`/`audit-container` evidence gathered by the existing pregather step). |
-| — (unbuilt) | L6B, L10, L12, L13 | No harness lane exists yet; see the L3/L9 narrowing notes above and the standalone gaps list below. |
+| `00-intake-recovery` | L0 | Includes gated build discovery (`docs/build-discovery/`). |
+| `01-component-characterization` | L0A | See §22. |
+| `02-evidence-pregather` | (infrastructure) | Runs the deterministic evidence pipeline; not itself an L-lane. |
+| `03-threat-model-dfd-stride` | L6A | |
+| `04-asvs-masvs` | L2 | |
+| `05-native-memory` | subset of L3 | Native memory-safety only, not the full native-build/SAST scope L3 describes. |
+| `06-cve-reachability` | L1 | Full L1 scope: dependency and license inventory, best-effort EOL/abandonware signals (`data/eol-reference.json`), CVE reachability. |
+| `07-red-team-adversarial` | L4 / L5 | Every scenario carries its design lane as a tag alongside the general/known-list mode. |
+| `08-blue-team-refutation` | L4B / L5B | Dedicated refutation lane; carries the L4/L5 tag through from `07`. |
+| `09-independent-verification` | L7 | |
+| `12-scoring-prioritization` | L8 | Runs after `09`/`11`, before `10` (`process-manifest.json` order). |
+| `11-remediation-proposal` | L11 | |
+| `10-synthesis-report` | subset of L9 / L14 | Report assembly and cross-lane synthesis; scoring is lane 12's. |
+| `13-fuzz-target-triage` | supports L4/L5/L7 | Ranks candidate fuzz targets; runs no fuzzer. |
+| `15-deployment-hardening` | L15 | Reuses `audit-iac`/`audit-container` evidence. |
+| (none) | L6B, L10, L12, L13 | No harness lane. L12's design is §4.2. |
 
-Unbuilt as standalone lanes: `L6B` (threat-model reconciliation), `L10`
-(static protocol/parser/wire-format analysis), `L12` (supply-chain/provenance beyond SBOM), `L13`
-(privacy/data protection). `L15` (static deployment hardening) has a harness lane as of this revision
-(see §12 and `appsec-review-process/15-deployment-hardening/`). `L1` (2026-09-17: full scope, not
-just CVE reachability), `L4`/`L5` (2026-09-17: explicit design-lane tagging within `07`), and
-`L4B`/`L5B` (2026-09-17: `08` formalized as its own row) are now fully covered by existing harness
-lanes; see the rows above for what changed.
+The dated narrative that used to sit here (what changed on which day) is in §24.
 
-### 4.2 L12 design note — native/vendored supply-chain inference (added 2026-09-18, design only, not yet implemented)
+### 4.2 L12 design note — native/vendored supply-chain inference
 
-**Motivating gap, confirmed concretely on the `targets/eastl` run.** The `sbom` step's tool
-(`syft dir:/workspace -o cyclonedx-json@1.5=...`) only extracts dependencies from files it
-recognizes as package-manager manifests/lockfiles (`package.json`, `go.mod`, `requirements.txt`/
-`poetry.lock`, `pom.xml`/`build.gradle`, `*.csproj`, `Cargo.lock`, `conan.lock`, `vcpkg.json`, etc.).
-It has no reader for raw `CMakeLists.txt` dependency declarations and no ability to infer vendored
-code with no manifest at all. On EASTL — a header-only C++ template library with only a
-`CMakeLists.txt` and no lockfile — this produced exactly 4 "components," all GitHub Actions
-CI-workflow references (`actions/checkout@v4` etc.), not EASTL's own tree. Once the real ScanCode
-scan ran (2026-09-18), it directly disproved the "EASTL has no third-party code" reading of that
-result: `3RDPARTYLICENSES.TXT` documents real vendored HP (1994) and LLVM/libc++ (2009–2015)
-license/copyright text bundled in the tree, and 689 of 1317 scanned files carry real
-license/copyright hits. The SBOM step is silently blind to all of it. This is expected behavior for
-syft given its actual ecosystem support, not a bug in this repo's own code — but it means `L1`'s
-dependency inventory is incomplete for exactly the kind of target (native C/C++, vendored-not-
-packaged) this pipeline exists to review, and the gap will recur on `targets/idsoftware-doom3-bfg`
-and the real engagement repo, not just here.
+**Motivating gap.** The `sbom` step's tool (`syft`) only extracts dependencies from files it
+recognizes as package-manager manifests/lockfiles. It has no reader for raw `CMakeLists.txt`
+dependency declarations and cannot infer vendored code with no manifest at all. On EASTL (a
+header-only C++ library with only a `CMakeLists.txt`) it produced four "components", all GitHub
+Actions references, while the ScanCode scan showed real vendored HP and LLVM/libc++ code
+(`3RDPARTYLICENSES.TXT`; 689 of 1317 files with license/copyright hits). This is expected syft
+behaviour, not a bug here, but it means L1's inventory is incomplete for exactly the native,
+vendored-not-packaged targets this pipeline exists to review.
 
-**Two tiers, decided 2026-09-18 with the repo owner:**
+**Decision: two tiers.**
 
-**Tier A — static, ScanCode-clustering heuristic (cheap, no build required, closes today's specific
-gap).** A new deterministic script clusters ScanCode's existing per-file `license_detections`/
-`copyrights` output into candidate "vendored component" entries: files sharing a directory,
-license expression, and a copyright holder distinct from the project's own declared license become
-one flagged pseudo-component, explicitly marked `confidence: "candidate — no package-manager
-manifest, inferred from bundled license/copyright evidence"` (never promoted to a definitive SBOM
-entry without a human or a later, stronger signal confirming it). Output feeds
-`analyze_dependency_lifecycle.py` as a supplementary, clearly-labeled source alongside the syft-
-derived component list, not a replacement for it. This is implementable and testable today against
-the eastl evidence already on disk (it would surface `3RDPARTYLICENSES.TXT`'s HP/LLVM cluster as a
-candidate component) and needs no pipeline reordering.
+- **Tier A — static ScanCode clustering (no build required).** A deterministic script clusters
+  ScanCode's per-file `license_detections`/`copyrights` into candidate vendored-component entries
+  (files sharing a directory, license expression and a copyright holder distinct from the project's
+  own license), marked as candidates and never promoted to a definitive SBOM entry without a stronger
+  signal. It feeds `analyze_dependency_lifecycle.py` as a supplementary, labelled source.
+- **Tier B — post-build native-dependency inference.** Runs *after* the hostile-build step, because
+  it needs compile/link output. Pass 1 runs every popular native build-tool/package-manager manifest
+  reader (Conan, vcpkg, Ninja, Make, Maven, Gradle, NuGet, pip/Poetry, Cargo, Go modules, npm/yarn)
+  explicitly. Pass 2 inspects the build/link output (objects, libraries, linker command lines, final
+  binaries) for what pass 1 missed: semver-aware where it applies with graceful degradation, version
+  signals in paths, filenames, config files, header macros and embedded string banners, prioritising
+  conventionally named directories (`lib`, `sdk`, `vendor`, `third_party`, `extern`, `deps`, ...).
 
-**Tier B — dynamic, post-build native-dependency inference (needs compiled/linked output; larger
-design scope; placement decided below).** Per the repo owner's explicit direction, this job moves
-to run *after* the hostile-build step, not alongside static evidence pregather, because it needs
-real compile/link output to work from — not just source text. Two internal passes:
+**Isolation and placement.** Tier B is its own evidence step and lane on the L12 track, not folded
+into `05-native-memory`, and runs in a separate, purpose-built image rather than widening
+`images/audit-native`'s hostile-build surface (§2.2.1). It consumes the hostile-build worker's
+*exported, allowlisted* artifacts (compile database, build/link logs and whichever binaries/objects
+cross the import boundary) under ordinary read-only evidence isolation.
 
-1. **Known/easy pass first**: run every popular native build-tool and package-manager's own
-   manifest/lockfile reader across the tree before falling back to heuristics — CMake (via any
-   `conan.lock`/`conanfile.txt`/`vcpkg.json`/`vcpkg-configuration.json` it references, not raw
-   `CMakeLists.txt` parsing), Ninja, Make, Conan, vcpkg, Maven, Ant, Gradle, NuGet, pip/Poetry,
-   Cargo, Go modules, npm/yarn — "whatever popular build and code-vendoring solution exists" per
-   the repo owner. This is a broader-coverage superset of what `syft` already does for the
-   ecosystems it supports, run explicitly rather than assumed complete.
-2. **Heuristic pass for what's left unaccounted for**: only after the known/easy pass runs, inspect
-   the actual build/link step's output (object files, static/shared libraries, linker command
-   lines and logs, final binaries) for vendored code the manifest pass didn't catch. Heuristics to
-   apply, per the repo owner's own list:
-   - Semantic-versioning-aware parsing where it applies, with the explicit caveat that some vendored
-     deps are old enough that strict semver parsing may not be meaningful — degrade gracefully
-     (report a raw version string with low confidence rather than failing to match a semver regex).
-   - Version signals hiding in: directory paths (`.../2.2.4/...`), filenames (`libraryA-20.4`),
-     config files, header comments/includes, macro/`#define` constants, and version banners embedded
-     as string/byte-array constants inside compiled binaries (a `strings`-style scan of build output
-     for version-looking text near a product-name match).
-   - Focus/prioritize heuristics on conventionally-named directories first — `lib`, `libs`, `sdk`,
-     `tools`, `shared`, `libraries`, and their common siblings (`vendor`, `third_party`, `extern`,
-     `deps`) — rather than scanning the entire tree with equal weight.
-
-**Isolation and placement (decided 2026-09-18):**
-
-- **New dedicated lane/step, not folded into `05-native-memory`'s evidence gathering** — the repo
-  owner's explicit choice, to keep this on the `L12` supply-chain/provenance track (already listed
-  as unbuilt in §4.1) as its own thing, rather than overloading native-memory's evidence scope.
-  Concretely: a new evidence-gathering step (name/numbering TBD — needs a `process-manifest.json`
-  slot, following the same "authoritative manifest order, not assumed numeric sequence" discipline
-  bug #11 established) that runs after the hostile-build step, and a new harness lane consuming it
-  that maps to `L12` in the §4.1 table (currently the `— (unbuilt)` row).
-- **A separate, purpose-built isolated Docker image** for this step's tooling (the repo owner's own
-  suggestion) — not merged into `images/audit-native`'s existing hostile-build worker. That worker's
-  isolation profile (§2.2.1: `--network none`, `--read-only` root, no-exec tmpfs except the one JVM
-  carve-out, `--cap-drop ALL`, tight pid/memory/cpu quotas) is scoped to the specific static-analysis
-  tools it already runs (clang-cl/clang, SVF, CSA/CodeChecker, cppcheck, Joern/JVM); adding a wide
-  matrix of package-manager CLIs and a binary-strings heuristic scanner to that same image would
-  needlessly widen its surface. This new step should consume the hostile-build worker's *exported,
-  allowlisted* artifacts (compile_commands.json, build/link logs, and whichever compiled
-  binaries/objects the worker already exports across the import boundary per §2.2's "only explicitly
-  allowlisted artifacts... may cross the import boundary" rule) rather than re-running or re-entering
-  the hostile-build sandbox itself — so it needs standard read-only evidence-consumption isolation,
-  not the same hostile-execution boundary as the build step.
-
-**Open items before Tier B can actually be built (not resolved by this design note):**
-
-- **Confirm exactly what the hostile-build worker currently exports across the import boundary.**
-  `images/audit-native/run.sh`'s own header only documents the isolation profile, not the specific
-  allowlisted artifact set (compile_commands.json is certainly produced per §2.2's "permitted" list;
-  whether compiled object files/static or shared libraries/final binaries are also exported, or only
-  logs and the compile database, is unconfirmed and needs to be checked against the actual
-  native-pregather orchestration before Tier B's heuristic pass can be designed in more detail — a
-  binary-strings scan needs the binaries themselves, not just compile_commands.json).
-- **Exact step/lane name and its slot in `process-manifest.json`'s authoritative `process_order`** —
-  not chosen yet.
-- **Whether Tier A should be built now, independent of Tier B's larger design/build timeline** — Tier
-  A has no dependency on Tier B or on the hostile-build export question above, and would close the
-  concrete gap already flagged for the eastl run today. Not yet confirmed with the repo owner whether
-  to build it now or hold both tiers together.
-
-This section records the design decision; neither tier is implemented yet.
-
-### 4.2.1 Tier B progress update (2026-09-18, same-day continuation)
-
-Two scripts now exist in `scripts/` (commit `201d5b7`) implementing the first half of Tier B's
-pipeline, both tested against a real clang/ld toolchain (not just written blind):
-
-- **`pipeline/capture_build_commands.py`** — command-line capture. Takes `compile_commands.json`
-  (already a standard artifact this pipeline produces) and, per-entry, re-invokes the compile
-  command with clang's `-###` flag appended, which prints the real `-cc1` subprocess argv without
-  executing it — staying inside the hostile-build boundary's existing "compile or syntax-check"
-  permitted list (§2.2). Separately accepts `--link-recipe`, a caller-supplied JSON array of
-  driver-level link commands (e.g. `clang++ ... -o app`), which it likewise expands via `-###` to
-  the real `ld`/`lld`/`collect2` subprocess argv — this is what actually carries every `-L` search
-  path and positional `.a`/`.so`/`.o` the link pulled in. Output: `build-commands.jsonl`, one JSON
-  record per real subprocess invocation, tagged `kind` (compile/assemble/link/other) and `stage`
-  (driver-level vs. `-###`-expanded).
-- **`pipeline/extract_vendor_candidates.py`** — the heuristic pass. Parses `-I`/`-L`/`-l` and
-  positional object/library paths out of `build-commands.jsonl`, resolves them to absolute paths,
-  classifies in-tree vs. out-of-tree against `--repo-root`, dedupes to distinct candidate
-  directories, and runs a bounded walk (`--max-depth`, default 4, *from each candidate directory*,
-  not from the repo root) looking for version-carrying files (`version.h`-style filenames,
-  `*-config.cmake`/`*.pc`, `CHANGELOG`), `#define ...VERSION...` macros in small header/text files,
-  and version-looking path segments — checked both in the candidate directory's own descendants
-  *and* a few levels of its ancestors (a flag typically points at `.../foo-1.2.3/include`, not at
-  the versioned directory itself — missed in the first draft, caught by testing against a real
-  fixture, fixed before commit). Confidence-scores each candidate (`high`/`medium`/`low`) from what
-  combination of signals it found. Output: `native-vendor-candidates.json` — evidence records only,
-  explicitly never a verdict; product/version disambiguation is left to a later, deliberately small
-  inference pass over just this candidate list, not the whole tree.
-
-**A real, non-obvious bug found by testing against the actual toolchain, not just written blind**:
-an unfiltered real link command line (`clang++ main.o -L. -lvendor -o app` on a stock Ubuntu 18.1.3
-clang host) pulled in over 80 `.pc` files from `/usr/lib/x86_64-linux-gnu` alone — standard
-toolchain/OS library search paths that show up on essentially every real link line via the
-compiler driver's own default search path, not anything the target vendored. Left unfiltered, this
-would have flooded the "small, focused candidate list" the whole design exists to produce.
-**Fixed**: `extract_vendor_candidates.py` now excludes standard system library directory prefixes
-(`/usr/lib`, `/usr/lib64`, `/usr/local/lib`, `/lib`, `/lib64`, and anything nested under them, e.g.
-`/usr/lib/gcc/.../13`) by default, with `--include-system-libdirs` to disable and
-`--system-libdir-prefix` to override the list. Re-verified end-to-end after the fix: the same test
-fixture went from 7 emitted candidates (4 of them pure system noise) down to 3 real candidates.
-
-**Neither script is wired into `pregather.sh` yet, and two concrete things remain open before that
-can happen:**
-
-1. **How `compile_commands.json` is actually produced for a real target (e.g. `targets/eastl`) is
-   not yet confirmed from this repo's own scripts.** `pipeline/pregather.sh` accepts an existing
-   compile database (`--compile-db`) or converts one via `pipeline/normalize_compile_db.py`, and
-   there's a separate MSVC/vcxproj path (`vcxproj_to_compile_commands.py`) for the Windows/MSBuild
-   case — but nothing found so far in `pipeline/`/`scripts/` shows a CMake generator invocation
-   (`cmake -G Ninja`, `cmake -G "Unix Makefiles"`, or a `bear --`-wrapped build) for the Linux/CMake
-   case. This matters directly for the link-recipe question: `ninja -t commands <target>` (or an
-   equivalent Make dry-run query) can supply real driver-level link commands cheaply, without
-   executing a real build, *only if* Ninja is the actual generator in use. If it isn't — or if
-   different targets use different generators — `capture_build_commands.py`'s `--link-recipe` input
-   needs a different, possibly per-build-system, producer. **Needs the repo owner to confirm** how
-   `compile_commands.json` gets generated today for `targets/eastl` specifically before this gap
-   can be closed for real, rather than guessed at further.
-2. **Real integration and validation against an actual target's real build, inside the
-   `audit-native` container**, is something this session's sandbox cannot do (no Docker, no C++
-   target checkout, no compile_commands.json for a real multi-file C++ project available here) —
-   the synthetic-fixture testing above validates the scripts' own logic against the real clang/ld
-   toolchain, but not against a real project's actual scale, oddities, or build-system quirks.
-   Matches this project's established discipline (see `claude/review-cli-harness-2026-09-17.md`'s
-   "every real bug found this session was found by actually running the real CLI" lesson) — real
-   validation needs to happen on hal5000/WSL against `targets/eastl` or a similarly real tree.
-
-Once (1) and (2) are resolved, the remaining pieces of the full sequence discussed with the repo
-owner — the step-1 pregather extension to actually export `build-commands.jsonl` as a first-class
-artifact (alongside IR), the scoped LLM disambiguation pass over `native-vendor-candidates.json`,
-and the expanded SBOM-merge container/step consuming both Tier A and Tier B output — are still
-design-only, not yet built.
-
-
+**Status.** Pass 2's two scripts exist (`pipeline/capture_build_commands.py` expands
+`compile_commands.json` and a `--link-recipe` via `clang -###`; `pipeline/extract_vendor_candidates.py`
+walks the resulting search paths for version signals, with a system-libdir exclusion list in
+`data/native-libdir-reference.json`). Nothing else is built: no Tier A script, no pass 1, no wiring
+into the evidence pipeline, no graph node. What the hostile-build worker exports across its boundary
+is still unconfirmed. The L12 work is tracked in `docs/design-parity/design-parity-completion-plan.md`
+(Workstream D2) and the vendor-prepass task series (`docs/proposals/vendor-prepass/task-series.md`,
+ADR-0010). The dated build log of the first scripts is in §24.
 
 ## 5. Multi-agent operating model
 
@@ -347,7 +216,7 @@ L6 is split into two stages. L6A runs immediately after intake to create the ini
 
 `L0 → L6A → parallel specialist discovery → streaming L7 verification → L6B reconciliation → L14 synthesis`
 
-### 5.4 Standards-reference discipline (added 2026-09-19)
+### 5.4 Standards-reference discipline
 
 A finding may cite a standard identifier (CWE, ASVS control, ATT&CK technique, CAPEC, a DISA STIG
 V-number, a NIST 800-53 control, a CIS Benchmark control) but the citation discipline differs by
@@ -378,101 +247,31 @@ uniformly:
   when no such standard exists at the needed resolution. This is a real, evidence-grounded scoping
   limit, the same category as an ASVS/MASVS-does-not-apply determination (§13), not a gap to elide.
 
-### 5.5 Pool launcher, waiter, and rendezvous (proposed 2026-09-19, under discussion — not yet implemented)
+### 5.5 Pool launcher, waiter, and rendezvous
 
-§5.1's panel model ("panel members form initial conclusions independently before seeing other
-votes," "prompt diversity matters independently of model diversity") and §5.2's evidence-qualified
-quorum have so far been descriptions of a voting *outcome*, not a mechanism that actually launches
-N independent reviewers and waits for them. This section proposes that mechanism. It generalizes the
-`15-deployment-hardening` IaC persona pool (§12; `claude/TODO.md`'s "session 10" entries) into
-something every panel-shaped lane can use — `07-red-team-adversarial`, `08-blue-team-refutation`,
-and `09-independent-verification` are the immediate intended consumers, not `15` alone.
+§5.1's panel model and §5.2's evidence-qualified quorum need a mechanism that launches N
+independent workers and waits for all of them. That mechanism is built and specified outside this
+document:
 
-**Job config, not CLI flags.** A pool job is declared as a config file, the same convention as
-`model-config.json`/`process-manifest.json`, rather than assembled from ad hoc CLI flags — the
-whole point is that "3 workers of persona X, 2 of persona Y" is a fact about the job worth keeping
-on record alongside the run, not a one-off invocation to retype. Sketch:
+- **Resource pools (B15)** -- `docs/pools/resource-pools.md`: the six Dagster concurrency pools and
+  how every job derives its pool.
+- **Pool specification and deterministic expansion (C01)** -- `docs/pools/pool-specification.md`:
+  a pool job is a recorded configuration (`pool-specification.schema.json`), not CLI flags; worker
+  groups are `persona` or `pinned_container`; `count` expands to independent instances with
+  deterministic ids and scoped output paths.
+- **Wait-all rendezvous and terminal manifest (C02)** -- `docs/rendezvous/pool-rendezvous.md`: the
+  waiter, the eleven terminal states, and the manifest a merge step reads.
+- **Worker kinds** -- persona workers use the persona-invocation adapter (B14,
+  `docs/adapters/persona-invocation-adapter.md`); tool workers use the pinned-container adapter (B13,
+  `docs/adapters/pinned-container-adapter.md`) as argv-array container invocations, never a shell-out
+  to the legacy prepass scripts (ADR-0002).
 
-```json
-{
-  "job_id": "07-red-team-adversarial-pool-01",
-  "lane": "07-red-team-adversarial",
-  "run_id": "20260917T193147Z-2319a6",
-  "budget": "standard",
-  "workers": [
-    { "worker_id": "rt-l4-general", "kind": "persona", "persona_id": "redteam-l4-general", "count": 3 },
-    { "worker_id": "rt-l5-malfeasance", "kind": "persona", "persona_id": "redteam-l5-malfeasance", "count": 2 },
-    { "worker_id": "gitleaks", "kind": "tool", "step": "secrets" }
-  ],
-  "rendezvous": { "mode": "wait_all", "timeout_seconds": 3600 }
-}
-```
-
-**Two worker kinds, one bookkeeping mechanism.** A worker is either:
-
-- `kind: "persona"` — an LLM dispatch: the lane's own `config.md`/`prompt.md` stays the fixed outer
-  task framing ("you are red team, find vulnerabilities in this design lane"), and `persona_id`
-  selects one `subprompts.md` entry as the inner variation. `count: N` expands to N independent
-  worker instances of that exact (lane, persona_id) pair, each its own subprocess/container, no
-  shared context between instances — this *is* §5.1's "prompt diversity" panel, materialized: running
-  the same persona N times independently produces N independent votes for §5.2's evidence-qualified
-  quorum, the same way running different personas produces reviewer diversity.
-- `kind: "tool"` — a bare deterministic invocation with no LLM/persona layer at all (the "run
-  gitleaks" case). Same job config, same launcher, same rendezvous bookkeeping, but no `claude -p`
-  call — this is a deliberate unification, not a special case bolted on: a job that mixes reasoning
-  workers and deterministic scanner workers should rendezvous as one wave, not two systems that
-  happen to run near each other in time.
-
-**Launcher**: expands each worker spec's `count` into concrete instances, launches each at its own
-scoped output path (`outputs/<lane>/pool/<job_id>/<instance_id>/`, generalizing the
-`workers/<parallel_review_group>/` shape from the pool-dispatch output-merging design note in
-`claude/TODO.md` to be keyed by instance id rather than assuming component-sharding is the only
-axis a pool ever splits on), and records each instance's expected output path in a job manifest —
-the single source of truth the waiter reads.
-
-**Waiter / rendezvous**: polls (not busy-loops — the same zero-API-cost `time.sleep(N)` pattern as
-the existing `acquire_run_lock` mutex) for every instance in the job manifest to reach a terminal
-state, then hands off to a deterministic (non-LLM) merge step. Per §7 (non-short-circuit
-completion), one worker's failure does not abort the wave — it's recorded as a failed/degraded
-instance in the merge, not silently dropped or allowed to block the others indefinitely (bounded by
-the job's own `timeout_seconds`, mirroring `acquire_run_lock`'s stale-lock reclaim).
-
-**Decided 2026-09-19 — tool-worker dispatch is deterministic, not a shell-out to the legacy
-scripts.** `kind: "tool"` workers are launched natively by the pool launcher itself as pinned-image,
-argv-array container invocations — the same discipline ADR-0002 already established for the Python
-orchestrator over the old PowerShell prepass (never a shell string assembled at runtime; one step is
-one tool invocation). The launcher does not shell out to `Invoke-VendorAuditPrePass.ps1`/`.sh` as an
-external subprocess; those scripts' step table is the reference for which tools/images/args exist
-today, but a `tool` worker's own dispatch path lives in the pool launcher, moving this project one
-step further toward the evidence pipeline and the LLM harness converging under one Python mechanism
-rather than staying two systems that happen to run near each other in time. Migrating the *existing*
-`Invoke-VendorAuditPrePass.ps1`/`.sh` step table into this format is follow-on work, not implied to
-be done at once — the decision here is the shape new tool-worker dispatch takes, not a mandate to
-port every existing step immediately.
-
-**Decided 2026-09-19 — rendezvous is `wait_all` only; quorum evaluation waits for every worker to
-exit.** No early-exit-on-quorum mode. Evidence-qualified quorum (§5.2) requires independent
-agreement on mechanism/evidence, not just a headcount of completions, so evaluating it against a
-partial worker set (even one that already has enough same-persona agreement to nominally satisfy a
-count) would trade real coverage for wall-clock savings the design doesn't want. This closes the
-question raised in the prior revision of this section rather than leaving early-exit as a future
-optimization to revisit.
-
-**Still open, genuinely undecided — not to be read as settled by appearing in this doc:**
-
-- Concurrency limits: bounded by Docker daemon capacity for `tool` workers, and — separately, still
-  an open question from `claude/TODO.md`'s driver-open-items list — whether Max-subscription rate
-  limits get tripped by many concurrent `claude -p` dispatches, which this proposal would make more
-  likely to actually exercise than the current unpooled single-call path has so far.
-- The merge step is not one operation: `persona` workers produce `finding.schema.json`-shaped
-  findings that need array-level merging (§5.2 quorum keyed off `persona_id`), evaluated only once
-  every worker in the wave has exited per the rendezvous decision above; `tool` workers produce raw
-  scanner evidence that gets filed into the evidence tree, not merged into a findings array at all.
-  A single "pool merge" concept covering both still needs to say which kind of merge it's doing per
-  worker, not treat them uniformly.
-- `persona_id` naming convention across lanes (e.g. `redteam-l4-general` vs. a bare `l4-general`) —
-  needed before `07`/`08`/`09` personas are actually authored, to avoid collisions with the IaC
-  personas already namespaced for `15` (`claude/TODO.md`, "session 10 continuation").
+Decisions this design holds, now enforced by those specs: rendezvous is `wait_all` only -- quorum
+is evaluated against the whole wave, never a partial set, because §5.2 needs independent agreement
+on mechanism, not a headcount; and one worker's failure degrades the wave (§7) rather than aborting
+it. Still open and tracked in `appsec-review-process/TODO.md`: per-worker-kind merge semantics and
+quorum evaluation (C03/C04), and the cross-lane `persona_id` naming convention (registry). The
+original proposal text is in §24.
 
 ## 6. Mechanism vs. intent
 
@@ -485,7 +284,7 @@ Mythos separates technical verification from attribution. A dangerous or hidden 
 - Obfuscation, anti-debugging, geography, poor code quality, unusual crypto, or undocumented behavior are not sufficient by themselves to establish malicious intent.
 - Intent-level conclusions require heterogeneous verification and human disposition.
 
-### 6.1 Agent-facing prompt injection (added 2026-09-17)
+### 6.1 Agent-facing prompt injection
 
 The target codebase, its generated evidence, any copied documents, and any archive/zip contents
 reviewed under this design are hostile input with respect to the reviewing agents, not just with
@@ -1052,3 +851,24 @@ VERIFIED_PRIMITIVE_CREATED · VERIFICATION_DEPENDENCY_REGISTERED · VERIFICATION
 ### 23.9 Incremental Event-Driven Operation
 
 These controls make Mythos an incremental evidence system rather than a sequence of globally blocking stages. Localized facts can be verified early, later facts can satisfy dependencies, classification changes can invalidate only affected work, and integrators may generate new hypotheses without bypassing source verification.
+
+## 24. Decision log (historical)
+
+Dated narrative moved out of the numbered sections on 2026-09-21 so that they describe the design,
+not the diary. Full text of each entry is in git history (`docs/design-v3.md` before that date).
+
+- **2026-09-17 -- harness/design reconciliation.** `06-cve-reachability` broadened to full L1
+  scope; `07` tags every scenario with its design lane; `08-blue-team-refutation` formalised as the
+  L4B/L5B row rather than folded into `07`; `12-scoring-prioritization` extracted from synthesis;
+  `15-deployment-hardening` added; §2.2.1 written from `images/audit-native/run.sh`; §6.1 and the
+  `INJECTION_SUSPECTED` event added.
+- **2026-09-18 -- L12 two-tier decision (§4.2)** made with the repo owner after the EASTL SBOM gap
+  was confirmed from both the tooling side (syft) and the lane side (a clean `06` dispatch). Same
+  day: `capture_build_commands.py` and `extract_vendor_candidates.py` written and tested against a
+  real clang/ld toolchain with synthetic fixtures; an 80-false-positive system-libdir bug found and
+  fixed by exclusion list; the exclusion lists externalised to a curated data file. Build discovery
+  formalised into `00-intake-recovery` as a prerequisite for Tier B's link-recipe input.
+- **2026-09-19 -- pool proposal (§5.5)** written as a job-config-not-CLI-flags design generalising
+  the `15-deployment-hardening` persona pool to `07`/`08`/`09`; two decisions taken the same day
+  (deterministic tool-worker dispatch; `wait_all` only). Superseded by B15/C01/C02 as built.
+  §5.4 standards-reference discipline recorded.

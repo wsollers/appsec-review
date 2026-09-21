@@ -99,8 +99,9 @@ bounded paths, sizes and time, and dynamic analysis requires its own isolated jo
 Every tool adapter needs separate stdout/stderr, command/image/version records, bounded execution,
 tool-specific exit-code interpretation, pre/post checks and immutable output under
 `runs/<run_id>/data/jobs/<job>/<scope>/attempts/<attempt_id>/`. The old binary wrapper's `|| true`
-and merged streams cannot serve as its acceptance contract. Retain legacy scripts for compatibility
-and invoke qualified per-tool adapters from the new workers.
+and merged streams cannot serve as its acceptance contract. Once a per-tool adapter is qualified
+and its callers are updated, the legacy script is deleted outright; no wrapper or shim is kept
+(`AGENTS.md`, "Script migration").
 
 ## Qualification and remaining work
 

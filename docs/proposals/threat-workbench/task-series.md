@@ -54,7 +54,7 @@ only.
 Remaining for the integrator (not this task): close `TODO.md` G01 and add `M01` to S02's
 `BLOCKED(...)` list.
 
-## T02 — Schemas For Integrated Model, Cell Result, Intercom — `READY`
+## T02 — Schemas For Integrated Model, Cell Result, Intercom — `READY` → done 2026-09-19 (`c6acf2b`)
 
 Owner: implementation agent A. Reviewer: agent B.
 
@@ -89,7 +89,7 @@ Reviewer focus: every flow has source, destination, data class, evidence, confid
 fields; every threat has proof obligations, `minimum_verification` and downstream owner; intercom
 records cannot be edited in place (no `updated_at`, only follow-up records).
 
-## T03 — Output Contract And Claim Class — `BLOCKED(T02, M01)`
+## T03 — Output Contract And Claim Class — `READY` (T02 and M01 done)
 
 M01 dependency: the lane-in bundle's `m01_gated` sources must be rewritten with the node IDs and
 contract IDs M01 declares before this contract's `validation_rules` can name them. T03 may start
@@ -119,7 +119,7 @@ node's `contract` string resolves once the file exists.
 Reviewer focus: exactly one result artifact; no shared-surface edits; the three prohibitions the
 enum cannot express are named in `validation_rules` and cross-referenced to follow-up F02.
 
-## T04 — Persona, Role, Domain, Tooling-Profile Records And Workcell Compositions — `BLOCKED(T03, B14)`
+## T04 — Persona, Role, Domain, Tooling-Profile Records And Workcell Compositions — `BLOCKED(T03)`
 
 Owner: agent A. Reviewer: agent B.
 
@@ -176,7 +176,7 @@ model-identity hashes.
 Reviewer focus: no early publication; no hidden fallback to an older success after a newer failure;
 no cross-instance path access.
 
-## T06 — Intercom Artifact Bus — `BLOCKED(T02)`
+## T06 — Intercom Artifact Bus — `READY` → done 2026-09-19 (`87707d4`)
 
 Owner: agent A. Reviewer: agent B. (Independent of T05; pure file semantics.)
 
@@ -199,7 +199,7 @@ author rejected; every open record appears exactly once in the unresolved set.
 
 Reviewer focus: durable artifact exchange, not hidden conversation; contradictions preserved.
 
-## T07 — Join, Ranking, Diagram Generation — `BLOCKED(C03, T05, T06)`
+## T07 — Join, Ranking, Diagram Generation — `BLOCKED(C03, T05)`
 
 Owner: agent B. Reviewer: agent A.
 
@@ -271,7 +271,7 @@ stubbed persona adapters in under the focused-suite budget.
 Reviewer focus: small enough to maintain, rich enough to exercise every cell and both wave-4
 branches.
 
-## T10 — Lifecycle Integration — `INTEGRATION`, `BLOCKED(T02–T09, F03, M01, B11, B14, B15, C01–C03)`
+## T10 — Lifecycle Integration — `INTEGRATION`, `BLOCKED(T03–T05, T07–T09, F03, B11, B15, C01–C03)`
 
 Owner: integrator only.
 

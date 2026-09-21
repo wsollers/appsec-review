@@ -3,7 +3,7 @@ proposal_only: true
 status: not_registered_not_runnable
 adr: docs/decisions/ADR-0008-threat-workbench.md
 
-# Producer IDs are checked against appsec-review-process/job-graph.json (42 nodes).
+# Producer IDs are checked against appsec-review-process/job-graph.json (51 nodes).
 # `availability` is one of:
 #   declared_edge  - already a declared dependency of 03-threat-model-dfd-stride
 #   transitive     - reachable through 02-evidence-assembly; T10 decides whether to declare an edge

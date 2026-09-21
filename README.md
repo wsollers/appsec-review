@@ -5,8 +5,8 @@ evidence gathering → LLM-assisted discovery → refutation → independent ver
 cross-lane synthesis. The current implementation combines Dockerized scanner/native
 evidence jobs with a tracked prompt/process harness under `appsec-review-process/`.
 
-Design authority: `docs/architecture/design-v3.md` (exported from the Google Doc on 2026-09-11; the Doc
-remains the editing surface until this repo takes over — see `docs/decisions/ADR-0004`).
+Design authority: `docs/architecture/design-v3.md`, edited in this repo by pull request (the 2026-09-11
+Google Doc it came from is frozen history — see `docs/decisions/ADR-0004`).
 
 Agent entrypoints live in [`AGENTS.md`](AGENTS.md). Agents should use
 [`docs/agent-reader.md`](docs/agent-reader.md) to find the current Dagster, run-output, persona,
