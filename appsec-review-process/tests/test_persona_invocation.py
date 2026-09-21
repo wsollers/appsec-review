@@ -29,9 +29,29 @@ SCHEMA_FILES = ("persona-invocation-request.schema.json", "persona-invoker-outpu
 SUPPORTED_KEYWORDS = {"$schema", "$id", "title", "description", "type", "required", "properties",
                       "additionalProperties", "enum", "const", "pattern", "items", "minItems", "$ref"}
 OTHER_SHA = "sha256:" + "1" * 64
+# The reviewer's exact payload (PR 32): every member alone must be refused, as must the whole.
+REVIEW_PAYLOAD = {"final_severity": "critical", "severity": "high", "cvss_score": 9.8, "is_exploitable": True,
+                  "exploitability_verdict": "yes", "verified_finding": True, "remediation_status": "fixed",
+                  "compliance_verdict": "compliant"}
+SPELLED_JSON = ({"severity": "critical"}, {"isExploitable": True}, {"CVSSScore": 9.8}, {"cvss3": "9.8"},
+                {"severity": ["critical"]}, {"outer": [{"Severity": {"level": 1}}, {"exploitability": "yes"}]},
+                {"note": "verified_finding"}, {"note": "Verified-Finding"}, {"note": " compliance score "},
+                {"observedRuntimeState": 1}, {"x_malicious.intent_y": 1}, {"note": "CVSSv3 9.8"},
+                {"severity": {"level": "critical"}}, {"severity": {"a": [{"b": "critical"}]}})
+SPELLED_BODIES = ("critical_severity\n", "highSeverity\n", "exploitability_is_high\n", "e\u0301xploitable\n",
+                  "\uff45xploitable\n", "the finding/is/confirmed\n")
+UNSCANNABLE_BODIES = (b"critical\x00severity explo\x00itable\n", b"explo\x1bitable\n", b"explo\x7fitable\n",
+                      "explo\u0085itable\n", "exploit\u200bable\n", "exploit\u00adable\n", "\ufeffbenign\n",
+                      "explo\u2060itable\n", "explo\u202eitable\n", "\u0435xploitable\n", "expl\u03bfitable\n")
+SCANNABLE_BODY = ("R\u00e9sum\u00e9 na\u00efve; \u0395\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac; "
+                  "\u0440\u0443\u0441\u0441\u043a\u0438\u0439 \u0442\u0435\u043a\u0441\u0442; 5 \u03bcm;\ttab\r\n"
+                  "No severity was assessed and no class such as a verified finding is asserted here.\n")
 
 with tempfile.TemporaryDirectory() as _probe:
     SYMLINKS = support.symlinks_supported(Path(_probe))
+    (Path(_probe) / "case-probe").write_bytes(b"x")
+    # Two names that differ only in case can coexist only here; elsewhere the collision cannot arise.
+    CASE_SENSITIVE = not (Path(_probe) / "CASE-PROBE").exists()
 
 
 class Case(unittest.TestCase):
@@ -441,6 +461,25 @@ class RequestPinTests(Case):
         with mock.patch("os.path.realpath", side_effect=reported):
             self.rejected(request, r"readable_inputs\[0\]: is not the one real spelling of the file")
 
+    def test_a_file_that_changes_identity_between_the_check_and_the_open_is_refused(self):
+        """The race made deterministic: the n-th ``os.fstat`` of an opened pin reports another inode
+        than the ``os.stat`` taken before the open. Only ``_read_pinned`` calls ``os.fstat`` here."""
+        from types import SimpleNamespace
+        from unittest import mock
+        real = os.fstat
+        for swapped, label in ((1, "outer_prompt"), (2, r"readable_inputs\[0\]"), (3, r"readable_inputs\[1\]")):
+            calls = []
+
+            def reported(descriptor, swapped=swapped, calls=calls):
+                status = real(descriptor)
+                calls.append(descriptor)
+                if len(calls) != swapped:
+                    return status
+                return SimpleNamespace(st_dev=status.st_dev, st_ino=status.st_ino + 1)
+            with self.subTest(pin=label), mock.patch("os.fstat", side_effect=reported):
+                self.rejected(self.ws.request(), label + ": changed identity while it was opened")
+                self.assertEqual(len(calls), swapped, "nothing is read after a pin fails")
+
     def test_links_special_files_and_directories_are_not_inputs(self):
         source = self.ws.data / "evidence" / "source.json"
         hard = self.ws.data / "evidence" / "hard.json"
@@ -630,6 +669,32 @@ class IndependenceTests(Case):
         alias = self.ws.reviewing(declared={"model": {**support.OTHER_MODEL, "snapshot": "latest"}})
         self.rejected(alias, r"producers\[0\].model names a moving alias")
 
+    def test_one_model_has_one_family_so_renaming_a_family_buys_no_independence(self):
+        """PR 32 review: ``family`` is a label. Listing one (provider, model_id) under two family
+        names made a model independent of itself, and the verifier agreed."""
+        renamed = {**support.MODEL, "family": "fixture-family-renamed"}           # the reviewer's exact case
+        later = {**renamed, "snapshot": "2026-09-15"}
+        for label, models in (("same snapshot", (support.MODEL, renamed)), ("another snapshot", (support.MODEL, later)),
+                              ("not adjacent", (support.MODEL, support.OTHER_MODEL, later))):
+            with self.subTest(allow_list=label):
+                self.rejected(self.ws.request(), "one provider and model_id under two families",
+                              runtime=self.ws.runtime(invoker=support.Recording(), allowed_models=models))
+        pi.validate_runtime(self.ws.runtime(allowed_models=(support.MODEL, {**support.MODEL, "snapshot": "2026-09-15"})))
+        honest = self.ws.request()
+        self.ws.run(honest)
+        self.assertEqual(self.ws.verify(honest), [])
+        self.assertRegex(" ".join(self.ws.verify(honest, allowed_models=(support.MODEL, renamed))),
+                         "one provider and model_id under two families")
+        shutil.rmtree(self.ws.attempt)
+        self.ws.attempt.mkdir()
+        message = "self-verification: producers[0] is the same provider and model_id, whatever family it states"
+        for produced in (renamed, later):
+            with self.subTest(produced=produced["snapshot"]):
+                request = self.ws.reviewing(produced={"model": produced})
+                self.assertEqual([e for e in pi.request_errors(request, **support.IDS) if "self-verification" in e],
+                                 [message])
+                self.rejected(request, re.escape(message))
+
     def test_a_reviewer_must_name_and_read_every_producer_and_a_producer_names_none(self):
         golden = self.ws.reviewing()
         self.assertEqual([e["role"] for e in golden["readable_inputs"]],
@@ -734,6 +799,21 @@ class ProducerBindingTests(Case):
                 request = self.ws.reviewing(produced=produced, declared=declared)
                 self.assertEqual(pi.request_errors(request, **support.IDS), [], "the lie must look independent")
                 self.rejected(request, r"self-verification: the result of producers\[0\] " + pattern)
+
+    def test_the_same_model_under_another_family_name_is_refused_from_the_result_bytes(self):
+        renamed = {**support.MODEL, "family": "fixture-family-renamed", "snapshot": "2026-09-15"}
+        request = self.ws.reviewing(produced={"model": renamed}, declared={"model": deepcopy(support.OTHER_MODEL)})
+        self.assertEqual(pi.request_errors(request, **support.IDS), [], "the lie must look independent")
+        self.rejected(request, r"self-verification: the result of producers\[0\] is the same provider and model_id")
+
+    def test_a_producer_cannot_state_another_family_than_the_allow_list_gives_its_model(self):
+        relabelled = {**support.OTHER_MODEL, "family": "fixture-family-c"}
+        request = self.ws.reviewing(produced={"model": relabelled})
+        self.assertEqual(pi.request_errors(request, **support.IDS), [])
+        self.rejected(request, r"producers\[0\]: its producer result states another family than the runtime's")
+        unknown = self.ws.reviewing(produced={"name": "producer-unlisted", "model": {
+            **support.OTHER_MODEL, "model_id": "fixture-unlisted", "family": "fixture-family-c"}})
+        self.assertIsNone(self.ws.run(unknown)["cause"], "a model the allow-list does not know keeps its stated family")
 
     def test_each_declared_identity_field_must_equal_the_result_bytes(self):
         edits = {"run_id": "another-run", "job_id": "another-job", "attempt_id": "another-attempt",
@@ -895,6 +975,13 @@ def hostile_invokers() -> dict[str, tuple]:
         (root / "is exploitable" / "note.md").write_text("benign\n", encoding="utf-8")
         relist(manifest, root)
 
+    # PR 32 review: identifier spellings, key/value splits, claim ids and unscannable byte forms.
+    def written(name, data):
+        def change(manifest, root, package):
+            (root / "notes" / name).write_bytes(data if isinstance(data, bytes) else data.encode("utf-8"))
+            relist(manifest, root)
+        return change
+
     def binary_suffix(manifest, root, package):
         (root / "notes" / "payload.bin").write_bytes(b"MZ")
         relist(manifest, root)
@@ -941,6 +1028,15 @@ def hostile_invokers() -> dict[str, tuple]:
     def link(manifest, root, package):
         (root / "notes" / "link.json").symlink_to(root / "notes" / "fixture-note.json")
 
+    def case_collision(manifest, root, package):
+        (root / "notes" / "A.md").write_text("benign\n", encoding="utf-8")
+        (root / "notes" / "a.md").write_text("benign too\n", encoding="utf-8")
+        relist(manifest, root)
+
+    def suspected_locator(manifest, root, package):
+        manifest["injection_suspected"].append(
+            {**manifest["claims"][0]["citations"][0], "locator": "line 3: exploitable, critical severity"})
+
     cases = {
         "OUTPUT_ESCAPE": [escape, listed_escape,
                           lambda m, r, p: (r / "empty").mkdir(),
@@ -960,6 +1056,14 @@ def hostile_invokers() -> dict[str, tuple]:
                              set_at("usage", "output_units", value=-1),
                              set_at("claims", 0, "file", value="notes/absent.json"),
                              set_at("claims", 0, "statement", value="line one\nline two"),
+                             *[written("form.md", data) for data in UNSCANNABLE_BODIES],
+                             written("form.json", b'{"note": "explo\\u0000itable"}'),
+                             written("form.json", b'{"note": "explo\\ud800itable"}'),
+                             written("form.json", '{"explo\u200bitable": true}'),
+                             written("form.json", b'{"explo\\u200bitable": {}}'),       # only the parsed key shows it
+                             set_at("limitations", value=["exploit\u200bable"]),
+                             set_at("claims", 0, "statement", value="This is \u0435xploitable."),
+                             set_at("claims", 0, "citations", 0, "locator", value="exploit\u00adable"),
                              lambda m, r, p: m["claims"].append(deepcopy(m["claims"][0]))],
         "IDENTITY_MISMATCH": [set_at("request_sha256", value=OTHER_SHA), set_at("invoker_id", value="other-invoker"),
                               set_at("persona_id", value="developer-engineer"),
@@ -974,13 +1078,26 @@ def hostile_invokers() -> dict[str, tuple]:
                              set_at("claims", 0, "claim_class", value="invented_class"),
                              prohibited_text, prohibited_file, assertion_in_file_name,
                              assertion_in_directory_name,
-                             set_at("limitations", value=["The system is fully compliant."])],
+                             set_at("limitations", value=["The system is fully compliant."]),
+                             written("assessment.json", json.dumps(REVIEW_PAYLOAD)),
+                             *[written("one.json", json.dumps({key: value})) for key, value in REVIEW_PAYLOAD.items()],
+                             *[written("spelled.json", json.dumps(document)) for document in SPELLED_JSON],
+                             *[written("spelled.md", body) for body in SPELLED_BODIES],
+                             written("final_severity.md", "benign\n"),
+                             set_at("claims", 0, "claim_id", value="exploitable"),
+                             set_at("claims", 0, "claim_id", value="cvss-9-8-certified"),
+                             set_at("claims", 0, "claim_id", value="verified_finding-1"),
+                             set_at("claims", 0, "citations", 0, "locator", value="critical_severity"),
+                             # The locator is scanned: nothing else in these two manifests trips a rule.
+                             cite(locator="line 3: exploitable, critical severity"), suspected_locator],
         "UNDECLARED_CITATION": [cite(path="evidence/unlisted.json"), cite(sha256=OTHER_SHA), cite(root="other-root"),
                                 lambda m, r, p: m["injection_suspected"].append(
                                     {"root": "run-data", "path": "secrets/env", "sha256": OTHER_SHA, "locator": "x"})],
     }
     if SYMLINKS:
         cases["OUTPUT_ESCAPE"].append(link)
+    if CASE_SENSITIVE:
+        cases["OUTPUT_ESCAPE"].append(case_collision)
     return {cause: [manifest_edit(change) for change in changes] for cause, changes in cases.items()}
 
 
@@ -1030,6 +1147,75 @@ class OutcomeTests(Case):
                     result = self.ws.run(request, self.ws.runtime(invoker=invoker))
                     envelope = self.check(request, result, cause, "FAILED")
                     self.assertFalse(any(a["path"].startswith("outputs/") for a in envelope["artifacts"]))
+
+    def test_legitimate_text_in_other_scripts_and_a_disclaimer_is_still_ok(self):
+        """The form rules refuse evasions, not languages: whole words in another script, accents,
+        a two-letter unit and the permitted whitespace controls all publish."""
+        def honest(manifest, root, package):
+            (root / "notes" / "prose.md").write_bytes(SCANNABLE_BODY.encode("utf-8"))
+            (root / "notes" / "counts.json").write_text(
+                json.dumps({"reviewedControls": 3, "note": SCANNABLE_BODY}), encoding="utf-8")
+            relist(manifest, root)
+        request = self.ws.request()
+        self.check(request, self.ws.run(request, self.ws.runtime(invoker=Rewriting(honest))), None, "OK")
+
+    def test_every_scanned_text_gets_the_same_normalisation(self):
+        prohibited = set(pi.BASELINE_PROHIBITED)
+        for text in ("cvss_score", "cvssScore", "CVSS-Score", "is_exploitable", "isExploitable",
+                     "critical.severity", "criticalSeverity", "HIGHSeverity", "severity: critical",
+                     "verified_finding", "Verified Finding", "verifiedFinding", "compliance-score"):
+            with self.subTest(text=text):
+                self.assertTrue(pi._asserts_prohibited([text], prohibited, []))
+                self.assertTrue(pi._asserts_prohibited([], prohibited, [text]))
+        self.assertFalse(pi._asserts_prohibited(["no verified finding is claimed"], prohibited, []))
+        self.assertTrue(pi._asserts_prohibited([], prohibited, ["no_verified_finding_claimed"]))
+        self.assertFalse(pi._asserts_prohibited(["verified_finding"], {"final_severity"}, ["verified_finding"]))
+        for text in SCANNABLE_BODY.splitlines():
+            self.assertTrue(pi.text_form_ok(text))
+
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "mode bits do not bind this user")
+    def test_a_directory_that_cannot_be_listed_is_never_skipped(self):
+        """PR 32 review: ``os.walk`` skipped it silently, so an unlisted file inside it reached an OK
+        result that the verifier agreed with. Every mode that hides names or entries is refused."""
+        for mode in (0o000, 0o300, 0o400):
+            with self.subTest(mode=oct(mode)):
+                hidden = self.ws.attempt / "outputs" / "persona" / "hidden"
+                if hidden.exists():
+                    os.chmod(hidden, 0o700)          # a failed case must not block the next one
+                self.fresh()
+
+                def hide(manifest, root, package, mode=mode):
+                    (root / "hidden").mkdir()
+                    (root / "hidden" / "verdict.md").write_text(
+                        "Verified: critical severity, exploitable. " + MARKER, encoding="utf-8")
+                    os.chmod(root / "hidden", mode)
+                self.addCleanup(lambda: hidden.exists() and os.chmod(hidden, 0o700))
+                request = self.ws.request()
+                result = self.ws.run(request, self.ws.runtime(invoker=Rewriting(hide)))
+                self.check(request, result, "OUTPUT_ESCAPE", "FAILED")
+                self.assertEqual(self.read(pi.RECORD_FILE)["output_tree_state"], "irregular")
+                self.assertEqual(pi.scan_output_tree(hidden.parent, request["budget"]), ("irregular", None, {}))
+                os.chmod(hidden, 0o700)
+                self.assertEqual(pi.scan_output_tree(hidden.parent, request["budget"])[0], "regular")
+                self.assert_rejected(request)
+
+    @unittest.skipIf(os.name != "posix" or os.geteuid() == 0, "mode bits do not bind this user")
+    def test_an_unlistable_directory_elsewhere_in_the_attempt_cannot_hide_a_write(self):
+        sealed = self.ws.attempt / "sealed"
+        sealed.mkdir()
+        os.chmod(sealed, 0o300)                       # enterable and writable, not listable
+        self.addCleanup(os.chmod, sealed, 0o700)
+
+        def write_unseen(manifest, root, package):
+            before = os.stat(sealed)
+            (sealed / "verdict.md").write_text(MARKER, encoding="utf-8")
+            os.utime(sealed, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertIsNone(pi._snapshot(self.ws.attempt, self.ws.attempt / "outputs"))
+        request = self.ws.request()
+        result = self.ws.run(request, self.ws.runtime(invoker=Rewriting(write_unseen)))
+        self.assertEqual((result["execution_status"], result["cause"]), ("FAILED", "OUTPUT_ESCAPE"))
+        self.assertTrue(self.read(pi.RECORD_FILE)["attempt_changed_outside_output_root"])
+        self.assertEqual(self.ws.verify(request), [])
 
     def test_an_invoker_that_edits_the_adapters_own_log_fails_and_the_attempt_never_verifies(self):
         def edit_request_copy(manifest, root, package):
@@ -1517,6 +1703,45 @@ class VerifierTests(Case):
         self.assertRegex(errors[0], r"the expected request does not resolve: readable_inputs\[1\]")
         evidence.write_bytes(original)
         self.assertEqual(self.ws.verify(request), [])
+
+    def edit_both(self, edit) -> None:
+        """One edit applied to ``invocation.json`` AND the result, every hash correctly resealed, so
+        the two projections agree and only the rule about the value itself can refuse it."""
+        record, result = self.read(pi.RECORD_FILE), self.read(pi.RESULT_FILE)
+        edit(record)
+        edit(result)
+        self.write_result(result, False)
+        self.reseal(pi.RECORD_FILE, pi.canonical_bytes(record))
+
+    def test_a_run_cannot_finish_before_it_started_even_when_both_records_agree(self):
+        request, result = self.produce()
+        self.edit_both(lambda document: document.update(finished_at="2026-09-20T11:59:59Z"))
+        self.assertEqual(self.assert_rejected(request), ["finished_at is before started_at"])
+        self.edit_both(lambda document: document.update(finished_at=result["started_at"]))
+        self.assertEqual(self.ws.verify(request), [], "finishing in the second it started is possible")
+
+    def test_only_a_timeout_or_a_cancellation_can_leave_the_invoker_running(self):
+        denied = support.permission([("fixed-network-destination",
+                                      {"scheme": "https", "host": "api.example.org", "port": 443})])
+        runs = {"returned": {}, "raised": {"invoker": support.Raising(RuntimeError("x"))},
+                "unavailable": {"invoker": support.Raising(pi.InvokerUnavailable("x"))},
+                "not_invoked": {"clock": lambda: "2026-09-22T00:00:00Z"}}
+        for outcome, runtime in runs.items():
+            with self.subTest(outcome=outcome):
+                shutil.rmtree(self.ws.attempt)
+                self.ws.attempt.mkdir()
+                request, result = self.produce(self.ws.request(permission=denied), **runtime)
+                self.assertEqual((result["outcome"], result["invoker_stopped"]), (outcome, True))
+                self.edit_both(lambda document: document.update(invoker_stopped=False))
+                self.assertEqual(self.assert_rejected(request), ["this outcome cannot leave the invoker running"])
+        shutil.rmtree(self.ws.attempt)
+        self.ws.attempt.mkdir()
+        stubborn = support.Sleeping(honor_cancel=False)
+        self.addCleanup(stubborn.release.set)
+        request, result = self.produce(invoker=stubborn, stop_grace_seconds=0,
+                                       request=self.ws.request(budget={**self.ws.request()["budget"],
+                                                                       "timeout_seconds": 1}))
+        self.assertEqual((result["outcome"], result["invoker_stopped"]), ("timed_out", False))
 
     def test_impossible_outcome_shapes_are_rejected_even_when_resealed(self):
         request, _ = self.produce(invoker=support.Raising(RuntimeError("x")))
