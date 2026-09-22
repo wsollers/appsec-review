@@ -36,3 +36,23 @@ images/audit-codeql/codeql-bundle-linux64.tar.zst
 # image build inputs fetched by images/image_build.py
 /images/scancode-toolkit/src/
 /images/.build-state/
+
+.claude/worktrees/agent-a07ef96e3c1e186f6
+
+.claude/worktrees/agent-a233808d8c5aa6b62
+
+.claude/worktrees/agent-a6e7b57fb83395897
+
+.claude/worktrees/agent-a74109b9d8dda9688
+
+.claude/worktrees/agent-aa85b4abaf8175fcb
+
+.claude/worktrees/agent-ab83e68e3cd0ff477
+
+.claude/worktrees/agent-ae975910cdc771eb8
+
+.claude/worktrees/agent-af204f1947111feb3
+
+.claude/worktrees/continuation-prompts
+
+.claude/worktrees/port-scripts

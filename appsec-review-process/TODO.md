@@ -24,8 +24,12 @@ each names the batch ids it closes so the batch table further down stays the sta
 - **Persona-dependent discovery nodes use the supplied pattern until D01 lands.** A validated,
   hand-supplied record stands in for `02-dev-project-discovery`, `02-devops-project-discovery` and
   `02-sre-operations-topology` so the build chain is not blocked on pool dispatch.
-- **The fixture is tracked, not a target.** `/targets*/` is git-ignored, so the fixture lives
-  under `fixtures/targets/hello-autotools/` and is committed.
+- **The fixture is its own repository, cloned in like any real target.** Step 1 of the
+  engagement flow is: clone the system under test into `targets/<name>/` (git-ignored here).
+  The fixture follows that same rule rather than being a special case -- it's tracked at
+  `github.com/wsollers/hello-autotools`, not committed into this repo's tree, and lands at
+  `fixtures/targets/hello-autotools/` by cloning it there, the same command a real engagement
+  would run.
 
 ### Done when
 
@@ -34,17 +38,41 @@ every `02-*` node either accepted or `SKIPPED` under a declared `allowed_skip_re
 `WORKER_NOT_IMPLEMENTED`, all evidence under `runs/<run_id>/data/`, `validate_design_parity.py`
 PASS with the readiness view regenerated, and the whole chain under ten minutes on the fixture.
 
-### Phase 1 -- fixture target (fast lane; no batch)
+### Phase 1 -- fixture target (fast lane; no batch) -- DONE (2026-09-21)
 
-- Deliver `fixtures/targets/hello-autotools/`: `configure.ac`, `Makefile.am`, `src/greet.h`,
-  `src/greet.cpp`, `src/main.cpp`, `tests/run.sh` wired to `make check`, `README.md` stating it is
-  a fixture, `.gitignore` for autotools output. Builds with `autoreconf -fi && ./configure &&
-  make && make check` on a stock toolchain. No IaC, containers, mobile code, lockfiles or
-  third-party code, so those scanners exercise their zero-input skip paths.
-- One seeded, documented defect in `src/greet.cpp` (fixed buffer + `strcpy`) so `02-source-sast`
-  and `02-native-sast` have exactly one expected hit; `README.md` names it. Remove it later if a
-  clean baseline is wanted -- the hit fixture in the test suite keeps SAST qualification.
-- Done when: the four commands succeed on Linux/WSL2 and the tree is committed.
+- Delivered as its own repository, `github.com/wsollers/hello-autotools`, not committed into
+  this repo's tree -- see the updated decision above. It lands at `fixtures/targets/hello-autotools/`
+  the same way any real target would: `git clone https://github.com/wsollers/hello-autotools.git
+  fixtures/targets/hello-autotools`.
+- Contains `configure.ac`, `Makefile.am`, `src/`, `tests/run.sh` wired to `make check`,
+  `README.md`/`docs/` stating it is a fixture, `.gitignore` for autotools output. Builds with
+  `autoreconf -fi && ./configure && make && make check` on a stock toolchain. No IaC, containers,
+  mobile code, or lockfiles, so those scanners exercise their zero-input skip paths.
+- Four seeded, documented defects, not one -- CWE-121 stack buffer overflow (`strcpy`,
+  `src/greet.cpp`), CWE-134 format string (`src/logger.cpp`), CWE-78 command injection
+  (`src/runner.cpp`, only reachable with `--report`), and CWE-787/CWE-120 out-of-bounds write
+  (`src/store.h`, only reachable with `--store`). All four verified to actually trigger.
+  `docs/VULNERABILITIES.md` in that repo names each one with CWE, root cause, and exact trigger
+  command. Source/native SAST should expect 3 unconditional hits (VULN-01, VULN-02, VULN-04)
+  plus VULN-03 as a reachability-analysis case gated behind `--report`.
+- VULN-04 specifically is a control, not just a fourth data point: it's the same defect class
+  as VULN-01 (unbounded copy into a fixed buffer) but reached only through a macro expansion
+  (`STORE_INTO`) into a C++ template instantiation (`copy_into_fixed<16>`), rather than a plain
+  unwrapped function call. Macro/template handling is a known blind spot for source-based static
+  analysis, so a tool finding VULN-01 but missing VULN-04 tells us something specific and
+  actionable about that tool's expansion/instantiation fidelity -- worth checking per-tool once
+  D09/E03 (phase 7/8) are live, not just recording pass/fail on the hit count.
+- Also vendors one real third-party dependency -- cJSON 1.7.18 (MIT), linked as its own
+  convenience archive (`libcjson.a`) so the build produces a genuine compile/archive/link chain,
+  and exercised via a `--json` flag. Chosen deliberately at a version within a real, currently
+  open CVE's affected range (CVE-2025-57052) so the vendored copy is already a valid target for
+  SCA/dependency-vulnerability matching (`02-sca-vulnerability-match`, phase 7) once that scanner
+  is live -- this goes beyond the original "no third-party code" scope on purpose, to give that
+  node something to actually find later instead of only exercising its zero-input skip path.
+  See `docs/DEPENDENCIES.md` and `vendor/cJSON-1.7.18/VENDORED.md` in that repo.
+- Done when: the four commands succeed on Linux/WSL2 and the tree is committed -- DONE: verified
+  clean-checkout `autoreconf -fi && ./configure && make && make check` passes, `--json` and
+  `--report` paths hand-verified, pushed to https://github.com/wsollers/hello-autotools.
 
 ### Phase 2 -- ADR-0011 and the host code location (full protocol: `orchestrator/dagster/`)
 
@@ -126,13 +154,13 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 
 | Node | Batch | Tool / image | Fixture expectation |
 |---|---|---|---|
-| `02-source-sast` | D09 | Semgrep in `audit-static` | 1 hit (seeded `strcpy`) |
+| `02-source-sast` | D09 | Semgrep in `audit-static` | 3 unconditional hits (VULN-01 `strcpy`, VULN-02 format string, VULN-04 `memcpy` behind macro+template) + VULN-03 (command injection) as a reachability case behind `--report` |
 | `02-secrets-inventory` | M03 | gitleaks in `audit-static` | clean; V06 redaction receipt present |
 | `02-iac-config-scan` | M03 | `audit-iac` | `SKIPPED(not-applicable-no-matching-inputs)` |
-| `02-sbom-inventory` | M05 | syft in `audit-static` | valid SBOM with zero components |
-| `02-license-scan` | M05 | `scancode-toolkit` | project licence only |
-| `02-dependency-lifecycle` | M05 | `analyze_dependency_lifecycle` + `data/eol-reference.json` | empty, `unknown` never inferred current |
-| `02-sca-vulnerability-match` | M05 + V16/V17/V18 | Grype with mirrored DB, OSV snapshot | zero matches against a published snapshot (the publishers are the real work here) |
+| `02-sbom-inventory` | M05 | syft in `audit-static` | valid SBOM with **one** component: vendored cJSON 1.7.18 (not zero -- updated when the fixture gained a vendored dependency) |
+| `02-license-scan` | M05 | `scancode-toolkit` | project licence (MIT) plus vendored cJSON's licence (MIT) -- two components, same licence text |
+| `02-dependency-lifecycle` | M05 | `analyze_dependency_lifecycle` + `data/eol-reference.json` | cJSON isn't in a lifecycle/EOL-tracked product family, so still empty/`unknown`-never-inferred-current is the expected outcome even with a real dependency present |
+| `02-sca-vulnerability-match` | M05 + V16/V17/V18 | Grype with mirrored DB, OSV snapshot | **one** match, not zero -- vendored cJSON 1.7.18 against **CVE-2025-57052** (published, affects 1.5.0-1.7.18). This is the fixture's actual test of match accuracy, not just of the zero-input skip path (the publishers are still the real work here) |
 | `02-container-image-inventory` | M04 (after M02) | `audit-container` | `SKIPPED` zero-input receipt |
 | `02-binary-hardening` | M04 | `audit-binary-analysis` | `SKIPPED` (no supplied binaries) |
 | `02-mobile-sast` | M04 | mobile SAST in `audit-static` | `SKIPPED` |
@@ -145,7 +173,11 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 
 ### Phase 8 -- native evidence chain (E03-E10)
 
-- E03 `02-native-sast` (clang-tidy, cppcheck, CSA in `audit-native`; expect the seeded hit),
+- E03 `02-native-sast` (clang-tidy, cppcheck, CSA in `audit-native`; expect the same 3
+  unconditional hits as `02-source-sast` -- VULN-01, VULN-02, VULN-04 -- and the same
+  `--report`-gated VULN-03 reachability case; VULN-04 (`src/store.h`) is the one worth checking
+  per-tool, since it's only visible if the tool expands the `STORE_INTO` macro and instantiates
+  the `copy_into_fixed<16>` template rather than analyzing pre-expansion source),
   E04 `02-ir-capture`, E05 `02-ir-link` + `02-ir-facts`, E06 `02-debug-symbol-index`,
   E07 `02-binary-triage` (after the M02 image decision), E08 `02-binary-cfg` +
   `02-binary-intelligence-ingest`, E09 `02-test-execution` (`make check`; the first job to declare
