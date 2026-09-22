@@ -30,6 +30,24 @@ each names the batch ids it closes so the batch table further down stays the sta
   `github.com/wsollers/hello-autotools`, not committed into this repo's tree, and lands at
   `fixtures/targets/hello-autotools/` by cloning it there, the same command a real engagement
   would run.
+- **Multi-ecosystem provisioning is out of scope for the hello-autotools chain.** Ecosystem
+  detection (Java, Go, Node/TypeScript, VC++ `.sln`/`.vcxproj`, Rust, clang, plus license-gated
+  engines) stays a declared capability of the buildenv catalog, but hello-autotools proves only
+  the single C++/autotools case end to end. A second, purpose-built polyglot fixture proves
+  multi-ecosystem detection and per-partition provisioning, so neither slows down nor risks
+  phase 1-11's ten-minute bar.
+- **Every catalog ecosystem declares a provisioning mode.** `auto` (the LLM-driven
+  discover/hydrate/infer/build loop may run unattended, bounded by attempt count) or `supplied`
+  (a human pre-provisions and registers the image; the loop never attempts it). Unity and Unreal
+  are `supplied` unconditionally -- licensed Editor installs and activation are not something the
+  loop proposes or installs; detection still has to recognize them so it routes straight to the
+  human-supplied path instead of burning retry attempts.
+- **Working-tree cleanup between build attempts is pluggable and fails closed.** `automatic` uses
+  the target's own VCS-native reset (`git clean -xfd && git checkout .`, `p4 sync -f`/`p4 revert`,
+  `make clean`, ...), detected the same deterministic way build tooling is. `manual` deletes and
+  re-fetches from an explicitly recorded `target` (git remote+ref, Perforce depot path+client
+  spec, or a supplied-archive location) captured at intake; if `manual` is selected and no
+  `target` is recorded, the loop refuses and fails rather than deleting anything.
 
 ### Done when
 
@@ -127,6 +145,11 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
   `build-discovery.md`, propose or amend a Dockerfile/lock, `docker build`, run configure+build in
   the B13 boundary, on failure revise, at most N attempts then a human gate, on success write the
   lock. First real use of `skills/agents/`.
+- `schemas/buildenv-lock.schema.json` and the catalog also carry: a `provisioning` field
+  (`auto`/`supplied`) per ecosystem entry, and a `cleanup` field (`automatic`/`manual`) with
+  `manual` requiring a `target` (VCS remote/ref, Perforce depot+client, or supplied-archive path)
+  -- refuse and fail, never delete, if `manual` is chosen with no `target` recorded. Unity/Unreal
+  entries are `provisioning: supplied` from the start.
 - Done when: `registry/buildenv-locks/hello-autotools.json` exists and `build_execution` replays
   it to a non-empty `compile_commands.json` under the run.
 
@@ -212,6 +235,22 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 - `docs/processes/evidence-collection.md`: the step-4 runbook (fixture commands, expected states,
   how to read the assembly manifest); update `engagement-start.md` so step 4 is no longer a fork.
 - Q02 (real supplied discovery/build chain) then runs the same graph on the first real target.
+
+### Fixture addendum -- polyglot multi-ecosystem fixture (parallel track, not on the hello-autotools critical path)
+
+A second target repository (name TBD, e.g. `hello-polyglot`), following the same rule as
+hello-autotools: tracked as its own repo, cloned into `fixtures/targets/`, not committed into
+this tree. One hello-world component per ecosystem the catalog claims `auto` support for --
+Java, Go, Node/TypeScript, a VC++ `.sln`/`.vcxproj`, Rust -- each with its own small seeded defect
+so SAST/SCA nodes get a real hit per ecosystem instead of only exercising zero-input skip paths,
+mirroring the vendored-cJSON choice in hello-autotools. It exists to prove two things
+hello-autotools's single C++ root cannot: that `02-repository-partition-discovery` correctly
+enumerates more than one build root, and that the provisioning loop's detect/hydrate/infer/build
+cycle generalizes across ecosystems, including the ambiguous-marker case (`*.sln` currently
+matches both the `cpp` and `dotnet` catalog entries). Unity and Unreal are not included here --
+they are `supplied`-only and get their own licensed, human-provisioned fixture image if/when
+that's prioritized, not a hello-world in this repo. Has its own done-when bar; does not block or
+extend hello-autotools's ten-minute target.
 
 ## Workstream B Batch 8 checkpoint (2026-09-19)
 
