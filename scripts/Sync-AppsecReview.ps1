@@ -58,7 +58,7 @@ function Sync-Side {
     if ($upstream.ExitCode -ne 0) { throw "[$Side] branch '$branch' has no upstream; set one with git push -u origin $branch" }
 
     $dirty = Assert-Git $Side @('status', '--porcelain') 'reading status'
-    if ($dirty) { Write-Warning "[$Side] uncommitted changes present (left untouched):`n$dirty" }
+    if ($dirty -and -not $PullOnly) { Write-Warning "[$Side] uncommitted changes present (left untouched):`n$dirty" }
 
     Assert-Git $Side @('fetch', '--prune', '--quiet') 'fetch' | Out-Null
     $counts = (Assert-Git $Side @('rev-list', '--left-right', '--count', 'HEAD...@{u}') 'comparing with upstream') -split '\s+'
