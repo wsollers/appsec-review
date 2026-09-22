@@ -13,8 +13,15 @@ from datetime import datetime, timezone
 from dagster import (DefaultScheduleStatus, Definitions, Failure, job, op, resource,
                      in_process_executor, MetadataValue, RetryPolicy, ScheduleDefinition)
 
+# ADR-0011: this file is loaded by a host-owned `dagster api grpc` code location, not a container.
+# The process tree and run-data root resolve from the environment (code-location.sh sets both),
+# falling back to this repository's own layout. The old container paths (/opt/process, /runs) are gone.
+PROCESS_ROOT = Path(os.environ.get('APPSEC_PROCESS_ROOT')
+                    or Path(__file__).resolve().parents[2] / 'appsec-review-process')
+RUNS_ROOT = Path(os.environ.get('APPSEC_RUNS_ROOT') or PROCESS_ROOT / 'runs')
+
 # B15: pool ids, limits and the explicit unassigned state come from resource_pools.py only.
-sys.path.insert(0, '/opt/process')
+sys.path.insert(0, str(PROCESS_ROOT))
 import resource_pools
 
 
@@ -26,7 +33,7 @@ def write_json(path, value):
 
 def step_dir(context):
     # Dagster supplies the UUID; no user-controlled paths are accepted by this bootstrap.
-    path = Path('/runs') / ('dagster-bootstrap-' + context.run_id) / 'data' / 'jobs' / context.op.name / 'attempts' / context.run_id
+    path = RUNS_ROOT / ('dagster-bootstrap-' + context.run_id) / 'data' / 'jobs' / context.op.name / 'attempts' / context.run_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -122,7 +129,18 @@ def orchestration_smoke():
     post_validation(smoke_work(pre_validation()))
 
 
-sys.path.insert(0, '/opt/process')
+@op(tags=resource_pools.unassigned('bootstrap_diagnostic'))
+def nop_op(context):
+    # Plumbing proof for the host-owned code location (ADR-0011): no run data, no target, no Docker.
+    print(f'nop: running in host code location, dagster run {context.run_id}', flush=True)
+    print('nop: ending successfully', file=sys.stderr, flush=True)
+
+
+@job
+def nop():
+    nop_op()
+
+
 from phase1 import Session, sync_state, invalidate
 from execution_state import atomic_json, data_path, digest, event, now, Blocked, emergency
 from nvd_feed import sync as sync_nvd
@@ -245,7 +263,7 @@ nvd_reference_schedule = ScheduleDefinition(
 
 from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
 
-defs = Definitions(jobs=[orchestration_smoke, phase1_intake, nvd_reference_sync,
+defs = Definitions(jobs=[orchestration_smoke, nop, phase1_intake, nvd_reference_sync,
                          engagement_workflow, build_discovery, build_execution,
                          evidence_index, critical_findings_sarif, ossf_scorecard,
                          repository_partition_discovery, full_review],

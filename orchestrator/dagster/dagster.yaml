@@ -1,22 +1,30 @@
+# ADR-0011: the containers (webserver, daemon) and the host code location + its run workers share
+# this instance. The daemon passes its instance ref to the host run worker, and env-sourced values
+# stay unresolved in that ref, so each process resolves them from its own environment:
+# compose.yaml sets the container values, code-location.sh the host ones.
 storage:
   postgres:
     postgres_db:
       username: appsec
       password:
         env: DAGSTER_POSTGRES_PASSWORD
-      hostname: postgres
+      hostname:
+        env: DAGSTER_PG_HOST
       db_name: appsec_dagster
-      port: 5432
+      port:
+        env: DAGSTER_PG_PORT
 compute_logs:
   module: dagster.core.storage.local_compute_log_manager
   class: LocalComputeLogManager
   config:
-    base_dir: /var/dagster/compute-logs
+    base_dir:
+      env: DAGSTER_COMPUTE_LOG_DIR
 local_artifact_storage:
   module: dagster._core.storage.root
   class: LocalArtifactStorage
   config:
-    base_dir: /var/dagster/artifacts
+    base_dir:
+      env: DAGSTER_ARTIFACT_DIR
 telemetry:
   enabled: false
 run_coordinator:

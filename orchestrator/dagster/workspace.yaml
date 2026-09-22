@@ -1,5 +1,7 @@
+# ADR-0011: the code location is a host process (code-location.sh / .ps1), not a container.
+# webserver and daemon reach it through compose.yaml's host-gateway mapping.
 load_from:
   - grpc_server:
-      host: code-server
+      host: host.docker.internal
       port: 4000
       location_name: appsec_review

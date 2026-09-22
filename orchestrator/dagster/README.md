@@ -12,12 +12,18 @@ sensors use the existing persistent instance; the stopped legacy stack is untouc
 See [Dagster launching](../../docs/dagster/dagster-launching.md): the service runs the graph, while the
 client only submits and monitors. Configuration resolution is a separate visible op.
 
-Services: PostgreSQL, user-code server, webserver, daemon. Only the webserver is published, at
-http://127.0.0.1:3000. Freeciv21 source and governing code are mounted read-only. No host Docker
-socket or host credentials are mounted.
-Run data are bind-mounted at `/runs`; metadata and compute logs use project-specific Docker volumes.
+Services: PostgreSQL, webserver, daemon in Compose; the user-code server is a **host process**
+([ADR-0011](../../docs/decisions/ADR-0011-orchestration-boundary.md)): `code-location.sh` (or
+`code-location.ps1`, which runs it under WSL) serves `definitions.py` with `dagster api grpc` on port
+4000, and webserver/daemon reach it at `host.docker.internal:4000`. Ops therefore run as host
+processes with the host's own Docker; no Docker socket is mounted into any container. Only the
+webserver (http://127.0.0.1:3000) and PostgreSQL (`127.0.0.1:${APPSEC_PG_PORT:-55432}`, for the host
+code location and its run workers) are published, both on loopback.
+Run data are written by the host user under `appsec-review-process/runs/`; the instance config in
+`dagster.yaml` is env-sourced so the containers and the host resolve their own Postgres address and
+log directories. Compute logs live in the ignored `.host/compute-logs`, shared with the webserver.
 Python/PostgreSQL base images are digest-pinned; Python dependencies use `requirements.lock.txt`
-and `pip check`. Git is version-pinned. Qualification records actual runtime versions.
+(resolved for Python 3.12, so the host venv must be 3.12) and `pip check`.
 
 ## Service setup and smoke diagnostic
 
@@ -27,10 +33,14 @@ From the repository root, initialize the ignored local password file once:
 
 ```text
 python orchestrator/dagster/setup.py
+orchestrator/dagster/code-location.sh start          # separate terminal; Windows: .\orchestrator\dagster\code-location.ps1
 docker compose -f orchestrator/dagster/compose.yaml up -d --build
 docker compose -f orchestrator/dagster/compose.yaml ps
-docker compose -f orchestrator/dagster/compose.yaml exec code-server dagster job execute -f /opt/app/definitions.py -j orchestration_smoke
 ```
+
+Then launch `nop` (plumbing only: one op that writes to stdout and stderr and succeeds) or
+`orchestration_smoke` from the UI. `code-location.sh check` runs the gRPC health check. The
+remaining `exec code-server` commands below predate ADR-0011 and are being migrated (Phase 2).
 
 ### Native Linux host
 
