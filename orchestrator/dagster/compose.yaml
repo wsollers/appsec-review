@@ -16,8 +16,10 @@ x-runtime: &runtime
     DAGSTER_COMPUTE_LOG_DIR: /var/dagster/compute-logs
     DAGSTER_ARTIFACT_DIR: /var/dagster/artifacts
     HOME: /tmp
+  # host-gateway on native Linux / Docker Desktop; under WSL 2 NAT, code-location.sh records the
+  # distro IP instead (the Windows host does not forward the port into WSL).
   extra_hosts:
-    - "host.docker.internal:host-gateway"
+    - "host.docker.internal:${APPSEC_CODE_LOCATION_HOST:-host-gateway}"
   volumes:
     - dagster-storage:/var/dagster
     # Run workers execute on the host and write compute logs to .host/compute-logs; the webserver

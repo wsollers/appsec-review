@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ADR-0011: host-owned Dagster code location. Ops run as host processes with the host's own Docker;
-# webserver/daemon (compose.yaml) reach this server at host.docker.internal:4000.
+# webserver/daemon (compose.yaml) reach this server at host.docker.internal:4000, which compose maps
+# to APPSEC_CODE_LOCATION_HOST (set here under WSL NAT) or Docker's host-gateway.
 #
 #   code-location.sh prepare   create/refresh the host venv and DAGSTER_HOME, then exit
 #   code-location.sh start     prepare, then run `dagster api grpc` in the foreground
@@ -13,7 +14,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 PORT=4000   # fixed: workspace.yaml names this port
-BIND="${APPSEC_GRPC_BIND:-0.0.0.0}"
+BIND="${APPSEC_GRPC_BIND:-}"   # resolved below: WSL NAT -> the distro's own IP, else 0.0.0.0
 VENV="${APPSEC_VENV:-$HOME/.venvs/appsec-review-dagster}"
 # requirements.lock.txt is resolved for the image's Python (3.12, Dockerfile); other minors fail to
 # resolve it (e.g. websockets==17.1 has no 3.10 build), so the host venv must match.
@@ -31,6 +32,36 @@ while IFS='=' read -r key value; do
             [[ -n "${!key:-}" ]] || export "$key=$value" ;;
     esac
 done < "$HERE/.env"
+
+# Where the containers find this server. Under WSL 2 NAT networking, Docker Desktop's host-gateway
+# is the Windows host, which WSL does not forward this port to (verified 2026-09-22 on hal5000:
+# refused); the distro's own IP is reachable from the containers because Docker Desktop runs in the
+# same WSL VM. That IP changes on every WSL restart, so it is re-read on each start and written to
+# .env as APPSEC_CODE_LOCATION_HOST, which compose.yaml maps host.docker.internal to.
+wsl_nat_ip() {
+    [[ -r /proc/sys/fs/binfmt_misc/WSLInterop || -n "${WSL_DISTRO_NAME:-}" ]] || return 1
+    [[ "$(wslinfo --networking-mode 2>/dev/null)" == "nat" ]] || return 1
+    ip -4 -o addr show dev eth0 2>/dev/null | awk '{split($4, a, "/"); print a[1]; exit}'
+}
+sync_env_host() {   # rewrite only this script's own key; every other .env line is left alone
+    local value="$1" current
+    current="$(sed -n 's/^APPSEC_CODE_LOCATION_HOST=//p' "$HERE/.env" | tr -d '\r')"
+    [[ "$current" == "$value" ]] && return 0
+    if [[ -n "$current" ]]; then
+        sed -i "s/^APPSEC_CODE_LOCATION_HOST=.*/APPSEC_CODE_LOCATION_HOST=$value/" "$HERE/.env"
+    else
+        [[ -z "$(tail -c1 "$HERE/.env")" ]] || echo >> "$HERE/.env"
+        echo "APPSEC_CODE_LOCATION_HOST=$value" >> "$HERE/.env"
+    fi
+    echo "code-location: APPSEC_CODE_LOCATION_HOST ${current:-(unset)} -> $value; recreate the containers:" \
+         "docker compose -f $HERE/compose.yaml up -d webserver daemon" >&2
+}
+if WSL_IP="$(wsl_nat_ip)" && [[ -n "$WSL_IP" ]]; then
+    BIND="${BIND:-$WSL_IP}"
+    sync_env_host "$WSL_IP"
+fi
+BIND="${BIND:-0.0.0.0}"
+CHECK_HOST="$BIND"; [[ "$BIND" == "0.0.0.0" ]] && CHECK_HOST=127.0.0.1
 
 export DAGSTER_HOME="$HERE/.host/home"
 export DAGSTER_PG_HOST="${DAGSTER_PG_HOST:-127.0.0.1}"
@@ -79,6 +110,6 @@ case "${1:-start}" in
         echo "code-location: dagster api grpc on $BIND:$PORT, runs under $APPSEC_RUNS_ROOT" >&2
         exec "$VENV/bin/dagster" api grpc -h "$BIND" -p "$PORT" \
             -f "$HERE/definitions.py" -d "$REPO" --location-name appsec_review ;;
-    check) exec timeout 20 "$VENV/bin/dagster" api grpc-health-check -p "$PORT" ;;
+    check) exec timeout 20 "$VENV/bin/dagster" api grpc-health-check -h "$CHECK_HOST" -p "$PORT" ;;
     *) echo "usage: $0 [prepare|start|check]" >&2; exit 2 ;;
 esac
