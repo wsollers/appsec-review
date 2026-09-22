@@ -31,6 +31,7 @@ images/audit-codeql/codeql-bundle-linux64.tar.zst
 # per-target scratch outputs (databases, bitcode, logs) — never committed
 /scratch*/
 /targets*/
+/fixtures/targets/
 /runs/
 
 # image build inputs fetched by images/image_build.py
