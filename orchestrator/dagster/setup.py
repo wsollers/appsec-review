@@ -6,6 +6,10 @@ container creates under the bind-mounted runs/ is owned by root (the host-side l
 write beside it) and git refuses the operator-owned mounted target as "dubious ownership".
 Docker Desktop and Windows have no os.getuid and need neither; the compose default stays root.
 Existing lines are never changed: a value is appended only when its key is absent.
+
+It also creates .host/ (ADR-0011: the host code location's DAGSTER_HOME, compute logs, artifacts)
+as the operator. Otherwise `compose up` creates the compute-logs bind source as root first, and the
+host code location can no longer write under .host/.
 """
 import os
 from pathlib import Path
@@ -28,3 +32,6 @@ if hasattr(os, 'getuid'):
         with path.open('a', encoding='utf-8') as stream:
             stream.write(('' if text.endswith('\n') or not text else '\n') + ''.join(missing))
         print('Recorded the operator uid/gid for the runtime containers.')
+
+for name in ('home', 'compute-logs', 'artifacts'):
+    (path.parent / '.host' / name).mkdir(parents=True, exist_ok=True)

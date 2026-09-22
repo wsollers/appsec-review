@@ -45,7 +45,12 @@ export APPSEC_DEFINITIONS_DIR="$HERE"
 export PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
 prepare() {
-    mkdir -p "$DAGSTER_HOME" "$DAGSTER_COMPUTE_LOG_DIR" "$DAGSTER_ARTIFACT_DIR" "$APPSEC_RUNS_ROOT"
+    if ! mkdir -p "$DAGSTER_HOME" "$DAGSTER_COMPUTE_LOG_DIR" "$DAGSTER_ARTIFACT_DIR" "$APPSEC_RUNS_ROOT" \
+         || [[ ! -w "$DAGSTER_HOME" || ! -w "$DAGSTER_COMPUTE_LOG_DIR" ]]; then
+        # Usually `compose up` ran before setup.py and Docker created the bind source as root.
+        echo "code-location: $HERE/.host is not writable by $(id -un); fix with:" \
+             "sudo chown -R $(id -u):$(id -g) '$HERE/.host'" >&2; exit 2
+    fi
     # Copied on every start so the host instance never drifts from the tracked file.
     cp "$HERE/dagster.yaml" "$DAGSTER_HOME/dagster.yaml"
     local stamp="$VENV/.appsec-requirements.sha256" want
