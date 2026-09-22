@@ -56,7 +56,11 @@ prepare() {
             echo "code-location: need Python 3.12 to match requirements.lock.txt; set APPSEC_PYTHON" \
                  "(e.g. sudo apt install python3.12-venv, or uv python install 3.12)" >&2; exit 2
         fi
-        "$PYTHON" -m venv "$VENV"
+        if ! "$PYTHON" -c 'import ensurepip' 2>/dev/null; then
+            echo "code-location: $PYTHON has no ensurepip; on Ubuntu: sudo apt install python3.12-venv" >&2; exit 2
+        fi
+        # --clear: a half-built venv from an earlier failed attempt is rebuilt, not reused.
+        "$PYTHON" -m venv --clear "$VENV"
         "$VENV/bin/pip" install --quiet --no-cache-dir -r "$HERE/requirements.txt" -c "$HERE/requirements.lock.txt"
         "$VENV/bin/pip" check
         echo "$want" > "$stamp"
