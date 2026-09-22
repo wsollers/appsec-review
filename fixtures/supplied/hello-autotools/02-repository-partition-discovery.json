@@ -1,7 +1,7 @@
 {
   "schema": "appsec-review/repository-partition-map/0.1",
   "target": "hello-autotools",
-  "source_revision": "8f4b54c602892c1a05d85bb1cb1b89174b063843",
+  "source_revision": "632522b6801caa5810f0c6bf71bf3783c90068ac",
   "partitions": [
     {
       "exclude_paths": [],
@@ -27,7 +27,7 @@
               "line_range": null,
               "tool_name": null,
               "tool_rule_id": null,
-              "content_hash": "a71761d2ff5f19505612a2e867f2ce2b5672fe5f89ebd8752362efe2ffc84a26",
+              "content_hash": "af0684c8e47cef45074c9aefd7b53c6c1884fba2cc236994ea707f3aa0a3cc43",
               "note": "includes cJSON.h"
             }
           ]
@@ -61,7 +61,7 @@
           "line_range": null,
           "tool_name": null,
           "tool_rule_id": null,
-          "content_hash": "d9ff4b170634de0ab74c5a6e0863f005d63774913a2307de13a3b43edfcc5039",
+          "content_hash": "d04dee85aebdb7ac7852e9220d95a199991ef4eada1caae9be5f2de29eda67ac",
           "note": "CLI entry point"
         }
       ],
@@ -309,7 +309,7 @@
     "unassigned_paths": [],
     "uninspected_scope": [],
     "budget_limitations": [
-      "probe budget: partition boundaries were set from the build definition and file layout at 8f4b54c; no per-file content review was needed for routing."
+      "probe budget: partition boundaries were set from the build definition and file layout at 632522b; no per-file content review was needed for routing."
     ],
     "category_checks": [
       {

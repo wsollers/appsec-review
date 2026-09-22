@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/targets"
 
 # name|origin|pinned commit (full SHA; bump deliberately when the fixture changes)
 FIXTURES=(
-    "hello-autotools|https://github.com/wsollers/hello-autotools.git|8f4b54c602892c1a05d85bb1cb1b89174b063843"
+    "hello-autotools|https://github.com/wsollers/hello-autotools.git|632522b6801caa5810f0c6bf71bf3783c90068ac"
 )
 
 populate() {

@@ -12,13 +12,13 @@ requirements themselves are in [engagement-start.md](engagement-start.md); the p
 ```mermaid
 flowchart TD
   P0["P0 Stack up: compose + host code location<br/>nop job proven"]:::done
-  P1["P1 fixtures/populate-targets.sh<br/>hello-autotools @ 8f4b54c"]:::done
-  S1["S1 run_process.py --start<br/>new run needed @ 8f4b54c"]:::next
-  S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::todo
-  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::todo
+  P1["P1 fixtures/populate-targets.sh<br/>hello-autotools @ 632522b"]:::done
+  S1["S1 run_process.py --start"]:::done
+  S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::done
+  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
   S4a["S4a 02-repository-partition-discovery<br/>no supplied map: hand-off FAIL as designed"]:::done
-  S4b["S4b supply partition map<br/>fixtures/supply_record.py, re-run: expect accepted"]:::todo
-  S5["S5 02-dev-project-discovery (supplied)<br/>devops / sre: SKIPPED not-applicable"]:::todo
+  S4b["S4b supply partition map<br/>ACCEPTED, run c8f720 @ 8f4b54c"]:::done
+  S5["S5 02-dev-project-discovery (supplied)<br/>devops / sre: SKIPPED not-applicable<br/>new run @ 632522b"]:::next
   S6["S6 02-build-configure"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::blocked
   BE["Phase 4: C++ buildenv provisioning + lock"]:::blocked
@@ -44,12 +44,12 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | Step | Who / what | Command | Expected result | Status |
 |---|---|---|---|---|
 | P0 | stack + host code location | `docker compose -f orchestrator/dagster/compose.yaml up -d`; `orchestrator/dagster/code-location.sh start` | `code-location.sh check` succeeds; `nop` runs | DONE 2026-09-22 (runs ac01458f, 3ea3b999) |
-| P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `8f4b54c` | DONE 2026-09-22 (re-pinned from `e3ad863`) |
+| P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `632522b` | DONE 2026-09-22 (re-pinned `e3ad863` -> `8f4b54c` -> `632522b`) |
 | S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE 2026-09-22: `20260922T193334Z-7074be` |
 | S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE 2026-09-22 |
 | S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE 2026-09-22: Dagster run `4984e285`, ~4 s |
 | S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22: Dagster run `9565c126` |
-| S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | NEXT |
+| S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE 2026-09-22: run `20260922T195024Z-c8f720`, Dagster `b8441de2` |
 | S5 | dev-project discovery; devops/sre skip | (via `engagement_workflow` / `full_review` graph) | dev accepted; devops + sre `SKIPPED(not-applicable-no-matching-inputs)` with receipts | |
 | S6 | `02-build-configure` | -- | needs B13 (Phase 3) and the C++ buildenv (Phase 4) | BLOCKED |
 
@@ -66,8 +66,10 @@ trivial `nop` job proved the whole path: submitted from the UI or CLI, queued by
 executed by a run worker on the host.
 
 **P1 -- Fixture target.** `fixtures/populate-targets.sh` clones `hello-autotools` at its pinned
-commit into `fixtures/targets/`. The pin is `8f4b54c`: the fixture's `main` with the seeded-defect list removed.
-The list itself is on the fixture's `with-vulnerabilities-doc` branch (`e3ad863`) for scoring. It is cloned in, never committed, just as a real engagement target
+commit into `fixtures/targets/`. The pin is `632522b`: the fixture's `main` with the seeded-defect list removed and the
+defect-identifying comments stripped from `src/` (comment-only; object code byte-identical). The
+original list and comments are on the fixture's `with-vulnerabilities-doc` branch (`e3ad863`), the
+answer key for scoring results afterwards. It is cloned in, never committed, just as a real engagement target
 would arrive. The script refuses to touch a clone with the wrong origin or local changes.
 
 **S1 -- Create the engagement (`run_process.py --start`).** This is the first command the security
@@ -109,7 +111,7 @@ it divides the repository into parts, says what kind of code each part is, which
 it routes to, how the parts relate, and what is in or out of review scope, citing the files that
 justify each call. For the fixture it is a tracked file,
 `fixtures/supplied/hello-autotools/02-repository-partition-discovery.json`, written against
-`8f4b54c`, with five partitions: `app` (`src/`, the C++ CLI), `vendored-cjson` (linked third-party
+`632522b`, with five partitions: `app` (`src/`, the C++ CLI), `vendored-cjson` (linked third-party
 library), `build` (autotools files and the Dockerfile), `tests` (the `make check` smoke test) and
 `docs`. Every citation carries the SHA-256 of the cited file, so the gate can tell if the target
 changed since the analysis was written.
@@ -165,3 +167,15 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   **Open:** the seeded defects are still named in `src/` comments (VULN ids, CWE numbers,
   "Intentional seeded defect"), and `src/` is in review scope; removing the doc alone does not
   remove the answer key from what the lanes read.
+- 2026-09-22 -- S1-S4b done on a fresh run `20260922T195024Z-c8f720` at `8f4b54c`: intake SUCCESS
+  (Dagster `ac3b334f`), partition map supplied by `fixtures/supply_record.py`, and
+  `repository_partition_discovery` **SUCCESS** (Dagster `b8441de2`); the attempt holds
+  `repository-partition-map.json`, `repository-partition-summary.md`, `result.json`. First discovery
+  node accepted. (An earlier paste ran the chain against the old run because a `RUN=<placeholder>`
+  line failed; harmless, superseded.)
+- 2026-09-22 -- Answer-key leak in `src/` closed: fixture `main` -> `632522b` strips the VULN/CWE/
+  attack/CVE-reachability comments (9 files, comments only; all translation units compile to
+  byte-identical objects before/after). Pin and partition map moved to `632522b` (rehashed
+  `src/main.cpp`, `src/jsonreport.cpp`; validators pass). Run `c8f720` stays as the S4 proof at
+  `8f4b54c`; S5 starts on a new run at `632522b`. `tests/run.sh` still says, generically, that the
+  fixture has seeded defects (no locations); left as is.
