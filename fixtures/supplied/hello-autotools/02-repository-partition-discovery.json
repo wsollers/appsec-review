@@ -1,7 +1,7 @@
 {
   "schema": "appsec-review/repository-partition-map/0.1",
   "target": "hello-autotools",
-  "source_revision": "e3ad8638dbec9e5fe77a90082dea845735d1e910",
+  "source_revision": "8f4b54c602892c1a05d85bb1cb1b89174b063843",
   "partitions": [
     {
       "exclude_paths": [],
@@ -275,7 +275,7 @@
         "vendor/cJSON-1.7.18/VENDORED.md"
       ],
       "primary_persona_id": "developer-engineer",
-      "routing_rationale": "Prose documentation. docs/VULNERABILITIES.md enumerates the fixture's seeded defects, and README.md and VENDORED.md describe them; reading them would let review lanes report the documented answers instead of detecting them.",
+      "routing_rationale": "Prose documentation. The seeded-defect enumeration (docs/VULNERABILITIES.md) was removed from main and kept on the with-vulnerabilities-doc branch, but README.md, docs/*.md and VENDORED.md still describe the seeded defects; reading them would let review lanes report the documented answers instead of detecting them.",
       "confidence": "high",
       "evidence_citations": [
         {
@@ -289,17 +289,17 @@
         },
         {
           "source_type": "source_file",
-          "path": "docs/VULNERABILITIES.md",
+          "path": "docs/ARCHITECTURE.md",
           "line_range": null,
           "tool_name": null,
           "tool_rule_id": null,
-          "content_hash": "d72d628159675970cdca792f3b74dedf9b1b9def1214edae7e0168f6b96d1b32",
-          "note": "seeded-defect enumeration (answer key)"
+          "content_hash": "82c0417c3e1e4b0b4dee858c02ac09fc887fd3622c33ac5421dc212f82d0c8b1",
+          "note": "architecture notes that reference the seeded defects"
         }
       ],
       "disposition": "deferred",
       "disposition_reason": "Excluded from review scope so the fixture measures detection rather than recall of its own documentation; used only afterwards to score results.",
-      "rescope_trigger": "Scoring the engagement against the fixture's documented expectations."
+      "rescope_trigger": "Scoring the engagement against the fixture's documented expectations (with-vulnerabilities-doc branch)."
     }
   ],
   "coverage": {
@@ -309,7 +309,7 @@
     "unassigned_paths": [],
     "uninspected_scope": [],
     "budget_limitations": [
-      "probe budget: partition boundaries were set from the build definition and file layout at e3ad863; no per-file content review was needed for routing."
+      "probe budget: partition boundaries were set from the build definition and file layout at 8f4b54c; no per-file content review was needed for routing."
     ],
     "category_checks": [
       {

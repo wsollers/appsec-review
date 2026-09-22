@@ -12,12 +12,12 @@ requirements themselves are in [engagement-start.md](engagement-start.md); the p
 ```mermaid
 flowchart TD
   P0["P0 Stack up: compose + host code location<br/>nop job proven"]:::done
-  P1["P1 fixtures/populate-targets.sh<br/>hello-autotools @ e3ad863"]:::done
-  S1["S1 run_process.py --start<br/>run 20260922T193334Z-7074be"]:::done
-  S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::done
-  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
+  P1["P1 fixtures/populate-targets.sh<br/>hello-autotools @ 8f4b54c"]:::done
+  S1["S1 run_process.py --start<br/>new run needed @ 8f4b54c"]:::next
+  S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::todo
+  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::todo
   S4a["S4a 02-repository-partition-discovery<br/>no supplied map: hand-off FAIL as designed"]:::done
-  S4b["S4b supply partition map<br/>fixtures/supply_record.py, re-run: expect accepted"]:::next
+  S4b["S4b supply partition map<br/>fixtures/supply_record.py, re-run: expect accepted"]:::todo
   S5["S5 02-dev-project-discovery (supplied)<br/>devops / sre: SKIPPED not-applicable"]:::todo
   S6["S6 02-build-configure"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::blocked
@@ -44,7 +44,7 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | Step | Who / what | Command | Expected result | Status |
 |---|---|---|---|---|
 | P0 | stack + host code location | `docker compose -f orchestrator/dagster/compose.yaml up -d`; `orchestrator/dagster/code-location.sh start` | `code-location.sh check` succeeds; `nop` runs | DONE 2026-09-22 (runs ac01458f, 3ea3b999) |
-| P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `e3ad863` | DONE 2026-09-22 |
+| P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `8f4b54c` | DONE 2026-09-22 (re-pinned from `e3ad863`) |
 | S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE 2026-09-22: `20260922T193334Z-7074be` |
 | S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE 2026-09-22 |
 | S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE 2026-09-22: Dagster run `4984e285`, ~4 s |
@@ -66,7 +66,8 @@ trivial `nop` job proved the whole path: submitted from the UI or CLI, queued by
 executed by a run worker on the host.
 
 **P1 -- Fixture target.** `fixtures/populate-targets.sh` clones `hello-autotools` at its pinned
-commit into `fixtures/targets/`. It is cloned in, never committed, just as a real engagement target
+commit into `fixtures/targets/`. The pin is `8f4b54c`: the fixture's `main` with the seeded-defect list removed.
+The list itself is on the fixture's `with-vulnerabilities-doc` branch (`e3ad863`) for scoring. It is cloned in, never committed, just as a real engagement target
 would arrive. The script refuses to touch a clone with the wrong origin or local changes.
 
 **S1 -- Create the engagement (`run_process.py --start`).** This is the first command the security
@@ -108,13 +109,15 @@ it divides the repository into parts, says what kind of code each part is, which
 it routes to, how the parts relate, and what is in or out of review scope, citing the files that
 justify each call. For the fixture it is a tracked file,
 `fixtures/supplied/hello-autotools/02-repository-partition-discovery.json`, written against
-`e3ad863`, with five partitions: `app` (`src/`, the C++ CLI), `vendored-cjson` (linked third-party
+`8f4b54c`, with five partitions: `app` (`src/`, the C++ CLI), `vendored-cjson` (linked third-party
 library), `build` (autotools files and the Dockerfile), `tests` (the `make check` smoke test) and
 `docs`. Every citation carries the SHA-256 of the cited file, so the gate can tell if the target
 changed since the analysis was written.
 
-`docs` is deliberately `deferred`, meaning excluded from review. `docs/VULNERABILITIES.md` lists the
-fixture's seeded defects, and `README.md` and cJSON's `VENDORED.md` describe them. If review lanes
+`docs` is deliberately `deferred`, meaning excluded from review. The seeded-defect list
+(`docs/VULNERABILITIES.md`) was removed from the fixture's `main` and kept on its
+`with-vulnerabilities-doc` branch, but `README.md`, the other `docs/*.md` and cJSON's `VENDORED.md`
+still describe the defects. If review lanes
 could read them, the fixture would measure recall of its own documentation instead of detection.
 They are kept for scoring the results afterwards. Whether a `deferred` partition actually stops
 later lanes from reading those files is not yet verified; to check when the lanes run.
@@ -154,3 +157,11 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   the fixture's partition map; it passes the schema, path, persona, citation-freshness (19
   citations), secret and claim-promotion validators against a clean clone at `e3ad863`. Added
   `fixtures/supply_record.py`. S4b next.
+- 2026-09-22 -- Fixture answer key moved off `main`: branch `with-vulnerabilities-doc` pushed at
+  `e3ad863` (doc intact); `main` is now `8f4b54c` with `docs/VULNERABILITIES.md` removed.
+  `populate-targets.sh` re-pinned and the partition map regenerated against `8f4b54c` (all
+  validators pass). Run `20260922T193334Z-7074be` was staged and intake-accepted at `e3ad863`, so
+  it no longer matches the pinned fixture: S1-S3 repeat on a new run, then S4a/S4b.
+  **Open:** the seeded defects are still named in `src/` comments (VULN ids, CWE numbers,
+  "Intentional seeded defect"), and `src/` is in review scope; removing the doc alone does not
+  remove the answer key from what the lanes read.
