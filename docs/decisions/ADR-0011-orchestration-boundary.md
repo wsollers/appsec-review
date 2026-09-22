@@ -85,6 +85,41 @@ Engine-boundary criteria used below: fork/join, pools, human gates, loops, exter
   UI and skips the successful ops; `qualify_dagster.py` passes. This closes the previously-open
   "B13 build execution" question by making a real Docker-reachable caller exist at all.
 
+## Addendum 2026-09-22: host networking, verified on a Windows host (Docker Desktop + WSL 2 NAT)
+
+The Decision above assumed `host.docker.internal` -> `host-gateway` reaches the host code location
+everywhere. On `hal5000` (Docker Desktop, WSL 2 `nat` networking, code location running in the WSL
+distro) it does not:
+
+| Path from `webserver` | Result |
+|---|---|
+| `host-gateway` IPv4 (`192.168.65.254`, the Windows host) | refused -- WSL does not forward the port to Windows, with the server bound to `127.0.0.1` or `0.0.0.0` (`Test-NetConnection 127.0.0.1 -Port 4000` also fails) |
+| `host-gateway` IPv6 (`fdc4:f303:9324::254`) | no route; harmless, the gRPC client falls back to IPv4 |
+| the WSL distro's own `eth0` IP | reachable -- Docker Desktop runs in the same WSL VM |
+
+So `compose.yaml` maps `host.docker.internal` to `${APPSEC_CODE_LOCATION_HOST:-host-gateway}`, and
+`code-location.sh`, under WSL NAT, binds to the distro IP and keeps that key in `.env` current (the IP
+changes on every WSL restart; the script prints the `up -d webserver daemon` recreate command when it
+does). Elsewhere the bind stays `0.0.0.0` and the mapping stays `host-gateway`.
+
+With that in place the plumbing bar was met the same day: webserver, daemon and postgres
+containerized; `dagster api grpc` as a WSL host process; the `nop` job submitted from both the UI and
+`dagster job launch`, dequeued by the daemon, and executed by a run worker on the host (host pid in
+the run log). The fuller Phase 2 "Done when" in Consequences is still open.
+
+**Exposure of the code-location port.** `dagster api grpc` is unauthenticated, and anything that can
+reach it can launch runs of the defined jobs as the host user, with host Docker -- the very privilege
+this ADR keeps out of containers. Scope of each bind:
+
+- WSL NAT, bound to the distro IP (the default there): the WSL VM (its containers and distros) and the
+  Windows host via the NAT; not the LAN. Accepted for a development host.
+- `0.0.0.0` on a native Linux host (the default there): every interface, LAN included, unless
+  firewalled. Not accepted as-is for anything but a single-user development host; the follow-up is
+  to bind to the Docker bridge gateway instead (the address `host-gateway` resolves to) -- tracked in
+  Phase 2, not decided here.
+- WSL `mirrored` networking was not needed and is not recommended here: it would place the port on
+  the Windows host's real interfaces.
+
 ## Non-decisions
 
 This ADR does not decide: which lifecycle worker migrates to B13 first (a separate batch per
