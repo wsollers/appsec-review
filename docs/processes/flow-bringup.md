@@ -15,8 +15,8 @@ flowchart TD
   P1["P1 fixtures/populate-targets.sh<br/>hello-autotools @ e3ad863"]:::done
   S1["S1 run_process.py --start<br/>run 20260922T193334Z-7074be"]:::done
   S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::done
-  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::next
-  S4a["S4a 02-repository-partition-discovery<br/>no supplied map: expect actionable hand-off FAIL"]:::todo
+  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
+  S4a["S4a 02-repository-partition-discovery<br/>no supplied map: expect actionable hand-off FAIL"]:::next
   S4b["S4b author supplied partition map<br/>re-run: expect accepted"]:::todo
   S5["S5 02-dev-project-discovery (supplied)<br/>devops / sre: SKIPPED not-applicable"]:::todo
   S6["S6 02-build-configure"]:::blocked
@@ -47,8 +47,8 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `e3ad863` | DONE 2026-09-22 |
 | S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE 2026-09-22: `20260922T193334Z-7074be` |
 | S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE 2026-09-22 |
-| S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | NEXT |
-| S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | fails with an actionable hand-off (no silent success) | |
+| S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE 2026-09-22: Dagster run `4984e285`, ~4 s |
+| S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | NEXT |
 | S4b | author supplied `repository-partition-map` | (to write: one component, one native family, autotools route) | gate accepts it | |
 | S5 | dev-project discovery; devops/sre skip | (via `engagement_workflow` / `full_review` graph) | dev accepted; devops + sre `SKIPPED(not-applicable-no-matching-inputs)` with receipts | |
 | S6 | `02-build-configure` | -- | needs B13 (Phase 3) and the C++ buildenv (Phase 4) | BLOCKED |
@@ -97,6 +97,11 @@ validated hand-off gate, not analysis (`discovery_gate.py`). It either accepts a
 repository-partition map supplied out of band, or fails with an actionable hand-off that says what
 is missing. Running it first with nothing supplied proves it fails clearly rather than passing
 silently as a no-op.
+Concretely, it writes `handoff.md` (for a person) and `handoff.json` (for a machine) under
+`data/jobs/02-repository-partition-discovery/`, naming the exact file it expects,
+`supplied/result.json`, and its schema, `schemas/repository-partition-map.schema.json`. This
+analysis needs judgment about the target's actual code (partition boundaries, routing rationale,
+confidence), so the gate refuses to make it up.
 
 **S4b -- Supply the partition map.** We write the fixture's partition map (one component, one
 native family, an autotools build route) and re-run the gate, which should now accept it. This is
@@ -122,3 +127,6 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   `fixtures/targets/hello-autotools`, budget `probe`, permissions default `read-source`.
   `launch_job.py`'s platform-check message updated (it still told operators to use the
   code-server). S3 next.
+- 2026-09-22 -- S3 done: `phase1_intake` for run `20260922T193334Z-7074be` SUCCESS (Dagster run
+  `4984e285`, launch `03587dc6`), submitted from WSL, executed in the host code location. First real
+  review job end to end under ADR-0011. S4a next.
