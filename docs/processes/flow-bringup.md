@@ -13,9 +13,9 @@ requirements themselves are in [engagement-start.md](engagement-start.md); the p
 flowchart TD
   P0["P0 Stack up: compose + host code location<br/>nop job proven"]:::done
   P1["P1 fixtures/populate-targets.sh<br/>hello-autotools @ e3ad863"]:::done
-  S1["S1 run_process.py --start<br/>creates run_id + run-owned dirs"]:::next
-  S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::todo
-  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::todo
+  S1["S1 run_process.py --start<br/>run 20260922T193334Z-7074be"]:::done
+  S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::done
+  S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::next
   S4a["S4a 02-repository-partition-discovery<br/>no supplied map: expect actionable hand-off FAIL"]:::todo
   S4b["S4b author supplied partition map<br/>re-run: expect accepted"]:::todo
   S5["S5 02-dev-project-discovery (supplied)<br/>devops / sre: SKIPPED not-applicable"]:::todo
@@ -45,9 +45,9 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 |---|---|---|---|---|
 | P0 | stack + host code location | `docker compose -f orchestrator/dagster/compose.yaml up -d`; `orchestrator/dagster/code-location.sh start` | `code-location.sh check` succeeds; `nop` runs | DONE 2026-09-22 (runs ac01458f, 3ea3b999) |
 | P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `e3ad863` | DONE 2026-09-22 |
-| S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | NEXT |
-| S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | |
-| S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | |
+| S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE 2026-09-22: `20260922T193334Z-7074be` |
+| S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE 2026-09-22 |
+| S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | NEXT |
 | S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | fails with an actionable hand-off (no silent success) | |
 | S4b | author supplied `repository-partition-map` | (to write: one component, one native family, autotools route) | gate accepts it | |
 | S5 | dev-project discovery; devops/sre skip | (via `engagement_workflow` / `full_review` graph) | dev accepted; devops + sre `SKIPPED(not-applicable-no-matching-inputs)` with receipts | |
@@ -81,6 +81,9 @@ contract; everything later is derived from it. It also records the platform the 
 (`posix` here), and a run can't later be restaged from a different platform. Under ADR-0011
 `--target` is a plain host path (`fixtures/targets/hello-autotools`); it used to be a read-only
 mount path inside the container, which needed a `compose.yaml` edit for every new target.
+The staging output also lists "Expected before pregather" notes (`job-status.json`,
+`llm/retrieval-plan.json`, ...). They are informational: outputs of the legacy evidence pipeline
+that don't exist yet because nothing has run; not errors.
 
 **S3 -- Intake (`00-intake`, `launch_job.py --job phase1_intake`).** This is the first Dagster job.
 It checks that the configuration is valid, then records the target's exact source revision and any
@@ -114,3 +117,8 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
 - 2026-09-22 -- P0/P1 done. Networking under WSL 2 NAT required the distro-IP mapping
   (ADR-0011 addendum). First operator script identified: `run_process.py --start` (S1), now a host
   command, no longer `docker compose exec code-server`.
+- 2026-09-22 -- S1 and S2 done on the host for the first time: run `20260922T193334Z-7074be`
+  created and staged from WSL with the code-location venv, target
+  `fixtures/targets/hello-autotools`, budget `probe`, permissions default `read-source`.
+  `launch_job.py`'s platform-check message updated (it still told operators to use the
+  code-server). S3 next.

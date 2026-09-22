@@ -50,7 +50,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
     run_id = identifier(run_id)
     manifest = read_json(run_path(run_id)/'inputs/artifact-manifest.json')
     if manifest.get('orchestration_version') != 1 or manifest.get('intake_config',{}).get('executor_platform') != 'posix':
-        raise Blocked('Dagster requires a Linux-staged run. Create/stage through the code-server; preserve host runs.')
+        raise Blocked('Dagster requires a POSIX-staged run (ADR-0011: create and stage on the Linux/WSL host that runs the code location); preserve Windows-staged runs.')
     request_id = identifier(launch_id or str(uuid.uuid4()))
     root = data_path(run_id, 'orchestration', 'launches', request_id)
     root.mkdir(parents=True, exist_ok=True)
