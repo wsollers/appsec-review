@@ -16,8 +16,8 @@ flowchart TD
   S1["S1 run_process.py --start<br/>run 20260922T193334Z-7074be"]:::done
   S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::done
   S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
-  S4a["S4a 02-repository-partition-discovery<br/>no supplied map: expect actionable hand-off FAIL"]:::next
-  S4b["S4b author supplied partition map<br/>re-run: expect accepted"]:::todo
+  S4a["S4a 02-repository-partition-discovery<br/>no supplied map: hand-off FAIL as designed"]:::done
+  S4b["S4b supply partition map<br/>fixtures/supply_record.py, re-run: expect accepted"]:::next
   S5["S5 02-dev-project-discovery (supplied)<br/>devops / sre: SKIPPED not-applicable"]:::todo
   S6["S6 02-build-configure"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::blocked
@@ -48,8 +48,8 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE 2026-09-22: `20260922T193334Z-7074be` |
 | S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE 2026-09-22 |
 | S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE 2026-09-22: Dagster run `4984e285`, ~4 s |
-| S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | NEXT |
-| S4b | author supplied `repository-partition-map` | (to write: one component, one native family, autotools route) | gate accepts it | |
+| S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22: Dagster run `9565c126` |
+| S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | NEXT |
 | S5 | dev-project discovery; devops/sre skip | (via `engagement_workflow` / `full_review` graph) | dev accepted; devops + sre `SKIPPED(not-applicable-no-matching-inputs)` with receipts | |
 | S6 | `02-build-configure` | -- | needs B13 (Phase 3) and the C++ buildenv (Phase 4) | BLOCKED |
 
@@ -103,9 +103,26 @@ Concretely, it writes `handoff.md` (for a person) and `handoff.json` (for a mach
 analysis needs judgment about the target's actual code (partition boundaries, routing rationale,
 confidence), so the gate refuses to make it up.
 
-**S4b -- Supply the partition map.** We write the fixture's partition map (one component, one
-native family, an autotools build route) and re-run the gate, which should now accept it. This is
-Phase 5 work, pulled forward because discovery doesn't need Docker.
+**S4b -- Supply the partition map.** The partition map is the analysis the gate refused to invent:
+it divides the repository into parts, says what kind of code each part is, which reviewer persona
+it routes to, how the parts relate, and what is in or out of review scope, citing the files that
+justify each call. For the fixture it is a tracked file,
+`fixtures/supplied/hello-autotools/02-repository-partition-discovery.json`, written against
+`e3ad863`, with five partitions: `app` (`src/`, the C++ CLI), `vendored-cjson` (linked third-party
+library), `build` (autotools files and the Dockerfile), `tests` (the `make check` smoke test) and
+`docs`. Every citation carries the SHA-256 of the cited file, so the gate can tell if the target
+changed since the analysis was written.
+
+`docs` is deliberately `deferred`, meaning excluded from review. `docs/VULNERABILITIES.md` lists the
+fixture's seeded defects, and `README.md` and cJSON's `VENDORED.md` describe them. If review lanes
+could read them, the fixture would measure recall of its own documentation instead of detection.
+They are kept for scoring the results afterwards. Whether a `deferred` partition actually stops
+later lanes from reading those files is not yet verified; to check when the lanes run.
+
+`fixtures/supply_record.py` installs the record at the path the hand-off names. It refuses if the
+staged target is not at the record's exact commit or has local changes, and never overwrites a
+different supplied file, since a supplied result is evidence. This is Phase 5 work, pulled forward
+because discovery doesn't need Docker.
 
 **S5 -- Project discovery.** The three branches fanning out from the partition map: developer
 project discovery takes a supplied record the same way; DevOps and SRE discovery should end
@@ -130,3 +147,10 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
 - 2026-09-22 -- S3 done: `phase1_intake` for run `20260922T193334Z-7074be` SUCCESS (Dagster run
   `4984e285`, launch `03587dc6`), submitted from WSL, executed in the host code location. First real
   review job end to end under ADR-0011. S4a next.
+- 2026-09-22 -- S4a done as designed: `repository_partition_discovery` FAILED with
+  `HANDOFF_ISSUED` (Dagster run `9565c126`) and wrote `handoff.md`/`handoff.json` naming
+  `supplied/result.json` and its schema. Its text wrongly said the job ran "inside `full_review`"
+  and to re-run `full_review`; `discovery_gate.py` now names whichever job reached the gate. Wrote
+  the fixture's partition map; it passes the schema, path, persona, citation-freshness (19
+  citations), secret and claim-promotion validators against a clean clone at `e3ad863`. Added
+  `fixtures/supply_record.py`. S4b next.

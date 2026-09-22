@@ -64,12 +64,13 @@ def issue_handoff(run_id, job, dagster_id):
                    'No dedicated schema is shipped for this contract yet; the result must be a '
                    'non-empty JSON object.\n')
     text = (f'# Hand-off: {job}\n\n'
-            f'Dagster run `{dagster_id}` reached `{job}` inside `full_review` and found no '
+            f'Dagster run `{dagster_id}` reached `{job}` and found no '
             f'supplied result yet.\n\n'
             f'This job needs real analytical judgment about the target repository that this gate '
             f'cannot fabricate. A human or agent session must produce the result and write it to:\n\n'
             f'`{supplied}`\n\n{schema_line}\n'
-            f'Re-run `full_review` for this engagement once the file is in place.\n')
+            f'Once the file is in place, re-run the Dagster job that reached this gate for this '
+            f'engagement (the standalone job, or `full_review`).\n')
     resolved_path, resolved = create_handoff(run_id, job, scope_id='handoff')
     atomic_json(handoff_path(run_id, job).with_suffix('.json'),
                 {'job': job, 'dagster_run_id': dagster_id, 'issued_at': now(),

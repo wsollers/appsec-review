@@ -1,0 +1,404 @@
+{
+  "schema": "appsec-review/repository-partition-map/0.1",
+  "target": "hello-autotools",
+  "source_revision": "e3ad8638dbec9e5fe77a90082dea845735d1e910",
+  "partitions": [
+    {
+      "exclude_paths": [],
+      "supporting_persona_ids": [],
+      "relationships": [
+        {
+          "target_partition_id": "vendored-cjson",
+          "kind": "calls",
+          "basis": "declared",
+          "evidence_citations": [
+            {
+              "source_type": "source_file",
+              "path": "Makefile.am",
+              "line_range": null,
+              "tool_name": null,
+              "tool_rule_id": null,
+              "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+              "note": "hello_autotools_LDADD = libcjson.a; CPPFLAGS adds the vendored include path"
+            },
+            {
+              "source_type": "source_file",
+              "path": "src/jsonreport.cpp",
+              "line_range": null,
+              "tool_name": null,
+              "tool_rule_id": null,
+              "content_hash": "a71761d2ff5f19505612a2e867f2ce2b5672fe5f89ebd8752362efe2ffc84a26",
+              "note": "includes cJSON.h"
+            }
+          ]
+        }
+      ],
+      "overlap_notes": [],
+      "partition_id": "app",
+      "name": "hello-autotools CLI program",
+      "kinds": [
+        "other"
+      ],
+      "include_paths": [
+        "src/**"
+      ],
+      "primary_persona_id": "developer-engineer",
+      "routing_rationale": "Single C++ command-line executable (bin_PROGRAMS = hello-autotools); all first-party source lives under src/ and is compiled by the autotools build.",
+      "confidence": "high",
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "hello_autotools_SOURCES lists every src/ translation unit and header"
+        },
+        {
+          "source_type": "source_file",
+          "path": "src/main.cpp",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "d9ff4b170634de0ab74c5a6e0863f005d63774913a2307de13a3b43edfcc5039",
+          "note": "CLI entry point"
+        }
+      ],
+      "disposition": "review",
+      "disposition_reason": "First-party native code; primary review scope.",
+      "rescope_trigger": "A new executable, library or language root outside src/."
+    },
+    {
+      "exclude_paths": [
+        "vendor/cJSON-1.7.18/VENDORED.md"
+      ],
+      "supporting_persona_ids": [],
+      "relationships": [],
+      "overlap_notes": [
+        "vendor/cJSON-1.7.18/VENDORED.md is assigned to the deferred docs partition, not here."
+      ],
+      "partition_id": "vendored-cjson",
+      "name": "Vendored cJSON 1.7.18",
+      "kinds": [
+        "vendored",
+        "shared-library"
+      ],
+      "include_paths": [
+        "vendor/cJSON-1.7.18/**"
+      ],
+      "primary_persona_id": "developer-engineer",
+      "routing_rationale": "Third-party C library vendored in-tree and built as its own convenience archive (libcjson.a) that the program links; in scope for dependency identification and native review of the linked code.",
+      "confidence": "high",
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "noinst_LIBRARIES = libcjson.a built from vendor/cJSON-1.7.18/cJSON.c"
+        },
+        {
+          "source_type": "source_file",
+          "path": "vendor/cJSON-1.7.18/cJSON.h",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "0578cc29132912edbc88f83207a8fc76e5db3db0605497e909a9384ef3cc474b",
+          "note": "library header carrying the upstream version macros"
+        }
+      ],
+      "disposition": "review",
+      "disposition_reason": "Linked third-party code; reviewed as a dependency edge, not as first-party code.",
+      "rescope_trigger": "The vendored version changes, or a second vendored library appears."
+    },
+    {
+      "exclude_paths": [],
+      "supporting_persona_ids": [],
+      "relationships": [
+        {
+          "target_partition_id": "app",
+          "kind": "builds",
+          "basis": "declared",
+          "evidence_citations": [
+            {
+              "source_type": "source_file",
+              "path": "Makefile.am",
+              "line_range": null,
+              "tool_name": null,
+              "tool_rule_id": null,
+              "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+              "note": "bin_PROGRAMS = hello-autotools"
+            }
+          ]
+        },
+        {
+          "target_partition_id": "vendored-cjson",
+          "kind": "builds",
+          "basis": "declared",
+          "evidence_citations": [
+            {
+              "source_type": "source_file",
+              "path": "Makefile.am",
+              "line_range": null,
+              "tool_name": null,
+              "tool_rule_id": null,
+              "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+              "note": "noinst_LIBRARIES = libcjson.a"
+            }
+          ]
+        }
+      ],
+      "overlap_notes": [
+        "Dockerfile is also a container image definition; it is routed here as the fixture's reproducible build recipe, not as a deployment."
+      ],
+      "partition_id": "build",
+      "name": "Autotools build and container build recipe",
+      "kinds": [
+        "build-release"
+      ],
+      "include_paths": [
+        "configure.ac",
+        "Makefile.am",
+        "Dockerfile",
+        ".gitignore"
+      ],
+      "primary_persona_id": "developer-engineer",
+      "routing_rationale": "GNU autotools build definition (configure.ac, Makefile.am) plus a two-stage Dockerfile that runs autoreconf/configure/make/make check and copies the binary into a runtime image.",
+      "confidence": "high",
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "configure.ac",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "9b9f5a688e91df94b134c14a7b5f2476b87f07cb2b41b30b68b65d0a57fcd54c",
+          "note": "AC_INIT / AM_INIT_AUTOMAKE autotools project"
+        },
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "program, convenience library and TESTS definitions"
+        },
+        {
+          "source_type": "source_file",
+          "path": "Dockerfile",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+          "note": "build stage runs the autotools chain"
+        }
+      ],
+      "disposition": "review",
+      "disposition_reason": "Build route for the native build steps (autoreconf -fi, ./configure, make).",
+      "rescope_trigger": "The image is deployed or published anywhere, or CI/deployment manifests appear: route the Dockerfile to devops-engineer."
+    },
+    {
+      "exclude_paths": [],
+      "supporting_persona_ids": [],
+      "relationships": [
+        {
+          "target_partition_id": "app",
+          "kind": "other",
+          "basis": "declared",
+          "evidence_citations": [
+            {
+              "source_type": "source_file",
+              "path": "tests/run.sh",
+              "line_range": null,
+              "tool_name": null,
+              "tool_rule_id": null,
+              "content_hash": "55fda00cd478486cf7c17f4db8f34a22ff2375bec8986b736986d63adf18e93c",
+              "note": "runs the built hello-autotools binary"
+            }
+          ]
+        }
+      ],
+      "overlap_notes": [],
+      "partition_id": "tests",
+      "name": "make check smoke test",
+      "kinds": [
+        "test"
+      ],
+      "include_paths": [
+        "tests/**"
+      ],
+      "primary_persona_id": "developer-engineer",
+      "routing_rationale": "One shell smoke test wired to make check (TESTS = tests/run.sh); exercises only the normal greeting path.",
+      "confidence": "high",
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "tests/run.sh",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "55fda00cd478486cf7c17f4db8f34a22ff2375bec8986b736986d63adf18e93c",
+          "note": "smoke test script"
+        },
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "TESTS = tests/run.sh"
+        }
+      ],
+      "disposition": "review",
+      "disposition_reason": "Test coverage context for the program; small.",
+      "rescope_trigger": "Additional test suites or fuzz harnesses appear."
+    },
+    {
+      "exclude_paths": [],
+      "supporting_persona_ids": [],
+      "relationships": [],
+      "overlap_notes": [],
+      "partition_id": "docs",
+      "name": "Documentation and fixture answer key",
+      "kinds": [
+        "documentation"
+      ],
+      "include_paths": [
+        "README.md",
+        "LICENSE",
+        "docs/**",
+        "vendor/cJSON-1.7.18/VENDORED.md"
+      ],
+      "primary_persona_id": "developer-engineer",
+      "routing_rationale": "Prose documentation. docs/VULNERABILITIES.md enumerates the fixture's seeded defects, and README.md and VENDORED.md describe them; reading them would let review lanes report the documented answers instead of detecting them.",
+      "confidence": "high",
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "README.md",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "2b814300f4f02d58a3bc9ce93a4560a6b1e03f97634e3a15bd9c24bfbfea42c3",
+          "note": "describes the fixture purpose and points at the seeded-defect documentation"
+        },
+        {
+          "source_type": "source_file",
+          "path": "docs/VULNERABILITIES.md",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "d72d628159675970cdca792f3b74dedf9b1b9def1214edae7e0168f6b96d1b32",
+          "note": "seeded-defect enumeration (answer key)"
+        }
+      ],
+      "disposition": "deferred",
+      "disposition_reason": "Excluded from review scope so the fixture measures detection rather than recall of its own documentation; used only afterwards to score results.",
+      "rescope_trigger": "Scoring the engagement against the fixture's documented expectations."
+    }
+  ],
+  "coverage": {
+    "inventory_scope": [
+      "**"
+    ],
+    "unassigned_paths": [],
+    "uninspected_scope": [],
+    "budget_limitations": [
+      "probe budget: partition boundaries were set from the build definition and file layout at e3ad863; no per-file content review was needed for routing."
+    ],
+    "category_checks": [
+      {
+        "category": "native-code",
+        "result": "found",
+        "search_scope": [
+          "src/**",
+          "vendor/**"
+        ],
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Makefile.am",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+            "note": "C++ program and C convenience library"
+          }
+        ]
+      },
+      {
+        "category": "vendored-dependencies",
+        "result": "found",
+        "search_scope": [
+          "vendor/**"
+        ],
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "vendor/cJSON-1.7.18/cJSON.h",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "0578cc29132912edbc88f83207a8fc76e5db3db0605497e909a9384ef3cc474b",
+            "note": "vendored cJSON header"
+          }
+        ]
+      },
+      {
+        "category": "container-build",
+        "result": "found",
+        "search_scope": [
+          "Dockerfile"
+        ],
+        "evidence_citations": [
+          {
+            "source_type": "source_file",
+            "path": "Dockerfile",
+            "line_range": null,
+            "tool_name": null,
+            "tool_rule_id": null,
+            "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+            "note": "two-stage build and runtime image"
+          }
+        ]
+      },
+      {
+        "category": "iac",
+        "result": "not-found",
+        "search_scope": [
+          "**"
+        ],
+        "evidence_citations": []
+      },
+      {
+        "category": "cicd",
+        "result": "not-found",
+        "search_scope": [
+          "**"
+        ],
+        "evidence_citations": []
+      },
+      {
+        "category": "deployment",
+        "result": "not-found",
+        "search_scope": [
+          "**"
+        ],
+        "evidence_citations": []
+      },
+      {
+        "category": "operations",
+        "result": "not-found",
+        "search_scope": [
+          "**"
+        ],
+        "evidence_citations": []
+      }
+    ]
+  }
+}
