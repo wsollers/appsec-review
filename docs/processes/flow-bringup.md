@@ -93,6 +93,9 @@ executed by a run worker on the host.
 After every start or restart of the code location, run `code-location.sh reload`: the webserver
 launches jobs from the job list it loaded earlier, so until it reloads, a newly added job is
 rejected with `PipelineNotFoundError` even though the code location already serves it.
+`reload` does not load new code into a running code location (it logs a harmless "Reloading
+definitions ... not currently supported" warning); changed job code needs a code-location restart
+first.
 
 **P1 -- Fixture target.** `fixtures/populate-targets.sh` clones `hello-autotools` at its pinned
 commit into `fixtures/targets/`. The pin is `632522b`: the fixture's `main` with the seeded-defect list removed and the
@@ -273,4 +276,9 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   also migrated off the code-server (fixture runs via `code-location.sh run`, `--target` defaulting
   to the fixture). Along the way: qualifier fails fast if the Docker engine stops answering;
   `code-location.sh reload` retries while the webserver starts.
+- 2026-09-23 -- Qualification migration confirmed on hal5000: `qualify_phase1.py` on run
+  `20260923T172004Z-136043` (batch `q-8604c203`) -- every step exit 0, including the compose
+  restart; **only A01 blocks** (no prompt-vetting record on this fresh run; unrelated to ADR-0011).
+  Phase 2's code-server removal is complete. Remaining Phase 2 items (persistent code location on
+  Windows, systemd example, native-Linux bind) do not block Phase 3.
 

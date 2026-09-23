@@ -54,7 +54,10 @@ on Ubuntu install `python3.12-venv`), plus `git` and `libfuzzy2` on the host: in
 metadata and `evidence_index` loads `libfuzzy.so.2`. `start` warns if `libfuzzy.so.2` is missing.
 Run `reload` after every start or restart of the code location: the webserver launches jobs from
 the job list it last loaded, so until then a newly added job is rejected with
-`PipelineNotFoundError`. Under WSL 2 NAT networking the containers reach the code location through
+`PipelineNotFoundError`. `reload` refreshes only the webserver's view: the code location
+(`dagster api grpc`) cannot reload its own code in place and logs "Reloading definitions ... is not
+currently supported" when asked, which is harmless. To pick up changed job code, restart the code
+location (Ctrl+C, `start`), then `reload`. Under WSL 2 NAT networking the containers reach the code location through
 the distro's own IP, which changes when WSL restarts; `start` detects that, updates `.env` and
 prints the `docker compose ... up -d webserver daemon` command to recreate the two containers.
 An already-running stack does not need a rebuild for each submission. Preserve its volumes.
