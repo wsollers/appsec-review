@@ -377,3 +377,8 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   and artifacts rolled up per process model) and Appendices A-C (steps, lifecycle jobs, artifact
   glossary), compact forms of `job-catalog.md`. The Drive connector cannot edit a Doc in place, so it
   is a new Doc (links updated); the previous one is in the Drive trash.
+- 2026-09-23 -- System acceptance test started: [system-acceptance-test.md](system-acceptance-test.md),
+  `scripts/system-acceptance-test.sh` (+ `.ps1` for Windows via WSL). Staged from a fresh clone of the
+  fixture to SARIF and report; stage 1 `sut-checkout` is built (deletes a clean existing clone,
+  re-clones at the pin, checks HEAD, cleanliness, origin, no answer key); the other 14 stages stop the
+  SAT with `NOT_IMPLEMENTED` until each is built. The fixture checkout in the Windows clone was deleted.
