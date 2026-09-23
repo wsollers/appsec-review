@@ -114,13 +114,23 @@ def main(argv=None):
         command('dagster',CODE_LOCATION+['run','-B',str(ROOT/'qualify_dagster.py'),
                                   '--qualification-run',args.run_id,'--evidence-id',batch+'-dagster',*target_args],900)
         command('restart',COMPOSE+['restart'],180)
-        deadline=time.monotonic()+120
+        # Wait for the restarted services, counting only running containers (a stopped leftover such
+        # as the retired code-server must not keep the count off), and for the webserver to answer:
+        # Docker's health status alone can lag behind the published port.
+        def settled(records):
+            running=[r for r in records if r['State'].get('Running')]
+            return len(running)==SERVICES and all(r['State'].get('Health',{}).get('Status')=='healthy' for r in running)
+        def web_up():
+            try:
+                with urllib.request.urlopen('http://127.0.0.1:3000/server_info',timeout=5) as response: return response.status==200
+            except OSError: return False
+        deadline=time.monotonic()+240
         while time.monotonic()<deadline:
             services=containers('appsec-review')
-            if len(services)==SERVICES and all(r['State'].get('Health',{}).get('Status')=='healthy' for r in services): break
-            time.sleep(2)
+            if settled(services) and web_up(): break
+            time.sleep(3)
         atomic_json(root/'services-after.json',services)
-        healthy=len(services)==SERVICES and all(r['State'].get('Health',{}).get('Status')=='healthy' for r in services)
+        healthy=settled(services)
         # Compose does not restart the host code location; it must still answer after the services restart.
         command('code-location-check',CODE_LOCATION+['check'],60)
         healthy=healthy and ok('code-location-check')
