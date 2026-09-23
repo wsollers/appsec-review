@@ -7,10 +7,12 @@ no full review, target build, scanner, network probe or LLM is dispatched by thi
 
 ## Normal execution: submit to Dagster
 
-Follow [Dagster launching](dagster-launching.md) to create/stage a Linux-owned run and execute:
+Follow [Dagster launching](dagster-launching.md) to create and stage a run on the POSIX host (Linux, or
+WSL on Windows; ADR-0011) and execute:
 
-```powershell
-python -B appsec-review-process/launch_job.py --run-id <run_id> --wait
+```bash
+PY=~/.venvs/appsec-review-dagster/bin/python
+$PY -B appsec-review-process/launch_job.py --run-id <run_id> --wait
 ```
 
 The launcher only submits and monitors. Its default [engagement workflow](dagster-workflow.md)
@@ -20,12 +22,12 @@ to select it explicitly.
 
 ## Explicit host adapter diagnostics
 
-```powershell
-python -B appsec-review-process/run_process.py --start
-python -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project freeciv21 --target targets/freeciv21 --business-goal "Bounded intake" --platform Linux --platform Windows
-python -B appsec-review-process/phase1.py intake --run-id <run_id>
-python -B appsec-review-process/phase1.py status --run-id <run_id>
-python -B appsec-review-process/create_handoff.py --run-id <run_id> --process 02-evidence-pregather --budget probe
+```bash
+$PY -B appsec-review-process/run_process.py --start
+$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project freeciv21 --target targets/freeciv21 --business-goal "Bounded intake" --platform Linux --platform Windows
+$PY -B appsec-review-process/phase1.py intake --run-id <run_id>
+$PY -B appsec-review-process/phase1.py status --run-id <run_id>
+$PY -B appsec-review-process/create_handoff.py --run-id <run_id> --process 02-evidence-pregather --budget probe
 ```
 
 Add repeated `--include`, `--exclude` and `--permission` options when staging. The default scope
@@ -45,12 +47,14 @@ checks detect observed changes, but cannot detect a transient edit that is rever
 
 ## Service and UI submission
 
-```powershell
-python orchestrator/dagster/setup.py
+```bash
+python3 orchestrator/dagster/setup.py
 docker compose -f orchestrator/dagster/compose.yaml up -d --build
+orchestrator/dagster/code-location.sh start      # separate terminal
+orchestrator/dagster/code-location.sh reload     # after every code-location (re)start
 docker compose -f orchestrator/dagster/compose.yaml ps
-docker compose -f orchestrator/dagster/compose.yaml exec -T code-server python -B /opt/process/run_process.py --start
-docker compose -f orchestrator/dagster/compose.yaml exec -T code-server python -B /opt/process/stage_artifacts.py --run-id <linux_run_id> --project freeciv21 --target /targets/freeciv21 --business-goal "Bounded intake" --platform Linux --platform Windows
+$PY -B appsec-review-process/run_process.py --start
+$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project freeciv21 --target targets/freeciv21 --business-goal "Bounded intake" --platform Linux --platform Windows
 ```
 
 Prefer the host launcher above, which supplies the queue tag automatically. To submit in the UI,
@@ -60,22 +64,26 @@ open http://127.0.0.1:3000, select `engagement_workflow`, and use:
 resources:
   workflow_settings:
     config:
-      engagement_run_id: <linux_run_id>
+      engagement_run_id: <run_id>
       force: false
 ```
 
-Add the run tag `engagement_run_id: <linux_run_id>` with the same ID. The workflow rejects a
+Add the run tag `engagement_run_id: <run_id>` with the same ID. The workflow rejects a
 missing or mismatched tag. Its graph is configuration -> atomic intake -> three parallel
 preparation branches -> validated final join; see the [workflow diagram](dagster-workflow.mmd).
 Work metadata points to distinct stdout/stderr files. Dagster execution IDs are recorded in
 attempt and workflow state. Each locked work unit runs in one process; independent branches use
 the multiprocessing executor. The retained `phase1_intake` job instead uses `resources.session`
-and its four config/pre/work/post ops run in process under one intake lock. Source and governing
-code are mounted read-only; only run data and service metadata are writable. There is no Docker
-socket or host credential mount. The worker receives a minimal environment without service secrets.
+and its four config/pre/work/post ops run in process under one intake lock. Since ADR-0011 ops run as host
+processes under the operator's account, so source is no longer protected by read-only container
+mounts: it is protected by what the workers do (the trusted intake worker hashes and parses files
+and never executes target code; anything that runs target code must go through the pinned-container
+adapter, B13). No container has a Docker socket or host credentials mounted. The intake worker
+subprocess receives an allow-listed environment (`PATH` and locale only), not the service secrets
+the code location itself holds.
 This is a code-defined visual graph, not a drag-and-drop editor.
 
-```powershell
+```bash
 docker compose -f orchestrator/dagster/compose.yaml stop
 docker compose -f orchestrator/dagster/compose.yaml up -d
 docker compose -f orchestrator/dagster/compose.yaml restart
@@ -83,8 +91,10 @@ docker compose -f orchestrator/dagster/compose.yaml restart
 
 Never use `down --volumes` for engagement start-over. PostgreSQL and compute logs have dedicated
 persistent volumes. Rotation is 10 MiB times three files per service; grace period is 30 seconds.
-The stopped `lra-ingestion-harness` stack and its volumes are preserved. Only localhost port 3000
-is exposed. Dagster/Python dependencies and base images are pinned; Debian package versions are
+The stopped `lra-ingestion-harness` stack and its volumes are preserved. The webserver (3000) and
+PostgreSQL (`${APPSEC_PG_PORT:-55432}`, for the host code location) are published on loopback
+only; the host code location listens on port 4000 (see ADR-0011's addendum for its exposure).
+Stopping the containers does not stop the code location: stop it with Ctrl+C in its terminal. Dagster/Python dependencies and base images are pinned; Debian package versions are
 recorded by qualification. A changed runtime contract invalidates accepted intake reuse.
 
 ## Ownership, reuse and recovery
@@ -108,8 +118,8 @@ For workflow jobs, inspect the Dagster run URL, `review_cli.py status`,
 Reconnect to a still-running submission with its `--launch-id`. After correcting a failed job,
 submit a new launch from the host:
 
-```powershell
-python -B appsec-review-process/launch_job.py --run-id <run_id> --wait
+```bash
+$PY -B appsec-review-process/launch_job.py --run-id <run_id> --wait
 ```
 
 The workflow revalidates intake and reuses unchanged successful branches. `run-status.json` and
@@ -132,8 +142,8 @@ Raw logs remain ignored locally. Command records redact credential flags and URL
 
 Populated legacy runs are not converted in place. Stage into a new run with:
 
-```powershell
-python -B appsec-review-process/stage_artifacts.py --run-id <new_run_id> --project <project> --target <target> --business-goal "Recover legacy evidence" --platform <platform> --engagement-output scratch/<project>-engagement --import-legacy
+```bash
+$PY -B appsec-review-process/stage_artifacts.py --run-id <new_run_id> --project <project> --target <target> --business-goal "Recover legacy evidence" --platform <platform> --engagement-output scratch/<project>-engagement --import-legacy
 ```
 
 This copies into a unique run-owned `data/imports/` directory and records origin plus every file
@@ -150,9 +160,13 @@ cache or an accepted-input discovery mechanism.
 
 ## Qualification
 
-```powershell
-python -B appsec-review-process/qualify_phase1.py --run-id <qualification_run_id>
+```bash
+$PY -B appsec-review-process/qualify_phase1.py --run-id <qualification_run_id>
 ```
+
+**Not yet migrated to ADR-0011:** `qualify_phase1.py` still runs its suites and checks with
+`docker compose exec code-server ...`, and that container no longer exists, so this command fails
+until the script is updated (remaining Phase 2 work).
 
 The command records argv, exit codes, hashes, tested code identity, limits, gate results and resume
 commands under the run's `data/acceptance/`. It performs bounded tests and Freeciv21 intake only.

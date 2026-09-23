@@ -40,8 +40,9 @@ docker compose -f orchestrator/dagster/compose.yaml ps
 ```
 
 Then launch `nop` (plumbing only: one op that writes to stdout and stderr and succeeds) or
-`orchestration_smoke` from the UI. `code-location.sh check` runs the gRPC health check. The
-remaining `exec code-server` commands below predate ADR-0011 and are being migrated (Phase 2).
+`orchestration_smoke` from the UI. `code-location.sh check` runs the gRPC health check. Operator
+commands (creating, staging and submitting runs) are in [Dagster launching](../../docs/dagster/dagster-launching.md);
+they all run on this host, with the code location's venv.
 
 ### Native Linux host
 
@@ -49,33 +50,40 @@ Docker Desktop (Windows, macOS) maps bind-mount ownership for you; a native Linu
 not. `setup.py` therefore also appends `APPSEC_UID` / `APPSEC_GID` (the operator's uid/gid) to the
 ignored `.env` on a POSIX host, and `compose.yaml` starts the runtime services as that user
 (`user: "${APPSEC_UID:-0}:${APPSEC_GID:-0}"`; unset keeps root, the previous behaviour). Running as
-root on native Linux fails in two ways: everything a container creates under the bind-mounted
-`runs/` is root-owned, so the host-side `launch_job.py` cannot write beside it; and git refuses the
-operator-owned `/targets/<name>` as "dubious ownership", so `00-intake` goes `BLOCKED`.
+root on native Linux used to break run data and git ownership when workers ran in a container.
+Since ADR-0011 run data and targets are written and read by the host code location as the operator,
+so this matters only for the services' own files: compute logs under the bind-mounted `.host/`
+(which `setup.py` creates as the operator before `compose up` can create it as root).
 
 Prerequisites: Docker Engine with the Compose v2 plugin (`docker compose version`; on Ubuntu the
-package is `docker-compose-v2`), the operator in the `docker` group, and the review target cloned at
-`targets/<name>` in the repository root (ignored by git). The host needs no `libfuzzy`: the image
-pins it, and workers run in the container.
+package is `docker-compose-v2`), the operator in the `docker` group, and the review target checked
+out on the host (for example under `targets/<name>`, ignored by git). Because workers now run on the
+host (ADR-0011), the host also needs Python 3.12 with `venv` (`python3.12-venv`), `git`, and
+`libfuzzy2` (`evidence_index` loads `libfuzzy.so.2`; `code-location.sh start` warns if it is
+missing). These are no longer pinned by the image; qualification should record the host versions.
 
-A stack first created as root has root-owned named volumes and run directories. Migrate once, while
-it is still running as root, then re-run `setup.py` and `up -d --build`:
+A stack first created as root may have left root-owned run directories and a root-owned `.host/`.
+Fix them on the host, then re-run `setup.py` and `up -d`:
 
 ```text
-docker compose -f orchestrator/dagster/compose.yaml exec code-server chown -R <uid>:<gid> /runs /data/feeds/nvd /var/dagster
+sudo chown -R "$(id -u):$(id -g)" appsec-review-process/runs data/feeds/nvd orchestrator/dagster/.host
 ```
 
 `nvd_reference_schedule` is on by default and calls the NVD API every two hours from the moment the
 stack starts. On a development host add `APPSEC_NVD_SCHEDULE=stopped` to `.env` (the only other
 accepted value is `running`); the job can still be launched by hand.
 
-The runtime mounts `docs/` and `data/reference/` read-only beside `/opt/process` and `/opt/schemas`
-so that suites and workers which read them resolve the same relative locations as on the host. Run
-the unit suite where the workers run:
+Workers read the repository in place, so suites resolve `docs/`, `data/reference/` and `schemas/`
+at their normal relative locations. Run the unit suite where the workers run, on the host, with the
+code location's venv:
 
 ```text
-docker compose -f orchestrator/dagster/compose.yaml exec -T -e PHASE1_TEST_DATA=/tmp/p1 -w /opt code-server sh -c 'mkdir -p /tmp/p1 && python -B -m unittest discover -s /opt/process/tests -p "test_*.py"'
+mkdir -p /tmp/p1 && PHASE1_TEST_DATA=/tmp/p1 APPSEC_DEFINITIONS_DIR=orchestrator/dagster \
+  ~/.venvs/appsec-review-dagster/bin/python -B -m unittest discover -s appsec-review-process/tests -p "test_*.py"
 ```
+
+Not every suite has been migrated from the old container paths yet (`test_phase1.py` and
+`qualify_dagster.py` among them; remaining Phase 2 work).
 
 `compose.yaml`, `Dockerfile`, `definitions.py` and `dagster.yaml` are part of every job's runtime
 fingerprint (`job_graph.py`), so a change to any of them makes previously accepted pointers

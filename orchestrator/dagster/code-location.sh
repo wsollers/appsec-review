@@ -110,6 +110,10 @@ case "${1:-start}" in
     prepare) prepare ;;
     start)
         prepare
+        # Workers now run here, not in the image, so host prerequisites the image used to pin are checked.
+        command -v git >/dev/null || echo "code-location: WARNING git not found; intake needs it" >&2
+        "$VENV/bin/python" -c "import ctypes; ctypes.CDLL('libfuzzy.so.2')" 2>/dev/null \
+            || echo "code-location: WARNING libfuzzy.so.2 not found; evidence_index needs it (Ubuntu: sudo apt install libfuzzy2)" >&2
         echo "code-location: dagster api grpc on $BIND:$PORT, runs under $APPSEC_RUNS_ROOT" >&2
         echo "code-location: once it reports Started, run '$0 reload' so the webserver picks up the current jobs" >&2
         exec "$VENV/bin/dagster" api grpc -h "$BIND" -p "$PORT" \

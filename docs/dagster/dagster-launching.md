@@ -1,8 +1,14 @@
 # Submit jobs to Dagster
 
-This is the operator entry point for the current process. Run commands from the repository root
-on the host. The launcher connects to the repo-local Dagster service at http://127.0.0.1:3000;
-job execution occurs in its Linux code-server. Do not run the host launcher inside the code-server.
+This is the operator entry point for the current process. Since
+[ADR-0011](../decisions/ADR-0011-orchestration-boundary.md), every operator command and every job's
+execution run on one POSIX host: native Linux, or WSL on a Windows host. Dagster's webserver,
+daemon and PostgreSQL run in containers and only orchestrate; ops run in the **host code
+location** (`orchestrator/dagster/code-location.sh`), as the operator, with the host's own Docker.
+Run every command below from the repository root on that host. The launcher connects to the
+repo-local Dagster service at http://127.0.0.1:3000. There is no `code-server` container any more;
+older instructions that `docker compose exec code-server ...` no longer work. A worked end-to-end
+example on the `hello-autotools` fixture is in [flow bring-up](../processes/flow-bringup.md).
 
 The default job is **`engagement_workflow`**: configuration, atomic intake, three parallel
 preparation branches, then a validated final join. Dagster allows two runs globally and one per
@@ -27,58 +33,71 @@ for dependencies, locking and qualification.
 
 ## 1. Check the service
 
-```powershell
-docker compose -f orchestrator/dagster/compose.yaml ps
-```
+Initial setup, or after dependency/image changes (from the repository root):
 
-For initial setup, or to rebuild after dependency/image changes:
-
-```powershell
-python orchestrator/dagster/setup.py
+```bash
+python3 orchestrator/dagster/setup.py                      # once; also creates .host/ as you
 docker compose -f orchestrator/dagster/compose.yaml up -d --build
+orchestrator/dagster/code-location.sh start                # separate terminal; keep it running
+orchestrator/dagster/code-location.sh reload               # after every code-location (re)start
 ```
 
-The PostgreSQL, code-server, webserver and daemon services should be healthy. An already-running
-stack does not need a rebuild for each submission. Preserve its volumes and the stopped legacy stack.
+Routine check:
+
+```bash
+docker compose -f orchestrator/dagster/compose.yaml ps     # postgres, webserver, daemon healthy
+orchestrator/dagster/code-location.sh check                # "gRPC connection successful"
+```
+
+The code location needs a Python 3.12 venv matching `requirements.lock.txt` (the script builds it;
+on Ubuntu install `python3.12-venv`), plus `git` and `libfuzzy2` on the host: intake reads Git
+metadata and `evidence_index` loads `libfuzzy.so.2`. `start` warns if `libfuzzy.so.2` is missing.
+Run `reload` after every start or restart of the code location: the webserver launches jobs from
+the job list it last loaded, so until then a newly added job is rejected with
+`PipelineNotFoundError`. Under WSL 2 NAT networking the containers reach the code location through
+the distro's own IP, which changes when WSL restarts; `start` detects that, updates `.env` and
+prints the `docker compose ... up -d webserver daemon` command to recreate the two containers.
+An already-running stack does not need a rebuild for each submission. Preserve its volumes.
 
 ## 2. Create and stage an engagement
 
-Create the run **inside the code-server** so its execution platform and paths are Linux-owned.
-This PowerShell example captures the returned engagement ID:
+`PY` below is the code location's venv, so operator commands run with the same interpreter and
+dependencies as the jobs:
 
-```powershell
-$created = docker compose -f orchestrator/dagster/compose.yaml exec -T code-server python -B /opt/process/run_process.py --start | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw "Run creation failed" }
-$runId = $created.run_id
-
-docker compose -f orchestrator/dagster/compose.yaml exec -T code-server python -B /opt/process/stage_artifacts.py --run-id $runId --project freeciv21 --target /targets/freeciv21 --business-goal "Bounded intake and preparation" --platform Linux --platform Windows --budget probe --execution-environment dagster-read-only-linux
-if ($LASTEXITCODE -ne 0) { throw "Input staging failed" }
+```bash
+PY=~/.venvs/appsec-review-dagster/bin/python
+RUN=$($PY -B appsec-review-process/run_process.py --start | $PY -c 'import json,sys; print(json.load(sys.stdin)["run_id"])') \
+&& echo "RUN=$RUN" \
+&& $PY -B appsec-review-process/stage_artifacts.py --run-id $RUN --project <project> \
+     --target <path/to/target/checkout> --business-goal "<the decision this review informs>" \
+     --platform Linux --budget probe --execution-environment dagster-read-only-linux
 ```
 
-For Bash, run the same Docker commands, copy the returned `run_id`, and substitute it for `$runId`
-in later examples. `--platform` describes the target platforms; it does not choose the execution OS.
-Add repeated `--include`, `--exclude` or `--permission` options when needed. The default permission
-is `read-source`; initial intake does not require scanner output or a compile database.
+Capture the run ID as above rather than typing it into a `RUN=<...>` line: if bash rejects such a
+line, `$RUN` silently keeps whatever older run it held. `--platform` describes the target
+platforms; it does not choose the execution OS. Add repeated `--include`, `--exclude` or
+`--permission` options when needed. The default permission is `read-source`; initial intake does
+not require scanner output or a compile database.
 
-Freeciv21 is already mounted read-only at `/targets/freeciv21`. For another target, first add an
-explicit read-only target bind mount to the shared runtime in
-[compose.yaml](../../orchestrator/dagster/compose.yaml), apply the Compose change when jobs are idle,
-and stage its **container path**. A host path such as `F:\targets\project` is not a container path.
-Do not repurpose a Windows-owned run for Dagster; create a Linux-owned run and explicitly import
-legacy evidence when needed. See [legacy imports](operations.md#legacy-compatibility).
+`--target` is a **host path** to the target's checkout (for the fixture,
+`fixtures/targets/hello-autotools`, populated by `fixtures/populate-targets.sh`). No
+`compose.yaml` mount or edit is needed per target. The run is created on this host and records its
+platform (`posix`); Dagster refuses a run staged on another platform. Do not repurpose a
+Windows-staged run: create a new run on the host and explicitly import legacy evidence when needed.
+See [legacy imports](operations.md#legacy-compatibility).
 
 ## 3. Submit the workflow
 
 Submit and wait for the terminal result:
 
-```powershell
-python -B appsec-review-process/launch_job.py --run-id $runId --wait
+```bash
+$PY -B appsec-review-process/launch_job.py --run-id $RUN --wait
 ```
 
 Submit and return immediately after Dagster accepts the request:
 
-```powershell
-python -B appsec-review-process/launch_job.py --run-id $runId
+```bash
+$PY -B appsec-review-process/launch_job.py --run-id $RUN
 ```
 
 The JSON response includes `launch_id`, `dagster_run_id`, `status` and a browser `url`. Save the
@@ -94,10 +113,12 @@ monitoring but leaves server execution running.
 | `build_discovery` | `--job build_discovery` | Intake and cited discovery of build requirements/commands; no build execution |
 | `build_execution` | `--job build_execution` | One sandboxed configure step after accepted build discovery; records compile database evidence when produced |
 | `evidence_index` | `--job evidence_index` | Accepted searchable source/discovery evidence for LLM retrieval |
+| `repository_partition_discovery` | `--job repository_partition_discovery` | Supplied-result gate: accepts a validated repository partition map from `data/jobs/02-repository-partition-discovery/supplied/result.json`, or fails with a hand-off naming that file |
+| `dev_project_discovery` | `--job dev_project_discovery` | Supplied-result gate for developer project discovery; also requires the accepted partition map at the same source revision |
 | `critical_findings_sarif` | `--job critical_findings_sarif` | Strict run-owned conversion of independently verified finding Markdown to accepted SARIF 2.1.0 |
 | `full_review` | `--job full_review` | All lifecycle/registry jobs; currently stops at the first unimplemented worker |
 
-`python -B appsec-review-process/review_cli.py intake --run-id $runId` selects the intake-only
+`$PY -B appsec-review-process/review_cli.py intake --run-id $RUN` selects the intake-only
 job and waits. Direct `phase1.py intake` remains an explicit host adapter diagnostic, not the normal
 workflow submission path. The launcher accepts the registered jobs listed above; it does not accept
 arbitrary scripts. See [build discovery and full-graph readiness](../build-discovery/build-discovery-integration.md)
@@ -105,8 +126,8 @@ before selecting `full_review`.
 
 ## 4. Check status and results
 
-```powershell
-python -B appsec-review-process/review_cli.py status --run-id $runId
+```bash
+$PY -B appsec-review-process/review_cli.py status --run-id $RUN
 ```
 
 For an engagement with workflow state, this reports workflow status and the Dagster URL. Non-OK
@@ -143,8 +164,8 @@ Workflow `OK` means bounded intake and preparation passed, not that a full secur
 Every Dagster job requires:
 
 - a staged run manifest under `appsec-review-process/runs/<run_id>/inputs/artifact-manifest.json`
-- an execution platform matching the run owner; create Linux-owned runs in the code-server for
-  Dagster work
+- an execution platform matching the run owner: create and stage runs on the POSIX host that runs
+  the code location (ADR-0011)
 - a matching `engagement_run_id` tag for service submissions
 - immutable attempt output under the run's `data/jobs/.../attempts/<attempt_id>/`
 - validation through the job's declared output contract before publication
@@ -162,6 +183,10 @@ Current job boundaries matter:
 - `build_execution` depends on an accepted `build_discovery` result and runs one restricted CMake
   configure step inside the selected build environment. Its compile database, when present, lives
   at `data/jobs/00-workflow-preparation/build_execution/attempts/<attempt_id>/build/discovery/compile_commands.json`.
+- `repository_partition_discovery` and `dev_project_discovery` are validated hand-off gates, not
+  analysis. Each accepts a supplied, schema-valid record (citations must match the target's current
+  file hashes; no finding or severity claims) or fails with `handoff.md`/`handoff.json` naming the
+  file it needs. For the fixture, `fixtures/supply_record.py` installs the tracked records.
 - `full_review` exposes the lifecycle graph for dependency qualification. Many workers are
   intentionally blocked until implemented and qualified.
 
@@ -185,15 +210,15 @@ lane.
 
 Reconnect to an existing launch without creating another execution:
 
-```powershell
-python -B appsec-review-process/launch_job.py --run-id $runId --launch-id <launch_id> --wait
+```bash
+$PY -B appsec-review-process/launch_job.py --run-id $RUN --launch-id <launch_id> --wait
 ```
 
 Reattachment preserves the original job selection, including older intake-only requests. It does
 not retry a failed or canceled terminal job. After correcting a failure, submit a **new launch**:
 
-```powershell
-python -B appsec-review-process/launch_job.py --run-id $runId --wait
+```bash
+$PY -B appsec-review-process/launch_job.py --run-id $RUN --wait
 ```
 
 The workflow rechecks freshness, reuses unchanged successful attempts, and reruns missing or invalid
@@ -218,7 +243,7 @@ Open http://127.0.0.1:3000, select **`engagement_workflow`**, and use this run c
 resources:
   workflow_settings:
     config:
-      engagement_run_id: <linux_run_id>
+      engagement_run_id: $RUN
       force: false
 ```
 
@@ -233,7 +258,7 @@ do not bypass generation setup with isolated step selection.
 For searchable source and accepted discovery evidence, submit:
 
 ```sh
-python -B appsec-review-process/launch_job.py --run-id <linux_run_id> --job evidence_index --wait
+$PY -B appsec-review-process/launch_job.py --run-id $RUN --job evidence_index --wait
 ```
 
 This job prepares/reuses intake and build discovery automatically. Query via the
@@ -248,7 +273,7 @@ For explicitly authorized published OpenSSF Scorecard evidence, stage
 and submit:
 
 ```sh
-python -B appsec-review-process/launch_job.py --run-id <linux_run_id> --job ossf_scorecard --wait
+$PY -B appsec-review-process/launch_job.py --run-id $RUN --job ossf_scorecard --wait
 ```
 
 The accepted pointer is under `data/jobs/02-ossf-scorecard/whole/`. This fetches published JSON2;

@@ -246,3 +246,10 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   (`20260923T163246Z-71cd68`, `632522b`) instead of the mix of earlier runs and fixture revisions;
   added the end-to-end command chain. `engagement-start.md` corrected for ADR-0011 (host-created
   runs, host target paths, no compose edit, host code location) and the two discovery gates.
+- 2026-09-23 -- Operator docs migrated to ADR-0011: `docs/dagster/dagster-launching.md` and
+  `operations.md` (host commands with the code-location venv, host `--target`, start/reload, the two
+  discovery jobs, source protection now by worker behavior rather than read-only mounts),
+  `orchestrator/dagster/README.md` (native-Linux prerequisites incl. host `libfuzzy2`/`git`, host
+  `chown`, host unit-suite command) and `00-intake-recovery/config.md`. `code-location.sh start`
+  now warns if `git` or `libfuzzy.so.2` is missing on the host. Still unmigrated and marked as such:
+  `qualify_phase1.py`, `qualify_dagster.py`, `test_phase1.py`.
