@@ -18,9 +18,9 @@ flowchart TD
   S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
   S4a["S4a 02-repository-partition-discovery<br/>no supplied map: hand-off FAIL as designed"]:::done
   S4b["S4b supply partition map<br/>ACCEPTED, run c8f720 @ 8f4b54c"]:::done
-  S5["S5 02-dev-project-discovery<br/>standalone job dev_project_discovery<br/>new run @ 632522b"]:::next
+  S5["S5 02-dev-project-discovery<br/>ACCEPTED, run 71cd68 @ 632522b"]:::done
   S6["S6 02-build-configure"]:::blocked
-  B13["Phase 3: B13 into service + B16 image registry"]:::blocked
+  B13["Phase 3: B13 into service + B16 image registry<br/>NEXT"]:::next
   BE["Phase 4: C++ buildenv provisioning + lock"]:::blocked
 
   P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S6
@@ -43,14 +43,14 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 
 | Step | Who / what | Command | Expected result | Status |
 |---|---|---|---|---|
-| P0 | stack + host code location | `docker compose -f orchestrator/dagster/compose.yaml up -d`; `orchestrator/dagster/code-location.sh start` | `code-location.sh check` succeeds; `nop` runs | DONE 2026-09-22 (runs ac01458f, 3ea3b999) |
+| P0 | stack + host code location | `docker compose -f orchestrator/dagster/compose.yaml up -d`; `orchestrator/dagster/code-location.sh start`, then `code-location.sh reload` after every (re)start | `code-location.sh check` succeeds; `nop` runs | DONE 2026-09-22 (runs ac01458f, 3ea3b999) |
 | P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `632522b` | DONE 2026-09-22 (re-pinned `e3ad863` -> `8f4b54c` -> `632522b`) |
 | S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE 2026-09-22: `20260922T193334Z-7074be` |
 | S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE 2026-09-22 |
 | S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE 2026-09-22: Dagster run `4984e285`, ~4 s |
 | S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22: Dagster run `9565c126` |
 | S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE 2026-09-22: run `20260922T195024Z-c8f720`, Dagster `b8441de2` |
-| S5 | dev-project discovery | new run at `632522b` (S1-S4b), then `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery` and `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | NEXT |
+| S5 | dev-project discovery | new run at `632522b` (S1-S4b), then `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery` and `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | DONE 2026-09-23: run `20260923T163246Z-71cd68`, Dagster `68d20d4a` |
 | S6 | `02-build-configure` | -- | needs B13 (Phase 3) and the C++ buildenv (Phase 4) | BLOCKED |
 
 ## What each step does
@@ -64,6 +64,9 @@ themselves. The code location (`code-location.sh start`) is the host process the
 in, so jobs get the host's own Docker without a Docker socket mounted into any container. The
 trivial `nop` job proved the whole path: submitted from the UI or CLI, queued by the daemon, and
 executed by a run worker on the host.
+After every start or restart of the code location, run `code-location.sh reload`: the webserver
+launches jobs from the job list it loaded earlier, so until it reloads, a newly added job is
+rejected with `PipelineNotFoundError` even though the code location already serves it.
 
 **P1 -- Fixture target.** `fixtures/populate-targets.sh` clones `hello-autotools` at its pinned
 commit into `fixtures/targets/`. The pin is `632522b`: the fixture's `main` with the seeded-defect list removed and the
@@ -206,3 +209,10 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   receipts moved to Phase 10 (only `02-evidence-assembly` consumes them). Also fixed a regression
   from P0: the `nop` job had broken the design-parity check (now exempt like
   `orchestration_smoke`). Tests: pool assignments, resource pools, Dagster, worker adoption (62) pass.
+- 2026-09-23 -- S5 done: fresh run `20260923T163246Z-71cd68` at `632522b` ran the whole chain from
+  one command (intake, partition discovery, dev discovery); `dev_project_discovery` SUCCESS
+  (Dagster `68d20d4a`) through the hardened gate. Two launches were first rejected with
+  `PipelineNotFoundError`: the webserver still held the job list from before the code location was
+  restarted. Added `code-location.sh reload` (and a reminder on `start`). The discovery chain on the
+  path to `02-build-configure` is complete; S6 needs Phase 3 (B13 into service) and Phase 4 (C++
+  buildenv provisioning), which come next.

@@ -6,6 +6,9 @@
 #   code-location.sh prepare   create/refresh the host venv and DAGSTER_HOME, then exit
 #   code-location.sh start     prepare, then run `dagster api grpc` in the foreground
 #   code-location.sh check     gRPC health check against the running server
+#   code-location.sh reload    tell the webserver to reload this code location (run after every
+#                              start/restart: until then it launches from its old job list and a
+#                              new job is rejected with PipelineNotFoundError)
 #
 # Native Linux or WSL (code-location.ps1 runs this under WSL on a Windows host). Runs as the
 # invoking user: run data are written by the host user directly, not through a container mount.
@@ -108,8 +111,24 @@ case "${1:-start}" in
     start)
         prepare
         echo "code-location: dagster api grpc on $BIND:$PORT, runs under $APPSEC_RUNS_ROOT" >&2
+        echo "code-location: once it reports Started, run '$0 reload' so the webserver picks up the current jobs" >&2
         exec "$VENV/bin/dagster" api grpc -h "$BIND" -p "$PORT" \
             -f "$HERE/definitions.py" -d "$REPO" --location-name appsec_review ;;
     check) exec timeout 20 "$VENV/bin/dagster" api grpc-health-check -h "$CHECK_HOST" -p "$PORT" ;;
-    *) echo "usage: $0 [prepare|start|check]" >&2; exit 2 ;;
+    reload)
+        exec "$VENV/bin/python" - <<'PY'
+import json, sys, urllib.request
+query = 'mutation { reloadRepositoryLocation(repositoryLocationName: "appsec_review") { __typename ... on WorkspaceLocationEntry { loadStatus } ... on PythonError { message } } }'
+request = urllib.request.Request('http://127.0.0.1:3000/graphql', data=json.dumps({'query': query}).encode(),
+                                 headers={'Content-Type': 'application/json'})
+try:
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)['data']['reloadRepositoryLocation']
+except Exception as exc:
+    sys.exit(f'code-location: webserver reload failed ({exc}); is the stack up on 127.0.0.1:3000?')
+print('code-location: webserver reload ->', json.dumps(result))
+sys.exit(0 if result.get('__typename') == 'WorkspaceLocationEntry' else 1)
+PY
+        ;;
+    *) echo "usage: $0 [prepare|start|check|reload]" >&2; exit 2 ;;
 esac

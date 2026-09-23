@@ -34,6 +34,7 @@ From the repository root, initialize the ignored local password file once:
 ```text
 python orchestrator/dagster/setup.py
 orchestrator/dagster/code-location.sh start          # separate terminal; Windows: .\orchestrator\dagster\code-location.ps1
+orchestrator/dagster/code-location.sh reload         # after every code-location (re)start
 docker compose -f orchestrator/dagster/compose.yaml up -d --build
 docker compose -f orchestrator/dagster/compose.yaml ps
 ```
