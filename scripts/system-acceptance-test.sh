@@ -147,10 +147,20 @@ stage_services() {
   COMPOSE=(docker compose -f "$dagster/compose.yaml")
 
   # 1. Docker engine answers.
-  local engine
-  engine="$(timeout 30 docker version --format '{{.Server.Version}}' 2>&1)" || die "services: Docker engine not answering ($engine).
-  Recover: stop the code location (Ctrl+C), 'wsl --shutdown' from Windows, restart Docker Desktop, then
+  local engine rc=0 why
+  command -v docker >/dev/null || die "services: no 'docker' command in this shell (Docker Desktop WSL integration off for this distro?)"
+  engine="$(timeout ${SAT_DOCKER_TIMEOUT:-60} docker version --format '{{.Server.Version}}' 2>&1)" || rc=$?
+  if [[ $rc != 0 || -z "$engine" ]]; then
+    case $rc in
+      124) why="'docker version' hung and was stopped after ${SAT_DOCKER_TIMEOUT:-60} s (the engine is not responding)" ;;
+      0)   why="'docker version' returned no server version" ;;
+      *)   why="'docker version' exited $rc: ${engine:-no output}" ;;
+    esac
+    die "services: Docker engine not answering: $why.
+  Check: docker version; docker info. If it hangs or fails: stop the code location (Ctrl+C),
+  'wsl --shutdown' from Windows, restart Docker Desktop and wait until it reports running, then
   orchestrator/dagster/code-location.sh start (own terminal) and re-run this stage."
+  fi
   echo "docker engine $engine"
 
   # 2. Settings exist, and the code location address in .env matches this WSL boot.
