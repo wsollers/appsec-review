@@ -253,3 +253,15 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   `chown`, host unit-suite command) and `00-intake-recovery/config.md`. `code-location.sh start`
   now warns if `git` or `libfuzzy.so.2` is missing on the host. Still unmigrated and marked as such:
   `qualify_phase1.py`, `qualify_dagster.py`, `test_phase1.py`.
+- 2026-09-23 -- Qualification scripts migrated to ADR-0011. `code-location.sh run ARGS` runs the
+  venv python in the jobs' own environment (DAGSTER_HOME/Postgres, run root, definitions).
+  `qualify_dagster.py`: definitions from `APPSEC_DEFINITIONS_DIR`, `--target/--project/--platform`
+  (default: the hello-autotools fixture) instead of `/targets/freeciv21`. `qualify_phase1.py`:
+  tests-linux, dagster, restart-check and runtime steps go through `code-location.sh run`; expects 3
+  healthy services and adds a `code-location-check` after the compose restart; host target run uses
+  the same target options. `test_phase1.py` needed no change (40 tests pass on the host).
+  Sandbox: `--check-contracts` PASS; `qualify_dagster.py` PASS (intake, validated reuse, fresh-run
+  isolation, failure propagation) and `--resume-check` PASS against a SQLite instance and the
+  fixture at `632522b`. The full `qualify_phase1.py` (it restarts the compose stack) is to be run
+  on hal5000.
+

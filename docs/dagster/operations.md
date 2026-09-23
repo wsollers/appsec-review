@@ -164,9 +164,12 @@ cache or an accepted-input discovery mechanism.
 $PY -B appsec-review-process/qualify_phase1.py --run-id <qualification_run_id>
 ```
 
-**Not yet migrated to ADR-0011:** `qualify_phase1.py` still runs its suites and checks with
-`docker compose exec code-server ...`, and that container no longer exists, so this command fails
-until the script is updated (remaining Phase 2 work).
+Run it on the host with the stack and the host code location up (`code-location.sh start`, then
+`reload`) and the target checkout present. The target defaults to the `hello-autotools` fixture
+(`fixtures/populate-targets.sh`); pass `--target <path> --project <name> [--platform ...]` for
+another. Since ADR-0011 the Linux test pass and the live-Dagster checks (`qualify_dagster.py`) run
+through `orchestrator/dagster/code-location.sh run`, i.e. in the same environment, instance and
+run root as the jobs, instead of `docker compose exec` into the retired code-server container.
 
 The command records argv, exit codes, hashes, tested code identity, limits, gate results and resume
 commands under the run's `data/acceptance/`. It performs bounded tests and Freeciv21 intake only.

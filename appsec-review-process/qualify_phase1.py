@@ -16,13 +16,17 @@ from execution_state import ROOT, atomic_json, atomic_bytes, data_path, digest, 
 
 REPO = ROOT.parent
 COMPOSE = ['docker','compose','-f','orchestrator/dagster/compose.yaml']
+# ADR-0011: ops run in the host code location. What used to be `docker compose exec` into the
+# retired code-server container runs through this, in the jobs' own environment.
+CODE_LOCATION = ['bash', str(REPO/'orchestrator/dagster/code-location.sh')]
+SERVICES = 3  # postgres, webserver, daemon
 
 
 def code_identity():
     paths = list(ROOT.glob('*.py')) + [ROOT/'job-graph.json',ROOT/'process-manifest.json',ROOT/'phase-1-implementation-prompt.md',
         ROOT/'00-intake-recovery/config.md',ROOT/'00-intake-recovery/prompt.md',ROOT/'tooling/buildenv-catalog.json']
     paths += list((ROOT/'registry').rglob('*.json')) + list((REPO/'schemas').glob('*.json')) + list((ROOT/'tests').glob('*.py'))
-    paths += [REPO/'orchestrator/dagster'/name for name in ('definitions.py','compose.yaml','Dockerfile','requirements.txt','requirements.lock.txt','dagster.yaml','workspace.yaml')]
+    paths += [REPO/'orchestrator/dagster'/name for name in ('definitions.py','compose.yaml','Dockerfile','requirements.txt','requirements.lock.txt','dagster.yaml','workspace.yaml','code-location.sh')]
     paths += [REPO/'pipeline/engagement_job.ps1',REPO/'pipeline/engagement_job.sh',REPO/'docs/design-parity/job-graph.mmd']
     return {'base_revision':subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip(),
             'working_tree_files':{str(p.relative_to(REPO)):file_hash(p) for p in sorted(set(paths))}}
@@ -70,10 +74,19 @@ def contracts():
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id');parser.add_argument('--check-contracts',action='store_true')
+    parser.add_argument('--target',default=str(REPO/'fixtures/targets/hello-autotools'),
+                        help='host path of the target checkout used for intake qualification (default: the hello-autotools fixture)')
+    parser.add_argument('--project',default='hello-autotools')
+    parser.add_argument('--platform',action='append',help='target platform (repeatable; default Linux)')
     args=parser.parse_args(argv)
     if args.check_contracts: contracts();return 0
     if not args.run_id: parser.error('--run-id is required')
     if not (ROOT/'runs'/args.run_id/'run-status.json').exists(): parser.error('create qualification run with run_process.py --start first')
+    target=Path(args.target).resolve()
+    if not target.is_dir(): parser.error(f'target checkout not found: {target} (fixtures/populate-targets.sh populates the default)')
+    platforms=args.platform or ['Linux']
+    platform_args=[x for platform in platforms for x in ('--platform',platform)]
+    target_args=['--target',str(target),'--project',args.project,*platform_args]
     batch='q-'+uuid.uuid4().hex[:8]; root=data_path(args.run_id,'acceptance',batch);root.mkdir(parents=True)
     before=code_identity();atomic_json(root/'tested-identity.json',before)
     steps={}
@@ -94,19 +107,23 @@ def main(argv=None):
         with ThreadPoolExecutor(max_workers=2) as pool:
             win=pool.submit(command,'tests-host',[sys.executable,'-B',str(ROOT/'tests/test_phase1.py')],360,
                             dict(os.environ,PHASE1_TEST_DATA=str(root/'f'),PYTHONDONTWRITEBYTECODE='1'))
-            linux=pool.submit(command,'tests-linux',COMPOSE+['exec','-T','-e',f'PHASE1_TEST_DATA=/runs/{args.run_id}/data/acceptance/{batch}/l',
-                                  'code-server','python','-B','/opt/process/tests/test_phase1.py'],600)
+            # tests-linux: the same suite in the code location's environment (where the jobs run).
+            linux=pool.submit(command,'tests-linux',CODE_LOCATION+['run','-B',str(ROOT/'tests/test_phase1.py')],600,
+                              dict(os.environ,PHASE1_TEST_DATA=str(root/'l'),PYTHONDONTWRITEBYTECODE='1'))
             win.result();linux.result()
-        command('dagster',COMPOSE+['exec','-T','code-server','python','-B','/opt/process/qualify_dagster.py',
-                                  '--qualification-run',args.run_id,'--evidence-id',batch+'-dagster'],900)
+        command('dagster',CODE_LOCATION+['run','-B',str(ROOT/'qualify_dagster.py'),
+                                  '--qualification-run',args.run_id,'--evidence-id',batch+'-dagster',*target_args],900)
         command('restart',COMPOSE+['restart'],180)
         deadline=time.monotonic()+120
         while time.monotonic()<deadline:
             services=containers('appsec-review')
-            if len(services)==4 and all(r['State'].get('Health',{}).get('Status')=='healthy' for r in services): break
+            if len(services)==SERVICES and all(r['State'].get('Health',{}).get('Status')=='healthy' for r in services): break
             time.sleep(2)
         atomic_json(root/'services-after.json',services)
-        healthy=len(services)==4 and all(r['State'].get('Health',{}).get('Status')=='healthy' for r in services)
+        healthy=len(services)==SERVICES and all(r['State'].get('Health',{}).get('Status')=='healthy' for r in services)
+        # Compose does not restart the host code location; it must still answer after the services restart.
+        command('code-location-check',CODE_LOCATION+['check'],60)
+        healthy=healthy and ok('code-location-check')
         with urllib.request.urlopen('http://127.0.0.1:3000/server_info',timeout=10) as response:
             atomic_bytes(root/'webserver.json',response.read());web_ok=response.status==200
         query='query { pipelineOrError(params:{repositoryName:"__repository__", repositoryLocationName:"appsec_review", pipelineName:"phase1_intake"}) { __typename ... on Pipeline { name solids { name inputs { definition { name } dependsOn { solid { name } } } } } } }'
@@ -117,20 +134,20 @@ def main(argv=None):
         graph=ui['data']['pipelineOrError']
         edges={(upstream['solid']['name'],node['name']) for node in graph['solids'] for port in node['inputs'] for upstream in port['dependsOn']}
         web_ok=web_ok and edges=={('intake_config','intake_pre_validation'),('intake_pre_validation','intake_work'),('intake_work','intake_post_validation')}
-        command('restart-check',COMPOSE+['exec','-T','code-server','python','-B','/opt/process/qualify_dagster.py',
-                                        '--qualification-run',args.run_id,'--evidence-id',batch+'-dagster','--resume-check'],120)
-        command('runtime',COMPOSE+['exec','-T','code-server','python','-B','-c',
-            "import json,subprocess;from definitions import defs;print(json.dumps({'jobs':[{ 'name':j.name,'ops':list(j.graph.node_dict)} for j in defs.get_repository_def().get_all_jobs()],'dependencies':subprocess.check_output(['pip','freeze','--all'],text=True),'git':subprocess.check_output(['git','--version'],text=True)}))"],60)
+        command('restart-check',CODE_LOCATION+['run','-B',str(ROOT/'qualify_dagster.py'),
+                                        '--qualification-run',args.run_id,'--evidence-id',batch+'-dagster','--resume-check',*target_args],120)
+        command('runtime',CODE_LOCATION+['run','-B','-c',
+            "import json,os,subprocess,sys;sys.path.insert(0,os.environ['APPSEC_DEFINITIONS_DIR']);from definitions import defs;print(json.dumps({'jobs':[{ 'name':j.name,'ops':list(j.graph.node_dict)} for j in defs.get_repository_def().get_all_jobs()],'python':sys.version,'dependencies':subprocess.check_output([sys.executable,'-m','pip','freeze','--all'],text=True),'git':subprocess.check_output(['git','--version'],text=True)}))"],60)
         old_after=containers('lra-ingestion-harness');atomic_json(root/'legacy-after.json',old_after)
         old_ok=legacy_identity(old_before)==legacy_identity(old_after) and all(not x['State']['Running'] for x in old_after)
         original=data_path(args.run_id,'acceptance','lra-ingestion-harness-before.json')
         if original.exists(): old_ok=old_ok and legacy_identity(read_json(original))==legacy_identity(old_after)
-        # Host Freeciv run also exercises the compatibility CLI and Windows link handling.
+        # Host target run also exercises the compatibility CLI (and, on Windows targets, link handling).
         created=command('create-host-run',[sys.executable,'-B',str(ROOT/'run_process.py'),'--start'])
         rid=json.loads((root/'create-host-run/stdout.log').read_text())['run_id']
-        command('stage-host-run',[sys.executable,'-B',str(ROOT/'stage_artifacts.py'),'--run-id',rid,'--project','freeciv21',
-            '--target',str(REPO/'targets/freeciv21'),'--business-goal','Bounded qualification; no builds or scanners','--platform','Linux','--platform','Windows'])
-        # Explicit adapter parity diagnostics; the operator CLI submits to Linux Dagster.
+        command('stage-host-run',[sys.executable,'-B',str(ROOT/'stage_artifacts.py'),'--run-id',rid,'--project',args.project,
+            '--target',str(target),'--business-goal','Bounded qualification; no builds or scanners',*platform_args])
+        # Explicit adapter parity diagnostics; the operator CLI submits to Dagster (host code location).
         command('intake-host',[sys.executable,'-B',str(ROOT/'phase1.py'),'intake','--run-id',rid],300)
         command('reuse-host',[sys.executable,'-B',str(ROOT/'phase1.py'),'intake','--run-id',rid],300)
         command('status-host',[sys.executable,'-B',str(ROOT/'review_cli.py'),'status','--run-id',rid],180)
@@ -142,13 +159,13 @@ def main(argv=None):
         pointer=accepted(rid,fresh=False) if ok('intake-host') else None
         if pointer:
             result=read_json(job_root(rid)/'attempts'/pointer['attempt_id']/'outputs/intake.json')
-            freeciv_ok=result['native']['applicable'] and result['native']['build_status']=='NOT_EXECUTED' and result['source_revision'] != 'unversioned' and not result['scope']['primary_selection_excludes_other_scope']
-            atomic_json(root/'freeciv-host.json',{'run_id':rid,'pointer':pointer,'native':result['native'],'scope':result['scope'],'families':list(result['families'])})
-        else: freeciv_ok=False
+            target_ok=result['native']['applicable'] and result['native']['build_status']=='NOT_EXECUTED' and result['source_revision'] != 'unversioned' and not result['scope']['primary_selection_excludes_other_scope']
+            atomic_json(root/'target-host.json',{'run_id':rid,'target':str(target),'pointer':pointer,'native':result['native'],'scope':result['scope'],'families':list(result['families'])})
+        else: target_ok=False
     except BaseException as exc:
         atomic_json(root/'qualification-error.json',{'error':f'{type(exc).__name__}: {exc}'})
         print(f'Qualification error: {exc}',file=sys.stderr,flush=True)
-        healthy=web_ok=old_ok=freeciv_ok=False;reuse={}
+        healthy=web_ok=old_ok=target_ok=False;reuse={}
     after=code_identity();stable=before==after
     atomic_json(root/'steps.json',steps)
     methods=[n.name for n in ast.walk(ast.parse((ROOT/'tests/test_phase1.py').read_text())) if isinstance(n,ast.FunctionDef) and n.name.startswith('test_A')]
@@ -159,7 +176,7 @@ def main(argv=None):
     vetted=initial.get('prompt_sha256')==prompt_hash and initial.get('requirement_blockers')==[]
     mappings={
       'A01':(['qualify_phase1.py','phase-1-implementation-prompt.md'],['contracts']),
-      'A02':(['orchestrator/dagster/compose.yaml','orchestrator/dagster/definitions.py','qualify_dagster.py'],['dagster','restart','restart-check','runtime']),
+      'A02':(['orchestrator/dagster/compose.yaml','orchestrator/dagster/definitions.py','orchestrator/dagster/code-location.sh','qualify_dagster.py'],['dagster','restart','code-location-check','restart-check','runtime']),
       'A03':(['job_graph.py','registry/'],['contracts','tests-host','tests-linux']),
       'A04':(['intake.py'],['tests-host','tests-linux','intake-host']),
       'A05':(['phase1.py:validate_supplied'],['tests-host','tests-linux']),
@@ -174,9 +191,9 @@ def main(argv=None):
       'A14':(['intake.py','qualify_dagster.py'],['intake-host','reuse-host','dagster']),
       'A15':(['job-graph.json','docs/design-parity/job-graph.mmd','job_graph.py','review_cli.py'],['graph','status-host','dagster','tests-host','tests-linux']),
       'A16':(['qualify_phase1.py'],list(steps))}
-    conditions={'A01':ok('contracts') and stable and vetted,'A02':all(ok(n) for n in ('dagster','restart','restart-check','runtime')) and healthy and web_ok and old_ok,
+    conditions={'A01':ok('contracts') and stable and vetted,'A02':all(ok(n) for n in ('dagster','restart','code-location-check','restart-check','runtime')) and healthy and web_ok and old_ok,
                 **{f'A{i:02}':tests_ok for i in range(3,14)},
-                'A14':freeciv_ok and reuse.get('reused') is True and ok('dagster'),
+                'A14':target_ok and reuse.get('reused') is True and ok('dagster'),
                 'A15':tests_ok and ok('graph') and ok('status-host') and ok('dagster'),'A16':stable and bool(steps)}
     conditions['A03'] &= ok('contracts')
     conditions['A13'] &= all(ok(n) for n in ('handoff-host','status-host','validate-host'))
@@ -188,7 +205,7 @@ def main(argv=None):
             'resume_command':f'python -B appsec-review-process/qualify_phase1.py --run-id {args.run_id}'})
     for row in gate_rows:
         extra={'A02':['legacy-before.json','legacy-after.json','services-before.json','services-after.json','webserver.json','ui-graph.json'],
-               'A14':['freeciv-host.json'],'A16':['tested-identity.json','steps.json']}.get(row['id'],[])
+               'A14':['target-host.json'],'A16':['tested-identity.json','steps.json']}.get(row['id'],[])
         row['additional_evidence']=[{'path':str((root/name).relative_to(data_path(args.run_id))),'sha256':file_hash(root/name)} for name in extra if (root/name).exists()]
     blockers=[r['id'] for r in gate_rows if r['status']!='PASS']
     section=''; requirements=[]
@@ -212,17 +229,18 @@ def main(argv=None):
          'resolved_findings':['Legacy/shared scratch requires explicit import into a new run','Non-native intake is not gated on compile databases',
          'Missing pregather output differs from corrupt supplied evidence','OS locks bind a run to one executor platform',
          'Validator composition is explicit and nonrecursive','Planned downstream jobs are not dispatched or claimed implemented',
-         'Freeciv Windows Linux-link caveats are recorded without following links','Command redaction, lost-worker cleanup and logging failures have behavioral tests'],
+         'Windows Linux-link caveats (e.g. Freeciv21) are recorded without following links','Command redaction, lost-worker cleanup and logging failures have behavioral tests'],
          'coverage':'Tasks 0-5 and acceptance A01-A16; see per-gate implementation/tests/commands above and the initial line-by-line prompt-vetting.json.'}
     atomic_json(root/'prompt-vetting.json',vet)
     report={'run_id':args.run_id,'qualification_id':batch,'date':now(),'status':'ACCEPTED' if not blockers else 'NOT ACCEPTED',
             'gates':gate_rows,'tested_identity':before,'stable_during_tests':stable,'prompt_sha256':prompt_hash,
             'review_type':'self-review','limitations':['Intake and handoff only; downstream partition/discovery/scanners remain planned.',
-             'No Freeciv21 build, native compile evidence, full security review or LLM was executed.',
+             'No target build, native compile evidence, full security review or LLM was executed.',
              'Execution-platform-bound OS locking; no distributed or cross-OS lock guarantee.',
              'Quiescent source boundary checks; transient edit/revert between checks is not detectable.',
              'One attempt per invocation; infrastructure recovery is explicit, not an automatic target retry.',
-             'Raw logs stay local; service metadata/compute logs use dedicated persistent Dagster volumes.'],
+             'Raw logs stay local; service metadata uses a persistent Dagster volume and compute logs the host .host/ directory (ADR-0011).',
+             'ADR-0011: tests-host and tests-linux both run on the POSIX host; tests-linux uses the code location environment.'],
             'blockers':blockers,'resume_command':f'python -B appsec-review-process/qualify_phase1.py --run-id {args.run_id}'}
     atomic_json(root/'acceptance.json',report)
     lines=['# Phase 1 acceptance', '', '**'+report['status']+'**', '',f'Run: `{args.run_id}`; qualification: `{batch}`',

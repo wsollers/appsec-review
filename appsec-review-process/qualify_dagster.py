@@ -1,6 +1,13 @@
-"""Bounded Linux/Dagster qualification, executed inside the existing code-server."""
+"""Bounded Linux/Dagster qualification against the live instance.
+
+ADR-0011: runs on the POSIX host in the code location's environment
+(`orchestrator/dagster/code-location.sh run -B appsec-review-process/qualify_dagster.py ...`), so it
+uses the same DAGSTER_HOME/Postgres instance, run root and definitions as the jobs. It used to run
+inside the retired code-server container.
+"""
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from execution_state import data_path, atomic_json, read_json, tree_hashes
@@ -11,9 +18,14 @@ from phase1 import stage, accepted, job_root
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--qualification-run',required=True); p.add_argument('--resume-check',action='store_true')
     p.add_argument('--evidence-id',default='dagster')
+    p.add_argument('--target',default=str(Path(__file__).resolve().parent.parent/'fixtures/targets/hello-autotools'),
+                   help='host path of the target checkout (default: the hello-autotools fixture)')
+    p.add_argument('--project',default='hello-autotools')
+    p.add_argument('--platform',action='append',help='target platform (repeatable; default Linux)')
     args=p.parse_args(); out=data_path(args.qualification_run,'acceptance',args.evidence_id)
     out.mkdir(parents=True,exist_ok=True)
-    sys.path.insert(0,'/opt/app')
+    sys.path.insert(0,os.environ.get('APPSEC_DEFINITIONS_DIR') or str(Path(__file__).resolve().parent.parent/'orchestrator/dagster'))
+    target=str(Path(args.target).resolve(strict=True)); platforms=args.platform or ['Linux']
     from definitions import phase1_intake
     from dagster import DagsterInstance
     with DagsterInstance.get() as instance:
@@ -34,7 +46,7 @@ def main():
         executions=[]; pointers=[]
         def engage(permissions=None):
             rid,_=run_process.get_or_create_run(None)
-            stage(rid,'/targets/freeciv21','freeciv21','Bounded Phase 1 qualification; no builds or scanners',['Linux','Windows'],permissions=permissions,execution_environment='dagster-read-only-linux')
+            stage(rid,target,args.project,'Bounded Phase 1 qualification; no builds or scanners',platforms,permissions=permissions,execution_environment='dagster-read-only-linux')
             return rid
         def dispatch(rid,force=False):
             result=phase1_intake.execute_in_process(instance=instance,raise_on_error=False,
@@ -62,7 +74,7 @@ def main():
         if any(e.step_key=='intake_work' and e.event_type_value=='STEP_START' for e in d.all_events):
             raise AssertionError('work started after failed pre-validation')
         for rid in (first,fresh): pointers.append({'run_id':rid,'pointer':accepted(rid,fresh=False)})
-        atomic_json(out/'before-restart.json',{'executions':executions,'accepted':pointers,'freeciv_runs':[first,fresh],
+        atomic_json(out/'before-restart.json',{'executions':executions,'accepted':pointers,'target_runs':[first,fresh],'target':target,
                                               'failure_run':failure,'immutable_first_attempt':True})
         print(json.dumps({'dagster_qualification':'PASS','runs':[first,fresh,failure]}))
     return 0

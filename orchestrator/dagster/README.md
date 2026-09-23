@@ -82,8 +82,9 @@ mkdir -p /tmp/p1 && PHASE1_TEST_DATA=/tmp/p1 APPSEC_DEFINITIONS_DIR=orchestrator
   ~/.venvs/appsec-review-dagster/bin/python -B -m unittest discover -s appsec-review-process/tests -p "test_*.py"
 ```
 
-Not every suite has been migrated from the old container paths yet (`test_phase1.py` and
-`qualify_dagster.py` among them; remaining Phase 2 work).
+To run a suite in exactly the jobs' environment (instance, run root, definitions), use
+`orchestrator/dagster/code-location.sh run -B <script> [args]`; `qualify_phase1.py` does this for
+its Linux test pass and its live-Dagster checks.
 
 `compose.yaml`, `Dockerfile`, `definitions.py` and `dagster.yaml` are part of every job's runtime
 fingerprint (`job_graph.py`), so a change to any of them makes previously accepted pointers

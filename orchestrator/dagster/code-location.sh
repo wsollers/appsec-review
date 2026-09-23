@@ -6,6 +6,9 @@
 #   code-location.sh prepare   create/refresh the host venv and DAGSTER_HOME, then exit
 #   code-location.sh start     prepare, then run `dagster api grpc` in the foreground
 #   code-location.sh check     gRPC health check against the running server
+#   code-location.sh run ARGS  run the venv's python with ARGS in the code location's environment
+#                              (DAGSTER_HOME, Postgres, APPSEC_* roots): qualification and diagnostics
+#                              see the same instance and paths as the jobs
 #   code-location.sh reload    tell the webserver to reload this code location (run after every
 #                              start/restart: until then it launches from its old job list and a
 #                              new job is rejected with PipelineNotFoundError)
@@ -118,6 +121,10 @@ case "${1:-start}" in
         echo "code-location: once it reports Started, run '$0 reload' so the webserver picks up the current jobs" >&2
         exec "$VENV/bin/dagster" api grpc -h "$BIND" -p "$PORT" \
             -f "$HERE/definitions.py" -d "$REPO" --location-name appsec_review ;;
+    run)
+        shift
+        prepare >/dev/null
+        exec "$VENV/bin/python" "$@" ;;
     check) exec timeout 20 "$VENV/bin/dagster" api grpc-health-check -h "$CHECK_HOST" -p "$PORT" ;;
     reload)
         exec "$VENV/bin/python" - <<'PY'
@@ -134,5 +141,5 @@ print('code-location: webserver reload ->', json.dumps(result))
 sys.exit(0 if result.get('__typename') == 'WorkspaceLocationEntry' else 1)
 PY
         ;;
-    *) echo "usage: $0 [prepare|start|check|reload]" >&2; exit 2 ;;
+    *) echo "usage: $0 [prepare|start|check|reload|run ARGS...]" >&2; exit 2 ;;
 esac
