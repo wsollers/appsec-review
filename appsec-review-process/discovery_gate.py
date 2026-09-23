@@ -83,6 +83,39 @@ def issue_handoff(run_id, job, dagster_id):
     return path, resolved_path
 
 
+def _require_consumer_inputs(run_id, value):
+    """02-dev-project-discovery acceptance checks beyond the schema (added 2026-09-22).
+
+    - The graph's declared dependency: an accepted 02-repository-partition-discovery result for
+      this run, at the same source revision as the supplied project discovery.
+    - The same content checks the adopted partition gate gets from validate_job_output: normalized
+      repository paths, citation freshness against the staged target, no secret-like values and no
+      finding/severity/runtime-state promotion.
+    """
+    import validate_job_output as vjo
+    try:
+        partition_attempt = validate(run_id, ADOPTED_JOB)
+    except Blocked:
+        raise
+    except Exception as exc:
+        raise Blocked(CONSUMER_JOB + ': requires an accepted ' + ADOPTED_JOB + ' result for this run first ('
+                      + type(exc).__name__ + ')') from exc
+    if partition_attempt is None:
+        raise Blocked(CONSUMER_JOB + ': the accepted ' + ADOPTED_JOB + ' result predates the common envelope; re-run it')
+    partition = read_json(partition_attempt / 'repository-partition-map.json')
+    if value.get('source_revision') != partition.get('source_revision'):
+        raise Blocked(CONSUMER_JOB + ': source_revision ' + str(value.get('source_revision'))
+                      + ' does not match the accepted partition map (' + str(partition.get('source_revision')) + ')')
+    source_root, errors = vjo._source_root(run_path(run_id) / 'data', run_id)
+    errors = list(errors)
+    if source_root is not None:
+        errors += vjo._project_discovery_errors(value, source_root)
+    errors += vjo._secret_errors(value)
+    errors += vjo._claim_promotion_errors(value, set(vjo.PROMOTION_FIELDS))
+    if errors:
+        raise Blocked(CONSUMER_JOB + ': supplied result is invalid: ' + '; '.join(errors))
+
+
 def _legacy_run(run_id, dagster_id, job, force=False):
     """Keep the unadopted developer-discovery gate behavior unchanged except schema coverage."""
     base = root(run_id, job)
@@ -98,6 +131,8 @@ def _legacy_run(run_id, dagster_id, job, force=False):
         errors = validate_document(value, schema)
         if errors:
             raise Blocked(job + ': supplied result failed schema validation: ' + '; '.join(errors))
+    if job == CONSUMER_JOB:
+        _require_consumer_inputs(run_id, value)
     fingerprint = digest({'job': job, 'supplied_hash': file_hash(supplied)})
     if not force and (base / 'accepted.json').exists():
         candidate = read_json(base / 'accepted.json')

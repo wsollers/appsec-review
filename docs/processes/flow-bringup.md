@@ -18,7 +18,7 @@ flowchart TD
   S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
   S4a["S4a 02-repository-partition-discovery<br/>no supplied map: hand-off FAIL as designed"]:::done
   S4b["S4b supply partition map<br/>ACCEPTED, run c8f720 @ 8f4b54c"]:::done
-  S5["S5 02-dev-project-discovery (supplied)<br/>devops / sre: SKIPPED not-applicable<br/>new run @ 632522b"]:::next
+  S5["S5 02-dev-project-discovery<br/>standalone job dev_project_discovery<br/>new run @ 632522b"]:::next
   S6["S6 02-build-configure"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::blocked
   BE["Phase 4: C++ buildenv provisioning + lock"]:::blocked
@@ -50,7 +50,7 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE 2026-09-22: Dagster run `4984e285`, ~4 s |
 | S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22: Dagster run `9565c126` |
 | S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE 2026-09-22: run `20260922T195024Z-c8f720`, Dagster `b8441de2` |
-| S5 | dev-project discovery; devops/sre skip | (via `engagement_workflow` / `full_review` graph) | dev accepted; devops + sre `SKIPPED(not-applicable-no-matching-inputs)` with receipts | |
+| S5 | dev-project discovery | new run at `632522b` (S1-S4b), then `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery` and `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | NEXT |
 | S6 | `02-build-configure` | -- | needs B13 (Phase 3) and the C++ buildenv (Phase 4) | BLOCKED |
 
 ## What each step does
@@ -129,10 +129,29 @@ staged target is not at the record's exact commit or has local changes, and neve
 different supplied file, since a supplied result is evidence. This is Phase 5 work, pulled forward
 because discovery doesn't need Docker.
 
-**S5 -- Project discovery.** The three branches fanning out from the partition map: developer
-project discovery takes a supplied record the same way; DevOps and SRE discovery should end
-`SKIPPED(not-applicable-no-matching-inputs)` with receipts, because the fixture has no deployment
-or operations inputs.
+**S5 -- Developer project discovery (`dev_project_discovery`).** Where the partition map says
+*what parts exist*, project discovery says *how to build them*: the project root, languages,
+build manifests, lockfiles, candidate build-environment image, and a safe command plan in which
+every command states its purpose, argv, authorization and side effects. For the fixture it is
+`fixtures/supplied/hello-autotools/02-dev-project-discovery.json`: one project at the repo root
+(C++ and C), manifests `configure.ac` and `Makefile.am`, no lockfile (the only dependency is the
+vendored cJSON source), image `audit-buildenv-cpp:local`, and four commands (`autoreconf -fi`,
+`./configure`, `make`, `make check`). All four are marked `script-execution-required`, because each
+runs repository-controlled code (m4 macros, the configure script, make recipes, the tests), and
+none needs network. This record is what `02-build-configure` (S6) consumes.
+
+It is the same supplied-result gate as S4, but it previously checked only the schema. It now also
+requires an accepted partition map for the run at the same source revision (the graph's declared
+dependency), and applies the partition gate's content checks: normalized paths, fresh citation
+hashes, no secret-like values, no finding/severity language. Until now it could only run inside
+`full_review`, which fans out to every unimplemented node; the standalone `dev_project_discovery`
+job runs just this gate.
+
+DevOps and SRE discovery (`02-devops-project-discovery`, `02-sre-operations-topology`) were planned
+here as `SKIPPED(not-applicable-no-matching-inputs)` with receipts. In the code they are generic
+`WORKER_NOT_IMPLEMENTED` placeholders, and the only node that consumes them (and accepts that skip
+reason) is `02-evidence-assembly`. Their skip receipts therefore move to Phase 10, where assembly
+needs them; nothing on the path to S6 depends on them.
 
 **S6 -- Build configure (`02-build-configure`).** The first step that runs the target's own build
 (`autoreconf -fi`, `./configure`). It must go through B13, the pinned-container adapter and the one
@@ -179,3 +198,11 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   `src/main.cpp`, `src/jsonreport.cpp`; validators pass). Run `c8f720` stays as the S4 proof at
   `8f4b54c`; S5 starts on a new run at `632522b`. `tests/run.sh` still says, generically, that the
   fixture has seeded defects (no locations); left as is.
+- 2026-09-22 -- S5 prepared. Developer discovery only ran inside `full_review`; added the
+  standalone `dev_project_discovery` job (definitions, launcher, sensors, design-parity manifest).
+  Hardened its gate: requires an accepted partition map at the same revision, plus path, citation
+  freshness, secret and claim-promotion checks (sandbox: pass + 5 rejection cases). Wrote the
+  fixture's project-discovery record at `632522b` (validators pass, 9 citations). DevOps/SRE skip
+  receipts moved to Phase 10 (only `02-evidence-assembly` consumes them). Also fixed a regression
+  from P0: the `nop` job had broken the design-parity check (now exempt like
+  `orchestration_smoke`). Tests: pool assignments, resource pools, Dagster, worker adoption (62) pass.

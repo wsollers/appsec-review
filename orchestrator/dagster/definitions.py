@@ -261,12 +261,12 @@ nvd_reference_schedule = ScheduleDefinition(
 )
 
 
-from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
+from dagster_workflow import engagement_workflow, build_discovery, build_execution, evidence_index, critical_findings_sarif, ossf_scorecard, repository_partition_discovery, dev_project_discovery, full_review, reconcile_workflow_failure, reconcile_workflow_cancellation
 
 defs = Definitions(jobs=[orchestration_smoke, nop, phase1_intake, nvd_reference_sync,
                          engagement_workflow, build_discovery, build_execution,
                          evidence_index, critical_findings_sarif, ossf_scorecard,
-                         repository_partition_discovery, full_review],
+                         repository_partition_discovery, dev_project_discovery, full_review],
                    schedules=[nvd_reference_schedule],
                    sensors=[reconcile_workflow_failure, reconcile_workflow_cancellation,
                             resource_pools.build_guard_sensor()])

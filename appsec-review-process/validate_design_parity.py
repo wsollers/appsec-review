@@ -289,7 +289,8 @@ def validate_manifest(manifest: dict[str, Any], repo: Path = REPO) -> dict[str, 
         errors.append("manifest has jobs absent from graph: " + ", ".join(extra))
     actual = _dagster_inventory(repo)
     inventory = manifest.get("dagster_inventory", {})
-    expected_jobs = sorted(set(actual["standalone_jobs"]) - {"orchestration_smoke"})
+    # Plumbing diagnostics (bootstrap smoke; ADR-0011 host code-location `nop`) are not lifecycle jobs.
+    expected_jobs = sorted(set(actual["standalone_jobs"]) - {"orchestration_smoke", "nop"})
     if sorted(inventory.get("standalone_jobs", [])) != expected_jobs:
         errors.append(f"Dagster standalone job mismatch: manifest={sorted(inventory.get('standalone_jobs', []))} actual={expected_jobs}")
     relationships = inventory.get("standalone_relationships", [])

@@ -34,7 +34,7 @@ SUPPORTED_KEYWORDS = {"$schema", "$id", "title", "description", "type", "require
                       "additionalProperties", "enum", "const", "pattern", "items", "minItems", "$ref"}
 # The executor caps as they were before B15. Pools may not be an excuse to change one.
 EXECUTOR_CAPS = {"engagement_workflow": "plan", "build_discovery": 3, "build_execution": 2, "evidence_index": 2,
-                 "critical_findings_sarif": 1, "ossf_scorecard": 1, "repository_partition_discovery": 1,
+                 "critical_findings_sarif": 1, "ossf_scorecard": 1, "repository_partition_discovery": 1, "dev_project_discovery": 1,
                  "full_review": 3}
 
 

@@ -1,0 +1,178 @@
+{
+  "schema": "appsec-review/project-discovery/1.0",
+  "target": "hello-autotools",
+  "source_revision": "632522b6801caa5810f0c6bf71bf3783c90068ac",
+  "projects": [
+    {
+      "project_id": "hello-autotools",
+      "root": ".",
+      "languages": [
+        "C++",
+        "C"
+      ],
+      "manifests": [
+        "configure.ac",
+        "Makefile.am"
+      ],
+      "lockfiles": [],
+      "candidate_buildenv_images": [
+        "audit-buildenv-cpp:local"
+      ],
+      "commands": [
+        "autoreconf -fi",
+        "./configure",
+        "make",
+        "make check"
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "configure.ac",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "9b9f5a688e91df94b134c14a7b5f2476b87f07cb2b41b30b68b65d0a57fcd54c",
+          "note": "AC_INIT/AM_INIT_AUTOMAKE autotools project; AC_PROG_CXX and AC_PROG_CC"
+        },
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "bin_PROGRAMS, noinst_LIBRARIES (libcjson.a) and TESTS = tests/run.sh"
+        },
+        {
+          "source_type": "source_file",
+          "path": "src/main.cpp",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "d04dee85aebdb7ac7852e9220d95a199991ef4eada1caae9be5f2de29eda67ac",
+          "note": "C++ program entry point"
+        },
+        {
+          "source_type": "source_file",
+          "path": "vendor/cJSON-1.7.18/cJSON.c",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "75c51de8fa40ac9d7a99319c6330719bd692eb81c0a869265f3d4c682533f9b9",
+          "note": "vendored C library compiled into libcjson.a"
+        }
+      ],
+      "confidence": "high"
+    }
+  ],
+  "safe_command_plan": [
+    {
+      "project_id": "hello-autotools",
+      "purpose": "Generate the configure script and Makefile.in from the autotools inputs",
+      "argv": [
+        "autoreconf",
+        "-fi"
+      ],
+      "authorization": "script-execution-required",
+      "side_effects": [
+        "writes generated autotools files into the source tree (configure, Makefile.in, aclocal.m4, autom4te.cache/, build-aux/)",
+        "m4 processing of repository-controlled macros can execute commands"
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "configure.ac",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "9b9f5a688e91df94b134c14a7b5f2476b87f07cb2b41b30b68b65d0a57fcd54c",
+          "note": "AC_INIT/AM_INIT_AUTOMAKE autotools project; AC_PROG_CXX and AC_PROG_CC"
+        }
+      ]
+    },
+    {
+      "project_id": "hello-autotools",
+      "purpose": "Configure the build (compiler detection, Makefile generation)",
+      "argv": [
+        "./configure"
+      ],
+      "authorization": "script-execution-required",
+      "side_effects": [
+        "runs the generated repository-controlled configure shell script",
+        "writes Makefile, config.status and config.log"
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "configure.ac",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "9b9f5a688e91df94b134c14a7b5f2476b87f07cb2b41b30b68b65d0a57fcd54c",
+          "note": "AC_INIT/AM_INIT_AUTOMAKE autotools project; AC_PROG_CXX and AC_PROG_CC"
+        }
+      ]
+    },
+    {
+      "project_id": "hello-autotools",
+      "purpose": "Compile libcjson.a and the hello-autotools executable",
+      "argv": [
+        "make"
+      ],
+      "authorization": "script-execution-required",
+      "side_effects": [
+        "runs repository-controlled make recipes",
+        "writes object files, libcjson.a and the hello-autotools binary"
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "bin_PROGRAMS, noinst_LIBRARIES (libcjson.a) and TESTS = tests/run.sh"
+        }
+      ]
+    },
+    {
+      "project_id": "hello-autotools",
+      "purpose": "Run the make check smoke test",
+      "argv": [
+        "make",
+        "check"
+      ],
+      "authorization": "script-execution-required",
+      "side_effects": [
+        "executes the built binary and tests/run.sh",
+        "writes test-suite.log and tests/*.log, tests/*.trs"
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "bin_PROGRAMS, noinst_LIBRARIES (libcjson.a) and TESTS = tests/run.sh"
+        },
+        {
+          "source_type": "source_file",
+          "path": "tests/run.sh",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "55fda00cd478486cf7c17f4db8f34a22ff2375bec8986b736986d63adf18e93c",
+          "note": "smoke test executed by make check"
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": [
+    "No dependency lockfile: the only third-party dependency is vendored source (vendor/cJSON-1.7.18/), so dependency identity comes from the vendored tree, not a package manager.",
+    "The repository's own Dockerfile build path (debian:bookworm-slim) is not planned; the build runs in the pipeline's pinned C++ build-environment image instead.",
+    "Every planned command executes repository-controlled code (m4 macros, configure, make recipes, tests) and therefore needs the script-execution capability inside the isolated build environment; none needs network."
+  ]
+}
