@@ -32,10 +32,21 @@ def code_identity():
             'working_tree_files':{str(p.relative_to(REPO)):file_hash(p) for p in sorted(set(paths))}}
 
 
+def docker_output(argv, timeout=30):
+    # A wedged Docker Desktop engine answers 500 or not at all; fail fast with a clear cause instead
+    # of hanging the whole qualification.
+    try:
+        return subprocess.check_output(argv,text=True,timeout=timeout,stderr=subprocess.PIPE)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f'Docker did not answer within {timeout}s ({" ".join(argv[:2])}); restart Docker Desktop') from None
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f'Docker call failed ({" ".join(argv[:2])}): {(exc.stderr or "").strip()[:300]}') from None
+
+
 def containers(project):
-    ids=subprocess.check_output(['docker','ps','-aq','--filter','label=com.docker.compose.project='+project],text=True).split()
+    ids=docker_output(['docker','ps','-aq','--filter','label=com.docker.compose.project='+project]).split()
     if not ids: return []
-    records=json.loads(subprocess.check_output(['docker','inspect',*ids],text=True))
+    records=json.loads(docker_output(['docker','inspect',*ids]))
     # Never export Config.Env, which contains service credentials.
     return [{'Id':r['Id'],'Name':r['Name'],'State':r['State'],'Mounts':r['Mounts'],'Image':r['Image'],
              'ports':r['NetworkSettings']['Ports']} for r in records]
@@ -101,6 +112,7 @@ def main(argv=None):
         return result
     def ok(name): return name in steps and steps[name]['exit_code']==0 and not steps[name].get('error')
     try:
+        docker_output(['docker','version','--format','{{.Server.Version}}'],20)  # preflight: engine answers
         old_before=containers('lra-ingestion-harness');new_before=containers('appsec-review')
         atomic_json(root/'legacy-before.json',old_before);atomic_json(root/'services-before.json',new_before)
         contracts_result=command('contracts',[sys.executable,'-B',str(ROOT/'qualify_phase1.py'),'--check-contracts'])
