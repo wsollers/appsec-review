@@ -11,14 +11,14 @@ requirements themselves are in [engagement-start.md](engagement-start.md); the p
 
 ```mermaid
 flowchart TD
-  P0["P0 Stack up: compose + host code location<br/>nop job proven"]:::done
+  P0["P0 Stack up: compose + host code location<br/>code-location.sh start + reload"]:::done
   P1["P1 fixtures/populate-targets.sh<br/>hello-autotools @ 632522b"]:::done
   S1["S1 run_process.py --start"]:::done
   S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::done
   S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
-  S4a["S4a 02-repository-partition-discovery<br/>no supplied map: hand-off FAIL as designed"]:::done
-  S4b["S4b supply partition map<br/>ACCEPTED, run c8f720 @ 8f4b54c"]:::done
-  S5["S5 02-dev-project-discovery<br/>ACCEPTED, run 71cd68 @ 632522b"]:::done
+  S4a["S4a partition-discovery gate, nothing supplied<br/>hand-off FAIL as designed (one-time proof)"]:::done
+  S4b["S4b supply partition map<br/>fixtures/supply_record.py -> ACCEPTED"]:::done
+  S5["S5 02-dev-project-discovery<br/>supply_record.py -> ACCEPTED"]:::done
   S6["S6 02-build-configure"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry<br/>NEXT"]:::next
   BE["Phase 4: C++ buildenv provisioning + lock"]:::blocked
@@ -35,23 +35,49 @@ flowchart TD
 
 Legend: green done, yellow next, grey to do, red blocked on another phase.
 
+**Reference run:** `20260923T163246Z-71cd68`, fixture `632522b` -- S1-S3, S4b and S5 all accepted in
+one command chain (below). S4a is a one-time negative proof, run on an earlier run; the log below
+keeps the history of earlier runs and fixture revisions.
+
 ## Steps
 
 All commands run in WSL from `~/projects/appsec-review` with the code location running
-(`orchestrator/dagster/code-location.sh start`). `PY` is the code location's venv:
+(`orchestrator/dagster/code-location.sh start`, then `code-location.sh reload`). `PY` is the code location's venv:
 `PY=~/.venvs/appsec-review-dagster/bin/python`.
 
 | Step | Who / what | Command | Expected result | Status |
 |---|---|---|---|---|
 | P0 | stack + host code location | `docker compose -f orchestrator/dagster/compose.yaml up -d`; `orchestrator/dagster/code-location.sh start`, then `code-location.sh reload` after every (re)start | `code-location.sh check` succeeds; `nop` runs | DONE 2026-09-22 (runs ac01458f, 3ea3b999) |
 | P1 | fixture target | `fixtures/populate-targets.sh` | `hello-autotools` at `632522b` | DONE 2026-09-22 (re-pinned `e3ad863` -> `8f4b54c` -> `632522b`) |
-| S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE 2026-09-22: `20260922T193334Z-7074be` |
-| S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE 2026-09-22 |
-| S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE 2026-09-22: Dagster run `4984e285`, ~4 s |
-| S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22: Dagster run `9565c126` |
-| S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE 2026-09-22: run `20260922T195024Z-c8f720`, Dagster `b8441de2` |
-| S5 | dev-project discovery | new run at `632522b` (S1-S4b), then `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery` and `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | DONE 2026-09-23: run `20260923T163246Z-71cd68`, Dagster `68d20d4a` |
+| S1 | security engineer: create the engagement | `$PY -B appsec-review-process/run_process.py --start` | JSON with `run_id`; `appsec-review-process/runs/<run_id>/` exists | DONE: reference run `20260923T163246Z-71cd68` |
+| S2 | security engineer: stage inputs | `$PY -B appsec-review-process/stage_artifacts.py --run-id <run_id> --project hello-autotools --target fixtures/targets/hello-autotools --business-goal "..." --platform Linux --budget probe --execution-environment dagster-read-only-linux` | `inputs/artifact-manifest.json` validates; `executor_platform` = `posix` | DONE: reference run |
+| S3 | Dagster: `00-intake` | `$PY -B appsec-review-process/launch_job.py --run-id <run_id> --job phase1_intake --wait` | `SUCCESS`; `data/jobs/00-intake/whole/accepted.json` | DONE: reference run, Dagster `ded064e3` |
+| S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22 (one-time proof): run `20260922T193334Z-7074be`, Dagster `9565c126` |
+| S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE: reference run, Dagster `278df830` |
+| S5 | dev-project discovery | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery`, then `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | DONE: reference run, Dagster `68d20d4a` |
 | S6 | `02-build-configure` | -- | needs B13 (Phase 3) and the C++ buildenv (Phase 4) | BLOCKED |
+
+## Run it end to end
+
+What the security engineer runs today, as one chain that stops at the first failure and captures
+the new run ID itself (never paste a `RUN=<placeholder>` line: if bash rejects it, `$RUN` silently
+keeps an older run). This produced the reference run.
+
+```bash
+cd ~/projects/appsec-review
+PY=~/.venvs/appsec-review-dagster/bin/python
+fixtures/populate-targets.sh \
+&& RUN=$($PY -B appsec-review-process/run_process.py --start | $PY -c 'import json,sys; print(json.load(sys.stdin)["run_id"])') \
+&& echo "RUN=$RUN" \
+&& $PY -B appsec-review-process/stage_artifacts.py --run-id $RUN --project hello-autotools \
+     --target fixtures/targets/hello-autotools --business-goal "Bring-up: prove intake and discovery on the fixture" \
+     --platform Linux --budget probe --execution-environment dagster-read-only-linux \
+&& $PY -B appsec-review-process/launch_job.py --run-id $RUN --job phase1_intake --wait \
+&& $PY -B fixtures/supply_record.py --run-id $RUN --job 02-repository-partition-discovery \
+&& $PY -B appsec-review-process/launch_job.py --run-id $RUN --job repository_partition_discovery --wait \
+&& $PY -B fixtures/supply_record.py --run-id $RUN --job 02-dev-project-discovery \
+&& $PY -B appsec-review-process/launch_job.py --run-id $RUN --job dev_project_discovery --wait
+```
 
 ## What each step does
 
@@ -216,3 +242,7 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   restarted. Added `code-location.sh reload` (and a reminder on `start`). The discovery chain on the
   path to `02-build-configure` is complete; S6 needs Phase 3 (B13 into service) and Phase 4 (C++
   buildenv provisioning), which come next.
+- 2026-09-23 -- Tracker consolidated: status column now cites the reference run
+  (`20260923T163246Z-71cd68`, `632522b`) instead of the mix of earlier runs and fixture revisions;
+  added the end-to-end command chain. `engagement-start.md` corrected for ADR-0011 (host-created
+  runs, host target paths, no compose edit, host code location) and the two discovery gates.
