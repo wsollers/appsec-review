@@ -132,11 +132,17 @@ import json, sys, urllib.request
 query = 'mutation { reloadRepositoryLocation(repositoryLocationName: "appsec_review") { __typename ... on WorkspaceLocationEntry { loadStatus } ... on PythonError { message } } }'
 request = urllib.request.Request('http://127.0.0.1:3000/graphql', data=json.dumps({'query': query}).encode(),
                                  headers={'Content-Type': 'application/json'})
-try:
-    with urllib.request.urlopen(request, timeout=30) as response:
-        result = json.load(response)['data']['reloadRepositoryLocation']
-except Exception as exc:
-    sys.exit(f'code-location: webserver reload failed ({exc}); is the stack up on 127.0.0.1:3000?')
+import time
+deadline = time.monotonic() + 60   # a just-started webserver refuses or resets connections for a while
+while True:
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.load(response)['data']['reloadRepositoryLocation']
+        break
+    except Exception as exc:
+        if time.monotonic() >= deadline:
+            sys.exit(f'code-location: webserver reload failed ({exc}); is the stack up on 127.0.0.1:3000?')
+        time.sleep(3)
 print('code-location: webserver reload ->', json.dumps(result))
 sys.exit(0 if result.get('__typename') == 'WorkspaceLocationEntry' else 1)
 PY
