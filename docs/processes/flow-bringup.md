@@ -17,15 +17,17 @@ flowchart TD
   S2["S2 stage_artifacts.py<br/>--target fixtures/targets/hello-autotools"]:::done
   S3["S3 00-intake<br/>launch_job.py --job phase1_intake"]:::done
   S4a["S4a partition-discovery gate, nothing supplied<br/>hand-off FAIL as designed (one-time proof)"]:::done
-  S4b["S4b supply partition map<br/>fixtures/supply_record.py -> ACCEPTED"]:::done
-  S5["S5 02-dev-project-discovery<br/>supply_record.py -> ACCEPTED"]:::done
-  S6["S6 02-build-configure"]:::blocked
+  S4b["S4b supply partition map<br/>fixtures/supply_record.py: ACCEPTED"]:::done
+  S5["S5 02-dev-project-discovery<br/>supply_record.py: ACCEPTED"]:::done
+  S6["S6 02-build-configure<br/>blocked: Phases 3, 4 and E01"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry<br/>NEXT"]:::next
-  BE["Phase 4: C++ buildenv provisioning + lock"]:::blocked
+  BE["Phase 4: C++ buildenv provisioning + lock"]:::todo
+  E01["E01: autotools-capable configure worker<br/>consumes S5 plan, runs through B13"]:::todo
 
   P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S6
   B13 -.-> S6
   BE -.-> S6
+  E01 -.-> S6
 
   classDef done fill:#d8f0d8,stroke:#2e7d32,color:#1b3d1b
   classDef next fill:#fff1c2,stroke:#b8860b,color:#4a3a00
@@ -33,7 +35,8 @@ flowchart TD
   classDef blocked fill:#f6dcdc,stroke:#b23b3b,color:#4a1515
 ```
 
-Legend: green done, yellow next, grey to do, red blocked on another phase.
+Legend: green done, yellow next, grey to do, red blocked on another phase. Dotted arrows are
+prerequisites from outside the step sequence.
 
 **Reference run:** `20260923T163246Z-71cd68`, fixture `632522b` -- S1-S3, S4b and S5 all accepted in
 one command chain (below). S4a is a one-time negative proof, run on an earlier run; the log below
@@ -55,7 +58,7 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22 (one-time proof): run `20260922T193334Z-7074be`, Dagster `9565c126` |
 | S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE: reference run, Dagster `278df830` |
 | S5 | dev-project discovery | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery`, then `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | DONE: reference run, Dagster `68d20d4a` |
-| S6 | `02-build-configure` | -- | needs B13 (Phase 3) and the C++ buildenv (Phase 4) | BLOCKED |
+| S6 | `02-build-configure` | -- | needs B13 (Phase 3), the C++ buildenv (Phase 4) and an autotools-capable configure worker (E01) | BLOCKED |
 
 ## Run it end to end
 
@@ -189,6 +192,13 @@ needs them; nothing on the path to S6 depends on them.
 piece of code allowed to run `docker run`, inside the C++ build-environment image. That is why it
 waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
 
+It also needs a new worker. The op wired to this node today (`build_configure_work`) calls
+`build_execution.py`, which configures only a single CMake root, reads the older `build_discovery`
+branch rather than S5's project discovery, and runs through the `buildenv-common` wrapper rather
+than B13. On the autotools fixture it would stop with "only a single unambiguous CMake root is
+supported". The configure worker planned as batch E01 replays S5's command plan (`autoreconf -fi`,
+`./configure`) through B13 in `audit-buildenv-cpp`; that is what S6 actually runs.
+
 ## Log
 
 - 2026-09-22 -- P0/P1 done. Networking under WSL 2 NAT required the distro-IP mapping
@@ -297,4 +307,11 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   (`7c26b5d`), carrying the 2026-09-19 review forward to the current hash `273676ad...`. Phase 2's
   code-server removal is fully qualified; remaining Phase 2 items (persistent code location on
   Windows, systemd example, native-Linux bind) do not block Phase 3.
+- 2026-09-23 -- Rendered every Mermaid diagram in the process docs (flow-bringup, engagement-start,
+  dagster-launching, dagster-workflow.mmd) with mermaid-cli: all four parse and lay out as intended.
+  Review against the code found: (1) engagement-start presented step 3 (configure) as built for any
+  native target, but `build_execution.py` handles only a single CMake root from `build_discovery`,
+  not S5's plan, and not through B13 -- so S6 also needs the E01 configure worker; added to the
+  chart, table and S6 text; (2) `dagster-workflow.mmd` still said partition discovery "remains
+  planned"; (3) `->` inside chart labels rendered as a broken "- >"; replaced.
 

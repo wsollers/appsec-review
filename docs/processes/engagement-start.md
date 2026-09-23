@@ -18,7 +18,7 @@ flowchart TD
   S1[1. Create the run on the POSIX host and stage the artifact manifest] --> S2
   S2[2. engagement_workflow: config -> intake -> 3 preparation branches -> validated join] --> S2b
   S2b[2b. Discovery gates: repository partition map, then developer project discovery - supplied, validated records] --> G1{native code in scope?}
-  G1 -- yes --> S3[3. build_discovery -> build_execution: one sandboxed configure, compile database]
+  G1 -- yes --> S3[3. 02-build-configure: one isolated configure in the pinned build image, compile database. Built today only for CMake roots - build_execution]
   G1 -- no --> S4
   S3 --> S4[4. Evidence collection: deterministic scanners, no judgment]
   S4 --> S5[5. evidence_index: accepted searchable evidence]
@@ -26,7 +26,12 @@ flowchart TD
   S6 --> S7[7. Refutation, independent verification, scoring, synthesis, report / SARIF]
 ```
 
-Built today: 1, 2, 2b, 3, 5 and the `critical_findings_sarif` publisher, all run-owned and validated.
+Built today: 1, 2, 2b, 5 and the `critical_findings_sarif` publisher, all run-owned and validated.
+Step 3 is built only partially: `build_execution` configures a single CMake root from the older
+`build_discovery` branch, through the `buildenv-common` wrapper. It refuses other build systems (the
+`hello-autotools` fixture among them), does not consume step 2b's developer project discovery, and
+does not go through the B13 pinned-container adapter. The lifecycle configure worker that does
+(`02-build-configure`, batch E01) is planned: B13 into service, then the C++ build environment, then E01.
 Step 2b's two gates accept supplied, schema- and freshness-validated records (`discovery_gate.py`);
 they do not perform the analysis themselves.
 Step 4 runs only through the legacy `pipeline/engagement_job.*` path into `scratch/` and is then

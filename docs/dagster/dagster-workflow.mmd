@@ -9,4 +9,4 @@ flowchart TD
   discovery_handoffs["Discovery handoffs: pre / worker / post"] --> workflow_publish
   workflow_intake --> workflow_publish
   workflow_publish["Recheck freshness; validate all branches; publish workflow"]
-  workflow_publish --> next["Partition discovery and specialist execution remain planned"]
+  workflow_publish --> next["Next, as separate jobs: repository_partition_discovery and dev_project_discovery (supplied-result gates); specialist execution remains planned"]
