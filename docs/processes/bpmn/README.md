@@ -15,3 +15,8 @@ node render.cjs pre-submission.bpmn render-new   # then rename into render/ as n
 
 `render.cjs` needs `PUPPETEER_PATH` (path to the `puppeteer` module) and, if puppeteer's bundled
 browser is not used, `CHROME` (a Chromium executable).
+
+`render/print/` holds each diagram cut into overlapping, page-width segments
+(`<diagram>-partNofM.png`) for documents with portrait pages, such as the Google Doc
+"AppSecReview - Process.doc". Regenerate them from the full PNGs whenever the renders change.
+
