@@ -63,6 +63,9 @@ selection (the graph), model identity (adapter config), and anything read from t
 
 ## 3. What each step requires and produces
 
+Per-job inputs and outputs, and their rollup per process model, are in the generated
+[job and artifact catalog](job-catalog.md).
+
 | Step | Job | Requires | Produces (accepted pointer) | Gate to next |
 |---|---|---|---|---|
 | 1 | `run_process.py --start`, `stage_artifacts.py` | Running stack and host code location; target checkout on the host | `inputs/artifact-manifest.json` | Manifest validates. |

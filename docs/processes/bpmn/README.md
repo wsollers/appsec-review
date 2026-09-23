@@ -20,3 +20,7 @@ browser is not used, `CHROME` (a Chromium executable).
 (`<diagram>-partNofM.png`) for documents with portrait pages, such as the Google Doc
 ["AppSecReview - Process.doc"](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit). Regenerate them from the full PNGs whenever the renders change.
 
+What each BPMN task consumes and produces is in [../job-catalog.md](../job-catalog.md) (model
+"Pre-submission process"). `catalog/steps.json` maps each step to the BPMN element ids it covers, and
+`python3 docs/processes/job_catalog.py --check` fails if a BPMN task is added without a step, so update
+`steps.json` with the model.
