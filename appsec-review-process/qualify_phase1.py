@@ -229,6 +229,11 @@ def main(argv=None):
         extra={'A02':['legacy-before.json','legacy-after.json','services-before.json','services-after.json','webserver.json','ui-graph.json'],
                'A14':['target-host.json'],'A16':['tested-identity.json','steps.json']}.get(row['id'],[])
         row['additional_evidence']=[{'path':str((root/name).relative_to(data_path(args.run_id))),'sha256':file_hash(root/name)} for name in extra if (root/name).exists()]
+    # A02 combines steps with three environment checks; record each so a failure names its cause.
+    a02=next(r for r in gate_rows if r['id']=='A02')
+    a02['checks']={'steps_ok':all(ok(n) for n in ('dagster','restart','code-location-check','restart-check','runtime')),
+                   'services_healthy_after_restart':bool(healthy),'ui_graph_intake_edges':bool(web_ok),
+                   'legacy_stack_stopped_and_unchanged':bool(old_ok)}
     blockers=[r['id'] for r in gate_rows if r['status']!='PASS']
     section=''; requirements=[]
     section_gates={'Task 0':['A01'],'Task 1':['A02'],'Task 2':['A04','A05','A13','A14'],
