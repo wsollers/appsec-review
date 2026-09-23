@@ -161,6 +161,15 @@ stage_services() {
   'wsl --shutdown' from Windows, restart Docker Desktop and wait until it reports running, then
   orchestrator/dagster/code-location.sh start (own terminal) and re-run this stage."
   fi
+  # One engine only: a native dockerd in the distro competes with Docker Desktop's WSL integration
+  # for /var/run/docker.sock, which is how the engine wedged on 2026-09-23 (500 on /version).
+  local engine_os
+  engine_os="$(timeout 30 docker info --format '{{.OperatingSystem}}' 2>/dev/null || true)"
+  if [[ "$engine_os" == "Docker Desktop" ]] && systemctl is-active --quiet docker 2>/dev/null; then
+    die "services: Docker Desktop answers, but a native docker service is also active in this distro; they
+  compete for /var/run/docker.sock. Run: sudo systemctl disable --now docker.service docker.socket containerd.service"
+  fi
+  engine="$engine ($engine_os)"
   echo "docker engine $engine"
 
   # 2. Settings exist, and the code location address in .env matches this WSL boot.
@@ -186,13 +195,15 @@ stage_services() {
   done
   echo "compose: $states"
 
-  # 4. The webserver resolves host.docker.internal to the code location's address.
+  # 4. The webserver maps host.docker.internal to the code location's address. Docker Desktop also
+  #    adds its own (often IPv6) host-gateway entry for that name, so the check is that the address
+  #    is among the name's IPv4 answers; step 5's reload is what proves the webserver reaches it.
   local resolved
-  resolved="$("${COMPOSE[@]}" exec -T webserver getent hosts host.docker.internal | awk '{print $1; exit}')"
-  if [[ -n "$wsl_ip" && "$resolved" != "$wsl_ip" ]]; then
-    die "services: webserver resolves host.docker.internal to ${resolved:-nothing}, expected $wsl_ip; run: ${COMPOSE[*]} up -d --force-recreate webserver daemon"
+  resolved="$("${COMPOSE[@]}" exec -T webserver getent ahostsv4 host.docker.internal | awk '{print $1}' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+  if [[ -n "$wsl_ip" && " $resolved " != *" $wsl_ip "* ]]; then
+    die "services: in the webserver, host.docker.internal resolves (IPv4) to ${resolved:-nothing}, not the code location at $wsl_ip; run: ${COMPOSE[*]} up -d --force-recreate webserver daemon"
   fi
-  echo "webserver: host.docker.internal -> $resolved"
+  echo "webserver: host.docker.internal (IPv4) -> $resolved"
 
   # 5. Host code location serving (gRPC health); the webserver then reloads the current job code.
   "$cl" check >/dev/null 2>&1 || die "services: host code location not answering on port 4000.

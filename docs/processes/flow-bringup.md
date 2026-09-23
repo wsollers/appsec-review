@@ -387,3 +387,10 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   location address vs this WSL boot, `compose up -d` and health, the webserver's resolution of
   `host.docker.internal`, gRPC check, reload `LOADED`, required jobs loaded, required daemons healthy.
   On `--resume`, the checkout is re-verified instead of trusted.
+- 2026-09-23 -- Docker wedge root cause: a native Docker CE (`docker.service`, enabled) ran in the
+  distro alongside Docker Desktop's WSL integration; both claim `/var/run/docker.sock` (500 on
+  `/version`). The stack (image, postgres and storage volumes) was on Docker Desktop, as ADR-0011
+  intends; the native service was disabled (`systemctl disable --now docker.service docker.socket
+  containerd.service`). SAT `services` now fails if both are active, records the engine
+  (`docker info` OperatingSystem), and checks the IPv4 answers for `host.docker.internal` (Desktop
+  also adds an IPv6 host-gateway entry, which the first live run tripped over).

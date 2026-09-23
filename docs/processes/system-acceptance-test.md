@@ -59,12 +59,15 @@ Brings up this project's own Compose services and checks that jobs can run. The 
 runs in the foreground in its own terminal, so this stage checks it and never starts it; start it
 first with `orchestrator/dagster/code-location.sh start`.
 
-1. The Docker engine answers `docker version` (else: the recovery steps, stop).
+1. The Docker engine answers `docker version` (else: why, and the recovery steps). If Docker Desktop
+   answers while a native `docker` service is also active in the distro, the stage fails: the two
+   compete for `/var/run/docker.sock`, which wedged the engine on 2026-09-23.
 2. `orchestrator/dagster/.env` exists and, under WSL NAT, `APPSEC_CODE_LOCATION_HOST` equals this WSL
    boot's IP (else: restart the code location, which rewrites it).
 3. `docker compose up -d` (idempotent; recreates webserver and daemon when the address changed), then
    postgres, webserver and daemon all `running/healthy` within 240 s.
-4. Inside the webserver, `host.docker.internal` resolves to the code location's address.
+4. Inside the webserver, the IPv4 answers for `host.docker.internal` include the code location's address
+   (Docker Desktop adds its own, often IPv6, host-gateway entry for that name as well).
 5. `code-location.sh check` (gRPC health) passes, and `code-location.sh reload` reports `LOADED`.
 6. The loaded job list includes the jobs the SAT drives (`phase1_intake`,
    `repository_partition_discovery`, `dev_project_discovery`, `engagement_workflow`, `full_review`),
