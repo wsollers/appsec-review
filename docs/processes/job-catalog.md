@@ -389,7 +389,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | BPMN elements | `sp2_docker` |
 | Consumes | -- |
 | Produces | [`docker-engine`](#a-docker-engine) |
-| Notes | Engine not answering (500) is recovered by hand: wsl --shutdown, restart Docker Desktop. |
+| Notes | Docker Desktop must be the only engine: a native docker.service in the distro competes for /var/run/docker.sock (500 on /version, hangs). docker info reports OperatingSystem "Docker Desktop"; systemctl is-active docker reports inactive. |
 
 <a id="step-docker-recover"></a>
 
@@ -402,7 +402,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | BPMN elements | `sp2_recover` |
 | Consumes | -- |
 | Produces | [`docker-engine`](#a-docker-engine) |
-| Notes | Only when docker-check fails. |
+| Notes | Only when docker-check fails. If a native docker service is active in the distro, disable it first (sudo systemctl disable --now docker.service docker.socket containerd.service): it was the root cause of the repeated wedges (2026-09-23). |
 
 <a id="step-compose-setup"></a>
 
@@ -1890,7 +1890,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-sut-checkout"></a>`sut-checkout` | file | fixtures/targets/<project>/ (host path) | [`populate-targets`](#step-populate-targets) | [`stage-artifacts`](#step-stage-artifacts)<br>[`partition-analysis`](#step-partition-analysis)<br>[`supply-partition`](#step-supply-partition)<br>[`dev-analysis`](#step-dev-analysis)<br>[`supply-dev`](#step-supply-dev)<br>[`legacy-pregather`](#step-legacy-pregather) |
 | <a id="a-compose-env"></a>`compose-env` | file | orchestrator/dagster/.env | [`compose-setup`](#step-compose-setup)<br>[`code-location-start`](#step-code-location-start) | [`compose-up`](#step-compose-up)<br>[`code-location-start`](#step-code-location-start) |
 | <a id="a-host-dirs"></a>`host-dirs` | file | orchestrator/dagster/.host/ | [`compose-setup`](#step-compose-setup) | [`compose-up`](#step-compose-up) |
-| <a id="a-docker-engine"></a>`docker-engine` | state | Docker Desktop engine | [`docker-check`](#step-docker-check)<br>[`docker-recover`](#step-docker-recover) | [`compose-up`](#step-compose-up) |
+| <a id="a-docker-engine"></a>`docker-engine` | state | Docker Desktop engine (the only engine; no native docker.service in the distro) | [`docker-check`](#step-docker-check)<br>[`docker-recover`](#step-docker-recover) | [`compose-up`](#step-compose-up) |
 | <a id="a-dagster-services"></a>`dagster-services` | state | compose project appsec-review: webserver, daemon, postgres (127.0.0.1:55432) | [`compose-up`](#step-compose-up) | [`code-location-reload`](#step-code-location-reload) |
 | <a id="a-code-location"></a>`code-location` | state | dagster code-server on the host, gRPC :4000 | [`code-location-start`](#step-code-location-start) | [`code-location-check`](#step-code-location-check)<br>[`code-location-reload`](#step-code-location-reload)<br>[`nop`](#step-nop) |
 | <a id="a-code-location-venv"></a>`code-location-venv` | file | ~/.venvs/appsec-review-dagster/ | [`code-location-start`](#step-code-location-start) | -- |

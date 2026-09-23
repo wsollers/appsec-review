@@ -132,6 +132,30 @@ reload, so `code-location.sh reload` (the webserver's `reloadRepositoryLocation`
 its exposure (below) and the webserver/daemon wiring are the same. This is also what the retired
 `code-server` container ran.
 
+## Addendum 2026-09-23: one Docker engine on the host
+
+On a Windows host the engine is Docker Desktop, reached from the WSL distro through Desktop's WSL
+integration. On `hal5000` the distro also had a native Docker CE install whose `docker.service` was
+enabled. Both claim `/var/run/docker.sock`: the native daemon took the socket from systemd at boot,
+and Desktop's integration mounted its proxy over the same path. The engine then wedged repeatedly
+(`docker version` hanging, then `500 Internal Server Error` on `/version`), which had been read as
+Docker Desktop instability; three such wedges were recovered by `wsl --shutdown` before the cause
+was found. The stack (image, PostgreSQL and storage volumes) was on Docker Desktop throughout, as
+this ADR intends, so disabling the native service lost nothing.
+
+Requirement: exactly one engine. On a Windows host that is Docker Desktop, with Ubuntu enabled under
+Settings, Resources, WSL integration, and no native engine running in the distro:
+
+```bash
+sudo systemctl disable --now docker.service docker.socket containerd.service   # once
+docker info --format '{{.OperatingSystem}}'    # Docker Desktop
+systemctl is-active docker                     # inactive
+```
+
+On a native Linux host the native engine is the only one and this does not apply. The system
+acceptance test's `services` stage records which engine answered and fails if Docker Desktop answers
+while a native `docker` service is active.
+
 ## Non-decisions
 
 This ADR does not decide: which lifecycle worker migrates to B13 first (a separate batch per

@@ -6,7 +6,7 @@
     "sut-checkout": {"kind": "file", "path": "fixtures/targets/<project>/ (host path)", "about": "Clean checkout of the target at the pinned commit; refused if the origin is wrong, the tree is dirty, or HEAD does not match."},
     "compose-env": {"kind": "file", "path": "orchestrator/dagster/.env", "about": "Postgres password, operator uid/gid, APPSEC_CODE_LOCATION_HOST (WSL distro IP)."},
     "host-dirs": {"kind": "file", "path": "orchestrator/dagster/.host/", "about": "Host-owned Dagster storage (compute logs, artifacts), created by setup.py as the operator."},
-    "docker-engine": {"kind": "state", "path": "Docker Desktop engine", "about": "Answers docker version; recovery is wsl --shutdown and a Docker Desktop restart."},
+    "docker-engine": {"kind": "state", "path": "Docker Desktop engine (the only engine; no native docker.service in the distro)", "about": "Answers docker version; recovery is wsl --shutdown and a Docker Desktop restart."},
     "dagster-services": {"kind": "state", "path": "compose project appsec-review: webserver, daemon, postgres (127.0.0.1:55432)", "about": "Orchestration only: queue, state and history."},
     "code-location": {"kind": "state", "path": "dagster code-server on the host, gRPC :4000", "about": "Host process that runs every op; started by code-location.sh start."},
     "code-location-venv": {"kind": "file", "path": "~/.venvs/appsec-review-dagster/", "about": "Python 3.12 environment the jobs run in (code-location.sh prepare)."},

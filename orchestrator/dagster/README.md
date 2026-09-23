@@ -56,7 +56,8 @@ so this matters only for the services' own files: compute logs under the bind-mo
 (which `setup.py` creates as the operator before `compose up` can create it as root).
 
 Prerequisites: Docker Engine with the Compose v2 plugin (`docker compose version`; on Ubuntu the
-package is `docker-compose-v2`), the operator in the `docker` group, and the review target checked
+package is `docker-compose-v2`), exactly one engine (under WSL: Docker Desktop, with no native
+`docker.service` running in the distro; see ADR-0011, addendum 2026-09-23), the operator in the `docker` group, and the review target checked
 out on the host (for example under `targets/<name>`, ignored by git). Because workers now run on the
 host (ADR-0011), the host also needs Python 3.12 with `venv` (`python3.12-venv`), `git`, and
 `libfuzzy2` (`evidence_index` loads `libfuzzy.so.2`; `code-location.sh start` warns if it is

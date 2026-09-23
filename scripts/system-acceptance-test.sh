@@ -26,7 +26,7 @@ STAGES=(
   "sut-checkout|1|Fresh clone of the fixture at its pinned commit; clean; no answer key on the branch"
   "services|1|Dagster services healthy; host code location serving; job list reloaded"
   "run-create|1|run_process.py --start creates the run and its folders"
-  "stage-inputs|0|stage_artifacts.py writes a valid artifact manifest (executor platform posix)"
+  "stage-inputs|1|stage_artifacts.py writes a valid artifact manifest (executor platform posix)"
   "intake|0|00-intake accepted (phase1_intake)"
   "partition-discovery|0|Partition map supplied and accepted (repository_partition_discovery)"
   "dev-project-discovery|0|Project discovery supplied and accepted (dev_project_discovery)"
@@ -282,6 +282,74 @@ PY
   echo "run-create: PASS  run $run_id (READY, first lane $(printf '%s' "$summary" | python3 -c 'import json,sys; print(json.load(sys.stdin)["resume_from"])'); data/ inputs/ outputs/ present; manifest is the unfilled template)"
 }
 
+# ---- stage 4: stage-inputs -----------------------------------------------------------------------
+# The engineer states what is reviewed and why. For the SAT these are fixed, so every SAT stages the
+# same engagement; SAT_* environment variables override them for experiments.
+SAT_BUSINESS_GOAL="${SAT_BUSINESS_GOAL:-System acceptance test: full review cycle on the fixture}"
+SAT_PLATFORM="${SAT_PLATFORM:-Linux}"
+SAT_BUDGET="${SAT_BUDGET:-probe}"
+SAT_EXECUTION_ENVIRONMENT="${SAT_EXECUTION_ENVIRONMENT:-dagster-read-only-linux}"
+
+require_run() {  # the run this SAT created in stage 3
+  RUN_ID="$(sat_get run_id)"
+  [[ -n "$RUN_ID" ]] || die "$1: this SAT has no run yet (stage run-create)"
+  RUN_DIR="$REPO/appsec-review-process/runs/$RUN_ID"
+  [[ -d "$RUN_DIR" ]] || die "$1: run folder $RUN_DIR is missing"
+}
+
+stage_stage_inputs() {
+  require_run stage-inputs
+  local cl="$REPO/orchestrator/dagster/code-location.sh" target="$REPO/fixtures/targets/$FIXTURE" out
+  out="$("$cl" run -B "$REPO/appsec-review-process/stage_artifacts.py" --run-id "$RUN_ID" --project "$FIXTURE" \
+          --target "$target" --business-goal "$SAT_BUSINESS_GOAL" --platform "$SAT_PLATFORM" \
+          --budget "$SAT_BUDGET" --execution-environment "$SAT_EXECUTION_ENVIRONMENT")" \
+    || die "stage-inputs: stage_artifacts.py failed: $out"
+  echo "$out"
+
+  # The manifest is the intake contract: check it says exactly what was asked, on this host.
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$RUN_ID" "$FIXTURE" "$(realpath "$target")" "$SAT_BUSINESS_GOAL" "$SAT_PLATFORM" "$SAT_BUDGET" "$SAT_EXECUTION_ENVIRONMENT" <<'PY'
+import hashlib, json, sys, pathlib
+rdir, run_id, project, target, goal, platform, budget, env = sys.argv[1:]
+rdir = pathlib.Path(rdir)
+path = rdir / 'inputs' / 'artifact-manifest.json'
+m = json.loads(path.read_text())
+c = m.get('intake_config', {})
+want = {
+    'orchestration_version': (m.get('orchestration_version'), 1),
+    'run_id': (m.get('run_id'), run_id),
+    'project': (m.get('project'), project),
+    'target': (c.get('target'), target),
+    'business_goal': (c.get('business_goal'), goal),
+    'platforms': (c.get('platforms'), [platform]),
+    'budget': (c.get('budget'), budget),
+    'execution_environment': (c.get('execution_environment'), env),
+    'executor_platform': (c.get('executor_platform'), 'posix'),
+    'permissions': (c.get('permissions'), ['read-source']),
+    'scope': (m.get('scope'), {'include': ['**'], 'exclude': []}),
+    'imports': (c.get('imports'), []),
+    'compile_database': (c.get('compile_database'), None),
+    'supplied_evidence': (m.get('artifact_hashes'), {}),
+    'engagement_relative': (c.get('engagement_relative'), 'pending-evidence'),
+}
+bad = ['%s=%r (expected %r)' % (k, got, exp) for k, (got, exp) in want.items() if got != exp]
+status = json.loads((rdir / 'run-status.json').read_text()).get('status')
+if status != 'READY':
+    bad.append('run-status %r (expected READY)' % status)
+if bad:
+    sys.exit('manifest: ' + '; '.join(bad))
+notes = m.get('notes', [])
+print(json.dumps({'target': target, 'business_goal': goal, 'platforms': [platform], 'budget': budget,
+                  'execution_environment': env, 'executor_platform': 'posix', 'permissions': ['read-source'],
+                  'supplied_evidence': 0, 'pregather_expected_notes': len(notes),
+                  'manifest_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}))
+PY
+)" || die "stage-inputs: $summary"
+
+  record PASS stage-inputs "$summary"
+  echo "stage-inputs: PASS  manifest for $FIXTURE on posix: platform $SAT_PLATFORM, budget $SAT_BUDGET, read-source only, no supplied evidence"
+}
+
 # ---- driver --------------------------------------------------------------------------------------
 FIXTURE=hello-autotools; THROUGH=""; RESUME=""
 while [[ $# -gt 0 ]]; do
@@ -310,7 +378,8 @@ json.dump({'schema': 'appsec-review/system-acceptance/1', 'sat_id': sat_id, 'fix
            'repo_commit': repo_head, 'run_id': None, 'stages': {}}, open(path, 'w'), indent=1)
 EOF
 fi
-echo "SAT $(sat_get sat_id)  fixture $FIXTURE  record ${SAT_DIR#$REPO/}${RESUME:+  run $(sat_get run_id)}"
+RUN_ID="$(sat_get run_id)"
+echo "SAT $(sat_get sat_id)  fixture $FIXTURE  record ${SAT_DIR#$REPO/}${RUN_ID:+  run $RUN_ID}"
 
 for id in $(stage_ids); do
   if [[ "$(stage_status "$id")" == PASS && "$id" == sut-checkout ]]; then

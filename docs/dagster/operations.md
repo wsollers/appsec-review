@@ -89,6 +89,13 @@ docker compose -f orchestrator/dagster/compose.yaml up -d
 docker compose -f orchestrator/dagster/compose.yaml restart
 ```
 
+If the engine stops answering (`docker version` hangs or returns `500 Internal Server Error`):
+first check there is only one engine (`systemctl is-active docker` must be `inactive` under WSL with
+Docker Desktop; see ADR-0011, addendum 2026-09-23). Then stop the code location (Ctrl+C),
+`wsl --shutdown` from Windows, restart Docker Desktop, start the code location again and
+`code-location.sh reload`. `scripts/system-acceptance-test.sh --through services` checks all of this
+in one pass (engine, the containers' health, code location reachability, loaded jobs, daemons).
+
 Never use `down --volumes` for engagement start-over. PostgreSQL and compute logs have dedicated
 persistent volumes. Rotation is 10 MiB times three files per service; grace period is 30 seconds.
 This project only starts, stops and reports on its own Compose project (`appsec-review`); other

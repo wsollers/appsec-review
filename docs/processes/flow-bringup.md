@@ -104,6 +104,14 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 
 ## Run it end to end
 
+**Scripted: the system acceptance test.** `scripts/system-acceptance-test.sh --through <stage>` runs
+this flow from a fresh clone of the fixture, one checked stage at a time, and records evidence per
+stage ([system-acceptance-test.md](system-acceptance-test.md)). It is replacing the chain below
+stage by stage; `--list` shows which stages are built. Start the code location first, in its own
+terminal.
+
+**By hand**, the equivalent chain as far as the SAT does not yet reach:
+
 What the security engineer runs today, as one chain that stops at the first failure and captures
 the new run ID itself (never paste a `RUN=<placeholder>` line: if bash rejects it, `$RUN` silently
 keeps an older run). This produced the reference run.
@@ -399,3 +407,8 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   built: `run_process.py --start` in the code location's environment; checks the run id, folders,
   `run-status.json` (READY, first lane `00-intake-recovery`), a single `RUN_CREATED` event, and that
   the manifest is still the unfilled template; the run id is kept in `sat.json`.
+- 2026-09-23 -- SAT stage 3 `run-create` passed in WSL (SAT `20260923T204446Z`, run
+  `20260923T204734Z-483b29`). Stage 4 `stage-inputs` built (fixed SAT engagement, manifest checked
+  field by field). Docs for the single-engine requirement: ADR-0011 addendum 2026-09-23,
+  `orchestrator/dagster/README.md` prerequisites, `docs/dagster/operations.md` recovery; catalog
+  steps `docker-check`/`docker-recover` updated. "Run it end to end" now leads with the SAT.

@@ -30,7 +30,7 @@ is re-verified (same HEAD, still clean) because every later stage reads that che
 | 1 | `sut-checkout` | Fresh clone at the pinned commit; clean; origin correct; no answer key or defect comments on the reviewed revision | yes |
 | 2 | `services` | Dagster services healthy; host code location serving; job list reloaded | yes |
 | 3 | `run-create` | `run_process.py --start` creates the run | yes |
-| 4 | `stage-inputs` | `stage_artifacts.py` writes a valid manifest (executor platform `posix`) | |
+| 4 | `stage-inputs` | `stage_artifacts.py` writes a valid manifest (executor platform `posix`) | yes |
 | 5 | `intake` | `00-intake` accepted | |
 | 6 | `partition-discovery` | Partition map supplied and accepted | |
 | 7 | `dev-project-discovery` | Project discovery supplied and accepted | |
@@ -91,3 +91,27 @@ appsec-review-process/run_process.py --start` (the code location's Python and `A
 The run id is written to `sat.json` (`run_id`); every later stage of this SAT works on that run, and
 `--resume` shows it in the header. Evidence: run id and folder, status, creation time, first lane,
 lane count, manifest state.
+
+### 4. `stage-inputs`
+
+States what is reviewed and why, through `code-location.sh run -B appsec-review-process/stage_artifacts.py`
+on the run from stage 3. The engagement is fixed so every SAT stages the same one; `SAT_BUSINESS_GOAL`,
+`SAT_PLATFORM`, `SAT_BUDGET` and `SAT_EXECUTION_ENVIRONMENT` override it for experiments.
+
+| Parameter | SAT value |
+|---|---|
+| project | the fixture name (`hello-autotools`) |
+| target | `fixtures/targets/<fixture>` (absolute host path) |
+| business goal | "System acceptance test: full review cycle on the fixture" |
+| platform | `Linux` |
+| budget | `probe` |
+| execution environment | `dagster-read-only-linux` |
+| permissions | default, `read-source` only |
+
+Checks on `inputs/artifact-manifest.json` (the intake contract): `orchestration_version` 1, this
+run's id, the project, the resolved target path, goal, platforms, budget and execution environment
+as given; `executor_platform` `posix`; permissions `read-source` only; whole-tree scope (`**`, no
+excludes); no imports, no compile database, no supplied evidence (`pending-evidence`); and
+`run-status.json` still `READY`. The eight "Expected before pregather" notes are counted, not
+treated as errors: they name legacy pregather outputs that do not exist before anything has run.
+Evidence: the staged values, the note count and the manifest's SHA-256.
