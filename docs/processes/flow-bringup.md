@@ -285,4 +285,10 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   not and logged "Reloading definitions ... not currently supported". Verified in a sandbox: a job
   added to `definitions.py` appeared after `reload_code` without a restart, and the warning was gone.
   ADR-0011 amended.
+- 2026-09-23 -- A01 explained and made re-attestable. The 2026-09-19 prompt review covered the spec
+  at `7c26b5d` (hash `87e4d61f...`); since then only two reference-path lines changed in the docs
+  reorg (`2ded09f`, `bbc9fb5`), giving `273676ad...`. Added `attest_prompt.py`: shows the diff since
+  the reviewed revision and writes `prompt-vetting.json` only with a named approval and a reason; it
+  never rehashes blindly (sandbox: diff-only, wrong-prior-hash, missing-approver, write and re-run
+  cases all behave).
 

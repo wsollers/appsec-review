@@ -173,5 +173,13 @@ through `orchestrator/dagster/code-location.sh run`, i.e. in the same environmen
 run root as the jobs, instead of `docker compose exec` into the retired code-server container.
 
 The command records argv, exit codes, hashes, tested code identity, limits, gate results and resume
-commands under the run's `data/acceptance/`. It performs bounded tests and Freeciv21 intake only.
+commands under the run's `data/acceptance/`.
+
+Gate A01 also needs `data/acceptance/prompt-vetting.json` on the qualification run, recording a
+review of `phase-1-implementation-prompt.md` at its **current** SHA-256. The hash binds a review to
+the exact text reviewed, so any edit to the spec (even a moved link) invalidates it. After a
+maintenance edit, carry the review forward with `appsec-review-process/attest_prompt.py`: it shows the
+diff since the reviewed revision and writes the new record only with `--approve`, a named
+`--approved-by` and a `--classification` of why the diff changes no requirement. A substantive
+change to the spec needs a real re-review instead. It performs bounded tests and Freeciv21 intake only.
 Use `phase1.py graph --check` to verify `docs/design-parity/job-graph.mmd` against `job-graph.json`.
