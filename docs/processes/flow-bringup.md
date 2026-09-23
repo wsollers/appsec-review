@@ -13,7 +13,7 @@ and its renders (`bpmn/render/`, `bpmn/render/print/`); the Mermaid charts and t
 (`render/`); this tracker's status and "What each step does" exposition; the job and artifact
 catalog [job-catalog.md](job-catalog.md) (sources in `catalog/`, regenerate with
 `python3 docs/processes/job_catalog.py`; `--check` fails when it is stale); and the Google Doc
-[AppSecReview - Process.doc](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit), which mirrors these files for reading outside the repository.
+[AppSecReview - Process.doc](https://docs.google.com/document/d/1OwuRBMoLLoPOL79JlSDUvhUdzgdG_hNDbidD9PHlteI/edit), which mirrors these files for reading outside the repository.
 
 ## Flow and status
 
@@ -361,7 +361,7 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   checkout to Dagster acceptance; intake and discovery gates modelled as pre-submittal (William's
   call). Validated with bpmn-moddle and rendered with bpmn-js (0 warnings each); renders committed
   under `bpmn/render/`.
-- 2026-09-23 -- Google Doc [AppSecReview - Process.doc](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit) created from these docs
+- 2026-09-23 -- Google Doc [AppSecReview - Process.doc](https://docs.google.com/document/d/1OwuRBMoLLoPOL79JlSDUvhUdzgdG_hNDbidD9PHlteI/edit) created from these docs
   (system arrangement, engagement flow, pre-submission BPMN with drill-downs, fixture bring-up, Dagster
   workflow, open items); images are the committed renders at `b9d84be`. Standing rule added: every
   process change updates the BPMN, Mermaid, renders, this exposition and the Google Doc together.
@@ -373,3 +373,7 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   lifecycle graph) and has an appendix entry per step and per lifecycle job (51) plus an artifact
   glossary. `--check` also verifies every BPMN task is covered by a step; `tests/test_job_catalog.py`
   runs it with the unit suite.
+- 2026-09-23 -- Google Doc "AppSecReview - Process.doc" re-created with the catalog: section 7 (jobs
+  and artifacts rolled up per process model) and Appendices A-C (steps, lifecycle jobs, artifact
+  glossary), compact forms of `job-catalog.md`. The Drive connector cannot edit a Doc in place, so it
+  is a new Doc (links updated); the previous one is in the Drive trash.

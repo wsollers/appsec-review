@@ -3,7 +3,7 @@
 Status: **DRAFT for the 2026-09 architecture discussion.** Updated 2026-09-23 for ADR-0011 (host-owned
 code location) and the discovery gates; the step-by-step bring-up on the `hello-autotools` fixture is
 tracked in [flow-bringup.md](flow-bringup.md). The detailed process up to Dagster's acceptance of the engagement is modelled
-in BPMN: [bpmn/pre-submission.bpmn](bpmn/pre-submission.bpmn); a readable companion with the models and their exposition is the Google Doc [AppSecReview - Process.doc](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit). Describes what exists today, marks
+in BPMN: [bpmn/pre-submission.bpmn](bpmn/pre-submission.bpmn); a readable companion with the models and their exposition is the Google Doc [AppSecReview - Process.doc](https://docs.google.com/document/d/1OwuRBMoLLoPOL79JlSDUvhUdzgdG_hNDbidD9PHlteI/edit). Describes what exists today, marks
 what is designed but unbuilt, and lists the decisions the discussion must settle. Once agreed it
 becomes the normative "how an engagement starts" doc and the diary parts move to `docs/TODO/`.
 

@@ -1,7 +1,7 @@
 # Mermaid renders
 
 PNG renders of the Mermaid charts in the process docs, for places that cannot render Mermaid
-(the Google Doc ["AppSecReview - Process.doc"](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit)). Re-render whenever a chart changes:
+(the Google Doc ["AppSecReview - Process.doc"](https://docs.google.com/document/d/1OwuRBMoLLoPOL79JlSDUvhUdzgdG_hNDbidD9PHlteI/edit)). Re-render whenever a chart changes:
 
 ```bash
 npx -p @mermaid-js/mermaid-cli mmdc -i chart.mmd -o render/<name>.png -b white -s 2
