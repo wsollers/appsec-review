@@ -52,12 +52,6 @@ def containers(project):
              'ports':r['NetworkSettings']['Ports']} for r in records]
 
 
-def legacy_identity(records):
-    # Docker returns mount arrays in map iteration order; compare identities, not order.
-    return sorted([{'Id':r['Id'],'Name':r['Name'],'State':r['State'],
-                    'Mounts':sorted(r['Mounts'],key=lambda m:(m['Destination'],m['Source']))} for r in records],key=lambda r:r['Id'])
-
-
 def contracts():
     from job_graph import composition,load_graph,mermaid
     from schema_validate import validate_document
@@ -113,8 +107,10 @@ def main(argv=None):
     def ok(name): return name in steps and steps[name]['exit_code']==0 and not steps[name].get('error')
     try:
         docker_output(['docker','version','--format','{{.Server.Version}}'],20)  # preflight: engine answers
-        old_before=containers('lra-ingestion-harness');new_before=containers('appsec-review')
-        atomic_json(root/'legacy-before.json',old_before);atomic_json(root/'services-before.json',new_before)
+        # Only this project's containers are inspected; other Compose projects on the same engine are
+        # none of this project's business (it never starts, stops or reports on them).
+        new_before=containers('appsec-review')
+        atomic_json(root/'services-before.json',new_before)
         contracts_result=command('contracts',[sys.executable,'-B',str(ROOT/'qualify_phase1.py'),'--check-contracts'])
         with ThreadPoolExecutor(max_workers=2) as pool:
             win=pool.submit(command,'tests-host',[sys.executable,'-B',str(ROOT/'tests/test_phase1.py')],360,
@@ -160,10 +156,6 @@ def main(argv=None):
                                         '--qualification-run',args.run_id,'--evidence-id',batch+'-dagster','--resume-check',*target_args],120)
         command('runtime',CODE_LOCATION+['run','-B','-c',
             "import json,os,subprocess,sys;sys.path.insert(0,os.environ['APPSEC_DEFINITIONS_DIR']);from definitions import defs;print(json.dumps({'jobs':[{ 'name':j.name,'ops':list(j.graph.node_dict)} for j in defs.get_repository_def().get_all_jobs()],'python':sys.version,'dependencies':subprocess.check_output([sys.executable,'-m','pip','freeze','--all'],text=True),'git':subprocess.check_output(['git','--version'],text=True)}))"],60)
-        old_after=containers('lra-ingestion-harness');atomic_json(root/'legacy-after.json',old_after)
-        old_ok=legacy_identity(old_before)==legacy_identity(old_after) and all(not x['State']['Running'] for x in old_after)
-        original=data_path(args.run_id,'acceptance','lra-ingestion-harness-before.json')
-        if original.exists(): old_ok=old_ok and legacy_identity(read_json(original))==legacy_identity(old_after)
         # Host target run also exercises the compatibility CLI (and, on Windows targets, link handling).
         created=command('create-host-run',[sys.executable,'-B',str(ROOT/'run_process.py'),'--start'])
         rid=json.loads((root/'create-host-run/stdout.log').read_text())['run_id']
@@ -187,7 +179,7 @@ def main(argv=None):
     except BaseException as exc:
         atomic_json(root/'qualification-error.json',{'error':f'{type(exc).__name__}: {exc}'})
         print(f'Qualification error: {exc}',file=sys.stderr,flush=True)
-        healthy=web_ok=old_ok=target_ok=False;reuse={}
+        healthy=web_ok=target_ok=False;reuse={}
     after=code_identity();stable=before==after
     atomic_json(root/'steps.json',steps)
     methods=[n.name for n in ast.walk(ast.parse((ROOT/'tests/test_phase1.py').read_text())) if isinstance(n,ast.FunctionDef) and n.name.startswith('test_A')]
@@ -213,7 +205,7 @@ def main(argv=None):
       'A14':(['intake.py','qualify_dagster.py'],['intake-host','reuse-host','dagster']),
       'A15':(['job-graph.json','docs/design-parity/job-graph.mmd','job_graph.py','review_cli.py'],['graph','status-host','dagster','tests-host','tests-linux']),
       'A16':(['qualify_phase1.py'],list(steps))}
-    conditions={'A01':ok('contracts') and stable and vetted,'A02':all(ok(n) for n in ('dagster','restart','code-location-check','restart-check','runtime')) and healthy and web_ok and old_ok,
+    conditions={'A01':ok('contracts') and stable and vetted,'A02':all(ok(n) for n in ('dagster','restart','code-location-check','restart-check','runtime')) and healthy and web_ok,
                 **{f'A{i:02}':tests_ok for i in range(3,14)},
                 'A14':target_ok and reuse.get('reused') is True and ok('dagster'),
                 'A15':tests_ok and ok('graph') and ok('status-host') and ok('dagster'),'A16':stable and bool(steps)}
@@ -226,14 +218,13 @@ def main(argv=None):
             'commands':[{'step':name,**steps[name]} for name in names if name in steps],
             'resume_command':f'python -B appsec-review-process/qualify_phase1.py --run-id {args.run_id}'})
     for row in gate_rows:
-        extra={'A02':['legacy-before.json','legacy-after.json','services-before.json','services-after.json','webserver.json','ui-graph.json'],
+        extra={'A02':['services-before.json','services-after.json','webserver.json','ui-graph.json'],
                'A14':['target-host.json'],'A16':['tested-identity.json','steps.json']}.get(row['id'],[])
         row['additional_evidence']=[{'path':str((root/name).relative_to(data_path(args.run_id))),'sha256':file_hash(root/name)} for name in extra if (root/name).exists()]
     # A02 combines steps with three environment checks; record each so a failure names its cause.
     a02=next(r for r in gate_rows if r['id']=='A02')
     a02['checks']={'steps_ok':all(ok(n) for n in ('dagster','restart','code-location-check','restart-check','runtime')),
-                   'services_healthy_after_restart':bool(healthy),'ui_graph_intake_edges':bool(web_ok),
-                   'legacy_stack_stopped_and_unchanged':bool(old_ok)}
+                   'services_healthy_after_restart':bool(healthy),'ui_graph_intake_edges':bool(web_ok)}
     blockers=[r['id'] for r in gate_rows if r['status']!='PASS']
     section=''; requirements=[]
     section_gates={'Task 0':['A01'],'Task 1':['A02'],'Task 2':['A04','A05','A13','A14'],

@@ -264,4 +264,13 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   isolation, failure propagation) and `--resume-check` PASS against a SQLite instance and the
   fixture at `632522b`. The full `qualify_phase1.py` (it restarts the compose stack) is to be run
   on hal5000.
+- 2026-09-23 -- Qualification on hal5000 (run `20260923T172004Z-136043`): every step passed,
+  including the compose restart; blockers were A01 (no prompt-vetting on a fresh run, expected) and
+  A02. A02 failed only on the check that another project's stack (`lra-ingestion-harness`) was
+  stopped and unchanged. Rule set by William: **this project only starts, stops and reports on its
+  own containers.** Removed that check from `qualify_phase1.py` and `qualify_workflow.py` and the
+  docs that described it; A02's report entry now lists its remaining checks. `qualify_workflow.py`
+  also migrated off the code-server (fixture runs via `code-location.sh run`, `--target` defaulting
+  to the fixture). Along the way: qualifier fails fast if the Docker engine stops answering;
+  `code-location.sh reload` retries while the webserver starts.
 

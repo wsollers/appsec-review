@@ -100,8 +100,10 @@ python -B appsec-review-process/qualify_workflow.py --run-id <qualification_run_
 The qualification uses the actual service API and multiprocessing executor, not
 `execute_in_process`. It records queue samples and run timing, checks distinct branch processes
 and overlapping attempts, injects a branch write failure, verifies recovery reuses successful
-siblings, and runs bounded Freeciv21 preparation. All fixtures and evidence stay under the owning
-run's `data/`; the stopped legacy stack is checked for changes.
+siblings, and runs bounded preparation on a real native target (`--target`, default the
+`hello-autotools` fixture; Freeciv21 before ADR-0011). All fixtures and evidence stay under the
+owning run's `data/`. Since ADR-0011 it creates its fixture runs on the host through
+`orchestrator/dagster/code-location.sh run`, and it no longer inspects other Compose projects.
 
 The 2026-09-19 qualification passed in run `20260919T123919Z-0b9e70`:
 [live queue/parallelism/recovery/Freeciv21 report](../../appsec-review-process/runs/20260919T123919Z-0b9e70/data/qualification/workflow-11a97950/report.json).

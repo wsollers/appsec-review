@@ -91,7 +91,8 @@ docker compose -f orchestrator/dagster/compose.yaml restart
 
 Never use `down --volumes` for engagement start-over. PostgreSQL and compute logs have dedicated
 persistent volumes. Rotation is 10 MiB times three files per service; grace period is 30 seconds.
-The stopped `lra-ingestion-harness` stack and its volumes are preserved. The webserver (3000) and
+This project only starts, stops and reports on its own Compose project (`appsec-review`); other
+projects' containers on the same Docker engine are outside its scope and are never inspected. The webserver (3000) and
 PostgreSQL (`${APPSEC_PG_PORT:-55432}`, for the host code location) are published on loopback
 only; the host code location listens on port 4000 (see ADR-0011's addendum for its exposure).
 Stopping the containers does not stop the code location: stop it with Ctrl+C in its terminal. Dagster/Python dependencies and base images are pinned; Debian package versions are

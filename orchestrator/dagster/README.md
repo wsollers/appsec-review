@@ -8,7 +8,7 @@ The normal entry point is `python -B appsec-review-process/launch_job.py --run-i
 It now selects [engagement_workflow](../../docs/dagster/dagster-workflow.md): two concurrent runs globally,
 one per engagement, and up to three independent preparation steps per workflow. Use
 `--job phase1_intake` for the intake-only graph. The queue, monitoring and failure/cancellation
-sensors use the existing persistent instance; the stopped legacy stack is untouched.
+sensors use the existing persistent instance.
 See [Dagster launching](../../docs/dagster/dagster-launching.md): the service runs the graph, while the
 client only submits and monitors. Configuration resolution is a separate visible op.
 
@@ -111,8 +111,8 @@ docker compose -f orchestrator/dagster/compose.yaml up -d
 ```
 
 Use `stop` to preserve containers and volumes. Do not use `down --volumes` to start a new
-engagement. The former `lra-ingestion-harness` stack was stopped, not removed; starting its
-webserver on port 3000 while this stack is running would conflict.
+engagement. This project only starts, stops and reports on its own Compose project (`appsec-review`); other
+projects' containers on the same Docker engine are outside its scope and are never inspected. Port 3000 must be free for this stack's webserver.
 
 Follow the [Phase 1 prompt](../../appsec-review-process/phase-1-implementation-prompt.md),
 [run-data contract](../../docs/dagster/run-data-and-job-execution.md), and

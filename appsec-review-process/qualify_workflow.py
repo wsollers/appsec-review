@@ -1,4 +1,9 @@
-"""Qualify the real Dagster queue, multiprocess branches and branch recovery."""
+"""Qualify the real Dagster queue, multiprocess branches and branch recovery.
+
+ADR-0011: fixture runs are created on the POSIX host in the code location's environment
+(`orchestrator/dagster/code-location.sh run`), with host target paths; the retired code-server
+container is no longer used. Only this project's containers are inspected.
+"""
 import argparse
 from datetime import datetime
 import json
@@ -9,30 +14,30 @@ import uuid
 
 from execution_state import ROOT, atomic_json, data_path, execute, read_json, file_hash, tree_hashes
 from launch_job import launch, find_run, graphql, TERMINAL
-from qualify_phase1 import code_identity, containers, legacy_identity
+from qualify_phase1 import code_identity
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id',required=True)
+    parser.add_argument('--target',default=str(ROOT.parent/'fixtures/targets/hello-autotools'),
+                        help='host path of a real target checkout for the bounded native workflow (default: the hello-autotools fixture)')
     args=parser.parse_args()
     out=data_path(args.run_id,'qualification','workflow-'+uuid.uuid4().hex[:8]);out.mkdir(parents=True)
     identity=code_identity()
     # workflow-plan.json is not a Phase 1 input; record its independent contract too.
     identity['workflow_plan_sha256']=file_hash(ROOT/'workflow-plan.json')
-    legacy=legacy_identity(containers('lra-ingestion-harness'))
     fixture=out/'target'; fixture.mkdir()
     for n in range(100): (fixture/f'fixture{n}.py').write_text('# Static fixture; never executed.\n')
-    linux_target='/runs/'+args.run_id+'/'+str(fixture.relative_to(data_path(args.run_id).parent)).replace('\\','/')
-    # relative_to(run root) begins data/.
-    create="""import sys,json;sys.path.insert(0,'/opt/process');import run_process,phase1
+    target=str(Path(args.target).resolve(strict=True))
+    create="""import sys,json,os;sys.path.insert(0,os.environ['APPSEC_PROCESS_ROOT']);import run_process,phase1
 ids=[]
-for target in [sys.argv[1]]*3+['/targets/freeciv21']:
- rid=run_process.new_run_id();run_process.init_run(rid);phase1.stage(rid,target,'workflow-qualification','Bounded Dagster workflow qualification',['Linux','Windows'],execution_environment='dagster-read-only-linux');ids.append(rid)
+for target in [sys.argv[1]]*3+[sys.argv[2]]:
+ rid=run_process.new_run_id();run_process.init_run(rid);phase1.stage(rid,target,'workflow-qualification','Bounded Dagster workflow qualification',['Linux'],execution_environment='dagster-read-only-linux');ids.append(rid)
 print(json.dumps(ids))"""
-    result=execute(['docker','compose','-f','orchestrator/dagster/compose.yaml','exec','-T','code-server','python','-B','-c',create,linux_target],ROOT.parent,out/'create',120)
+    result=execute(['bash',str(ROOT.parent/'orchestrator/dagster/code-location.sh'),'run','-B','-c',create,str(fixture),target],ROOT.parent,out/'create',120)
     if result['exit_code']!=0: raise RuntimeError('fixture staging failed: '+str(out/'create'))
-    a,b,c,freeciv=json.loads((out/'create/stdout.log').read_text())
+    a,b,c,native_run=json.loads((out/'create/stdout.log').read_text())
     requests=[]
     for rid,request in [(a,'queue-a'),(a,'queue-a-duplicate'),(b,'queue-b')]:
         requests.append(launch(rid,launch_id=request))
@@ -79,15 +84,14 @@ print(json.dumps(ids))"""
     for name,pointer in siblings.items():
         assert read_json(data_path(c,'jobs','00-workflow-preparation',name,'accepted.json'))==pointer
     print('Branch failure blocks join; corrected rerun reuses successful siblings. PASS',flush=True)
-    native=launch(freeciv,launch_id='freeciv-workflow',wait=True)
+    native=launch(native_run,launch_id='native-target-workflow',wait=True)
     assert native['status']=='SUCCESS',native
-    print('Freeciv21 bounded workflow: PASS',flush=True)
+    print('Native target bounded workflow: PASS',flush=True)
     after=code_identity();after['workflow_plan_sha256']=file_hash(ROOT/'workflow-plan.json')
     assert identity==after,'code changed during qualification'
-    assert legacy_identity(containers('lra-ingestion-harness'))==legacy,'legacy stack changed'
-    atomic_json(out/'report.json',{'status':'PASS','tested_identity':identity,'engagement_runs':[a,b,c,freeciv],
-                'requests':requests,'branch_failure':failed,'branch_recovery':resumed,'freeciv':native,
-                'legacy_unchanged':True,'evidence':tree_hashes(out)})
+    atomic_json(out/'report.json',{'status':'PASS','tested_identity':identity,'engagement_runs':[a,b,c,native_run],
+                'requests':requests,'branch_failure':failed,'branch_recovery':resumed,'native_target':native,
+                'native_target_path':target,'evidence':tree_hashes(out)})
     atomic_json(data_path(args.run_id,'qualification','latest.json'),{'status':'PASS','report':str(out/'report.json'),'sha256':file_hash(out/'report.json')})
     print(json.dumps({'status':'PASS','report':str(out/'report.json')}),flush=True)
 
