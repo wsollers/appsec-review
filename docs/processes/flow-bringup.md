@@ -291,4 +291,10 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   the reviewed revision and writes `prompt-vetting.json` only with a named approval and a reason; it
   never rehashes blindly (sandbox: diff-only, wrong-prior-hash, missing-approver, write and re-run
   cases all behave).
+- 2026-09-23 -- **Phase 1 ACCEPTED under ADR-0011**: `qualify_phase1.py` on run
+  `20260923T172004Z-136043` (batch `q-ee054f49`), all gates A01-A16 pass, no blockers. A01 via
+  `attest_prompt.py`: William approved the two-line reference-path diff since the reviewed spec
+  (`7c26b5d`), carrying the 2026-09-19 review forward to the current hash `273676ad...`. Phase 2's
+  code-server removal is fully qualified; remaining Phase 2 items (persistent code location on
+  Windows, systemd example, native-Linux bind) do not block Phase 3.
 
