@@ -382,3 +382,8 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   fixture to SARIF and report; stage 1 `sut-checkout` is built (deletes a clean existing clone,
   re-clones at the pin, checks HEAD, cleanliness, origin, no answer key); the other 14 stages stop the
   SAT with `NOT_IMPLEMENTED` until each is built. The fixture checkout in the Windows clone was deleted.
+- 2026-09-23 -- SAT stage 1 `sut-checkout` passed in WSL (SAT `20260923T200400Z`: `632522b`, tree
+  `57b620b`, 24 files, clean, no answer key). Stage 2 `services` built: Docker engine, `.env` code
+  location address vs this WSL boot, `compose up -d` and health, the webserver's resolution of
+  `host.docker.internal`, gRPC check, reload `LOADED`, required jobs loaded, required daemons healthy.
+  On `--resume`, the checkout is re-verified instead of trusted.

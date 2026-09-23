@@ -24,7 +24,7 @@ PY="${PY:-$HOME/.venvs/appsec-review-dagster/bin/python}"
 # Stage table: id|built(1/0)|what it proves. Order is the process flow (docs/processes/job-catalog.md).
 STAGES=(
   "sut-checkout|1|Fresh clone of the fixture at its pinned commit; clean; no answer key on the branch"
-  "services|0|Dagster services healthy; host code location serving; job list reloaded"
+  "services|1|Dagster services healthy; host code location serving; job list reloaded"
   "run-create|0|run_process.py --start creates the run and its folders"
   "stage-inputs|0|stage_artifacts.py writes a valid artifact manifest (executor platform posix)"
   "intake|0|00-intake accepted (phase1_intake)"
@@ -116,6 +116,102 @@ stage_sut_checkout() {
   echo "sut-checkout: PASS  $name at ${head:0:7} (tree ${tree:0:7}, $files tracked files, clean, no answer key)"
 }
 
+# ---- stage 2: services ---------------------------------------------------------------------------
+# Brings up this project's own Compose services (idempotent; recreates webserver/daemon if the code
+# location address changed) and checks the host code location, which runs in the foreground in its
+# own terminal and is therefore checked, not started.
+SAT_REQUIRED_JOBS="phase1_intake repository_partition_discovery dev_project_discovery engagement_workflow full_review"
+
+graphql() {  # graphql <query> -> the response's "data" as JSON on stdout
+  python3 -c '
+import json, sys, urllib.request
+req = urllib.request.Request("http://127.0.0.1:3000/graphql", data=json.dumps({"query": sys.argv[1]}).encode(),
+                             headers={"Content-Type": "application/json"})
+with urllib.request.urlopen(req, timeout=30) as r:
+    body = json.load(r)
+if body.get("errors"):
+    sys.exit("graphql errors: " + json.dumps(body["errors"]))
+print(json.dumps(body["data"]))' "$1"
+}
+
+compose_states() {  # "postgres=running/healthy daemon=... webserver=..."
+  "${COMPOSE[@]}" ps --format json | python3 -c '
+import json, sys
+text = sys.stdin.read().strip()
+rows = json.loads(text) if text.startswith("[") else [json.loads(l) for l in text.splitlines() if l.strip()]
+print(" ".join("%s=%s/%s" % (r["Service"], r.get("State"), r.get("Health") or "-") for r in sorted(rows, key=lambda r: r["Service"])))'
+}
+
+stage_services() {
+  local dagster="$REPO/orchestrator/dagster" cl="$REPO/orchestrator/dagster/code-location.sh"
+  COMPOSE=(docker compose -f "$dagster/compose.yaml")
+
+  # 1. Docker engine answers.
+  local engine
+  engine="$(timeout 30 docker version --format '{{.Server.Version}}' 2>&1)" || die "services: Docker engine not answering ($engine).
+  Recover: stop the code location (Ctrl+C), 'wsl --shutdown' from Windows, restart Docker Desktop, then
+  orchestrator/dagster/code-location.sh start (own terminal) and re-run this stage."
+  echo "docker engine $engine"
+
+  # 2. Settings exist, and the code location address in .env matches this WSL boot.
+  [[ -f "$dagster/.env" ]] || die "services: $dagster/.env missing; run: python3 orchestrator/dagster/setup.py"
+  local env_host wsl_ip=""
+  env_host="$(sed -n 's/^APPSEC_CODE_LOCATION_HOST=//p' "$dagster/.env" | tr -d '\r')"
+  if [[ "$(wslinfo --networking-mode 2>/dev/null)" == nat ]]; then
+    wsl_ip="$(ip -4 -o addr show dev eth0 | awk '{split($4,a,"/"); print a[1]; exit}')"
+    [[ "$env_host" == "$wsl_ip" ]] || die "services: .env APPSEC_CODE_LOCATION_HOST=${env_host:-unset}, but this WSL boot's IP is $wsl_ip.
+  Restart the code location (orchestrator/dagster/code-location.sh start) so it rewrites .env, then re-run."
+  fi
+
+  # 3. This project's Compose services up and healthy. 'up -d' is idempotent and recreates
+  #    webserver/daemon when the code location address changed.
+  "${COMPOSE[@]}" up -d
+  local deadline=$((SECONDS + 240)) states svc ok
+  while :; do
+    states="$(compose_states)"; ok=1
+    for svc in postgres webserver daemon; do [[ " $states " == *" $svc=running/healthy "* ]] || ok=0; done
+    [[ $ok == 1 ]] && break
+    (( SECONDS < deadline )) || die "services: not healthy after 240 s: $states"
+    sleep 5
+  done
+  echo "compose: $states"
+
+  # 4. The webserver resolves host.docker.internal to the code location's address.
+  local resolved
+  resolved="$("${COMPOSE[@]}" exec -T webserver getent hosts host.docker.internal | awk '{print $1; exit}')"
+  if [[ -n "$wsl_ip" && "$resolved" != "$wsl_ip" ]]; then
+    die "services: webserver resolves host.docker.internal to ${resolved:-nothing}, expected $wsl_ip; run: ${COMPOSE[*]} up -d --force-recreate webserver daemon"
+  fi
+  echo "webserver: host.docker.internal -> $resolved"
+
+  # 5. Host code location serving (gRPC health); the webserver then reloads the current job code.
+  "$cl" check >/dev/null 2>&1 || die "services: host code location not answering on port 4000.
+  Start it in its own terminal: orchestrator/dagster/code-location.sh start (wait for 'Started'), then re-run."
+  echo "code location: gRPC health OK"
+  local reload
+  reload="$("$cl" reload 2>&1)" || die "services: reload failed: $reload"
+  echo "$reload"
+  [[ "$reload" == *'"loadStatus": "LOADED"'* ]] || die "services: code location did not report LOADED: $reload"
+
+  # 6. The loaded job list has the jobs this SAT drives, and every daemon Dagster requires is healthy.
+  local jobs daemons missing="" j
+  jobs="$(graphql '{ repositoriesOrError { ... on RepositoryConnection { nodes { name location { name } jobs { name } } } } }' \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(sorted(j["name"] for n in d["repositoriesOrError"]["nodes"] if n["location"]["name"]=="appsec_review" for j in n["jobs"])))')" \
+    || die "services: could not read the job list from the webserver"
+  for j in $SAT_REQUIRED_JOBS; do [[ " $jobs " == *" $j "* ]] || missing+=" $j"; done
+  [[ -z "$missing" ]] || die "services: loaded job list lacks:$missing (loaded: $jobs)"
+  daemons="$(graphql '{ instance { daemonHealth { allDaemonStatuses { daemonType required healthy } } } }' \
+    | python3 -c 'import json,sys; s=json.load(sys.stdin)["instance"]["daemonHealth"]["allDaemonStatuses"]; bad=[d["daemonType"] for d in s if d["required"] and not d["healthy"]]; print(("UNHEALTHY: " + " ".join(bad)) if bad else " ".join(sorted(d["daemonType"] for d in s if d["required"])))')" \
+    || die "services: could not read daemon health from the webserver"
+  [[ "$daemons" != UNHEALTHY* ]] || die "services: required Dagster daemons $daemons"
+  echo "jobs loaded: $jobs"
+  echo "required daemons healthy: $daemons"
+
+  record PASS services "$(python3 -c 'import json,sys; k=["docker_engine","compose","code_location_host","webserver_resolves","reload","jobs","required_daemons"]; print(json.dumps(dict(zip(k, sys.argv[1:]))))' \
+    "$engine" "$states" "${wsl_ip:-$env_host}" "$resolved" LOADED "$jobs" "$daemons")"
+  echo "services: PASS  engine $engine; postgres, webserver, daemon healthy; code location LOADED; SAT jobs present"
+}
+
 # ---- driver --------------------------------------------------------------------------------------
 FIXTURE=hello-autotools; THROUGH=""; RESUME=""
 while [[ $# -gt 0 ]]; do
@@ -147,7 +243,15 @@ fi
 echo "SAT $(sat_get sat_id)  fixture $FIXTURE  record ${SAT_DIR#$REPO/}"
 
 for id in $(stage_ids); do
-  if [[ "$(stage_status "$id")" == PASS ]]; then
+  if [[ "$(stage_status "$id")" == PASS && "$id" == sut-checkout ]]; then
+    # Later stages read this checkout, so on resume it is re-verified rather than trusted.
+    head_now="$(git -C "$REPO/fixtures/targets/$FIXTURE" rev-parse HEAD 2>/dev/null || true)"
+    head_then="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["stages"]["sut-checkout"]["evidence"]["head"])' "$SAT_DIR/sat.json")"
+    if [[ "$head_now" != "$head_then" || -n "$(git -C "$REPO/fixtures/targets/$FIXTURE" status --porcelain --untracked-files=all 2>/dev/null)" ]]; then
+      echo "sut-checkout: the checkout changed since this SAT's stage 1 (HEAD ${head_now:-missing}, or local changes); start a new SAT"; exit 1
+    fi
+    echo "sut-checkout: already PASS in this SAT; checkout re-verified (${head_now:0:7}, clean)"
+  elif [[ "$(stage_status "$id")" == PASS ]]; then
     echo "$id: already PASS in this SAT"
   elif [[ "$(stage_field "$id" 1)" != 1 ]]; then
     record NOT_IMPLEMENTED "$id" ""
