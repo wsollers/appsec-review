@@ -1,0 +1,724 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Defs_PreSubmission" targetNamespace="https://github.com/wsollers/appsec-review/bpmn" exporter="appsec-review" exporterVersion="1">
+  <bpmn:collaboration id="Collab_PreSubmission">
+    <bpmn:participant id="P_Engineer" name="Security engineer (host)" processRef="Proc_Engineer" />
+    <bpmn:participant id="P_Dagster" name="Dagster services" processRef="Proc_Dagster" />
+    <bpmn:messageFlow id="MF_presubmit" name="intake + gate jobs" sourceRef="Sub_PreSubmit" targetRef="D_start" />
+    <bpmn:messageFlow id="MF_submit" name="launchRun" sourceRef="Sub_Submit" targetRef="D_start" />
+    <bpmn:messageFlow id="MF_response" name="QUEUED or rejected" sourceRef="D_respond" targetRef="Sub_Submit" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Engineer" name="Pre-submission: engagement up to Dagster acceptance" isExecutable="false">
+    <bpmn:startEvent id="Start_Engagement" name="Engagement requested">
+      <bpmn:outgoing>Flow_Start_Engagement_Sub_Checkout</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:subProcess id="Sub_Checkout" name="1. Check out system under test">
+      <bpmn:incoming>Flow_Start_Engagement_Sub_Checkout</bpmn:incoming>
+      <bpmn:outgoing>Flow_Sub_Checkout_Sub_Services</bpmn:outgoing>
+      <bpmn:startEvent id="sp1_start" name="SUT needed at a known revision">
+        <bpmn:outgoing>Flow_sp1_start_sp1_have</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:exclusiveGateway id="sp1_have" name="Checkout exists?">
+        <bpmn:incoming>Flow_sp1_start_sp1_have</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_have_sp1_clone</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp1_have_sp1_isgit</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:scriptTask id="sp1_clone" name="git clone origin">
+        <bpmn:incoming>Flow_sp1_have_sp1_clone</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_clone_sp1_merge</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp1_isgit" name="Is a git clone?">
+        <bpmn:incoming>Flow_sp1_have_sp1_isgit</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_isgit_sp1_notgit</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp1_isgit_sp1_origin</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp1_notgit" name="Refuse: not a clone (move aside)">
+        <bpmn:incoming>Flow_sp1_isgit_sp1_notgit</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp1_notgit" />
+      </bpmn:endEvent>
+      <bpmn:scriptTask id="sp1_origin" name="Verify origin URL">
+        <bpmn:incoming>Flow_sp1_isgit_sp1_origin</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_origin_sp1_originok</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp1_originok" name="Origin matches pin?">
+        <bpmn:incoming>Flow_sp1_origin_sp1_originok</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_originok_sp1_badorigin</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp1_originok_sp1_status</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp1_badorigin" name="Refuse: wrong origin">
+        <bpmn:incoming>Flow_sp1_originok_sp1_badorigin</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp1_badorigin" />
+      </bpmn:endEvent>
+      <bpmn:scriptTask id="sp1_status" name="Check working tree (git status)">
+        <bpmn:incoming>Flow_sp1_originok_sp1_status</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_status_sp1_clean</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp1_clean" name="Local changes?">
+        <bpmn:incoming>Flow_sp1_status_sp1_clean</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_clean_sp1_dirty</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp1_clean_sp1_fetch</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp1_dirty" name="Refuse: local changes (never reset)">
+        <bpmn:incoming>Flow_sp1_clean_sp1_dirty</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp1_dirty" />
+      </bpmn:endEvent>
+      <bpmn:scriptTask id="sp1_fetch" name="git fetch origin">
+        <bpmn:incoming>Flow_sp1_clean_sp1_fetch</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_fetch_sp1_merge</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp1_merge" name="">
+        <bpmn:incoming>Flow_sp1_clone_sp1_merge</bpmn:incoming>
+        <bpmn:incoming>Flow_sp1_fetch_sp1_merge</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_merge_sp1_checkout</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:scriptTask id="sp1_checkout" name="Check out pinned commit">
+        <bpmn:incoming>Flow_sp1_merge_sp1_checkout</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_checkout_sp1_verify</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp1_verify" name="HEAD == pinned commit?">
+        <bpmn:incoming>Flow_sp1_checkout_sp1_verify</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp1_verify_sp1_badhead</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp1_verify_sp1_end</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp1_badhead" name="Refuse: HEAD mismatch">
+        <bpmn:incoming>Flow_sp1_verify_sp1_badhead</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp1_badhead" />
+      </bpmn:endEvent>
+      <bpmn:endEvent id="sp1_end" name="SUT at pinned commit, clean">
+        <bpmn:incoming>Flow_sp1_verify_sp1_end</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_sp1_start_sp1_have" sourceRef="sp1_start" targetRef="sp1_have" />
+      <bpmn:sequenceFlow id="Flow_sp1_have_sp1_clone" name="no" sourceRef="sp1_have" targetRef="sp1_clone" />
+      <bpmn:sequenceFlow id="Flow_sp1_have_sp1_isgit" name="yes" sourceRef="sp1_have" targetRef="sp1_isgit" />
+      <bpmn:sequenceFlow id="Flow_sp1_clone_sp1_merge" sourceRef="sp1_clone" targetRef="sp1_merge" />
+      <bpmn:sequenceFlow id="Flow_sp1_isgit_sp1_notgit" name="no" sourceRef="sp1_isgit" targetRef="sp1_notgit" />
+      <bpmn:sequenceFlow id="Flow_sp1_isgit_sp1_origin" name="yes" sourceRef="sp1_isgit" targetRef="sp1_origin" />
+      <bpmn:sequenceFlow id="Flow_sp1_origin_sp1_originok" sourceRef="sp1_origin" targetRef="sp1_originok" />
+      <bpmn:sequenceFlow id="Flow_sp1_originok_sp1_badorigin" name="no" sourceRef="sp1_originok" targetRef="sp1_badorigin" />
+      <bpmn:sequenceFlow id="Flow_sp1_originok_sp1_status" name="yes" sourceRef="sp1_originok" targetRef="sp1_status" />
+      <bpmn:sequenceFlow id="Flow_sp1_status_sp1_clean" sourceRef="sp1_status" targetRef="sp1_clean" />
+      <bpmn:sequenceFlow id="Flow_sp1_clean_sp1_dirty" name="yes" sourceRef="sp1_clean" targetRef="sp1_dirty" />
+      <bpmn:sequenceFlow id="Flow_sp1_clean_sp1_fetch" name="no" sourceRef="sp1_clean" targetRef="sp1_fetch" />
+      <bpmn:sequenceFlow id="Flow_sp1_fetch_sp1_merge" sourceRef="sp1_fetch" targetRef="sp1_merge" />
+      <bpmn:sequenceFlow id="Flow_sp1_merge_sp1_checkout" sourceRef="sp1_merge" targetRef="sp1_checkout" />
+      <bpmn:sequenceFlow id="Flow_sp1_checkout_sp1_verify" sourceRef="sp1_checkout" targetRef="sp1_verify" />
+      <bpmn:sequenceFlow id="Flow_sp1_verify_sp1_badhead" name="no" sourceRef="sp1_verify" targetRef="sp1_badhead" />
+      <bpmn:sequenceFlow id="Flow_sp1_verify_sp1_end" name="yes" sourceRef="sp1_verify" targetRef="sp1_end" />
+      <bpmn:textAnnotation id="sp1_n1"><bpmn:text>Fixtures: fixtures/populate-targets.sh (origin + pinned commit per fixture). Real engagement: the engineer checks out the agreed revision; the same checks apply.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp1_n1" sourceRef="sp1_start" targetRef="sp1_n1" />
+    </bpmn:subProcess>
+    <bpmn:subProcess id="Sub_Services" name="2. Start services">
+      <bpmn:incoming>Flow_Sub_Checkout_Sub_Services</bpmn:incoming>
+      <bpmn:outgoing>Flow_Sub_Services_Sub_Engagement</bpmn:outgoing>
+      <bpmn:startEvent id="sp2_start" name="Services needed">
+        <bpmn:outgoing>Flow_sp2_start_sp2_docker</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:scriptTask id="sp2_docker" name="docker version (engine answers?)">
+        <bpmn:incoming>Flow_sp2_start_sp2_docker</bpmn:incoming>
+        <bpmn:incoming>Flow_sp2_recover_sp2_docker</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_docker_sp2_dockok</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp2_dockok" name="Engine answers?">
+        <bpmn:incoming>Flow_sp2_docker_sp2_dockok</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_dockok_sp2_recover</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp2_dockok_sp2_first</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:userTask id="sp2_recover" name="Recover Docker: wsl --shutdown, restart Docker Desktop">
+        <bpmn:incoming>Flow_sp2_dockok_sp2_recover</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_recover_sp2_docker</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:exclusiveGateway id="sp2_first" name="First setup?">
+        <bpmn:incoming>Flow_sp2_dockok_sp2_first</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_first_sp2_setup</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp2_first_sp2_m1</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:scriptTask id="sp2_setup" name="setup.py: .env password, uid/gid, .host/ as operator">
+        <bpmn:incoming>Flow_sp2_first_sp2_setup</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_setup_sp2_m1</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp2_m1" name="">
+        <bpmn:incoming>Flow_sp2_first_sp2_m1</bpmn:incoming>
+        <bpmn:incoming>Flow_sp2_setup_sp2_m1</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_m1_sp2_up</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:scriptTask id="sp2_up" name="compose up -d">
+        <bpmn:incoming>Flow_sp2_m1_sp2_up</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_up_sp2_ps</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:scriptTask id="sp2_ps" name="compose ps: service health">
+        <bpmn:incoming>Flow_sp2_up_sp2_ps</bpmn:incoming>
+        <bpmn:incoming>Flow_sp2_wait_sp2_ps</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_ps_sp2_healthy</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp2_healthy" name="3 services healthy?">
+        <bpmn:incoming>Flow_sp2_ps_sp2_healthy</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_healthy_sp2_wait</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp2_healthy_sp2_cl</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:intermediateCatchEvent id="sp2_wait" name="Wait, re-check">
+        <bpmn:incoming>Flow_sp2_healthy_sp2_wait</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_wait_sp2_ps</bpmn:outgoing>
+        <bpmn:timerEventDefinition />
+      </bpmn:intermediateCatchEvent>
+      <bpmn:scriptTask id="sp2_cl" name="code-location.sh start (venv, prerequisites, code-server)">
+        <bpmn:incoming>Flow_sp2_healthy_sp2_cl</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_cl_sp2_ip</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp2_ip" name="WSL NAT IP changed?">
+        <bpmn:incoming>Flow_sp2_cl_sp2_ip</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_ip_sp2_recreate</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp2_ip_sp2_m2</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:scriptTask id="sp2_recreate" name="Update .env host; recreate webserver + daemon">
+        <bpmn:incoming>Flow_sp2_ip_sp2_recreate</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_recreate_sp2_m2</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp2_m2" name="">
+        <bpmn:incoming>Flow_sp2_ip_sp2_m2</bpmn:incoming>
+        <bpmn:incoming>Flow_sp2_recreate_sp2_m2</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_m2_sp2_check</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:scriptTask id="sp2_check" name="code-location.sh check (gRPC health)">
+        <bpmn:incoming>Flow_sp2_m2_sp2_check</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_check_sp2_reload</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:scriptTask id="sp2_reload" name="code-location.sh reload (retries 60 s)">
+        <bpmn:incoming>Flow_sp2_check_sp2_reload</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_reload_sp2_loaded</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp2_loaded" name="Location LOADED?">
+        <bpmn:incoming>Flow_sp2_reload_sp2_loaded</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp2_loaded_sp2_loaderr</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp2_loaded_sp2_end</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp2_loaderr" name="Definitions fail to import: fix, reload">
+        <bpmn:incoming>Flow_sp2_loaded_sp2_loaderr</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp2_loaderr" />
+      </bpmn:endEvent>
+      <bpmn:endEvent id="sp2_end" name="Services ready, jobs current">
+        <bpmn:incoming>Flow_sp2_loaded_sp2_end</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_sp2_start_sp2_docker" sourceRef="sp2_start" targetRef="sp2_docker" />
+      <bpmn:sequenceFlow id="Flow_sp2_docker_sp2_dockok" sourceRef="sp2_docker" targetRef="sp2_dockok" />
+      <bpmn:sequenceFlow id="Flow_sp2_dockok_sp2_recover" name="no" sourceRef="sp2_dockok" targetRef="sp2_recover" />
+      <bpmn:sequenceFlow id="Flow_sp2_recover_sp2_docker" name="retry" sourceRef="sp2_recover" targetRef="sp2_docker" />
+      <bpmn:sequenceFlow id="Flow_sp2_dockok_sp2_first" name="yes" sourceRef="sp2_dockok" targetRef="sp2_first" />
+      <bpmn:sequenceFlow id="Flow_sp2_first_sp2_setup" name="yes" sourceRef="sp2_first" targetRef="sp2_setup" />
+      <bpmn:sequenceFlow id="Flow_sp2_first_sp2_m1" name="no" sourceRef="sp2_first" targetRef="sp2_m1" />
+      <bpmn:sequenceFlow id="Flow_sp2_setup_sp2_m1" sourceRef="sp2_setup" targetRef="sp2_m1" />
+      <bpmn:sequenceFlow id="Flow_sp2_m1_sp2_up" sourceRef="sp2_m1" targetRef="sp2_up" />
+      <bpmn:sequenceFlow id="Flow_sp2_up_sp2_ps" sourceRef="sp2_up" targetRef="sp2_ps" />
+      <bpmn:sequenceFlow id="Flow_sp2_ps_sp2_healthy" sourceRef="sp2_ps" targetRef="sp2_healthy" />
+      <bpmn:sequenceFlow id="Flow_sp2_healthy_sp2_wait" name="no" sourceRef="sp2_healthy" targetRef="sp2_wait" />
+      <bpmn:sequenceFlow id="Flow_sp2_wait_sp2_ps" sourceRef="sp2_wait" targetRef="sp2_ps" />
+      <bpmn:sequenceFlow id="Flow_sp2_healthy_sp2_cl" name="yes" sourceRef="sp2_healthy" targetRef="sp2_cl" />
+      <bpmn:sequenceFlow id="Flow_sp2_cl_sp2_ip" sourceRef="sp2_cl" targetRef="sp2_ip" />
+      <bpmn:sequenceFlow id="Flow_sp2_ip_sp2_recreate" name="yes" sourceRef="sp2_ip" targetRef="sp2_recreate" />
+      <bpmn:sequenceFlow id="Flow_sp2_ip_sp2_m2" name="no" sourceRef="sp2_ip" targetRef="sp2_m2" />
+      <bpmn:sequenceFlow id="Flow_sp2_recreate_sp2_m2" sourceRef="sp2_recreate" targetRef="sp2_m2" />
+      <bpmn:sequenceFlow id="Flow_sp2_m2_sp2_check" sourceRef="sp2_m2" targetRef="sp2_check" />
+      <bpmn:sequenceFlow id="Flow_sp2_check_sp2_reload" sourceRef="sp2_check" targetRef="sp2_reload" />
+      <bpmn:sequenceFlow id="Flow_sp2_reload_sp2_loaded" sourceRef="sp2_reload" targetRef="sp2_loaded" />
+      <bpmn:sequenceFlow id="Flow_sp2_loaded_sp2_loaderr" name="no" sourceRef="sp2_loaded" targetRef="sp2_loaderr" />
+      <bpmn:sequenceFlow id="Flow_sp2_loaded_sp2_end" name="yes" sourceRef="sp2_loaded" targetRef="sp2_end" />
+      <bpmn:textAnnotation id="sp2_n1"><bpmn:text>Only this project's Compose project (appsec-review) is started, stopped or inspected.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp2_n1" sourceRef="sp2_up" targetRef="sp2_n1" />
+    </bpmn:subProcess>
+    <bpmn:subProcess id="Sub_Engagement" name="3. Launch engagement">
+      <bpmn:incoming>Flow_Sub_Services_Sub_Engagement</bpmn:incoming>
+      <bpmn:outgoing>Flow_Sub_Engagement_Sub_PreSubmit</bpmn:outgoing>
+      <bpmn:startEvent id="sp3_start" name="Engagement approved">
+        <bpmn:outgoing>Flow_sp3_start_sp3_define</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:userTask id="sp3_define" name="Define engagement: business goal, platforms, budget, scope, permissions">
+        <bpmn:incoming>Flow_sp3_start_sp3_define</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp3_define_sp3_grant</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:userTask id="sp3_grant" name="Named human grants permissions beyond read-source">
+        <bpmn:incoming>Flow_sp3_define_sp3_grant</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp3_grant_sp3_create</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:scriptTask id="sp3_create" name="run_process.py --start: new run ID and run-owned folders">
+        <bpmn:incoming>Flow_sp3_grant_sp3_create</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp3_create_sp3_stage</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:scriptTask id="sp3_stage" name="stage_artifacts.py: write artifact manifest (host --target)">
+        <bpmn:incoming>Flow_sp3_create_sp3_stage</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp3_stage_sp3_ok</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp3_ok" name="Staging accepted?">
+        <bpmn:incoming>Flow_sp3_stage_sp3_ok</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp3_ok_sp3_blocked</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp3_ok_sp3_end</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp3_blocked" name="Blocked: wrong platform, legacy run, or unimported evidence: create a new run">
+        <bpmn:incoming>Flow_sp3_ok_sp3_blocked</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp3_blocked" />
+      </bpmn:endEvent>
+      <bpmn:endEvent id="sp3_end" name="Run staged (executor platform posix, inputs fingerprinted)">
+        <bpmn:incoming>Flow_sp3_ok_sp3_end</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_sp3_start_sp3_define" sourceRef="sp3_start" targetRef="sp3_define" />
+      <bpmn:sequenceFlow id="Flow_sp3_define_sp3_grant" sourceRef="sp3_define" targetRef="sp3_grant" />
+      <bpmn:sequenceFlow id="Flow_sp3_grant_sp3_create" sourceRef="sp3_grant" targetRef="sp3_create" />
+      <bpmn:sequenceFlow id="Flow_sp3_create_sp3_stage" sourceRef="sp3_create" targetRef="sp3_stage" />
+      <bpmn:sequenceFlow id="Flow_sp3_stage_sp3_ok" sourceRef="sp3_stage" targetRef="sp3_ok" />
+      <bpmn:sequenceFlow id="Flow_sp3_ok_sp3_blocked" name="no" sourceRef="sp3_ok" targetRef="sp3_blocked" />
+      <bpmn:sequenceFlow id="Flow_sp3_ok_sp3_end" name="yes" sourceRef="sp3_ok" targetRef="sp3_end" />
+      <bpmn:textAnnotation id="sp3_n1"><bpmn:text>Capture the run ID in the command itself; never a RUN=&lt;placeholder&gt; line.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp3_n1" sourceRef="sp3_create" targetRef="sp3_n1" />
+    </bpmn:subProcess>
+    <bpmn:subProcess id="Sub_PreSubmit" name="4. Pre-submittal processing (intake, discovery gates)">
+      <bpmn:incoming>Flow_Sub_Engagement_Sub_PreSubmit</bpmn:incoming>
+      <bpmn:outgoing>Flow_Sub_PreSubmit_Sub_Submit</bpmn:outgoing>
+      <bpmn:startEvent id="sp4_start" name="Run staged">
+        <bpmn:outgoing>Flow_sp4_start_sp4_intake</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:sendTask id="sp4_intake" name="Launch and await phase1_intake">
+        <bpmn:incoming>Flow_sp4_start_sp4_intake</bpmn:incoming>
+        <bpmn:incoming>Flow_sp4_intfix_sp4_intake</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_intake_sp4_intok</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:exclusiveGateway id="sp4_intok" name="Intake SUCCESS?">
+        <bpmn:incoming>Flow_sp4_intake_sp4_intok</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_intok_sp4_intfix</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp4_intok_sp4_pgate</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:userTask id="sp4_intfix" name="Inspect failure; correct inputs; restage">
+        <bpmn:incoming>Flow_sp4_intok_sp4_intfix</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_intfix_sp4_intake</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:sendTask id="sp4_pgate" name="Launch and await repository_partition_discovery">
+        <bpmn:incoming>Flow_sp4_intok_sp4_pgate</bpmn:incoming>
+        <bpmn:incoming>Flow_sp4_psupply_sp4_pgate</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_pgate_sp4_pok</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:exclusiveGateway id="sp4_pok" name="Partition map accepted?">
+        <bpmn:incoming>Flow_sp4_pgate_sp4_pok</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_pok_sp4_panalyze</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp4_pok_sp4_dgate</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:userTask id="sp4_panalyze" name="Produce partition map from the hand-off (analyst/agent; fixture: tracked record)">
+        <bpmn:incoming>Flow_sp4_pok_sp4_panalyze</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_panalyze_sp4_psupply</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:scriptTask id="sp4_psupply" name="supply_record.py: commit + clean-tree check, install supplied result">
+        <bpmn:incoming>Flow_sp4_panalyze_sp4_psupply</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_psupply_sp4_pgate</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:sendTask id="sp4_dgate" name="Launch and await dev_project_discovery">
+        <bpmn:incoming>Flow_sp4_pok_sp4_dgate</bpmn:incoming>
+        <bpmn:incoming>Flow_sp4_dsupply_sp4_dgate</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_dgate_sp4_dok</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:exclusiveGateway id="sp4_dok" name="Project discovery accepted?">
+        <bpmn:incoming>Flow_sp4_dgate_sp4_dok</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_dok_sp4_danalyze</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp4_dok_sp4_end</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:userTask id="sp4_danalyze" name="Produce project discovery: manifests, build image, safe command plan">
+        <bpmn:incoming>Flow_sp4_dok_sp4_danalyze</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_danalyze_sp4_dsupply</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:scriptTask id="sp4_dsupply" name="supply_record.py for 02-dev-project-discovery">
+        <bpmn:incoming>Flow_sp4_danalyze_sp4_dsupply</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_dsupply_sp4_dgate</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:endEvent id="sp4_end" name="Pre-submittal complete: intake, partition map, project plan accepted">
+        <bpmn:incoming>Flow_sp4_dok_sp4_end</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_sp4_start_sp4_intake" sourceRef="sp4_start" targetRef="sp4_intake" />
+      <bpmn:sequenceFlow id="Flow_sp4_intake_sp4_intok" sourceRef="sp4_intake" targetRef="sp4_intok" />
+      <bpmn:sequenceFlow id="Flow_sp4_intok_sp4_intfix" name="no" sourceRef="sp4_intok" targetRef="sp4_intfix" />
+      <bpmn:sequenceFlow id="Flow_sp4_intfix_sp4_intake" name="retry" sourceRef="sp4_intfix" targetRef="sp4_intake" />
+      <bpmn:sequenceFlow id="Flow_sp4_intok_sp4_pgate" name="yes" sourceRef="sp4_intok" targetRef="sp4_pgate" />
+      <bpmn:sequenceFlow id="Flow_sp4_pgate_sp4_pok" sourceRef="sp4_pgate" targetRef="sp4_pok" />
+      <bpmn:sequenceFlow id="Flow_sp4_pok_sp4_panalyze" name="no: hand-off issued or record invalid" sourceRef="sp4_pok" targetRef="sp4_panalyze" />
+      <bpmn:sequenceFlow id="Flow_sp4_panalyze_sp4_psupply" sourceRef="sp4_panalyze" targetRef="sp4_psupply" />
+      <bpmn:sequenceFlow id="Flow_sp4_psupply_sp4_pgate" sourceRef="sp4_psupply" targetRef="sp4_pgate" />
+      <bpmn:sequenceFlow id="Flow_sp4_pok_sp4_dgate" name="yes" sourceRef="sp4_pok" targetRef="sp4_dgate" />
+      <bpmn:sequenceFlow id="Flow_sp4_dgate_sp4_dok" sourceRef="sp4_dgate" targetRef="sp4_dok" />
+      <bpmn:sequenceFlow id="Flow_sp4_dok_sp4_danalyze" name="no: hand-off issued or record invalid" sourceRef="sp4_dok" targetRef="sp4_danalyze" />
+      <bpmn:sequenceFlow id="Flow_sp4_danalyze_sp4_dsupply" sourceRef="sp4_danalyze" targetRef="sp4_dsupply" />
+      <bpmn:sequenceFlow id="Flow_sp4_dsupply_sp4_dgate" sourceRef="sp4_dsupply" targetRef="sp4_dgate" />
+      <bpmn:sequenceFlow id="Flow_sp4_dok_sp4_end" name="yes" sourceRef="sp4_dok" targetRef="sp4_end" />
+      <bpmn:textAnnotation id="sp4_n1"><bpmn:text>Gates validate: schema, normalized paths, personas, citation SHA-256 freshness, no finding/severity claims. Dev discovery also requires the accepted partition map at the same revision.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp4_n1" sourceRef="sp4_pgate" targetRef="sp4_n1" />
+      <bpmn:textAnnotation id="sp4_n2"><bpmn:text>Each launch follows "Submit to Dagster" (--wait); Dagster then executes the job in the host code location.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp4_n2" sourceRef="sp4_intake" targetRef="sp4_n2" />
+    </bpmn:subProcess>
+    <bpmn:subProcess id="Sub_Submit" name="5. Submit engagement job to Dagster">
+      <bpmn:incoming>Flow_Sub_PreSubmit_Sub_Submit</bpmn:incoming>
+      <bpmn:outgoing>Flow_Sub_Submit_End_Accepted</bpmn:outgoing>
+      <bpmn:startEvent id="sp5_start" name="Ready to submit">
+        <bpmn:outgoing>Flow_sp5_start_sp5_manifest</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:scriptTask id="sp5_manifest" name="Read staged manifest">
+        <bpmn:incoming>Flow_sp5_start_sp5_manifest</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_manifest_sp5_posix</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp5_posix" name="orchestration v1 and posix-staged?">
+        <bpmn:incoming>Flow_sp5_manifest_sp5_posix</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_posix_sp5_notposix</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp5_posix_sp5_job</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp5_notposix" name="Blocked: stage on the POSIX host">
+        <bpmn:incoming>Flow_sp5_posix_sp5_notposix</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp5_notposix" />
+      </bpmn:endEvent>
+      <bpmn:exclusiveGateway id="sp5_job" name="Registered job?">
+        <bpmn:incoming>Flow_sp5_posix_sp5_job</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_job_sp5_badjob</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp5_job_sp5_request</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp5_badjob" name="Blocked: unsupported job">
+        <bpmn:incoming>Flow_sp5_job_sp5_badjob</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp5_badjob" />
+      </bpmn:endEvent>
+      <bpmn:scriptTask id="sp5_request" name="Create or lock launch request (launch ID, request.json)">
+        <bpmn:incoming>Flow_sp5_job_sp5_request</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_request_sp5_same</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp5_same" name="Same config as existing request?">
+        <bpmn:incoming>Flow_sp5_request_sp5_same</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_same_sp5_changed</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp5_same_sp5_find</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp5_changed" name="Blocked: use a new launch ID">
+        <bpmn:incoming>Flow_sp5_same_sp5_changed</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp5_changed" />
+      </bpmn:endEvent>
+      <bpmn:scriptTask id="sp5_find" name="Find Dagster run by request + engagement tags">
+        <bpmn:incoming>Flow_sp5_same_sp5_find</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_find_sp5_exists</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="sp5_exists" name="Already submitted?">
+        <bpmn:incoming>Flow_sp5_find_sp5_exists</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_exists_sp5_intent</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp5_exists_sp5_m</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:scriptTask id="sp5_intent" name="Record SUBMITTING (durable intent before the side effect)">
+        <bpmn:incoming>Flow_sp5_exists_sp5_intent</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_intent_sp5_launch</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:sendTask id="sp5_launch" name="launchRun (GraphQL)">
+        <bpmn:incoming>Flow_sp5_intent_sp5_launch</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_launch_sp5_resp</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:exclusiveGateway id="sp5_resp" name="LaunchRunSuccess?">
+        <bpmn:incoming>Flow_sp5_launch_sp5_resp</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_resp_sp5_rejected</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp5_resp_sp5_m</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp5_rejected" name="REJECTED recorded (config invalid / PipelineNotFound: reload)">
+        <bpmn:incoming>Flow_sp5_resp_sp5_rejected</bpmn:incoming>
+        <bpmn:errorEventDefinition errorRef="Error_sp5_rejected" />
+      </bpmn:endEvent>
+      <bpmn:exclusiveGateway id="sp5_m" name="">
+        <bpmn:incoming>Flow_sp5_exists_sp5_m</bpmn:incoming>
+        <bpmn:incoming>Flow_sp5_resp_sp5_m</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp5_m_sp5_end</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="sp5_end" name="Accepted: run QUEUED (dagster_run_id, URL)">
+        <bpmn:incoming>Flow_sp5_m_sp5_end</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_sp5_start_sp5_manifest" sourceRef="sp5_start" targetRef="sp5_manifest" />
+      <bpmn:sequenceFlow id="Flow_sp5_manifest_sp5_posix" sourceRef="sp5_manifest" targetRef="sp5_posix" />
+      <bpmn:sequenceFlow id="Flow_sp5_posix_sp5_notposix" name="no" sourceRef="sp5_posix" targetRef="sp5_notposix" />
+      <bpmn:sequenceFlow id="Flow_sp5_posix_sp5_job" name="yes" sourceRef="sp5_posix" targetRef="sp5_job" />
+      <bpmn:sequenceFlow id="Flow_sp5_job_sp5_badjob" name="no" sourceRef="sp5_job" targetRef="sp5_badjob" />
+      <bpmn:sequenceFlow id="Flow_sp5_job_sp5_request" name="yes" sourceRef="sp5_job" targetRef="sp5_request" />
+      <bpmn:sequenceFlow id="Flow_sp5_request_sp5_same" sourceRef="sp5_request" targetRef="sp5_same" />
+      <bpmn:sequenceFlow id="Flow_sp5_same_sp5_changed" name="no" sourceRef="sp5_same" targetRef="sp5_changed" />
+      <bpmn:sequenceFlow id="Flow_sp5_same_sp5_find" name="yes" sourceRef="sp5_same" targetRef="sp5_find" />
+      <bpmn:sequenceFlow id="Flow_sp5_find_sp5_exists" sourceRef="sp5_find" targetRef="sp5_exists" />
+      <bpmn:sequenceFlow id="Flow_sp5_exists_sp5_intent" name="no" sourceRef="sp5_exists" targetRef="sp5_intent" />
+      <bpmn:sequenceFlow id="Flow_sp5_exists_sp5_m" name="yes: reattach" sourceRef="sp5_exists" targetRef="sp5_m" />
+      <bpmn:sequenceFlow id="Flow_sp5_intent_sp5_launch" sourceRef="sp5_intent" targetRef="sp5_launch" />
+      <bpmn:sequenceFlow id="Flow_sp5_launch_sp5_resp" sourceRef="sp5_launch" targetRef="sp5_resp" />
+      <bpmn:sequenceFlow id="Flow_sp5_resp_sp5_rejected" name="no" sourceRef="sp5_resp" targetRef="sp5_rejected" />
+      <bpmn:sequenceFlow id="Flow_sp5_resp_sp5_m" name="yes" sourceRef="sp5_resp" targetRef="sp5_m" />
+      <bpmn:sequenceFlow id="Flow_sp5_m_sp5_end" sourceRef="sp5_m" targetRef="sp5_end" />
+      <bpmn:textAnnotation id="sp5_n1"><bpmn:text>With --wait the client then polls to SUCCESS / FAILURE / CANCELED; QUEUED or STARTED is acceptance, not completion.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp5_n1" sourceRef="sp5_launch" targetRef="sp5_n1" />
+    </bpmn:subProcess>
+    <bpmn:endEvent id="End_Accepted" name="Engagement accepted by Dagster">
+      <bpmn:incoming>Flow_Sub_Submit_End_Accepted</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Engagement_Sub_Checkout" sourceRef="Start_Engagement" targetRef="Sub_Checkout" />
+    <bpmn:sequenceFlow id="Flow_Sub_Checkout_Sub_Services" sourceRef="Sub_Checkout" targetRef="Sub_Services" />
+    <bpmn:sequenceFlow id="Flow_Sub_Services_Sub_Engagement" sourceRef="Sub_Services" targetRef="Sub_Engagement" />
+    <bpmn:sequenceFlow id="Flow_Sub_Engagement_Sub_PreSubmit" sourceRef="Sub_Engagement" targetRef="Sub_PreSubmit" />
+    <bpmn:sequenceFlow id="Flow_Sub_PreSubmit_Sub_Submit" sourceRef="Sub_PreSubmit" targetRef="Sub_Submit" />
+    <bpmn:sequenceFlow id="Flow_Sub_Submit_End_Accepted" sourceRef="Sub_Submit" targetRef="End_Accepted" />
+  </bpmn:process>
+  <bpmn:process id="Proc_Dagster" name="Dagster launch acceptance" isExecutable="false">
+    <bpmn:startEvent id="D_start" name="Launch request received">
+      <bpmn:outgoing>Flow_D_start_D_valid</bpmn:outgoing>
+      <bpmn:messageEventDefinition />
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="D_valid" name="Job, config and tags valid?">
+      <bpmn:incoming>Flow_D_start_D_valid</bpmn:incoming>
+      <bpmn:outgoing>Flow_D_valid_D_queue</bpmn:outgoing>
+      <bpmn:outgoing>Flow_D_valid_D_err</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="D_queue" name="Enqueue run (2 global, 1 per engagement)">
+      <bpmn:incoming>Flow_D_valid_D_queue</bpmn:incoming>
+      <bpmn:outgoing>Flow_D_queue_D_merge</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="D_err" name="Record validation errors">
+      <bpmn:incoming>Flow_D_valid_D_err</bpmn:incoming>
+      <bpmn:outgoing>Flow_D_err_D_merge</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="D_merge" name="">
+      <bpmn:incoming>Flow_D_queue_D_merge</bpmn:incoming>
+      <bpmn:incoming>Flow_D_err_D_merge</bpmn:incoming>
+      <bpmn:outgoing>Flow_D_merge_D_respond</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="D_respond" name="Respond: LaunchRunSuccess (QUEUED) or rejected">
+      <bpmn:incoming>Flow_D_merge_D_respond</bpmn:incoming>
+      <bpmn:outgoing>Flow_D_respond_D_end</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="D_end" name="Launch request handled">
+      <bpmn:incoming>Flow_D_respond_D_end</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_D_start_D_valid" sourceRef="D_start" targetRef="D_valid" />
+    <bpmn:sequenceFlow id="Flow_D_valid_D_queue" name="yes" sourceRef="D_valid" targetRef="D_queue" />
+    <bpmn:sequenceFlow id="Flow_D_valid_D_err" name="no" sourceRef="D_valid" targetRef="D_err" />
+    <bpmn:sequenceFlow id="Flow_D_queue_D_merge" sourceRef="D_queue" targetRef="D_merge" />
+    <bpmn:sequenceFlow id="Flow_D_err_D_merge" sourceRef="D_err" targetRef="D_merge" />
+    <bpmn:sequenceFlow id="Flow_D_merge_D_respond" sourceRef="D_merge" targetRef="D_respond" />
+    <bpmn:sequenceFlow id="Flow_D_respond_D_end" sourceRef="D_respond" targetRef="D_end" />
+  </bpmn:process>
+  <bpmn:error id="Error_sp1_notgit" name="sp1_notgit" />
+  <bpmn:error id="Error_sp1_badorigin" name="sp1_badorigin" />
+  <bpmn:error id="Error_sp1_dirty" name="sp1_dirty" />
+  <bpmn:error id="Error_sp1_badhead" name="sp1_badhead" />
+  <bpmn:error id="Error_sp2_loaderr" name="sp2_loaderr" />
+  <bpmn:error id="Error_sp3_blocked" name="sp3_blocked" />
+  <bpmn:error id="Error_sp5_notposix" name="sp5_notposix" />
+  <bpmn:error id="Error_sp5_badjob" name="sp5_badjob" />
+  <bpmn:error id="Error_sp5_changed" name="sp5_changed" />
+  <bpmn:error id="Error_sp5_rejected" name="sp5_rejected" />
+  <bpmndi:BPMNDiagram id="Diagram_Top" name="Pre-submission overview">
+    <bpmndi:BPMNPlane id="Plane_Top" bpmnElement="Collab_PreSubmission">
+      <bpmndi:BPMNShape id="P_Engineer_di" bpmnElement="P_Engineer" isHorizontal="true"><dc:Bounds x="160" y="60" width="1340" height="230" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="P_Dagster_di" bpmnElement="P_Dagster" isHorizontal="true"><dc:Bounds x="160" y="360" width="1340" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Engagement_di" bpmnElement="Start_Engagement"><dc:Bounds x="232" y="157" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="190" y="199" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Checkout_di" bpmnElement="Sub_Checkout" isExpanded="false"><dc:Bounds x="306" y="130" width="140" height="90" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Services_di" bpmnElement="Sub_Services" isExpanded="false"><dc:Bounds x="516" y="130" width="140" height="90" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Engagement_di" bpmnElement="Sub_Engagement" isExpanded="false"><dc:Bounds x="726" y="130" width="140" height="90" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_PreSubmit_di" bpmnElement="Sub_PreSubmit" isExpanded="false"><dc:Bounds x="936" y="130" width="140" height="90" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Submit_di" bpmnElement="Sub_Submit" isExpanded="false"><dc:Bounds x="1146" y="130" width="140" height="90" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Accepted_di" bpmnElement="End_Accepted"><dc:Bounds x="1387" y="157" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1345" y="199" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Engagement_Sub_Checkout_di" bpmnElement="Flow_Start_Engagement_Sub_Checkout"><di:waypoint x="268" y="175" /><di:waypoint x="306" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Checkout_Sub_Services_di" bpmnElement="Flow_Sub_Checkout_Sub_Services"><di:waypoint x="446" y="175" /><di:waypoint x="516" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Services_Sub_Engagement_di" bpmnElement="Flow_Sub_Services_Sub_Engagement"><di:waypoint x="656" y="175" /><di:waypoint x="726" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Engagement_Sub_PreSubmit_di" bpmnElement="Flow_Sub_Engagement_Sub_PreSubmit"><di:waypoint x="866" y="175" /><di:waypoint x="936" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_PreSubmit_Sub_Submit_di" bpmnElement="Flow_Sub_PreSubmit_Sub_Submit"><di:waypoint x="1076" y="175" /><di:waypoint x="1146" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Submit_End_Accepted_di" bpmnElement="Flow_Sub_Submit_End_Accepted"><di:waypoint x="1286" y="175" /><di:waypoint x="1387" y="175" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="D_start_di" bpmnElement="D_start"><dc:Bounds x="582" y="452" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="540" y="494" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="D_valid_di" bpmnElement="D_valid" isMarkerVisible="true"><dc:Bounds x="715" y="445" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="680" y="397" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="D_queue_di" bpmnElement="D_queue"><dc:Bounds x="825" y="428" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="D_err_di" bpmnElement="D_err"><dc:Bounds x="825" y="538" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="D_merge_di" bpmnElement="D_merge" isMarkerVisible="true"><dc:Bounds x="1045" y="445" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="D_respond_di" bpmnElement="D_respond"><dc:Bounds x="1175" y="428" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="D_end_di" bpmnElement="D_end"><dc:Bounds x="1402" y="452" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1360" y="494" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_D_start_D_valid_di" bpmnElement="Flow_D_start_D_valid"><di:waypoint x="618" y="470" /><di:waypoint x="715" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_D_valid_D_queue_di" bpmnElement="Flow_D_valid_D_queue"><di:waypoint x="765" y="470" /><di:waypoint x="825" y="470" /><bpmndi:BPMNLabel><dc:Bounds x="771" y="448" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_D_valid_D_err_di" bpmnElement="Flow_D_valid_D_err"><di:waypoint x="740" y="495" /><di:waypoint x="740" y="580" /><di:waypoint x="825" y="580" /><bpmndi:BPMNLabel><dc:Bounds x="746" y="528" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_D_queue_D_merge_di" bpmnElement="Flow_D_queue_D_merge"><di:waypoint x="975" y="470" /><di:waypoint x="1045" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_D_err_D_merge_di" bpmnElement="Flow_D_err_D_merge"><di:waypoint x="975" y="580" /><di:waypoint x="1070" y="580" /><di:waypoint x="1070" y="495" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_D_merge_D_respond_di" bpmnElement="Flow_D_merge_D_respond"><di:waypoint x="1095" y="470" /><di:waypoint x="1175" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_D_respond_D_end_di" bpmnElement="Flow_D_respond_D_end"><di:waypoint x="1325" y="470" /><di:waypoint x="1402" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_presubmit_di" bpmnElement="MF_presubmit"><di:waypoint x="1006" y="220" /><di:waypoint x="1006" y="318" /><di:waypoint x="590" y="318" /><di:waypoint x="590" y="452" /><bpmndi:BPMNLabel><dc:Bounds x="660" y="301" width="300" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_submit_di" bpmnElement="MF_submit"><di:waypoint x="1176" y="220" /><di:waypoint x="1176" y="336" /><di:waypoint x="610" y="336" /><di:waypoint x="610" y="452" /><bpmndi:BPMNLabel><dc:Bounds x="820" y="342" width="300" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_response_di" bpmnElement="MF_response"><di:waypoint x="1250" y="428" /><di:waypoint x="1250" y="220" /><bpmndi:BPMNLabel><dc:Bounds x="1256" y="300" width="300" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="Diagram_Sub_Checkout" name="1. Check out system under test">
+    <bpmndi:BPMNPlane id="Plane_Sub_Checkout" bpmnElement="Sub_Checkout">
+      <bpmndi:BPMNShape id="sp1_start_di" bpmnElement="sp1_start"><dc:Bounds x="102" y="182" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="60" y="224" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_have_di" bpmnElement="sp1_have" isMarkerVisible="true"><dc:Bounds x="305" y="175" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="270" y="127" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_clone_di" bpmnElement="sp1_clone"><dc:Bounds x="465" y="308" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_isgit_di" bpmnElement="sp1_isgit" isMarkerVisible="true"><dc:Bounds x="515" y="175" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="480" y="231" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_notgit_di" bpmnElement="sp1_notgit"><dc:Bounds x="522" y="32" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="480" y="-16" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_origin_di" bpmnElement="sp1_origin"><dc:Bounds x="675" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_originok_di" bpmnElement="sp1_originok" isMarkerVisible="true"><dc:Bounds x="935" y="175" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="900" y="231" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_badorigin_di" bpmnElement="sp1_badorigin"><dc:Bounds x="942" y="32" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="900" y="-16" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_status_di" bpmnElement="sp1_status"><dc:Bounds x="1095" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_clean_di" bpmnElement="sp1_clean" isMarkerVisible="true"><dc:Bounds x="1355" y="175" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1320" y="231" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_dirty_di" bpmnElement="sp1_dirty"><dc:Bounds x="1362" y="32" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1320" y="-16" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_fetch_di" bpmnElement="sp1_fetch"><dc:Bounds x="1515" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_merge_di" bpmnElement="sp1_merge" isMarkerVisible="true"><dc:Bounds x="1775" y="175" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_checkout_di" bpmnElement="sp1_checkout"><dc:Bounds x="1935" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_verify_di" bpmnElement="sp1_verify" isMarkerVisible="true"><dc:Bounds x="2195" y="175" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="2160" y="231" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_badhead_di" bpmnElement="sp1_badhead"><dc:Bounds x="2202" y="32" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2160" y="-16" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp1_end_di" bpmnElement="sp1_end"><dc:Bounds x="2412" y="182" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2370" y="224" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_sp1_start_sp1_have_di" bpmnElement="Flow_sp1_start_sp1_have"><di:waypoint x="138" y="200" /><di:waypoint x="305" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_have_sp1_clone_di" bpmnElement="Flow_sp1_have_sp1_clone"><di:waypoint x="330" y="225" /><di:waypoint x="330" y="350" /><di:waypoint x="465" y="350" /><bpmndi:BPMNLabel><dc:Bounds x="336" y="278" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_have_sp1_isgit_di" bpmnElement="Flow_sp1_have_sp1_isgit"><di:waypoint x="355" y="200" /><di:waypoint x="515" y="200" /><bpmndi:BPMNLabel><dc:Bounds x="361" y="178" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_clone_sp1_merge_di" bpmnElement="Flow_sp1_clone_sp1_merge"><di:waypoint x="615" y="350" /><di:waypoint x="1800" y="350" /><di:waypoint x="1800" y="225" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_isgit_sp1_notgit_di" bpmnElement="Flow_sp1_isgit_sp1_notgit"><di:waypoint x="540" y="175" /><di:waypoint x="540" y="68" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="112" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_isgit_sp1_origin_di" bpmnElement="Flow_sp1_isgit_sp1_origin"><di:waypoint x="565" y="200" /><di:waypoint x="675" y="200" /><bpmndi:BPMNLabel><dc:Bounds x="571" y="178" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_origin_sp1_originok_di" bpmnElement="Flow_sp1_origin_sp1_originok"><di:waypoint x="825" y="200" /><di:waypoint x="935" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_originok_sp1_badorigin_di" bpmnElement="Flow_sp1_originok_sp1_badorigin"><di:waypoint x="960" y="175" /><di:waypoint x="960" y="68" /><bpmndi:BPMNLabel><dc:Bounds x="966" y="112" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_originok_sp1_status_di" bpmnElement="Flow_sp1_originok_sp1_status"><di:waypoint x="985" y="200" /><di:waypoint x="1095" y="200" /><bpmndi:BPMNLabel><dc:Bounds x="991" y="178" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_status_sp1_clean_di" bpmnElement="Flow_sp1_status_sp1_clean"><di:waypoint x="1245" y="200" /><di:waypoint x="1355" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_clean_sp1_dirty_di" bpmnElement="Flow_sp1_clean_sp1_dirty"><di:waypoint x="1380" y="175" /><di:waypoint x="1380" y="68" /><bpmndi:BPMNLabel><dc:Bounds x="1386" y="112" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_clean_sp1_fetch_di" bpmnElement="Flow_sp1_clean_sp1_fetch"><di:waypoint x="1405" y="200" /><di:waypoint x="1515" y="200" /><bpmndi:BPMNLabel><dc:Bounds x="1411" y="178" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_fetch_sp1_merge_di" bpmnElement="Flow_sp1_fetch_sp1_merge"><di:waypoint x="1665" y="200" /><di:waypoint x="1775" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_merge_sp1_checkout_di" bpmnElement="Flow_sp1_merge_sp1_checkout"><di:waypoint x="1825" y="200" /><di:waypoint x="1935" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_checkout_sp1_verify_di" bpmnElement="Flow_sp1_checkout_sp1_verify"><di:waypoint x="2085" y="200" /><di:waypoint x="2195" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_verify_sp1_badhead_di" bpmnElement="Flow_sp1_verify_sp1_badhead"><di:waypoint x="2220" y="175" /><di:waypoint x="2220" y="68" /><bpmndi:BPMNLabel><dc:Bounds x="2226" y="112" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp1_verify_sp1_end_di" bpmnElement="Flow_sp1_verify_sp1_end"><di:waypoint x="2245" y="200" /><di:waypoint x="2412" y="200" /><bpmndi:BPMNLabel><dc:Bounds x="2251" y="178" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp1_n1_di" bpmnElement="sp1_n1"><dc:Bounds x="183" y="380" width="330" height="70" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp1_n1_di" bpmnElement="Assoc_sp1_n1"><di:waypoint x="120" y="182" /><di:waypoint x="203" y="450" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="Diagram_Sub_Services" name="2. Start services">
+    <bpmndi:BPMNPlane id="Plane_Sub_Services" bpmnElement="Sub_Services">
+      <bpmndi:BPMNShape id="sp2_start_di" bpmnElement="sp2_start"><dc:Bounds x="102" y="212" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="60" y="254" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_docker_di" bpmnElement="sp2_docker"><dc:Bounds x="255" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_dockok_di" bpmnElement="sp2_dockok" isMarkerVisible="true"><dc:Bounds x="515" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="480" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_recover_di" bpmnElement="sp2_recover"><dc:Bounds x="465" y="338" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_first_di" bpmnElement="sp2_first" isMarkerVisible="true"><dc:Bounds x="725" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="690" y="261" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_setup_di" bpmnElement="sp2_setup"><dc:Bounds x="675" y="38" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_m1_di" bpmnElement="sp2_m1" isMarkerVisible="true"><dc:Bounds x="935" y="205" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_up_di" bpmnElement="sp2_up"><dc:Bounds x="1095" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_ps_di" bpmnElement="sp2_ps"><dc:Bounds x="1305" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_healthy_di" bpmnElement="sp2_healthy" isMarkerVisible="true"><dc:Bounds x="1565" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1530" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_wait_di" bpmnElement="sp2_wait"><dc:Bounds x="1572" y="362" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1530" y="404" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_cl_di" bpmnElement="sp2_cl"><dc:Bounds x="1725" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_ip_di" bpmnElement="sp2_ip" isMarkerVisible="true"><dc:Bounds x="1985" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1950" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_recreate_di" bpmnElement="sp2_recreate"><dc:Bounds x="1935" y="338" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_m2_di" bpmnElement="sp2_m2" isMarkerVisible="true"><dc:Bounds x="2195" y="205" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_check_di" bpmnElement="sp2_check"><dc:Bounds x="2355" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_reload_di" bpmnElement="sp2_reload"><dc:Bounds x="2565" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_loaded_di" bpmnElement="sp2_loaded" isMarkerVisible="true"><dc:Bounds x="2825" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="2790" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_loaderr_di" bpmnElement="sp2_loaderr"><dc:Bounds x="2832" y="362" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2790" y="404" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp2_end_di" bpmnElement="sp2_end"><dc:Bounds x="3042" y="212" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="3000" y="254" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_sp2_start_sp2_docker_di" bpmnElement="Flow_sp2_start_sp2_docker"><di:waypoint x="138" y="230" /><di:waypoint x="255" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_docker_sp2_dockok_di" bpmnElement="Flow_sp2_docker_sp2_dockok"><di:waypoint x="405" y="230" /><di:waypoint x="515" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_dockok_sp2_recover_di" bpmnElement="Flow_sp2_dockok_sp2_recover"><di:waypoint x="540" y="255" /><di:waypoint x="540" y="338" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="286" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_recover_sp2_docker_di" bpmnElement="Flow_sp2_recover_sp2_docker"><di:waypoint x="540" y="422" /><di:waypoint x="540" y="457" /><di:waypoint x="330" y="457" /><di:waypoint x="330" y="272" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="430" width="35" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_dockok_sp2_first_di" bpmnElement="Flow_sp2_dockok_sp2_first"><di:waypoint x="565" y="230" /><di:waypoint x="725" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="571" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_first_sp2_setup_di" bpmnElement="Flow_sp2_first_sp2_setup"><di:waypoint x="750" y="205" /><di:waypoint x="750" y="122" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="154" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_first_sp2_m1_di" bpmnElement="Flow_sp2_first_sp2_m1"><di:waypoint x="775" y="230" /><di:waypoint x="935" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="781" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_setup_sp2_m1_di" bpmnElement="Flow_sp2_setup_sp2_m1"><di:waypoint x="825" y="80" /><di:waypoint x="960" y="80" /><di:waypoint x="960" y="205" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_m1_sp2_up_di" bpmnElement="Flow_sp2_m1_sp2_up"><di:waypoint x="985" y="230" /><di:waypoint x="1095" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_up_sp2_ps_di" bpmnElement="Flow_sp2_up_sp2_ps"><di:waypoint x="1245" y="230" /><di:waypoint x="1305" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_ps_sp2_healthy_di" bpmnElement="Flow_sp2_ps_sp2_healthy"><di:waypoint x="1455" y="230" /><di:waypoint x="1565" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_healthy_sp2_wait_di" bpmnElement="Flow_sp2_healthy_sp2_wait"><di:waypoint x="1590" y="255" /><di:waypoint x="1590" y="362" /><bpmndi:BPMNLabel><dc:Bounds x="1596" y="298" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_wait_sp2_ps_di" bpmnElement="Flow_sp2_wait_sp2_ps"><di:waypoint x="1590" y="398" /><di:waypoint x="1590" y="433" /><di:waypoint x="1380" y="433" /><di:waypoint x="1380" y="272" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_healthy_sp2_cl_di" bpmnElement="Flow_sp2_healthy_sp2_cl"><di:waypoint x="1615" y="230" /><di:waypoint x="1725" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="1621" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_cl_sp2_ip_di" bpmnElement="Flow_sp2_cl_sp2_ip"><di:waypoint x="1875" y="230" /><di:waypoint x="1985" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_ip_sp2_recreate_di" bpmnElement="Flow_sp2_ip_sp2_recreate"><di:waypoint x="2010" y="255" /><di:waypoint x="2010" y="338" /><bpmndi:BPMNLabel><dc:Bounds x="2016" y="286" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_ip_sp2_m2_di" bpmnElement="Flow_sp2_ip_sp2_m2"><di:waypoint x="2035" y="230" /><di:waypoint x="2195" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="2041" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_recreate_sp2_m2_di" bpmnElement="Flow_sp2_recreate_sp2_m2"><di:waypoint x="2085" y="380" /><di:waypoint x="2220" y="380" /><di:waypoint x="2220" y="255" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_m2_sp2_check_di" bpmnElement="Flow_sp2_m2_sp2_check"><di:waypoint x="2245" y="230" /><di:waypoint x="2355" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_check_sp2_reload_di" bpmnElement="Flow_sp2_check_sp2_reload"><di:waypoint x="2505" y="230" /><di:waypoint x="2565" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_reload_sp2_loaded_di" bpmnElement="Flow_sp2_reload_sp2_loaded"><di:waypoint x="2715" y="230" /><di:waypoint x="2825" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_loaded_sp2_loaderr_di" bpmnElement="Flow_sp2_loaded_sp2_loaderr"><di:waypoint x="2850" y="255" /><di:waypoint x="2850" y="362" /><bpmndi:BPMNLabel><dc:Bounds x="2856" y="298" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp2_loaded_sp2_end_di" bpmnElement="Flow_sp2_loaded_sp2_end"><di:waypoint x="2875" y="230" /><di:waypoint x="3042" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="2881" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp2_n1_di" bpmnElement="sp2_n1"><dc:Bounds x="1086" y="42" width="300" height="45" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp2_n1_di" bpmnElement="Assoc_sp2_n1"><di:waypoint x="1170" y="188" /><di:waypoint x="1106" y="87" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="Diagram_Sub_Engagement" name="3. Launch engagement">
+    <bpmndi:BPMNPlane id="Plane_Sub_Engagement" bpmnElement="Sub_Engagement">
+      <bpmndi:BPMNShape id="sp3_start_di" bpmnElement="sp3_start"><dc:Bounds x="102" y="182" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="60" y="224" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp3_define_di" bpmnElement="sp3_define"><dc:Bounds x="255" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp3_grant_di" bpmnElement="sp3_grant"><dc:Bounds x="465" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp3_create_di" bpmnElement="sp3_create"><dc:Bounds x="675" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp3_stage_di" bpmnElement="sp3_stage"><dc:Bounds x="885" y="158" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp3_ok_di" bpmnElement="sp3_ok" isMarkerVisible="true"><dc:Bounds x="1145" y="175" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1110" y="127" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp3_blocked_di" bpmnElement="sp3_blocked"><dc:Bounds x="1152" y="332" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1110" y="374" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp3_end_di" bpmnElement="sp3_end"><dc:Bounds x="1362" y="182" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1320" y="224" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_sp3_start_sp3_define_di" bpmnElement="Flow_sp3_start_sp3_define"><di:waypoint x="138" y="200" /><di:waypoint x="255" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp3_define_sp3_grant_di" bpmnElement="Flow_sp3_define_sp3_grant"><di:waypoint x="405" y="200" /><di:waypoint x="465" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp3_grant_sp3_create_di" bpmnElement="Flow_sp3_grant_sp3_create"><di:waypoint x="615" y="200" /><di:waypoint x="675" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp3_create_sp3_stage_di" bpmnElement="Flow_sp3_create_sp3_stage"><di:waypoint x="825" y="200" /><di:waypoint x="885" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp3_stage_sp3_ok_di" bpmnElement="Flow_sp3_stage_sp3_ok"><di:waypoint x="1035" y="200" /><di:waypoint x="1145" y="200" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp3_ok_sp3_blocked_di" bpmnElement="Flow_sp3_ok_sp3_blocked"><di:waypoint x="1170" y="225" /><di:waypoint x="1170" y="332" /><bpmndi:BPMNLabel><dc:Bounds x="1176" y="268" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp3_ok_sp3_end_di" bpmnElement="Flow_sp3_ok_sp3_end"><di:waypoint x="1195" y="200" /><di:waypoint x="1362" y="200" /><bpmndi:BPMNLabel><dc:Bounds x="1201" y="178" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp3_n1_di" bpmnElement="sp3_n1"><dc:Bounds x="666" y="35" width="280" height="45" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp3_n1_di" bpmnElement="Assoc_sp3_n1"><di:waypoint x="750" y="158" /><di:waypoint x="686" y="80" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="Diagram_Sub_PreSubmit" name="4. Pre-submittal processing (intake, discovery gates)">
+    <bpmndi:BPMNPlane id="Plane_Sub_PreSubmit" bpmnElement="Sub_PreSubmit">
+      <bpmndi:BPMNShape id="sp4_start_di" bpmnElement="sp4_start"><dc:Bounds x="102" y="242" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="60" y="284" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_intake_di" bpmnElement="sp4_intake"><dc:Bounds x="255" y="218" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_intok_di" bpmnElement="sp4_intok" isMarkerVisible="true"><dc:Bounds x="515" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="480" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_intfix_di" bpmnElement="sp4_intfix"><dc:Bounds x="465" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_pgate_di" bpmnElement="sp4_pgate"><dc:Bounds x="675" y="218" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_pok_di" bpmnElement="sp4_pok" isMarkerVisible="true"><dc:Bounds x="935" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="900" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_panalyze_di" bpmnElement="sp4_panalyze"><dc:Bounds x="885" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_psupply_di" bpmnElement="sp4_psupply"><dc:Bounds x="675" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_dgate_di" bpmnElement="sp4_dgate"><dc:Bounds x="1095" y="218" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_dok_di" bpmnElement="sp4_dok" isMarkerVisible="true"><dc:Bounds x="1355" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1320" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_danalyze_di" bpmnElement="sp4_danalyze"><dc:Bounds x="1305" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_dsupply_di" bpmnElement="sp4_dsupply"><dc:Bounds x="1095" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_end_di" bpmnElement="sp4_end"><dc:Bounds x="1572" y="242" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1530" y="284" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_sp4_start_sp4_intake_di" bpmnElement="Flow_sp4_start_sp4_intake"><di:waypoint x="138" y="260" /><di:waypoint x="255" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_intake_sp4_intok_di" bpmnElement="Flow_sp4_intake_sp4_intok"><di:waypoint x="405" y="260" /><di:waypoint x="515" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_intok_sp4_intfix_di" bpmnElement="Flow_sp4_intok_sp4_intfix"><di:waypoint x="540" y="285" /><di:waypoint x="540" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="316" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_intfix_sp4_intake_di" bpmnElement="Flow_sp4_intfix_sp4_intake"><di:waypoint x="540" y="452" /><di:waypoint x="540" y="487" /><di:waypoint x="330" y="487" /><di:waypoint x="330" y="302" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="460" width="35" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_intok_sp4_pgate_di" bpmnElement="Flow_sp4_intok_sp4_pgate"><di:waypoint x="565" y="260" /><di:waypoint x="675" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="571" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_pgate_sp4_pok_di" bpmnElement="Flow_sp4_pgate_sp4_pok"><di:waypoint x="825" y="260" /><di:waypoint x="935" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_pok_sp4_panalyze_di" bpmnElement="Flow_sp4_pok_sp4_panalyze"><di:waypoint x="960" y="285" /><di:waypoint x="960" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="966" y="316" width="120" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_panalyze_sp4_psupply_di" bpmnElement="Flow_sp4_panalyze_sp4_psupply"><di:waypoint x="885" y="410" /><di:waypoint x="825" y="410" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_psupply_sp4_pgate_di" bpmnElement="Flow_sp4_psupply_sp4_pgate"><di:waypoint x="750" y="368" /><di:waypoint x="750" y="302" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_pok_sp4_dgate_di" bpmnElement="Flow_sp4_pok_sp4_dgate"><di:waypoint x="985" y="260" /><di:waypoint x="1095" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="991" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_dgate_sp4_dok_di" bpmnElement="Flow_sp4_dgate_sp4_dok"><di:waypoint x="1245" y="260" /><di:waypoint x="1355" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_dok_sp4_danalyze_di" bpmnElement="Flow_sp4_dok_sp4_danalyze"><di:waypoint x="1380" y="285" /><di:waypoint x="1380" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="1386" y="316" width="120" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_danalyze_sp4_dsupply_di" bpmnElement="Flow_sp4_danalyze_sp4_dsupply"><di:waypoint x="1305" y="410" /><di:waypoint x="1245" y="410" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_dsupply_sp4_dgate_di" bpmnElement="Flow_sp4_dsupply_sp4_dgate"><di:waypoint x="1170" y="368" /><di:waypoint x="1170" y="302" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_dok_sp4_end_di" bpmnElement="Flow_sp4_dok_sp4_end"><di:waypoint x="1405" y="260" /><di:waypoint x="1572" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="1411" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp4_n1_di" bpmnElement="sp4_n1"><dc:Bounds x="813" y="65" width="380" height="70" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp4_n1_di" bpmnElement="Assoc_sp4_n1"><di:waypoint x="750" y="218" /><di:waypoint x="833" y="135" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp4_n2_di" bpmnElement="sp4_n2"><dc:Bounds x="246" y="65" width="380" height="55" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp4_n2_di" bpmnElement="Assoc_sp4_n2"><di:waypoint x="330" y="218" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="Diagram_Sub_Submit" name="5. Submit engagement job to Dagster">
+    <bpmndi:BPMNPlane id="Plane_Sub_Submit" bpmnElement="Sub_Submit">
+      <bpmndi:BPMNShape id="sp5_start_di" bpmnElement="sp5_start"><dc:Bounds x="102" y="212" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="60" y="254" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_manifest_di" bpmnElement="sp5_manifest"><dc:Bounds x="255" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_posix_di" bpmnElement="sp5_posix" isMarkerVisible="true"><dc:Bounds x="515" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="480" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_notposix_di" bpmnElement="sp5_notposix"><dc:Bounds x="522" y="362" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="480" y="404" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_job_di" bpmnElement="sp5_job" isMarkerVisible="true"><dc:Bounds x="725" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="690" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_badjob_di" bpmnElement="sp5_badjob"><dc:Bounds x="732" y="362" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="690" y="404" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_request_di" bpmnElement="sp5_request"><dc:Bounds x="885" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_same_di" bpmnElement="sp5_same" isMarkerVisible="true"><dc:Bounds x="1145" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1110" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_changed_di" bpmnElement="sp5_changed"><dc:Bounds x="1152" y="362" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1110" y="404" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_find_di" bpmnElement="sp5_find"><dc:Bounds x="1305" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_exists_di" bpmnElement="sp5_exists" isMarkerVisible="true"><dc:Bounds x="1565" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1530" y="261" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_intent_di" bpmnElement="sp5_intent"><dc:Bounds x="1725" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_launch_di" bpmnElement="sp5_launch"><dc:Bounds x="1935" y="188" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_resp_di" bpmnElement="sp5_resp" isMarkerVisible="true"><dc:Bounds x="2195" y="205" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="2160" y="157" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_rejected_di" bpmnElement="sp5_rejected"><dc:Bounds x="2202" y="362" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2160" y="404" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_m_di" bpmnElement="sp5_m" isMarkerVisible="true"><dc:Bounds x="2405" y="205" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp5_end_di" bpmnElement="sp5_end"><dc:Bounds x="2622" y="212" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2580" y="254" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_sp5_start_sp5_manifest_di" bpmnElement="Flow_sp5_start_sp5_manifest"><di:waypoint x="138" y="230" /><di:waypoint x="255" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_manifest_sp5_posix_di" bpmnElement="Flow_sp5_manifest_sp5_posix"><di:waypoint x="405" y="230" /><di:waypoint x="515" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_posix_sp5_notposix_di" bpmnElement="Flow_sp5_posix_sp5_notposix"><di:waypoint x="540" y="255" /><di:waypoint x="540" y="362" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="298" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_posix_sp5_job_di" bpmnElement="Flow_sp5_posix_sp5_job"><di:waypoint x="565" y="230" /><di:waypoint x="725" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="571" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_job_sp5_badjob_di" bpmnElement="Flow_sp5_job_sp5_badjob"><di:waypoint x="750" y="255" /><di:waypoint x="750" y="362" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="298" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_job_sp5_request_di" bpmnElement="Flow_sp5_job_sp5_request"><di:waypoint x="775" y="230" /><di:waypoint x="885" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="781" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_request_sp5_same_di" bpmnElement="Flow_sp5_request_sp5_same"><di:waypoint x="1035" y="230" /><di:waypoint x="1145" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_same_sp5_changed_di" bpmnElement="Flow_sp5_same_sp5_changed"><di:waypoint x="1170" y="255" /><di:waypoint x="1170" y="362" /><bpmndi:BPMNLabel><dc:Bounds x="1176" y="298" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_same_sp5_find_di" bpmnElement="Flow_sp5_same_sp5_find"><di:waypoint x="1195" y="230" /><di:waypoint x="1305" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="1201" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_find_sp5_exists_di" bpmnElement="Flow_sp5_find_sp5_exists"><di:waypoint x="1455" y="230" /><di:waypoint x="1565" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_exists_sp5_intent_di" bpmnElement="Flow_sp5_exists_sp5_intent"><di:waypoint x="1615" y="230" /><di:waypoint x="1725" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="1621" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_exists_sp5_m_di" bpmnElement="Flow_sp5_exists_sp5_m"><di:waypoint x="1590" y="205" /><di:waypoint x="1590" y="125" /><di:waypoint x="2430" y="125" /><di:waypoint x="2430" y="205" /><bpmndi:BPMNLabel><dc:Bounds x="1596" y="155" width="91" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_intent_sp5_launch_di" bpmnElement="Flow_sp5_intent_sp5_launch"><di:waypoint x="1875" y="230" /><di:waypoint x="1935" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_launch_sp5_resp_di" bpmnElement="Flow_sp5_launch_sp5_resp"><di:waypoint x="2085" y="230" /><di:waypoint x="2195" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_resp_sp5_rejected_di" bpmnElement="Flow_sp5_resp_sp5_rejected"><di:waypoint x="2220" y="255" /><di:waypoint x="2220" y="362" /><bpmndi:BPMNLabel><dc:Bounds x="2226" y="298" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_resp_sp5_m_di" bpmnElement="Flow_sp5_resp_sp5_m"><di:waypoint x="2245" y="230" /><di:waypoint x="2405" y="230" /><bpmndi:BPMNLabel><dc:Bounds x="2251" y="208" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp5_m_sp5_end_di" bpmnElement="Flow_sp5_m_sp5_end"><di:waypoint x="2455" y="230" /><di:waypoint x="2622" y="230" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp5_n1_di" bpmnElement="sp5_n1"><dc:Bounds x="2073" y="12" width="420" height="45" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp5_n1_di" bpmnElement="Assoc_sp5_n1"><di:waypoint x="2010" y="188" /><di:waypoint x="2093" y="57" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -42,6 +42,40 @@ prerequisites from outside the step sequence.
 one command chain (below). S4a is a one-time negative proof, run on an earlier run; the log below
 keeps the history of earlier runs and fixture revisions.
 
+## Pre-submission process (BPMN)
+
+The end-to-end process up to the point where Dagster accepts the engagement, as a BPMN 2.0 model:
+[`bpmn/pre-submission.bpmn`](bpmn/pre-submission.bpmn) (opens in bpmn.io / Camunda Modeler;
+renders in [`bpmn/render/`](bpmn/render/)).
+
+![Pre-submission overview](bpmn/render/pre-submission-0-overview.svg)
+
+Two pools: the **security engineer** on the POSIX host, and **Dagster services**, which receive
+launch requests and answer with `QUEUED` or a rejection. The engineer's process is five collapsed
+subprocesses, each with its own diagram:
+
+1. [**Check out the system under test**](bpmn/render/pre-submission-1-checkout.svg): clone or
+   verify at the pinned commit; refuse a non-clone, a wrong origin, local changes or a HEAD mismatch
+   rather than repair them.
+2. [**Start services**](bpmn/render/pre-submission-2-services.svg): Docker engine check with the
+   recovery loop, first-time `setup.py`, `compose up` and wait for 3 healthy services, code location
+   start, WSL IP re-sync, gRPC check, `reload` until the location is `LOADED`.
+3. [**Launch the engagement**](bpmn/render/pre-submission-3-engagement.svg): define goal, platforms,
+   budget, scope and permissions (a named human grants anything beyond `read-source`), create the
+   run, stage the manifest; staging blocks wrong-platform and legacy runs.
+4. [**Pre-submittal processing**](bpmn/render/pre-submission-4-pre-submittal.svg): intake, then the
+   partition and developer-discovery gates, each with its hand-off loop (produce the record, supply
+   it, relaunch) until accepted.
+5. [**Submit to Dagster**](bpmn/render/pre-submission-5-submit.svg): `launch_job.py`'s checks
+   (POSIX-staged run, registered job, unchanged request), the duplicate-submission guard (find by
+   tags, reattach), durable intent, `launchRun`, then `QUEUED` or `REJECTED`.
+
+The model ends at **accepted** (`QUEUED`), not completed. What Dagster does with the engagement job
+after that (fan-out into lanes and queues) is the next diagram. Two gaps the model makes visible:
+the engagement job submitted in step 5 is not yet fully runnable (`full_review` stops at the first
+unimplemented worker), and step 4's hand-off loops are manual today (fixture records are tracked;
+real targets need an analyst or agent).
+
 ## Steps
 
 All commands run in WSL from `~/projects/appsec-review` with the code location running
@@ -314,4 +348,9 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   not S5's plan, and not through B13 -- so S6 also needs the E01 configure worker; added to the
   chart, table and S6 text; (2) `dagster-workflow.mmd` still said partition discovery "remains
   planned"; (3) `->` inside chart labels rendered as a broken "- >"; replaced.
+- 2026-09-23 -- Pre-submission BPMN model added (`docs/processes/bpmn/pre-submission.bpmn`): overview
+  collaboration (engineer + Dagster pools) and five drill-down subprocesses, from system-under-test
+  checkout to Dagster acceptance; intake and discovery gates modelled as pre-submittal (William's
+  call). Validated with bpmn-moddle and rendered with bpmn-js (0 warnings each); renders committed
+  under `bpmn/render/`.
 
