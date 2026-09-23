@@ -107,7 +107,7 @@ containerized; `dagster api grpc` as a WSL host process; the `nop` job submitted
 `dagster job launch`, dequeued by the daemon, and executed by a run worker on the host (host pid in
 the run log). The fuller Phase 2 "Done when" in Consequences is still open.
 
-**Exposure of the code-location port.** `dagster api grpc` is unauthenticated, and anything that can
+**Exposure of the code-location port.** The code-location gRPC endpoint is unauthenticated, and anything that can
 reach it can launch runs of the defined jobs as the host user, with host Docker -- the very privilege
 this ADR keeps out of containers. Scope of each bind:
 
@@ -119,6 +119,18 @@ this ADR keeps out of containers. Scope of each bind:
   Phase 2, not decided here.
 - WSL `mirrored` networking was not needed and is not recommended here: it would place the port on
   the Windows host's real interfaces.
+
+## Amendment 2026-09-23: `dagster code-server start` instead of `dagster api grpc`
+
+The Decision names `dagster api grpc` as the host process. `code-location.sh` now runs `dagster
+code-server start` with the same host, port, file, working directory and location name. Both serve
+the same gRPC API on port 4000, and runs are still launched by the host server as host processes; the
+difference is that `code-server start` keeps a stable endpoint and swaps a child server underneath on
+reload, so `code-location.sh reload` (the webserver's `reloadRepositoryLocation`) re-imports changed
+`definitions.py` without restarting the process. `api grpc` cannot reload in place and logged
+"Reloading definitions ... not currently supported". Nothing else in this ADR changes: the endpoint,
+its exposure (below) and the webserver/daemon wiring are the same. This is also what the retired
+`code-server` container ran.
 
 ## Non-decisions
 

@@ -14,7 +14,7 @@ client only submits and monitors. Configuration resolution is a separate visible
 
 Services: PostgreSQL, webserver, daemon in Compose; the user-code server is a **host process**
 ([ADR-0011](../../docs/decisions/ADR-0011-orchestration-boundary.md)): `code-location.sh` (or
-`code-location.ps1`, which runs it under WSL) serves `definitions.py` with `dagster api grpc` on port
+`code-location.ps1`, which runs it under WSL) serves `definitions.py` with `dagster code-server start` on port
 4000, and webserver/daemon reach it at `host.docker.internal:4000`. Ops therefore run as host
 processes with the host's own Docker; no Docker socket is mounted into any container. Only the
 webserver (http://127.0.0.1:3000) and PostgreSQL (`127.0.0.1:${APPSEC_PG_PORT:-55432}`, for the host

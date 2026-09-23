@@ -93,9 +93,8 @@ executed by a run worker on the host.
 After every start or restart of the code location, run `code-location.sh reload`: the webserver
 launches jobs from the job list it loaded earlier, so until it reloads, a newly added job is
 rejected with `PipelineNotFoundError` even though the code location already serves it.
-`reload` does not load new code into a running code location (it logs a harmless "Reloading
-definitions ... not currently supported" warning); changed job code needs a code-location restart
-first.
+`reload` also loads changed job code into the running code location (`dagster code-server
+start` re-imports `definitions.py`), so pulling a job change needs `reload`, not a restart.
 
 **P1 -- Fixture target.** `fixtures/populate-targets.sh` clones `hello-autotools` at its pinned
 commit into `fixtures/targets/`. The pin is `632522b`: the fixture's `main` with the seeded-defect list removed and the
@@ -281,4 +280,9 @@ waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
   restart; **only A01 blocks** (no prompt-vetting record on this fresh run; unrelated to ADR-0011).
   Phase 2's code-server removal is complete. Remaining Phase 2 items (persistent code location on
   Windows, systemd example, native-Linux bind) do not block Phase 3.
+- 2026-09-23 -- Code location switched from `dagster api grpc` to `dagster code-server start`
+  (William's call), so `code-location.sh reload` reloads changed job code in place; `api grpc` could
+  not and logged "Reloading definitions ... not currently supported". Verified in a sandbox: a job
+  added to `definitions.py` appeared after `reload_code` without a restart, and the warning was gone.
+  ADR-0011 amended.
 

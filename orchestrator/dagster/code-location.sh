@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# ADR-0011: host-owned Dagster code location. Ops run as host processes with the host's own Docker;
+# ADR-0011: host-owned Dagster code location (`dagster code-server start`). Ops run as host processes with the host's own Docker;
 # webserver/daemon (compose.yaml) reach this server at host.docker.internal:4000, which compose maps
 # to APPSEC_CODE_LOCATION_HOST (set here under WSL NAT) or Docker's host-gateway.
 #
 #   code-location.sh prepare   create/refresh the host venv and DAGSTER_HOME, then exit
-#   code-location.sh start     prepare, then run `dagster api grpc` in the foreground
+#   code-location.sh start     prepare, then run `dagster code-server start` in the foreground
 #   code-location.sh check     gRPC health check against the running server
 #   code-location.sh run ARGS  run the venv's python with ARGS in the code location's environment
 #                              (DAGSTER_HOME, Postgres, APPSEC_* roots): qualification and diagnostics
 #                              see the same instance and paths as the jobs
-#   code-location.sh reload    tell the webserver to reload this code location (run after every
-#                              start/restart: until then it launches from its old job list and a
-#                              new job is rejected with PipelineNotFoundError)
+#   code-location.sh reload    reload this code location: the code server re-imports definitions.py
+#                              and the webserver refreshes its job list. Run after changing job code
+#                              and after every start/restart (until then the webserver launches from
+#                              its old job list and a new job is rejected with PipelineNotFoundError)
 #
 # Native Linux or WSL (code-location.ps1 runs this under WSL on a Windows host). Runs as the
 # invoking user: run data are written by the host user directly, not through a container mount.
@@ -117,9 +118,11 @@ case "${1:-start}" in
         command -v git >/dev/null || echo "code-location: WARNING git not found; intake needs it" >&2
         "$VENV/bin/python" -c "import ctypes; ctypes.CDLL('libfuzzy.so.2')" 2>/dev/null \
             || echo "code-location: WARNING libfuzzy.so.2 not found; evidence_index needs it (Ubuntu: sudo apt install libfuzzy2)" >&2
-        echo "code-location: dagster api grpc on $BIND:$PORT, runs under $APPSEC_RUNS_ROOT" >&2
-        echo "code-location: once it reports Started, run '$0 reload' so the webserver picks up the current jobs" >&2
-        exec "$VENV/bin/dagster" api grpc -h "$BIND" -p "$PORT" \
+        echo "code-location: dagster code-server on $BIND:$PORT, runs under $APPSEC_RUNS_ROOT" >&2
+        echo "code-location: once it reports Started, run '$0 reload' so the webserver picks up the current jobs (also after editing job code; no restart needed)" >&2
+        # `code-server start` (not `api grpc`) so `reload` also reloads changed job code in place:
+        # it serves a stable gRPC endpoint and swaps a child server underneath on reload.
+        exec "$VENV/bin/dagster" code-server start -h "$BIND" -p "$PORT" \
             -f "$HERE/definitions.py" -d "$REPO" --location-name appsec_review ;;
     run)
         shift
