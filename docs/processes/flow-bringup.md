@@ -394,3 +394,8 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   containerd.service`). SAT `services` now fails if both are active, records the engine
   (`docker info` OperatingSystem), and checks the IPv4 answers for `host.docker.internal` (Desktop
   also adds an IPv6 host-gateway entry, which the first live run tripped over).
+- 2026-09-23 -- SAT from the top passed through `services` (SAT `20260923T204446Z`: fresh clone at
+  `632522b`, Docker Desktop 29.8.0, services healthy, code location LOADED). Stage 3 `run-create`
+  built: `run_process.py --start` in the code location's environment; checks the run id, folders,
+  `run-status.json` (READY, first lane `00-intake-recovery`), a single `RUN_CREATED` event, and that
+  the manifest is still the unfilled template; the run id is kept in `sat.json`.

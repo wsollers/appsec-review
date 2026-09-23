@@ -25,7 +25,7 @@ PY="${PY:-$HOME/.venvs/appsec-review-dagster/bin/python}"
 STAGES=(
   "sut-checkout|1|Fresh clone of the fixture at its pinned commit; clean; no answer key on the branch"
   "services|1|Dagster services healthy; host code location serving; job list reloaded"
-  "run-create|0|run_process.py --start creates the run and its folders"
+  "run-create|1|run_process.py --start creates the run and its folders"
   "stage-inputs|0|stage_artifacts.py writes a valid artifact manifest (executor platform posix)"
   "intake|0|00-intake accepted (phase1_intake)"
   "partition-discovery|0|Partition map supplied and accepted (repository_partition_discovery)"
@@ -64,7 +64,8 @@ json.dump(data, open(path, 'w'), indent=1)
 EOF
 }
 stage_status() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["stages"].get(sys.argv[2],{}).get("status",""))' "$SAT_DIR/sat.json" "$1"; }
-sat_get() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$SAT_DIR/sat.json" "$1"; }
+sat_get() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))[sys.argv[2]]; print("" if v is None else v)' "$SAT_DIR/sat.json" "$1"; }
+sat_set() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d[sys.argv[2]]=sys.argv[3]; json.dump(d, open(p,"w"), indent=1)' "$SAT_DIR/sat.json" "$1" "$2"; }
 
 # ---- fixtures ------------------------------------------------------------------------------------
 # name -> origin and pin come from fixtures/populate-targets.sh, the single source of the pin.
@@ -233,6 +234,54 @@ stage_services() {
   echo "services: PASS  engine $engine; postgres, webserver, daemon healthy; code location LOADED; SAT jobs present"
 }
 
+# ---- stage 3: run-create -------------------------------------------------------------------------
+# The security engineer's first command. Runs in the code location's environment (the same Python
+# and APPSEC_* paths the jobs use), creates a brand-new run, and records its id in sat.json so every
+# later stage of this SAT works on that run.
+stage_run_create() {
+  local cl="$REPO/orchestrator/dagster/code-location.sh" out run_id
+  out="$("$cl" run -B "$REPO/appsec-review-process/run_process.py" --start)" || die "run-create: run_process.py --start failed: $out"
+  echo "$out"
+  run_id="$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')" \
+    || die "run-create: could not read run_id from: $out"
+  [[ "$run_id" =~ ^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}$ ]] || die "run-create: unexpected run id '$run_id'"
+
+  local rdir="$REPO/appsec-review-process/runs/$run_id" d
+  [[ -d "$rdir" ]] || die "run-create: $rdir was not created (is APPSEC_RUNS_ROOT pointing elsewhere?)"
+  for d in data inputs outputs; do [[ -d "$rdir/$d" ]] || die "run-create: $rdir/$d missing"; done
+
+  # run-status.json: a new run, READY, for this id, starting at the first lane of the manifest order.
+  local summary
+  summary="$(python3 - "$rdir" "$run_id" "$REPO/appsec-review-process/process-manifest.json" <<'PY'
+import json, sys, pathlib
+rdir, run_id, manifest = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+s = json.loads((rdir / 'run-status.json').read_text())
+problems = []
+if s.get('schema') != 'appsec-review-process/run-status/0.1': problems.append('schema %r' % s.get('schema'))
+if s.get('run_id') != run_id: problems.append('run_id %r' % s.get('run_id'))
+if s.get('status') != 'READY': problems.append('status %r' % s.get('status'))
+if s.get('completed_processes'): problems.append('completed_processes not empty')
+order = json.loads(open(manifest).read())['process_order']
+if s.get('resume_from') != order[0]: problems.append('resume_from %r, manifest starts %r' % (s.get('resume_from'), order[0]))
+events = [json.loads(l) for l in (rdir / 'events.jsonl').read_text().splitlines() if l.strip()]
+if [e.get('event') for e in events] != ['RUN_CREATED']: problems.append('events %r' % [e.get('event') for e in events])
+if problems: sys.exit('run-status: ' + '; '.join(problems))
+print(json.dumps({'status': s['status'], 'created_at': s['created_at'], 'resume_from': s['resume_from'],
+                  'lanes': len(s['process_order'])}))
+PY
+)" || die "run-create: $summary"
+
+  # The artifact manifest is still the unfilled template here; stage-inputs writes the real one.
+  local template="$REPO/appsec-review-process/templates/artifact-manifest.template.json" manifest_state
+  if cmp -s "$template" "$rdir/inputs/artifact-manifest.json"; then manifest_state=template
+  else die "run-create: inputs/artifact-manifest.json is not the unfilled template (a fresh run should not be staged yet)"; fi
+
+  sat_set run_id "$run_id"
+  record PASS run-create "$(python3 -c 'import json,sys; e=json.loads(sys.argv[3]); e.update(run_id=sys.argv[1], run_dir=sys.argv[2], artifact_manifest=sys.argv[4]); print(json.dumps(e))' \
+    "$run_id" "appsec-review-process/runs/$run_id" "$summary" "$manifest_state")"
+  echo "run-create: PASS  run $run_id (READY, first lane $(printf '%s' "$summary" | python3 -c 'import json,sys; print(json.load(sys.stdin)["resume_from"])'); data/ inputs/ outputs/ present; manifest is the unfilled template)"
+}
+
 # ---- driver --------------------------------------------------------------------------------------
 FIXTURE=hello-autotools; THROUGH=""; RESUME=""
 while [[ $# -gt 0 ]]; do
@@ -261,7 +310,7 @@ json.dump({'schema': 'appsec-review/system-acceptance/1', 'sat_id': sat_id, 'fix
            'repo_commit': repo_head, 'run_id': None, 'stages': {}}, open(path, 'w'), indent=1)
 EOF
 fi
-echo "SAT $(sat_get sat_id)  fixture $FIXTURE  record ${SAT_DIR#$REPO/}"
+echo "SAT $(sat_get sat_id)  fixture $FIXTURE  record ${SAT_DIR#$REPO/}${RESUME:+  run $(sat_get run_id)}"
 
 for id in $(stage_ids); do
   if [[ "$(stage_status "$id")" == PASS && "$id" == sut-checkout ]]; then

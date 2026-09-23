@@ -29,7 +29,7 @@ is re-verified (same HEAD, still clean) because every later stage reads that che
 |---|---|---|---|
 | 1 | `sut-checkout` | Fresh clone at the pinned commit; clean; origin correct; no answer key or defect comments on the reviewed revision | yes |
 | 2 | `services` | Dagster services healthy; host code location serving; job list reloaded | yes |
-| 3 | `run-create` | `run_process.py --start` creates the run | |
+| 3 | `run-create` | `run_process.py --start` creates the run | yes |
 | 4 | `stage-inputs` | `stage_artifacts.py` writes a valid manifest (executor platform `posix`) | |
 | 5 | `intake` | `00-intake` accepted | |
 | 6 | `partition-discovery` | Partition map supplied and accepted | |
@@ -75,3 +75,19 @@ first with `orchestrator/dagster/code-location.sh start`.
 
 Evidence: engine version, service states, code location address, what the webserver resolves, the
 loaded job list and the required daemons.
+
+### 3. `run-create`
+
+The security engineer's first command, run the way the jobs run: `code-location.sh run -B
+appsec-review-process/run_process.py --start` (the code location's Python and `APPSEC_*` paths).
+
+1. The output names a run id of the form `YYYYMMDDTHHMMSSZ-xxxxxx`.
+2. `appsec-review-process/runs/<run_id>/` exists with `data/`, `inputs/` and `outputs/`.
+3. `run-status.json` is for this run, `READY`, with nothing completed and `resume_from` equal to the
+   first lane of `process-manifest.json` (`00-intake-recovery`); `events.jsonl` holds exactly one
+   event, `RUN_CREATED`.
+4. `inputs/artifact-manifest.json` is still the unfilled template (stage 4 writes the real one).
+
+The run id is written to `sat.json` (`run_id`); every later stage of this SAT works on that run, and
+`--resume` shows it in the header. Evidence: run id and folder, status, creation time, first lane,
+lane count, manifest state.
