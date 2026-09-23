@@ -18,5 +18,5 @@ browser is not used, `CHROME` (a Chromium executable).
 
 `render/print/` holds each diagram cut into overlapping, page-width segments
 (`<diagram>-partNofM.png`) for documents with portrait pages, such as the Google Doc
-"AppSecReview - Process.doc". Regenerate them from the full PNGs whenever the renders change.
+["AppSecReview - Process.doc"](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit). Regenerate them from the full PNGs whenever the renders change.
 

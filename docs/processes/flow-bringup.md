@@ -7,6 +7,12 @@ as host processes in WSL (`Ubuntu-24.04`, clone at `~/projects/appsec-review`). 
 requirements themselves are in [engagement-start.md](engagement-start.md); the phase plan is in
 `appsec-review-process/TODO.md` ("Step 4 plan").
 
+**Keeping the docs current (standing rule).** Every change to the process (a script, gate, step, or
+their order) updates, in the same change: the BPMN model [bpmn/pre-submission.bpmn](bpmn/pre-submission.bpmn)
+and its renders (`bpmn/render/`, `bpmn/render/print/`); the Mermaid charts and their renders
+(`render/`); this tracker's status and "What each step does" exposition; and the Google Doc
+[AppSecReview - Process.doc](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit), which mirrors these files for reading outside the repository.
+
 ## Flow and status
 
 ```mermaid
@@ -353,4 +359,7 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   checkout to Dagster acceptance; intake and discovery gates modelled as pre-submittal (William's
   call). Validated with bpmn-moddle and rendered with bpmn-js (0 warnings each); renders committed
   under `bpmn/render/`.
-
+- 2026-09-23 -- Google Doc [AppSecReview - Process.doc](https://docs.google.com/document/d/1DZlI8yF94P5cYO_fDxb8-hsY6eH7tZtmQd4Oscvd9hM/edit) created from these docs
+  (system arrangement, engagement flow, pre-submission BPMN with drill-downs, fixture bring-up, Dagster
+  workflow, open items); images are the committed renders at `b9d84be`. Standing rule added: every
+  process change updates the BPMN, Mermaid, renders, this exposition and the Google Doc together.
