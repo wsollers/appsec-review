@@ -27,8 +27,11 @@ to evidence collection without knowing how to build means native evidence can ne
 2. **LLM inference over the index (`02-build-plan`).** The model reads only the index, the buildenv
    catalog and the schema, and returns a structured build plan: base image, apt packages, ordered
    argv commands, feasibility tier, each claim cited. The plan is validated deterministically
-   before anything is built. Default invoker: `claude -p` under the operator's subscription through
-   the `PersonaInvoker` interface; the API is a second implementation of the same interface.
+   before anything is built. The model is **Haiku**, called through the `claude` CLI with its
+   current login (the operator's subscription), never an API key: the invoker strips
+   `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` from the child process. Both are set in
+   `model-config.json` (`lane_overrides["02-build-plan"]`, `invocation.auth.mode`); switching to an
+   API key is `invocation.auth.mode = "api-key"` there and nothing else.
 3. **Our code renders the Dockerfile.** The model chooses base and packages; it never writes a
    Dockerfile, adds repositories, downloads or copies target files into an image.
 4. **Bounded loop (`02-build-resolution`).** Build the image (network to the distro mirror only,
@@ -70,7 +73,6 @@ to evidence collection without knowing how to build means native evidence can ne
 
 ## Non-decisions
 
-- The model pinned for `build_plan`.
 - Ecosystems beyond apt (pip, npm, cargo, Maven): each needs its own `package-restore` mirror; until
   then `BLOCKED(UNSUPPORTED_ECOSYSTEM)`.
 - Windows and MSVC targets.

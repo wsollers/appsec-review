@@ -8791,8 +8791,8 @@
   "llm-invoker": {
    "id": "llm-invoker",
    "kind": "state",
-   "path": "PersonaInvoker (default: claude -p under the subscription; ANTHROPIC_API_KEY unset)",
-   "about": "The model call behind build-plan and its revisions; model pinned in model-config.json.",
+   "path": "PersonaInvoker: claude -p with its current login (subscription, never an API key), model Haiku",
+   "about": "The model call behind build-plan and its revisions; model and auth mode set in model-config.json (lane_overrides[\"02-build-plan\"], invocation.auth.mode).",
    "produced_by": [],
    "consumed_by": [
     "step:build-plan",

@@ -84,12 +84,9 @@ Before asking the model anything, the job looks for an image that already built 
 
 ## 3. `02-build-plan` (LLM inference)
 
-**Invoker.** Through the persona-invocation protocol (`persona_invocation.PersonaInvoker`). The
-default implementation runs `claude -p` under the operator's subscription, the path `review_cli.py`
-already uses; it refuses to start if `ANTHROPIC_API_KEY` is set (that forces API billing,
-`scripts/Test-SubscriptionAuth.ps1`) unless the invoker is explicitly configured as `api`. An
-Anthropic API invoker is a second implementation of the same interface. The model is pinned in
-`model-config.json` (`build_plan` role) and recorded, with the prompt hash, in every attempt.
+**Invoker.** Through the persona-invocation protocol (`persona_invocation.PersonaInvoker`), using
+the `claude` CLI (`claude -p`) with its current login, the operator's Claude subscription. The model
+is Haiku; authentication and model are set as described in "Model and authentication" below.
 
 **Inputs to the model:** the build index, the buildenv catalog (the base images it may choose
 from), the output schema, and on retries the previous plan and a bounded failure excerpt. Never the
@@ -175,6 +172,29 @@ On `OK`:
 A catalogued image is deleted only by an operator (`image_build.py` prune, later); the catalog
 entry is never rewritten, only appended to.
 
+## Model and authentication
+
+Decided by William, 2026-09-24.
+
+| Setting | Value | Where to change it |
+|---|---|---|
+| Model | Haiku (`haiku`, the claude CLI alias for the current Haiku) | `appsec-review-process/model-config.json`, `lane_overrides["02-build-plan"].model` |
+| Authentication | `subscription`: the claude CLI's current login, never an API key | `appsec-review-process/model-config.json`, `invocation.auth.mode` |
+
+With `subscription`, the invoker removes `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from the
+environment of the `claude` child process only. A key left set in the operator's shell would
+otherwise switch billing to the API without warning (`scripts/Test-SubscriptionAuth.ps1`); the
+operator's own environment is not changed.
+
+**To use an API key instead** (the one place to change): set `invocation.auth.mode` to `api-key`
+in `model-config.json`. The invoker then passes `ANTHROPIC_API_KEY` through to `claude` and refuses
+to start if it is not set. Nothing else changes: the same CLI, flags, model and prompts. A direct
+Anthropic API client (no CLI) would be a second `PersonaInvoker` implementation; it is not planned.
+
+Every attempt records the auth mode, the requested model, the model that actually answered (from
+the CLI's JSON output; `--fallback-model` can substitute one under load) and the prompt hash, so a
+plan can be audited and replayed.
+
 ## Job parameters
 
 | Parameter | Default | Meaning |
@@ -228,7 +248,5 @@ The SAT walks these in flow order after the discovery gates and before evidence 
 
 ## Open
 
-- The model to pin for `build_plan` (default: the same model `review_cli.py` resolves for analysis
-  roles) and whether the API invoker is needed now or later.
 - Windows targets (`*.sln`, MSVC) need a Windows build environment; out of scope for v1, recorded
   as `BLOCKED(UNSUPPORTED_PLATFORM)`.

@@ -24,7 +24,8 @@
   },
   "lane_overrides": {
     "09-independent-verification": { "effort": "high" },
-    "10-synthesis-report": { "effort": "high" }
+    "10-synthesis-report": { "effort": "high" },
+    "02-build-plan": { "model": "haiku", "_note": "Build plan and its revisions (docs/processes/build-resolution.md). Decided by William 2026-09-24. 'haiku' is the claude CLI alias for the current Haiku; the model that actually answered is recorded per attempt." }
   },
   "lane_tools": {
     "_note": "Real filesystem/tool scoping via --allowedTools, not just prompt instruction. default applies unless a lane is listed here.",
@@ -53,6 +54,12 @@
   },
   "invocation": {
     "type": "cli",
+    "auth": {
+      "mode": "subscription",
+      "decided": "William 2026-09-24: use the claude CLI with its current login (the Claude subscription), never an API key.",
+      "effect": "subscription: the invoker removes ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN from the claude child process's environment (the operator's own environment is untouched), so a key set in the shell cannot silently switch billing to the API. Each attempt records auth mode 'subscription'.",
+      "to_use_an_api_key": "Set mode to 'api-key' here (this is the one place to change). The invoker then passes ANTHROPIC_API_KEY through and refuses to start if it is unset; attempts record auth mode 'api-key'. See docs/processes/build-resolution.md, section 'Model and authentication'."
+    },
     "status": "CONFIRMED 2026-09-17 against claude 2.1.146 on hal5000 (real user install, not the sandbox-restricted binary). Flags are real flags from `claude -p --help`'s actual output. Prompt delivery, dollar caps, and permission-mode decided by the repo owner 2026-09-17 -- see decisions below.",
     "binary": "claude",
     "fixed_flags": ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--permission-mode", "bypassPermissions"],

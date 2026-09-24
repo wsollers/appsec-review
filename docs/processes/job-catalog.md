@@ -1970,7 +1970,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-legacy-pregather"></a>`legacy-pregather` | file | scratch/<project>-engagement/ (legacy pipeline/engagement_job.*) | [`legacy-pregather`](#step-legacy-pregather) | [`lane-handoffs`](#step-lane-handoffs) |
 | <a id="a-buildenv-image"></a>`buildenv-image` | state | audit-buildenv-cpp (pinned image, via B13) | -- | [`build-resolution`](#step-build-resolution)<br>[`build_execution`](#step-build-execution) |
 | <a id="a-buildenv-catalog"></a>`buildenv-catalog` | record | appsec-review-process/tooling/buildenv-catalog.json | -- | [`build-plan`](#step-build-plan) |
-| <a id="a-llm-invoker"></a>`llm-invoker` | state | PersonaInvoker (default: claude -p under the subscription; ANTHROPIC_API_KEY unset) | -- | [`build-plan`](#step-build-plan)<br>[`build-resolution`](#step-build-resolution) |
+| <a id="a-llm-invoker"></a>`llm-invoker` | state | PersonaInvoker: claude -p with its current login (subscription, never an API key), model Haiku | -- | [`build-plan`](#step-build-plan)<br>[`build-resolution`](#step-build-resolution) |
 | <a id="a-build-index"></a>`build-index` | file | runs/<run_id>/data/jobs/02-build-index/.../outputs/build-index.json, build-index.md | [`build-index`](#step-build-index) | [`build-plan`](#step-build-plan) |
 | <a id="a-build-plan"></a>`build-plan` | file | runs/<run_id>/data/jobs/02-build-plan/.../outputs/build-plan.json | [`build-plan`](#step-build-plan) | [`build-resolution`](#step-build-resolution) |
 | <a id="a-build-attempts"></a>`build-attempts` | file | runs/<run_id>/data/jobs/02-build-resolution/attempts/<n>/ (plan, Dockerfile, image id, exit codes, logs) | [`build-resolution`](#step-build-resolution) | -- |
