@@ -418,3 +418,9 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   no findings, build not executed), manifest and events, and an unchanged checkout. Checked against
   a real intake output: families `autotools`, `cpp`, `deployment` (the Dockerfile), so intake also
   marks DevOps and SRE discovery `required` -- revisit the planned skip receipts for those two.
+- 2026-09-24 -- SAT stage 5 `intake` passed in WSL (Dagster `dbcacaee`, attempt
+  `20260924T135038Z-9e3a134f56cb`). Stage 6 `partition-discovery` built: the gate first with nothing
+  supplied (must FAIL with `handoff.md`/`handoff.json` and accept nothing, the old S4a proof, now on
+  the same run), then `supply_record.py`, then the gate again (must SUCCEED); the accepted map is
+  checked by `discovery_gate.validate` and independently (revision, partitions, `docs` deferred,
+  all 19 citation hashes re-computed from the checkout).

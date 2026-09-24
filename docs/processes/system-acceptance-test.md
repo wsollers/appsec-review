@@ -32,7 +32,7 @@ is re-verified (same HEAD, still clean) because every later stage reads that che
 | 3 | `run-create` | `run_process.py --start` creates the run | yes |
 | 4 | `stage-inputs` | `stage_artifacts.py` writes a valid manifest (executor platform `posix`) | yes |
 | 5 | `intake` | `00-intake` accepted | yes |
-| 6 | `partition-discovery` | Partition map supplied and accepted | |
+| 6 | `partition-discovery` | Hand-off with nothing supplied; partition map supplied and accepted | yes |
 | 7 | `dev-project-discovery` | Project discovery supplied and accepted | |
 | 8 | `engagement-workflow` | Preparation branches and join published | |
 | 9 | `build-configure` | `02-build-configure` through B13 in the pinned build image (needs Phase 3, Phase 4, E01) | |
@@ -140,3 +140,25 @@ Evidence: Dagster run, launch and attempt ids, revision and source fingerprint, 
 families, native applicability and strategy, the selected jobs with their applicability, and the
 number of recorded limitations. On `hello-autotools` the families are `autotools`, `cpp` and
 `deployment` (the Dockerfile), so intake also marks DevOps and SRE discovery `required`.
+
+### 6. `partition-discovery`
+
+`02-repository-partition-discovery` is a supplied-result gate: it validates an analysis written by a
+person or agent and never invents one. The stage proves both halves on the SAT's run:
+
+1. **Nothing supplied.** `launch_job.py --job repository_partition_discovery --wait` must end
+   `FAILURE`; the gate must have written `handoff.md` and `handoff.json` naming `supplied/result.json`
+   and the `repository-partition-map` schema; nothing may be accepted. (Skipped, and recorded as
+   skipped, if a result is already supplied, e.g. when the stage is re-run after a later failure.)
+2. **Supply.** `fixtures/supply_record.py` installs the fixture's recorded analysis
+   (`fixtures/supplied/<fixture>/02-repository-partition-discovery.json`); it refuses a checkout at a
+   different commit or with local changes and never overwrites a different supplied result.
+3. **Accept.** The gate is launched again and must end `SUCCESS`; `discovery_gate.validate` (the
+   project's own validator) must accept the result; the accepted attempt must come from that Dagster
+   run; the map's `source_revision` is the checkout's HEAD; its partitions are the record's; the
+   `docs` partition is `deferred`; and every source-file citation's SHA-256 is re-computed from the
+   checkout and must match (independently of the gate).
+
+Evidence: both Dagster runs, the attempt, each partition's disposition, the primary personas and the
+number of citations checked. On `hello-autotools`: `app`, `build`, `tests`, `vendored-cjson` review,
+`docs` deferred, 19 citations.

@@ -28,7 +28,7 @@ STAGES=(
   "run-create|1|run_process.py --start creates the run and its folders"
   "stage-inputs|1|stage_artifacts.py writes a valid artifact manifest (executor platform posix)"
   "intake|1|00-intake accepted (phase1_intake)"
-  "partition-discovery|0|Partition map supplied and accepted (repository_partition_discovery)"
+  "partition-discovery|1|Partition map supplied and accepted (repository_partition_discovery)"
   "dev-project-discovery|0|Project discovery supplied and accepted (dev_project_discovery)"
   "engagement-workflow|0|engagement_workflow: preparation branches and join published"
   "build-configure|0|02-build-configure through B13 in the pinned build image (needs Phase 3, 4, E01)"
@@ -355,15 +355,21 @@ PY
 # the work runs in the host code location), then the accepted output is checked on disk.
 SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
 
-launch_and_wait() {  # launch_and_wait <stage> <dagster job>  -> sets LAUNCH (the final request JSON)
-  local cl="$REPO/orchestrator/dagster/code-location.sh" rc=0
-  LAUNCH="$("$cl" run -B "$REPO/appsec-review-process/launch_job.py" --run-id "$RUN_ID" --job "$2" --wait --timeout "$SAT_JOB_TIMEOUT")" || rc=$?
+launch_job() {  # launch_job <dagster job> -> LAUNCH (final request JSON), LAUNCH_STATUS, LAUNCH_DAGSTER, LAUNCH_RC
+  local cl="$REPO/orchestrator/dagster/code-location.sh"
+  LAUNCH_RC=0
+  LAUNCH="$("$cl" run -B "$REPO/appsec-review-process/launch_job.py" --run-id "$RUN_ID" --job "$1" --wait --timeout "$SAT_JOB_TIMEOUT")" || LAUNCH_RC=$?
   echo "$LAUNCH"
-  local status dagster_id
-  status="$(printf '%s' "$LAUNCH" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
-  dagster_id="$(printf '%s' "$LAUNCH" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("dagster_run_id",""))' 2>/dev/null || true)"
-  [[ $rc == 0 && "$status" == SUCCESS ]] || die "$1: Dagster job $2 did not succeed (status ${status:-unknown}, exit $rc).
-  Dagster run: ${dagster_id:+http://127.0.0.1:3000/runs/$dagster_id}${dagster_id:-none (see the launch request under runs/$RUN_ID/data/orchestration/launches/)}"
+  LAUNCH_STATUS="$(printf '%s' "$LAUNCH" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
+  LAUNCH_DAGSTER="$(printf '%s' "$LAUNCH" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("dagster_run_id",""))' 2>/dev/null || true)"
+}
+
+dagster_url() { echo "${LAUNCH_DAGSTER:+http://127.0.0.1:3000/runs/$LAUNCH_DAGSTER}${LAUNCH_DAGSTER:-none (see the launch request under runs/$RUN_ID/data/orchestration/launches/)}"; }
+
+launch_and_wait() {  # launch_and_wait <stage> <dagster job>: the job must end SUCCESS
+  launch_job "$2"
+  [[ $LAUNCH_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "$1: Dagster job $2 did not succeed (status ${LAUNCH_STATUS:-unknown}, exit $LAUNCH_RC).
+  Dagster run: $(dagster_url)"
 }
 
 stage_intake() {
@@ -424,6 +430,108 @@ PY
 import json,sys; s=json.load(sys.stdin)
 print("intake: PASS  Dagster %s accepted attempt %s; revision %s, %d files fingerprinted; families: %s; native: %s (%s); build not executed; no findings" % (
   s["dagster_run_id"][:8], s["attempt_id"], s["source_revision"][:7], s["files_fingerprinted"], ", ".join(sorted(s["families"])), s["native_applicable"], s["native_strategy"]))'
+}
+
+# ---- stage 6: partition-discovery -----------------------------------------------------------------
+# 02-repository-partition-discovery is a supplied-result gate: it never invents the analysis. The
+# stage proves both halves: with nothing supplied it must fail with an actionable hand-off; with the
+# fixture's recorded analysis supplied it must accept it, and the accepted map must still match the
+# checkout (every citation hash re-checked here, independently of the gate).
+PARTITION_JOB=02-repository-partition-discovery
+
+gate_validate() {  # gate_validate <job>: the project's own validator for an accepted gate result
+  "$REPO/orchestrator/dagster/code-location.sh" run -B -c \
+    'import sys; sys.path.insert(0, sys.argv[1]); import discovery_gate; discovery_gate.validate(sys.argv[2], sys.argv[3]); print("validator OK")' \
+    "$REPO/appsec-review-process" "$RUN_ID" "$1"
+}
+
+stage_partition_discovery() {
+  require_run partition-discovery
+  local jobdir="$RUN_DIR/data/jobs/$PARTITION_JOB" supplied="$RUN_DIR/data/jobs/$PARTITION_JOB/supplied/result.json"
+  local handoff_dagster="" handoff_state="not-run"
+
+  # a) Nothing supplied: the gate must fail with a hand-off, and accept nothing. Skipped (and said so)
+  #    if a result is already supplied, e.g. when this stage is re-run after a later failure.
+  if [[ ! -e "$supplied" ]]; then
+    echo "-- a) gate with nothing supplied: expect FAILURE and a hand-off"
+    launch_job repository_partition_discovery
+    [[ "$LAUNCH_STATUS" == FAILURE ]] || die "partition-discovery: with nothing supplied the gate ended ${LAUNCH_STATUS:-unknown}, expected FAILURE. Dagster run: $(dagster_url)"
+    handoff_dagster="$LAUNCH_DAGSTER"
+    python3 - "$jobdir" <<'PY' || die "partition-discovery: hand-off check failed"
+import json, pathlib, sys
+d = pathlib.Path(sys.argv[1])
+bad = [f for f in ('handoff.md', 'handoff.json') if not (d / f).is_file()]
+if not bad:
+    text = (d / 'handoff.md').read_text() + (d / 'handoff.json').read_text()
+    for needle in ('supplied/result.json', 'repository-partition-map'):
+        if needle not in text: bad.append('hand-off does not name ' + needle)
+acc = d / 'accepted.json'
+if acc.exists() and json.loads(acc.read_text()).get('status') == 'OK': bad.append('a result was accepted with nothing supplied')
+if bad: sys.exit('; '.join(bad))
+print('hand-off issued: handoff.md and handoff.json name supplied/result.json and the repository-partition-map schema; nothing accepted')
+PY
+    handoff_state="issued"
+  else
+    echo "-- a) skipped: a supplied result already exists for this run (stage re-run)"
+    handoff_state="skipped-already-supplied"
+  fi
+
+  # b) Supply the fixture's recorded analysis (refuses a moved or dirty checkout, never overwrites).
+  echo "-- b) supply the recorded partition map"
+  "$REPO/orchestrator/dagster/code-location.sh" run -B "$REPO/fixtures/supply_record.py" --run-id "$RUN_ID" --job "$PARTITION_JOB" --fixture "$FIXTURE" \
+    || die "partition-discovery: supply_record.py refused"
+
+  # c) The gate accepts it.
+  echo "-- c) gate with the supplied map: expect SUCCESS"
+  launch_and_wait partition-discovery repository_partition_discovery
+  gate_validate "$PARTITION_JOB" || die "partition-discovery: discovery_gate.validate rejected the accepted result"
+
+  local summary
+  summary="$(python3 - "$jobdir" "$REPO/fixtures/targets/$FIXTURE" "$REPO/fixtures/supplied/$FIXTURE/$PARTITION_JOB.json" "$LAUNCH_DAGSTER" "$(sat_get run_id)" <<'PY'
+import hashlib, json, pathlib, sys
+d, target, record_path, dagster_id, run_id = sys.argv[1:]
+d, target = pathlib.Path(d), pathlib.Path(target)
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+if ptr.get('status') != 'OK': bad.append('accepted status %r' % ptr.get('status'))
+att = d / 'attempts' / ptr['attempt_id']
+status = json.loads((att / 'status.json').read_text())
+if status.get('dagster_run_id') != dagster_id: bad.append('accepted by Dagster run %r, launched %r' % (status.get('dagster_run_id'), dagster_id))
+m = json.loads((att / 'repository-partition-map.json').read_text())
+rec = json.loads(pathlib.Path(record_path).read_text())
+head = __import__('subprocess').run(['git', '-C', str(target), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+if m.get('source_revision') != head: bad.append('map source_revision %r, checkout %r' % (m.get('source_revision'), head))
+ids = {p['partition_id']: p for p in m.get('partitions', [])}
+if sorted(ids) != sorted(p['partition_id'] for p in rec['partitions']): bad.append('partitions %r differ from the record' % sorted(ids))
+if ids.get('docs', {}).get('disposition') != 'deferred': bad.append('docs partition is not deferred')
+# Independent freshness check: every source-file citation hash matches the checkout now.
+cites, stale = 0, []
+def walk(v):
+    global cites
+    if isinstance(v, dict):
+        if v.get('source_type') == 'source_file' and v.get('content_hash'):
+            cites += 1
+            f = target / v['path']
+            if not f.is_file() or hashlib.sha256(f.read_bytes()).hexdigest() != v['content_hash']: stale.append(v['path'])
+        for x in v.values(): walk(x)
+    elif isinstance(v, list):
+        for x in v: walk(x)
+walk(m)
+if stale: bad.append('stale citations: ' + ', '.join(sorted(set(stale))))
+if cites == 0: bad.append('no source-file citations found')
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': ptr['attempt_id'], 'source_revision': head,
+                  'partitions': {k: v.get('disposition') for k, v in ids.items()},
+                  'primary_personas': sorted({v.get('primary_persona_id') for v in ids.values()}),
+                  'citations_checked': cites}))
+PY
+)" || die "partition-discovery: $summary"
+
+  record PASS partition-discovery "$(python3 -c 'import json,sys; e=json.loads(sys.argv[1]); e.update(handoff=sys.argv[2], handoff_dagster_run_id=sys.argv[3] or None); print(json.dumps(e))' "$summary" "$handoff_state" "$handoff_dagster")"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("partition-discovery: PASS  hand-off %s; map accepted by Dagster %s (attempt %s): %s; %d citations match the checkout" % (
+  sys.argv[1], s["dagster_run_id"][:8], s["attempt_id"], ", ".join("%s=%s" % kv for kv in sorted(s["partitions"].items())), s["citations_checked"]))' "$handoff_state"
 }
 
 # ---- driver --------------------------------------------------------------------------------------
