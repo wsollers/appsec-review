@@ -254,17 +254,36 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
    `persona_invocation.load_composition` uses, so the assembled prompt and what
    `persona_invocation` independently re-hashes can never drift apart; `governing_rules` and
    `buildenv_catalog` as literal file bytes; `task` as the job template's own `task_prompt` file's
-   literal bytes), concatenates, and (via `assemble_outer_prompt`) writes the result under the
-   attempt's own scratch dir via `execution_state.data_path` (run-owned, symlink-checked, atomic),
-   returning `{path, sha256, bytes}` ready to drop straight into
-   `request["outer_prompt"]`. Verified in the cloud sandbox: full render of D01's 8-section prompt
-   (governing_rules, persona, role, domain, tooling_profile, buildenv_catalog, task,
-   output_contract) succeeds; the written file round-trips through
-   `persona_invocation._read_pinned` with the exact `sha256`/`bytes` this module returns (proves
-   the pin persona_invocation.resolve_request will independently verify actually matches); a
-   missing job template raises `PromptAssemblyError` before writing anything. `--print` on the
-   module (`python3 persona_prompt_assembly.py <job_template_id> --print`) renders without writing,
-   for review.
+   literal bytes), concatenates, and (via `assemble_outer_prompt`) writes the result to
+   `appsec-review-process/prompt-cache/<job_template_id>/outer_prompt.md` (a new, gitignored
+   `prompt-cache/` dir alongside `runs/`, not under any run's `attempts/` tree), returning
+   `{path, sha256, bytes}` ready to drop straight into `request["outer_prompt"]`. **Corrected
+   2026-09-24, before delivery of item 3:** the first build wrote this file under the attempt's own
+   scratch dir (`runs/<run_id>/data/jobs/<job_id>/attempts/<attempt_id>/prompt/outer_prompt.md`) via
+   `execution_state.data_path`. That is a real bug, not a style choice --
+   `persona_invocation._read_pinned` explicitly refuses an `outer_prompt` that sits inside the
+   attempt it's for ("an attempt never reads itself"), so `resolve_request` would have rejected
+   every request this module built, every time. The original round-trip test missed it because it
+   called `_read_pinned` with `attempt=None` rather than a real attempt identity, so that check was
+   never exercised. Root cause: the assembled prompt is a pure function of `job_template_id` plus
+   current registry state -- nothing about it is run-, job-, or attempt-specific -- so it never
+   belonged under `runs/` at all; `owasp_dispatch.py`'s real usage (`prompt_root=ROOT`, the static
+   process tree) confirms this is the established convention. Fixed by dropping the
+   `run_id`/`job_id`/`attempt_id` parameters entirely and caching one file per `job_template_id`
+   under `prompt-cache/`, regenerated (not appended to) on every call, so two attempts of the same
+   job template share one `outer_prompt` file and its pin, and a registry edit is picked up on the
+   next call with no stale per-attempt copy to invalidate. Re-verified in the cloud sandbox against
+   the corrected design: full render of D01's 8-section prompt (governing_rules, persona, role,
+   domain, tooling_profile, buildenv_catalog, task, output_contract) succeeds; the written file
+   round-trips through `persona_invocation._read_pinned` with the exact `sha256`/`bytes` this module
+   returns, this time called with a *real* attempt identity (a fake `runs/.../attempts/<id>` dir
+   outside `prompt-cache/`) so the "attempt never reads itself" check is actually exercised;
+   separately confirmed the original (now-fixed) in-attempt path does raise
+   `PersonaRequestError: outer_prompt: is inside the attempt; an attempt never reads itself` when
+   fed to the same check, proving the bug was real and the fix resolves it; a missing job template
+   raises `PromptAssemblyError` before writing anything. `--print` on the module
+   (`python3 persona_prompt_assembly.py <job_template_id> --print`) renders without writing, for
+   review.
 2b. **DONE, William's addition 2026-09-24, not in the original spec.** ~~Model version
    registry~~ -- built: `appsec-review-process/model_version_registry.py`. Real gap found while
    starting item 3: `persona_invocation.py`'s request schema requires a fully pinned model

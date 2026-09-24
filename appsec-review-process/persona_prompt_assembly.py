@@ -28,7 +28,9 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from execution_state import atomic_bytes, beneath, data_path, identifier
+import hashlib
+
+from execution_state import atomic_bytes, beneath, identifier
 from schema_validate import SchemaStore, validate_document
 
 ROOT = Path(__file__).resolve().parent
@@ -36,6 +38,12 @@ REGISTRY_DIR = ROOT / "registry"
 PROMPT_ROOT = ROOT  # matches persona_invocation.PROMPT_ROOT: paths are named relative to this tree
 GOVERNING_RULES_PATH = REGISTRY_DIR / "prompt-fragments" / "governing-rules.md"
 BUILDENV_CATALOG_PATH = ROOT / "tooling" / "buildenv-catalog.json"
+# Deliberately NOT under runs/<run_id>/.../attempts/<attempt_id>/: persona_invocation's own
+# _read_pinned refuses an outer_prompt that sits inside the attempt ("an attempt never reads
+# itself"), and this module's render is a pure function of job_template_id and the registry --
+# nothing about it is run-, job-, or attempt-specific, so it does not belong under runs/ at all.
+# One cached file per job_template_id, regenerated (not appended to) on every call.
+PROMPT_CACHE_DIR = ROOT / "prompt-cache"
 
 # section name -> (registry directory, schema file, composition key, the record's own id field).
 # Deliberately not imported from persona_invocation.COMPOSITION_KINDS: this module stays a plain
@@ -147,20 +155,21 @@ def assemble_prompt_text(job_template_id: str, store: SchemaStore | None = None)
     return text, template
 
 
-def assemble_outer_prompt(job_template_id: str, *, run_id: str, job_id: str, attempt_id: str,
-                          store: SchemaStore | None = None) -> dict[str, Any]:
-    """Assembles and writes the outer prompt for one attempt, under the attempt's own scratch
-    directory (``runs/<run_id>/data/jobs/<job_id>/attempts/<attempt_id>/prompt/outer_prompt.md``),
-    and returns ``{path, sha256, bytes}`` -- ``path`` relative to ``PROMPT_ROOT``, ``sha256`` in the
-    ``sha256:<64 hex>`` form ``persona_invocation`` pins, ``bytes`` the exact byte count written.
-    The request builder passes this dict straight through as ``request["outer_prompt"]``."""
+def assemble_outer_prompt(job_template_id: str, *, store: SchemaStore | None = None) -> dict[str, Any]:
+    """Assembles and writes the outer prompt for `job_template_id` to its cache path under
+    ``PROMPT_CACHE_DIR`` (never under any run's ``attempts/`` tree -- see that constant's
+    comment), and returns ``{path, sha256, bytes}`` -- ``path`` relative to ``PROMPT_ROOT``,
+    ``sha256`` in the ``sha256:<64 hex>`` form ``persona_invocation`` pins, ``bytes`` the exact
+    byte count written. The request builder passes this dict straight through as
+    ``request["outer_prompt"]``. Not run-, job-, or attempt-scoped: every call for the same
+    ``job_template_id`` regenerates the same cache file from the current registry state, so two
+    attempts of the same job template share one outer_prompt file and its pin, and a registry
+    edit is picked up on the next call without any stale per-attempt copy to invalidate."""
     text, _template = assemble_prompt_text(job_template_id, store)
     data = text.encode("utf-8")
-    output_path = data_path(run_id, "jobs", identifier(job_id), "attempts", identifier(attempt_id),
-                            "prompt", "outer_prompt.md")
+    output_path = beneath(PROMPT_CACHE_DIR, PROMPT_CACHE_DIR / identifier(job_template_id) / "outer_prompt.md")
     atomic_bytes(output_path, data)
     relative = output_path.resolve().relative_to(PROMPT_ROOT.resolve()).as_posix()
-    import hashlib
     return {
         "path": relative,
         "sha256": "sha256:" + hashlib.sha256(data).hexdigest(),
@@ -174,17 +183,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("job_template_id")
     parser.add_argument("--print", action="store_true", help="render and print the assembled prompt text, write nothing")
-    parser.add_argument("--run-id")
-    parser.add_argument("--job-id")
-    parser.add_argument("--attempt-id")
     args = parser.parse_args()
 
     if args.print:
         rendered_text, _ = assemble_prompt_text(args.job_template_id)
         print(rendered_text)
     else:
-        if not (args.run_id and args.job_id and args.attempt_id):
-            raise SystemExit("--run-id, --job-id, and --attempt-id are required unless --print")
-        result = assemble_outer_prompt(args.job_template_id, run_id=args.run_id, job_id=args.job_id,
-                                       attempt_id=args.attempt_id)
+        result = assemble_outer_prompt(args.job_template_id)
         print(json.dumps(result, indent=2))
