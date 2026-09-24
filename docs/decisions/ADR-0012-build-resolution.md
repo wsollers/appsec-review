@@ -30,8 +30,11 @@ to evidence collection without knowing how to build means native evidence can ne
    before anything is built. The model is **Haiku**, called through the `claude` CLI with its
    current login (the operator's subscription), never an API key: the invoker strips
    `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` from the child process. Both are set in
-   `model-config.json` (`lane_overrides["02-build-plan"]`, `invocation.auth.mode`); switching to an
-   API key is `invocation.auth.mode = "api-key"` there and nothing else.
+   `model-config.json` (`unbuilt_job_defaults["02-build-plan"]` until that job template is
+   authored, then its own `model` field; `invocation.auth.mode`); switching to an API key is
+   `invocation.auth.mode = "api-key"` there and nothing else. (Model routing redesigned
+   2026-09-24: jobs declare their own model in their job-template record rather than a
+   lane-keyed table -- see model-config.json's `_notes`.)
 3. **Our code renders the Dockerfile.** The model chooses base and packages; it never writes a
    Dockerfile, adds repositories, downloads or copies target files into an image.
 4. **Bounded loop (`02-build-resolution`).** Build the image (network to the distro mirror only,

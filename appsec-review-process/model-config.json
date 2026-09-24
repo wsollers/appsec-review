@@ -1,14 +1,15 @@
 {
-  "schema": "appsec-review-process/model-config/0.3",
+  "schema": "appsec-review-process/model-config/0.4",
   "_notes": [
-    "Single model family available today (per 2026-09-17 design conversation): claude-sonnet-5, via the real Claude Code CLI (v2.1.146+, confirmed on hal5000 at C:\\Users\\wsoll\\.local\\bin\\claude.exe -- NOT the restricted /opt/cowork/claude-bin/claude found on the Cowork device-bridge sandbox's own PATH, which only supports bare `claude -p \"<prompt>\"`).",
-    "Originally scoped around a private 'fable' model; superseded -- model identity now lives here, not hardcoded in review_cli.py, so it can be repointed without touching code.",
-    "'effort' is a reasoning-effort/tier label, not a distinct model family -- it is how lane/budget-tier stakes get expressed with only one model available (see design conversation: 09/10 keep the strongest tier regardless of budget; probe-budget lanes run cheaper/faster). Maps directly to claude's own --effort low|medium|high|xhigh|max.",
+    "Model routing design changed 2026-09-24 (William): models are not tied to a lane by a central table here. Each job declares the model/effort it needs in its OWN registry job-template record (registry/job-templates/<job_template_id>.json, top-level `model: {model, effort}`), because the job -- not the lane it happens to run in -- knows what it needs. `resolve_model()` in review_cli.py reads that field once the job template exists; it is authoritative for that job, and this file's `default`/`unbuilt_job_defaults` below never override it.",
+    "This file keeps only: the process-wide `default` (used when a job template declares no model/effort of its own, and as the base every other layer sits on top of), `budget_effort_floor` (an effort floor by budget tier, applied before any job-declared value), and `unbuilt_job_defaults` -- a temporary bridge for job_template_ids referenced by the job graph that do not have a registry job-template file yet (so they have nowhere else to carry a preference). An entry there is dropped the day that job template is authored with its own `model` field; it is never consulted once a job template exists, even one that leaves `model` unset.",
+    "Default model is 'haiku' (the claude CLI alias for the current Haiku) as of 2026-09-24 (William). Prior default was claude-sonnet-5; sonnet-5 stays available and is what several job templates pin explicitly for reasoning-heavy work (e.g. 02-repository-partition-discovery) -- see each job template's own `model` field. Real Claude Code CLI (v2.1.146+, confirmed on hal5000 at C:\\Users\\wsoll\\.local\\bin\\claude.exe -- NOT the restricted /opt/cowork/claude-bin/claude found on the Cowork device-bridge sandbox's own PATH, which only supports bare `claude -p \"<prompt>\"`).",
+    "'effort' is a reasoning-effort/tier label, not a distinct model family. Maps directly to claude's own --effort low|medium|high|xhigh|max.",
     "Quorum panels (design-v3.md Sec5) additionally use 'personas' (see quorum_personas below) since real model-family diversity isn't available yet -- every quorum result must still be tagged diversity_requirement_met:false downstream. Personas are implemented as claude --agents/--agent (real named agents, not just swapped system-prompt text), see quorum_personas.agent_definitions.",
     "max_budget_usd values below are PLACEHOLDERS, explicitly accepted as such by the repo owner on 2026-09-17 pending real-run experience -- revisit once a full-budget pooled lane has actually run once."
   ],
   "default": {
-    "model": "claude-sonnet-5",
+    "model": "haiku",
     "effort": "medium"
   },
   "budget_effort_floor": {
@@ -22,10 +23,11 @@
     "standard": 2.0,
     "full": 5.0
   },
-  "lane_overrides": {
+  "unbuilt_job_defaults": {
+    "_note": "Superseded by each job's own job-template `model` field as it is authored (see _notes[0] above). Only for job_template_ids that appear in job-graph.json but have no registry/job-templates/<id>.json yet.",
     "09-independent-verification": { "effort": "high" },
     "10-synthesis-report": { "effort": "high" },
-    "02-build-plan": { "model": "haiku", "_note": "Build plan and its revisions (docs/processes/build-resolution.md). Decided by William 2026-09-24. 'haiku' is the claude CLI alias for the current Haiku; the model that actually answered is recorded per attempt." }
+    "02-build-plan": { "model": "haiku", "_note": "Build plan and its revisions (docs/processes/build-resolution.md). Decided by William 2026-09-24. 'haiku' is the claude CLI alias for the current Haiku; the model that actually answered is recorded per attempt. Move this into registry/job-templates/02-build-plan.json's own `model` field once that job template is authored (D-series build-resolution work)." }
   },
   "lane_tools": {
     "_note": "Real filesystem/tool scoping via --allowedTools, not just prompt instruction. default applies unless a lane is listed here.",

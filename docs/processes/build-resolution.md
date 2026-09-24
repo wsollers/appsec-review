@@ -178,7 +178,7 @@ Decided by William, 2026-09-24.
 
 | Setting | Value | Where to change it |
 |---|---|---|
-| Model | Haiku (`haiku`, the claude CLI alias for the current Haiku) | `appsec-review-process/model-config.json`, `lane_overrides["02-build-plan"].model` |
+| Model | Haiku (`haiku`, the claude CLI alias for the current Haiku) | `appsec-review-process/model-config.json`, `unbuilt_job_defaults["02-build-plan"].model` (moves into `registry/job-templates/02-build-plan.json`'s own `model` field once that job template is authored -- see model-config.json's `_notes`, changed 2026-09-24) |
 | Authentication | `subscription`: the claude CLI's current login, never an API key | `appsec-review-process/model-config.json`, `invocation.auth.mode` |
 
 With `subscription`, the invoker removes `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from the

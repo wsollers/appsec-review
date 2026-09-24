@@ -65,15 +65,28 @@ def load_model_config() -> dict[str, Any]:
     return data
 
 
+def load_job_template(lane: str) -> dict[str, Any]:
+    return load_json(ROOT / "registry" / "job-templates" / f"{lane}.json")
+
+
 def resolve_model(lane: str, budget: str, model_override: str = "", effort_override: str = "") -> dict[str, Any]:
-    """Deterministic model/effort resolution: a per-call CLI override (--model/
-    --effort on `run`) beats lane_overrides beats budget_effort_floor beats
-    default. Model identity itself is not currently varied per lane/budget by
-    config (single model family available) but the field is read from config
-    either way so a future multi-model setup doesn't need this function's
-    callers to change. The CLI override exists so a cheap model/effort can be
-    used for a dev/mechanics-validation pass without editing model-config.json
-    (its `default` stays the real, intended-for-actual-review setting)."""
+    """Deterministic model/effort resolution, lowest precedence first:
+    default -> budget_effort_floor (effort only) -> the lane's own job-template `model`
+    field (if that job template exists) or, only when it doesn't yet exist,
+    model-config.json's `unbuilt_job_defaults` bridge -> a per-call CLI override
+    (--model/--effort on `run`), which always wins.
+
+    Design (William, 2026-09-24): a job declares the model/effort it needs in its OWN
+    registry job-template record, not in a lane-keyed table here -- the job, not the lane
+    it happens to run in, knows what it needs. `unbuilt_job_defaults` exists only because a
+    handful of lanes are referenced by the job graph before their job template is authored;
+    once a job template exists, this function reads its `model` field and never consults
+    `unbuilt_job_defaults` for that lane again, even if the job template leaves `model` unset
+    (that is the job's own choice to take the process-wide default).
+
+    The CLI override exists so a cheap model/effort can be used for a dev/mechanics-
+    validation pass without editing model-config.json or a job template (the resolved
+    `default`/job-declared value stays the real, intended-for-actual-review setting)."""
     cfg = load_model_config()
     default = cfg.get("default") or {}
     model = default.get("model", "")
@@ -83,11 +96,22 @@ def resolve_model(lane: str, budget: str, model_override: str = "", effort_overr
     if floor:
         effort = floor
 
-    override = (cfg.get("lane_overrides") or {}).get(lane) or {}
-    if override.get("model"):
-        model = override["model"]
-    if override.get("effort"):
-        effort = override["effort"]
+    template = load_job_template(lane)
+    template_model = template.get("model") if isinstance(template.get("model"), dict) else None
+    pending = None
+    if template:
+        if template_model:
+            if template_model.get("model"):
+                model = template_model["model"]
+            if template_model.get("effort"):
+                effort = template_model["effort"]
+    else:
+        pending = (cfg.get("unbuilt_job_defaults") or {}).get(lane) or {}
+        if pending.get("model"):
+            model = pending["model"]
+        if pending.get("effort"):
+            effort = pending["effort"]
+        pending = pending or None
 
     if model_override:
         model = model_override
@@ -102,7 +126,8 @@ def resolve_model(lane: str, budget: str, model_override: str = "", effort_overr
         "source": {
             "default": default,
             "budget_effort_floor_applied": floor,
-            "lane_override_applied": override or None,
+            "job_template_model_applied": template_model,
+            "unbuilt_job_defaults_applied": pending,
             "cli_override_applied": {"model": model_override, "effort": effort_override} if (model_override or effort_override) else None,
         },
         "invocation": cfg.get("invocation"),

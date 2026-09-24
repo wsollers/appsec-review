@@ -4,6 +4,11 @@
   "display_name": "Repository Partition Discovery And Specialist Routing",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
+  "model": {
+    "model": "claude-sonnet-5",
+    "effort": "medium",
+    "_note": "Pinned explicitly 2026-09-24 (D01 construction), not left to model-config.json's process-wide default (haiku as of the same date). Repository-partition mapping is a routing judgment call over an unknown target, not classification -- sonnet-5/medium was the deliberate choice discussed 2026-09-17/24; flagged to William, not assumed. Still respects runtime.allowed_models and the CLI's --fallback-model if sonnet-5 is unavailable for a given call."
+  },
   "composition": {
     "persona_id": "developer-engineer",
     "role_id": "repository-partition-mapper",

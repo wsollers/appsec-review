@@ -8791,7 +8791,7 @@
    "id": "llm-invoker",
    "kind": "state",
    "path": "PersonaInvoker: claude -p with its current login (subscription, never an API key), model Haiku",
-   "about": "The model call behind build-plan and its revisions; model and auth mode set in model-config.json (lane_overrides[\"02-build-plan\"], invocation.auth.mode).",
+   "about": "The model call behind build-plan and its revisions; model and auth mode set in model-config.json (unbuilt_job_defaults[\"02-build-plan\"] until that job template is authored, then its own `model` field; invocation.auth.mode).",
    "produced_by": [],
    "consumed_by": [
     "step:build-plan",

@@ -218,10 +218,24 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
   `appsec-review-process/02-evidence-pregather/repository-partition-discovery.md`.
 - The buildenv catalog the `buildenv_catalog` prompt section renders already exists:
   `appsec-review-process/tooling/buildenv-catalog.json`.
-- Model: no lane override for `02-repository-partition-discovery` in `model-config.json`, so it
-  gets `default` (`claude-sonnet-5`, effort `medium`). Flag to William for confirmation, don't just
-  assume: partition discovery is a judgment call (routing, not classification), medium/sonnet reads
-  right, but say so before spending a live run on it.
+- Model: confirmed with William 2026-09-24. Model routing was redesigned in the same conversation
+  (not scoped to D01 alone -- a full migration, done): jobs declare the model/effort they need in
+  their OWN job-template record instead of a lane-keyed table in `model-config.json`.
+  `model-config.json`'s process-wide `default` changed from `claude-sonnet-5`/`medium` to
+  `haiku`/`medium`; `lane_overrides` was renamed `unbuilt_job_defaults` and now only bridges
+  job_template_ids that appear in the job graph but have no registry job-template file yet (currently
+  `09-independent-verification`, `10-synthesis-report`, `02-build-plan`) -- each entry is dropped
+  once that job template is authored with its own `model` field. `review_cli.py`'s `resolve_model()`
+  now reads a job template's `model` field (via a new `load_job_template()` helper) ahead of that
+  bridge, still under a per-call CLI override. `registry/job-templates/02-repository-partition-
+  discovery.json` now pins `model: {model: "claude-sonnet-5", effort: "medium"}` explicitly, so D01
+  keeps the sonnet-5/medium routing judgment already discussed rather than silently falling to the
+  new haiku default. See `model-config.json`'s `_notes` for the full rationale. Note for the
+  request builder (Phase 5b item 3): call `resolve_model` (or read the job template directly) with
+  the job_template_id `02-repository-partition-discovery` -- `review_cli.py`'s own `run`/`model` CLI
+  commands resolve `--lane` through `resolve_process()` first, which only knows *process* ids
+  (`02-evidence-pregather`, etc.), one level coarser than job_template_id; the new per-job `model`
+  field is keyed by job_template_id and only ever read directly, not through that CLI resolution.
 
 **What is genuinely missing (the facility to build, in dependency order):**
 
