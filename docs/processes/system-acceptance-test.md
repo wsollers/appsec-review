@@ -31,7 +31,7 @@ is re-verified (same HEAD, still clean) because every later stage reads that che
 | 2 | `services` | Dagster services healthy; host code location serving; job list reloaded | yes |
 | 3 | `run-create` | `run_process.py --start` creates the run | yes |
 | 4 | `stage-inputs` | `stage_artifacts.py` writes a valid manifest (executor platform `posix`) | yes |
-| 5 | `intake` | `00-intake` accepted | |
+| 5 | `intake` | `00-intake` accepted | yes |
 | 6 | `partition-discovery` | Partition map supplied and accepted | |
 | 7 | `dev-project-discovery` | Project discovery supplied and accepted | |
 | 8 | `engagement-workflow` | Preparation branches and join published | |
@@ -115,3 +115,28 @@ excludes); no imports, no compile database, no supplied evidence (`pending-evide
 `run-status.json` still `READY`. The eight "Expected before pregather" notes are counted, not
 treated as errors: they name legacy pregather outputs that do not exist before anything has run.
 Evidence: the staged values, the note count and the manifest's SHA-256.
+
+### 5. `intake`
+
+The first Dagster job: `code-location.sh run -B appsec-review-process/launch_job.py --run-id <run>
+--job phase1_intake --wait` (`launch_job.py` submits and monitors; the work runs in the host code
+location). The job must end `SUCCESS` within `SAT_JOB_TIMEOUT` (default 900 s); otherwise the stage
+fails and prints the Dagster run URL. Then, on disk:
+
+1. `data/jobs/00-intake/whole/accepted.json` is `OK`, was published by the Dagster run just launched,
+   and points at the latest attempt; the attempt has `outputs/intake.json`,
+   `outputs/build-discovery.md` and `status.json`, and every file still matches the hashes recorded
+   at acceptance.
+2. `intake.json`: `source_revision` is the pin from stage 1; business goal, platform, budget and
+   permissions are as staged; it fingerprinted exactly the clone's tracked files (the clone is clean,
+   so all files are tracked); `ready_to_collect` true, `pregather_complete` false, **no findings**;
+   `native.build_status` `NOT_EXECUTED` with no commands attempted (intake never runs target code);
+   partition discovery and developer project discovery are selected as `required`.
+3. The manifest's `accepted_intake` equals the pointer and its `source_identity` names the pin; the
+   run's `data/events.jsonl` has the `ACCEPTED` event for the attempt.
+4. The checkout is unchanged (same HEAD, still clean).
+
+Evidence: Dagster run, launch and attempt ids, revision and source fingerprint, file count, detected
+families, native applicability and strategy, the selected jobs with their applicability, and the
+number of recorded limitations. On `hello-autotools` the families are `autotools`, `cpp` and
+`deployment` (the Dockerfile), so intake also marks DevOps and SRE discovery `required`.

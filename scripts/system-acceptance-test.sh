@@ -27,7 +27,7 @@ STAGES=(
   "services|1|Dagster services healthy; host code location serving; job list reloaded"
   "run-create|1|run_process.py --start creates the run and its folders"
   "stage-inputs|1|stage_artifacts.py writes a valid artifact manifest (executor platform posix)"
-  "intake|0|00-intake accepted (phase1_intake)"
+  "intake|1|00-intake accepted (phase1_intake)"
   "partition-discovery|0|Partition map supplied and accepted (repository_partition_discovery)"
   "dev-project-discovery|0|Project discovery supplied and accepted (dev_project_discovery)"
   "engagement-workflow|0|engagement_workflow: preparation branches and join published"
@@ -348,6 +348,82 @@ PY
 
   record PASS stage-inputs "$summary"
   echo "stage-inputs: PASS  manifest for $FIXTURE on posix: platform $SAT_PLATFORM, budget $SAT_BUDGET, read-source only, no supplied evidence"
+}
+
+# ---- stage 5: intake -----------------------------------------------------------------------------
+# The first Dagster job. Submitted and awaited with launch_job.py (which only submits and monitors;
+# the work runs in the host code location), then the accepted output is checked on disk.
+SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
+
+launch_and_wait() {  # launch_and_wait <stage> <dagster job>  -> sets LAUNCH (the final request JSON)
+  local cl="$REPO/orchestrator/dagster/code-location.sh" rc=0
+  LAUNCH="$("$cl" run -B "$REPO/appsec-review-process/launch_job.py" --run-id "$RUN_ID" --job "$2" --wait --timeout "$SAT_JOB_TIMEOUT")" || rc=$?
+  echo "$LAUNCH"
+  local status dagster_id
+  status="$(printf '%s' "$LAUNCH" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
+  dagster_id="$(printf '%s' "$LAUNCH" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("dagster_run_id",""))' 2>/dev/null || true)"
+  [[ $rc == 0 && "$status" == SUCCESS ]] || die "$1: Dagster job $2 did not succeed (status ${status:-unknown}, exit $rc).
+  Dagster run: ${dagster_id:+http://127.0.0.1:3000/runs/$dagster_id}${dagster_id:-none (see the launch request under runs/$RUN_ID/data/orchestration/launches/)}"
+}
+
+stage_intake() {
+  require_run intake
+  launch_and_wait intake phase1_intake
+
+  local head files summary
+  head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["stages"]["sut-checkout"]["evidence"]["head"])' "$SAT_DIR/sat.json")"
+  files="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["stages"]["sut-checkout"]["evidence"]["tracked_files"])' "$SAT_DIR/sat.json")"
+  summary="$(python3 - "$RUN_DIR" "$RUN_ID" "$LAUNCH" "$head" "$files" "$SAT_BUSINESS_GOAL" "$SAT_PLATFORM" "$SAT_BUDGET" <<'PY'
+import hashlib, json, pathlib, sys
+rdir, run_id, launch, head, files, goal, platform, budget = sys.argv[1:]
+rdir = pathlib.Path(rdir); launch = json.loads(launch)
+def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+bad = []
+base = rdir / 'data/jobs/00-intake/whole'
+ptr = json.loads((base / 'accepted.json').read_text())
+if ptr.get('status') != 'OK': bad.append('accepted status %r' % ptr.get('status'))
+if ptr.get('dagster_run_id') != launch.get('dagster_run_id'): bad.append('accepted by Dagster run %r, launched %r' % (ptr.get('dagster_run_id'), launch.get('dagster_run_id')))
+if json.loads((base / 'latest.json').read_text()).get('attempt_id') != ptr['attempt_id']: bad.append('accepted attempt is not the latest')
+att = base / 'attempts' / ptr['attempt_id']
+for f in ('outputs/intake.json', 'outputs/build-discovery.md', 'status.json'):
+    if not (att / f).is_file(): bad.append('missing ' + f)
+if sha(att / 'status.json') != ptr.get('status_sha256'): bad.append('status.json hash differs from the accepted pointer')
+for rel, h in ptr.get('hashes', {}).items():
+    if sha(att / rel) != h: bad.append('output changed since acceptance: ' + rel)
+r = json.loads((att / 'outputs/intake.json').read_text())
+exp = {'source_revision': head, 'business_goal': goal, 'platforms': [platform], 'budget': budget,
+       'permissions': ['read-source'], 'ready_to_collect': True, 'pregather_complete': False, 'findings': []}
+bad += ['intake %s=%r (expected %r)' % (k, r.get(k), v) for k, v in exp.items() if r.get(k) != v]
+if len(r.get('scope', {}).get('all_paths', [])) != int(files): bad.append('intake saw %d files, the clone has %s' % (len(r['scope']['all_paths']), files))
+n = r.get('native', {})
+if n.get('build_status') != 'NOT_EXECUTED' or n.get('commands_attempted'): bad.append('intake executed build commands: %r' % n.get('commands_attempted'))
+jobs = {j['job']: j.get('applicability') for j in r.get('selected_jobs', [])}
+for j in ('02-repository-partition-discovery', '02-dev-project-discovery'):
+    if jobs.get(j) != 'required': bad.append('%s applicability %r (expected required)' % (j, jobs.get(j)))
+m = json.loads((rdir / 'inputs/artifact-manifest.json').read_text())
+if m.get('accepted_intake') != ptr: bad.append('manifest accepted_intake differs from the accepted pointer')
+if m.get('source_identity', {}).get('revision') != head: bad.append('manifest source_identity revision %r' % m.get('source_identity', {}).get('revision'))
+events = [json.loads(l) for l in (rdir / 'data/events.jsonl').read_text().splitlines() if l.strip()] if (rdir / 'data/events.jsonl').exists() else []
+if not any(e.get('event') == 'ACCEPTED' and e.get('attempt_id') == ptr['attempt_id'] for e in events): bad.append('no ACCEPTED event for the attempt')
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id': ptr['dagster_run_id'], 'launch_id': launch.get('launch_id'), 'attempt_id': ptr['attempt_id'],
+                  'source_revision': r['source_revision'], 'source_fingerprint': r['source_fingerprint'],
+                  'files_fingerprinted': len(r['scope']['all_paths']), 'families': r['families'],
+                  'native_applicable': n.get('applicable'), 'native_primary': n.get('primary'), 'native_strategy': n.get('strategy', {}).get('method'),
+                  'selected_jobs': jobs, 'limitations': len(r['limitations'])}))
+PY
+)" || die "intake: $summary"
+
+  # Intake is read-only: the checkout must be exactly as stage 1 left it.
+  local target="$REPO/fixtures/targets/$FIXTURE"
+  [[ "$(git -C "$target" rev-parse HEAD)" == "$head" && -z "$(git -C "$target" status --porcelain --untracked-files=all)" ]] \
+    || die "intake: the checkout changed during intake (HEAD or local files)"
+
+  record PASS intake "$summary"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("intake: PASS  Dagster %s accepted attempt %s; revision %s, %d files fingerprinted; families: %s; native: %s (%s); build not executed; no findings" % (
+  s["dagster_run_id"][:8], s["attempt_id"], s["source_revision"][:7], s["files_fingerprinted"], ", ".join(sorted(s["families"])), s["native_applicable"], s["native_strategy"]))'
 }
 
 # ---- driver --------------------------------------------------------------------------------------

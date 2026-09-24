@@ -412,3 +412,9 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   field by field). Docs for the single-engine requirement: ADR-0011 addendum 2026-09-23,
   `orchestrator/dagster/README.md` prerequisites, `docs/dagster/operations.md` recovery; catalog
   steps `docker-check`/`docker-recover` updated. "Run it end to end" now leads with the SAT.
+- 2026-09-24 -- SAT stage 4 `stage-inputs` passed in WSL (SAT `20260923T204446Z`, run
+  `20260923T204734Z-483b29`). Stage 5 `intake` built: `launch_job.py --job phase1_intake --wait`,
+  then the accepted pointer, attempt hashes, `intake.json` contents (pin, staged values, file count,
+  no findings, build not executed), manifest and events, and an unchanged checkout. Checked against
+  a real intake output: families `autotools`, `cpp`, `deployment` (the Dockerfile), so intake also
+  marks DevOps and SRE discovery `required` -- revisit the planned skip receipts for those two.
