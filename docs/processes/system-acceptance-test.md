@@ -60,7 +60,7 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 6 | `partition-discovery` (gate) | yes |
 | 7 | `dev-project-discovery` (gate) | yes |
 | 8 | `devops-project-discovery` (gate; the fixture's Dockerfile) | yes |
-| 9 | `sre-operations-topology` (gate) | |
+| 9 | `sre-operations-topology` (gate; chains after devops discovery) | yes |
 | 10 | `build-index` (deterministic, cited build signals) | |
 | 11 | `build-plan` (LLM build plan from the index; compared with the fixture answer key) | |
 | 12 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | |
@@ -135,26 +135,30 @@ findings, build `NOT_EXECUTED` with no commands attempted, partition and develop
 `required`; the manifest records the pointer and the revision; the workflow joined exactly the three
 branches on this intake; discovery hand-offs `PLANNED_NOT_EXECUTED`; checkout unchanged.
 
-### 6. `partition-discovery`, 7. `dev-project-discovery`, 8. `devops-project-discovery` (supplied-result gates)
+### 6. `partition-discovery`, 7. `dev-project-discovery`, 8. `devops-project-discovery`, 9. `sre-operations-topology` (supplied-result gates)
 
 Three steps each: `handoff`, `supply`, `accept`. Stage 8 is the same gate shape as stage 7 --
 `02-devops-project-discovery` reuses the `project-discovery` contract and schema, reading the
 devops-persona partitions of the same accepted partition map (the fixture's Dockerfile as the
-build/release route, not a second native build to resolve). Stage 9 (`sre-operations-topology`,
-not yet built) chains after stage 8's accepted record instead of the partition map directly, using
-a new `operations-topology` schema.
+build/release route, not a second native build to resolve). Stage 9 (`02-sre-operations-topology`)
+chains after stage 8's accepted record instead of the partition map directly (William, 2026-09-24:
+operations topology is read off the containers/services devops discovery already found), using its
+own `operations-topology` schema: one `hello-autotools` `cli-batch` service, no ports or
+dependencies, citing the Dockerfile's final stage and `ENTRYPOINT`.
 
 | Step | Reads | Writes | Validates |
 |---|---|---|---|
 | `handoff`: the gate with nothing supplied, **exit 1** | accepted intake (`OK`); the supplied result **absent** | `handoff.md`, `handoff.json`, `handoff/latest-handoff.json`, `handoff/handoffs/*.json`, `job.lock`; for the partition gate also a `BLOCKED` attempt (`inputs`, `result`, `status`) and its pointers; launch request | `handoff.json` names the job, the expected schema, the path; hand-off record has identity, composition, inputs, fingerprint, claim class; partition's `result.json` against `worker-result-envelope.schema.json` |
 | `supply`: `fixtures/supply_record.py` | the fixture record against its schema, at the pin; the staged manifest's target; the supplied result absent | exactly `supplied/result.json` | against its schema; byte-identical to the record |
-| `accept`: the gate again | the supplied result against its schema, at the pin; the upstream acceptance (intake for partition, the partition map for developer discovery) | partition: attempt `inputs`, `repository-partition-map.json`, `repository-partition-summary.md`, `result.json`, `status.json`, `supplied/result.json` and refreshed pointers/hand-off; developer: exactly `accepted`, `latest`, attempt `inputs`, `output`, `status` | outputs against their schemas (`repository-partition-map`, `project-discovery`, the worker envelope with `execution_status` `OK`) |
+| `accept`: the gate again | the supplied result against its schema, at the pin; the upstream acceptance (intake for partition, the partition map for developer/devops discovery, the accepted devops record for SRE topology) | partition: attempt `inputs`, `repository-partition-map.json`, `repository-partition-summary.md`, `result.json`, `status.json`, `supplied/result.json` and refreshed pointers/hand-off; developer/devops/sre: exactly `accepted`, `latest`, attempt `inputs`, `output`, `status` | outputs against their schemas (`repository-partition-map`, `project-discovery`, `operations-topology`, the worker envelope with `execution_status` `OK`) |
 
 Then: Dagster `FAILURE` for `handoff` with nothing accepted, `SUCCESS` for `accept`;
 `discovery_gate.validate` accepts; accepted by the launched Dagster run; every source-file citation's
-SHA-256 recomputed from the checkout; partition: records' partitions, `docs` deferred; developer:
-accepted output = supplied file = fixture record, same revision as the accepted partition map, every
-command-plan entry has argv, purpose and authorization.
+SHA-256 recomputed from the checkout; partition: records' partitions, `docs` deferred; developer/
+devops: accepted output = supplied file = fixture record, same revision as the accepted partition
+map, every command-plan entry has argv, purpose and authorization; sre: accepted output = supplied
+file = fixture record, same revision as the accepted devops record, every service id unique, every
+dependency target resolves to a known service id, coverage gaps recorded.
 
 ## Gaps the contracts have exposed
 
@@ -162,7 +166,7 @@ command-plan entry has argv, purpose and authorization.
 |---|---|---|
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
-| SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Stage 9; devops discovery (stage 8) done 2026-09-24 |
+| SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Done 2026-09-24 (stage 8 devops, stage 9 sre topology both gated and passing live) |
 | No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Build part: designed as stages 10-12 (build-resolution.md); rest open |
 | The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |

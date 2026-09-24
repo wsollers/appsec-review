@@ -171,9 +171,13 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
   `project-discovery` contract, devops-persona partitions -- the Dockerfile as build/release route,
   not a second native build); SRE chains after the accepted devops record (`operations-topology`
   contract, new schema). Fixture records: `fixtures/supplied/hello-autotools/
-  02-devops-project-discovery.json` (done) and `02-sre-operations-topology.json` (next).
+  02-devops-project-discovery.json` and `02-sre-operations-topology.json` -- both done 2026-09-24;
+  all four discovery gates (SAT stages 6-9) built and confirmed live on the host (SAT
+  `20260924T161102Z` through stage 8; stage 9 built on the same SAT record, needing no further
+  `discovery_gate.py` edit).
 - Done when: all four discovery nodes are accepted on the fixture and `02-build-configure`'s
-  dependency is satisfied without persona dispatch.
+  dependency is satisfied without persona dispatch. **Done** for the discovery chain itself;
+  `02-build-configure` (Phase 6+) is separate follow-on work.
 
 ### Phase 6 -- build and compile database (E01, E02)
 

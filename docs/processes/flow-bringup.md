@@ -251,6 +251,31 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-24 -- SAT stage 9, `sre-operations-topology`, built: same gate shape again, chaining
+  after the accepted `02-devops-project-discovery` record instead of the partition map (its
+  `UPSTREAM_JOB`/`SCHEMAS`/`_PAYLOAD_ERRORS` entries in `discovery_gate.py`, its Dagster ops/job in
+  `dagster_workflow.py`, and its manifest/job-graph promotion were all already shipped in the
+  stage-8 commit, so this stage needed no further edit to `discovery_gate.py` -- fixture record,
+  `scripts/system-acceptance-test.sh`'s `stage_sre_operations_topology()` and STAGES-row flip, and
+  docs only). Fixture record: `fixtures/supplied/hello-autotools/02-sre-operations-topology.json`
+  -- one `hello-autotools` `cli-batch` service, no ports or dependencies, citing the Dockerfile's
+  final stage (`COPY --from=build ... /usr/local/bin/hello-autotools`, `ENTRYPOINT`) and recording
+  as coverage gaps that no ports/orchestration/observability are declared anywhere in the
+  repository. Because `discovery_gate.py` was not touched this time, the just-passed SAT
+  `20260924T161102Z` (stages 1-8 live PASS, see below) should resume cleanly through stage 9 rather
+  than needing a fresh SAT.
+- 2026-09-24 -- SAT stages 1-8 **PASS live** on the host in one fresh run: `scripts/
+  system-acceptance-test.sh --through devops-project-discovery` (no `--resume`), SAT
+  `20260924T161102Z`, run `20260924T161129Z-b28b9c`. First live confirmation of the stage-8 build.
+  A prior attempt to `--resume` the older reference SAT `20260924T150120Z` failed at stage 8's
+  `accept` step (`execution_state.Blocked: accepted pointer input fingerprint mismatch`,
+  `publish_job_output.validate_published`): `_validate_common`'s input fingerprint includes a
+  SHA-256 of `discovery_gate.py`'s own current source, so editing that file (as stage 8's build
+  did) invalidates every previously-accepted partition/dev-discovery pointer in every existing run
+  -- intentional tamper-evidence, not a bug, but it means a SAT cannot be resumed across an edit to
+  `discovery_gate.py`; a fresh SAT is required instead. SAT `20260924T150120Z` (run
+  `20260924T150149Z-f0918d`) is retired for this reason; `20260924T161102Z` is now the current
+  reference for stages 1-8.
 - 2026-09-24 -- SAT stage 8, `devops-project-discovery`, built: same validated hand-off gate as
   partition and dev discovery (William: these are real gated records, not a skip, because the
   fixture has a Dockerfile and intake marks both devops and SRE discovery required).

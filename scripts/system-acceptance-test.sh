@@ -39,7 +39,7 @@ STAGES=(
   "partition-discovery|1|Gate: hand-off with nothing supplied; partition map supplied and accepted"
   "dev-project-discovery|1|Gate: hand-off with nothing supplied; project discovery supplied and accepted"
   "devops-project-discovery|1|Gate: DevOps project discovery (Dockerfile) supplied and accepted"
-  "sre-operations-topology|0|Gate: SRE operations topology supplied and accepted"
+  "sre-operations-topology|1|Gate: SRE operations topology supplied and accepted"
   "build-index|0|02-build-index: deterministic, cited index of every build signal; nothing executed"
   "build-plan|0|02-build-plan: LLM build plan from the index only; validated; compared with the answer key"
   "build-resolution|0|02-build-resolution: image + trial configure/build via B13, <= build_resolution_attempts; image_build_<id> catalogued, lock written"
@@ -52,7 +52,7 @@ STAGES=(
   "sarif|0|critical_findings_sarif: accepted SARIF from verified findings"
   "report|0|10-synthesis-report: report generated"
 )
-SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery full_review"
+SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology full_review"
 SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
 SAT_BUSINESS_GOAL="${SAT_BUSINESS_GOAL:-System acceptance test: full review cycle on the fixture}"
 SAT_PLATFORM="${SAT_PLATFORM:-Linux}"
@@ -61,6 +61,7 @@ SAT_EXECUTION_ENVIRONMENT="${SAT_EXECUTION_ENVIRONMENT:-dagster-read-only-linux}
 PARTITION_JOB=02-repository-partition-discovery
 DEV_JOB=02-dev-project-discovery
 DEVOPS_JOB=02-devops-project-discovery
+SRE_JOB=02-sre-operations-topology
 
 die() { echo "SAT: $*" >&2; exit 1; }
 stage_ids() { for s in "${STAGES[@]}"; do echo "${s%%|*}"; done; }
@@ -760,6 +761,70 @@ import json,sys; s=json.load(sys.stdin)
 print("devops-project-discovery: PASS  hand-off %s; accepted by Dagster %s: %s (%s), %s, base image %s; plan: %s; %d coverage gaps; %d citations fresh" % (
   sys.argv[1], s["dagster_run_id"][:8], ",".join(s["projects"]), "/".join(map(str, s["languages"])), ", ".join(map(str, s["manifests"])),
   ", ".join(map(str, s["buildenv_images"])), "; ".join(" ".join(c["argv"]) + " [" + c["authorization"] + "]" for c in s["command_plan"]), s["coverage_gaps"], s["citations_checked"]))' "$handoff_state"
+}
+
+# ---- stage: sre-operations-topology ----------------------------------------------------------------
+# Chains after the accepted devops-project-discovery record instead of the partition map directly
+# (William, 2026-09-24: operations topology is read off the containers/services devops discovery
+# already found). Its own schema (operations-topology.schema.json), not project-discovery's.
+stage_sre_operations_topology() {
+  require_run sre-operations-topology
+  gate_handoff sre-operations-topology "$SRE_JOB" sre_operations_topology operations-topology
+  local handoff_state="$HANDOFF_STATE" handoff_dagster="$HANDOFF_DAGSTER"
+  gate_supply sre-operations-topology "$SRE_JOB" operations-topology
+
+  echo "-- accept: the gate with the supplied topology must succeed"
+  run_step sre-operations-topology accept "$(contract sre-operations-topology accept <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$SRE_JOB/supplied/result.json", "kind": "file", "schema": "operations-topology.schema.json", "equals": {"source_revision": "{pin}"}},
+            {"path": "{run}/data/jobs/$DEVOPS_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
+ "writes": {"required": ["{run}/data/jobs/$SRE_JOB/accepted.json", "{run}/data/jobs/$SRE_JOB/latest.json", "{run}/data/jobs/$SRE_JOB/attempts/*/output.json",
+                         "{run}/data/jobs/$SRE_JOB/attempts/*/inputs.json", "{run}/data/jobs/$SRE_JOB/attempts/*/status.json"],
+            "allowed": [$LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$SRE_JOB/attempts/*/output.json", "schema": "operations-topology.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$SRE_JOB/accepted.json", "equals": {"status": "OK", "job": "$SRE_JOB"}}]}
+JSON
+)" launch sre_operations_topology
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "sre-operations-topology: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  gate_validate "$SRE_JOB" || die "sre-operations-topology: discovery_gate.validate rejected the accepted result"
+
+  local jobdir="$RUN_DIR/data/jobs/$SRE_JOB" attempt cites summary
+  attempt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["attempt_id"])' "$jobdir/accepted.json")"
+  cites="$(citations_fresh "$jobdir/attempts/$attempt/output.json")" || die "sre-operations-topology: $cites"
+  summary="$(python3 - "$RUN_DIR" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$SRE_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
+import json, pathlib, sys
+rdir, attempt, record, dagster_id, cites = sys.argv[1:]
+rdir = pathlib.Path(rdir); d = rdir / 'data/jobs/02-sre-operations-topology'
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+if ptr.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (ptr.get('dagster_run_id'), dagster_id))
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != attempt: bad.append('accepted attempt is not the latest')
+out = json.loads((d / 'attempts' / attempt / 'output.json').read_text())
+if out != json.loads((d / 'supplied/result.json').read_text()) or out != json.loads(pathlib.Path(record).read_text()):
+    bad.append('accepted output, supplied file and fixture record differ')
+dd = rdir / 'data/jobs/02-devops-project-discovery'
+devops_out = json.loads((dd / 'attempts' / json.loads((dd / 'accepted.json').read_text())['attempt_id'] / 'output.json').read_text())
+if devops_out['source_revision'] != out['source_revision']: bad.append('revision differs from the accepted devops discovery record')
+services = out.get('services', [])
+ids = [s.get('service_id') for s in services]
+if not services: bad.append('no services recorded')
+if len(ids) != len(set(ids)): bad.append('duplicate service_id')
+known = set(ids)
+for s in services:
+    for dep in s.get('dependencies', []):
+        if dep.get('target_service_id') not in known: bad.append('dependency target %r does not resolve' % dep.get('target_service_id'))
+if not out.get('coverage_gaps'): bad.append('sre topology must record its coverage gaps')
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'services': [{'id': s['service_id'], 'kind': s['kind']} for s in services],
+                  'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': int(cites)}))
+PY
+)" || die "sre-operations-topology: $summary"
+  checkout_unchanged sre-operations-topology
+  record PASS sre-operations-topology "$(python3 -c 'import json,sys; e=json.loads(sys.argv[1]); e.update(handoff=sys.argv[2], handoff_dagster_run_id=sys.argv[3] or None); print(json.dumps(e))' "$summary" "$handoff_state" "$handoff_dagster")"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("sre-operations-topology: PASS  hand-off %s; accepted by Dagster %s: %s; %d coverage gaps; %d citations fresh" % (
+  sys.argv[1], s["dagster_run_id"][:8], ", ".join("%s(%s)" % (x["id"], x["kind"]) for x in s["services"]), s["coverage_gaps"], s["citations_checked"]))' "$handoff_state"
 }
 
 # ---- driver --------------------------------------------------------------------------------------
