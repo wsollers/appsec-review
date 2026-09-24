@@ -287,8 +287,12 @@
         <bpmn:incoming>Flow_sp4_intok_sp4_intfix</bpmn:incoming>
         <bpmn:outgoing>Flow_sp4_intfix_sp4_intake</bpmn:outgoing>
       </bpmn:userTask>
+      <bpmn:scriptTask id="sp4_mode" name="discovery_gate.set_dispatch_mode: automatic (real persona call) or supplied (default)">
+        <bpmn:incoming>Flow_sp4_intok_sp4_mode</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_mode_sp4_pgate</bpmn:outgoing>
+      </bpmn:scriptTask>
       <bpmn:sendTask id="sp4_pgate" name="Launch and await repository_partition_discovery">
-        <bpmn:incoming>Flow_sp4_intok_sp4_pgate</bpmn:incoming>
+        <bpmn:incoming>Flow_sp4_mode_sp4_pgate</bpmn:incoming>
         <bpmn:incoming>Flow_sp4_psupply_sp4_pgate</bpmn:incoming>
         <bpmn:outgoing>Flow_sp4_pgate_sp4_pok</bpmn:outgoing>
       </bpmn:sendTask>
@@ -330,7 +334,8 @@
       <bpmn:sequenceFlow id="Flow_sp4_intake_sp4_intok" sourceRef="sp4_intake" targetRef="sp4_intok" />
       <bpmn:sequenceFlow id="Flow_sp4_intok_sp4_intfix" name="no" sourceRef="sp4_intok" targetRef="sp4_intfix" />
       <bpmn:sequenceFlow id="Flow_sp4_intfix_sp4_intake" name="retry" sourceRef="sp4_intfix" targetRef="sp4_intake" />
-      <bpmn:sequenceFlow id="Flow_sp4_intok_sp4_pgate" name="yes" sourceRef="sp4_intok" targetRef="sp4_pgate" />
+      <bpmn:sequenceFlow id="Flow_sp4_intok_sp4_mode" name="yes" sourceRef="sp4_intok" targetRef="sp4_mode" />
+      <bpmn:sequenceFlow id="Flow_sp4_mode_sp4_pgate" sourceRef="sp4_mode" targetRef="sp4_pgate" />
       <bpmn:sequenceFlow id="Flow_sp4_pgate_sp4_pok" sourceRef="sp4_pgate" targetRef="sp4_pok" />
       <bpmn:sequenceFlow id="Flow_sp4_pok_sp4_panalyze" name="no: hand-off issued or record invalid" sourceRef="sp4_pok" targetRef="sp4_panalyze" />
       <bpmn:sequenceFlow id="Flow_sp4_panalyze_sp4_psupply" sourceRef="sp4_panalyze" targetRef="sp4_psupply" />
@@ -345,6 +350,8 @@
       <bpmn:association id="Assoc_sp4_n1" sourceRef="sp4_pgate" targetRef="sp4_n1" />
       <bpmn:textAnnotation id="sp4_n2"><bpmn:text>Each launch follows "Submit to Dagster" (--wait); Dagster then executes the job in the host code location.</bpmn:text></bpmn:textAnnotation>
       <bpmn:association id="Assoc_sp4_n2" sourceRef="sp4_intake" targetRef="sp4_n2" />
+      <bpmn:textAnnotation id="sp4_n3"><bpmn:text>Automatic mode: this same launch dispatches a real claude CLI persona call, validates the response against the literal output schema, and overwrites source_revision/content_hash with orchestrator-pinned values before publish -- no separate hand-authoring step. The "no" branch below (produce map, then supply_record.py) applies only in supplied mode (the default; live-confirmed 2026-09-24, D01).</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp4_n3" sourceRef="sp4_mode" targetRef="sp4_n3" />
     </bpmn:subProcess>
     <bpmn:subProcess id="Sub_Submit" name="5. Submit engagement job to Dagster">
       <bpmn:incoming>Flow_Sub_PreSubmit_Sub_Submit</bpmn:incoming>
@@ -651,6 +658,7 @@
       <bpmndi:BPMNShape id="sp4_intake_di" bpmnElement="sp4_intake"><dc:Bounds x="255" y="218" width="150" height="84" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sp4_intok_di" bpmnElement="sp4_intok" isMarkerVisible="true"><dc:Bounds x="515" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="480" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sp4_intfix_di" bpmnElement="sp4_intfix"><dc:Bounds x="465" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_mode_di" bpmnElement="sp4_mode"><dc:Bounds x="670" y="140" width="140" height="60" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sp4_pgate_di" bpmnElement="sp4_pgate"><dc:Bounds x="675" y="218" width="150" height="84" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sp4_pok_di" bpmnElement="sp4_pok" isMarkerVisible="true"><dc:Bounds x="935" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="900" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sp4_panalyze_di" bpmnElement="sp4_panalyze"><dc:Bounds x="885" y="368" width="150" height="84" /></bpmndi:BPMNShape>
@@ -664,7 +672,8 @@
       <bpmndi:BPMNEdge id="Flow_sp4_intake_sp4_intok_di" bpmnElement="Flow_sp4_intake_sp4_intok"><di:waypoint x="405" y="260" /><di:waypoint x="515" y="260" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_intok_sp4_intfix_di" bpmnElement="Flow_sp4_intok_sp4_intfix"><di:waypoint x="540" y="285" /><di:waypoint x="540" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="316" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_intfix_sp4_intake_di" bpmnElement="Flow_sp4_intfix_sp4_intake"><di:waypoint x="540" y="452" /><di:waypoint x="540" y="487" /><di:waypoint x="330" y="487" /><di:waypoint x="330" y="302" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="460" width="35" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_sp4_intok_sp4_pgate_di" bpmnElement="Flow_sp4_intok_sp4_pgate"><di:waypoint x="565" y="260" /><di:waypoint x="675" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="571" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_intok_sp4_mode_di" bpmnElement="Flow_sp4_intok_sp4_mode"><di:waypoint x="540" y="235" /><di:waypoint x="540" y="170" /><di:waypoint x="670" y="170" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="200" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_mode_sp4_pgate_di" bpmnElement="Flow_sp4_mode_sp4_pgate"><di:waypoint x="740" y="200" /><di:waypoint x="740" y="218" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_pgate_sp4_pok_di" bpmnElement="Flow_sp4_pgate_sp4_pok"><di:waypoint x="825" y="260" /><di:waypoint x="935" y="260" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_pok_sp4_panalyze_di" bpmnElement="Flow_sp4_pok_sp4_panalyze"><di:waypoint x="960" y="285" /><di:waypoint x="960" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="966" y="316" width="120" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_panalyze_sp4_psupply_di" bpmnElement="Flow_sp4_panalyze_sp4_psupply"><di:waypoint x="885" y="410" /><di:waypoint x="825" y="410" /></bpmndi:BPMNEdge>
@@ -679,6 +688,8 @@
       <bpmndi:BPMNEdge id="Assoc_sp4_n1_di" bpmnElement="Assoc_sp4_n1"><di:waypoint x="750" y="218" /><di:waypoint x="833" y="135" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="sp4_n2_di" bpmnElement="sp4_n2"><dc:Bounds x="246" y="65" width="380" height="55" /></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Assoc_sp4_n2_di" bpmnElement="Assoc_sp4_n2"><di:waypoint x="330" y="218" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp4_n3_di" bpmnElement="sp4_n3"><dc:Bounds x="855" y="305" width="360" height="60" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp4_n3_di" bpmnElement="Assoc_sp4_n3"><di:waypoint x="810" y="170" /><di:waypoint x="900" y="305" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
   <bpmndi:BPMNDiagram id="Diagram_Sub_Submit" name="5. Submit engagement job to Dagster">

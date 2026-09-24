@@ -521,3 +521,28 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   `FAILED` on a rejected model response with no partial publish) but **not yet run against a real
   `claude` CLI on hal5000** -- that live run, via `--dispatch`, is next and is D01's actual proof.
   D02-D04 (developer/devops/SRE discovery, stages 7-9) do not have this yet.
+- 2026-09-24 -- **D01's live proof landed: `--dispatch` ran end to end against a real `claude` CLI
+  on hal5000 and the SAT passed clean.** Five gaps surfaced across five successive live attempts,
+  each fixed and re-run in turn (full detail in `appsec-review-process/TODO.md` Phase 5b item 8):
+  (1) the `claude` binary wasn't found from inside the Dagster daemon process (bare name resolved
+  via a `PATH` the daemon doesn't share with the interactive shell) -- fixed with a new
+  `claude_binary_resolver.py` that resolves the real path with `shutil.which()` from inside the
+  dispatching process itself and pins it per run (never a hardcoded path, per William's explicit
+  correction: "Don't pin a version. Look it up in the first job. If not found error
+  appropriately."); (2) the model's response didn't match the output schema, because the prompt
+  never showed the model the literal schema, only registry metadata -- fixed by inlining the real
+  JSON Schema (and its `$ref`s) into the prompt; (3) `source_revision` came back "unknown" because
+  `.git` is deliberately excluded from the model's inputs -- correct, honest model behavior, not a
+  bug -- fixed by having the orchestrator overwrite it with its own pinned git revision after the
+  fact, the same "caller owns provenance" split `status.json` already followed; (4) evidence
+  citation `content_hash` values failed freshness validation because a model cannot reliably
+  compute an exact SHA-256 by hand -- fixed the same way, backfilling the orchestrator's own pinned
+  hash for every resolvable citation; (5) a purely cosmetic SAT-contract gap (`job.lock` missing
+  from the automatic-mode `writes.allowed` list) caught after the underlying Dagster job had
+  already reported `SUCCESS`. With all five fixed, `scripts/system-acceptance-test.sh --dispatch
+  --through partition-discovery` passed clean on hal5000 (SAT run `20260924T214618Z`, Dagster run
+  `7e2fc40f-9e22-4c03-8cdc-ab488ac2219c`): a real repository, a real model call, a schema-conformant
+  result, 6 partitions all dispositioned `review`, 37 citations independently confirmed fresh
+  against the checkout, zero contract violations. **D01 (unpooled) is DONE.** D02-D04
+  (developer/devops/SRE discovery, SAT stages 7-9) still run on supplied records and are next in
+  line -- they reuse every facility built here; only their task prompts remain to be authored.

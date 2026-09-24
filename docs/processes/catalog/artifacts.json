@@ -1,6 +1,7 @@
 {
   "_comment": "Hand-maintained artifact vocabulary for the job catalog. Paths under runs/<run_id>/ are relative to appsec-review-process/. Lifecycle-job outputs are not listed here: job_catalog.py derives them as job:<id> from job-graph.json and the output contracts. Kind: file (a file or folder), state (a service or environment condition), decision (a human decision or approval), record (a tracked input maintained outside a run).",
   "artifacts": {
+    "dispatch-mode": {"kind": "file", "path": "runs/<run_id>/data/dispatch-mode.json", "about": "Per-job opt-in flag (automatic | supplied) set by discovery_gate.set_dispatch_mode before a persona-dependent discovery job is launched; unset jobs default to supplied. Read only by discovery_gate.run, never by dagster_workflow.py."},
     "sut-origin": {"kind": "record", "path": "remote Git origin of the system under test", "about": "Where the target is cloned from; fixtures pin it in fixtures/populate-targets.sh."},
     "sut-pin": {"kind": "record", "path": "fixtures/populate-targets.sh (origin URL + commit)", "about": "The exact commit the engagement reviews."},
     "sut-checkout": {"kind": "file", "path": "fixtures/targets/<project>/ (host path)", "about": "Clean checkout of the target at the pinned commit; refused if the origin is wrong, the tree is dirty, or HEAD does not match."},

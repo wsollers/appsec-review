@@ -21,15 +21,18 @@ each names the batch ids it closes so the batch table further down stays the sta
 - **Build environments are provisioned before the engagement, not by it.** A supplied, tracked
   `buildenv.lock` (image digest, Dockerfile hash, configure argv) is produced by an agent/human loop
   and validated on read; `build_execution` replays it.
-- **Persona-dependent discovery nodes use the supplied pattern until D01 lands.** A validated,
-  hand-supplied record stands in for `02-dev-project-discovery`, `02-devops-project-discovery` and
-  `02-sre-operations-topology` so the build chain is not blocked on pool dispatch. **Correction,
+- **Persona-dependent discovery nodes used the supplied pattern until D01 landed.** A validated,
+  hand-supplied record stood in for `02-dev-project-discovery`, `02-devops-project-discovery` and
+  `02-sre-operations-topology` so the build chain was not blocked on pool dispatch. **Correction,
   William 2026-09-24: this was right for getting the gate/schema/chaining plumbing built (SAT
   stages 6-9), but the SAT does not get to call itself done that way. A gate that only checks "does
   the supplied file validate" while a human hand-writes the file it is checking is a test of the
-  JSON schema, not of the system. D01 (below, Phase 5b) is now under construction to close this for
-  real; SAT stages 6-9 will be re-proven against automatic dispatch, not re-declared passing on the
-  fixture alone.**
+  JSON schema, not of the system.** D01 (Phase 5b, below) closed this for `02-repository-partition-
+  discovery` the same day with a clean live `--dispatch` SAT PASS against a real `claude` CLI call
+  -- see Phase 5b for the full bug-fix sequence. D02-D04 (dev/devops/sre project discovery) still
+  use the supplied pattern; they follow the identical D01 shape once their task prompts are
+  authored (Phase 5b's closing note). SAT stages 7-9 remain to be re-proven against automatic
+  dispatch once D02-D04 land, the same way stage 6 (partition discovery) was just re-proven here.
 - **The fixture is its own repository, cloned in like any real target.** Step 1 of the
   engagement flow is: clone the system under test into `targets/<name>/` (git-ignored here).
   The fixture follows that same rule rather than being a special case -- it's tracked at
@@ -186,9 +189,10 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
   on the fixture via a supplied record is not the finish line for the discovery chain; automatic
   dispatch (Phase 5b) is.
 
-### Phase 5b -- D01: automatic persona dispatch for repository-partition-discovery (unpooled)
+### Phase 5b -- D01: automatic persona dispatch for repository-partition-discovery (unpooled) -- DONE
 
-**Started 2026-09-24 (William's correction).** The goal: `02-repository-partition-discovery`
+**Started 2026-09-24 (William's correction); closed 2026-09-24 with a clean live SAT PASS (see item
+8's final bullet below).** The goal: `02-repository-partition-discovery`
 actually reads the target and produces its own discovery record, dispatched to a real model, with
 the SAT proving that live -- not copying in a hand-authored fixture file. This is D01 from the
 batch table below, built in its simplest, unpooled form (see scope note).
@@ -630,9 +634,9 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
      cleanly against the real schema (confirming the schema itself and this diagnosis are correct);
      `build_prompt_text` against a fake package confirms the rendered prompt contains both the
      partition-map schema and its referenced evidence-citation schema; all 19
-     `tests/test_worker_adoption.py` tests still pass unmodified. **Not yet re-confirmed with
-     another live dispatch** -- the next `--dispatch` SAT run on hal5000 is what proves the model
-     now produces a schema-conformant response.
+     `tests/test_worker_adoption.py` tests still pass unmodified. **Live-confirmed** by the bug-4
+     attempt below and the final clean PASS: the model's response was fully schema-conformant on
+     every subsequent live attempt.
    - **Also fixed, found while re-reading item 6's own SAT contract after the first live attempt**:
      `stage_partition_discovery()`'s automatic-mode `accept` contract's `writes.allowed` list didn't
      include `{run}/data/claude-binary.json` (new, from bug 1's fix) or
@@ -715,12 +719,33 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
      real production-code bugs in the automatic-dispatch chain itself, found and fixed by working
      through successive live SAT failures one at a time; this fifth gap is purely cosmetic to the
      test harness -- the underlying job already succeeded.**
+   - **CONFIRMED CLEAN: `scripts/system-acceptance-test.sh --dispatch --through partition-discovery`
+     PASS, run by William on hal5000 2026-09-24 (SAT run `20260924T214618Z`, Dagster run
+     `7e2fc40f-9e22-4c03-8cdc-ab488ac2219c`, launched via `20260924T214649Z-69227b`).** With all
+     five gaps above fixed (commit `51f01d3` on top of `24afac9`/`00a75e7`/`568992e`/`1e0ec37`),
+     the automatic-dispatch gate reported `"status": "SUCCESS"` and the SAT itself reported
+     `partition-discovery: PASS` with **zero contract violations** ("21 file(s) written, all within
+     contract; 3 output(s) valid; 9 ambient change(s) ignored"). The real `claude` CLI, called
+     against the real fixture target repo (revision `632522b6801caa5810f0c6bf71bf3783c90068ac`),
+     produced a schema-conformant `repository-partition-map.json` with 6 partitions (`app-core`,
+     `build-system`, `containerization-deployment`, `documentation`, `test-suite`,
+     `vendored-cjson`), all dispositioned `review`, backed by 37 citations that the orchestrator
+     independently confirmed match the checkout on disk (freshness-validated content hashes, not
+     model-reported ones). The live partition names differ from the hand-authored fixture answer
+     key's names (`app`/`build`/`docs`/`tests`/`vendored-cjson`) -- the SAT reports this only as an
+     informational `diff_note`, not a failure, since the supplied-fixture answer key was never a
+     spec for what a live model must name things; it exists to prove the *harness* accepts a
+     conformant record, which the fixture path (items 1-7) already proved separately. **This is
+     D01's first fully clean live PASS: real repository discovery, real model call, real schema,
+     real orchestrator-owned provenance, real freshness-validated citations, no fixture-copy
+     shortcut anywhere in the chain.** D01 (unpooled) is DONE.
 
-**Acceptance for D01 (unpooled), from the batch table, still holds:** dispatch, supplied mode
+**Acceptance for D01 (unpooled), from the batch table, now fully met:** dispatch, supplied mode
 retained, inapplicable/gap handling, citation freshness, rescope trigger, malformed persona result,
-timeout/cancel, reuse/recovery, and live real-target qualification (live = the fixture, run in WSL
-by William; a second real target is a separate, later qualification step, not required to close D01
-on the fixture).
+timeout/cancel, reuse/recovery, and live real-target qualification are all confirmed -- the last of
+these (live dispatch against the fixture target, run in WSL by William) closed with the clean PASS
+above. A second, different real target is a separate, later qualification step, not required to
+close D01 on the fixture target it was scoped to.
 
 **Once D01 (partition discovery) is proven live with real dispatch:** D02 (`02-dev-project-
 discovery`), D03 (`02-devops-project-discovery`) and D04 (`02-sre-operations-topology`) follow the
@@ -1158,12 +1183,17 @@ Cross-cutting capability ownership is explicit:
 
 ### Discovery and source intelligence
 
-#### D01 — Repository-partition persona dispatch — BLOCKED(B14,C01,C02,C03)
+#### D01 — Repository-partition persona dispatch — DONE (unpooled, 2026-09-24; see Phase 5b above)
 
-- Deliver: automatic persona mode for `02-repository-partition-discovery` while retaining supplied
-  mode as an explicit validated alternative. Never fabricate target classification.
-- Acceptance: dispatch, supplied mode, inapplicable/gap, citation freshness, rescope trigger,
-  malformed persona result, timeout/cancel, reuse/recovery, and live real-target qualification.
+- Delivered: automatic persona mode for `02-repository-partition-discovery` (unpooled: one job
+  template, one invocation, one result), supplied mode retained as an explicit validated
+  alternative. Never fabricates target classification.
+- Acceptance met: dispatch, supplied mode, inapplicable/gap, citation freshness, rescope trigger,
+  malformed persona result, timeout/cancel, reuse/recovery, and live real-target qualification --
+  all confirmed, including a clean live `--dispatch` SAT PASS against a real `claude` CLI call
+  (SAT run `20260924T214618Z`, Dagster run `7e2fc40f-9e22-4c03-8cdc-ab488ac2219c`). Pooled D01
+  (concurrent fan-out across many partitions on a real target) remains a separate, later piece,
+  tracked by C01-C03, not required to close this entry.
 
 #### D02 — Developer project discovery dispatch — BLOCKED(B10,D01)
 

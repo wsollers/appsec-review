@@ -1,5 +1,15 @@
 # Continuation prompt — D01 unpooled persona dispatch construction (2026-09-24)
 
+**STATUS: DONE, 2026-09-24.** D01 (unpooled) closed the same day this prompt was written, with a
+clean live `--dispatch` SAT PASS on hal5000 against a real `claude` CLI call (SAT run
+`20260924T214618Z`, Dagster run `7e2fc40f-9e22-4c03-8cdc-ab488ac2219c`, commit `51f01d3`). Five
+live-dispatch failures were found and fixed in turn along the way; the transferable lessons from
+that sequence are in `docs/lessons-learned-2026-09-24-d01-live-dispatch.md`, and the full
+blow-by-blow is in `appsec-review-process/TODO.md` Phase 5b item 8. **D02-D04 are next** (see
+section 6 below and the lessons doc's closing section) — this prompt's sections 0-5 remain useful
+background for that work since the facilities they describe are reused unchanged; only section 6's
+"before you start" question is now moot (the model choice was confirmed and is live-proven).
+
 Paste this whole file as the first message of a new conversation. It is self-contained. Use this
 prompt for **construction and live testing** of D01 (below). A separate, ongoing conversation is
 doing higher-level architecture/sequencing for the rest of the SAT backlog — don't duplicate that

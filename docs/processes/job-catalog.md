@@ -9,7 +9,7 @@ output contracts, lane `config.md` files, and the hand-maintained `docs/processe
 Regenerate after any process change: `python3 docs/processes/job_catalog.py`;
 `--check` fails when this file is stale or a reference is broken.
 
-Covers 5 process models, 43 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 51 lifecycle jobs and 95 artifacts.
+Covers 5 process models, 44 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 51 lifecycle jobs and 96 artifacts.
 
 How to read the rollups: **Enters** is what the model or group consumes but does not produce itself
 (its inputs); **Leaves** is what it produces that nothing inside consumes (its results); **Passes**
@@ -35,7 +35,7 @@ From checking out the system under test to Dagster accepting (queuing) the engag
 
 | Rolled up for the model | Artifacts |
 |---|---|
-| Enters | [`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin)<br>[`job-definitions`](#a-job-definitions) |
+| Enters | [`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin)<br>[`job-definitions`](#a-job-definitions)<br>[`dispatch-mode`](#a-dispatch-mode) |
 | Leaves | [`code-location-venv`](#a-code-location-venv)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`launch-request`](#a-launch-request)<br>[`dagster-run-queued`](#a-dagster-run-queued) |
 | Passes between steps | [`sut-checkout`](#a-sut-checkout)<br>[`docker-engine`](#a-docker-engine)<br>[`compose-env`](#a-compose-env)<br>[`host-dirs`](#a-host-dirs)<br>[`dagster-services`](#a-dagster-services)<br>[`code-location`](#a-code-location)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`engagement-definition`](#a-engagement-definition)<br>[`permission-grant`](#a-permission-grant)<br>[`run-dir`](#a-run-dir)<br>[`artifact-manifest`](#a-artifact-manifest)<br>[`resolved-config`](#a-resolved-config)<br>[`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff)<br>[`partition-record`](#a-partition-record)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dev-handoff`](#a-dev-handoff)<br>[`dev-record`](#a-dev-record)<br>[`dev-supplied`](#a-dev-supplied)<br>[`launch-intent`](#a-launch-intent) |
 
@@ -75,13 +75,13 @@ From checking out the system under test to Dagster accepting (queuing) the engag
 |---|---|---|---|
 | [phase1_intake (Dagster job)](#step-phase1-intake) | Dagster job | [`artifact-manifest`](#a-artifact-manifest)<br>[`loaded-job-list`](#a-loaded-job-list) | [`resolved-config`](#a-resolved-config)<br>[`00-intake`](#a-job-00-intake) |
 | [Correct inputs after an intake failure](#step-intake-fix) | human task | [`resolved-config`](#a-resolved-config) | [`artifact-manifest`](#a-artifact-manifest) |
-| [repository_partition_discovery (Dagster job)](#step-repository-partition-discovery) | Dagster job | [`00-intake`](#a-job-00-intake)<br>[`partition-supplied`](#a-partition-supplied)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
+| [repository_partition_discovery (Dagster job)](#step-repository-partition-discovery) | Dagster job | [`00-intake`](#a-job-00-intake)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
 | [Write the partition map](#step-partition-analysis) | human task | [`partition-handoff`](#a-partition-handoff)<br>[`sut-checkout`](#a-sut-checkout) | [`partition-record`](#a-partition-record) |
 | [Install the supplied partition map](#step-supply-partition) | operator script | [`partition-record`](#a-partition-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | [`partition-supplied`](#a-partition-supplied) |
 | [dev_project_discovery (Dagster job)](#step-dev-project-discovery) | Dagster job | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`dev-supplied`](#a-dev-supplied)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`dev-handoff`](#a-dev-handoff) |
 | [Write the project discovery](#step-dev-analysis) | human task | [`dev-handoff`](#a-dev-handoff)<br>[`sut-checkout`](#a-sut-checkout)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery) | [`dev-record`](#a-dev-record) |
 | [Install the supplied project discovery](#step-supply-dev) | operator script | [`dev-record`](#a-dev-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | [`dev-supplied`](#a-dev-supplied) |
-| **Group rollup** | | **Enters:** [`loaded-job-list`](#a-loaded-job-list)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | **Leaves:** [`02-dev-project-discovery`](#a-job-02-dev-project-discovery) |
+| **Group rollup** | | **Enters:** [`loaded-job-list`](#a-loaded-job-list)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | **Leaves:** [`02-dev-project-discovery`](#a-job-02-dev-project-discovery) |
 
 ### Pre-submission process: 5. Submit engagement job to Dagster
 
@@ -230,7 +230,7 @@ The steps run so far on hello-autotools, in process-flow order. Source: `docs/pr
 
 | Rolled up for the model | Artifacts |
 |---|---|
-| Enters | [`docker-engine`](#a-docker-engine)<br>[`host-dirs`](#a-host-dirs)<br>[`job-definitions`](#a-job-definitions)<br>[`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin)<br>[`engagement-definition`](#a-engagement-definition)<br>[`permission-grant`](#a-permission-grant)<br>[`partition-record`](#a-partition-record)<br>[`dev-record`](#a-dev-record)<br>[`buildenv-catalog`](#a-buildenv-catalog)<br>[`llm-invoker`](#a-llm-invoker)<br>[`buildenv-image`](#a-buildenv-image) |
+| Enters | [`docker-engine`](#a-docker-engine)<br>[`host-dirs`](#a-host-dirs)<br>[`job-definitions`](#a-job-definitions)<br>[`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin)<br>[`engagement-definition`](#a-engagement-definition)<br>[`permission-grant`](#a-permission-grant)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`partition-record`](#a-partition-record)<br>[`dev-record`](#a-dev-record)<br>[`buildenv-catalog`](#a-buildenv-catalog)<br>[`llm-invoker`](#a-llm-invoker)<br>[`buildenv-image`](#a-buildenv-image) |
 | Leaves | [`code-location-venv`](#a-code-location-venv)<br>[`resolved-config`](#a-resolved-config)<br>[`partition-handoff`](#a-partition-handoff)<br>[`dev-handoff`](#a-dev-handoff)<br>[`build-attempts`](#a-build-attempts)<br>[`build-lock`](#a-build-lock)<br>[`02-build-configure`](#a-job-02-build-configure) |
 | Passes between steps | [`dagster-services`](#a-dagster-services)<br>[`code-location`](#a-code-location)<br>[`compose-env`](#a-compose-env)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir)<br>[`artifact-manifest`](#a-artifact-manifest)<br>[`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dev-supplied`](#a-dev-supplied)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`build-index`](#a-build-index)<br>[`build-plan`](#a-build-plan)<br>[`build-image-catalog`](#a-build-image-catalog) |
 
@@ -276,9 +276,9 @@ The steps run so far on hello-autotools, in process-flow order. Source: `docs/pr
 
 | Step | Type | Consumes | Produces |
 |---|---|---|---|
-| [repository_partition_discovery (Dagster job)](#step-repository-partition-discovery) | Dagster job | [`00-intake`](#a-job-00-intake)<br>[`partition-supplied`](#a-partition-supplied)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
+| [repository_partition_discovery (Dagster job)](#step-repository-partition-discovery) | Dagster job | [`00-intake`](#a-job-00-intake)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
 | [Install the supplied partition map](#step-supply-partition) | operator script | [`partition-record`](#a-partition-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | [`partition-supplied`](#a-partition-supplied) |
-| **Group rollup** | | **Enters:** [`00-intake`](#a-job-00-intake)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`partition-record`](#a-partition-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | **Leaves:** [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
+| **Group rollup** | | **Enters:** [`00-intake`](#a-job-00-intake)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`partition-record`](#a-partition-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | **Leaves:** [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
 
 ### Fixture bring-up: S5 Developer project discovery
 
@@ -572,6 +572,19 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Produces | [`artifact-manifest`](#a-artifact-manifest) |
 | Notes | Inspect, correct, restage. |
 
+<a id="step-set-dispatch-mode"></a>
+
+### discovery_gate.set_dispatch_mode: automatic or supplied
+
+| | |
+|---|---|
+| Type | operator script |
+| Runs | `code-location.sh run -B -c "discovery_gate.set_dispatch_mode(<code_location>, <run_id>, '02-repository-partition-discovery', 'automatic')"` |
+| BPMN elements | `sp4_mode` |
+| Consumes | [`00-intake`](#a-job-00-intake) |
+| Produces | [`dispatch-mode`](#a-dispatch-mode) |
+| Notes | Opt-in only, per run and per job; unset defaults to supplied. Not called by any Full-protocol file -- a human or the fast-lane SAT sets this before launching the job so dagster_workflow.py never has to know. D01, live-confirmed 2026-09-24. |
+
 <a id="step-repository-partition-discovery"></a>
 
 ### repository_partition_discovery (Dagster job)
@@ -582,9 +595,9 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Runs | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` |
 | Lifecycle job(s) | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) |
 | BPMN elements | `sp4_pgate` |
-| Consumes | [`00-intake`](#a-job-00-intake)<br>[`partition-supplied`](#a-partition-supplied)<br>[`loaded-job-list`](#a-loaded-job-list) |
+| Consumes | [`00-intake`](#a-job-00-intake)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) |
 | Produces | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
-| Notes | Supplied-result gate: accepts a valid, fresh map or fails with a hand-off; never invents the analysis. |
+| Notes | Supplied-result gate by default; in automatic mode (dispatch-mode.json), dispatches a real claude CLI persona call, schema-validates the response, and overwrites source_revision/content_hash with orchestrator-pinned values before publish -- never invents the analysis either way. |
 
 <a id="step-partition-analysis"></a>
 
@@ -1002,7 +1015,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/00-intake.json) | target path<br>source identity<br>scope<br>permissions<br>hashed imports *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/00-intake/` |
 | Output files (registry/output-contracts/intake.json) | outputs/intake.json<br>outputs/build-discovery.md<br>status.json |
-| Consumed by | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
+| Consumed by | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
 | Next prerequisite | Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/pools/resource-pools.md step 8). |
 
 ### Lane `02-evidence-pregather`
@@ -1935,6 +1948,7 @@ job. Producers and consumers are computed from the catalog.
 
 | Artifact | Kind | Path | Produced by | Consumed by |
 |---|---|---|---|---|
+| <a id="a-dispatch-mode"></a>`dispatch-mode` | file | runs/<run_id>/data/dispatch-mode.json | [`set-dispatch-mode`](#step-set-dispatch-mode) | [`repository_partition_discovery`](#step-repository-partition-discovery) |
 | <a id="a-sut-origin"></a>`sut-origin` | record | remote Git origin of the system under test | -- | [`populate-targets`](#step-populate-targets) |
 | <a id="a-sut-pin"></a>`sut-pin` | record | fixtures/populate-targets.sh (origin URL + commit) | -- | [`populate-targets`](#step-populate-targets) |
 | <a id="a-sut-checkout"></a>`sut-checkout` | file | fixtures/targets/<project>/ (host path) | [`populate-targets`](#step-populate-targets) | [`stage-artifacts`](#step-stage-artifacts)<br>[`partition-analysis`](#step-partition-analysis)<br>[`supply-partition`](#step-supply-partition)<br>[`dev-analysis`](#step-dev-analysis)<br>[`supply-dev`](#step-supply-dev)<br>[`build-index`](#step-build-index)<br>[`legacy-pregather`](#step-legacy-pregather) |
@@ -1979,7 +1993,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-build-image-catalog"></a>`build-image-catalog` | file | data/build-images/catalog/image_build_<id>.json (+ container-images/ record for B13), outside every run | [`build-resolution`](#step-build-resolution) | [`build-resolution`](#step-build-resolution) |
 | <a id="a-build-lock"></a>`build-lock` | file | runs/<run_id>/data/jobs/02-build-resolution/.../outputs/build-lock.json | [`build-resolution`](#step-build-resolution) | -- |
 | <a id="a-lane-handoff"></a>`lane-handoff` | file | runs/<run_id>/ lane hand-off files (create_handoff.py) | [`lane-handoffs`](#step-lane-handoffs) | -- |
-| <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
+| <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
 | <a id="a-job-02-ossf-scorecard"></a>`02-ossf-scorecard` | job output | runs/<run_id>/data/jobs/02-ossf-scorecard/ | [`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-repository-partition-discovery"></a>`02-repository-partition-discovery` | job output | runs/<run_id>/data/jobs/02-repository-partition-discovery/ | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) |
 | <a id="a-job-02-dev-project-discovery"></a>`02-dev-project-discovery` | job output | runs/<run_id>/data/jobs/02-dev-project-discovery/ | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-build-configure`](#job-02-build-configure) |

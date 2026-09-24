@@ -3,8 +3,8 @@
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
   "lifecycle_jobs": 51,
-  "steps": 43,
-  "artifacts": 44,
+  "steps": 44,
+  "artifacts": 45,
   "models": 5
  },
  "models": [
@@ -266,6 +266,7 @@
        "consumes": [
         "job:00-intake",
         "partition-supplied",
+        "dispatch-mode",
         "loaded-job-list"
        ],
        "produces": [
@@ -353,6 +354,7 @@
      "rollup": {
       "enters": [
        "loaded-job-list",
+       "dispatch-mode",
        "sut-checkout",
        "run-dir"
       ],
@@ -427,7 +429,8 @@
     "enters": [
      "sut-origin",
      "sut-pin",
-     "job-definitions"
+     "job-definitions",
+     "dispatch-mode"
     ],
     "leaves": [
      "code-location-venv",
@@ -2289,6 +2292,7 @@
        "consumes": [
         "job:00-intake",
         "partition-supplied",
+        "dispatch-mode",
         "loaded-job-list"
        ],
        "produces": [
@@ -2316,6 +2320,7 @@
      "rollup": {
       "enters": [
        "job:00-intake",
+       "dispatch-mode",
        "loaded-job-list",
        "partition-record",
        "sut-checkout",
@@ -2497,6 +2502,7 @@
      "sut-pin",
      "engagement-definition",
      "permission-grant",
+     "dispatch-mode",
      "partition-record",
      "dev-record",
      "buildenv-catalog",
@@ -4386,6 +4392,22 @@
    "notes": "Inspect, correct, restage."
   },
   {
+   "id": "set-dispatch-mode",
+   "name": "discovery_gate.set_dispatch_mode: automatic or supplied",
+   "kind": "script",
+   "runs": "code-location.sh run -B -c \"discovery_gate.set_dispatch_mode(<code_location>, <run_id>, '02-repository-partition-discovery', 'automatic')\"",
+   "bpmn": [
+    "sp4_mode"
+   ],
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "dispatch-mode"
+   ],
+   "notes": "Opt-in only, per run and per job; unset defaults to supplied. Not called by any Full-protocol file -- a human or the fast-lane SAT sets this before launching the job so dagster_workflow.py never has to know. D01, live-confirmed 2026-09-24."
+  },
+  {
    "id": "repository_partition_discovery",
    "name": "repository_partition_discovery (Dagster job)",
    "kind": "dagster-job",
@@ -4399,13 +4421,14 @@
    "consumes": [
     "job:00-intake",
     "partition-supplied",
+    "dispatch-mode",
     "loaded-job-list"
    ],
    "produces": [
     "job:02-repository-partition-discovery",
     "partition-handoff"
    ],
-   "notes": "Supplied-result gate: accepts a valid, fresh map or fails with a hand-off; never invents the analysis."
+   "notes": "Supplied-result gate by default; in automatic mode (dispatch-mode.json), dispatches a real claude CLI persona call, schema-validates the response, and overwrites source_revision/content_hash with orchestrator-pinned values before publish -- never invents the analysis either way."
   },
   {
    "id": "partition-analysis",
@@ -8327,6 +8350,18 @@
   "10-synthesis-report"
  ],
  "artifacts": {
+  "dispatch-mode": {
+   "id": "dispatch-mode",
+   "kind": "file",
+   "path": "runs/<run_id>/data/dispatch-mode.json",
+   "about": "Per-job opt-in flag (automatic | supplied) set by discovery_gate.set_dispatch_mode before a persona-dependent discovery job is launched; unset jobs default to supplied. Read only by discovery_gate.run, never by dagster_workflow.py.",
+   "produced_by": [
+    "step:set-dispatch-mode"
+   ],
+   "consumed_by": [
+    "step:repository_partition_discovery"
+   ]
+  },
   "sut-origin": {
    "id": "sut-origin",
    "kind": "record",
@@ -8876,6 +8911,7 @@
     "job:00-intake"
    ],
    "consumed_by": [
+    "step:set-dispatch-mode",
     "step:repository_partition_discovery",
     "step:op-scope_check",
     "step:op-native_plan_check",
