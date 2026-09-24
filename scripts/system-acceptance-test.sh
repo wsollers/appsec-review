@@ -650,6 +650,7 @@ stage_partition_discovery() {
             "allowed": ["{run}/data/jobs/$PARTITION_JOB/latest.json",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/inputs.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-summary.md",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/status.json",
+                        "{run}/data/jobs/$PARTITION_JOB/attempts/*/failure-result.json",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/outputs/persona/*", "{run}/data/jobs/$PARTITION_JOB/attempts/*/logs/persona/*",
                         "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
                         "appsec-review-process/prompt-cache/$PARTITION_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},

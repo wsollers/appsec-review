@@ -662,9 +662,48 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
      ends with the correct pinned revision and validates cleanly; `intake.py`'s `revision` field
      defaults to the literal string `"unversioned"` (never `None`) when a target has no VCS at
      all, so the override is safe even for a non-git target; all 19
-     `tests/test_worker_adoption.py` tests still pass unmodified. **Not yet re-confirmed with
-     another live dispatch** -- if this was the last gap, the next `--dispatch` SAT run is D01's
-     first clean live PASS.
+     `tests/test_worker_adoption.py` tests still pass unmodified.
+   - **Also fixed, found on this same live attempt's contract report**: the automatic-mode
+     `accept` contract's `writes.allowed` list didn't include
+     `{run}/data/jobs/$PARTITION_JOB/attempts/*/failure-result.json` --
+     `publish_job_output.record_terminal_noncurrent` writes that filename instead of `result.json`
+     whenever a worker already durably wrote a candidate `result.json` before a later validation
+     step rejects it (its own documented behavior: "preserve that immutable candidate... instead
+     of rewriting history"). Added to the allowed list.
+   - **Bug 4: with source_revision fixed, dispatch got all the way to publish-time citation-
+     freshness rejection.** The persona's `repository-partition-map.json` was fully schema-
+     conformant this time (confirming bug 2's and bug 3's fixes both worked -- no schema or
+     source_revision complaints at all) and the attempt reached `publish_job_output`'s real
+     `record_terminal_current`, which durably wrote a candidate `result.json` before
+     `validate_job_output.py`'s citation-freshness check rejected it with 26 identical errors:
+     every single `evidence_citations[].content_hash` across every partition, relationship, and
+     `coverage.category_checks` entry failed `"a lowercase SHA-256 is required for freshness"`
+     (`validate_job_output.py`'s `_citation_errors`, which requires a bare 64-lowercase-hex string
+     matching `file_hash()` of the cited file's *current* on-disk content, checked with a strict
+     `re.fullmatch(r"[0-9a-f]{64}", ...)`). **Not a model mistake in the way bug 3 wasn't**: the
+     persona has no reliable way to compute a file's exact SHA-256 by hand, and (per its own
+     attempted values in the coverage check citations) its guesses failed the strict format check
+     every time -- this is orchestrator-owned verification data, the same class as `source_
+     revision`. **Fixed in `discovery_gate.py`**: new `_backfill_citation_content_hashes(value,
+     by_path)`, called right after the `source_revision` override, walks `partition_map` exactly
+     the way `validate_job_output.py`'s own `_walk_citations` does (any `evidence_citations` list
+     at any depth -- partitions, their relationships, and coverage checks all nest one), and for
+     every `source_type: source_file` citation whose `path` resolves against this request's own
+     pinned `readable_inputs` (`by_path = {entry['path']: entry['sha256'] ...}`, stripping the
+     `sha256:` prefix `persona_dispatch.py`'s `_walk_target` always adds), overwrites
+     `content_hash` with the pinned, authoritative value -- unconditionally, even when the model
+     already wrote something, mirroring `source_revision`'s "caller owns provenance, never
+     trusted from the model" split. A citation whose path does **not** resolve is left exactly as
+     written, so it can still legitimately fail freshness validation downstream, per governing
+     rule 2 ("a claim needs evidence that resolves") -- this function never fabricates a hash to
+     paper over an unpinned citation. Verified: a hand-built nested sample (a resolvable citation
+     at each of the three nesting depths, one deliberately unresolvable path, and one citation
+     where the model had already written a wrong value) confirms all four cases -- resolved paths
+     get the correct pinned hash, the unresolved path is left untouched, nesting is fully reached,
+     and an existing wrong value is overwritten; the pinned hash format was confirmed to match the
+     freshness check's own `[0-9a-f]{64}` regex; all 19 `tests/test_worker_adoption.py` tests
+     still pass unmodified. **Not yet re-confirmed with another live dispatch** -- if this really
+     was the last gap, the next `--dispatch` SAT run is D01's first clean live PASS.
 
 **Acceptance for D01 (unpooled), from the batch table, still holds:** dispatch, supplied mode
 retained, inapplicable/gap handling, citation freshness, rescope trigger, malformed persona result,

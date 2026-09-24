@@ -272,6 +272,40 @@ def _input_fingerprint(record):
     return 'sha256:' + digest(record)
 
 
+def _backfill_citation_content_hashes(value, by_path):
+    """Walks ``value`` exactly the way ``validate_job_output.py``'s own ``_walk_citations`` does
+    (any dict key named ``evidence_citations`` holding a list of dicts, at any depth --
+    partitions, their relationships, and coverage.category_checks all nest one), and for every
+    ``source_type: source_file`` citation whose ``path`` resolves in ``by_path`` (this request's
+    own pinned ``readable_inputs``, ``path`` -> bare-hex sha256), overwrites ``content_hash`` with
+    that pinned value. Never fabricates a hash for a path that does not resolve -- an unresolved
+    citation is left exactly as the persona wrote it, so independent re-validation (and
+    ``validate_job_output.py``'s live citation-freshness check downstream) can legitimately reject
+    it, per governing rule 2 ('a claim needs evidence that resolves'). **Why this exists (a real
+    bug found live on hal5000, 2026-09-24, the same class as ``source_revision`` above):**
+    ``content_hash`` is orchestrator-owned verification data -- the persona has no reliable way to
+    compute a file's exact SHA-256 by hand, and its own guesses (when it attempted one at all)
+    failed the freshness check's strict ``[0-9a-f]{64}`` format every time. The orchestrator
+    already has the authoritative hash for every file it pinned into the request; trusting the
+    model to reproduce it was never going to work reliably, so it is not asked to -- this function
+    stamps the real value in, the same "caller owns provenance bookkeeping, the model owns
+    evidence-derived content" split ``source_revision``'s fix above already draws."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == 'evidence_citations' and isinstance(item, list):
+                for citation in item:
+                    if not isinstance(citation, dict) or citation.get('source_type') != 'source_file':
+                        continue
+                    sha256 = by_path.get(citation.get('path'))
+                    if sha256:
+                        citation['content_hash'] = sha256.split(':', 1)[-1]
+            else:
+                _backfill_citation_content_hashes(item, by_path)
+    elif isinstance(value, list):
+        for item in value:
+            _backfill_citation_content_hashes(item, by_path)
+
+
 def _validate_partition_payload(value):
     # Structural checks happen before copying; all cross-record/path/freshness semantics are owned
     # by validate_job_output's explicit repository-partition-map contract dispatch.
@@ -522,6 +556,12 @@ def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerpr
     # the model), the same "caller owns provenance bookkeeping, the model owns evidence-derived
     # content" split status.json's exclusion from the response envelope already draws.
     partition_map['source_revision'] = record['source_revision']
+    # Same reasoning as source_revision just above, for a different field: every evidence
+    # citation's content_hash must be the cited file's exact current SHA-256 (validate_job_
+    # output.py's citation-freshness check, downstream of this gate), which the persona cannot
+    # reliably reproduce by hand -- the orchestrator already has it, pinned per readable input.
+    by_path = {entry['path']: entry['sha256'] for entry in request['readable_inputs']}
+    _backfill_citation_content_hashes(partition_map, by_path)
     errors = _validate_partition_payload(partition_map)
     if errors:
         raise ValueError('persona dispatch result failed independent re-validation: '
