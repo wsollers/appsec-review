@@ -424,3 +424,7 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   the same run), then `supply_record.py`, then the gate again (must SUCCEED); the accepted map is
   checked by `discovery_gate.validate` and independently (revision, partitions, `docs` deferred,
   all 19 citation hashes re-computed from the checkout).
+- 2026-09-24 -- SAT stage 6 `partition-discovery` passed in WSL (hand-off Dagster `94258f31`,
+  accepted Dagster `f9724591`, 19 citations fresh). Stage 7 `dev-project-discovery` built on the same
+  pattern (hand-off proof, supply, accept); since this older gate records no output hashes, the SAT
+  compares the accepted output with the supplied file and the fixture record, and records that gap.

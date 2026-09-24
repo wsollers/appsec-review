@@ -29,7 +29,7 @@ STAGES=(
   "stage-inputs|1|stage_artifacts.py writes a valid artifact manifest (executor platform posix)"
   "intake|1|00-intake accepted (phase1_intake)"
   "partition-discovery|1|Partition map supplied and accepted (repository_partition_discovery)"
-  "dev-project-discovery|0|Project discovery supplied and accepted (dev_project_discovery)"
+  "dev-project-discovery|1|Project discovery supplied and accepted (dev_project_discovery)"
   "engagement-workflow|0|engagement_workflow: preparation branches and join published"
   "build-configure|0|02-build-configure through B13 in the pinned build image (needs Phase 3, 4, E01)"
   "native-build|0|02-native-build: compile database and build outputs"
@@ -445,36 +445,43 @@ gate_validate() {  # gate_validate <job>: the project's own validator for an acc
     "$REPO/appsec-review-process" "$RUN_ID" "$1"
 }
 
-stage_partition_discovery() {
-  require_run partition-discovery
-  local jobdir="$RUN_DIR/data/jobs/$PARTITION_JOB" supplied="$RUN_DIR/data/jobs/$PARTITION_JOB/supplied/result.json"
-  local handoff_dagster="" handoff_state="not-run"
-
-  # a) Nothing supplied: the gate must fail with a hand-off, and accept nothing. Skipped (and said so)
-  #    if a result is already supplied, e.g. when this stage is re-run after a later failure.
-  if [[ ! -e "$supplied" ]]; then
-    echo "-- a) gate with nothing supplied: expect FAILURE and a hand-off"
-    launch_job repository_partition_discovery
-    [[ "$LAUNCH_STATUS" == FAILURE ]] || die "partition-discovery: with nothing supplied the gate ended ${LAUNCH_STATUS:-unknown}, expected FAILURE. Dagster run: $(dagster_url)"
-    handoff_dagster="$LAUNCH_DAGSTER"
-    python3 - "$jobdir" <<'PY' || die "partition-discovery: hand-off check failed"
+gate_handoff_proof() {  # gate_handoff_proof <stage> <job id> <dagster job> <schema name> -> HANDOFF_STATE, HANDOFF_DAGSTER
+  # With nothing supplied the gate must end FAILURE, write handoff.md/handoff.json naming
+  # supplied/result.json and the schema, and accept nothing. Skipped (and recorded as skipped) when a
+  # result is already supplied, e.g. when the stage is re-run after a later failure.
+  local jobdir="$RUN_DIR/data/jobs/$2"
+  HANDOFF_DAGSTER=""
+  if [[ -e "$jobdir/supplied/result.json" ]]; then
+    echo "-- a) skipped: a supplied result already exists for this run (stage re-run)"
+    HANDOFF_STATE="skipped-already-supplied"; return 0
+  fi
+  echo "-- a) gate with nothing supplied: expect FAILURE and a hand-off"
+  launch_job "$3"
+  [[ "$LAUNCH_STATUS" == FAILURE ]] || die "$1: with nothing supplied the gate ended ${LAUNCH_STATUS:-unknown}, expected FAILURE. Dagster run: $(dagster_url)"
+  HANDOFF_DAGSTER="$LAUNCH_DAGSTER"
+  python3 - "$jobdir" "$4" <<'PY' || die "$1: hand-off check failed"
 import json, pathlib, sys
-d = pathlib.Path(sys.argv[1])
+d, schema = pathlib.Path(sys.argv[1]), sys.argv[2]
 bad = [f for f in ('handoff.md', 'handoff.json') if not (d / f).is_file()]
 if not bad:
     text = (d / 'handoff.md').read_text() + (d / 'handoff.json').read_text()
-    for needle in ('supplied/result.json', 'repository-partition-map'):
+    for needle in ('supplied/result.json', schema):
         if needle not in text: bad.append('hand-off does not name ' + needle)
 acc = d / 'accepted.json'
 if acc.exists() and json.loads(acc.read_text()).get('status') == 'OK': bad.append('a result was accepted with nothing supplied')
 if bad: sys.exit('; '.join(bad))
-print('hand-off issued: handoff.md and handoff.json name supplied/result.json and the repository-partition-map schema; nothing accepted')
+print('hand-off issued: handoff.md and handoff.json name supplied/result.json and the %s schema; nothing accepted' % schema)
 PY
-    handoff_state="issued"
-  else
-    echo "-- a) skipped: a supplied result already exists for this run (stage re-run)"
-    handoff_state="skipped-already-supplied"
-  fi
+  HANDOFF_STATE="issued"
+}
+
+stage_partition_discovery() {
+  require_run partition-discovery
+  local jobdir="$RUN_DIR/data/jobs/$PARTITION_JOB"
+
+  # a) Nothing supplied: the gate must fail with a hand-off, and accept nothing.
+  gate_handoff_proof partition-discovery "$PARTITION_JOB" repository_partition_discovery repository-partition-map
+  local handoff_state="$HANDOFF_STATE" handoff_dagster="$HANDOFF_DAGSTER"
 
   # b) Supply the fixture's recorded analysis (refuses a moved or dirty checkout, never overwrites).
   echo "-- b) supply the recorded partition map"
@@ -532,6 +539,90 @@ PY
 import json,sys; s=json.load(sys.stdin)
 print("partition-discovery: PASS  hand-off %s; map accepted by Dagster %s (attempt %s): %s; %d citations match the checkout" % (
   sys.argv[1], s["dagster_run_id"][:8], s["attempt_id"], ", ".join("%s=%s" % kv for kv in sorted(s["partitions"].items())), s["citations_checked"]))' "$handoff_state"
+}
+
+# ---- stage 7: dev-project-discovery ---------------------------------------------------------------
+# How to build what the partition map found: project root, languages, manifests, candidate build
+# image and a safe command plan. Same supplied-result pattern as stage 6; this gate additionally
+# requires the accepted partition map at the same revision. It is the older gate path, whose
+# accepted record carries no output hashes, so the stage compares the accepted output with the
+# supplied file itself.
+DEV_JOB=02-dev-project-discovery
+
+stage_dev_project_discovery() {
+  require_run dev-project-discovery
+  local jobdir="$RUN_DIR/data/jobs/$DEV_JOB"
+
+  gate_handoff_proof dev-project-discovery "$DEV_JOB" dev_project_discovery project-discovery
+  local handoff_state="$HANDOFF_STATE" handoff_dagster="$HANDOFF_DAGSTER"
+
+  echo "-- b) supply the recorded project discovery"
+  "$REPO/orchestrator/dagster/code-location.sh" run -B "$REPO/fixtures/supply_record.py" --run-id "$RUN_ID" --job "$DEV_JOB" --fixture "$FIXTURE" \
+    || die "dev-project-discovery: supply_record.py refused"
+
+  echo "-- c) gate with the supplied discovery: expect SUCCESS"
+  launch_and_wait dev-project-discovery dev_project_discovery
+  gate_validate "$DEV_JOB" || die "dev-project-discovery: discovery_gate.validate rejected the accepted result"
+
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$REPO/fixtures/targets/$FIXTURE" "$REPO/fixtures/supplied/$FIXTURE/$DEV_JOB.json" "$LAUNCH_DAGSTER" <<'PY'
+import hashlib, json, pathlib, subprocess, sys
+rdir, target, record_path, dagster_id = sys.argv[1:]
+rdir, target = pathlib.Path(rdir), pathlib.Path(target)
+d = rdir / 'data/jobs/02-dev-project-discovery'
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+if ptr.get('status') != 'OK': bad.append('accepted status %r' % ptr.get('status'))
+if ptr.get('dagster_run_id') != dagster_id: bad.append('accepted by Dagster run %r, launched %r' % (ptr.get('dagster_run_id'), dagster_id))
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != ptr.get('attempt_id'): bad.append('accepted attempt is not the latest')
+att = d / 'attempts' / ptr['attempt_id']
+out = json.loads((att / 'output.json').read_text())
+supplied = json.loads((d / 'supplied/result.json').read_text())
+record = json.loads(pathlib.Path(record_path).read_text())
+if out != supplied or supplied != record: bad.append('accepted output, supplied file and fixture record differ')
+head = subprocess.run(['git', '-C', str(target), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
+if out.get('source_revision') != head: bad.append('source_revision %r, checkout %r' % (out.get('source_revision'), head))
+# The graph dependency: same revision as the accepted partition map.
+pd = rdir / 'data/jobs/02-repository-partition-discovery'
+pptr = json.loads((pd / 'accepted.json').read_text())
+pmap = json.loads((pd / 'attempts' / pptr['attempt_id'] / 'repository-partition-map.json').read_text())
+if pmap.get('source_revision') != out.get('source_revision'): bad.append('revision differs from the accepted partition map')
+# Independent freshness check of every source-file citation.
+cites, stale = [0], []
+def walk(v):
+    if isinstance(v, dict):
+        if v.get('source_type') == 'source_file' and v.get('content_hash'):
+            cites[0] += 1
+            f = target / v['path']
+            if not f.is_file() or hashlib.sha256(f.read_bytes()).hexdigest() != v['content_hash']: stale.append(v['path'])
+        for x in v.values(): walk(x)
+    elif isinstance(v, list):
+        for x in v: walk(x)
+walk(out)
+if stale: bad.append('stale citations: ' + ', '.join(sorted(set(stale))))
+if cites[0] == 0: bad.append('no source-file citations')
+plan = out.get('safe_command_plan', [])
+if not plan: bad.append('empty safe command plan')
+for c in plan:
+    if not c.get('argv') or not c.get('authorization') or not c.get('purpose'): bad.append('incomplete plan entry %r' % c.get('argv'))
+if bad: sys.exit('; '.join(bad))
+p = out['projects'][0]
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': ptr['attempt_id'], 'source_revision': head,
+                  'projects': [x['project_id'] for x in out['projects']], 'root': p.get('root'),
+                  'languages': p.get('languages'), 'manifests': p.get('manifests'), 'lockfiles': p.get('lockfiles'),
+                  'buildenv_images': p.get('candidate_buildenv_images'),
+                  'command_plan': [{'argv': c['argv'], 'authorization': c['authorization']} for c in plan],
+                  'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': cites[0],
+                  'output_hashes_in_accepted_record': False}))
+PY
+)" || die "dev-project-discovery: $summary"
+
+  record PASS dev-project-discovery "$(python3 -c 'import json,sys; e=json.loads(sys.argv[1]); e.update(handoff=sys.argv[2], handoff_dagster_run_id=sys.argv[3] or None); print(json.dumps(e))' "$summary" "$handoff_state" "$handoff_dagster")"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("dev-project-discovery: PASS  hand-off %s; discovery accepted by Dagster %s: project %s (%s), manifests %s, image %s; plan: %s; %d citations match the checkout" % (
+  sys.argv[1], s["dagster_run_id"][:8], ",".join(s["projects"]), "/".join(map(str, s["languages"])), ", ".join(map(str, s["manifests"])),
+  ", ".join(map(str, s["buildenv_images"])), "; ".join(" ".join(c["argv"]) + " [" + c["authorization"] + "]" for c in s["command_plan"]), s["citations_checked"]))' "$handoff_state"
 }
 
 # ---- driver --------------------------------------------------------------------------------------

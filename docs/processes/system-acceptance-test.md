@@ -33,7 +33,7 @@ is re-verified (same HEAD, still clean) because every later stage reads that che
 | 4 | `stage-inputs` | `stage_artifacts.py` writes a valid manifest (executor platform `posix`) | yes |
 | 5 | `intake` | `00-intake` accepted | yes |
 | 6 | `partition-discovery` | Hand-off with nothing supplied; partition map supplied and accepted | yes |
-| 7 | `dev-project-discovery` | Project discovery supplied and accepted | |
+| 7 | `dev-project-discovery` | Hand-off with nothing supplied; project discovery supplied and accepted | yes |
 | 8 | `engagement-workflow` | Preparation branches and join published | |
 | 9 | `build-configure` | `02-build-configure` through B13 in the pinned build image (needs Phase 3, Phase 4, E01) | |
 | 10 | `native-build` | Compile database and build outputs | |
@@ -162,3 +162,27 @@ person or agent and never invents one. The stage proves both halves on the SAT's
 Evidence: both Dagster runs, the attempt, each partition's disposition, the primary personas and the
 number of citations checked. On `hello-autotools`: `app`, `build`, `tests`, `vendored-cjson` review,
 `docs` deferred, 19 citations.
+
+### 7. `dev-project-discovery`
+
+How to build what the partition map found: project root, languages, manifests, candidate build image
+and a safe command plan, in which every command states its purpose, argv and authorization. Same
+three steps as stage 6 with `--job dev_project_discovery`: the gate with nothing supplied must end
+`FAILURE` with a hand-off naming `supplied/result.json` and the `project-discovery` schema;
+`supply_record.py` installs `fixtures/supplied/<fixture>/02-dev-project-discovery.json`; the gate
+again must end `SUCCESS` and `discovery_gate.validate` must accept it. The gate itself also requires
+the accepted partition map at the same revision and checks citation freshness.
+
+This gate is the older code path: its accepted record names the attempt and the Dagster run but
+records no output hashes (intake and the partition gate do). So the stage checks that the accepted
+`output.json`, the supplied file and the fixture record are identical, besides: accepted by the
+launched Dagster run, the latest attempt, `source_revision` equal to the checkout's HEAD and to the
+accepted partition map's, every source-file citation hash re-computed from the checkout, and a
+non-empty command plan whose entries each have argv, purpose and authorization.
+
+Evidence: both Dagster runs, the attempt, projects, languages, manifests, lockfiles, candidate build
+images, the command plan (argv and authorization), coverage-gap count, citations checked, and
+`output_hashes_in_accepted_record: false` as a recorded gap. On `hello-autotools`: one project at the
+root (C++, C), `configure.ac` and `Makefile.am`, no lockfile, `audit-buildenv-cpp:local`, and four
+commands, `autoreconf -fi`, `./configure`, `make`, `make check`, all `script-execution-required`;
+9 citations. This plan is what stage 9 (`build-configure`) will run.
