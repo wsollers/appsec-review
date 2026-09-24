@@ -30,7 +30,7 @@ STAGES=(
   "intake|1|00-intake accepted (phase1_intake)"
   "partition-discovery|1|Partition map supplied and accepted (repository_partition_discovery)"
   "dev-project-discovery|1|Project discovery supplied and accepted (dev_project_discovery)"
-  "engagement-workflow|0|engagement_workflow: preparation branches and join published"
+  "engagement-workflow|1|engagement_workflow: preparation branches and join published"
   "build-configure|0|02-build-configure through B13 in the pinned build image (needs Phase 3, 4, E01)"
   "native-build|0|02-native-build: compile database and build outputs"
   "evidence|0|Evidence jobs (SAST, SBOM/SCA, secrets, IaC, ...) accepted or explicitly skipped"
@@ -623,6 +623,75 @@ import json,sys; s=json.load(sys.stdin)
 print("dev-project-discovery: PASS  hand-off %s; discovery accepted by Dagster %s: project %s (%s), manifests %s, image %s; plan: %s; %d citations match the checkout" % (
   sys.argv[1], s["dagster_run_id"][:8], ",".join(s["projects"]), "/".join(map(str, s["languages"])), ", ".join(map(str, s["manifests"])),
   ", ".join(map(str, s["buildenv_images"])), "; ".join(" ".join(c["argv"]) + " [" + c["authorization"] + "]" for c in s["command_plan"]), s["citations_checked"]))' "$handoff_state"
+}
+
+# ---- stage 8: engagement-workflow -----------------------------------------------------------------
+# engagement_workflow: configuration, atomic intake, three parallel preparation branches (scope,
+# native plan, discovery hand-offs), then a validated join. Here intake is already accepted (stage 5),
+# so the workflow must reuse it, not redo it, and must leave the accepted discovery results alone.
+stage_engagement_workflow() {
+  require_run engagement-workflow
+  launch_and_wait engagement-workflow engagement_workflow
+
+  # The project's own check of the published workflow and every branch (hashes and semantics).
+  local inspect
+  inspect="$("$REPO/orchestrator/dagster/code-location.sh" run -B -c \
+    'import json, sys; sys.path.insert(0, sys.argv[1]); import workflow; print(json.dumps(workflow.inspect_status(sys.argv[2])))' \
+    "$REPO/appsec-review-process" "$RUN_ID")" || die "engagement-workflow: workflow.inspect_status failed: $inspect"
+  echo "inspect_status: $inspect"
+
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$SAT_DIR/sat.json" "$LAUNCH_DAGSTER" "$inspect" <<'PY'
+import json, pathlib, sys
+rdir, sat_path, dagster_id, inspect = sys.argv[1:]
+rdir = pathlib.Path(rdir); sat = json.load(open(sat_path)); inspect = json.loads(inspect)
+bad = []
+if inspect.get('status') != 'OK': bad.append('inspect_status %r: %s' % (inspect.get('status'), inspect.get('error')))
+w = json.loads((rdir / 'data/workflows/engagement/accepted.json').read_text())
+if w.get('status') != 'OK': bad.append('workflow status %r' % w.get('status'))
+if w.get('dagster_run_id') != dagster_id: bad.append('published by Dagster run %r, launched %r' % (w.get('dagster_run_id'), dagster_id))
+if w.get('downstream_execution') != 'PLANNED_NOT_EXECUTED': bad.append('downstream_execution %r' % w.get('downstream_execution'))
+names = sorted(b['branch'] for b in w.get('branches', []))
+if names != ['discovery_handoffs', 'native_plan_check', 'scope_check']: bad.append('branches %r' % names)
+# Intake reused, not redone: same accepted attempt as stage 5, and a REUSE event from this Dagster run.
+intake_attempt = sat['stages']['intake']['evidence']['attempt_id']
+if w.get('intake', {}).get('attempt_id') != intake_attempt: bad.append('workflow used intake attempt %r, stage 5 accepted %r' % (w.get('intake', {}).get('attempt_id'), intake_attempt))
+events = [json.loads(l) for l in (rdir / 'data/events.jsonl').read_text().splitlines() if l.strip()]
+if not any(e.get('event') == 'REUSE' and e.get('dagster_run_id') == dagster_id for e in events): bad.append('no intake REUSE event from this Dagster run')
+# Branch outputs claim nothing and execute nothing.
+outputs = {}
+for b in w.get('branches', []):
+    att = rdir / 'data/jobs/00-workflow-preparation' / b['branch'] / 'attempts' / b['attempt_id']
+    o = json.loads((att / 'output.json').read_text())
+    outputs[b['branch']] = o
+    if o.get('findings') != [] or o.get('target_execution') is not False: bad.append(b['branch'] + ' claims findings or target execution')
+jobs = outputs.get('discovery_handoffs', {}).get('jobs', [])
+if not jobs or any(j.get('status') != 'PLANNED_NOT_EXECUTED' for j in jobs): bad.append('discovery hand-offs are not all PLANNED_NOT_EXECUTED')
+# The accepted discovery results from stages 6 and 7 are untouched.
+for stage, job in (('partition-discovery', '02-repository-partition-discovery'), ('dev-project-discovery', '02-dev-project-discovery')):
+    a = json.loads((rdir / 'data/jobs' / job / 'accepted.json').read_text())
+    if a.get('status') != 'OK' or a.get('attempt_id') != sat['stages'][stage]['evidence']['attempt_id']: bad.append(job + ' acceptance changed')
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id': dagster_id, 'intake_attempt_reused': intake_attempt,
+                  'branches': {b['branch']: b['attempt_id'] for b in w['branches']},
+                  'path_count': outputs['scope_check'].get('path_count'), 'families': sorted(outputs['scope_check'].get('families', {})),
+                  'native_build_status': outputs['native_plan_check']['native'].get('build_status'),
+                  'planned_jobs': {j['job']: j['applicability'] for j in jobs},
+                  'next_job': w.get('next_job'), 'downstream_execution': w.get('downstream_execution'),
+                  'discovery_results_untouched': True}))
+PY
+)" || die "engagement-workflow: $summary"
+
+  local target="$REPO/fixtures/targets/$FIXTURE" head
+  head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["stages"]["sut-checkout"]["evidence"]["head"])' "$SAT_DIR/sat.json")"
+  [[ "$(git -C "$target" rev-parse HEAD)" == "$head" && -z "$(git -C "$target" status --porcelain --untracked-files=all)" ]] \
+    || die "engagement-workflow: the checkout changed during the workflow"
+
+  record PASS engagement-workflow "$summary"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("engagement-workflow: PASS  Dagster %s published; intake reused (attempt %s); branches %s OK; %d paths, native %s; %d discovery jobs planned, not executed; discovery results untouched" % (
+  s["dagster_run_id"][:8], s["intake_attempt_reused"], ", ".join(sorted(s["branches"])), s["path_count"], s["native_build_status"], len(s["planned_jobs"])))'
 }
 
 # ---- driver --------------------------------------------------------------------------------------

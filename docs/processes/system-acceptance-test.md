@@ -34,7 +34,7 @@ is re-verified (same HEAD, still clean) because every later stage reads that che
 | 5 | `intake` | `00-intake` accepted | yes |
 | 6 | `partition-discovery` | Hand-off with nothing supplied; partition map supplied and accepted | yes |
 | 7 | `dev-project-discovery` | Hand-off with nothing supplied; project discovery supplied and accepted | yes |
-| 8 | `engagement-workflow` | Preparation branches and join published | |
+| 8 | `engagement-workflow` | Preparation branches and join published; intake reused; discovery results untouched | yes |
 | 9 | `build-configure` | `02-build-configure` through B13 in the pinned build image (needs Phase 3, Phase 4, E01) | |
 | 10 | `native-build` | Compile database and build outputs | |
 | 11 | `evidence` | Evidence jobs accepted or explicitly skipped | |
@@ -186,3 +186,28 @@ images, the command plan (argv and authorization), coverage-gap count, citations
 root (C++, C), `configure.ac` and `Makefile.am`, no lockfile, `audit-buildenv-cpp:local`, and four
 commands, `autoreconf -fi`, `./configure`, `make`, `make check`, all `script-execution-required`;
 9 citations. This plan is what stage 9 (`build-configure`) will run.
+
+### 8. `engagement-workflow`
+
+`launch_job.py --job engagement_workflow --wait` must end `SUCCESS`. The workflow resolves
+configuration, runs atomic intake, three parallel preparation branches (`scope_check`,
+`native_plan_check`, `discovery_handoffs`) and a validated join. Then:
+
+1. `workflow.inspect_status` (the project's own check: the published workflow and every branch's
+   hashes and semantics) reports `OK`.
+2. `data/workflows/engagement/accepted.json` is `OK`, published by the launched Dagster run, with
+   exactly the three branches and `downstream_execution` `PLANNED_NOT_EXECUTED`.
+3. **Intake is reused, not redone:** the workflow's intake pointer is stage 5's accepted attempt, and
+   the run's `data/events.jsonl` has a `REUSE` event from this Dagster run.
+4. No branch claims findings or target execution; every discovery hand-off job is
+   `PLANNED_NOT_EXECUTED`.
+5. The accepted partition map and project discovery from stages 6 and 7 are untouched (same
+   attempts, still `OK`), and the checkout is unchanged.
+
+Evidence: Dagster run, reused intake attempt, branch attempts, path count, families, native build
+status, the planned jobs with their applicability, next job.
+
+Order note: the engagement flow (`engagement-start.md`) runs `engagement_workflow` as step 2, before
+the discovery gates (2b); the SAT runs `phase1_intake` first (stage 5), then the gates, then the
+workflow, which therefore proves reuse and non-interference. Whether the SAT should instead follow the
+documented order (workflow as stage 5) is open.

@@ -428,3 +428,9 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   accepted Dagster `f9724591`, 19 citations fresh). Stage 7 `dev-project-discovery` built on the same
   pattern (hand-off proof, supply, accept); since this older gate records no output hashes, the SAT
   compares the accepted output with the supplied file and the fixture record, and records that gap.
+- 2026-09-24 -- SAT stage 7 `dev-project-discovery` passed in WSL (hand-off Dagster `07188bfe`,
+  accepted Dagster `27ea5b0c`, 9 citations). Stage 8 `engagement-workflow` built: workflow `OK` from
+  the launched run, `workflow.inspect_status` OK, intake reused (stage 5's attempt, `REUSE` event), no
+  findings or target execution in any branch, discovery hand-offs planned only, and the accepted
+  discovery results untouched. Open: the SAT order (intake, gates, workflow) differs from
+  `engagement-start.md` (workflow, then gates).
