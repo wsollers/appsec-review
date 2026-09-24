@@ -316,26 +316,62 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
    already gives William's "resolve once per run, pin, reuse on resume" behavior. **Live
    confirmation needed on hal5000** (see the module's `--query`/CLI block) before item 3 depends on
    it for a real dispatch.
-3. **Request builder -- new code.** Builds the full `appsec-review/persona-invocation-request/1.0`
-   object `persona_invocation.resolve_request` expects: `persona` (the composition ids),
-   `model`/`effort` (`model_version_registry.model_identity_for(run_id, alias)` for the pinned
-   identity, `alias` and `effort` from the job template's own `model` field via
-   `review_cli.resolve_model(job_template_id, budget)` -- called by `job_template_id` directly,
-   never through `review_cli`'s own `run`/`model` CLI commands, which resolve at the coarser
-   *process* granularity; see the model-routing-redesign note above), `tools`
-   (derived from the tooling profile via `persona_invocation.tool_ids`), `allowed_claim_classes` /
-   `prohibited_claim_classes` (from `persona_invocation.claim_ceiling(role, tooling_profile)` --
-   already exists, just needs calling), `outer_prompt` (from step 2), `readable_inputs` (a per-file
-   manifest -- root id, relative path, role, sha256, byte count -- for every file in the fixture
-   checkout the tooling profile's boundary allows the persona to read; for `static-repo-project-
-   inspector` that is the whole read-only checkout, hidden CI paths included, per the job template's
-   required inputs), `permission.decision` (a real B11 `permission_capabilities` evaluation for
-   `read-source` at probe/standard budget -- reuse the evaluator, do not hand-roll a decision
-   object). Where this code lives is an open call for whoever picks this up: either a new
-   `appsec-review-process/persona_dispatch.py`, or as new functions inside `discovery_gate.py`
-   alongside the existing supplied-path helpers. Prefer the new module; `discovery_gate.py` already
-   carries two execution shapes (common-envelope + legacy) and a third (automatic dispatch) reads
-   more clearly as its own file that `discovery_gate.py` calls into.
+3. **DONE.** ~~Request builder~~ -- built: `appsec-review-process/persona_dispatch.py`,
+   `build_request(job_template_id, *, run_id, job_id, attempt_id, target_root,
+   source_snapshot_sha256, now, ...)`. Builds the full
+   `appsec-review/persona-invocation-request/1.0` object: `persona` (the six id+sha256 composition
+   pairs, read straight from the registry -- the exact records
+   `persona_invocation.load_composition` independently re-loads and hashes); `model` (a real pinned
+   `persona-model-identity` from `model_version_registry.model_identity_for(run_id, alias)`, where
+   `alias` is `review_cli.resolve_model(job_template_id, budget_name)["model"]` -- called by
+   `job_template_id` directly, never through `review_cli`'s own `run`/`model` CLI commands, which
+   resolve at the coarser *process* granularity; see the model-routing-redesign note above);
+   `tools: []` and `budget.tool_call_limit: 0` (the persona reads target bytes already pinned into
+   `readable_inputs`, never calls back into a live filesystem -- the same convention
+   `owasp_dispatch.py`'s pooled cells already use, confirmed by reading its `build_specifications`);
+   `budget` (a new `PERSONA_BUDGETS` table keyed by the job template's own `budget_default`,
+   scoped to this module -- see its docstring for why it is not shared with
+   `owasp-dispatch/default-v1.json`'s `cell_budgets`, a different pooled domain); `allowed_claim_classes`
+   / `prohibited_claim_classes` (`persona_invocation.claim_ceiling(role, tooling_profile)`, already
+   existed, just called); `outer_prompt` (step 2's `assemble_outer_prompt`); `readable_inputs` (a
+   new `_walk_target`: every regular file under the target checkout, hidden CI/configuration
+   directories included per the job template's own instructions, `.git` excluded matching
+   `intake.source_identity`'s own exclusion, refuses outright if the checkout contains a symlink
+   anywhere -- see the module docstring for why this is a deliberately scoped-down walk for D01's
+   fixture-proof construction, not `intake.source_identity`'s full bounded/deadline-guarded one);
+   `permission` (a real B11 `permission_capabilities.evaluate()` call with an empty capabilities
+   requirement -- confirmed while researching this item that there is no `read-source` capability
+   definition in this registry at all, so empty is the correct requirement for
+   `static-repo-project-inspector`'s static-only mode, not a placeholder; the function asserts the
+   GRANTED/empty-capabilities result rather than assuming it, so a future capability added to this
+   tooling profile's requirements fails loudly here). Lives in its own new module (not inside
+   `discovery_gate.py`): `discovery_gate.py` already carries two execution shapes
+   (common-envelope + legacy) and a third (automatic dispatch) reads more clearly as its own file
+   that `discovery_gate.py` (item 5) will call into.
+   **A real bug found and fixed while structurally testing this module, before delivery:** the
+   first draft defaulted `job_id` to `job_template_id` itself, on the (wrong) assumption that it
+   matched `discovery_gate.py`'s existing `root(run_id, 'jobs', job)` directory-naming convention.
+   `permission_capabilities.py`'s default-deny secret-scanner (`HIGH_ENTROPY_RE`, applied to every
+   permission context field including `job_id`) incidentally matches any 32+ character string that
+   mixes letters, digits and separators the way most of this registry's descriptive kebab-case job
+   template ids do -- `02-repository-partition-discovery` (33 chars) is one of exactly two job
+   template ids in the current registry that trip it (`02-api-collection-intelligence-ingest`, 37
+   chars, is the other). Every `pc.evaluate` call for D01 raised `PermissionModelError: context
+   carries secret-like material` before a decision was even reached. Root cause: `job_id` and
+   `job_template_id` are meant to be separate concepts -- the test fixtures already model this
+   (`tests/persona_invocation_support.py`'s `JOB = "job-b14"` is a short opaque id, distinct from
+   `TEMPLATE = "04-owasp-validation-worklist"`) -- so the fix removed the dangerous default
+   entirely: `job_id` is now a required, caller-chosen parameter, never invented by this module.
+   Verified in the cloud sandbox against a synthetic target checkout (hidden `.github/workflows/`
+   dir, a `.git/objects/` entry that must NOT appear in `readable_inputs`, a plain source file) and
+   a fake-dispatched pinned model-versions record for a throwaway run id: the built request passed
+   **`persona_invocation.resolve_request` end-to-end** (not just this module's own schema-shaped
+   output -- the real independent re-derivation `persona_invocation.run_invocation` performs
+   before ever calling an invoker), confirming request/composition/prompt/readable-input hashes
+   all round-trip; `.git` was excluded and the hidden CI dir was included, as required; all four
+   failure paths (missing job template, missing target directory, a symlinked file in the target,
+   a run with no pinned model version) raised `RequestBuildError` naming exactly what was wrong,
+   never partially building a request.
 4. **`PersonaInvoker` -- new code, real model client.** `appsec-review-process/persona_invocation.py`
    is dispatch-protocol-only by design ("no model client and no network here"); B14 explicitly wants
    this supplied by the integrator. `appsec-review-process/review_cli.py` already has a live,
