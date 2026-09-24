@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "operations-topology.schema.json",
+  "title": "SRE Operations Topology Discovery Result",
+  "type": "object",
+  "required": ["schema", "target", "source_revision", "services", "operational_notes", "coverage_gaps"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "appsec-review/operations-topology/1.0"},
+    "target": {"type": "string"},
+    "source_revision": {"type": "string"},
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["service_id", "name", "kind", "image_ref", "ports", "dependencies", "evidence_citations", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "service_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "name": {"type": "string"},
+          "kind": {"type": "string", "enum": ["service", "daemon", "cli-batch", "job", "other"]},
+          "image_ref": {"type": "string"},
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["port", "protocol", "exposed"],
+              "additionalProperties": false,
+              "properties": {
+                "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+                "protocol": {"type": "string", "enum": ["tcp", "udp"]},
+                "exposed": {"type": "boolean"}
+              }
+            }
+          },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["target_service_id", "kind", "basis", "evidence_citations"],
+              "additionalProperties": false,
+              "properties": {
+                "target_service_id": {"type": "string"},
+                "kind": {"type": "string", "enum": ["network", "shared-storage", "orchestration", "other"]},
+                "basis": {"type": "string", "enum": ["declared", "inferred"]},
+                "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
+              }
+            }
+          },
+          "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}},
+          "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
+        }
+      }
+    },
+    "operational_notes": {"type": "array", "items": {"type": "string"}},
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}

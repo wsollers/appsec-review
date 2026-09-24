@@ -1,0 +1,115 @@
+{
+  "schema": "appsec-review/project-discovery/1.0",
+  "target": "hello-autotools",
+  "source_revision": "632522b6801caa5810f0c6bf71bf3783c90068ac",
+  "projects": [
+    {
+      "project_id": "container-image",
+      "root": ".",
+      "languages": [
+        "dockerfile"
+      ],
+      "manifests": [
+        "Dockerfile"
+      ],
+      "lockfiles": [],
+      "candidate_buildenv_images": [
+        "debian:bookworm-slim"
+      ],
+      "commands": [
+        "apt-get install -y --no-install-recommends autoconf automake build-essential libtool",
+        "autoreconf -fi",
+        "./configure",
+        "make",
+        "make check",
+        "docker build ."
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Dockerfile",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+          "note": "two-stage build: FROM debian:bookworm-slim AS build installs autoconf/automake/build-essential/libtool, runs autoreconf/configure/make/make check; final FROM debian:bookworm-slim copies only the built binary and sets ENTRYPOINT"
+        },
+        {
+          "source_type": "source_file",
+          "path": "Makefile.am",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "830a53c355a607e37aea0e2e6c018891b827eb32f825266a68c8c64f73aba872",
+          "note": "cross-reference: the same bin_PROGRAMS/make recipe the Dockerfile's build stage runs"
+        }
+      ],
+      "confidence": "high"
+    }
+  ],
+  "safe_command_plan": [
+    {
+      "project_id": "container-image",
+      "purpose": "Install the build-stage OS packages the Dockerfile declares (autoconf, automake, build-essential, libtool) before the containerized build runs.",
+      "argv": [
+        "apt-get",
+        "install",
+        "-y",
+        "--no-install-recommends",
+        "autoconf",
+        "automake",
+        "build-essential",
+        "libtool"
+      ],
+      "authorization": "network-required",
+      "side_effects": [
+        "installs OS packages into the build-stage image layer, not the host",
+        "fetches package lists and archives from the configured apt mirror"
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Dockerfile",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+          "note": "RUN apt-get update && apt-get install -y --no-install-recommends autoconf automake build-essential libtool"
+        }
+      ]
+    },
+    {
+      "project_id": "container-image",
+      "purpose": "Build the multi-stage image from the repository's own Dockerfile; the build stage runs autoreconf/configure/make/make check inside the image build, the final stage copies out only the built binary.",
+      "argv": [
+        "docker",
+        "build",
+        "-t",
+        "hello-autotools",
+        "."
+      ],
+      "authorization": "network-required",
+      "side_effects": [
+        "pulls the pinned debian:bookworm-slim base image if not already local",
+        "runs the Dockerfile's RUN steps (apt-get install, autoreconf, configure, make, make check) inside the image build, not against the host",
+        "produces a local container image; no target files are copied into any tracked image definition"
+      ],
+      "evidence_citations": [
+        {
+          "source_type": "source_file",
+          "path": "Dockerfile",
+          "line_range": null,
+          "tool_name": null,
+          "tool_rule_id": null,
+          "content_hash": "7242a28023019ac857f337be851c9f6214f56822f4f37ca009817e354380c603",
+          "note": "full two-stage build recipe"
+        }
+      ]
+    }
+  ],
+  "coverage_gaps": [
+    "No CI/CD workflow files, IaC manifests or deployment manifests were found anywhere in the repository (repository-partition-map coverage.category_checks: cicd, iac and deployment all not-found); the only build/release automation is this Dockerfile.",
+    "The Dockerfile's build stage runs the same autotools chain developer discovery already planned (02-dev-project-discovery); this record treats the Dockerfile as the containerized build/release route, not a second independent native build to resolve.",
+    "No image registry, tag policy or publication step is declared anywhere in the repository; the Dockerfile only builds and runs a binary, it does not publish one."
+  ]
+}

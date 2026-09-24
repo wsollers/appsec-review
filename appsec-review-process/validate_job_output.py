@@ -463,6 +463,24 @@ def _project_discovery_errors(value: Any, source_root: Path | None) -> list[str]
     return errors
 
 
+def _operations_topology_errors(value: Any, source_root: Path | None) -> list[str]:
+    errors: list[str] = []
+    services = value.get("services", []) if isinstance(value, dict) else []
+    ids = [item.get("service_id") for item in services if isinstance(item, dict)]
+    if len(ids) != len(set(ids)):
+        errors.append("operations topology service IDs must be unique")
+    known = set(ids)
+    for index, service in enumerate(services):
+        if not isinstance(service, dict):
+            continue
+        for dep_index, dependency in enumerate(service.get("dependencies", [])):
+            if isinstance(dependency, dict) and dependency.get("target_service_id") not in known:
+                errors.append(f"$.services[{index}].dependencies[{dep_index}].target_service_id: "
+                               "does not resolve to a service")
+    errors.extend(_citation_errors(value, source_root))
+    return errors
+
+
 # ---- ADR-0010 vendor-prepass contracts (V04, V07, V05) -----------------------------------------
 #
 # The nine family contracts have their own verifiers, and those verifiers deliberately take no

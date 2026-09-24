@@ -868,7 +868,7 @@
        "name": "SRE Operations Topology Discovery",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-repository-partition-discovery"
+        "job:02-devops-project-discovery"
        ],
        "produces": [
         "job:02-sre-operations-topology"
@@ -2806,7 +2806,7 @@
        "name": "SRE Operations Topology Discovery",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-repository-partition-discovery"
+        "job:02-devops-project-discovery"
        ],
        "produces": [
         "job:02-sre-operations-topology"
@@ -5161,12 +5161,14 @@
    "name": "DevOps Project And Pipeline Discovery",
    "contract": "project-discovery",
    "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "readiness": "supplied_artifact_gate",
+   "execution_mode": "supplied_artifact",
+   "worker": "appsec-review-process/discovery_gate.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "devops_project_discovery"
+   ],
+   "lifecycle_binding": "supplied_gate",
    "composition": {
     "persona_id": "devops-engineer",
     "role_id": "repo-project-discoverer",
@@ -5222,12 +5224,10 @@
    "outputs_source": "registry/output-contracts/project-discovery.json",
    "claim_class": "supplied_project_discovery",
    "gaps": [
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "not_automatic_analysis_dispatch",
+    "supplied_result_required"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode.",
    "consumes": [
     "job:02-repository-partition-discovery"
    ],
@@ -5241,12 +5241,14 @@
    "name": "SRE Operations Topology Discovery",
    "contract": "operations-topology",
    "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "readiness": "supplied_artifact_gate",
+   "execution_mode": "supplied_artifact",
+   "worker": "appsec-review-process/discovery_gate.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "sre_operations_topology"
+   ],
+   "lifecycle_binding": "supplied_gate",
    "composition": {
     "persona_id": "sre-engineer",
     "role_id": "operations-topology-mapper",
@@ -5256,9 +5258,9 @@
    },
    "depends_on": [
     {
-     "job": "02-repository-partition-discovery",
+     "job": "02-devops-project-discovery",
      "kind": "required",
-     "contract": "repository-partition-map"
+     "contract": "project-discovery"
     }
    ],
    "declared_inputs": [
@@ -5300,17 +5302,14 @@
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/operations-topology.json",
-   "claim_class": null,
+   "claim_class": "supplied_operations_topology",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "not_automatic_analysis_dispatch",
+    "supplied_result_required"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode.",
    "consumes": [
-    "job:02-repository-partition-discovery"
+    "job:02-devops-project-discovery"
    ],
    "produces": [
     "job:02-sre-operations-topology"
@@ -8932,8 +8931,7 @@
     "step:dev-analysis",
     "step:build-index",
     "job:02-dev-project-discovery",
-    "job:02-devops-project-discovery",
-    "job:02-sre-operations-topology"
+    "job:02-devops-project-discovery"
    ]
   },
   "job:02-dev-project-discovery": {
@@ -8959,6 +8957,7 @@
     "job:02-devops-project-discovery"
    ],
    "consumed_by": [
+    "job:02-sre-operations-topology",
     "job:02-evidence-assembly"
    ]
   },

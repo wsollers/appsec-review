@@ -49,9 +49,9 @@ class DagsterTests(unittest.TestCase):
         with DagsterInstance.local_temp(str(self.root/'dagster')) as instance:
             with build_op_context(instance=instance) as context:
                 with self.assertRaisesRegex(Failure,'WORKER_NOT_IMPLEMENTED'):
-                    LIFECYCLE_OPS['02-devops-project-discovery'](context,{'engagement_run_id':self.run_id},[])
+                    LIFECYCLE_OPS['02-evidence-assembly'](context,{'engagement_run_id':self.run_id},[])
                 record=state.read_json(state.data_path(self.run_id,'orchestration','dagster',context.run_id,
-                                                     '02-devops-project-discovery','pre.json'))
+                                                     '02-evidence-assembly','pre.json'))
                 self.assertEqual(record['status'],'BLOCKED')
                 self.assertEqual(record['resume_command'],
                     'python -B appsec-review-process/launch_job.py --run-id '+self.run_id+' --job full_review --wait')

@@ -131,7 +131,7 @@ class DesignParityTests(unittest.TestCase):
 
     def test_blocked_op_cannot_be_called_implemented(self):
         manifest = self.mutated()
-        self.record(manifest, "02-devops-project-discovery")["readiness"] = "implemented_not_qualified"
+        self.record(manifest, "02-evidence-assembly")["readiness"] = "implemented_not_qualified"
         self.assertIn("blocked_op cannot be classified", self.errors(manifest))
 
     def test_launcher_and_sensor_mismatch(self):

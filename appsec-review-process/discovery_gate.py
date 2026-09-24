@@ -38,10 +38,31 @@ from worker_adapters import SuppliedHumanDecisionAdapter, WorkerRequest
 SCHEMAS = {
     '02-repository-partition-discovery': 'repository-partition-map.schema.json',
     '02-dev-project-discovery': 'project-discovery.schema.json',
+    '02-devops-project-discovery': 'project-discovery.schema.json',
+    '02-sre-operations-topology': 'operations-topology.schema.json',
 }
 
 ADOPTED_JOB = '02-repository-partition-discovery'
 CONSUMER_JOB = '02-dev-project-discovery'
+
+# Every other supplied-record gate's required upstream job: the same source_revision as the
+# upstream's accepted result is required, plus that upstream must itself be accepted first.
+# 02-dev-project-discovery and 02-devops-project-discovery both read the partition map directly
+# (persona routing: developer-engineer vs devops-engineer partitions). 02-sre-operations-topology
+# chains after 02-devops-project-discovery -- operations topology is read off the containers/
+# services devops discovery already found, at the same revision.
+UPSTREAM_JOB = {
+    '02-dev-project-discovery': ADOPTED_JOB,
+    '02-devops-project-discovery': ADOPTED_JOB,
+    '02-sre-operations-topology': '02-devops-project-discovery',
+}
+
+# Job name -> the payload-shape validator (beyond schema) from validate_job_output.
+_PAYLOAD_ERRORS = {
+    '02-dev-project-discovery': 'project_discovery',
+    '02-devops-project-discovery': 'project_discovery',
+    '02-sre-operations-topology': 'operations_topology',
+}
 
 
 def root(run_id, job):
@@ -83,37 +104,50 @@ def issue_handoff(run_id, job, dagster_id):
     return path, resolved_path
 
 
-def _require_consumer_inputs(run_id, value):
-    """02-dev-project-discovery acceptance checks beyond the schema (added 2026-09-22).
+def _upstream_payload_filename(job):
+    # The adopted partition gate writes its own dedicated artifact name; every other supplied
+    # gate (this module's _legacy_run) writes the generic attempt/output.json shape.
+    return 'repository-partition-map.json' if job == ADOPTED_JOB else 'output.json'
 
-    - The graph's declared dependency: an accepted 02-repository-partition-discovery result for
-      this run, at the same source revision as the supplied project discovery.
+
+def _require_upstream_inputs(run_id, job, value):
+    """Acceptance checks beyond the schema for every chained supplied-record gate (added
+    2026-09-22 for 02-dev-project-discovery; generalized 2026-09-24 for
+    02-devops-project-discovery and 02-sre-operations-topology).
+
+    - The graph's declared dependency: an accepted upstream result for this run (UPSTREAM_JOB),
+      at the same source revision as the supplied record.
     - The same content checks the adopted partition gate gets from validate_job_output: normalized
       repository paths, citation freshness against the staged target, no secret-like values and no
       finding/severity/runtime-state promotion.
     """
     import validate_job_output as vjo
+    upstream = UPSTREAM_JOB[job]
     try:
-        partition_attempt = validate(run_id, ADOPTED_JOB)
+        upstream_attempt = validate(run_id, upstream)
     except Blocked:
         raise
     except Exception as exc:
-        raise Blocked(CONSUMER_JOB + ': requires an accepted ' + ADOPTED_JOB + ' result for this run first ('
+        raise Blocked(job + ': requires an accepted ' + upstream + ' result for this run first ('
                       + type(exc).__name__ + ')') from exc
-    if partition_attempt is None:
-        raise Blocked(CONSUMER_JOB + ': the accepted ' + ADOPTED_JOB + ' result predates the common envelope; re-run it')
-    partition = read_json(partition_attempt / 'repository-partition-map.json')
-    if value.get('source_revision') != partition.get('source_revision'):
-        raise Blocked(CONSUMER_JOB + ': source_revision ' + str(value.get('source_revision'))
-                      + ' does not match the accepted partition map (' + str(partition.get('source_revision')) + ')')
+    if upstream_attempt is None:
+        raise Blocked(job + ': the accepted ' + upstream + ' result predates the common envelope; re-run it')
+    upstream_value = read_json(upstream_attempt / _upstream_payload_filename(upstream))
+    if value.get('source_revision') != upstream_value.get('source_revision'):
+        raise Blocked(job + ': source_revision ' + str(value.get('source_revision'))
+                      + ' does not match the accepted ' + upstream + ' (' + str(upstream_value.get('source_revision')) + ')')
     source_root, errors = vjo._source_root(run_path(run_id) / 'data', run_id)
     errors = list(errors)
     if source_root is not None:
-        errors += vjo._project_discovery_errors(value, source_root)
+        payload_kind = _PAYLOAD_ERRORS[job]
+        if payload_kind == 'project_discovery':
+            errors += vjo._project_discovery_errors(value, source_root)
+        elif payload_kind == 'operations_topology':
+            errors += vjo._operations_topology_errors(value, source_root)
     errors += vjo._secret_errors(value)
     errors += vjo._claim_promotion_errors(value, set(vjo.PROMOTION_FIELDS))
     if errors:
-        raise Blocked(CONSUMER_JOB + ': supplied result is invalid: ' + '; '.join(errors))
+        raise Blocked(job + ': supplied result is invalid: ' + '; '.join(errors))
 
 
 def _legacy_run(run_id, dagster_id, job, force=False):
@@ -131,8 +165,8 @@ def _legacy_run(run_id, dagster_id, job, force=False):
         errors = validate_document(value, schema)
         if errors:
             raise Blocked(job + ': supplied result failed schema validation: ' + '; '.join(errors))
-    if job == CONSUMER_JOB:
-        _require_consumer_inputs(run_id, value)
+    if job in UPSTREAM_JOB:
+        _require_upstream_inputs(run_id, job, value)
     fingerprint = digest({'job': job, 'supplied_hash': file_hash(supplied)})
     if not force and (base / 'accepted.json').exists():
         candidate = read_json(base / 'accepted.json')

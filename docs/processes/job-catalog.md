@@ -155,7 +155,7 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Legacy evidence pipeline](#step-legacy-pregather) | operator script | [`sut-checkout`](#a-sut-checkout) | [`legacy-pregather`](#a-legacy-pregather) |
 | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-ossf-scorecard`](#a-job-02-ossf-scorecard) |
 | [DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery) | lifecycle job | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery) | [`02-devops-project-discovery`](#a-job-02-devops-project-discovery) |
-| [SRE Operations Topology Discovery](#job-02-sre-operations-topology) | lifecycle job | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery) | [`02-sre-operations-topology`](#a-job-02-sre-operations-topology) |
+| [SRE Operations Topology Discovery](#job-02-sre-operations-topology) | lifecycle job | [`02-devops-project-discovery`](#a-job-02-devops-project-discovery) | [`02-sre-operations-topology`](#a-job-02-sre-operations-topology) |
 | [02-evidence-assembly](#job-02-evidence-assembly) | lifecycle job | [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`02-api-collection-intelligence-ingest`](#a-job-02-api-collection-intelligence-ingest)<br>[`02-binary-intelligence-ingest`](#a-job-02-binary-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#a-job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#a-job-02-test-intelligence-ingest)<br>[`02-source-sast`](#a-job-02-source-sast)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-test-result-ingest`](#a-job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest)<br>[`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest)<br>[`02-evidence-index`](#a-job-02-evidence-index)<br>[`02-ossf-scorecard`](#a-job-02-ossf-scorecard)<br>[`02-secrets-inventory`](#a-job-02-secrets-inventory)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-container-image-inventory`](#a-job-02-container-image-inventory)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-license-scan`](#a-job-02-license-scan)<br>[`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle)<br>[`02-binary-hardening`](#a-job-02-binary-hardening)<br>[`02-mobile-sast`](#a-job-02-mobile-sast) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
 | [QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-api-collection-intelligence-ingest`](#a-job-02-api-collection-intelligence-ingest) |
 | [Binary Intelligence Ingest](#job-02-binary-intelligence-ingest) | lifecycle job | [`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-binary-cfg`](#a-job-02-binary-cfg) | [`02-binary-intelligence-ingest`](#a-job-02-binary-intelligence-ingest) |
@@ -936,8 +936,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-ossf-scorecard`](#job-02-ossf-scorecard) | `ossf-scorecard-results` | implemented_and_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | `repository-partition-map` | supplied_artifact_gate | `00-intake` |
 | `02-evidence-pregather` | [`02-dev-project-discovery`](#job-02-dev-project-discovery) | `project-discovery` | supplied_artifact_gate | `02-repository-partition-discovery` |
-| `02-evidence-pregather` | [`02-devops-project-discovery`](#job-02-devops-project-discovery) | `project-discovery` | registered_planned_not_executable | `02-repository-partition-discovery` |
-| `02-evidence-pregather` | [`02-sre-operations-topology`](#job-02-sre-operations-topology) | `operations-topology` | registered_planned_not_executable | `02-repository-partition-discovery` |
+| `02-evidence-pregather` | [`02-devops-project-discovery`](#job-02-devops-project-discovery) | `project-discovery` | supplied_artifact_gate | `02-repository-partition-discovery` |
+| `02-evidence-pregather` | [`02-sre-operations-topology`](#job-02-sre-operations-topology) | `operations-topology` | supplied_artifact_gate | `02-devops-project-discovery` |
 | `02-evidence-pregather` | [`02-evidence-assembly`](#job-02-evidence-assembly) | `pregather` | missing_prerequisites | `02-dev-project-discovery`, `02-devops-project-discovery`, `02-sre-operations-topology`, `02-api-collection-intelligence-ingest`, `02-binary-intelligence-ingest`, `02-doc-intelligence-ingest`, `02-standards-source-ingest`, `02-test-intelligence-ingest`, `02-source-sast`, `02-native-sast`, `02-ir-facts`, `02-test-result-ingest`, `02-test-coverage-ingest`, `02-operations-doc-ingest`, `02-evidence-index`, `02-ossf-scorecard`, `02-secrets-inventory`, `02-iac-config-scan`, `02-container-image-inventory`, `02-sbom-inventory`, `02-sca-vulnerability-match`, `02-license-scan`, `02-dependency-lifecycle`, `02-binary-hardening`, `02-mobile-sast` |
 | `02-evidence-pregather` | [`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) | `intelligence-extract` | registered_planned_not_executable | `00-intake` |
 | `02-evidence-pregather` | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) | `binary-intelligence` | registered_planned_not_executable | `02-binary-triage`, `02-binary-cfg` |
@@ -1042,7 +1042,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/02-repository-partition-discovery.json) | target repository path<br>repository file inventory including hidden CI/configuration paths<br>language build environment image catalog<br>existing project inventory *(optional)*<br>static evidence summary *(optional)*<br>API definitions *(optional)*<br>IaC and deployment manifests *(optional)*<br>CI/CD workflows *(optional)*<br>runbooks and service catalog *(optional)*<br>existing component map *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-repository-partition-discovery/` |
 | Output files (registry/output-contracts/repository-partition-map.json) | repository-partition-map.json<br>repository-partition-summary.md<br>status.json |
-| Consumed by | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology) |
+| Consumed by | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) |
 | Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
 | Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |
 
@@ -1073,17 +1073,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `project-discovery` (claim class `supplied_project_discovery`) |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `supplied_artifact_gate`; execution `supplied_artifact`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/discovery_gate.py:run` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `devops_project_discovery`; lifecycle binding: `supplied_gate` |
 | Composition | persona `devops-engineer`, role `repo-project-discoverer`, tooling `static-repo-project-inspector` |
 | Consumes (graph) | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) (required, contract `repository-partition-map`) |
 | Declared inputs (registry/job-templates/02-devops-project-discovery.json) | target repository path<br>CI/CD and deployment artifact inventory<br>Dockerfiles *(optional)*<br>IaC *(optional)*<br>environment templates *(optional)*<br>build logs *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-devops-project-discovery/` |
 | Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>safe-command-plan.json<br>status.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Consumed by | [`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
+| Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
+| Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |
 
 <a id="job-02-sre-operations-topology"></a>
 
@@ -1091,18 +1092,19 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 | | |
 |---|---|
-| Contract | `operations-topology` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Contract | `operations-topology` (claim class `supplied_operations_topology`) |
+| Status | readiness `supplied_artifact_gate`; execution `supplied_artifact`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/discovery_gate.py:run` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `sre_operations_topology`; lifecycle binding: `supplied_gate` |
 | Composition | persona `sre-engineer`, role `operations-topology-mapper`, tooling `static-ops-topology-inspector` |
-| Consumes (graph) | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) (required, contract `repository-partition-map`) |
+| Consumes (graph) | [`02-devops-project-discovery`](#job-02-devops-project-discovery) (required, contract `project-discovery`) |
 | Declared inputs (registry/job-templates/02-sre-operations-topology.json) | target repository path<br>deployment and operations artifact inventory<br>runbooks *(optional)*<br>smoke tests *(optional)*<br>monitoring and alerting config *(optional)*<br>service catalog *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-sre-operations-topology/` |
 | Output files (registry/output-contracts/operations-topology.json) | service-inventory.json<br>operations-topology-summary.md<br>live-state-followups.json<br>status.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
+| Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |
 
 <a id="job-02-evidence-assembly"></a>
 
@@ -1979,9 +1981,9 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-lane-handoff"></a>`lane-handoff` | file | runs/<run_id>/ lane hand-off files (create_handoff.py) | [`lane-handoffs`](#step-lane-handoffs) | -- |
 | <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
 | <a id="a-job-02-ossf-scorecard"></a>`02-ossf-scorecard` | job output | runs/<run_id>/data/jobs/02-ossf-scorecard/ | [`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-repository-partition-discovery"></a>`02-repository-partition-discovery` | job output | runs/<run_id>/data/jobs/02-repository-partition-discovery/ | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology) |
+| <a id="a-job-02-repository-partition-discovery"></a>`02-repository-partition-discovery` | job output | runs/<run_id>/data/jobs/02-repository-partition-discovery/ | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) |
 | <a id="a-job-02-dev-project-discovery"></a>`02-dev-project-discovery` | job output | runs/<run_id>/data/jobs/02-dev-project-discovery/ | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-build-configure`](#job-02-build-configure) |
-| <a id="a-job-02-devops-project-discovery"></a>`02-devops-project-discovery` | job output | runs/<run_id>/data/jobs/02-devops-project-discovery/ | [`02-devops-project-discovery`](#job-02-devops-project-discovery) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-devops-project-discovery"></a>`02-devops-project-discovery` | job output | runs/<run_id>/data/jobs/02-devops-project-discovery/ | [`02-devops-project-discovery`](#job-02-devops-project-discovery) | [`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-sre-operations-topology"></a>`02-sre-operations-topology` | job output | runs/<run_id>/data/jobs/02-sre-operations-topology/ | [`02-sre-operations-topology`](#job-02-sre-operations-topology) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-evidence-assembly"></a>`02-evidence-assembly` | job output | runs/<run_id>/data/jobs/02-evidence-assembly/ | [`02-evidence-assembly`](#job-02-evidence-assembly) | [`01-component-characterization`](#job-01-component-characterization) |
 | <a id="a-job-01-component-characterization"></a>`01-component-characterization` | job output | runs/<run_id>/data/jobs/01-component-characterization/ | [`01-component-characterization`](#job-01-component-characterization) | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |

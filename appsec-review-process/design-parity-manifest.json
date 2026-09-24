@@ -21,8 +21,13 @@
     "schema_file": "schemas/worker-result-envelope.schema.json"
   },
   "graph_contract": {
-    "roots": ["00-intake"],
-    "dependency_kinds": ["required", "optional"]
+    "roots": [
+      "00-intake"
+    ],
+    "dependency_kinds": [
+      "required",
+      "optional"
+    ]
   },
   "generated_views": {
     "lifecycle_mermaid": "docs/design-parity/full-review-workflow.mmd",
@@ -40,20 +45,146 @@
       "ossf_scorecard",
       "repository_partition_discovery",
       "dev_project_discovery",
-      "phase1_intake"
+      "devops_project_discovery",
+      "phase1_intake",
+      "sre_operations_topology"
     ],
     "standalone_relationships": [
-      {"job": "phase1_intake", "lifecycle_jobs": ["00-intake"], "relationship": "intake-only diagnostic and compatibility path"},
-      {"job": "engagement_workflow", "lifecycle_jobs": [], "relationship": "preparation workflow; not a full lifecycle review"},
-      {"job": "build_discovery", "lifecycle_jobs": [], "relationship": "supporting build-plan discovery before lifecycle configure"},
-      {"job": "build_execution", "lifecycle_jobs": ["02-build-configure"], "relationship": "standalone diagnostic for the lifecycle configure worker"},
-      {"job": "evidence_index", "lifecycle_jobs": ["02-evidence-index"], "relationship": "standalone and lifecycle-wired evidence producer"},
-      {"job": "critical_findings_sarif", "lifecycle_jobs": ["10-synthesis-report"], "relationship": "fixed-input standalone transform; final lifecycle publication binding is missing"},
-      {"job": "nvd_reference_sync", "lifecycle_jobs": [], "relationship": "shared asynchronous reference-feed publisher; not an engagement lifecycle or validator job"},
-      {"job": "ossf_scorecard", "lifecycle_jobs": ["02-ossf-scorecard"], "relationship": "standalone and lifecycle-wired published-results ingestion"},
-      {"job": "repository_partition_discovery", "lifecycle_jobs": ["02-repository-partition-discovery"], "relationship": "standalone qualification and lifecycle-wired supplied-artifact gate"},
-      {"job": "dev_project_discovery", "lifecycle_jobs": ["02-dev-project-discovery"], "relationship": "standalone and lifecycle-wired supplied-artifact gate; requires an accepted partition map"},
-      {"job": "full_review", "lifecycle_jobs": ["00-intake", "02-ossf-scorecard", "02-repository-partition-discovery", "02-dev-project-discovery", "02-devops-project-discovery", "02-sre-operations-topology", "02-evidence-assembly", "01-component-characterization", "03-threat-model-dfd-stride", "04-asvs-masvs", "05-native-memory", "06-cve-reachability", "13-fuzz-target-triage", "15-deployment-hardening", "07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification", "11-remediation-proposal", "12-scoring-prioritization", "10-synthesis-report", "02-api-collection-intelligence-ingest", "02-binary-intelligence-ingest", "02-doc-intelligence-ingest", "02-standards-source-ingest", "02-test-intelligence-ingest", "04-owasp-validation-worklist", "15-stig-srg-validation-worklist", "02-build-configure", "02-native-build", "02-source-sast", "02-native-sast", "02-ir-capture", "02-ir-link", "02-ir-facts", "02-debug-symbol-index", "02-binary-triage", "02-binary-cfg", "02-test-execution", "02-test-result-ingest", "02-test-coverage-ingest", "02-operations-doc-ingest", "02-evidence-index", "02-secrets-inventory", "02-iac-config-scan", "02-container-image-inventory", "02-sbom-inventory", "02-sca-vulnerability-match", "02-license-scan", "02-dependency-lifecycle", "02-binary-hardening", "02-mobile-sast"], "relationship": "lifecycle graph; blocked nodes remain explicit"}
+      {
+        "job": "phase1_intake",
+        "lifecycle_jobs": [
+          "00-intake"
+        ],
+        "relationship": "intake-only diagnostic and compatibility path"
+      },
+      {
+        "job": "engagement_workflow",
+        "lifecycle_jobs": [],
+        "relationship": "preparation workflow; not a full lifecycle review"
+      },
+      {
+        "job": "build_discovery",
+        "lifecycle_jobs": [],
+        "relationship": "supporting build-plan discovery before lifecycle configure"
+      },
+      {
+        "job": "build_execution",
+        "lifecycle_jobs": [
+          "02-build-configure"
+        ],
+        "relationship": "standalone diagnostic for the lifecycle configure worker"
+      },
+      {
+        "job": "evidence_index",
+        "lifecycle_jobs": [
+          "02-evidence-index"
+        ],
+        "relationship": "standalone and lifecycle-wired evidence producer"
+      },
+      {
+        "job": "critical_findings_sarif",
+        "lifecycle_jobs": [
+          "10-synthesis-report"
+        ],
+        "relationship": "fixed-input standalone transform; final lifecycle publication binding is missing"
+      },
+      {
+        "job": "nvd_reference_sync",
+        "lifecycle_jobs": [],
+        "relationship": "shared asynchronous reference-feed publisher; not an engagement lifecycle or validator job"
+      },
+      {
+        "job": "ossf_scorecard",
+        "lifecycle_jobs": [
+          "02-ossf-scorecard"
+        ],
+        "relationship": "standalone and lifecycle-wired published-results ingestion"
+      },
+      {
+        "job": "repository_partition_discovery",
+        "lifecycle_jobs": [
+          "02-repository-partition-discovery"
+        ],
+        "relationship": "standalone qualification and lifecycle-wired supplied-artifact gate"
+      },
+      {
+        "job": "dev_project_discovery",
+        "lifecycle_jobs": [
+          "02-dev-project-discovery"
+        ],
+        "relationship": "standalone and lifecycle-wired supplied-artifact gate; requires an accepted partition map"
+      },
+      {
+        "job": "devops_project_discovery",
+        "lifecycle_jobs": [
+          "02-devops-project-discovery"
+        ],
+        "relationship": "standalone and lifecycle-wired supplied-artifact gate; requires an accepted partition map"
+      },
+      {
+        "job": "sre_operations_topology",
+        "lifecycle_jobs": [
+          "02-sre-operations-topology"
+        ],
+        "relationship": "standalone and lifecycle-wired supplied-artifact gate; requires an accepted devops-project-discovery record"
+      },
+      {
+        "job": "full_review",
+        "lifecycle_jobs": [
+          "00-intake",
+          "02-ossf-scorecard",
+          "02-repository-partition-discovery",
+          "02-dev-project-discovery",
+          "02-devops-project-discovery",
+          "02-sre-operations-topology",
+          "02-evidence-assembly",
+          "01-component-characterization",
+          "03-threat-model-dfd-stride",
+          "04-asvs-masvs",
+          "05-native-memory",
+          "06-cve-reachability",
+          "13-fuzz-target-triage",
+          "15-deployment-hardening",
+          "07-red-team-adversarial",
+          "08-blue-team-refutation",
+          "09-independent-verification",
+          "11-remediation-proposal",
+          "12-scoring-prioritization",
+          "10-synthesis-report",
+          "02-api-collection-intelligence-ingest",
+          "02-binary-intelligence-ingest",
+          "02-doc-intelligence-ingest",
+          "02-standards-source-ingest",
+          "02-test-intelligence-ingest",
+          "04-owasp-validation-worklist",
+          "15-stig-srg-validation-worklist",
+          "02-build-configure",
+          "02-native-build",
+          "02-source-sast",
+          "02-native-sast",
+          "02-ir-capture",
+          "02-ir-link",
+          "02-ir-facts",
+          "02-debug-symbol-index",
+          "02-binary-triage",
+          "02-binary-cfg",
+          "02-test-execution",
+          "02-test-result-ingest",
+          "02-test-coverage-ingest",
+          "02-operations-doc-ingest",
+          "02-evidence-index",
+          "02-secrets-inventory",
+          "02-iac-config-scan",
+          "02-container-image-inventory",
+          "02-sbom-inventory",
+          "02-sca-vulnerability-match",
+          "02-license-scan",
+          "02-dependency-lifecycle",
+          "02-binary-hardening",
+          "02-mobile-sast"
+        ],
+        "relationship": "lifecycle graph; blocked nodes remain explicit"
+      }
     ],
     "launcher_jobs": [
       "build_discovery",
@@ -65,7 +196,9 @@
       "ossf_scorecard",
       "repository_partition_discovery",
       "dev_project_discovery",
-      "phase1_intake"
+      "devops_project_discovery",
+      "phase1_intake",
+      "sre_operations_topology"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -76,6 +209,8 @@
       "ossf_scorecard",
       "repository_partition_discovery",
       "dev_project_discovery",
+      "devops_project_discovery",
+      "sre_operations_topology",
       "full_review"
     ],
     "cancellation_sensor_jobs": [
@@ -87,6 +222,8 @@
       "ossf_scorecard",
       "repository_partition_discovery",
       "dev_project_discovery",
+      "devops_project_discovery",
+      "sre_operations_topology",
       "full_review"
     ],
     "queue": {
@@ -396,9 +533,9 @@
         "output_contract": "project-discovery"
       },
       "execution": {
-        "mode": "persona",
-        "worker": null,
-        "validator": null
+        "mode": "supplied_artifact",
+        "worker": "appsec-review-process/discovery_gate.py:run",
+        "validator": "appsec-review-process/discovery_gate.py:validate"
       },
       "output": {
         "contract": "project-discovery",
@@ -408,18 +545,23 @@
       },
       "permissions": [],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "devops_project_discovery"
+        ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "supplied_gate",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:devops_project_discovery_work"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "devops_project_discovery"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "devops_project_discovery"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "registered_planned_not_executable",
+      "resource_pool": "cpu",
+      "readiness": "supplied_artifact_gate",
       "qualification": {
         "levels": [
           "none"
@@ -427,12 +569,10 @@
         "references": []
       },
       "gaps": [
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "not_automatic_analysis_dispatch",
+        "supplied_result_required"
       ],
-      "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime."
+      "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
     },
     {
       "id": "02-sre-operations-topology",
@@ -444,7 +584,7 @@
         "node": "02-sre-operations-topology",
         "implemented": false,
         "dependencies": [
-          "02-repository-partition-discovery"
+          "02-devops-project-discovery"
         ]
       },
       "registry": {
@@ -456,30 +596,35 @@
         "output_contract": "operations-topology"
       },
       "execution": {
-        "mode": "persona",
-        "worker": null,
-        "validator": null
+        "mode": "supplied_artifact",
+        "worker": "appsec-review-process/discovery_gate.py:run",
+        "validator": "appsec-review-process/discovery_gate.py:validate"
       },
       "output": {
         "contract": "operations-topology",
         "contract_file": "appsec-review-process/registry/output-contracts/operations-topology.json",
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "schema_file": "schemas/operations-topology.schema.json",
+        "claim_class": "supplied_operations_topology"
       },
       "permissions": [],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "sre_operations_topology"
+        ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "supplied_gate",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:sre_operations_topology_work"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "sre_operations_topology"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "sre_operations_topology"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "registered_planned_not_executable",
+      "resource_pool": "cpu",
+      "readiness": "supplied_artifact_gate",
       "qualification": {
         "levels": [
           "none"
@@ -487,13 +632,10 @@
         "references": []
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "not_automatic_analysis_dispatch",
+        "supplied_result_required"
       ],
-      "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime."
+      "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
     },
     {
       "id": "02-evidence-assembly",

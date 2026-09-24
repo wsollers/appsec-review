@@ -164,9 +164,15 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 
 - Author the fixture's supplied `02-repository-partition-discovery` and `02-dev-project-discovery`
   records (one component, one native family, autotools build route), validated on read through
-  the existing supplied-envelope path (B10). `02-devops-project-discovery` and
-  `02-sre-operations-topology` end `SKIPPED(not-applicable-no-matching-inputs)` with receipts.
-- Done when: the three nodes are accepted/skipped on the fixture and `02-build-configure`'s
+  the existing supplied-envelope path (B10). **2026-09-24 (William): `02-devops-project-discovery`
+  and `02-sre-operations-topology` are not skipped -- the fixture has a Dockerfile, so intake marks
+  both required. Both are real gated records, same shape as partition and dev discovery**
+  (`discovery_gate.py`, SAT stages 8-9): devops reads the accepted partition map (same
+  `project-discovery` contract, devops-persona partitions -- the Dockerfile as build/release route,
+  not a second native build); SRE chains after the accepted devops record (`operations-topology`
+  contract, new schema). Fixture records: `fixtures/supplied/hello-autotools/
+  02-devops-project-discovery.json` (done) and `02-sre-operations-topology.json` (next).
+- Done when: all four discovery nodes are accepted on the fixture and `02-build-configure`'s
   dependency is satisfied without persona dispatch.
 
 ### Phase 6 -- build and compile database (E01, E02)

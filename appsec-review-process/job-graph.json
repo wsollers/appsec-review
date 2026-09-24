@@ -78,9 +78,9 @@
       "namespace": "02-sre-operations-topology",
       "dependencies": [
         {
-          "job": "02-repository-partition-discovery",
+          "job": "02-devops-project-discovery",
           "kind": "required",
-          "contract": "repository-partition-map",
+          "contract": "project-discovery",
           "allowed_skip_reasons": []
         }
       ]

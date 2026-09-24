@@ -251,6 +251,24 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-24 -- SAT stage 8, `devops-project-discovery`, built: same validated hand-off gate as
+  partition and dev discovery (William: these are real gated records, not a skip, because the
+  fixture has a Dockerfile and intake marks both devops and SRE discovery required).
+  `02-devops-project-discovery` reuses the `project-discovery` contract/schema and reads the
+  accepted partition map (`discovery_gate.py`'s `UPSTREAM_JOB` generalized from one hard-coded
+  consumer to a job->upstream map so a third and fourth gate could chain in the same way).
+  `02-sre-operations-topology` gets a new `operations-topology.schema.json` (the output-contract
+  registry had the shape but no schema wired) and chains after the accepted devops record, not the
+  partition map directly, since operations topology reads off the containers devops discovery
+  found. Both jobs, and their Dagster ops/standalone jobs/sensors, were already stubbed
+  (`blocked_op`) in `job-graph.json`/`design-parity-manifest.json`/the registry from an earlier
+  pass; this promoted devops's entries to `supplied_artifact_gate` (design-parity manifest stays
+  PASS, `job_catalog.py --check` clean). Fixture record:
+  `fixtures/supplied/hello-autotools/02-devops-project-discovery.json`, citing the repository's
+  Dockerfile (two-stage: autotools build stage, then a runtime stage that copies out only the
+  binary) and recording the coverage gap that no CI/CD, IaC or deployment manifests exist. SRE
+  discovery (stage 9) is next. `appsec-review-process/TODO.md` Phase 5's stale "SKIPPED" text for
+  both jobs corrected.
 - 2026-09-24 -- Build resolution designed (docs/processes/build-resolution.md, ADR-0012). The
   SAT reached the point where the system must build a target it has never seen, and it cannot:
   `build_discovery.py` is CMake-only, no model is called, no build image exists, and developer

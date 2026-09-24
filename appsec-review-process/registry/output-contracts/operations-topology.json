@@ -18,6 +18,19 @@
     "tooling_profile_id",
     "artifacts_read"
   ],
+  "result_schema": {
+    "artifact": "service-inventory.json",
+    "schema_file": "operations-topology.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "supplied_operations_topology",
+    "allowed_assertions": [
+      "declared-operations-topology",
+      "statically-inferred-service-dependency",
+      "coverage-gap"
+    ],
+    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+  },
   "validation_rules": [
     "declared topology must cite static evidence",
     "observed topology requires live-state evidence and is otherwise forbidden",

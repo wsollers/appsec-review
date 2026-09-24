@@ -59,7 +59,7 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 5 | `engagement-workflow` (config, intake, 3 preparation branches, join) | yes |
 | 6 | `partition-discovery` (gate) | yes |
 | 7 | `dev-project-discovery` (gate) | yes |
-| 8 | `devops-project-discovery` (gate; the fixture's Dockerfile) | |
+| 8 | `devops-project-discovery` (gate; the fixture's Dockerfile) | yes |
 | 9 | `sre-operations-topology` (gate) | |
 | 10 | `build-index` (deterministic, cited build signals) | |
 | 11 | `build-plan` (LLM build plan from the index; compared with the fixture answer key) | |
@@ -135,9 +135,14 @@ findings, build `NOT_EXECUTED` with no commands attempted, partition and develop
 `required`; the manifest records the pointer and the revision; the workflow joined exactly the three
 branches on this intake; discovery hand-offs `PLANNED_NOT_EXECUTED`; checkout unchanged.
 
-### 6. `partition-discovery` and 7. `dev-project-discovery` (supplied-result gates)
+### 6. `partition-discovery`, 7. `dev-project-discovery`, 8. `devops-project-discovery` (supplied-result gates)
 
-Three steps each: `handoff`, `supply`, `accept`.
+Three steps each: `handoff`, `supply`, `accept`. Stage 8 is the same gate shape as stage 7 --
+`02-devops-project-discovery` reuses the `project-discovery` contract and schema, reading the
+devops-persona partitions of the same accepted partition map (the fixture's Dockerfile as the
+build/release route, not a second native build to resolve). Stage 9 (`sre-operations-topology`,
+not yet built) chains after stage 8's accepted record instead of the partition map directly, using
+a new `operations-topology` schema.
 
 | Step | Reads | Writes | Validates |
 |---|---|---|---|
@@ -157,7 +162,7 @@ command-plan entry has argv, purpose and authorization.
 |---|---|---|
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
-| DevOps and SRE discovery required by intake (Dockerfile) but have no gate or Dagster job | job graph, `dagster_workflow.py` | Stages 8 and 9 |
+| SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Stage 9; devops discovery (stage 8) done 2026-09-24 |
 | No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Build part: designed as stages 10-12 (build-resolution.md); rest open |
 | The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |
