@@ -83,7 +83,7 @@ for step in (index.read_text().split() if index.exists() else []):
         steps.append({'step': step, 'incomplete': True}); continue
     pre, post = json.loads(pre_f.read_text()), json.loads(post_f.read_text())
     steps.append({'step': step, 'inputs_verified': len(pre['inputs']), 'exit': post['exit'],
-                  'written': len(post['added']) + len(post['modified']), 'deleted': len(post['deleted']),
+                  'written': len(post['written']), 'deleted': len(post['removed']),
                   'ambient': len(post['ambient']), 'outputs_validated': len(post['outputs_validated']),
                   'report': f'steps/{stage}.{step}.post.json'})
 data['stages'][stage] = {'status': status, 'time': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
@@ -197,7 +197,7 @@ JSON
   tree="$(git -C "$dest" rev-parse "HEAD^{tree}")"
   files="$(git -C "$dest" ls-files | wc -l | tr -d ' ')"
   # Exactly the tracked files were written (nothing generated, nothing extra).
-  local written; written="$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(len(r["added"])+len(r["modified"]))' "$SAT_DIR/steps/sut-checkout.clone.post.json")"
+  local written; written="$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(len(r["written"]))' "$SAT_DIR/steps/sut-checkout.clone.post.json")"
   [[ "$written" == "$files" ]] || die "sut-checkout: clone wrote $written files, the revision tracks $files"
   [[ ! -e "$dest/docs/VULNERABILITIES.md" ]] || die "sut-checkout: docs/VULNERABILITIES.md is present on the pinned revision"
   comments="$(grep -rnE 'VULN|CWE-[0-9]+' "$dest/src" 2>/dev/null | wc -l | tr -d ' ')"
@@ -338,8 +338,10 @@ JSON
   python3 - "$SAT_DIR/steps/run-create.start.post.json" "$run_id" <<'PY' || die "run-create: writes outside the new run"
 import json, sys
 r = json.load(open(sys.argv[1])); prefix = 'appsec-review-process/runs/%s/' % sys.argv[2]
-bad = [p for p in r['added'] + r['modified'] if not p.startswith(prefix)] + r['modified']
-if bad or len(r['added']) != 4: sys.exit('unexpected: %r (added %d)' % (bad, len(r['added'])))
+amb = set(r['ambient'])
+added = [p for p in r['added'] if p not in amb]
+bad = sorted(p for p in r['written'] if not p.startswith(prefix) or p not in added)
+if bad or len(r['written']) != 4: sys.exit('unexpected: %r (wrote %d)' % (bad, len(r['written'])))
 PY
   RUN_ID="$run_id"; RUN_DIR="$REPO/appsec-review-process/runs/$RUN_ID"
   for d in data inputs outputs; do [[ -d "$RUN_DIR/$d" ]] || die "run-create: $RUN_DIR/$d missing"; done

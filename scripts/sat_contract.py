@@ -196,8 +196,9 @@ def cmd_post(args) -> int:
             p = check_json(h, spec, repo) if h.suffix == '.json' or spec.get('schema') else []
             problems += p
             validated.append({'path': h.relative_to(repo).as_posix(), 'schema': spec.get('schema'), 'ok': not p})
-    report = {'exit': args.exit, 'added': added, 'modified': modified, 'deleted': deleted,
-              'ambient': ambient, 'outputs_validated': validated, 'problems': problems}
+    # 'written' and 'removed' are this command's own changes (ambient excluded); stages use these.
+    report = {'exit': args.exit, 'written': changed, 'removed': gone, 'added': added, 'modified': modified,
+              'deleted': deleted, 'ambient': ambient, 'outputs_validated': validated, 'problems': problems}
     Path(args.report).write_text(json.dumps(report, indent=1))
     print(json.dumps({'written': len(changed), 'deleted': len(gone), 'ambient': len(ambient),
                       'outputs_validated': len(validated), 'problems': problems}))
