@@ -23,7 +23,13 @@ each names the batch ids it closes so the batch table further down stays the sta
   and validated on read; `build_execution` replays it.
 - **Persona-dependent discovery nodes use the supplied pattern until D01 lands.** A validated,
   hand-supplied record stands in for `02-dev-project-discovery`, `02-devops-project-discovery` and
-  `02-sre-operations-topology` so the build chain is not blocked on pool dispatch.
+  `02-sre-operations-topology` so the build chain is not blocked on pool dispatch. **Correction,
+  William 2026-09-24: this was right for getting the gate/schema/chaining plumbing built (SAT
+  stages 6-9), but the SAT does not get to call itself done that way. A gate that only checks "does
+  the supplied file validate" while a human hand-writes the file it is checking is a test of the
+  JSON schema, not of the system. D01 (below, Phase 5b) is now under construction to close this for
+  real; SAT stages 6-9 will be re-proven against automatic dispatch, not re-declared passing on the
+  fixture alone.**
 - **The fixture is its own repository, cloned in like any real target.** Step 1 of the
   engagement flow is: clone the system under test into `targets/<name>/` (git-ignored here).
   The fixture follows that same rule rather than being a special case -- it's tracked at
@@ -176,8 +182,158 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
   `20260924T161102Z` through stage 8; stage 9 built on the same SAT record, needing no further
   `discovery_gate.py` edit).
 - Done when: all four discovery nodes are accepted on the fixture and `02-build-configure`'s
-  dependency is satisfied without persona dispatch. **Done** for the discovery chain itself;
-  `02-build-configure` (Phase 6+) is separate follow-on work.
+  dependency is satisfied without persona dispatch. Superseded by the correction above: accepted
+  on the fixture via a supplied record is not the finish line for the discovery chain; automatic
+  dispatch (Phase 5b) is.
+
+### Phase 5b -- D01: automatic persona dispatch for repository-partition-discovery (unpooled)
+
+**Started 2026-09-24 (William's correction).** The goal: `02-repository-partition-discovery`
+actually reads the target and produces its own discovery record, dispatched to a real model, with
+the SAT proving that live -- not copying in a hand-authored fixture file. This is D01 from the
+batch table below, built in its simplest, unpooled form (see scope note).
+
+**Scope decision, stated explicitly, not hidden:** the batch table marks D01
+`BLOCKED(B14,C01,C02,C03)`. B14 (persona invocation adapter) is done. C01/C02 (pool specification,
+wait-all rendezvous) are implemented-not-qualified; C03 (deterministic typed merges) does not exist.
+All three are concurrent multi-tool, multi-partition fan-out machinery for the *full* review, where
+many personas run in parallel and their results merge. A single fixture with one partition is one
+persona call -- it needs none of that. D01 is built here **unpooled**: one job template, one
+invocation, one result, the same "single-agent, unpooled" shape `review_cli.py` already uses for
+itself. Pooled D01 (fan-out across many partitions on a real target) stays tracked separately and
+is not required for the SAT to prove the discovery chain for real. If a future real engagement needs
+concurrent partition dispatch, that revisits C01-C03; it does not block this.
+
+**What already exists (no new registry records needed for D01):**
+
+- Job template `registry/job-templates/02-repository-partition-discovery.json` -- composition
+  already resolved: persona `developer-engineer`, role `repository-partition-mapper`, domain
+  `repository-partitioning`, tooling profile `static-repo-project-inspector`, output contract
+  `repository-partition-map`.
+- All five composed registry records exist and validate (`registry/personas/developer-engineer.json`,
+  `registry/roles/repository-partition-mapper.json`, `registry/domains/repository-partitioning.json`,
+  `registry/tooling-profiles/static-repo-project-inspector.json`,
+  `registry/output-contracts/repository-partition-map.json`).
+- The task prompt already exists and needs no new authoring for D01:
+  `appsec-review-process/02-evidence-pregather/repository-partition-discovery.md`.
+- The buildenv catalog the `buildenv_catalog` prompt section renders already exists:
+  `appsec-review-process/tooling/buildenv-catalog.json`.
+- Model: no lane override for `02-repository-partition-discovery` in `model-config.json`, so it
+  gets `default` (`claude-sonnet-5`, effort `medium`). Flag to William for confirmation, don't just
+  assume: partition discovery is a judgment call (routing, not classification), medium/sonnet reads
+  right, but say so before spending a live run on it.
+
+**What is genuinely missing (the facility to build, in dependency order):**
+
+1. **`governing_rules` prompt fragment -- new content.** No file anywhere renders the untrusted-
+   target-content / evidence-discipline / no-verified-findings rules as a prompt section; only
+   `AGENTS.md` and `registry/AUTHORING-TEMPLATE.md`'s "Evidence and trust boundaries" state them in
+   prose aimed at a human author. New file:
+   `appsec-review-process/registry/prompt-fragments/governing-rules.md` (new directory). Content:
+   distilled from AGENTS.md's two rules and AUTHORING-TEMPLATE.md's evidence/trust-boundary section,
+   written as an instruction to the persona, not to a human contributor. Shared by every future job
+   template that lists `governing_rules` in `prompt_sections` -- author it once, reuse it.
+2. **Prompt assembler -- new code.** Nothing today reads a job template's `prompt_sections` order
+   and turns it into `persona_invocation`'s required `outer_prompt` (a pinned file under
+   `prompt_root`, referenced by path + sha256 + byte count). New module:
+   `appsec-review-process/persona_prompt_assembly.py`. Contract: given `job_template_id` and a
+   registry dir, resolve the job template, load each `prompt_sections` entry's registry record (or
+   the new governing-rules fragment, or the job template's `task_prompt` file), render each as a
+   labeled markdown block in the declared order, concatenate, write the result under the attempt's
+   own scratch dir (`appsec-review-process/runs/<run_id>/data/jobs/<job>/attempts/<attempt>/prompt/
+   outer_prompt.md`), return `{path, sha256, bytes}` for the request builder. Section renderers are
+   pure functions of the registry JSON (no run data) except `task`, which is the literal
+   `task_prompt` file's bytes.
+3. **Request builder -- new code.** Builds the full `appsec-review/persona-invocation-request/1.0`
+   object `persona_invocation.resolve_request` expects: `persona` (the composition ids),
+   `model`/`effort` (from `model-config.json`, matching the runtime's `allowed_models`), `tools`
+   (derived from the tooling profile via `persona_invocation.tool_ids`), `allowed_claim_classes` /
+   `prohibited_claim_classes` (from `persona_invocation.claim_ceiling(role, tooling_profile)` --
+   already exists, just needs calling), `outer_prompt` (from step 2), `readable_inputs` (a per-file
+   manifest -- root id, relative path, role, sha256, byte count -- for every file in the fixture
+   checkout the tooling profile's boundary allows the persona to read; for `static-repo-project-
+   inspector` that is the whole read-only checkout, hidden CI paths included, per the job template's
+   required inputs), `permission.decision` (a real B11 `permission_capabilities` evaluation for
+   `read-source` at probe/standard budget -- reuse the evaluator, do not hand-roll a decision
+   object). Where this code lives is an open call for whoever picks this up: either a new
+   `appsec-review-process/persona_dispatch.py`, or as new functions inside `discovery_gate.py`
+   alongside the existing supplied-path helpers. Prefer the new module; `discovery_gate.py` already
+   carries two execution shapes (common-envelope + legacy) and a third (automatic dispatch) reads
+   more clearly as its own file that `discovery_gate.py` calls into.
+4. **`PersonaInvoker` -- new code, real model client.** `appsec-review-process/persona_invocation.py`
+   is dispatch-protocol-only by design ("no model client and no network here"); B14 explicitly wants
+   this supplied by the integrator. `appsec-review-process/review_cli.py` already has a live,
+   previously-debugged `claude -p` dispatch path (`build_claude_argv`, `_dispatch_streaming`,
+   `resolve_model`) proven against real subscription auth on hal5000 -- reuse it, do not rewrite it.
+   New file: `appsec-review-process/claude_cli_invoker.py`, a class implementing B14's
+   `PersonaInvoker` protocol (`invoker_id: str`, `invoke(package: InvocationPackage, *, output_root:
+   Path, cancel: threading.Event) -> None`): materialize `package.prompt` and every `package.inputs`
+   entry's bytes into a private scratch dir the invoker controls (B14 hands bytes, not paths -- the
+   invoker, not the adapter, decides how to expose them to the CLI), build a `claude -p` invocation
+   adapted from `build_claude_argv`/`_dispatch_streaming` (`--add-dir` scoped to that scratch dir and
+   `output_root` only, `--allowedTools` from `package.tool_actions`, model/effort from the request,
+   budget from `model-config.json`), run it with `cancel` polled the way `_dispatch_streaming`
+   already polls for timeout, parse the result, and write `invoker-output.json` (matching
+   `schemas/persona-invoker-output.schema.json`) plus any declared output files under `output_root`
+   -- and nothing else; the adapter reads only what is on disk afterward, per B14's contract.
+5. **Dagster lifecycle wiring -- extend existing code.** `discovery_gate.py` gets an automatic-
+   dispatch execution path for `02-repository-partition-discovery`, selected instead of the
+   supplied/hand-off path when automatic mode is requested. It builds a `PersonaRuntime` (invoker =
+   step 4's class, `registry_dir=appsec-review-process/registry`, `prompt_root`= the run's own
+   scratch root, `readable_roots={"target": <fixture checkout path>}`, `allowed_models` from
+   `model-config.json`, `source_snapshot_sha256` = the checkout's pinned revision content hash,
+   `registry_ceiling=None`, a real UTC `clock`, a fresh `threading.Event()` for `cancel`,
+   `stop_grace_seconds` from budget policy), calls `PersonaInvocationAdapter.execute()`, and
+   publishes the result through the *existing* `coordinate_worker_lifecycle` / `record_terminal_
+   current` / `validate_published` common-envelope boundary -- the same one `02-repository-
+   partition-discovery` already uses today (`ADOPTED_JOB` in `discovery_gate.py`). No new
+   publication plumbing; this is a new way to *produce* the value that boundary already accepts.
+   Supplied mode stays wired and tested as an explicit, separately-invoked alternative (William:
+   "retaining supplied mode as an explicit validated alternative" is D01's own acceptance
+   criterion) -- it becomes a regression/comparison fixture, not the SAT's proof path.
+6. **SAT script change.** `scripts/system-acceptance-test.sh`'s `stage_partition_discovery()`
+   (stage 6) gets a new `dispatch` mode that launches automatic dispatch instead of `gate_supply`'s
+   fixture copy. The `accept` step's checks change from "output byte-equals the fixture" to
+   "output validates against `repository-partition-map.schema.json`, every citation hash matches
+   the live checkout, and the record's own structural rules pass (routing table complete, `docs`
+   partition deferred, etc.)" -- comparing against the fixture record becomes an optional
+   informational diff, never a pass/fail gate. `--list`/`--through` keep working for a supplied-mode
+   run too, for regression.
+7. **Docs, same commit as the code (standing rule):** `docs/processes/system-acceptance-test.md`
+   stage 6 description, `docs/processes/engagement-start.md` step 2b, `docs/processes/flow-
+   bringup.md` log, and this file's Phase 5b status. BPMN/Mermaid diagrams if the dispatch step
+   changes the pictured flow meaningfully (a new "automatic dispatch" branch inside the existing
+   S2b box, likely -- check before assuming the diagram needs a new node).
+
+**Acceptance for D01 (unpooled), from the batch table, still holds:** dispatch, supplied mode
+retained, inapplicable/gap handling, citation freshness, rescope trigger, malformed persona result,
+timeout/cancel, reuse/recovery, and live real-target qualification (live = the fixture, run in WSL
+by William; a second real target is a separate, later qualification step, not required to close D01
+on the fixture).
+
+**Once D01 (partition discovery) is proven live with real dispatch:** D02 (`02-dev-project-
+discovery`), D03 (`02-devops-project-discovery`) and D04 (`02-sre-operations-topology`) follow the
+identical pattern (facilities 2-6 above are reusable as-is; only the job template's composition and
+task prompt differ per job). One piece is missing for those three that D01 does *not* need: **none
+of the three job templates have a `task_prompt` file yet** (`task_prompt: null` in all three
+registry job-template records, checked 2026-09-24) -- their `prompt_sections` list a `task` entry
+with nothing to render. New authored content, one file each, alongside the existing pattern:
+`appsec-review-process/02-evidence-pregather/dev-project-discovery.md`,
+`.../devops-project-discovery.md`, `.../sre-operations-topology.md`. Their personas, roles, domains,
+tooling profiles and output contracts all already exist (checked 2026-09-24): dev discovery ->
+`developer-engineer`/`repo-project-discoverer`/`repo-project-discovery`/`static-repo-project-
+inspector`/`project-discovery`; devops discovery -> `devops-engineer`/`repo-project-discoverer`/
+`repo-project-discovery`/`static-repo-project-inspector`/`project-discovery`; sre topology ->
+`sre-engineer`/`operations-topology-mapper`/`operations-topology`/`static-ops-topology-inspector`/
+`operations-topology`. Once stage 6 is live, re-run stages 7-9 the same way; this reopens SAT
+stages 6-9 as a set (a fresh SAT, not a resume, once `discovery_gate.py` changes -- same fingerprint
+rule already documented above).
+
+**Construction and live testing for this phase happens in a separate chat session** (continuation
+prompt: `docs/continuation-prompts/2026-09-24-d01-persona-dispatch-construction.md`), so this
+session can stay on higher-level architecture and sequencing. Its output lands the same way every
+other stage has: patch -> `Claude outputs/` -> `git am` -> gitkraken push, with William running the
+live WSL command and pasting output back before the next thing moves.
 
 ### Phase 6 -- build and compile database (E01, E02)
 

@@ -33,7 +33,8 @@ Session handoffs, newest first:
 
 | Prompt | What it covers |
 |---|---|
-| [2026-09-21-appsec-review-continuation.md](2026-09-21-appsec-review-continuation.md) | State late 2026-09-20, the subagent/verification protocol, lessons 1–16, next tasks. Supersedes every earlier session handoff. |
+| [2026-09-24-d01-persona-dispatch-construction.md](2026-09-24-d01-persona-dispatch-construction.md) | Scoped to one task: build and live-test D01 (automatic, unpooled persona dispatch for `02-repository-partition-discovery`), per `appsec-review-process/TODO.md` Phase 5b. Meant for a separate conversation from the one doing higher-level SAT architecture/sequencing. Does not supersede the 2026-09-21 prompt below for general coordinator protocol -- that prompt describes an earlier Linux-host/PR-based workflow now superseded in practice by the WSL/patch-based delivery this prompt itself documents (section 4). |
+| [2026-09-21-appsec-review-continuation.md](2026-09-21-appsec-review-continuation.md) | State late 2026-09-20, the subagent/verification protocol, lessons 1–16, next tasks. Supersedes every earlier session handoff before it. |
 
 Task-scoped prompts:
 
