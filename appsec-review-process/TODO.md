@@ -372,22 +372,61 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
    failure paths (missing job template, missing target directory, a symlinked file in the target,
    a run with no pinned model version) raised `RequestBuildError` naming exactly what was wrong,
    never partially building a request.
-4. **`PersonaInvoker` -- new code, real model client.** `appsec-review-process/persona_invocation.py`
-   is dispatch-protocol-only by design ("no model client and no network here"); B14 explicitly wants
-   this supplied by the integrator. `appsec-review-process/review_cli.py` already has a live,
-   previously-debugged `claude -p` dispatch path (`build_claude_argv`, `_dispatch_streaming`,
-   `resolve_model`) proven against real subscription auth on hal5000 -- reuse it, do not rewrite it.
-   New file: `appsec-review-process/claude_cli_invoker.py`, a class implementing B14's
-   `PersonaInvoker` protocol (`invoker_id: str`, `invoke(package: InvocationPackage, *, output_root:
-   Path, cancel: threading.Event) -> None`): materialize `package.prompt` and every `package.inputs`
-   entry's bytes into a private scratch dir the invoker controls (B14 hands bytes, not paths -- the
-   invoker, not the adapter, decides how to expose them to the CLI), build a `claude -p` invocation
-   adapted from `build_claude_argv`/`_dispatch_streaming` (`--add-dir` scoped to that scratch dir and
-   `output_root` only, `--allowedTools` from `package.tool_actions`, model/effort from the request,
-   budget from `model-config.json`), run it with `cancel` polled the way `_dispatch_streaming`
-   already polls for timeout, parse the result, and write `invoker-output.json` (matching
-   `schemas/persona-invoker-output.schema.json`) plus any declared output files under `output_root`
-   -- and nothing else; the adapter reads only what is on disk afterward, per B14's contract.
+4. **DONE.** ~~`PersonaInvoker`~~ -- built: `appsec-review-process/claude_cli_invoker.py`,
+   `ClaudeCliInvoker`, implementing B14's `PersonaInvoker` protocol. Reuses
+   `review_cli.py`'s already-proven `_dispatch_streaming` (not `build_claude_argv`, which is tied
+   to `review_cli`'s own run-id/lane/`--add-dir` semantics that don't fit a private,
+   protocol-scoped invocation -- a new small `_dispatch_argv` builds a `claude -p` argv from the
+   request's own pinned model alias and the caller's effort). No scratch-directory materialization
+   is needed: D01's job template sets `tools: []`/`tool_call_limit: 0` (the persona never calls
+   back into a live filesystem, matching `owasp_dispatch.py`'s own pooled-cell convention), so
+   every readable input's exact bytes are inlined directly into the one prompt text sent over
+   stdin instead.
+   **Strict IO contract (William, 2026-09-24, explicit sign-off on the design flagged at the end
+   of the previous turn): the model's single-turn response is validated, never parsed
+   heuristically.** With no tools, the model has exactly one turn to produce everything; this
+   invoker requires that response to be one JSON object, one key per output-contract-required
+   file (excluding `status.json` -- see below), each JSON-valued key schema-validated against the
+   output contract's own declared `result_schema.schema_file` and each markdown-valued key
+   type-checked as a non-empty string. Anything else -- unparseable JSON (a lone fenced block is
+   tolerated), an extra/missing key, a schema violation -- is a hard rejection: the invoker raises
+   `InvokerOutputError` rather than writing a best-effort `invoker-output.json`. Per B14's own
+   `_call_invoker` contract, a raised (non-`InvokerUnavailable`) exception yields outcome
+   `"raised"` -> cause `INVOKER_EXCEPTION` -> `execution_status: FAILED` -- the adapter is what
+   turns a rejection into the run's terminal record, not this module. Claims for
+   `invoker-output.json` are derived mechanically, not by the model: one claim per partition
+   (claim_class `repository_partition_map`) citing every `source_file` evidence citation the
+   partition itself named that resolves to a pinned `readable_inputs` entry (a citation that does
+   not resolve is dropped, never fabricated -- `persona_invocation`'s own `UNDECLARED_CITATION`
+   check is the backstop), plus one `evidence_gap` claim per `uninspected` coverage category check.
+   **Deliberately scoped, flagged not silently assumed, in the module's own docstring:**
+   `status.json` is excluded from what this invoker asks for or writes -- it needs run/job/dagster
+   identity and the handoff's `artifacts_read` that only the caller (item 5) has, the same split
+   `persona_invocation.py`'s own `OUTPUT_SCHEMA` already draws; the envelope's per-file typing only
+   understands `.json` and `.md` today (a future output contract needing another file type is a
+   named follow-up, not a silent gap); only `invocation_role: "produce"` with `tools: []` is
+   handled (a future review/verify/refute/judge role or a job template that actually grants tool
+   actions needs this module extended).
+   **A real bug found and fixed while structurally testing this module:** the first draft wrote
+   dispatch diagnostics (the raw stream-json transcript, the raw terminal result) under
+   `output_root/diagnostics/`. `persona_invocation.py`'s own output derivation scans every file
+   under `output_root` and rejects (`MALFORMED_RESULT`) anything not declared in the manifest --
+   B14's contract that an invoker writes "beneath output_root and nowhere else" is a hard
+   boundary, not just a description of where the *declared* files go. Fixed by writing diagnostics
+   to a private `tempfile.mkdtemp()` scratch directory entirely outside `attempt_root`, never
+   inside it at all.
+   **Verified end-to-end in the cloud sandbox**, against the same synthetic target checkout and a
+   fake `_dispatch_streaming` returning a real, schema-conformant repository-partition-map
+   envelope: the full `persona_invocation.run_invocation` pipeline -- request resolution, gate,
+   invoke, independent re-derivation, terminal record -- returns `execution_status: OK` with one
+   resolvable claim citing two pinned readable inputs and a clean three-file output tree
+   (`repository-partition-map.json`, `repository-partition-summary.md`, `invoker-output.json`).
+   Separately confirmed the strict-rejection path: a fake dispatch returning prose instead of JSON
+   yields `execution_status: FAILED` / `cause: INVOKER_EXCEPTION`, with the attempt's output tree
+   left completely untouched (no partial files). **Not yet dispatched against a real `claude`
+   CLI anywhere** -- same "prove structurally in the sandbox, confirm live on hal5000" split as
+   the model version registry; live confirmation is now needed for D01's actual SAT stage-6 proof,
+   the point the original construction spec was aiming at.
 5. **Dagster lifecycle wiring -- extend existing code.** `discovery_gate.py` gets an automatic-
    dispatch execution path for `02-repository-partition-discovery`, selected instead of the
    supplied/hand-off path when automatic mode is requested. It builds a `PersonaRuntime` (invoker =
