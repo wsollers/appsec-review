@@ -37,6 +37,13 @@
     "nvd-snapshot": {"kind": "file", "path": "data/feeds/nvd/ (or APPSEC_NVD_ROOT), outside every run", "about": "Immutable NVD JSON 2.0 snapshot, published every two hours by schedule."},
     "legacy-pregather": {"kind": "file", "path": "scratch/<project>-engagement/ (legacy pipeline/engagement_job.*)", "about": "Legacy evidence output, imported into a run only through explicit hashed imports."},
     "buildenv-image": {"kind": "state", "path": "audit-buildenv-cpp (pinned image, via B13)", "about": "C++ build environment; provisioning is Phase 4."},
+    "buildenv-catalog": {"kind": "record", "path": "appsec-review-process/tooling/buildenv-catalog.json", "about": "Base build images a build plan may choose from."},
+    "llm-invoker": {"kind": "state", "path": "PersonaInvoker (default: claude -p under the subscription; ANTHROPIC_API_KEY unset)", "about": "The model call behind build-plan and its revisions; model pinned in model-config.json."},
+    "build-index": {"kind": "file", "path": "runs/<run_id>/data/jobs/02-build-index/.../outputs/build-index.json, build-index.md", "about": "Bounded, cited index of build signals; the model's only view of the target (designed)."},
+    "build-plan": {"kind": "file", "path": "runs/<run_id>/data/jobs/02-build-plan/.../outputs/build-plan.json", "about": "Validated LLM build plan: base image, apt packages, ordered argv, feasibility tier, citations (designed)."},
+    "build-attempts": {"kind": "file", "path": "runs/<run_id>/data/jobs/02-build-resolution/attempts/<n>/ (plan, Dockerfile, image id, exit codes, logs)", "about": "Every resolution attempt, kept on success and failure (designed)."},
+    "build-image-catalog": {"kind": "file", "path": "data/build-images/catalog/image_build_<id>.json (+ container-images/ record for B13), outside every run", "about": "Host-local catalog of images that built a project, with every validated build; reused by build_image_reuse=auto (designed)."},
+    "build-lock": {"kind": "file", "path": "runs/<run_id>/data/jobs/02-build-resolution/.../outputs/build-lock.json", "about": "Image id and digest, Dockerfile hash, ordered argv; replayed by E01/E02 (designed)."},
     "lane-handoff": {"kind": "file", "path": "runs/<run_id>/ lane hand-off files (create_handoff.py)", "about": "Dispatches the tracked prompt harness for LLM lanes."}
   }
 }

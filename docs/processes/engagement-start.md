@@ -19,7 +19,9 @@ flowchart TD
   S1[1. Create the run on the POSIX host and stage the artifact manifest] --> S2
   S2[2. engagement_workflow: config -> intake -> 3 preparation branches -> validated join] --> S2b
   S2b[2b. Discovery gates: repository partition map, then developer project discovery - supplied, validated records] --> G1{native code in scope?}
-  G1 -- yes --> S3[3. 02-build-configure: one isolated configure in the pinned build image, compile database. Built today only for CMake roots - build_execution]
+  G1 -- yes --> S3a[3a. Build resolution: index the build signals, LLM build plan, build image + trial configure/build, retry up to build_resolution_attempts, catalog image_build_id - designed, not built]
+  S3a -- resolved --> S3[3b. 02-build-configure / 02-native-build: replay the build lock in the catalogued image, compile database]
+  S3a -- FAILED BUILD_UNRESOLVED --> S4
   G1 -- no --> S4
   S3 --> S4[4. Evidence collection: deterministic scanners, no judgment]
   S4 --> S5[5. evidence_index: accepted searchable evidence]
@@ -28,7 +30,9 @@ flowchart TD
 ```
 
 Built today: 1, 2, 2b, 5 and the `critical_findings_sarif` publisher, all run-owned and validated.
-Step 3 is built only partially: `build_execution` configures a single CMake root from the older
+Step 3a (build resolution: how to build an unknown target, with what tools, and whether it can be
+done at all) is designed in [build-resolution.md](build-resolution.md) (ADR-0012) and not built.
+Step 3b is built only partially: `build_execution` configures a single CMake root from the older
 `build_discovery` branch, through the `buildenv-common` wrapper. It refuses other build systems (the
 `hello-autotools` fixture among them), does not consume step 2b's developer project discovery, and
 does not go through the B13 pinned-container adapter. The lifecycle configure worker that does
@@ -71,7 +75,8 @@ Per-job inputs and outputs, and their rollup per process model, are in the gener
 | 1 | `run_process.py --start`, `stage_artifacts.py` | Running stack and host code location; target checkout on the host | `inputs/artifact-manifest.json` | Manifest validates. |
 | 2 | `engagement_workflow` (`launch_job.py --run-id <id> --wait`) | Manifest; `engagement_run_id` tag | `data/jobs/00-intake/whole/accepted.json`: source revision + dirty/untracked fingerprints, language/workspace/build/deployment families, native compile/link-recipe plan, specialist routing; `data/workflows/engagement/accepted.json` after the join | Workflow `OK`. `QUEUED`/`STARTED` are not completion. Intake passing says nothing about native build coverage. |
 | 2b | `repository_partition_discovery`, then `dev_project_discovery` | Accepted intake; a supplied `supplied/result.json` per gate (fixtures: `fixtures/supply_record.py`); dev discovery also needs the accepted partition map at the same source revision | `data/jobs/02-repository-partition-discovery/` (partition map, persona routing, review scope) and `data/jobs/02-dev-project-discovery/accepted.json` (project, manifests, build image, safe command plan) | Without a supplied record a gate fails with an actionable hand-off (`handoff.md`), never a silent pass. Citations must match the target's current file hashes. |
-| 3 | `build_discovery` then `build_execution` | Accepted intake; native families present; no current `build-discovery.md` for this exact target | Cited build requirements and command arrays (no execution); then one sandboxed configure inside the hostile-build boundary (`docs/architecture/design-v3.md` §2.2) and `compile_commands.json` when produced | Feasibility gate (ADR-0001 Tier A/B/C) recorded; a missing compile database blocks native lanes, not the engagement. |
+| 3a | `02-build-index`, `02-build-plan`, `02-build-resolution` (designed, [build-resolution.md](build-resolution.md)) | Accepted intake and partition map; `target-execution` and `package-restore` (apt mirror) grants; `build_resolution_attempts` (3), `build_image_reuse` (`auto`) | Cited build index; validated build plan; per-attempt image, logs and exit codes; on success `image_build_<id>` catalogued and `build-lock.json` in the run | `OK`, or `FAILED(BUILD_UNRESOLVED)` after the attempt budget: native jobs blocked, the engagement continues. |
+| 3b | `build_discovery` then `build_execution` (today; replaced by 3a + E01/E02) | Accepted intake; native families present; no current `build-discovery.md` for this exact target | Cited build requirements and command arrays (no execution); then one sandboxed configure inside the hostile-build boundary (`docs/architecture/design-v3.md` §2.2) and `compile_commands.json` when produced | Feasibility gate (ADR-0001 Tier A/B/C) recorded; a missing compile database blocks native lanes, not the engagement. |
 | 4 | today: `pipeline/engagement_job.sh` / `.ps1` outside Dagster; target: `02-*` nodes | Target checkout; images; (today) manual import afterwards | Static prepass, native pregather, `assemble`, `correlate`, `deep_confirm`, retrieval plan, `job-status.json` with explicit degraded status | Every tool records exit/duration/log; a tool that did not run is a coverage gap, never "clean". |
 | 5 | `evidence_index` | Accepted intake (+ imports) | `data/jobs/02-evidence-index/whole/accepted.json`; bounded CLI / read-only MCP retrieval (`docs/evidence/evidence-retrieval.md`) | Index is a locator, never evidence authority. |
 | 6 | lane hand-offs (`create_handoff.py`) | Accepted evidence; persona/registry composition; budget | Lane outputs under the run; component-purpose map first (`01`), then `03`.. per `process-manifest.json` | Each lane states read / covered / excluded / next. |

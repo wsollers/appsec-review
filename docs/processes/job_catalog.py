@@ -37,7 +37,8 @@ OUT_JSON = ROOT / 'docs' / 'processes' / 'job-catalog.json'
 BPMN = ROOT / 'docs' / 'processes' / 'bpmn' / 'pre-submission.bpmn'
 
 KIND_LABEL = {'script': 'operator script', 'human': 'human task', 'dagster-job': 'Dagster job',
-              'dagster-op': 'Dagster op', 'dagster-service': 'Dagster service', 'lifecycle': 'lifecycle job'}
+              'dagster-op': 'Dagster op', 'dagster-service': 'Dagster service', 'lifecycle': 'lifecycle job',
+              'planned': 'designed, not built'}
 
 
 def load(path: Path):

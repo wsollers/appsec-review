@@ -134,6 +134,13 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 
 ### Phase 4 -- build-environment provisioning (supplied) and the C++ buildenv
 
+> **Superseded 2026-09-24** by build resolution ([docs/processes/build-resolution.md](../docs/processes/build-resolution.md),
+> ADR-0012): a deterministic build index, an LLM build plan, a bounded image-build + trial loop
+> (`build_resolution_attempts`, default 3) and a host-local `image_build_<id>` catalog with reuse
+> (`build_image_reuse`). The lock shape and the validate-on-read rule below carry over; the
+> hand-supplied lock and the `provision-buildenv.md` skill do not. The build fields of the Phase 5
+> developer-discovery record become an answer key for the SAT, not an input.
+
 - `images/audit-buildenv-cpp`: add `autoconf automake libtool pkg-config make bear`; catalog
   markers add `configure.ac`, `Makefile.am`, `configure`. Rebuild, record the B16 entry.
 - `schemas/buildenv-lock.schema.json` and `registry/buildenv-locks/<project>.json`: image id +

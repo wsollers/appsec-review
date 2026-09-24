@@ -61,19 +61,25 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 7 | `dev-project-discovery` (gate) | yes |
 | 8 | `devops-project-discovery` (gate; the fixture's Dockerfile) | |
 | 9 | `sre-operations-topology` (gate) | |
-| 10 | `build-discovery` | |
-| 11 | `evidence` (legacy pipeline + hashed import; every tool ran or is a recorded gap) | |
-| 12 | `ossf-scorecard` (needs a network permission grant) | |
-| 13 | `evidence-index` | |
-| 14 | `build-configure` (B13, C++ build environment, E01) | |
-| 15 | `native-build` | |
-| 16 | `review-lanes` | |
-| 17 | `sarif` | |
-| 18 | `report` | |
+| 10 | `build-index` (deterministic, cited build signals) | |
+| 11 | `build-plan` (LLM build plan from the index; compared with the fixture answer key) | |
+| 12 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | |
+| 13 | `build-configure` (E01: replay the lock) | |
+| 14 | `native-build` (E02: compile database, binaries) | |
+| 15 | `evidence` (legacy pipeline + hashed import; every tool ran or is a recorded gap) | |
+| 16 | `ossf-scorecard` (needs a network permission grant) | |
+| 17 | `evidence-index` | |
+| 18 | `review-lanes` | |
+| 19 | `sarif` | |
+| 20 | `report` | |
 
-`build-configure` and `native-build` depend on Phase 3 (B13), Phase 4 (build environment) and E01.
-A missing compile database blocks native lanes, not the engagement: stages 10 to 13 do not depend on
-them.
+Stages 10 to 14 are how the system learns to build a target it has never seen and then builds it:
+[build-resolution.md](build-resolution.md) (ADR-0012). They come before evidence collection
+because native evidence depends on a build. A `FAILED(BUILD_UNRESOLVED)` blocks native jobs, not
+the engagement; the SAT fixture must resolve. The fixture's supplied discovery records are answer
+keys: the build stages' pre-contracts check they are not in the run or the model's inputs, and
+`build-plan` compares the plan with them afterwards. A second SAT with `build_image_reuse=auto`
+must reuse the catalogued image; one with `rebuild` must infer again.
 
 ### 1. `sut-checkout`
 
@@ -152,5 +158,6 @@ command-plan entry has argv, purpose and authorization.
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
 | DevOps and SRE discovery required by intake (Dockerfile) but have no gate or Dagster job | job graph, `dagster_workflow.py` | Stages 8 and 9 |
-| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Open |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Build part: designed as stages 10-12 (build-resolution.md); rest open |
+| The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |

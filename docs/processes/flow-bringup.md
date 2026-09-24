@@ -27,14 +27,14 @@ flowchart TD
   S4a["S4a partition-discovery gate, nothing supplied<br/>hand-off FAIL as designed (one-time proof)"]:::done
   S4b["S4b supply partition map<br/>fixtures/supply_record.py: ACCEPTED"]:::done
   S5["S5 02-dev-project-discovery<br/>supply_record.py: ACCEPTED"]:::done
-  S6["S6 02-build-configure<br/>blocked: Phases 3, 4 and E01"]:::blocked
-  B13["Phase 3: B13 into service + B16 image registry<br/>NEXT"]:::next
-  BE["Phase 4: C++ buildenv provisioning + lock"]:::todo
-  E01["E01: autotools-capable configure worker<br/>consumes S5 plan, runs through B13"]:::todo
+  S6a["S6a build resolution: index, LLM plan, image + trial build loop,<br/>image_build_id catalog (build-resolution.md, ADR-0012)<br/>NEXT: designed"]:::next
+  S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
+  B13["Phase 3: B13 into service + B16 image registry"]:::todo
+  E01["E01/E02: replay the lock through B13"]:::todo
 
-  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S6
+  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S6a --> S6
+  B13 -.-> S6a
   B13 -.-> S6
-  BE -.-> S6
   E01 -.-> S6
 
   classDef done fill:#d8f0d8,stroke:#2e7d32,color:#1b3d1b
@@ -251,6 +251,16 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-24 -- Build resolution designed (docs/processes/build-resolution.md, ADR-0012). The
+  SAT reached the point where the system must build a target it has never seen, and it cannot:
+  `build_discovery.py` is CMake-only, no model is called, no build image exists, and developer
+  discovery's build plan was written by hand. Design: deterministic `02-build-index` -> LLM
+  `02-build-plan` -> `02-build-resolution` (render Dockerfile, build image, trial configure+build
+  via B13, revise on failure up to `build_resolution_attempts`=3, else `FAILED(BUILD_UNRESOLVED)`)
+  -> catalog `image_build_<id>` for reuse (`build_image_reuse` auto/rebuild/require). Phase 4's
+  hand-supplied lock is superseded; the fixture discovery records become SAT answer keys. SAT
+  stages reordered: build-index, build-plan, build-resolution, build-configure, native-build come
+  before evidence.
 - 2026-09-22 -- P0/P1 done. Networking under WSL 2 NAT required the distro-IP mapping
   (ADR-0011 addendum). First operator script identified: `run_process.py --start` (S1), now a host
   command, no longer `docker compose exec code-server`.

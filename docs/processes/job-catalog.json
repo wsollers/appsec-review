@@ -3,8 +3,8 @@
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
   "lifecycle_jobs": 51,
-  "steps": 40,
-  "artifacts": 37,
+  "steps": 43,
+  "artifacts": 44,
   "models": 5
  },
  "models": [
@@ -691,8 +691,57 @@
      }
     },
     {
-     "name": "3. Build configure",
+     "name": "3. Build resolution and build",
      "entries": [
+      {
+       "ref": "step:build-index",
+       "id": "build-index",
+       "name": "02-build-index (designed)",
+       "kind": "planned",
+       "consumes": [
+        "job:00-intake",
+        "job:02-repository-partition-discovery",
+        "sut-checkout"
+       ],
+       "produces": [
+        "build-index"
+       ],
+       "declared_inputs": []
+      },
+      {
+       "ref": "step:build-plan",
+       "id": "build-plan",
+       "name": "02-build-plan (designed)",
+       "kind": "planned",
+       "consumes": [
+        "build-index",
+        "buildenv-catalog",
+        "llm-invoker"
+       ],
+       "produces": [
+        "build-plan"
+       ],
+       "declared_inputs": []
+      },
+      {
+       "ref": "step:build-resolution",
+       "id": "build-resolution",
+       "name": "02-build-resolution (designed)",
+       "kind": "planned",
+       "consumes": [
+        "build-plan",
+        "build-image-catalog",
+        "permission-grant",
+        "buildenv-image",
+        "llm-invoker"
+       ],
+       "produces": [
+        "build-attempts",
+        "build-image-catalog",
+        "build-lock"
+       ],
+       "declared_inputs": []
+      },
       {
        "ref": "step:build_discovery",
        "id": "build_discovery",
@@ -739,17 +788,27 @@
      ],
      "rollup": {
       "enters": [
-       "artifact-manifest",
        "job:00-intake",
+       "job:02-repository-partition-discovery",
+       "sut-checkout",
+       "buildenv-catalog",
+       "llm-invoker",
+       "permission-grant",
        "buildenv-image",
+       "artifact-manifest",
        "job:02-dev-project-discovery"
       ],
       "leaves": [
+       "build-attempts",
+       "build-lock",
        "workflow-status",
        "build-execution",
        "job:02-build-configure"
       ],
       "passes": [
+       "build-index",
+       "build-plan",
+       "build-image-catalog",
        "build-discovery"
       ],
       "declared_inputs": []
@@ -1827,6 +1886,8 @@
      "job-definitions",
      "engagement-definition",
      "permission-grant",
+     "buildenv-catalog",
+     "llm-invoker",
      "buildenv-image",
      "critical-findings-md"
     ],
@@ -1836,6 +1897,8 @@
      "prep-native-plan",
      "prep-handoffs",
      "workflow-status",
+     "build-attempts",
+     "build-lock",
      "build-execution",
      "lane-handoff",
      "job:10-synthesis-report"
@@ -1851,6 +1914,9 @@
      "job:00-intake",
      "job:02-repository-partition-discovery",
      "job:02-dev-project-discovery",
+     "build-index",
+     "build-plan",
+     "build-image-catalog",
      "build-discovery",
      "job:02-build-configure",
      "legacy-pregather",
@@ -2319,7 +2385,82 @@
      }
     },
     {
-     "name": "S6 Build configure (blocked)",
+     "name": "S6a Build resolution (designed)",
+     "entries": [
+      {
+       "ref": "step:build-index",
+       "id": "build-index",
+       "name": "02-build-index (designed)",
+       "kind": "planned",
+       "consumes": [
+        "job:00-intake",
+        "job:02-repository-partition-discovery",
+        "sut-checkout"
+       ],
+       "produces": [
+        "build-index"
+       ],
+       "declared_inputs": []
+      },
+      {
+       "ref": "step:build-plan",
+       "id": "build-plan",
+       "name": "02-build-plan (designed)",
+       "kind": "planned",
+       "consumes": [
+        "build-index",
+        "buildenv-catalog",
+        "llm-invoker"
+       ],
+       "produces": [
+        "build-plan"
+       ],
+       "declared_inputs": []
+      },
+      {
+       "ref": "step:build-resolution",
+       "id": "build-resolution",
+       "name": "02-build-resolution (designed)",
+       "kind": "planned",
+       "consumes": [
+        "build-plan",
+        "build-image-catalog",
+        "permission-grant",
+        "buildenv-image",
+        "llm-invoker"
+       ],
+       "produces": [
+        "build-attempts",
+        "build-image-catalog",
+        "build-lock"
+       ],
+       "declared_inputs": []
+      }
+     ],
+     "rollup": {
+      "enters": [
+       "job:00-intake",
+       "job:02-repository-partition-discovery",
+       "sut-checkout",
+       "buildenv-catalog",
+       "llm-invoker",
+       "permission-grant",
+       "buildenv-image"
+      ],
+      "leaves": [
+       "build-attempts",
+       "build-lock"
+      ],
+      "passes": [
+       "build-index",
+       "build-plan",
+       "build-image-catalog"
+      ],
+      "declared_inputs": []
+     }
+    },
+    {
+     "name": "S6b Build configure (blocked)",
      "entries": [
       {
        "ref": "job:02-build-configure",
@@ -2357,13 +2498,18 @@
      "engagement-definition",
      "permission-grant",
      "partition-record",
-     "dev-record"
+     "dev-record",
+     "buildenv-catalog",
+     "llm-invoker",
+     "buildenv-image"
     ],
     "leaves": [
      "code-location-venv",
      "resolved-config",
      "partition-handoff",
      "dev-handoff",
+     "build-attempts",
+     "build-lock",
      "job:02-build-configure"
     ],
     "passes": [
@@ -2378,7 +2524,10 @@
      "job:02-repository-partition-discovery",
      "partition-supplied",
      "dev-supplied",
-     "job:02-dev-project-discovery"
+     "job:02-dev-project-discovery",
+     "build-index",
+     "build-plan",
+     "build-image-catalog"
     ],
     "declared_inputs": []
    }
@@ -4501,6 +4650,58 @@
     "workflow-status"
    ],
    "notes": "Rechecks freshness, validates every branch, publishes the join."
+  },
+  {
+   "id": "build-index",
+   "name": "02-build-index (designed)",
+   "kind": "planned",
+   "runs": "launch_job.py --run-id <run_id> --job build_index --wait (not built)",
+   "bpmn": [],
+   "consumes": [
+    "job:00-intake",
+    "job:02-repository-partition-discovery",
+    "sut-checkout"
+   ],
+   "produces": [
+    "build-index"
+   ],
+   "notes": "Deterministic indexer: every build signal (build systems, toolchain and dependency declarations, CI and Dockerfile recipes, README build text), bounded and sha256-cited. Executes nothing. docs/processes/build-resolution.md."
+  },
+  {
+   "id": "build-plan",
+   "name": "02-build-plan (designed)",
+   "kind": "planned",
+   "runs": "launch_job.py --run-id <run_id> --job build_plan --wait (not built)",
+   "bpmn": [],
+   "consumes": [
+    "build-index",
+    "buildenv-catalog",
+    "llm-invoker"
+   ],
+   "produces": [
+    "build-plan"
+   ],
+   "notes": "LLM reads only the index, the buildenv catalog and the schema; returns base image, apt packages, ordered argv commands, feasibility, all cited. Validated before anything is built."
+  },
+  {
+   "id": "build-resolution",
+   "name": "02-build-resolution (designed)",
+   "kind": "planned",
+   "runs": "launch_job.py --run-id <run_id> --job build_resolution --wait (not built)",
+   "bpmn": [],
+   "consumes": [
+    "build-plan",
+    "build-image-catalog",
+    "permission-grant",
+    "buildenv-image",
+    "llm-invoker"
+   ],
+   "produces": [
+    "build-attempts",
+    "build-image-catalog",
+    "build-lock"
+   ],
+   "notes": "Loop up to build_resolution_attempts (default 3): render Dockerfile, build image (apt mirror only), trial configure+build via B13 with no network; on failure the model revises. FAILED(BUILD_UNRESOLVED) when exhausted. On success catalog image_build_<id> and write the lock. build_image_reuse: auto | rebuild | require."
   },
   {
    "id": "build_discovery",
@@ -8161,6 +8362,7 @@
     "step:supply-partition",
     "step:dev-analysis",
     "step:supply-dev",
+    "step:build-index",
     "step:legacy-pregather"
    ]
   },
@@ -8291,7 +8493,8 @@
     "step:grant-permissions"
    ],
    "consumed_by": [
-    "step:stage-artifacts"
+    "step:stage-artifacts",
+    "step:build-resolution"
    ]
   },
   "run-dir": {
@@ -8571,8 +8774,86 @@
    "about": "C++ build environment; provisioning is Phase 4.",
    "produced_by": [],
    "consumed_by": [
+    "step:build-resolution",
     "step:build_execution"
    ]
+  },
+  "buildenv-catalog": {
+   "id": "buildenv-catalog",
+   "kind": "record",
+   "path": "appsec-review-process/tooling/buildenv-catalog.json",
+   "about": "Base build images a build plan may choose from.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:build-plan"
+   ]
+  },
+  "llm-invoker": {
+   "id": "llm-invoker",
+   "kind": "state",
+   "path": "PersonaInvoker (default: claude -p under the subscription; ANTHROPIC_API_KEY unset)",
+   "about": "The model call behind build-plan and its revisions; model pinned in model-config.json.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:build-plan",
+    "step:build-resolution"
+   ]
+  },
+  "build-index": {
+   "id": "build-index",
+   "kind": "file",
+   "path": "runs/<run_id>/data/jobs/02-build-index/.../outputs/build-index.json, build-index.md",
+   "about": "Bounded, cited index of build signals; the model's only view of the target (designed).",
+   "produced_by": [
+    "step:build-index"
+   ],
+   "consumed_by": [
+    "step:build-plan"
+   ]
+  },
+  "build-plan": {
+   "id": "build-plan",
+   "kind": "file",
+   "path": "runs/<run_id>/data/jobs/02-build-plan/.../outputs/build-plan.json",
+   "about": "Validated LLM build plan: base image, apt packages, ordered argv, feasibility tier, citations (designed).",
+   "produced_by": [
+    "step:build-plan"
+   ],
+   "consumed_by": [
+    "step:build-resolution"
+   ]
+  },
+  "build-attempts": {
+   "id": "build-attempts",
+   "kind": "file",
+   "path": "runs/<run_id>/data/jobs/02-build-resolution/attempts/<n>/ (plan, Dockerfile, image id, exit codes, logs)",
+   "about": "Every resolution attempt, kept on success and failure (designed).",
+   "produced_by": [
+    "step:build-resolution"
+   ],
+   "consumed_by": []
+  },
+  "build-image-catalog": {
+   "id": "build-image-catalog",
+   "kind": "file",
+   "path": "data/build-images/catalog/image_build_<id>.json (+ container-images/ record for B13), outside every run",
+   "about": "Host-local catalog of images that built a project, with every validated build; reused by build_image_reuse=auto (designed).",
+   "produced_by": [
+    "step:build-resolution"
+   ],
+   "consumed_by": [
+    "step:build-resolution"
+   ]
+  },
+  "build-lock": {
+   "id": "build-lock",
+   "kind": "file",
+   "path": "runs/<run_id>/data/jobs/02-build-resolution/.../outputs/build-lock.json",
+   "about": "Image id and digest, Dockerfile hash, ordered argv; replayed by E01/E02 (designed).",
+   "produced_by": [
+    "step:build-resolution"
+   ],
+   "consumed_by": []
   },
   "lane-handoff": {
    "id": "lane-handoff",
@@ -8601,6 +8882,7 @@
     "step:op-native_plan_check",
     "step:op-discovery_handoffs",
     "step:op-workflow_publish",
+    "step:build-index",
     "step:build_discovery",
     "step:build_execution",
     "step:evidence_index",
@@ -8648,6 +8930,7 @@
    "consumed_by": [
     "step:dev_project_discovery",
     "step:dev-analysis",
+    "step:build-index",
     "job:02-dev-project-discovery",
     "job:02-devops-project-discovery",
     "job:02-sre-operations-topology"
