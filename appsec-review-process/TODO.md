@@ -427,21 +427,92 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
    CLI anywhere** -- same "prove structurally in the sandbox, confirm live on hal5000" split as
    the model version registry; live confirmation is now needed for D01's actual SAT stage-6 proof,
    the point the original construction spec was aiming at.
-5. **Dagster lifecycle wiring -- extend existing code.** `discovery_gate.py` gets an automatic-
-   dispatch execution path for `02-repository-partition-discovery`, selected instead of the
-   supplied/hand-off path when automatic mode is requested. It builds a `PersonaRuntime` (invoker =
-   step 4's class, `registry_dir=appsec-review-process/registry`, `prompt_root`= the run's own
-   scratch root, `readable_roots={"target": <fixture checkout path>}`, `allowed_models` from
-   `model-config.json`, `source_snapshot_sha256` = the checkout's pinned revision content hash,
-   `registry_ceiling=None`, a real UTC `clock`, a fresh `threading.Event()` for `cancel`,
-   `stop_grace_seconds` from budget policy), calls `PersonaInvocationAdapter.execute()`, and
-   publishes the result through the *existing* `coordinate_worker_lifecycle` / `record_terminal_
-   current` / `validate_published` common-envelope boundary -- the same one `02-repository-
-   partition-discovery` already uses today (`ADOPTED_JOB` in `discovery_gate.py`). No new
-   publication plumbing; this is a new way to *produce* the value that boundary already accepts.
-   Supplied mode stays wired and tested as an explicit, separately-invoked alternative (William:
-   "retaining supplied mode as an explicit validated alternative" is D01's own acceptance
-   criterion) -- it becomes a regression/comparison fixture, not the SAT's proof path.
+5. **DONE.** ~~Dagster lifecycle wiring~~ -- extended `appsec-review-process/discovery_gate.py`
+   in place (no new module: this is `discovery_gate.py`'s own third execution shape, alongside the
+   existing common-envelope supplied path and the legacy per-job path).
+   **Mode selection, without touching `dagster_workflow.py`:** confirmed by grep
+   (2026-09-24) that `dagster_workflow.py` calls `discovery_gate.run(run_id, dagster_id, job,
+   force)` identically for all four discovery jobs, and `dagster_workflow.py` is a Full-protocol
+   file (`AGENTS.md`) out of scope for this fast-lane change -- so `run()`'s external signature is
+   unchanged. Instead, a new run-scoped opt-in file, `dispatch_mode_path(run_id)` ->
+   `runs/<run_id>/data/dispatch-mode.json` (job id -> `"supplied"`/`"automatic"`), read by a new
+   `dispatch_mode(run_id, job)` (absent file or absent key -> `"supplied"`, full backward
+   compatibility for every existing/unconfigured run) and written by a new `set_dispatch_mode(run_id,
+   job, mode)`. `run()` now reads `dispatch_mode(run_id, ADOPTED_JOB)` and dispatches to the new
+   `_run_partition_automatic` only when it is `"automatic"`; every other job, and every run that has
+   never called `set_dispatch_mode`, takes the exact code path it always has.
+   **`_run_partition_automatic`** mirrors `_run_partition`'s own `coordinate_worker_lifecycle`
+   shape (`derive_inputs`/`preflight_validate`/`execute_attempt`/`post_validate`/`on_reuse`,
+   `worker_kind='persona'` -- the schema's own enum for this, not an invented value). Its
+   `derive_inputs` (`_automatic_partition_inputs`) sources the target checkout from
+   `phase1.manifest_path(run_id)`'s `target.repo_path` (the exact same field
+   `validate_job_output.py`'s own `_source_root` citation-freshness check already reads, confirmed
+   by reading it -- so the target this path dispatches against and the target consumer-job
+   acceptance checks citations against can never disagree), fingerprints it via
+   `intake.source_identity(target_root)['fingerprint']` (`sha256:`-prefixed), and hashes the source
+   of every module this path calls (tamper-evidence, mirroring `_partition_inputs`' own `code`
+   block for the supplied path). `execute_attempt` (`_dispatch_partition_persona`) calls
+   `model_version_registry.resolve_run_model_versions(run_id)` (a no-op reuse once the run's first
+   dispatch has resolved it), builds the request via `persona_dispatch.build_request` with a new
+   short opaque `PERSONA_JOB_ID = 'd01-partition'` (never `ADOPTED_JOB` itself as
+   `request.job_id` -- that is exactly the 33-character secret-scanner landmine item 3's own
+   docstring documents fixing once already), builds a `PersonaRuntime` (`invoker=
+   ClaudeCliInvoker(effort=..., budget_usd=...)` from `review_cli.resolve_model`/
+   `model-config.json`'s `budget_max_usd_per_call`, `allowed_models=(the one pinned model identity
+   the request actually uses,)`, a real UTC `clock`, a fresh `threading.Event()` `cancel`,
+   `stop_grace_seconds=5`), and calls `persona_invocation.run_invocation`.
+   **Resolved design question (read `publish_job_output.py`'s `record_terminal_current`/
+   `persist_terminal_current` in full to settle this, rather than inventing new status
+   machinery):** `record_terminal_current` only ever accepts `execution_status` in `{OK,
+   OK_WITH_GAPS, SKIPPED}` -- there is no path for `execute_attempt` to return normally with a
+   legitimately-completed-but-rejected result. So a `run_invocation` result whose
+   `execution_status != "OK"` (the model's response failed schema/envelope validation, the invoker
+   was unavailable, a budget/permission check failed, ...) is raised as a plain `RuntimeError`
+   naming the `execution_status`/`cause`/`outcome`, exactly mirroring `_run_partition`'s own
+   `execute_attempt` raising `ValueError` on an invalid supplied payload --
+   `coordinate_worker_lifecycle`'s `terminal_for()` catches it and records a clean non-current
+   `FAILED` terminal with the exception as cause, re-raising to the caller. No new terminal-status
+   machinery was added; the existing BLOCKED-on-preflight/FAILED-on-execute contract already
+   covers this case correctly once recognized.
+   **Output paths, kept identical to the supplied path on purpose:** `persona_invocation.
+   run_invocation` necessarily writes the model's two output files under a fresh
+   `attempt_root/outputs/persona/` subdirectory (`output_root` must not already exist when
+   `run_invocation` creates it, and `attempt_root` itself already exists by the time `execute_
+   attempt` runs) -- but `_validate_common` and every consumer job
+   (`02-dev-project-discovery`, `02-devops-project-discovery`) read
+   `attempt/repository-partition-map.json` at the attempt's top level, the same path the supplied
+   path has always written. So after an `OK` `run_invocation` result, `_dispatch_partition_persona`
+   independently re-validates the persona's `repository-partition-map.json` against the schema
+   (never trusts the invoker's own validation blindly -- same posture `_run_partition`'s
+   `execute_attempt` already takes toward the supplied file) and re-materializes both files at the
+   canonical top-level attempt paths, leaving `outputs/persona/` and `logs/persona/` in place as
+   part of the accepted attempt's immutable tree (covered by `publish_validated`'s `tree_hashes`
+   tamper check, same as any other file under an accepted attempt). **`_validate_common` was
+   updated too** (a real gap found while testing this end-to-end, not anticipated in the original
+   plan): it always recomputed the accepted pointer's expected fingerprint from the supplied path's
+   handoff-shaped record, which does not exist for an automatic-mode attempt -- `read_latest_
+   handoff` raised `FileNotFoundError` before `_validate_common` could even reach the fingerprint
+   check. Fixed by branching on `dispatch_mode(run_id, ADOPTED_JOB)`: automatic-mode runs
+   recompute via `_automatic_partition_inputs` (the same record `derive_inputs` built), supplied-mode
+   runs keep the existing handoff-based `_partition_inputs` call unchanged.
+   **Verified end-to-end in the cloud sandbox** (target-checkout + manifest fixture mirroring
+   `tests/test_worker_adoption.py`'s own `AdoptionTests.setUp`, a pre-seeded
+   `model-versions.json` so no real model-version probe runs, `review_cli._dispatch_streaming`
+   monkeypatched to a fake returning a schema-conformant envelope): (a) first automatic-mode run
+   through `discovery_gate.run()` accepts with `worker_kind: "persona"`,
+   `acceptance_status: "CURRENT"`, `status.json.dispatch_mode: "automatic"`; (b) a second call with
+   an unchanged target reuses the identical accepted pointer (`admit_reusable`'s existing dedup,
+   unmodified); (c) `discovery_gate.validate()` (the consumer-facing common-envelope read path)
+   succeeds against the automatic-mode attempt, proving the `_validate_common` fix; (d) a rejection
+   path (fake dispatch returning prose instead of JSON) raises the expected `RuntimeError`, records
+   a clean non-current `FAILED` pointer, and leaves the attempt with **no**
+   `repository-partition-map.json` at all -- no partial publish. The full existing
+   `tests/test_worker_adoption.py` suite (19 tests, the supplied path's own regression coverage)
+   still passes unmodified, confirming the supplied path (`_run_partition`) is untouched by this
+   change. **Not yet dispatched against a real `claude` CLI anywhere** -- same "prove structurally
+   in the sandbox, confirm live on hal5000" split as items 2b/3/4; live confirmation on hal5000 is
+   the next step, now that every piece of the automatic-dispatch chain exists and has been proven
+   structurally.
 6. **SAT script change.** `scripts/system-acceptance-test.sh`'s `stage_partition_discovery()`
    (stage 6) gets a new `dispatch` mode that launches automatic dispatch instead of `gate_supply`'s
    fixture copy. The `accept` step's checks change from "output byte-equals the fixture" to
