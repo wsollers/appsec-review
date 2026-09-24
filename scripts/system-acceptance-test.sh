@@ -653,6 +653,7 @@ stage_partition_discovery() {
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/failure-result.json",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/outputs/persona/*", "{run}/data/jobs/$PARTITION_JOB/attempts/*/logs/persona/*",
                         "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
+                        "{run}/data/llm-transcripts/$PARTITION_JOB/*/transcript.jsonl", "{run}/data/llm-transcripts/$PARTITION_JOB/*/raw-response.json",
                         "appsec-review-process/prompt-cache/$PARTITION_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
  "outputs": [{"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-map.json", "schema": "repository-partition-map.schema.json", "equals": {"source_revision": "{pin}"}},
              {"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"execution_status": "OK", "worker_kind": "persona"}},

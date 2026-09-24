@@ -771,6 +771,110 @@ session can stay on higher-level architecture and sequencing. Its output lands t
 other stage has: patch -> `Claude outputs/` -> `git am` -> gitkraken push, with William running the
 live WSL command and pasting output back before the next thing moves.
 
+### Phase 5c -- D02: automatic persona dispatch for dev-project-discovery -- IN PROGRESS, blocked on a Full-protocol fix
+
+**Started 2026-09-24, same evening as Phase 5b's clean PASS.** Goal: `02-dev-project-discovery`
+reads the accepted partition map plus the target repository and decides, itself, how each
+developer-routed project should be built and tested -- this is the first job in the pipeline where
+the persona decides the actual build tooling and technique (autotools vs. a package manager,
+which buildenv image, the ordered safe command plan), not just how the repo should be routed. D01's
+facilities (`claude_binary_resolver.py`, `model_version_registry.py`,
+`persona_prompt_assembly.py`'s schema inlining, `discovery_gate.py`'s dispatch-mode opt-in and
+provenance backfill pattern, `claude_cli_invoker.py`) are reused unchanged, per the lessons-learned
+doc's closing section.
+
+**Done so far, this evening:**
+
+1. **LLM transcript persistence, a tunable (not D02-specific, but built to support reviewing D02's
+   reasoning once it dispatches live).** New `model-config.json` field
+   `invocation.save_llm_transcripts` (default `false`). When `true`, `claude_cli_invoker.py`
+   additionally copies each dispatch's raw stream-json transcript and raw terminal response from
+   its private `/tmp` diagnostics directory to
+   `runs/<run_id>/data/llm-transcripts/<job_id>/<attempt_id>/{transcript.jsonl,raw-response.json}`
+   -- durable, outside the attempt tree B14's contract scans, so it can never trip a
+   MALFORMED_RESULT check, and never read back by any other code (diagnostics only). Wired in a
+   `finally` around the whole dispatch, so a failed or timed-out attempt is captured too, not just
+   a successful one -- gated by the tunable, and never itself raises. New
+   `appsec-review-process/tests/test_claude_cli_invoker.py` (9 tests, all passing) covers the
+   default-off behavior, the durable copy, a missing diagnostics file, missing run identity, and a
+   nonexistent diagnostics directory -- all silent no-ops, never a raise. Default is `false`: a
+   real (non-fixture) target's readable_inputs are the whole repo inlined verbatim, so a saved
+   transcript can be as large and sensitive as the target itself; turn it on deliberately per
+   review session. `scripts/system-acceptance-test.sh`'s automatic-mode `writes.allowed` for
+   partition-discovery already covers the new path (added alongside, so the tunable can be
+   exercised on stage 6 too, not just D02, without a further SAT contract gap).
+2. **`appsec-review-process/02-evidence-pregather/dev-project-discovery.md` authored** (task
+   prompt, `prompt_sections`' `task` entry). Scopes work to partitions the accepted map routed to
+   `developer-engineer` (primary or supporting); tells the persona to enumerate manifests/
+   lockfiles/workspace files per in-scope area, distinguish real project roots from vendored/
+   generated/example code, choose a candidate buildenv image per project from the buildenv
+   catalog, and produce an ordered, authorization-labeled (`read-only`/`network-required`/
+   `script-execution-required`) safe command plan with concrete side effects and citations --
+   proposing the plan, never executing it. Modeled directly on the existing supplied fixture
+   (`fixtures/supplied/hello-autotools/02-dev-project-discovery.json`) so the live persona is asked
+   for exactly the shape that fixture already demonstrates is achievable for this target.
+3. **`registry/job-templates/02-dev-project-discovery.json`: `task_prompt` wired to the file
+   above, `model` pinned to `claude-sonnet-5`/`medium`** (same reasoning as D01's pin -- this is a
+   judgment call over an unknown target, not classification). Both are Fast-lane edits (job
+   templates are not in AGENTS.md's Full-protocol list; this session already edited
+   `02-repository-partition-discovery.json`'s own `model` field the same way during D01
+   construction without objection).
+4. **Structurally verified**: `persona_prompt_assembly.assemble_outer_prompt('02-dev-project-
+   discovery')` succeeds and produces a pinned, hashed prompt file -- the task prompt, registry
+   composition, and buildenv catalog all render cleanly together.
+
+**Found, NOT fixed (Full-protocol scope -- this session deliberately did not touch it, the same
+judgment call made about `design-parity-manifest.json` during Phase 5b): a real, pre-existing gap
+in `registry/output-contracts/project-discovery.json` that will hard-block D02's first live
+dispatch attempt.** Reproduced directly (not guessed): that output contract's `required_files` is
+`["project-inventory.json", "project-discovery-summary.md", "safe-command-plan.json",
+"status.json"]` -- four entries -- but `schemas/project-discovery.schema.json` (the
+`result_schema.schema_file` for the *one* declared JSON result artifact, `project-inventory.json`)
+already defines `safe_command_plan` as a top-level field **inside** `project-inventory.json`,
+alongside `projects` and `coverage_gaps` -- there is no second JSON document. The existing supplied
+fixture (`fixtures/supplied/hello-autotools/02-dev-project-discovery.json`) and both
+`validate_job_output.py` and `scripts/system-acceptance-test.sh`'s own dev-discovery checks already
+treat it as one document (`out.get('safe_command_plan', [])` off the single result). Only the
+output contract's `required_files` list (and the job template's descriptive, non-authoritative
+`outputs.files` list, which duplicates the same mistake) disagree. Left as-is, `claude_cli_invoker
+.build_prompt_text` will raise `InvokerOutputError` on the very first live attempt, at the exact
+line that checks every declared JSON required file against `result_schema.artifact` (added during
+D01's bug-2 fix, Phase 5b item 8) -- confirmed by direct reproduction, not by reading the code and
+guessing:
+```
+$ python3 -c "..." # walks required_files against result_schema.artifact
+WOULD RAISE InvokerOutputError: 'safe-command-plan.json' is not the declared result_schema.artifact 'project-inventory.json'
+```
+**The fix is one line each, in two files**: drop `"safe-command-plan.json"` from
+`required_files` in `registry/output-contracts/project-discovery.json`, and drop it from
+`outputs.files` in `registry/job-templates/02-dev-project-discovery.json` (already touched this
+evening for `task_prompt`/`model`, so this second edit is small in the same place). This is
+squarely `registry/output-contracts/` = "worker contracts... output contracts" from AGENTS.md's
+Full-protocol list, which needs the Independent work protocol (branch, batch claim) before editing
+-- confirm with William whether this narrow, mechanical, already-reproduced fix can go in this same
+D02 construction effort (as D01's schema/prompt fixes did, all Fast-lane files) or needs its own
+formal batch first. **Do not skip this check and edit the output contract without asking** -- it is
+explicitly called out as Full-protocol scope, unlike everything else D01/D02 construction has
+touched so far.
+
+**Next, once that's resolved:** build the request-builder wiring in `discovery_gate.py` for
+`02-dev-project-discovery` -- **checked 2026-09-24: `discovery_gate.py`'s automatic-dispatch path
+(`_run_partition_automatic`, `_dispatch_partition_persona`, `dispatch_mode`) is currently written
+specifically for `ADOPTED_JOB` ('02-repository-partition-discovery') only; `CONSUMER_JOB`
+('02-dev-project-discovery', already a named constant in this module, currently only used by the
+*supplied*-record path) has no automatic-dispatch equivalent yet.** This is the Phase 5b item 5
+equivalent for D02: generalize the existing automatic-dispatch functions to take the job id (they
+already partially do -- see line ~176's `'repository-partition-map.json' if job == ADOPTED_JOB
+else 'output.json'`, a hint this was anticipated) or duplicate the shape for `CONSUMER_JOB`,
+whichever the existing code makes cleaner once you're reading it fresh; either way it needs to
+read the *accepted* partition map (not the supplied fixture) as an additional readable input,
+filtered to `developer-engineer`-routed partitions, per this task prompt's own scope section.
+Then add a `--dispatch` SAT path for stage 7 mirroring stage 6's, and hand William the exact live
+WSL command -- same delivery pattern as every fix this evening and all of Phase 5b: patch ->
+`Claude outputs/` -> `git am` -> push -> live run -> pasted output back before the next thing
+moves. Continuation prompt for this work:
+`docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`.
+
 ### Phase 6 -- build and compile database (E01, E02)
 
 - E01 `02-build-configure`: B13 + `audit-buildenv-cpp`, replays the lock's configure argv
@@ -1195,12 +1299,19 @@ Cross-cutting capability ownership is explicit:
   (concurrent fan-out across many partitions on a real target) remains a separate, later piece,
   tracked by C01-C03, not required to close this entry.
 
-#### D02 — Developer project discovery dispatch — BLOCKED(B10,D01)
+#### D02 — Developer project discovery dispatch — BLOCKED(B10,D01) — D01 leg now satisfied; see Phase 5c
 
 - Deliver: automatic `02-dev-project-discovery` worker producing schema-valid project/build plans;
   retain supplied mode. It proposes safe argv arrays but runs no target build.
 - Acceptance: monorepo/multi-language/shared-path fixtures, unsafe command rejection, evidence
   citations, supplied/automatic parity, and live full-review dependency-chain proof.
+- **Construction started 2026-09-24 (Phase 5c, below): task prompt authored, model pinned, prompt
+  assembly structurally verified. Not yet dispatched live -- a real, pre-existing gap in the
+  registry (not something this session introduced) blocks the first attempt. Read Phase 5c before
+  doing anything else here; do not re-author what it already describes as done.** Whether B10 (the
+  supplied-path common-envelope migration this entry also lists as a blocker) is itself done is
+  not verified in this entry -- re-derive it from `discovery_gate.py` and this file's B10 section
+  rather than trusting this note.
 
 #### D03 — DevOps project discovery — BLOCKED(D01,B14)
 

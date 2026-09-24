@@ -546,3 +546,16 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   against the checkout, zero contract violations. **D01 (unpooled) is DONE.** D02-D04
   (developer/devops/SRE discovery, SAT stages 7-9) still run on supplied records and are next in
   line -- they reuse every facility built here; only their task prompts remain to be authored.
+- 2026-09-24 (same evening) -- **D02 construction started: `02-dev-project-discovery`'s task
+  prompt authored, its job template's `task_prompt`/`model` wired, prompt assembly structurally
+  verified.** Also added, not D02-specific: a `save_llm_transcripts` tunable
+  (`model-config.json`'s `invocation.save_llm_transcripts`, default false) so a live dispatch's raw
+  transcript can be durably reviewed on request, without changing the default trust boundary that
+  keeps raw model output out of the accepted run record. **Found, deliberately not fixed (Full-
+  protocol scope, confirm with William first): `registry/output-contracts/project-discovery.json`'s
+  `required_files` lists `safe-command-plan.json` as a separate file, but
+  `schemas/project-discovery.schema.json` already defines `safe_command_plan` as a field inside
+  `project-inventory.json` -- reproduced directly, this raises `InvokerOutputError` on the first
+  live dispatch attempt.** Full detail and the exact reproduction:
+  `appsec-review-process/TODO.md` Phase 5c. Continuation prompt:
+  `docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`.

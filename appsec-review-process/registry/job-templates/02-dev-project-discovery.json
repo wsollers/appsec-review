@@ -4,6 +4,11 @@
   "display_name": "Developer Project Discovery",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
+  "model": {
+    "model": "claude-sonnet-5",
+    "effort": "medium",
+    "_note": "Pinned explicitly 2026-09-24 (D02 construction, mirrors 02-repository-partition-discovery's own pin), not left to model-config.json's process-wide default (haiku as of the same date). Deciding how a project wants to be built -- language/tooling identification, buildenv image selection, and an ordered, authorization-labeled safe command plan -- is a reasoning-heavy judgment call over an unknown target, not classification."
+  },
   "composition": {
     "persona_id": "developer-engineer",
     "role_id": "repo-project-discoverer",
@@ -41,5 +46,6 @@
     "buildenv_catalog",
     "task",
     "output_contract"
-  ]
+  ],
+  "task_prompt": "appsec-review-process/02-evidence-pregather/dev-project-discovery.md"
 }

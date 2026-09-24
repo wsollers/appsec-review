@@ -54,6 +54,7 @@ from typing import Any
 import claude_binary_resolver as cbr
 import persona_invocation as pi
 import review_cli as rc
+from execution_state import atomic_bytes, data_path
 from schema_validate import SchemaStore, validate_document
 
 ROOT = Path(__file__).resolve().parent
@@ -208,6 +209,43 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
         parts.append("## Required Output Schema(s)\n\n" + "\n".join(schema_sections))
     parts.append(ENVELOPE_INSTRUCTIONS.format(envelope_keys=envelope_keys))
     return "\n\n".join(parts)
+
+
+def _transcripts_enabled(cfg: dict) -> bool:
+    """Tunable, `model-config.json`'s `invocation.save_llm_transcripts` (default false) -- same
+    home and shape as this file's other per-run knobs (`binary`, `budget_max_usd_per_call`,
+    `lane_tools`). Off by default: a real target's readable_inputs are the whole repo, inlined
+    verbatim, so a saved transcript can be large and, for a real (non-fixture) engagement, as
+    sensitive as the target itself. Turn it on deliberately, per review session, not left on."""
+    invocation = cfg.get("invocation") or {}
+    return bool(invocation.get("save_llm_transcripts", False))
+
+
+def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> None:
+    """Best-effort durable copy of this dispatch's raw transcript/response, gated by
+    `_transcripts_enabled`. Written to `runs/<run_id>/data/llm-transcripts/<job_id>/<attempt_id>/`
+    -- deliberately outside the attempt tree (`attempts/<attempt_id>/outputs|logs/persona/`)
+    `persona_invocation.py` scans for B14's "invoker writes only beneath output_root" contract, so
+    this can never trip a MALFORMED_RESULT or "attempt changed outside output_root" check no
+    matter what it contains. Nothing else in this process reads these files back: they are
+    diagnostics for a human or agent to review after the fact, not part of the trusted run record
+    (the same reason raw model output is never echoed into an exception message -- see `invoke`'s
+    own diagnostics_dir comment). Called from a `finally`, so a failed or timed-out dispatch is
+    captured too, which is usually when it matters most; never raises itself, since a disk problem
+    here must not turn a real dispatch outcome into a different one."""
+    if not _transcripts_enabled(cfg):
+        return
+    try:
+        run_id, job_id, attempt_id = request.get("run_id"), request.get("job_id"), request.get("attempt_id")
+        if not (run_id and job_id and attempt_id):
+            return
+        dest = data_path(run_id, "llm-transcripts", job_id, attempt_id)
+        for name in ("transcript.jsonl", "raw-response.json"):
+            source = diagnostics_dir / name
+            if source.exists():
+                atomic_bytes(dest / name, source.read_bytes())
+    except Exception:
+        pass
 
 
 def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, timeout_seconds: int,
@@ -389,56 +427,63 @@ class ClaudeCliInvoker:
         # output_root/diagnostics/, which is exactly the mistake this paragraph now documents.
         diagnostics_dir = Path(tempfile.mkdtemp(prefix="claude-cli-invoker-"))
         transcript_path = diagnostics_dir / "transcript.jsonl"
-        started = time.time()
+        cfg = rc.load_model_config()
         try:
-            dispatch = self._dispatch_fn(argv, prompt_text, self.timeout_seconds, transcript_path)
-        except FileNotFoundError as exc:
-            raise pi.InvokerUnavailable(f"claude CLI binary unavailable: {exc}") from exc
-        duration_seconds = time.time() - started
-        if cancel.is_set():
-            raise pi.InvokerUnavailable("canceled during dispatch")
-        if dispatch.get("timed_out"):
-            raise TimeoutError("claude CLI dispatch exceeded its timeout")
+            started = time.time()
+            try:
+                dispatch = self._dispatch_fn(argv, prompt_text, self.timeout_seconds, transcript_path)
+            except FileNotFoundError as exc:
+                raise pi.InvokerUnavailable(f"claude CLI binary unavailable: {exc}") from exc
+            duration_seconds = time.time() - started
+            if cancel.is_set():
+                raise pi.InvokerUnavailable("canceled during dispatch")
+            if dispatch.get("timed_out"):
+                raise TimeoutError("claude CLI dispatch exceeded its timeout")
 
-        (diagnostics_dir / "raw-response.json").write_text(
-            json.dumps(dispatch.get("final_result"), indent=2, sort_keys=True) if dispatch.get("final_result")
-            is not None else "", encoding="utf-8")
-        result_text = _extract_result_text(dispatch)
-        if not result_text:
-            raise InvokerOutputError(
-                f"claude CLI dispatch produced no terminal result text (diagnostics: {diagnostics_dir})")
+            (diagnostics_dir / "raw-response.json").write_text(
+                json.dumps(dispatch.get("final_result"), indent=2, sort_keys=True) if dispatch.get("final_result")
+                is not None else "", encoding="utf-8")
+            result_text = _extract_result_text(dispatch)
+            if not result_text:
+                raise InvokerOutputError(
+                    f"claude CLI dispatch produced no terminal result text (diagnostics: {diagnostics_dir})")
 
-        try:
-            envelope = _parse_envelope(result_text)
-            _validate_envelope(envelope, fields, output_contract, store)
-        except InvokerOutputError as exc:
-            raise InvokerOutputError(f"{exc} (diagnostics: {diagnostics_dir})") from exc
+            try:
+                envelope = _parse_envelope(result_text)
+                _validate_envelope(envelope, fields, output_contract, store)
+            except InvokerOutputError as exc:
+                raise InvokerOutputError(f"{exc} (diagnostics: {diagnostics_dir})") from exc
 
-        written_files: list[str] = []
-        for filename, key, kind in fields:
-            value = envelope[key]
-            path = Path(output_root) / filename
-            if kind == "md":
-                path.write_text(value, encoding="utf-8")
-            else:
-                path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            written_files.append(filename)
+            written_files: list[str] = []
+            for filename, key, kind in fields:
+                value = envelope[key]
+                path = Path(output_root) / filename
+                if kind == "md":
+                    path.write_text(value, encoding="utf-8")
+                else:
+                    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                written_files.append(filename)
 
-        result_field = next(key for filename, key, kind in fields if kind == "json")
-        result_filename = next(filename for filename, key, kind in fields if kind == "json")
-        claims = _claims_from_partition_map(
-            envelope[result_field], package.inputs, package.allowed_claim_classes, result_filename)
+            result_field = next(key for filename, key, kind in fields if kind == "json")
+            result_filename = next(filename for filename, key, kind in fields if kind == "json")
+            claims = _claims_from_partition_map(
+                envelope[result_field], package.inputs, package.allowed_claim_classes, result_filename)
 
-        usage_raw = dispatch.get("final_result") if isinstance(dispatch.get("final_result"), dict) else {}
-        read_bytes = len(package.prompt) + sum(len(item.data) for item in package.inputs)
-        written_bytes = sum(len((Path(output_root) / f).read_bytes()) for f in written_files)
-        pi.write_invoker_output(
-            package, output_root, files=written_files, claims=claims,
-            usage={"input_bytes": read_bytes, "input_units": (usage_raw.get("usage") or {}).get("input_tokens")
-                  or (read_bytes + 3) // 4,
-                  "output_units": (usage_raw.get("usage") or {}).get("output_tokens")
-                  or (written_bytes + 3) // 4,
-                  "tool_calls": 0},
-            tool_calls=[], verified_invocations=[], injection_suspected=[],
-            limitations=[f"claude-cli dispatch, {duration_seconds:.1f}s, model={model_alias}, "
-                        f"effort={self.effort}"])
+            usage_raw = dispatch.get("final_result") if isinstance(dispatch.get("final_result"), dict) else {}
+            read_bytes = len(package.prompt) + sum(len(item.data) for item in package.inputs)
+            written_bytes = sum(len((Path(output_root) / f).read_bytes()) for f in written_files)
+            pi.write_invoker_output(
+                package, output_root, files=written_files, claims=claims,
+                usage={"input_bytes": read_bytes, "input_units": (usage_raw.get("usage") or {}).get("input_tokens")
+                      or (read_bytes + 3) // 4,
+                      "output_units": (usage_raw.get("usage") or {}).get("output_tokens")
+                      or (written_bytes + 3) // 4,
+                      "tool_calls": 0},
+                tool_calls=[], verified_invocations=[], injection_suspected=[],
+                limitations=[f"claude-cli dispatch, {duration_seconds:.1f}s, model={model_alias}, "
+                            f"effort={self.effort}"])
+        finally:
+            # Runs on every path -- success, a raised InvokerOutputError/InvokerUnavailable, a
+            # timeout, or cancellation -- so a failed dispatch's transcript is captured too, gated
+            # by the save_llm_transcripts tunable (see _transcripts_enabled). Never raises.
+            _persist_llm_transcript(cfg, package.request, diagnostics_dir)
