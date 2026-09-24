@@ -265,9 +265,45 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
    missing job template raises `PromptAssemblyError` before writing anything. `--print` on the
    module (`python3 persona_prompt_assembly.py <job_template_id> --print`) renders without writing,
    for review.
+2b. **DONE, William's addition 2026-09-24, not in the original spec.** ~~Model version
+   registry~~ -- built: `appsec-review-process/model_version_registry.py`. Real gap found while
+   starting item 3: `persona_invocation.py`'s request schema requires a fully pinned model
+   identity (`provider`, `family`, `model_id`, `snapshot` with version digits, no alias word)
+   before dispatch, but model-config.json only ever stored CLI aliases -- there was no real
+   snapshot to put in a request, and the exact `--output-format` response shape that would carry
+   one has been an open question since 2026-09-17. William's decision: add a step that queries the
+   provider for the exact current version behind each family alias once per run, store a ref to
+   the family plus the specific version that answered, and have repeat runs reuse the version
+   their own run resolved (never re-query mid-run). `resolve_run_model_versions(run_id)` does
+   this: queries every alias `configured_aliases()` finds in model-config.json/job templates (today:
+   `claude-sonnet-5`, `haiku`), pins `runs/<run_id>/data/model-versions.json`, and a second call
+   for the same run reuses the pinned record untouched. `model_identity_for(run_id, alias)` is
+   what the request builder (item 3, next) calls to get a real `persona-model-identity` object --
+   it never fabricates a snapshot; a query that yields nothing raises, naming exactly where to
+   look. `query_alias`'s identity extraction is deliberately defensive (best-effort scan of
+   `model`/`model_id`/`modelId` across every captured stream event, never assuming the shape),
+   because the real response shape is still unconfirmed -- **this module's live run also settles
+   that open question**, as a side effect of doing what William asked. Verified in the cloud
+   sandbox with a fake dispatch function (no real CLI call, since this sandbox's own `claude`
+   binary is a different, possibly-restricted install from hal5000's real one -- see the module's
+   docstring): full resolve/pin/reuse-on-repeat round trip; the produced identity passes
+   `persona_invocation.model_errors()` with zero errors; all three error paths (no identity found,
+   alias never queried, no pinned record for the run) raise `ModelVersionError` with a message
+   naming where to look, never silently. **Not yet dispatched for real anywhere, and not yet a
+   registered `job-graph.json` node** -- see the module's own docstring for why formal Dagster
+   registration is a separate, flagged-not-assumed follow-up (`job-graph.json` is one of the three
+   surfaces AGENTS.md calls out for the Full protocol, not the fast lane every other D01 file so
+   far has qualified for); callers invoke `resolve_run_model_versions` directly for now, which
+   already gives William's "resolve once per run, pin, reuse on resume" behavior. **Live
+   confirmation needed on hal5000** (see the module's `--query`/CLI block) before item 3 depends on
+   it for a real dispatch.
 3. **Request builder -- new code.** Builds the full `appsec-review/persona-invocation-request/1.0`
    object `persona_invocation.resolve_request` expects: `persona` (the composition ids),
-   `model`/`effort` (from `model-config.json`, matching the runtime's `allowed_models`), `tools`
+   `model`/`effort` (`model_version_registry.model_identity_for(run_id, alias)` for the pinned
+   identity, `alias` and `effort` from the job template's own `model` field via
+   `review_cli.resolve_model(job_template_id, budget)` -- called by `job_template_id` directly,
+   never through `review_cli`'s own `run`/`model` CLI commands, which resolve at the coarser
+   *process* granularity; see the model-routing-redesign note above), `tools`
    (derived from the tooling profile via `persona_invocation.tool_ids`), `allowed_claim_classes` /
    `prohibited_claim_classes` (from `persona_invocation.claim_ceiling(role, tooling_profile)` --
    already exists, just needs calling), `outer_prompt` (from step 2), `readable_inputs` (a per-file
