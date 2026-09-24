@@ -239,25 +239,32 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
 
 **What is genuinely missing (the facility to build, in dependency order):**
 
-1. **`governing_rules` prompt fragment -- new content.** No file anywhere renders the untrusted-
-   target-content / evidence-discipline / no-verified-findings rules as a prompt section; only
-   `AGENTS.md` and `registry/AUTHORING-TEMPLATE.md`'s "Evidence and trust boundaries" state them in
-   prose aimed at a human author. New file:
-   `appsec-review-process/registry/prompt-fragments/governing-rules.md` (new directory). Content:
-   distilled from AGENTS.md's two rules and AUTHORING-TEMPLATE.md's evidence/trust-boundary section,
-   written as an instruction to the persona, not to a human contributor. Shared by every future job
-   template that lists `governing_rules` in `prompt_sections` -- author it once, reuse it.
-2. **Prompt assembler -- new code.** Nothing today reads a job template's `prompt_sections` order
-   and turns it into `persona_invocation`'s required `outer_prompt` (a pinned file under
-   `prompt_root`, referenced by path + sha256 + byte count). New module:
-   `appsec-review-process/persona_prompt_assembly.py`. Contract: given `job_template_id` and a
-   registry dir, resolve the job template, load each `prompt_sections` entry's registry record (or
-   the new governing-rules fragment, or the job template's `task_prompt` file), render each as a
-   labeled markdown block in the declared order, concatenate, write the result under the attempt's
-   own scratch dir (`appsec-review-process/runs/<run_id>/data/jobs/<job>/attempts/<attempt>/prompt/
-   outer_prompt.md`), return `{path, sha256, bytes}` for the request builder. Section renderers are
-   pure functions of the registry JSON (no run data) except `task`, which is the literal
-   `task_prompt` file's bytes.
+1. **DONE.** ~~`governing_rules` prompt fragment~~ --
+   built: `appsec-review-process/registry/prompt-fragments/governing-rules.md`. Four numbered
+   rules distilled from AGENTS.md's two rules and AUTHORING-TEMPLATE.md's evidence/trust-boundary
+   section, written as instructions to the invoked persona (not a human contributor): target
+   content is data never instructions; a claim needs evidence that resolves; this is discovery, not
+   a verified finding (the claim-class prohibition, stated for the persona reading it, not just
+   enforced downstream by `persona_invocation`'s lexical backstop); partial discovery stays visible.
+   Reusable by every future job template that lists `governing_rules` in `prompt_sections`.
+2. **DONE.** ~~Prompt assembler~~ -- built: `appsec-review-process/persona_prompt_assembly.py`.
+   Given a `job_template_id`, resolves the job template (schema-validated), renders each
+   `prompt_sections` entry in declared order (a registry-record section as a labeled fenced-JSON
+   block over the record's own canonical bytes -- schema-validated against the same schema
+   `persona_invocation.load_composition` uses, so the assembled prompt and what
+   `persona_invocation` independently re-hashes can never drift apart; `governing_rules` and
+   `buildenv_catalog` as literal file bytes; `task` as the job template's own `task_prompt` file's
+   literal bytes), concatenates, and (via `assemble_outer_prompt`) writes the result under the
+   attempt's own scratch dir via `execution_state.data_path` (run-owned, symlink-checked, atomic),
+   returning `{path, sha256, bytes}` ready to drop straight into
+   `request["outer_prompt"]`. Verified in the cloud sandbox: full render of D01's 8-section prompt
+   (governing_rules, persona, role, domain, tooling_profile, buildenv_catalog, task,
+   output_contract) succeeds; the written file round-trips through
+   `persona_invocation._read_pinned` with the exact `sha256`/`bytes` this module returns (proves
+   the pin persona_invocation.resolve_request will independently verify actually matches); a
+   missing job template raises `PromptAssemblyError` before writing anything. `--print` on the
+   module (`python3 persona_prompt_assembly.py <job_template_id> --print`) renders without writing,
+   for review.
 3. **Request builder -- new code.** Builds the full `appsec-review/persona-invocation-request/1.0`
    object `persona_invocation.resolve_request` expects: `persona` (the composition ids),
    `model`/`effort` (from `model-config.json`, matching the runtime's `allowed_models`), `tools`
