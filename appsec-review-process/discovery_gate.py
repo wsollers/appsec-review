@@ -510,6 +510,18 @@ def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerpr
 
     persona_output_root = attempt / Path(*request['output_root'].split('/'))
     partition_map = read_json(persona_output_root / 'repository-partition-map.json')
+    # source_revision is orchestrator-owned provenance, not something the persona can know: D01's
+    # readable_inputs deliberately exclude .git (persona_dispatch.py's _walk_target), the same
+    # convention intake.source_identity's own exclusion follows, so the model has no VCS ref to
+    # read at all. A real live dispatch confirmed this is not hypothetical: the model correctly
+    # wrote "unknown (no VCS ref supplied ...)" rather than fabricate a revision it was never
+    # given -- exactly the honest behavior governing rule 2 asks for -- but every downstream
+    # consumer (citation-freshness checks, the SAT's own accept contract) expects this field to
+    # equal the run's actual pinned revision. Overwritten here with the same authoritative value
+    # _automatic_partition_inputs already computed from intake.source_identity (never trusted from
+    # the model), the same "caller owns provenance bookkeeping, the model owns evidence-derived
+    # content" split status.json's exclusion from the response envelope already draws.
+    partition_map['source_revision'] = record['source_revision']
     errors = _validate_partition_payload(partition_map)
     if errors:
         raise ValueError('persona dispatch result failed independent re-validation: '

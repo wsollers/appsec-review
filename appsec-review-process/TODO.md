@@ -640,6 +640,31 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
      2's prompt assembler, but never exercised by a passing automatic-mode contract check before
      now) -- both flagged "unexpected write" on the first live attempt. Both added to the allowed
      list.
+   - **Bug 3: `source_revision` mismatch (the last failure before a clean PASS).** With bug 2
+     fixed, the live dispatch produced a fully schema-conformant `repository-partition-map.json`
+     -- every field, structure, enum matched. The only remaining failure: the model wrote
+     `"source_revision": "unknown (no VCS ref supplied with target content; files provided as a
+     flat pinned set)"`, but the SAT's accept contract (and every downstream citation-freshness
+     check) expects the run's actual pinned git revision
+     (`632522b6801caa5810f0c6bf71bf3783c90068ac`). **Not a model mistake -- the model was telling
+     the truth.** D01's readable inputs deliberately exclude `.git` (`persona_dispatch.py`'s
+     `_walk_target`, the same convention `intake.source_identity`'s own exclusion follows), so the
+     persona genuinely has no VCS ref to read; writing "unknown" rather than fabricating a
+     revision is exactly the honest behavior governing rule 2 asks for. `source_revision` is
+     orchestrator-owned provenance, not evidence-derived content -- the same split that already
+     excludes `status.json` from what the model is asked to produce. **Fixed in
+     `discovery_gate.py`'s `_dispatch_partition_persona`**: after reading the persona's
+     `repository-partition-map.json` and before independent re-validation, overwrites
+     `partition_map['source_revision']` with `record['source_revision']` -- the same authoritative
+     value `_automatic_partition_inputs` already computed from `intake.source_identity` for the
+     fingerprint, never trusted from the model. Verified: a schema-conformant sample carrying the
+     model's exact "unknown ..." string, run through the same override-then-validate sequence,
+     ends with the correct pinned revision and validates cleanly; `intake.py`'s `revision` field
+     defaults to the literal string `"unversioned"` (never `None`) when a target has no VCS at
+     all, so the override is safe even for a non-git target; all 19
+     `tests/test_worker_adoption.py` tests still pass unmodified. **Not yet re-confirmed with
+     another live dispatch** -- if this was the last gap, the next `--dispatch` SAT run is D01's
+     first clean live PASS.
 
 **Acceptance for D01 (unpooled), from the batch table, still holds:** dispatch, supplied mode
 retained, inapplicable/gap handling, citation freshness, rescope trigger, malformed persona result,
