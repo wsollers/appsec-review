@@ -586,6 +586,60 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
    S2b box (matching the Mermaid diagram's own treatment), not a new pictured node or branch. Flag
    this explicitly for William to revisit if the BPMN is expected to show the automatic-dispatch
    branch distinctly.
+8. **Live qualification on hal5000, 2026-09-24 -- two real bugs found and fixed against a real
+   `claude` CLI, in progress.** Items 1-7 above were verified only structurally in the cloud
+   sandbox; this is the first time `--dispatch` actually ran against a live model.
+   - **Bug 1: `claude` binary not found (`FileNotFoundError`).** `model-config.json`'s
+     `invocation.binary` was the bare name `"claude"`, resolved via whatever process's own `PATH`
+     happens to run it -- fine for `code-location.sh run`'s synchronous steps (inherits the
+     interactive WSL shell's PATH) but not inside the long-running `dagster code-server start`
+     daemon that actually executes the job. **First fix attempt hardcoded one operator's absolute
+     install path directly into `model-config.json`; William rejected it** ("Don't pin a version.
+     Look it up in the first job. If not found error appropriately.") -- a hardcoded path breaks
+     the moment the install moves. **Fixed properly**: new module
+     `appsec-review-process/claude_binary_resolver.py`, `resolve_claude_binary(run_id)`, resolves
+     the real absolute path with `shutil.which()` from inside whichever process dispatches the
+     run's first claude CLI call (`model_version_registry.resolve_run_model_versions`, always
+     first) and pins it to the run (`runs/<run_id>/data/claude-binary.json`) -- the same "resolve
+     once per run, pin, reuse" shape already used for model identity. A resolution failure raises
+     `ClaudeBinaryError` (surfaced through `ClaudeCliInvoker` as `InvokerUnavailable`), never a
+     silent fallback. `model-config.json`'s `invocation.binary` is back to just `"claude"`.
+     `model_version_registry.py`'s `_probe_argv`/`query_alias` and `claude_cli_invoker.py`'s
+     `_dispatch_argv` all now take the resolved `binary` explicitly rather than reading a
+     bare/PATH-dependent name themselves. **Live-confirmed**: the next live attempt resolved
+     `/mnt/c/Users/wsoll/AppData/Roaming/npm/claude` from inside the daemon process and got past
+     this failure entirely.
+   - **Bug 2: the model's response didn't match the output schema (`INVOKER_EXCEPTION`).** With
+     bug 1 fixed, the live dispatch reached a real `claude -p` call, which returned a well-reasoned,
+     evidence-cited, but structurally different JSON object than `repository-partition-
+     map.schema.json` requires (`engagement`/`paths.include`/`kind` singular/`review_disposition`
+     instead of the schema's own `target`/`source_revision`/`include_paths`/`kinds`/`disposition`,
+     etc. -- 29 schema validation errors, confirmed by feeding the actual captured response through
+     `schema_validate.validate_document` directly). **Root cause**: the outer prompt's
+     `output_contract` section (rendered by `persona_prompt_assembly.py`) only ever shows the
+     output contract's own registry *metadata* (display name, claim class, prose validation rules
+     -- `registry/output-contracts/repository-partition-map.json`), never the literal JSON Schema
+     file (`repository-partition-map.schema.json`) with its actual field names/enums/required
+     properties. The model was never shown what shape was actually required, and reasonably
+     improvised its own. **Fixed in `claude_cli_invoker.py`** (its own module, since it already owns
+     envelope construction and validation): new `_render_json_schema(schema_file, store)` inlines
+     the literal schema JSON (plus every local `evidence-citation.schema.json`-style `$ref` it
+     reaches, via new `_local_schema_refs`) as a fenced block in the prompt, under a new "Required
+     Output Schema(s)" section, for every required JSON output file. `build_prompt_text` now takes
+     `store: SchemaStore` to do this. Verified: a hand-built schema-conformant sample validates
+     cleanly against the real schema (confirming the schema itself and this diagnosis are correct);
+     `build_prompt_text` against a fake package confirms the rendered prompt contains both the
+     partition-map schema and its referenced evidence-citation schema; all 19
+     `tests/test_worker_adoption.py` tests still pass unmodified. **Not yet re-confirmed with
+     another live dispatch** -- the next `--dispatch` SAT run on hal5000 is what proves the model
+     now produces a schema-conformant response.
+   - **Also fixed, found while re-reading item 6's own SAT contract after the first live attempt**:
+     `stage_partition_discovery()`'s automatic-mode `accept` contract's `writes.allowed` list didn't
+     include `{run}/data/claude-binary.json` (new, from bug 1's fix) or
+     `appsec-review-process/prompt-cache/$PARTITION_JOB/outer_prompt.md` (pre-existing, from item
+     2's prompt assembler, but never exercised by a passing automatic-mode contract check before
+     now) -- both flagged "unexpected write" on the first live attempt. Both added to the allowed
+     list.
 
 **Acceptance for D01 (unpooled), from the batch table, still holds:** dispatch, supplied mode
 retained, inapplicable/gap handling, citation freshness, rescope trigger, malformed persona result,

@@ -113,6 +113,51 @@ def _envelope_fields(output_contract: dict[str, Any]) -> list[tuple[str, str, st
     return fields
 
 
+def _local_schema_refs(schema: Any, *, seen: set[str]) -> None:
+    """Every local ``$ref`` schema filename directly or transitively reachable from ``schema``
+    (e.g. ``repository-partition-map.schema.json``'s partitions/relationships referencing
+    ``evidence-citation.schema.json``), collected into ``seen``. Only bare ``<name>.schema.json``
+    refs are followed (this project's own convention, confirmed by reading every schema under
+    ``schemas/`` -- none use ``#/...`` JSON-pointer refs or remote URLs); anything else is ignored
+    rather than guessed at."""
+    if isinstance(schema, dict):
+        ref = schema.get("$ref")
+        if isinstance(ref, str) and ref.endswith(".schema.json") and ref not in seen:
+            seen.add(ref)
+        for value in schema.values():
+            _local_schema_refs(value, seen=seen)
+    elif isinstance(schema, list):
+        for item in schema:
+            _local_schema_refs(item, seen=seen)
+
+
+def _render_json_schema(schema_file: str, store: SchemaStore) -> str:
+    """The literal JSON Schema content for one required JSON output file, fenced and labeled, plus
+    every local schema it ``$ref``s (e.g. ``evidence-citation.schema.json``), each fenced
+    separately. **Why this exists (a real bug found live on hal5000, 2026-09-24):** this invoker
+    used to tell the model only the output contract's registry *metadata* (display name, claim
+    class, prose validation rules -- see ``persona_prompt_assembly``'s ``output_contract`` prompt
+    section), never the schema's own field names, enums, or required-properties. D01's first live
+    dispatch against the real fixture produced a well-reasoned, evidence-cited, but structurally
+    different JSON object (``engagement``/``paths.include``/``kind`` singular/``review_disposition``
+    instead of the schema's own ``target``/``include_paths``/``kinds``/``disposition``, etc.) --
+    entirely reasonable, since the model was never shown what shape was actually required. This
+    function closes that gap: the model now reads the same schema this invoker will validate its
+    response against, byte for byte."""
+    root_schema = store.load(schema_file)
+    seen: set[str] = set()
+    _local_schema_refs(root_schema, seen=seen)
+    parts = [f"### `{schema_file}` (required JSON Schema -- your output must validate against this "
+             f"exactly: these field names, these enums, these required properties, nothing else "
+             f"unless the schema allows it)\n",
+             f"```json\n{json.dumps(root_schema, indent=2, sort_keys=True)}\n```\n"]
+    for ref in sorted(seen):
+        parts.append(f"### `{ref}` (referenced by `{schema_file}` -- every place above that "
+                     f"`$ref`s it must conform to this)\n")
+        parts.append(f"```json\n{json.dumps(store.load(ref), indent=2, sort_keys=True)}\n```\n")
+    return "\n".join(parts)
+
+
 def _render_readable_inputs(inputs: tuple) -> str:
     """Every readable input's exact bytes, inlined into the prompt text -- the only way the model
     can see them at all, since this invoker grants no tools and no filesystem access. Each is
@@ -130,20 +175,39 @@ def _render_readable_inputs(inputs: tuple) -> str:
     return "\n".join(parts)
 
 
-def build_prompt_text(package: Any, output_contract: dict[str, Any]) -> str:
+def build_prompt_text(package: Any, output_contract: dict[str, Any], store: SchemaStore) -> str:
     """The assembled outer prompt (governing rules, persona, role, domain, tooling profile,
     buildenv catalog, task, output contract -- already rendered by
     ``persona_prompt_assembly.assemble_outer_prompt`` and pinned by
     ``persona_invocation.resolve_request``), plus every readable input's bytes (never otherwise
-    visible to a tool-less model), plus this invoker's own strict response-envelope instructions."""
+    visible to a tool-less model), plus the literal JSON Schema for every required JSON output file
+    (``_render_json_schema`` -- the outer prompt's own ``output_contract`` section only carries the
+    contract's registry metadata, not the schema's field names/enums/required-properties; see that
+    function's docstring for the live bug this closes), plus this invoker's own strict
+    response-envelope instructions."""
     outer = package.prompt.decode("utf-8")
     fields = _envelope_fields(output_contract)
     envelope_keys = "\n".join(f'- `"{key}"`: {filename}' for filename, key, _kind in fields)
-    return "\n\n".join([
-        outer,
-        _render_readable_inputs(package.inputs),
-        ENVELOPE_INSTRUCTIONS.format(envelope_keys=envelope_keys),
-    ])
+    # Every JSON-valued required file gets its literal schema inlined. Today's output contracts
+    # declare exactly one JSON artifact (result_schema.artifact/schema_file); this loop still
+    # covers every kind=="json" field by filename match rather than assuming there is only one,
+    # so a future contract with a second JSON file is not silently left unrendered.
+    schema_sections = []
+    for filename, _key, kind in fields:
+        if kind != "json":
+            continue
+        if filename != output_contract["result_schema"]["artifact"]:
+            raise InvokerOutputError(
+                f"output contract {output_contract['contract_id']!r} requires JSON file "
+                f"{filename!r}, which is not its declared result_schema.artifact "
+                f"{output_contract['result_schema']['artifact']!r} -- this invoker only knows how "
+                f"to find a schema for the declared result artifact")
+        schema_sections.append(_render_json_schema(output_contract["result_schema"]["schema_file"], store))
+    parts = [outer, _render_readable_inputs(package.inputs)]
+    if schema_sections:
+        parts.append("## Required Output Schema(s)\n\n" + "\n".join(schema_sections))
+    parts.append(ENVELOPE_INSTRUCTIONS.format(envelope_keys=envelope_keys))
+    return "\n\n".join(parts)
 
 
 def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, timeout_seconds: int,
@@ -301,7 +365,7 @@ class ClaudeCliInvoker:
         output_contract = dict(package.composition["output_contract"])
         store = SchemaStore()
         fields = _envelope_fields(output_contract)
-        prompt_text = build_prompt_text(package, output_contract)
+        prompt_text = build_prompt_text(package, output_contract, store)
         model_alias = package.request["model"]["family"]
         # Reuses the run's already-pinned binary path when the run's first job (normally
         # model_version_registry.resolve_run_model_versions) already resolved one; resolves and

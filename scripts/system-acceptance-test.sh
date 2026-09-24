@@ -651,7 +651,8 @@ stage_partition_discovery() {
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/inputs.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-summary.md",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/status.json",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/outputs/persona/*", "{run}/data/jobs/$PARTITION_JOB/attempts/*/logs/persona/*",
-                        "{run}/data/model-versions.json", "{run}/data/*.jsonl", $LAUNCH_WRITES], "deletes": []},
+                        "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
+                        "appsec-review-process/prompt-cache/$PARTITION_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
  "outputs": [{"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-map.json", "schema": "repository-partition-map.schema.json", "equals": {"source_revision": "{pin}"}},
              {"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"execution_status": "OK", "worker_kind": "persona"}},
              {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "equals": {"status": "OK"}}]}
