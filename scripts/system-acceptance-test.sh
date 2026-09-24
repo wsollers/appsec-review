@@ -647,7 +647,7 @@ stage_partition_discovery() {
             {"path": "{run}/data/jobs/$PARTITION_JOB/supplied/result.json", "kind": "absent"},
             {"path": "{run}/data/jobs/00-intake/whole/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
  "writes": {"required": ["{run}/data/jobs/$PARTITION_JOB/accepted.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-map.json"],
-            "allowed": ["{run}/data/jobs/$PARTITION_JOB/latest.json",
+            "allowed": ["{run}/data/jobs/$PARTITION_JOB/latest.json", "{run}/data/jobs/$PARTITION_JOB/job.lock",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/inputs.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-summary.md",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/status.json",
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/failure-result.json",

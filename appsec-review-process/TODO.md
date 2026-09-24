@@ -702,8 +702,19 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
      get the correct pinned hash, the unresolved path is left untouched, nesting is fully reached,
      and an existing wrong value is overwritten; the pinned hash format was confirmed to match the
      freshness check's own `[0-9a-f]{64}` regex; all 19 `tests/test_worker_adoption.py` tests
-     still pass unmodified. **Not yet re-confirmed with another live dispatch** -- if this really
-     was the last gap, the next `--dispatch` SAT run is D01's first clean live PASS.
+     still pass unmodified.
+   - **The persona dispatch itself worked end to end for the first time**: this live attempt's
+     Dagster run reported `"status": "SUCCESS"` -- `discovery_gate.py`'s automatic-dispatch chain
+     (request build, live `claude` CLI call, schema-conformant response, independent
+     re-validation, `source_revision`/`content_hash` backfill, publish) is confirmed working
+     against a real target and a real model. **The only remaining SAT failure was a fifth,
+     trivial, SAT-contract-only gap**: the automatic-mode `accept` contract's `writes.allowed`
+     list never included `{run}/data/jobs/$PARTITION_JOB/job.lock` -- every other job's contract
+     in this same script lists its own `job.lock` explicitly (e.g. `00-intake/whole/job.lock`),
+     this one was simply missed when item 6 was first written. Added. **Bugs 1-4 above were all
+     real production-code bugs in the automatic-dispatch chain itself, found and fixed by working
+     through successive live SAT failures one at a time; this fifth gap is purely cosmetic to the
+     test harness -- the underlying job already succeeded.**
 
 **Acceptance for D01 (unpooled), from the batch table, still holds:** dispatch, supplied mode
 retained, inapplicable/gap handling, citation freshness, rescope trigger, malformed persona result,
