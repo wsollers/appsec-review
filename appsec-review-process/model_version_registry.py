@@ -55,6 +55,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from execution_state import atomic_bytes, data_path, identifier  # noqa: E402
+import claude_binary_resolver as cbr  # noqa: E402
 import review_cli as rc  # noqa: E402
 
 SCHEMA_ID = "appsec-review/run-model-versions/1.0"
@@ -94,13 +95,15 @@ def configured_aliases() -> list[str]:
     return sorted(aliases)
 
 
-def _probe_argv(alias: str) -> list[str]:
+def _probe_argv(alias: str, binary: str) -> list[str]:
     """A minimal, cheap, tool-free call: no --add-dir (nothing to read), no allowed tools (nothing
     to run), probe-tier budget cap, low effort. This asks only "what model answers as <alias>
-    today", never review work."""
+    today", never review work. `binary` is the caller's already-resolved, real absolute path (see
+    `claude_binary_resolver.py`) -- this function never re-resolves or falls back to a bare name
+    itself, so a resolution failure is never silently masked here."""
     cfg = rc.load_model_config()
     invocation = cfg.get("invocation") or {}
-    argv = [invocation.get("binary", "claude")] + list(invocation.get("fixed_flags") or [])
+    argv = [binary] + list(invocation.get("fixed_flags") or [])
     argv += ["--model", alias, "--effort", PROBE_EFFORT]
     usd = (cfg.get("budget_max_usd_per_call") or {}).get("probe")
     if usd is not None:
@@ -131,14 +134,15 @@ def _extract_identity(dispatch: dict[str, Any]) -> dict[str, Any]:
     return {"reported_model": reported, "extracted_from": sorted(candidates)}
 
 
-def query_alias(alias: str, *, transcript_path: Path, timeout: int = DEFAULT_TIMEOUT_SECONDS,
+def query_alias(alias: str, *, binary: str, transcript_path: Path, timeout: int = DEFAULT_TIMEOUT_SECONDS,
                 dispatch_fn=rc._dispatch_streaming) -> dict[str, Any]:
     """Issues one minimal probe call for `alias` (or, in a test, calls `dispatch_fn` with the same
-    signature as `review_cli._dispatch_streaming` against a fake). Returns a record with the
-    best-effort extracted identity, plus the full raw events and terminal result, so a human (or a
-    later, corrected parser) can always recover the exact model identity even if today's
-    field-name guesses are wrong."""
-    argv = _probe_argv(alias)
+    signature as `review_cli._dispatch_streaming` against a fake). `binary` is the caller's
+    already-resolved real path (see `resolve_run_model_versions`, `claude_binary_resolver.py`).
+    Returns a record with the best-effort extracted identity, plus the full raw events and
+    terminal result, so a human (or a later, corrected parser) can always recover the exact model
+    identity even if today's field-name guesses are wrong."""
+    argv = _probe_argv(alias, binary)
     dispatch = dispatch_fn(argv, PROBE_PROMPT, timeout, transcript_path)
     identity = _extract_identity(dispatch)
     return {
@@ -160,8 +164,12 @@ def _record_path(run_id: str) -> Path:
 def resolve_run_model_versions(run_id: str, *, aliases: list[str] | None = None, force: bool = False,
                                transcript_dir: Path | None = None,
                                dispatch_fn=rc._dispatch_streaming) -> dict[str, Any]:
-    """The run-scoped entry point. If the run already has a pinned `model-versions.json` and
-    `force` is false, loads and returns it unchanged (a resumed run reuses exactly the versions
+    """The run-scoped entry point -- and, per William's 2026-09-24 decision, the *first job* that
+    dispatches a real claude CLI call for a run, so it is also where the claude binary itself gets
+    resolved and pinned (`claude_binary_resolver.resolve_claude_binary`) rather than trusting a
+    hardcoded path: whatever process calls this is the process that will actually dispatch, so
+    resolving here captures the right `PATH`. If the run already has a pinned `model-versions.json`
+    and `force` is false, loads and returns it unchanged (a resumed run reuses exactly the versions
     its first run resolved -- William's "repeat runs would use the one their job had"). Otherwise
     queries every alias (default: `configured_aliases()`), writes the pinned record, and returns
     it. Each alias's transcript is written under `transcript_dir` (default: the record's own
@@ -172,10 +180,11 @@ def resolve_run_model_versions(run_id: str, *, aliases: list[str] | None = None,
     aliases = sorted(set(aliases)) if aliases is not None else configured_aliases()
     if not aliases:
         raise ModelVersionError("no model aliases found in model-config.json or any job template")
+    binary = cbr.resolve_claude_binary(run_id, force=force)
     transcript_dir = transcript_dir or path.parent
     entries = {}
     for alias in aliases:
-        entries[alias] = query_alias(alias, transcript_path=transcript_dir / f"{alias}.jsonl",
+        entries[alias] = query_alias(alias, binary=binary, transcript_path=transcript_dir / f"{alias}.jsonl",
                                      dispatch_fn=dispatch_fn)
     record = {
         "schema": SCHEMA_ID,

@@ -51,6 +51,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import claude_binary_resolver as cbr
 import persona_invocation as pi
 import review_cli as rc
 from schema_validate import SchemaStore, validate_document
@@ -145,10 +146,16 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any]) -> str:
     ])
 
 
-def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, timeout_seconds: int) -> list[str]:
+def _dispatch_argv(model_alias: str, effort: str, budget_usd: float | None, timeout_seconds: int,
+                   binary: str) -> list[str]:
+    """`binary` is the caller's already-resolved, real absolute claude CLI path (see
+    ``claude_binary_resolver.py`` -- resolved and pinned once per run by whichever job dispatches
+    first, normally ``model_version_registry.resolve_run_model_versions``). This function never
+    re-resolves or falls back to a bare name itself, so a resolution failure is never silently
+    masked here."""
     cfg = rc.load_model_config()
     invocation = cfg.get("invocation") or {}
-    argv = [invocation.get("binary", "claude")] + list(invocation.get("fixed_flags") or [])
+    argv = [binary] + list(invocation.get("fixed_flags") or [])
     argv += ["--model", model_alias, "--effort", effort]
     if budget_usd is not None:
         argv += ["--max-budget-usd", str(budget_usd)]
@@ -296,7 +303,15 @@ class ClaudeCliInvoker:
         fields = _envelope_fields(output_contract)
         prompt_text = build_prompt_text(package, output_contract)
         model_alias = package.request["model"]["family"]
-        argv = _dispatch_argv(model_alias, self.effort, self.budget_usd, self.timeout_seconds)
+        # Reuses the run's already-pinned binary path when the run's first job (normally
+        # model_version_registry.resolve_run_model_versions) already resolved one; resolves and
+        # pins it itself otherwise (e.g. a caller that skips model-version resolution). Either way
+        # this never falls back to a bare, PATH-dependent name -- see claude_binary_resolver.py.
+        try:
+            binary = cbr.resolve_claude_binary(package.request["run_id"])
+        except cbr.ClaudeBinaryError as exc:
+            raise pi.InvokerUnavailable(str(exc)) from exc
+        argv = _dispatch_argv(model_alias, self.effort, self.budget_usd, self.timeout_seconds, binary)
 
         # B14's contract is strict: an invoker writes its files and invoker-output.json beneath
         # output_root "and nowhere else" -- persona_invocation.py's own output derivation scans
