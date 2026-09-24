@@ -496,3 +496,28 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   stage is added until every earlier one runs and passes. Gaps exposed: no schema for the manifest,
   run status, workflow/branch outputs, accepted pointers or job hand-off record; the older dev gate
   records no output hashes. Needs a new SAT from the top (old SAT records predate the contracts).
+- 2026-09-24 -- **D01 built: `02-repository-partition-discovery` can now discover a target for
+  real**, closing the "SAT stages 6-9 pass on hand-authored fixture records, not on anything the
+  system discovered itself" gap for stage 6 (William's correction the same day; full spec
+  `appsec-review-process/TODO.md` Phase 5b). Unpooled (one job template, one invocation, one
+  result; C01-C03 pooled fan-out machinery stays a tracked follow-on): `governing_rules` prompt
+  fragment and `persona_prompt_assembly.py` (the assembled prompt); `model_version_registry.py`
+  (pins the exact model version behind each alias once per run); `persona_dispatch.py` (builds the
+  full `persona-invocation-request`); `claude_cli_invoker.py` (`ClaudeCliInvoker`, B14's real
+  `PersonaInvoker` -- a strict single-turn JSON response envelope, validated not parsed
+  heuristically, per William's sign-off); `discovery_gate.py`'s automatic-dispatch wiring
+  (`_run_partition_automatic`, opted into per run via `discovery_gate.set_dispatch_mode` so
+  `dagster_workflow.py`'s call into `run()`, Full-protocol, never changes) publishing through the
+  *existing* `coordinate_worker_lifecycle`/`record_terminal_current`/`validate_published`
+  common-envelope boundary; and `scripts/system-acceptance-test.sh --dispatch`, which opts SAT
+  stage 6 into this path and swaps the accept check from byte-equality with the fixture to schema
+  conformance, fresh evidence citations and routing-table completeness (a diff against the fixture
+  answer key stays informational only, never a pass/fail gate). The supplied-record path
+  (`_run_partition`) stays the default and fully intact -- its regression suite
+  (`tests/test_worker_adoption.py`) still passes unmodified. Live regression-confirmed on hal5000:
+  a fresh SAT (`20260924T202059Z`) passed through stage 9 on the pushed code, still exercising the
+  supplied-record path (mode defaults to `"supplied"`). Automatic dispatch itself is proven
+  structurally in the cloud sandbox (accept, reuse, `discovery_gate.validate` success, and a clean
+  `FAILED` on a rejected model response with no partial publish) but **not yet run against a real
+  `claude` CLI on hal5000** -- that live run, via `--dispatch`, is next and is D01's actual proof.
+  D02-D04 (developer/devops/SRE discovery, stages 7-9) do not have this yet.

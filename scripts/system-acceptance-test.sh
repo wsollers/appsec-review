@@ -10,6 +10,16 @@
 #   scripts/system-acceptance-test.sh --resume <sat_id> --through <stage>
 #                                                                continue an earlier SAT from its first
 #                                                                stage that has not passed
+#   scripts/system-acceptance-test.sh [--fixture hello-autotools] --dispatch --through <stage>
+#                                                                start a new SAT whose partition-
+#                                                                discovery stage (02-repository-
+#                                                                partition-discovery) opts into D01's
+#                                                                automatic persona dispatch instead of
+#                                                                installing the fixture's supplied
+#                                                                record (a real `claude` CLI call, not
+#                                                                a fixture copy) -- a new SAT only; a
+#                                                                `--resume` reads the choice its own
+#                                                                first run made, --dispatch is ignored
 #
 # Every command runs under a contract (run_step, scripts/sat_contract.py):
 #   pre   what it reads is present and valid (schema or structural contract; absent where required)
@@ -36,7 +46,7 @@ STAGES=(
   "run-create|1|run_process.py --start creates the run and exactly its initial files"
   "stage-inputs|1|stage_artifacts.py writes the intake contract (manifest) for this engagement"
   "engagement-workflow|1|engagement_workflow: intake executed and accepted; 3 preparation branches; join"
-  "partition-discovery|1|Gate: hand-off with nothing supplied; partition map supplied and accepted"
+  "partition-discovery|1|Gate: hand-off/supplied-record proof (default), or --dispatch: automatic live persona dispatch, schema+citation validated"
   "dev-project-discovery|1|Gate: hand-off with nothing supplied; project discovery supplied and accepted"
   "devops-project-discovery|1|Gate: DevOps project discovery (Dockerfile) supplied and accepted"
   "sre-operations-topology|1|Gate: SRE operations topology supplied and accepted"
@@ -558,6 +568,32 @@ JSON
   cmp -s "$REPO/fixtures/supplied/$FIXTURE/$2.json" "$RUN_DIR/data/jobs/$2/supplied/result.json" || die "$1: supplied file differs from the fixture record"
 }
 
+gate_dispatch_mode() {  # gate_dispatch_mode <stage> <job id>: opt this run into D01's automatic
+                        # persona dispatch for <job id> (discovery_gate.set_dispatch_mode), before
+                        # any launch -- discovery_gate.run()'s own external signature never changes;
+                        # this only writes the run-scoped dispatch-mode.json it reads internally.
+  local already
+  already="$(python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except OSError:
+    print("0"); sys.exit()
+print("1" if d.get(sys.argv[2]) == "automatic" else "0")' "$RUN_DIR/data/dispatch-mode.json" "$2" 2>/dev/null || echo 0)"
+  if [[ "$already" == 1 ]]; then
+    echo "-- dispatch-mode: already automatic for $2 (stage re-run)"
+    return 0
+  fi
+  echo "-- dispatch-mode: opt this run into automatic persona dispatch for $2 (real model call, not a fixture copy)"
+  run_step "$1" dispatch-mode "$(contract "$1" dispatch-mode <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$2/supplied/result.json", "kind": "absent"}],
+ "writes": {"required": ["{run}/data/dispatch-mode.json"], "allowed": [], "deletes": []},
+ "outputs": [{"path": "{run}/data/dispatch-mode.json", "equals": {"$2": "automatic"}}]}
+JSON
+)" "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import discovery_gate; discovery_gate.set_dispatch_mode(sys.argv[2], sys.argv[3], "automatic"); print("dispatch mode: automatic for", sys.argv[3])' \
+    "$REPO/appsec-review-process" "$RUN_ID" "$2"
+}
+
 gate_validate() {  # the project's own validator for an accepted gate result
   "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import discovery_gate; discovery_gate.validate(sys.argv[2], sys.argv[3]); print("validator OK")' \
     "$REPO/appsec-review-process" "$RUN_ID" "$1"
@@ -584,14 +620,50 @@ PY
 }
 
 # ---- stage: partition-discovery ------------------------------------------------------------------
+# Default (mode "supplied"): the pre-D01 gate/schema/chaining proof -- hand-off with nothing
+# supplied, then the fixture's recorded analysis installed and accepted.
+# --dispatch (mode "automatic", D01 item 6): no supplied file is ever installed; the run opts into
+# discovery_gate.py's automatic-dispatch path (item 5) before the one launch, which dispatches a
+# REAL live persona invocation (claude_cli_invoker.ClaudeCliInvoker) against the staged checkout --
+# not a copy of a hand-authored fixture. The accept check changes accordingly: it can no longer
+# byte-compare the live result against the fixture's answer key (a real model call has no reason to
+# reproduce a human's exact partition IDs or wording), so acceptance is schema conformance
+# (already required by discovery_gate itself), fresh evidence citations against the live checkout
+# (citations_fresh, unchanged), and structural completeness of the routing table and coverage
+# checks. A diff against the fixture answer key is still computed and logged, but only as an
+# informational note -- never a pass/fail gate (per the plan: "comparing against the fixture record
+# becomes an optional informational diff, never a pass/fail gate").
 stage_partition_discovery() {
   require_run partition-discovery
-  gate_handoff partition-discovery "$PARTITION_JOB" repository_partition_discovery repository-partition-map
-  local handoff_state="$HANDOFF_STATE" handoff_dagster="$HANDOFF_DAGSTER"
-  gate_supply partition-discovery "$PARTITION_JOB" repository-partition-map
+  local handoff_state="" handoff_dagster=""
 
-  echo "-- accept: the gate with the supplied map must succeed"
-  run_step partition-discovery accept "$(contract partition-discovery accept <<JSON
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    gate_dispatch_mode partition-discovery "$PARTITION_JOB"
+    handoff_state="automatic-dispatch"
+
+    echo "-- accept: the automatic-dispatch gate must succeed (live persona invocation)"
+    run_step partition-discovery accept "$(contract partition-discovery accept <<JSON
+{"inputs": [{"path": "{run}/data/dispatch-mode.json", "kind": "file", "equals": {"$PARTITION_JOB": "automatic"}},
+            {"path": "{run}/data/jobs/$PARTITION_JOB/supplied/result.json", "kind": "absent"},
+            {"path": "{run}/data/jobs/00-intake/whole/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
+ "writes": {"required": ["{run}/data/jobs/$PARTITION_JOB/accepted.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-map.json"],
+            "allowed": ["{run}/data/jobs/$PARTITION_JOB/latest.json",
+                        "{run}/data/jobs/$PARTITION_JOB/attempts/*/inputs.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-summary.md",
+                        "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/status.json",
+                        "{run}/data/jobs/$PARTITION_JOB/attempts/*/outputs/persona/*", "{run}/data/jobs/$PARTITION_JOB/attempts/*/logs/persona/*",
+                        "{run}/data/model-versions.json", "{run}/data/*.jsonl", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-map.json", "schema": "repository-partition-map.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"execution_status": "OK", "worker_kind": "persona"}},
+             {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "equals": {"status": "OK"}}]}
+JSON
+)" launch repository_partition_discovery
+  else
+    gate_handoff partition-discovery "$PARTITION_JOB" repository_partition_discovery repository-partition-map
+    handoff_state="$HANDOFF_STATE"; handoff_dagster="$HANDOFF_DAGSTER"
+    gate_supply partition-discovery "$PARTITION_JOB" repository-partition-map
+
+    echo "-- accept: the gate with the supplied map must succeed"
+    run_step partition-discovery accept "$(contract partition-discovery accept <<JSON
 {"inputs": [{"path": "{run}/data/jobs/$PARTITION_JOB/supplied/result.json", "kind": "file", "schema": "repository-partition-map.schema.json", "equals": {"source_revision": "{pin}"}},
             {"path": "{run}/data/jobs/00-intake/whole/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
  "writes": {"required": ["{run}/data/jobs/$PARTITION_JOB/accepted.json", "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-map.json"],
@@ -606,6 +678,7 @@ stage_partition_discovery() {
              {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "equals": {"status": "OK"}}]}
 JSON
 )" launch repository_partition_discovery
+  fi
   launch_status
   [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "partition-discovery: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
   gate_validate "$PARTITION_JOB" || die "partition-discovery: discovery_gate.validate rejected the accepted result"
@@ -614,7 +687,43 @@ JSON
   attempt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["attempt_id"])' "$jobdir/accepted.json")"
   map="$jobdir/attempts/$attempt/repository-partition-map.json"
   cites="$(citations_fresh "$map")" || die "partition-discovery: $cites"
-  summary="$(python3 - "$jobdir" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$PARTITION_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
+
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    summary="$(python3 - "$jobdir" "$attempt" "$LAUNCH_DAGSTER" "$cites" "$REPO/fixtures/supplied/$FIXTURE/$PARTITION_JOB.json" <<'PY'
+import json, pathlib, sys
+d, attempt, dagster_id, cites, record_path = sys.argv[1:]
+d = pathlib.Path(d); att = d / 'attempts' / attempt
+bad = []
+status = json.loads((att / 'status.json').read_text())
+if status.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (status.get('dagster_run_id'), dagster_id))
+if status.get('dispatch_mode') != 'automatic': bad.append('status.json does not record automatic dispatch')
+m = json.loads((att / 'repository-partition-map.json').read_text())
+ids = {p['partition_id']: p for p in m.get('partitions', [])}
+if not ids: bad.append('the live dispatch produced no partitions at all')
+personas = {'developer-engineer', 'devops-engineer', 'sre-engineer'}
+for pid, p in ids.items():
+    if p.get('primary_persona_id') not in personas: bad.append('partition %s: primary_persona_id %r is not a known persona' % (pid, p.get('primary_persona_id')))
+    if not p.get('evidence_citations'): bad.append('partition %s cites no evidence' % pid)
+checks = (m.get('coverage') or {}).get('category_checks') or []
+if not checks: bad.append('coverage.category_checks is empty -- the routing table is not complete')
+for c in checks:
+    if c.get('result') not in ('found', 'not-found', 'uninspected'): bad.append('category_check %r has no valid result' % c.get('category'))
+if bad: sys.exit('; '.join(bad))
+diff_note = ''
+try:
+    rec = json.loads(pathlib.Path(record_path).read_text())
+    rec_ids, live_ids = sorted(p['partition_id'] for p in rec['partitions']), sorted(ids)
+    if rec_ids != live_ids:
+        diff_note = 'informational only, not a failure: live partitions %s differ from the fixture answer key %s' % (live_ids, rec_ids)
+except OSError:
+    pass
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'partitions': {k: v.get('disposition') for k, v in ids.items()},
+                  'primary_personas': sorted({v.get('primary_persona_id') for v in ids.values()}), 'citations_checked': int(cites),
+                  'diff_note': diff_note}))
+PY
+)" || die "partition-discovery: $summary"
+  else
+    summary="$(python3 - "$jobdir" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$PARTITION_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
 import json, pathlib, sys
 d, attempt, record, dagster_id, cites = sys.argv[1:]
 d = pathlib.Path(d); att = d / 'attempts' / attempt
@@ -630,12 +739,14 @@ print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'partitio
                   'primary_personas': sorted({v.get('primary_persona_id') for v in ids.values()}), 'citations_checked': int(cites)}))
 PY
 )" || die "partition-discovery: $summary"
+  fi
   checkout_unchanged partition-discovery
   record PASS partition-discovery "$(python3 -c 'import json,sys; e=json.loads(sys.argv[1]); e.update(handoff=sys.argv[2], handoff_dagster_run_id=sys.argv[3] or None); print(json.dumps(e))' "$summary" "$handoff_state" "$handoff_dagster")"
   printf '%s' "$summary" | python3 -c '
 import json,sys; s=json.load(sys.stdin)
-print("partition-discovery: PASS  hand-off %s; map accepted by Dagster %s: %s; %d citations match the checkout" % (
-  sys.argv[1], s["dagster_run_id"][:8], ", ".join("%s=%s" % kv for kv in sorted(s["partitions"].items())), s["citations_checked"]))' "$handoff_state"
+note = ("; " + s["diff_note"]) if s.get("diff_note") else ""
+print("partition-discovery: PASS  hand-off %s; map accepted by Dagster %s: %s; %d citations match the checkout%s" % (
+  sys.argv[1], s["dagster_run_id"][:8], ", ".join("%s=%s" % kv for kv in sorted(s["partitions"].items())), s["citations_checked"], note))' "$handoff_state"
 }
 
 # ---- stage: dev-project-discovery ----------------------------------------------------------------
@@ -828,13 +939,14 @@ print("sre-operations-topology: PASS  hand-off %s; accepted by Dagster %s: %s; %
 }
 
 # ---- driver --------------------------------------------------------------------------------------
-FIXTURE=hello-autotools; THROUGH=""; RESUME=""
+FIXTURE=hello-autotools; THROUGH=""; RESUME=""; DISPATCH_FLAG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --list) list; exit 0 ;;
     --fixture) FIXTURE="$2"; shift 2 ;;
     --through) THROUGH="$2"; shift 2 ;;
     --resume) RESUME="$2"; shift 2 ;;
+    --dispatch) DISPATCH_FLAG=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument $1" ;;
   esac
@@ -847,18 +959,21 @@ if [[ -n "$RESUME" ]]; then
   SAT_DIR="$SAT_ROOT/$RESUME"; [[ -f "$SAT_DIR/sat.json" ]] || die "no SAT record $SAT_DIR/sat.json"
   FIXTURE="$(sat_get fixture)"
   [[ "$(sat_get schema)" == "appsec-review/system-acceptance/2" ]] || die "SAT $RESUME predates contract enforcement (schema $(sat_get schema)); start a new SAT"
+  [[ -z "$DISPATCH_FLAG" ]] || echo "SAT $RESUME: --dispatch is ignored on resume; using this SAT's own recorded choice"
 else
   SAT_ID="$(date -u +%Y%m%dT%H%M%SZ)"; SAT_DIR="$SAT_ROOT/$SAT_ID"; mkdir -p "$SAT_DIR"
-  python3 - "$SAT_DIR/sat.json" "$SAT_ID" "$FIXTURE" "$(git -C "$REPO" rev-parse HEAD)" <<'EOF'
+  python3 - "$SAT_DIR/sat.json" "$SAT_ID" "$FIXTURE" "$(git -C "$REPO" rev-parse HEAD)" "$([[ -n "$DISPATCH_FLAG" ]] && echo true || echo false)" <<'EOF'
 import json, sys
-path, sat_id, fixture, repo_head = sys.argv[1:]
+path, sat_id, fixture, repo_head, partition_dispatch = sys.argv[1:]
 json.dump({'schema': 'appsec-review/system-acceptance/2', 'sat_id': sat_id, 'fixture': fixture,
-           'repo_commit': repo_head, 'run_id': None, 'stages': {}}, open(path, 'w'), indent=1)
+           'repo_commit': repo_head, 'run_id': None, 'stages': {},
+           'partition_dispatch': partition_dispatch == 'true'}, open(path, 'w'), indent=1)
 EOF
 fi
 IFS='|' read -r _ _ PIN <<< "$(fixture_entry "$FIXTURE")"
 RUN_ID="$(sat_get run_id)"
-echo "SAT $(sat_get sat_id)  fixture $FIXTURE  record ${SAT_DIR#$REPO/}${RUN_ID:+  run $RUN_ID}"
+PARTITION_DISPATCH="$(python3 -c 'import json,sys; print("1" if json.load(open(sys.argv[1])).get("partition_dispatch") else "0")' "$SAT_DIR/sat.json")"
+echo "SAT $(sat_get sat_id)  fixture $FIXTURE  record ${SAT_DIR#$REPO/}${RUN_ID:+  run $RUN_ID}${PARTITION_DISPATCH:+$([[ $PARTITION_DISPATCH == 1 ]] && echo '  partition-discovery: automatic dispatch')}"
 
 for id in $(stage_ids); do
   if [[ "$(stage_status "$id")" == PASS && "$id" == sut-checkout ]]; then

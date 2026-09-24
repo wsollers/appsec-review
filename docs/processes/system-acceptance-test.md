@@ -14,6 +14,10 @@ cd ~/projects/appsec-review
 scripts/system-acceptance-test.sh --list                                # stages, and which are built
 scripts/system-acceptance-test.sh --through <stage>                     # new SAT from the top
 scripts/system-acceptance-test.sh --resume <sat_id> --through <stage>   # continue an earlier SAT
+scripts/system-acceptance-test.sh --dispatch --through <stage>          # new SAT: stage 6 dispatches
+                                                                        # a real persona invocation
+                                                                        # (D01) instead of installing
+                                                                        # the fixture's supplied record
 ```
 
 Start the code location first, in its own terminal (`orchestrator/dagster/code-location.sh start`).
@@ -57,7 +61,7 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 3 | `run-create` | yes |
 | 4 | `stage-inputs` | yes |
 | 5 | `engagement-workflow` (config, intake, 3 preparation branches, join) | yes |
-| 6 | `partition-discovery` (gate) | yes |
+| 6 | `partition-discovery` (gate; `--dispatch`: D01 live automatic persona dispatch instead) | yes |
 | 7 | `dev-project-discovery` (gate) | yes |
 | 8 | `devops-project-discovery` (gate; the fixture's Dockerfile) | yes |
 | 9 | `sre-operations-topology` (gate; chains after devops discovery) | yes |
@@ -160,6 +164,35 @@ map, every command-plan entry has argv, purpose and authorization; sre: accepted
 file = fixture record, same revision as the accepted devops record, every service id unique, every
 dependency target resolves to a known service id, coverage gaps recorded.
 
+### 6. `partition-discovery` with `--dispatch` (D01: live automatic persona dispatch)
+
+Run with `scripts/system-acceptance-test.sh --dispatch --through <stage>` (a new SAT only; a
+`--resume` reads its own SAT's recorded choice, `--dispatch` is ignored). Stage 6 alone changes
+shape; stages 7-9 are unaffected (they still read the accepted partition map or chain off it, and
+do not yet have their own dispatch mode -- D02-D04, tracked separately).
+
+Two steps instead of three: `dispatch-mode`, `accept`. There is no `handoff`/`supply` -- with
+`dispatch-mode.json` set to `"automatic"` for `02-repository-partition-discovery` before the one
+launch, `discovery_gate.run()` never takes the supplied/hand-off path at all
+(`discovery_gate.py`'s own internal choice, Phase 5b item 5; `dagster_workflow.py`'s call into
+`run()` is unchanged).
+
+| Step | Reads | Writes | Validates |
+|---|---|---|---|
+| `dispatch-mode`: opt this run into automatic dispatch | the supplied result **absent** | `data/dispatch-mode.json` | `{"02-repository-partition-discovery": "automatic"}` |
+| `accept`: the automatic-dispatch gate, a **real `claude` CLI call** | accepted intake (`OK`); `dispatch-mode.json` says automatic; the supplied result still absent | attempt `inputs`, `repository-partition-map.json`, `repository-partition-summary.md`, `result.json`, `status.json`, the persona invocation's own `outputs/persona/*` and `logs/persona/*`, the run's pinned `model-versions.json` and per-alias `*.jsonl` transcripts (`model_version_registry.resolve_run_model_versions` queries every configured alias once per run, not only the one this job uses), refreshed pointers | outputs against their schemas; the worker envelope `execution_status: OK`, `worker_kind: persona` |
+
+Then: Dagster `SUCCESS`; `discovery_gate.validate` accepts; accepted by the launched Dagster run;
+`status.json` records `dispatch_mode: "automatic"`; every source-file citation's SHA-256 recomputed
+from the live checkout (unchanged check, `citations_fresh`); at least one partition, each with a
+known `primary_persona_id` and at least one evidence citation; `coverage.category_checks`
+non-empty with a valid `result` on each entry (the routing table is structurally complete). **What
+changed from the supplied-result gate above, deliberately (per the original D01 spec): acceptance
+no longer byte-compares the result against the fixture's answer key** -- a real model call has no
+reason to reproduce a human's exact partition IDs, names or wording. A diff against the fixture
+record is still computed and printed (`diff_note` in the stage summary) when the two disagree, but
+it is informational only, never a pass/fail gate.
+
 ## Gaps the contracts have exposed
 
 | Gap | Where | Status |
@@ -167,6 +200,6 @@ dependency target resolves to a known service id, coverage gaps recorded.
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
 | SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Done 2026-09-24 (stage 8 devops, stage 9 sre topology both gated and passing live) |
-| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Build part: designed as stages 10-12 (build-resolution.md); rest open |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stages 7-9 (D02-D04) and the build part (stages 10-12, build-resolution.md): still open |
 | The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |

@@ -513,19 +513,79 @@ concurrent partition dispatch, that revisits C01-C03; it does not block this.
    in the sandbox, confirm live on hal5000" split as items 2b/3/4; live confirmation on hal5000 is
    the next step, now that every piece of the automatic-dispatch chain exists and has been proven
    structurally.
-6. **SAT script change.** `scripts/system-acceptance-test.sh`'s `stage_partition_discovery()`
-   (stage 6) gets a new `dispatch` mode that launches automatic dispatch instead of `gate_supply`'s
-   fixture copy. The `accept` step's checks change from "output byte-equals the fixture" to
-   "output validates against `repository-partition-map.schema.json`, every citation hash matches
-   the live checkout, and the record's own structural rules pass (routing table complete, `docs`
-   partition deferred, etc.)" -- comparing against the fixture record becomes an optional
-   informational diff, never a pass/fail gate. `--list`/`--through` keep working for a supplied-mode
-   run too, for regression.
-7. **Docs, same commit as the code (standing rule):** `docs/processes/system-acceptance-test.md`
-   stage 6 description, `docs/processes/engagement-start.md` step 2b, `docs/processes/flow-
-   bringup.md` log, and this file's Phase 5b status. BPMN/Mermaid diagrams if the dispatch step
-   changes the pictured flow meaningfully (a new "automatic dispatch" branch inside the existing
-   S2b box, likely -- check before assuming the diagram needs a new node).
+6. **DONE.** ~~SAT script change~~ -- extended `scripts/system-acceptance-test.sh` in place. A new
+   `--dispatch` CLI flag, meaningful only at SAT creation (`--resume` reads the resumed SAT's own
+   recorded choice from `sat.json` and prints a warning if `--dispatch` is also passed, rather than
+   silently honoring it -- a SAT's dispatch mode is fixed at creation, matching `--fixture`'s own
+   resume behavior). Stored as `sat.json`'s new `partition_dispatch: true/false` field (schema
+   `appsec-review/system-acceptance/2`, an additive field -- old `sat.json` files without it read as
+   `false`/supplied, same backward-compatibility posture as `discovery_gate.py`'s own
+   `dispatch_mode()` default). A new `PARTITION_DISPATCH` shell variable (`"1"`/`"0"`) is read once
+   from `sat.json` at driver startup and threaded into `stage_partition_discovery()`.
+   **`gate_dispatch_mode()`** (a new shared gate-step helper, alongside the existing
+   `gate_handoff`/`gate_supply`/`gate_validate`/`citations_fresh`): idempotent (checks `dispatch-
+   mode.json` for `"automatic"` first, so a stage re-run after a partial failure doesn't re-opt-in
+   needlessly), then opts the run into automatic dispatch via a `$CL run -B -c
+   'import discovery_gate; discovery_gate.set_dispatch_mode(...)'` one-liner -- calling the exact
+   function item 5 built, never reaching into `discovery_gate.py`'s internals directly -- wrapped in
+   a `run_step` contract requiring exactly `{run}/data/dispatch-mode.json` as the sole write.
+   **`stage_partition_discovery()` rewritten to branch on `$PARTITION_DISPATCH`:** the supplied
+   branch is the original `gate_handoff` + `gate_supply` + byte/ID-equality-against-the-fixture
+   `accept` contract, completely unchanged (confirmed: this branch is not new code, only relocated
+   inside the `if`). The automatic branch calls `gate_dispatch_mode` in place of `gate_handoff`/
+   `gate_supply`, then a differently-shaped `accept` contract: `inputs` require `dispatch-mode.json`
+   equals `{"02-repository-partition-discovery": "automatic"}` and the supplied-result path
+   **absent** (proving this run took the live-dispatch path, not a fixture copy); `writes.allowed`
+   covers `outputs/persona/*`, `logs/persona/*`, `data/model-versions.json`, `data/*.jsonl` -- no
+   handoff or supplied-result paths, since the automatic path never touches them; `outputs` checks
+   `execution_status: OK`, `worker_kind: persona`. After `launch`/`gate_validate`/`citations_fresh`
+   (unchanged, shared by both branches), the summary-building step also branches: the automatic
+   branch's python checks structural acceptance rather than fixture equality -- at least one
+   partition, each partition's `primary_persona_id` one of the three discovery-chain personas
+   (`developer-engineer`/`devops-engineer`/`sre-engineer`), non-empty `evidence_citations` per
+   partition, `coverage.category_checks` non-empty with every `result` in
+   `{found, not-found, uninspected}` -- **deliberately never comparing partition IDs or dispositions
+   against the fixture answer key as a pass/fail check, exactly as this item's original plan called
+   for** ("comparing against the fixture record becomes an optional informational diff, never a
+   pass/fail gate"): a `diff_note` is still computed (wrapped in `try/except OSError`, since the
+   fixture answer key may not exist for every fixture) and appended to the printed stage summary
+   when live partitions disagree with it, purely informational. The supplied branch's summary step
+   is the original byte/ID-equality check, unchanged. `--list`/`--through` and every other stage
+   (7-9, still supplied-mode-only) are unaffected either way.
+   **Verified in the cloud sandbox, without relying on eyeballing the shell script alone** (`bash
+   -n` cannot see inside heredoc bodies): `bash -n` on the whole file; every embedded Python heredoc
+   (9 of them) extracted and `ast.parse`'d; every embedded JSON contract heredoc (9 of them)
+   extracted and `json.loads`'d with placeholder substitution; standalone unit tests of the
+   `sat.json`-creation snippet, the `PARTITION_DISPATCH` getter, and `gate_dispatch_mode`'s
+   idempotency check; and a full live-data functional test -- reran item 5's automatic-dispatch flow
+   against a fresh synthetic fixture to produce real `repository-partition-map.json`/`status.json`
+   artifacts, then fed those exact files through the new dispatch-mode summary python verbatim,
+   confirming correct structural-pass output including a correctly-computed informational
+   `diff_note` when the live (synthetic) partitions disagreed with the fixture's own answer key. No
+   bugs found in this item's own logic (unlike items 3-5, each of which turned up a real bug) --
+   attributed to the multi-layer verification (syntax + AST + JSON + live data) run before
+   considering it ready, not to the change being simpler.
+7. **DONE.** ~~Docs, same commit as the code (standing rule)~~ -- `docs/processes/system-acceptance-
+   test.md` (usage block documents `--dispatch`; stage 6 table row now reads "gate; `--dispatch`:
+   automatic live persona dispatch instead"; a new subsection under the stage list documents the
+   two-step automatic shape (`dispatch-mode`, `accept` -- no `handoff`/`supply`), the reads/writes/
+   validates table, and states explicitly what changed and why: acceptance no longer byte-compares
+   against the fixture's answer key, per the original D01 spec, with the informational `diff_note`
+   still computed and printed; the gaps table's "no LLM/agent produces the discovery records" row
+   narrowed to "stages 7-9 (D02-D04) and the build part: still open" since stage 6 is now closed via
+   `--dispatch`), `docs/processes/engagement-start.md` (S2b Mermaid node label and the step-2b
+   prose/table updated to describe the automatic-dispatch option as an alternative to the supplied
+   record, explicitly noting D02-D04 don't have this yet; PNG re-rendered via `mmdc` -- needed a
+   Puppeteer `-p` config disabling the sandbox to run as root in this cloud sandbox -- and confirmed
+   visually via the Read tool), and `docs/processes/flow-bringup.md` (one new dated log entry
+   summarizing the full D01 build across items 1-7, the supplied-path regression proof, the live SAT
+   confirmation, and flagging that automatic dispatch has not yet been run against a real `claude`
+   CLI). This file's Phase 5b status updated in the same commit (this entry).
+   **BPMN judgment call, not yet confirmed with William:** `docs/processes/bpmn/pre-submission.bpmn`
+   was left unchanged -- the `--dispatch` addition read as a text-label change within the existing
+   S2b box (matching the Mermaid diagram's own treatment), not a new pictured node or branch. Flag
+   this explicitly for William to revisit if the BPMN is expected to show the automatic-dispatch
+   branch distinctly.
 
 **Acceptance for D01 (unpooled), from the batch table, still holds:** dispatch, supplied mode
 retained, inapplicable/gap handling, citation freshness, rescope trigger, malformed persona result,
