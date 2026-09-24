@@ -434,3 +434,12 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   findings or target execution in any branch, discovery hand-offs planned only, and the accepted
   discovery results untouched. Open: the SAT order (intake, gates, workflow) differs from
   `engagement-start.md` (workflow, then gates).
+- 2026-09-24 -- SAT reworked: every command now runs under a pre/post contract (`scripts/sat_contract.py`):
+  inputs present and valid (schema or structural, or absent where required), exit as expected,
+  exactly the declared write set (no unexpected add, change or delete anywhere in the repository),
+  written artifacts valid. Stages reordered to the documented flow: `engagement_workflow` is now the
+  intake step (intake must execute, not be reused), then the gates, then DevOps/SRE discovery,
+  build discovery, evidence, Scorecard and the evidence index before anything that needs B13. No
+  stage is added until every earlier one runs and passes. Gaps exposed: no schema for the manifest,
+  run status, workflow/branch outputs, accepted pointers or job hand-off record; the older dev gate
+  records no output hashes. Needs a new SAT from the top (old SAT records predate the contracts).

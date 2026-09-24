@@ -1,213 +1,156 @@
 # System acceptance test (SAT)
 
 One fixture, taken from a fresh clone of the system under test through the whole review cycle, to
-SARIF and report generation. Built one stage at a time so each step can be examined and refined
-before the next is added. Script: `scripts/system-acceptance-test.sh` (POSIX host);
-`scripts/system-acceptance-test.ps1` runs it inside WSL from Windows.
+SARIF and report generation, **in the order of the documented engagement flow**
+([engagement-start.md](engagement-start.md)). The SAT is how the system is finished: stages are built
+in flow order, and no stage is added until every earlier one runs and passes on the host.
+
+Script: `scripts/system-acceptance-test.sh` (POSIX host); `scripts/system-acceptance-test.ps1` runs it
+inside WSL from Windows. Contract engine: `scripts/sat_contract.py` (tested by
+`appsec-review-process/tests/test_sat_contract.py`).
 
 ```bash
 cd ~/projects/appsec-review
 scripts/system-acceptance-test.sh --list                                # stages, and which are built
-scripts/system-acceptance-test.sh --through sut-checkout                # new SAT, run to that stage
+scripts/system-acceptance-test.sh --through <stage>                     # new SAT from the top
 scripts/system-acceptance-test.sh --resume <sat_id> --through <stage>   # continue an earlier SAT
 ```
 
-```powershell
-.\scripts\system-acceptance-test.ps1 -Distro Ubuntu-24.04 --through sut-checkout
-```
+Start the code location first, in its own terminal (`orchestrator/dagster/code-location.sh start`).
 
-Each SAT has an id (UTC timestamp) and a record under
-`appsec-review-process/logs/system-acceptance/<sat_id>/` (gitignored): `sat.json` with per-stage
-status (`PASS`, `FAIL`, `NOT_IMPLEMENTED`) and evidence, plus one log per stage. A failing stage
-stops the SAT; a stage that is not built yet stops it with `NOT_IMPLEMENTED` (exit 3), never a
-silent skip. `--resume` skips stages that already passed in that SAT, except `sut-checkout`, which
-is re-verified (same HEAD, still clean) because every later stage reads that checkout.
+## Contract enforcement: verify what you read, verify what you wrote
+
+Every command the SAT runs goes through `run_step`, with a contract per command:
+
+1. **Pre (inputs).** Every input the command reads is present and valid: parsed, validated against
+   its schema in `schemas/` where one exists, otherwise against a structural contract (required
+   fields and values). Inputs that must not exist yet (a supplied result before its hand-off check,
+   an accepted intake before intake runs) are checked absent.
+2. **Run.** The command's exit code must be the one the contract expects (0, or 1 where failure is
+   the expected result).
+3. **Post (writes).** The repository is snapshotted before and after (path, size, mtime; content
+   hashes for the run folder and the checkout). Every added or modified file must match the
+   command's declared write set, every declared required write must be present, and nothing may be
+   deleted unless declared. Write sets are exact file shapes (`attempts/*/outputs/intake.json`), not
+   whole folders.
+4. **Post (outputs).** Every artifact the command wrote that the contract names is validated: schema
+   where one exists, structural fields otherwise.
+
+Then the stage checks the job's own success signal (Dagster `SUCCESS`, `LOADED`, an accepted pointer
+from this very Dagster run) and the artifacts' meaning (semantic checks listed per stage below).
+
+Ambient paths change without any SAT command and are reported, never counted: Dagster's own host
+storage (`orchestrator/dagster/.host/`) and the scheduled NVD feed (`data/feeds/nvd/`).
+
+Record: `appsec-review-process/logs/system-acceptance/<sat_id>/` (gitignored): `sat.json` (per stage:
+status, evidence, and a summary of each step), `<stage>.log`, `contracts/<stage>.<step>.json` (the
+contract as applied), `steps/<stage>.<step>.pre.json` and `.post.json` (inputs verified with their
+hashes; every file added, modified, deleted; outputs validated). A failing stage stops the SAT; an
+unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 
 ## Stages
 
-| # | Stage | Proves | Built |
-|---|---|---|---|
-| 1 | `sut-checkout` | Fresh clone at the pinned commit; clean; origin correct; no answer key or defect comments on the reviewed revision | yes |
-| 2 | `services` | Dagster services healthy; host code location serving; job list reloaded | yes |
-| 3 | `run-create` | `run_process.py --start` creates the run | yes |
-| 4 | `stage-inputs` | `stage_artifacts.py` writes a valid manifest (executor platform `posix`) | yes |
-| 5 | `intake` | `00-intake` accepted | yes |
-| 6 | `partition-discovery` | Hand-off with nothing supplied; partition map supplied and accepted | yes |
-| 7 | `dev-project-discovery` | Hand-off with nothing supplied; project discovery supplied and accepted | yes |
-| 8 | `engagement-workflow` | Preparation branches and join published; intake reused; discovery results untouched | yes |
-| 9 | `build-configure` | `02-build-configure` through B13 in the pinned build image (needs Phase 3, Phase 4, E01) | |
-| 10 | `native-build` | Compile database and build outputs | |
-| 11 | `evidence` | Evidence jobs accepted or explicitly skipped | |
-| 12 | `evidence-index` | `02-evidence-index` accepted | |
-| 13 | `review-lanes` | 01 through 09, 11, 12 | |
-| 14 | `sarif` | Accepted SARIF from verified findings | |
-| 15 | `report` | Report generated | |
+| # | Stage | Built |
+|---|---|---|
+| 1 | `sut-checkout` | yes |
+| 2 | `services` | yes |
+| 3 | `run-create` | yes |
+| 4 | `stage-inputs` | yes |
+| 5 | `engagement-workflow` (config, intake, 3 preparation branches, join) | yes |
+| 6 | `partition-discovery` (gate) | yes |
+| 7 | `dev-project-discovery` (gate) | yes |
+| 8 | `devops-project-discovery` (gate; the fixture's Dockerfile) | |
+| 9 | `sre-operations-topology` (gate) | |
+| 10 | `build-discovery` | |
+| 11 | `evidence` (legacy pipeline + hashed import; every tool ran or is a recorded gap) | |
+| 12 | `ossf-scorecard` (needs a network permission grant) | |
+| 13 | `evidence-index` | |
+| 14 | `build-configure` (B13, C++ build environment, E01) | |
+| 15 | `native-build` | |
+| 16 | `review-lanes` | |
+| 17 | `sarif` | |
+| 18 | `report` | |
+
+`build-configure` and `native-build` depend on Phase 3 (B13), Phase 4 (build environment) and E01.
+A missing compile database blocks native lanes, not the engagement: stages 10 to 13 do not depend on
+them.
 
 ### 1. `sut-checkout`
 
-Starts from nothing. An existing checkout of the fixture is deleted only if it is a clean clone of
-the expected origin; anything else (wrong origin, local changes, not a clone) is refused and left
-for a person. It then clones through `fixtures/populate-targets.sh` (the single source of the pin)
-and checks: HEAD equals the pin, the tree is clean, the origin is right, `docs/VULNERABILITIES.md`
-is absent and `src/` has no `VULN`/`CWE-` comments (the answer key stays on the fixture's
-`with-vulnerabilities-doc` branch, so the SAT measures detection, not recall of the fixture's notes).
-Evidence: fixture, origin, pin, HEAD, tree hash, tracked-file count.
+| Step | Reads (pre) | Writes (post) | Validates |
+|---|---|---|---|
+| `remove` (only if a checkout exists) | the checkout is a clean clone of the expected origin (git) | deletes only the checkout | checkout gone |
+| `clone`: `fixtures/populate-targets.sh <fixture>` | the script; the checkout absent | only files inside the checkout; `configure.ac`, `Makefile.am`, `src/*` required | exactly the tracked-file count written |
+
+Then: HEAD equals the pin (from `populate-targets.sh`, the single source), tree clean, origin right,
+`docs/VULNERABILITIES.md` absent, no `VULN`/`CWE-` comments in `src/` (the answer key stays on the
+fixture's `with-vulnerabilities-doc` branch).
 
 ### 2. `services`
 
-Brings up this project's own Compose services and checks that jobs can run. The host code location
-runs in the foreground in its own terminal, so this stage checks it and never starts it; start it
-first with `orchestrator/dagster/code-location.sh start`.
+| Step | Reads | Writes | Validates |
+|---|---|---|---|
+| `compose-up` | `compose.yaml`, `.env`, `workspace.yaml`, `dagster.yaml` | nothing in the repository | all three services `running/healthy` within 240 s |
+| `reload`: `code-location.sh reload` | `definitions.py`, `dagster_workflow.py` | nothing | `LOADED` |
 
-1. The Docker engine answers `docker version` (else: why, and the recovery steps). If Docker Desktop
-   answers while a native `docker` service is also active in the distro, the stage fails: the two
-   compete for `/var/run/docker.sock`, which wedged the engine on 2026-09-23.
-2. `orchestrator/dagster/.env` exists and, under WSL NAT, `APPSEC_CODE_LOCATION_HOST` equals this WSL
-   boot's IP (else: restart the code location, which rewrites it).
-3. `docker compose up -d` (idempotent; recreates webserver and daemon when the address changed), then
-   postgres, webserver and daemon all `running/healthy` within 240 s.
-4. Inside the webserver, the IPv4 answers for `host.docker.internal` include the code location's address
-   (Docker Desktop adds its own, often IPv6, host-gateway entry for that name as well).
-5. `code-location.sh check` (gRPC health) passes, and `code-location.sh reload` reports `LOADED`.
-6. The loaded job list includes the jobs the SAT drives (`phase1_intake`,
-   `repository_partition_discovery`, `dev_project_discovery`, `engagement_workflow`, `full_review`),
-   and every daemon Dagster marks required is healthy.
-
-Evidence: engine version, service states, code location address, what the webserver resolves, the
-loaded job list and the required daemons.
+Before and around them: Docker answers (hang vs error reported), Docker Desktop is the only engine
+(no native `docker.service`, ADR-0011 addendum 2026-09-23), `.env`'s code location address matches
+this WSL boot, the webserver resolves `host.docker.internal` (IPv4) to it, gRPC health passes, the
+SAT's jobs are loaded, every required Dagster daemon is healthy. The code location is checked, never
+started.
 
 ### 3. `run-create`
 
-The security engineer's first command, run the way the jobs run: `code-location.sh run -B
-appsec-review-process/run_process.py --start` (the code location's Python and `APPSEC_*` paths).
+| Step | Reads | Writes | Validates |
+|---|---|---|---|
+| `start`: `run_process.py --start` | `process-manifest.json` (`process_order`), the manifest template (unfilled) | exactly `run-status.json`, `run-status.md`, `events.jsonl`, `inputs/artifact-manifest.json`, all in the one new run | `run-status.json` schema id, `READY`, nothing completed |
 
-1. The output names a run id of the form `YYYYMMDDTHHMMSSZ-xxxxxx`.
-2. `appsec-review-process/runs/<run_id>/` exists with `data/`, `inputs/` and `outputs/`.
-3. `run-status.json` is for this run, `READY`, with nothing completed and `resume_from` equal to the
-   first lane of `process-manifest.json` (`00-intake-recovery`); `events.jsonl` holds exactly one
-   event, `RUN_CREATED`.
-4. `inputs/artifact-manifest.json` is still the unfilled template (stage 4 writes the real one).
-
-The run id is written to `sat.json` (`run_id`); every later stage of this SAT works on that run, and
-`--resume` shows it in the header. Evidence: run id and folder, status, creation time, first lane,
-lane count, manifest state.
+Then: run id format; `resume_from` is the manifest's first lane; exactly one `RUN_CREATED` event; the
+manifest is byte-identical to the template; `run-status.md` names the run.
 
 ### 4. `stage-inputs`
 
-States what is reviewed and why, through `code-location.sh run -B appsec-review-process/stage_artifacts.py`
-on the run from stage 3. The engagement is fixed so every SAT stages the same one; `SAT_BUSINESS_GOAL`,
-`SAT_PLATFORM`, `SAT_BUDGET` and `SAT_EXECUTION_ENVIRONMENT` override it for experiments.
+| Step | Reads | Writes | Validates |
+|---|---|---|---|
+| `stage`: `stage_artifacts.py` (fixed SAT engagement, `SAT_*` overrides) | `run-status.json` (this run, `READY`), the template manifest, the checkout | exactly the manifest, `run-status.json`, `run-status.md`, `processes/00-intake-recovery/status.json`, `data/publication.lock` | manifest: `orchestration_version` 1, run id, project, `executor_platform` posix, `read-source` only, no imports, no compile database, no supplied evidence, whole-tree scope |
 
-| Parameter | SAT value |
-|---|---|
-| project | the fixture name (`hello-autotools`) |
-| target | `fixtures/targets/<fixture>` (absolute host path) |
-| business goal | "System acceptance test: full review cycle on the fixture" |
-| platform | `Linux` |
-| budget | `probe` |
-| execution environment | `dagster-read-only-linux` |
-| permissions | default, `read-source` only |
+Then: target, goal, platform, budget and execution environment as staged; run still `READY`.
 
-Checks on `inputs/artifact-manifest.json` (the intake contract): `orchestration_version` 1, this
-run's id, the project, the resolved target path, goal, platforms, budget and execution environment
-as given; `executor_platform` `posix`; permissions `read-source` only; whole-tree scope (`**`, no
-excludes); no imports, no compile database, no supplied evidence (`pending-evidence`); and
-`run-status.json` still `READY`. The eight "Expected before pregather" notes are counted, not
-treated as errors: they name legacy pregather outputs that do not exist before anything has run.
-Evidence: the staged values, the note count and the manifest's SHA-256.
+### 5. `engagement-workflow`
 
-### 5. `intake`
+| Step | Reads | Writes | Validates |
+|---|---|---|---|
+| `launch`: `launch_job.py --job engagement_workflow --wait` | manifest (posix-staged, this run); **no accepted intake yet**; **no published workflow yet**; `workflow-plan.json`; the checkout | intake attempt files (`inputs`, `status`, `evidence/source.json`, `logs/*`, `outputs/intake.json`, `outputs/build-discovery.md`, `validation/{pre,post}/*`), intake pointers; for each of the 3 branches: `inputs`, `output`, `pre`, `post`, `status`, `logs/*`, pointers; the workflow's `accepted`, `status`, `attempts/*/result.json`, `config.json`; manifest, run state views, `data/events.jsonl`, launch request, Dagster op records | `intake.json` against `schemas/intake.schema.json`; intake pointer `OK` (contract `intake`); workflow `OK`, `PLANNED_NOT_EXECUTED`; 3 branch outputs with no findings and no target execution |
 
-The first Dagster job: `code-location.sh run -B appsec-review-process/launch_job.py --run-id <run>
---job phase1_intake --wait` (`launch_job.py` submits and monitors; the work runs in the host code
-location). The job must end `SUCCESS` within `SAT_JOB_TIMEOUT` (default 900 s); otherwise the stage
-fails and prints the Dagster run URL. Then, on disk:
+Then: Dagster `SUCCESS`; `workflow.inspect_status` `OK`; intake **executed by this Dagster run**
+(accepted pointer from it, `ACCEPTED` event, no `REUSE`), latest, every output file unchanged since
+acceptance; `intake.json` has the pin, the staged values, exactly the clone's file count, no
+findings, build `NOT_EXECUTED` with no commands attempted, partition and developer discovery
+`required`; the manifest records the pointer and the revision; the workflow joined exactly the three
+branches on this intake; discovery hand-offs `PLANNED_NOT_EXECUTED`; checkout unchanged.
 
-1. `data/jobs/00-intake/whole/accepted.json` is `OK`, was published by the Dagster run just launched,
-   and points at the latest attempt; the attempt has `outputs/intake.json`,
-   `outputs/build-discovery.md` and `status.json`, and every file still matches the hashes recorded
-   at acceptance.
-2. `intake.json`: `source_revision` is the pin from stage 1; business goal, platform, budget and
-   permissions are as staged; it fingerprinted exactly the clone's tracked files (the clone is clean,
-   so all files are tracked); `ready_to_collect` true, `pregather_complete` false, **no findings**;
-   `native.build_status` `NOT_EXECUTED` with no commands attempted (intake never runs target code);
-   partition discovery and developer project discovery are selected as `required`.
-3. The manifest's `accepted_intake` equals the pointer and its `source_identity` names the pin; the
-   run's `data/events.jsonl` has the `ACCEPTED` event for the attempt.
-4. The checkout is unchanged (same HEAD, still clean).
+### 6. `partition-discovery` and 7. `dev-project-discovery` (supplied-result gates)
 
-Evidence: Dagster run, launch and attempt ids, revision and source fingerprint, file count, detected
-families, native applicability and strategy, the selected jobs with their applicability, and the
-number of recorded limitations. On `hello-autotools` the families are `autotools`, `cpp` and
-`deployment` (the Dockerfile), so intake also marks DevOps and SRE discovery `required`.
+Three steps each: `handoff`, `supply`, `accept`.
 
-### 6. `partition-discovery`
+| Step | Reads | Writes | Validates |
+|---|---|---|---|
+| `handoff`: the gate with nothing supplied, **exit 1** | accepted intake (`OK`); the supplied result **absent** | `handoff.md`, `handoff.json`, `handoff/latest-handoff.json`, `handoff/handoffs/*.json`, `job.lock`; for the partition gate also a `BLOCKED` attempt (`inputs`, `result`, `status`) and its pointers; launch request | `handoff.json` names the job, the expected schema, the path; hand-off record has identity, composition, inputs, fingerprint, claim class; partition's `result.json` against `worker-result-envelope.schema.json` |
+| `supply`: `fixtures/supply_record.py` | the fixture record against its schema, at the pin; the staged manifest's target; the supplied result absent | exactly `supplied/result.json` | against its schema; byte-identical to the record |
+| `accept`: the gate again | the supplied result against its schema, at the pin; the upstream acceptance (intake for partition, the partition map for developer discovery) | partition: attempt `inputs`, `repository-partition-map.json`, `repository-partition-summary.md`, `result.json`, `status.json`, `supplied/result.json` and refreshed pointers/hand-off; developer: exactly `accepted`, `latest`, attempt `inputs`, `output`, `status` | outputs against their schemas (`repository-partition-map`, `project-discovery`, the worker envelope with `execution_status` `OK`) |
 
-`02-repository-partition-discovery` is a supplied-result gate: it validates an analysis written by a
-person or agent and never invents one. The stage proves both halves on the SAT's run:
+Then: Dagster `FAILURE` for `handoff` with nothing accepted, `SUCCESS` for `accept`;
+`discovery_gate.validate` accepts; accepted by the launched Dagster run; every source-file citation's
+SHA-256 recomputed from the checkout; partition: records' partitions, `docs` deferred; developer:
+accepted output = supplied file = fixture record, same revision as the accepted partition map, every
+command-plan entry has argv, purpose and authorization.
 
-1. **Nothing supplied.** `launch_job.py --job repository_partition_discovery --wait` must end
-   `FAILURE`; the gate must have written `handoff.md` and `handoff.json` naming `supplied/result.json`
-   and the `repository-partition-map` schema; nothing may be accepted. (Skipped, and recorded as
-   skipped, if a result is already supplied, e.g. when the stage is re-run after a later failure.)
-2. **Supply.** `fixtures/supply_record.py` installs the fixture's recorded analysis
-   (`fixtures/supplied/<fixture>/02-repository-partition-discovery.json`); it refuses a checkout at a
-   different commit or with local changes and never overwrites a different supplied result.
-3. **Accept.** The gate is launched again and must end `SUCCESS`; `discovery_gate.validate` (the
-   project's own validator) must accept the result; the accepted attempt must come from that Dagster
-   run; the map's `source_revision` is the checkout's HEAD; its partitions are the record's; the
-   `docs` partition is `deferred`; and every source-file citation's SHA-256 is re-computed from the
-   checkout and must match (independently of the gate).
+## Gaps the contracts have exposed
 
-Evidence: both Dagster runs, the attempt, each partition's disposition, the primary personas and the
-number of citations checked. On `hello-autotools`: `app`, `build`, `tests`, `vendored-cjson` review,
-`docs` deferred, 19 citations.
-
-### 7. `dev-project-discovery`
-
-How to build what the partition map found: project root, languages, manifests, candidate build image
-and a safe command plan, in which every command states its purpose, argv and authorization. Same
-three steps as stage 6 with `--job dev_project_discovery`: the gate with nothing supplied must end
-`FAILURE` with a hand-off naming `supplied/result.json` and the `project-discovery` schema;
-`supply_record.py` installs `fixtures/supplied/<fixture>/02-dev-project-discovery.json`; the gate
-again must end `SUCCESS` and `discovery_gate.validate` must accept it. The gate itself also requires
-the accepted partition map at the same revision and checks citation freshness.
-
-This gate is the older code path: its accepted record names the attempt and the Dagster run but
-records no output hashes (intake and the partition gate do). So the stage checks that the accepted
-`output.json`, the supplied file and the fixture record are identical, besides: accepted by the
-launched Dagster run, the latest attempt, `source_revision` equal to the checkout's HEAD and to the
-accepted partition map's, every source-file citation hash re-computed from the checkout, and a
-non-empty command plan whose entries each have argv, purpose and authorization.
-
-Evidence: both Dagster runs, the attempt, projects, languages, manifests, lockfiles, candidate build
-images, the command plan (argv and authorization), coverage-gap count, citations checked, and
-`output_hashes_in_accepted_record: false` as a recorded gap. On `hello-autotools`: one project at the
-root (C++, C), `configure.ac` and `Makefile.am`, no lockfile, `audit-buildenv-cpp:local`, and four
-commands, `autoreconf -fi`, `./configure`, `make`, `make check`, all `script-execution-required`;
-9 citations. This plan is what stage 9 (`build-configure`) will run.
-
-### 8. `engagement-workflow`
-
-`launch_job.py --job engagement_workflow --wait` must end `SUCCESS`. The workflow resolves
-configuration, runs atomic intake, three parallel preparation branches (`scope_check`,
-`native_plan_check`, `discovery_handoffs`) and a validated join. Then:
-
-1. `workflow.inspect_status` (the project's own check: the published workflow and every branch's
-   hashes and semantics) reports `OK`.
-2. `data/workflows/engagement/accepted.json` is `OK`, published by the launched Dagster run, with
-   exactly the three branches and `downstream_execution` `PLANNED_NOT_EXECUTED`.
-3. **Intake is reused, not redone:** the workflow's intake pointer is stage 5's accepted attempt, and
-   the run's `data/events.jsonl` has a `REUSE` event from this Dagster run.
-4. No branch claims findings or target execution; every discovery hand-off job is
-   `PLANNED_NOT_EXECUTED`.
-5. The accepted partition map and project discovery from stages 6 and 7 are untouched (same
-   attempts, still `OK`), and the checkout is unchanged.
-
-Evidence: Dagster run, reused intake attempt, branch attempts, path count, families, native build
-status, the planned jobs with their applicability, next job.
-
-Order note: the engagement flow (`engagement-start.md`) runs `engagement_workflow` as step 2, before
-the discovery gates (2b); the SAT runs `phase1_intake` first (stage 5), then the gates, then the
-workflow, which therefore proves reuse and non-interference. Whether the SAT should instead follow the
-documented order (workflow as stage 5) is open.
+| Gap | Where | Status |
+|---|---|---|
+| No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
+| The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
+| DevOps and SRE discovery required by intake (Dockerfile) but have no gate or Dagster job | job graph, `dagster_workflow.py` | Stages 8 and 9 |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Open |
+| Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |
