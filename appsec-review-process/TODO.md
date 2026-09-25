@@ -949,7 +949,7 @@ project-discovery path; (3) write the D04 continuation prompt and update
 `docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`'s status; (4) the
 `diagram drift` failure of `qualify_phase1.py --check-contracts` is still untriaged.
 
-### Phase 5e -- D04: automatic persona dispatch for sre-operations-topology -- BUILT, awaiting the live run
+### Phase 5e -- D04: automatic persona dispatch for sre-operations-topology -- BUILT and LIVE-CONFIRMED
 
 Branch `d04-sre-operations-topology-dispatch` (cut from `main` = `3f7b283`). Closes the last supplied
 discovery stage: with `--dispatch`, SAT stage 9 still installs the hand-authored fixture
@@ -1008,9 +1008,17 @@ the system.
 **Built 2026-09-25:** task prompt + template (`31ff6b5`); gate wiring (`AUTOMATIC_JOBS`, two-file
 upstream staging, `d04-sretopology`) and `_claims_from_operations_topology` (`bfe12c6`); 10 new tests,
 62 OK on William's Windows/Python 3.13; SAT stage 9 `--dispatch` branch and docs (SAT doc stage 9
-subsection and gaps table, engagement-start). **Not done:** the live run
-(`scripts/system-acceptance-test.sh --dispatch --through sre-operations-topology`, fresh SAT), then
-the flow-bringup log entry and the next continuation prompt (build lane).
+subsection and gaps table, engagement-start).
+
+**Live 2026-09-25:** fresh SAT `20260925T170552Z`, run `20260925T170620Z-c6a12e`, stages 1-9 PASS
+(hal5000 WSL). Stage 9 Dagster `6ea8a93b`, ~31 s: `hello-autotools` (`cli-batch`), 6 gaps, 9 notes
+(2 live follow-ups), 3 fresh citations. Two prompt-wording fixes found live first: D01 coverage path
+fields (`e915d92`) and the invoker envelope's nested-object rule (`97eeb3d`); see flow-bringup.md log.
+
+**Open (carried to the build-lane prompt):** D03 now also plans `docker run --rm hello-autotools
+World` [script-execution-required] -- running the built image, not only building it. Accepted by the
+SAT's checks (not a deploy/publish step), but it executes the target; William to decide whether the
+devops plan may include a run step or the prompt should limit it to build/inspect.
 
 ### Phase 5f -- build lane dependency restore: public registries for the POC; local mirror deferred -- TODO
 

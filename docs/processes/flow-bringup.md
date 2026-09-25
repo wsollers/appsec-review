@@ -251,6 +251,29 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-25 -- **D04 built and LIVE PASS: `02-sre-operations-topology` automatic persona dispatch;
+  SAT stages 1-9 all automatic for the first time.** Fresh SAT `20260925T170552Z`, run
+  `20260925T170620Z-c6a12e`, `--dispatch --through sre-operations-topology`, on hal5000 WSL
+  (Ubuntu-24.04, `~/projects/appsec-review`): **stages 1-9 PASS**, four real model calls. Stage 9
+  Dagster run `6ea8a93b`, ~31 s: one service `hello-autotools` (`cli-batch`, matches the fixture
+  answer key), 6 coverage gaps, 9 operational notes (2 `Live follow-up:`), 3 fresh citations, no
+  observed-state wording flagged. Stage 8 (D03) plan `docker build -t hello-autotools .`
+  [network-required] confirms the `3f7b283` tag wording live, plus a new `docker run --rm
+  hello-autotools World` [script-execution-required] entry (open question below). What was built:
+  task prompt `task-sre-operations-topology.md` and template fix (`31ff6b5`); `AUTOMATIC_JOBS`,
+  two-file upstream staging (devops record + partition map) and `_claims_from_operations_topology`
+  (`bfe12c6`); SAT stage 9 `--dispatch` (`4ac1e48`); task prompts renamed to `task-<name>.md` with an
+  enforcing test (`48c3445`). **Two live failures on the way, both prompt wording, both fixed:** (1)
+  SAT `20260925T163629Z` stage 6: the D01 persona wrote sentences into `coverage.inventory_scope` and
+  every `search_scope`; the validator rightly rejected them; the D01 prompt now says those fields hold
+  paths/globs only and reasons go in `budget_limitations` (`e915d92`). (2) Same SAT, stage 8: the D03
+  persona returned `project_inventory` as a JSON-encoded string inside the envelope
+  (`INVOKER_EXCEPTION`); the invoker's envelope instructions now name each key's kind and say JSON
+  files are nested objects, never strings (`97eeb3d`, applies to D01-D04). Environment on the way:
+  Docker Desktop's engine stuck (500 on `/version`; restart fixed it; native `docker.service` stayed
+  disabled); `claude` CLI installed in WSL (the Windows npm shim on the appended Windows PATH had
+  shadowed it: `Exec format error`). Triage aid: a rejected envelope leaves the raw response in the
+  code location's `/tmp/claude-cli-invoker-*/raw-response.json`.
 - 2026-09-25 -- **D03 built and LIVE PASS: `02-devops-project-discovery` automatic persona dispatch,
   first attempt.** Fresh SAT `20260925T044159Z`, run `20260925T044606Z-ee7f02`, `--dispatch --through
   devops-project-discovery`: **stages 1-8 PASS**, no failed attempt, three real model calls (D01

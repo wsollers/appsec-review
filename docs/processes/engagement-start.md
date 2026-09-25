@@ -50,7 +50,7 @@ live), has the same opt-in: its persona reads the target plus the accepted parti
 decides how the project is built (languages, buildenv image, the ordered safe command plan), keeping
 this job's existing accepted-record shape. The third gate, `02-devops-project-discovery` (D03,
 2026-09-25), has the same opt-in through the same shared code path, with its own task prompt. The
-fourth, `02-sre-operations-topology` (D04, built 2026-09-25, not yet run live), uses the same path
+fourth, `02-sre-operations-topology` (D04, live-confirmed 2026-09-25), uses the same path
 with its own schema and claim builder. SRE topology chains after the accepted devops record instead
 of the partition map directly (2026-09-24): in automatic mode its persona receives both the accepted
 devops record and the partition map as scope, and maps the declared services, ports and dependencies
