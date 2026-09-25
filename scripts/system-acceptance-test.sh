@@ -53,7 +53,7 @@ STAGES=(
   "dev-project-discovery|1|Gate: hand-off + supplied record (default), or --dispatch: automatic live persona dispatch (build tooling + safe command plan), schema+citation validated"
   "devops-project-discovery|1|Gate: DevOps project discovery (Dockerfile) supplied and accepted, or --dispatch: automatic live persona dispatch (CI/container/IaC/deploy units + safe command plan)"
   "sre-operations-topology|1|Gate: SRE operations topology supplied and accepted"
-  "build-index|0|02-build-index: deterministic, cited index of every build signal; nothing executed"
+  "build-index|1|02-build-index: deterministic, cited index of candidate units and build signals; nothing executed; units equal the answer key"
   "build-plan|0|02-build-plan: LLM build plan from the index only; validated; compared with the answer key"
   "build-resolution|0|02-build-resolution: image + trial configure/build via B13, <= build_resolution_attempts; image_build_<id> catalogued, lock written"
   "build-configure|0|02-build-configure (E01): replay the lock's configure in the catalogued image"
@@ -65,7 +65,7 @@ STAGES=(
   "sarif|0|critical_findings_sarif: accepted SARIF from verified findings"
   "report|0|10-synthesis-report: report generated"
 )
-SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology full_review"
+SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index full_review"
 SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
 SAT_BUSINESS_GOAL="${SAT_BUSINESS_GOAL:-System acceptance test: full review cycle on the fixture}"
 SAT_PLATFORM="${SAT_PLATFORM:-Linux}"
@@ -75,6 +75,7 @@ PARTITION_JOB=02-repository-partition-discovery
 DEV_JOB=02-dev-project-discovery
 DEVOPS_JOB=02-devops-project-discovery
 SRE_JOB=02-sre-operations-topology
+BUILD_INDEX_JOB=02-build-index
 
 die() { echo "SAT: $*" >&2; exit 1; }
 stage_ids() { for s in "${STAGES[@]}"; do echo "${s%%|*}"; done; }
@@ -1211,6 +1212,103 @@ print("sre-operations-topology: PASS  hand-off %s; accepted by Dagster %s: %s; %
   sys.argv[1], s["dagster_run_id"][:8], ", ".join("%s(%s)" % (x["id"], x["kind"]) for x in s["services"]), s["coverage_gaps"], s["citations_checked"]))
 if s.get("live_followups") is not None: print("  %d operational notes (%d live follow-ups)" % (s["operational_notes"], s["live_followups"]))
 if s.get("diff_note"): print("  " + s["diff_note"])' "$handoff_state"
+}
+
+# ---- stage: build-index --------------------------------------------------------------------------
+# 02-build-index (TODO Phase 5g item 2, ADR-0012 revision 1): the deterministic indexer, launched as
+# its standalone Dagster job. No model call and nothing executed, so the same checks hold with and
+# without --dispatch. Acceptance: the job's own validator (build_index.validate: envelope, pinned
+# upstreams, every cited hash/range/excerpt recomputed, byte-equal rebuild), the index names the
+# accepted upstream attempts, and the candidate units equal the fixture's answer key
+# (fixtures/supplied/<fixture>/02-build-index-units.json: unit ids, defining manifests, members; no
+# classes). The index is deterministic, so this comparison is pass/fail, unlike the persona stages.
+stage_build_index() {
+  require_run build-index
+  local key="$REPO/fixtures/supplied/$FIXTURE/02-build-index-units.json"
+  [[ -f "$key" ]] || die "build-index: no answer key $key for fixture $FIXTURE"
+
+  echo "-- accept: build_index must publish an accepted, validated index"
+  run_step build-index accept "$(contract build-index accept <<JSON
+{"inputs": [{"path": "{run}/data/jobs/00-intake/whole/accepted.json", "kind": "file", "equals": {"status": "OK"}},
+            {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}},
+            {"path": "{run}/data/jobs/$DEV_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}},
+            {"path": "{run}/data/jobs/$DEVOPS_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}},
+            {"path": "{run}/data/jobs/$BUILD_INDEX_JOB/accepted.json", "kind": "absent"},
+            {"path": "{run}/**/02-build-index-units.json", "kind": "absent"}],
+ "writes": {"required": ["{run}/data/jobs/$BUILD_INDEX_JOB/accepted.json", "{run}/data/jobs/$BUILD_INDEX_JOB/latest.json",
+                         "{run}/data/jobs/$BUILD_INDEX_JOB/attempts/*/build-index.json", "{run}/data/jobs/$BUILD_INDEX_JOB/attempts/*/build-index.md",
+                         "{run}/data/jobs/$BUILD_INDEX_JOB/attempts/*/inputs.json", "{run}/data/jobs/$BUILD_INDEX_JOB/attempts/*/status.json",
+                         "{run}/data/jobs/$BUILD_INDEX_JOB/attempts/*/result.json"],
+            "allowed": ["{run}/data/jobs/$BUILD_INDEX_JOB/job.lock", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$BUILD_INDEX_JOB/attempts/*/build-index.json", "schema": "build-index.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$BUILD_INDEX_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "deterministic_python", "job_id": "$BUILD_INDEX_JOB"}},
+             {"path": "{run}/data/jobs/$BUILD_INDEX_JOB/accepted.json", "equals": {"job": "$BUILD_INDEX_JOB"}}]}
+JSON
+)" launch build_index
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "build-index: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import build_index; build_index.validate(sys.argv[2]); print("validator OK")' \
+    "$REPO/appsec-review-process" "$RUN_ID" || die "build-index: build_index.validate rejected the accepted result"
+
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" "$key" "$PIN" <<'PY'
+import json, pathlib, sys
+rdir, dagster_id, key_path, pin = sys.argv[1:]
+rdir = pathlib.Path(rdir); jobs = rdir / 'data/jobs'; d = jobs / '02-build-index'
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+attempt = ptr.get('attempt_id')
+att = d / 'attempts' / str(attempt)
+if ptr.get('status') not in ('OK', 'OK_WITH_GAPS'): bad.append('accepted status is %r' % ptr.get('status'))
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != attempt: bad.append('accepted attempt is not the latest')
+status = json.loads((att / 'status.json').read_text())
+if status.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (status.get('dagster_run_id'), dagster_id))
+if status.get('target_execution') is not False: bad.append('status.json does not record target_execution false')
+index = json.loads((att / 'build-index.json').read_text())
+if index['source_revision'] != pin: bad.append('source_revision %s is not the pin' % index['source_revision'])
+# The index names exactly the accepted upstream attempts.
+upstream = {'00-intake': jobs / '00-intake/whole/accepted.json'}
+for job in ('02-repository-partition-discovery', '02-dev-project-discovery', '02-devops-project-discovery'):
+    upstream[job] = jobs / job / 'accepted.json'
+named = {i['job']: i['attempt_id'] for i in index['inputs']}
+for job, pointer in upstream.items():
+    want = json.loads(pointer.read_text()).get('attempt_id')
+    if named.get(job) != want: bad.append('index input %s names attempt %r, accepted is %r' % (job, named.get(job), want))
+if set(named) != set(upstream): bad.append('index inputs %s are not exactly the four upstreams' % sorted(named))
+# Answer key: unit ids, defining manifests and members (no classes: the index assigns none).
+key = json.loads(pathlib.Path(key_path).read_text())
+live = {u['unit_id']: {'defining_manifests': sorted(m['path'] for m in u['defining_manifests']),
+                       'members': sorted(m['path'] for m in u['members'])} for u in index['units']}
+want = {u['unit_id']: {'defining_manifests': sorted(u['defining_manifests']), 'members': sorted(u['members'])} for u in key['units']}
+if live != want: bad.append('units %s differ from the answer key %s' % (json.dumps(live, sort_keys=True), json.dumps(want, sort_keys=True)))
+if sorted(n['path'] for n in index['not_units']) != sorted(key.get('not_units', [])):
+    bad.append('not_units %s differ from the answer key %s' % (sorted(n['path'] for n in index['not_units']), sorted(key.get('not_units', []))))
+for u in index['units']:
+    if not u['signal_ids']: bad.append('unit %s cites no signal' % u['unit_id'])
+    for m in u['members']:
+        if not m['signal_ids']: bad.append('member %s of %s has no citing reference' % (m['path'], u['unit_id']))
+text = (att / 'build-index.json').read_text()
+for word in ('"class"', 'compiled-native', '"plan"', 'feasibility'):
+    if word in text: bad.append('the index carries %s: it must assign no class or plan' % word)
+if bad: sys.exit('; '.join(bad))
+t = index['truncated']
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'status': ptr.get('status'),
+                  'units': sorted(live), 'members': {k: v['members'] for k, v in live.items() if v['members']},
+                  'signals': len(index['signals']), 'not_units': len(index['not_units']),
+                  'kinds': sorted({s['kind'] for s in index['signals']}),
+                  'signals_omitted': t['signals_omitted'], 'excerpts_clipped': t['excerpts_clipped'],
+                  'excerpts_redacted': t['excerpts_redacted'],
+                  'cross_check': {c['job']: [(r['project_id'], r['root'], r['unit_ids']) for r in c['roots']] for c in index['cross_check']}}))
+PY
+)" || die "build-index: $summary"
+  checkout_unchanged build-index
+  record PASS build-index "$summary"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("build-index: PASS  %s by Dagster %s: units %s; members %s; %d signals (%s); %d not-units; omitted %d, clipped %d, redacted %d" % (
+  s["status"], s["dagster_run_id"][:8], ", ".join(s["units"]), s["members"] or "none", s["signals"], ", ".join(s["kinds"]),
+  s["not_units"], s["signals_omitted"], s["excerpts_clipped"], s["excerpts_redacted"]))
+print("  cross-check: %s" % s["cross_check"])'
 }
 
 # ---- driver --------------------------------------------------------------------------------------

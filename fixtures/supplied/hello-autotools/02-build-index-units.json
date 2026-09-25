@@ -1,0 +1,8 @@
+{
+  "_note": "SAT answer key for stage build-index (02-build-index), units only: no classes. The index is deterministic, so the SAT compares exactly. No job may read this file.",
+  "units": [
+    {"unit_id": "dir:.", "defining_manifests": ["Makefile.am", "configure.ac"], "members": ["vendor/cJSON-1.7.18"]},
+    {"unit_id": "file:Dockerfile", "defining_manifests": ["Dockerfile"], "members": []}
+  ],
+  "not_units": []
+}

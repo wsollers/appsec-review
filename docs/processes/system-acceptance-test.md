@@ -66,7 +66,7 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 7 | `dev-project-discovery` (gate; `--dispatch`: D02 live automatic persona dispatch instead) | yes |
 | 8 | `devops-project-discovery` (gate; the fixture's Dockerfile; `--dispatch`: D03 live automatic persona dispatch instead) | yes |
 | 9 | `sre-operations-topology` (gate; chains after devops discovery) | yes |
-| 10 | `build-index` (deterministic, cited build signals) | |
+| 10 | `build-index` (deterministic: candidate units and cited build signals; units equal the answer key) | yes |
 | 11 | `build-plan` (LLM build plan from the index; compared with the fixture answer key) | |
 | 12 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | |
 | 13 | `build-configure` (E01: replay the lock) | |
@@ -262,6 +262,24 @@ observed-state wording (`is running`, `is healthy`, `observed`, ...), and a diff
 (id, kind) against the fixture answer key. A result with no service is valid for the gate only when a
 coverage gap explains it (`claude_cli_invoker._claims_from_operations_topology`).
 
+### 10. `build-index` (deterministic; the same with or without `--dispatch`)
+
+One step, `accept`: `launch_job.py --job build_index`. Pre-contract: accepted intake, D01, D02 and D03
+(the graph's required edges); no `02-build-index` result yet; the answer key
+(`fixtures/supplied/<fixture>/02-build-index-units.json`) nowhere in the run. Post-contract: exactly
+the job's attempt files (`build-index.json`, `build-index.md`, `inputs.json`, `status.json`,
+`result.json`), the pointers and the job lock; `build-index.json` valid against
+`build-index.schema.json` at the pinned revision; a `deterministic_python` envelope.
+
+Checks that fail the stage: Dagster `SUCCESS`; `build_index.validate` (envelope, every pinned upstream
+re-hashed, every cited sha256, line range and excerpt recomputed from the checkout, byte-equal
+rebuild); accepted status `OK` or `OK_WITH_GAPS`, accepted by the launched Dagster run and latest;
+`target_execution: false`; the index names exactly the four accepted upstream attempts; units,
+defining manifests, members and not-units equal the answer key (for hello-autotools: `dir:.` with
+`configure.ac` and `Makefile.am` and member `vendor/cJSON-1.7.18`, and `file:Dockerfile`); every unit
+and member cites a signal; no class or plan anywhere; the checkout unchanged. The index is
+deterministic, so the answer-key comparison is pass/fail, unlike the persona stages.
+
 ## Gaps the contracts have exposed
 
 | Gap | Where | Status |
@@ -269,6 +287,6 @@ coverage gap explains it (`claude_cli_invoker._claims_from_operations_topology`)
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
 | SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Done 2026-09-24 (stage 8 devops, stage 9 sre topology both gated and passing live) |
-| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): closed, `--dispatch`, live PASS 2026-09-25 (first attempt; see flow-bringup.md log for the scope finding). Stage 8 (`02-devops-project-discovery`, D03): closed, `--dispatch`, live PASS 2026-09-25 (first attempt). Stage 9 (`02-sre-operations-topology`, D04): closed, `--dispatch`, live PASS 2026-09-25 (SAT `20260925T170552Z`, stages 1-9 all automatic). The build part (stages 10-12, build-resolution.md; per-unit classification, build-unit-classification.md): still open |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): closed, `--dispatch`, live PASS 2026-09-25 (first attempt; see flow-bringup.md log for the scope finding). Stage 8 (`02-devops-project-discovery`, D03): closed, `--dispatch`, live PASS 2026-09-25 (first attempt). Stage 9 (`02-sre-operations-topology`, D04): closed, `--dispatch`, live PASS 2026-09-25 (SAT `20260925T170552Z`, stages 1-9 all automatic). The build part: stage 10 (`build-index`, deterministic, no model) built 2026-09-25; stages 11-12 (build-resolution.md; per-unit classification, build-unit-classification.md) still open |
 | The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |
