@@ -54,10 +54,12 @@ Plan only commands an operator would invoke from outside against an in-scope dev
 example `docker build`, `docker compose build`, or `terraform validate`. Steps a definition runs
 internally belong in that unit's `commands` and in the plan entry's `side_effects`, not as separate
 entries. Each entry needs the exact `argv`, one token per element, with no shell strings and no
-placeholders (give a concrete value such as the project's own ID as an image tag); one `authorization`
-value from the schema's enum; concrete, named `side_effects`; and at least one evidence citation. If a
-required argument cannot be determined from the repository, omit the entry and record a coverage gap.
-Order entries as they must run.
+placeholders. Take an image name or tag from what the repository itself declares (a Makefile target, the
+README, a compose file, a CI workflow); where it declares none, use the target's own name (the `target`
+value in the accepted partition map), never a generic unit ID such as `container-image`. Each entry also
+needs one `authorization` value from the schema's enum; concrete, named `side_effects`; and at least one
+evidence citation. If a required argument cannot be determined from the repository, omit the entry and
+record a coverage gap. Order entries as they must run.
 
 Choose `authorization` by the strongest need: `network-required` if the command fetches anything (a base
 image pull, a package install in a build stage); otherwise `script-execution-required` if it runs

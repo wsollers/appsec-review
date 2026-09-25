@@ -931,9 +931,15 @@ stages 1-8 PASS on the first attempt (D03 Dagster run `f8b78648`, ~38 s). Result
   `test_claude_cli_invoker`) after the live run: **50 tests, all OK** (47 before D03).
 - **Accepted by William:** both D02 and D03 may read the Dockerfile; the duplicate `docker build`
   entries (`-t hello-autotools` vs `-t container-image`) are left for the build lane to reconcile.
-- **Open:** D03's image tag came from the project's own generic ID, which carries no meaning; reword the
-  prompt to prefer a tag the repository declares. The D02 scope wording (build manifests readable
-  wherever routed) is still not changed; low priority since the live D02 run behaved sensibly.
+- **Fixed 2026-09-25 (prompt wording only; not yet re-run live):** D03's image tag came from the
+  project's own generic ID (`container-image`), which carries no meaning. The prompt now says to take
+  an image name or tag from what the repository declares, else the target's own name (the `target`
+  value in the accepted partition map), never a generic unit ID. Confirm on the next fresh SAT
+  (`--dispatch --through devops-project-discovery`): the plan's `-t` value should be
+  `hello-autotools` or a repository-declared name, not `container-image`. No process or diagram
+  change (flow, gates, steps and order are unchanged).
+- **Open:** the D02 scope wording (build manifests readable wherever routed) is still not changed; low
+  priority since the live D02 run behaved sensibly.
 
 **Next:** (1) merge review for branch `d02-output-contract-fix` (Full-protocol contract fix
 `e17e23e`, D02 `9434b2b`, records, D03) -- not merged; (2) D04 (`02-sre-operations-topology`):

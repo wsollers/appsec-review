@@ -270,9 +270,13 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   `docker build -t container-image .` (`network-required`), 10 coverage gaps, 2 fresh citations.
   **Observed, accepted (William): both D02 and D03 read the Dockerfile and both plan a `docker
   build`**, with different tags (`hello-autotools` vs `container-image`); reading overlap is
-  wanted, and the duplicate is left for the build lane to reconcile. **Open:** D03 took the tag from
-  the project's own generic ID, which is meaningless; the prompt's wording ("such as the project's
-  own ID") should prefer a tag the repository declares. Also: the live partition names changed
+  wanted, and the duplicate is left for the build lane to reconcile. **Fixed the same day (prompt
+  wording only; not yet re-run live):** D03 took the tag from the project's own generic ID
+  (`container-image`), which is meaningless. The prompt's Safe Command Plan section now says to take
+  an image name or tag from what the repository declares (a Makefile target, the README, a compose
+  file, a CI workflow), else the target's own name (the `target` value in the accepted partition map),
+  never a generic unit ID. No process, gate, step or ordering changed, so the BPMN model and the
+  Mermaid charts are untouched. Also: the live partition names changed
   between runs (`autotools-build`/`container-build` on the earlier SAT, `autotools-build-system`/
   `container-build-dockerfile` here) while the routing shape held -- model output is not
   deterministic, which the structural (non-byte) acceptance is built for. `discovery_gate.py`
