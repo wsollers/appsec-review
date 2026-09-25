@@ -1,4 +1,4 @@
-"""Focused tests for D02/D03 (02-dev-project-discovery and 02-devops-project-discovery automatic persona dispatch, Phase 5c).
+"""Focused tests for D02-D04 (02-dev-project-discovery, 02-devops-project-discovery and 02-sre-operations-topology automatic persona dispatch, Phases 5c-5e).
 
 Nothing here calls a model: the live call is the SAT's ``--dispatch`` proof. These cover the parts
 that must hold regardless of what the model says -- claim building from ``project-inventory.json``,
@@ -8,6 +8,7 @@ behaviour with the persona dispatch itself stubbed.
 from __future__ import annotations
 
 import inspect
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -25,6 +26,7 @@ import persona_dispatch as pd
 
 JOB = discovery_gate.CONSUMER_JOB
 DEVOPS = discovery_gate.DEVOPS_JOB
+SRE = discovery_gate.SRE_JOB
 ALLOWED = ("evidence_gap", "project_inventory", "safe_command_plan")
 
 
@@ -48,6 +50,79 @@ def inventory(cites=("configure.ac",), plan_cites=("Makefile.am",)):
                                "evidence_citations": [citation(p, "1-3") for p in plan_cites]}],
         "coverage_gaps": [],
     }
+
+
+TOPOLOGY_ALLOWED = ("health_check_inventory", "live_state_followup", "observability_gap",
+                    "runtime_dependency_map", "service_inventory")
+
+
+def topology(service_cites=("Dockerfile",), dependency_cites=("compose.yaml",)):
+    return {
+        "schema": "appsec-review/operations-topology/1.0", "target": "t", "source_revision": "r",
+        "services": [
+            {"service_id": "web", "name": "web", "kind": "service", "image_ref": "web:local",
+             "ports": [{"port": 8080, "protocol": "tcp", "exposed": True}],
+             "dependencies": [{"target_service_id": "db", "kind": "network", "basis": "declared",
+                               "evidence_citations": [citation(p) for p in dependency_cites]}],
+             "evidence_citations": [citation(p) for p in service_cites], "confidence": "high"},
+            {"service_id": "db", "name": "db", "kind": "daemon", "image_ref": "postgres:16",
+             "ports": [], "dependencies": [], "evidence_citations": [citation("compose.yaml")],
+             "confidence": "medium"},
+        ],
+        "operational_notes": ["Live follow-up: is 8080 reachable from outside the host? (compose.yaml)"],
+        "coverage_gaps": [],
+    }
+
+
+class TopologyClaimBuilderTests(unittest.TestCase):
+    def setUp(self):
+        self.target = (item(pd.DEFAULT_READABLE_ROOT, "Dockerfile"),
+                       item(pd.DEFAULT_READABLE_ROOT, "compose.yaml"))
+
+    def test_one_claim_per_service_and_per_dependency_with_resolved_citations(self):
+        claims = cci._claims_from_operations_topology(topology(), self.target, TOPOLOGY_ALLOWED, "s.json")
+        self.assertEqual([(c["claim_id"], c["claim_class"]) for c in claims],
+                         [("service-web", "service_inventory"), ("dependency-web-0", "runtime_dependency_map"),
+                          ("service-db", "service_inventory")])
+        self.assertIn("8080/tcp published", claims[0]["statement"])
+        self.assertEqual(claims[1]["citations"][0]["path"], "compose.yaml")
+
+    def test_a_service_or_dependency_left_with_no_resolvable_citation_is_rejected(self):
+        with self.assertRaises(cci.InvokerOutputError):
+            cci._claims_from_operations_topology(topology(service_cites=("missing",)), self.target,
+                                                 TOPOLOGY_ALLOWED, "s.json")
+        with self.assertRaises(cci.InvokerOutputError):
+            cci._claims_from_operations_topology(topology(dependency_cites=("missing",)), self.target,
+                                                 TOPOLOGY_ALLOWED, "s.json")
+
+    def test_upstream_artifacts_are_never_citable_evidence(self):
+        with self.assertRaises(cci.InvokerOutputError):
+            cci._claims_from_operations_topology(
+                topology(service_cites=("devops-project-inventory.json",)), self.target,
+                TOPOLOGY_ALLOWED, "s.json")
+
+    def test_claim_class_outside_the_ceiling_is_rejected(self):
+        with self.assertRaises(cci.InvokerOutputError):
+            cci._claims_from_operations_topology(topology(), self.target, ("service_inventory",), "s.json")
+
+    def test_no_service_is_valid_only_when_a_coverage_gap_explains_it(self):
+        empty = topology()
+        empty["services"] = []
+        empty["coverage_gaps"] = ["no runnable unit is declared: the repository only builds a library"]
+        self.assertEqual(cci._claims_from_operations_topology(empty, self.target, TOPOLOGY_ALLOWED, "s.json"), [])
+        empty["coverage_gaps"] = []
+        with self.assertRaises(cci.InvokerOutputError):
+            cci._claims_from_operations_topology(empty, self.target, TOPOLOGY_ALLOWED, "s.json")
+
+    def test_the_topology_claim_classes_are_inside_the_registry_ceiling(self):
+        import persona_invocation as pi
+        registry = ROOT / "registry"
+        role = json.loads((registry / "roles" / "operations-topology-mapper.json").read_text(encoding="utf-8"))
+        profile = json.loads((registry / "tooling-profiles" / "static-ops-topology-inspector.json")
+                             .read_text(encoding="utf-8"))
+        allowed = pi.claim_ceiling(role, profile)["allowed"]
+        self.assertIn("service_inventory", allowed)
+        self.assertIn("runtime_dependency_map", allowed)
 
 
 class ClaimBuilderTests(unittest.TestCase):
@@ -98,9 +173,10 @@ class ClaimBuilderTests(unittest.TestCase):
     def test_citation_for_an_unpinned_path_returns_none_instead_of_raising(self):
         self.assertIsNone(cci._citation_for(None, "source_file", "x", None))
 
-    def test_both_result_schemas_have_a_claim_builder(self):
+    def test_every_automatic_result_schema_has_a_claim_builder(self):
         self.assertIn("repository-partition-map.schema.json", cci._CLAIM_BUILDERS)
         self.assertIn("project-discovery.schema.json", cci._CLAIM_BUILDERS)
+        self.assertIn("operations-topology.schema.json", cci._CLAIM_BUILDERS)
 
 
 class PromptGroupingTests(unittest.TestCase):
@@ -262,10 +338,86 @@ class GateTests(unittest.TestCase):
         # The dev job in the same run is untouched: no accepted record appears for it.
         self.assertFalse((self.base / "accepted.json").exists())
 
-    def test_only_the_project_discovery_jobs_have_an_automatic_path(self):
+    def test_only_the_chained_discovery_jobs_have_an_automatic_path(self):
         self.assertEqual(set(discovery_gate.AUTOMATIC_PROJECT_JOBS), {JOB, DEVOPS})
+        self.assertEqual(set(discovery_gate.AUTOMATIC_JOBS), {JOB, DEVOPS, SRE})
         with self.assertRaises(state.Blocked):
-            discovery_gate._run_project_automatic(self.run_id, "dagster-a", "02-sre-operations-topology")
+            discovery_gate._run_project_automatic(self.run_id, "dagster-a", "02-build-index")
+
+    def test_every_automatic_job_spec_matches_its_output_contract(self):
+        registry = ROOT / "registry"
+        for job, spec in discovery_gate.AUTOMATIC_JOBS.items():
+            with self.subTest(job=job):
+                template = json.loads((registry / "job-templates" / f"{job}.json").read_text(encoding="utf-8"))
+                contract_id = template["composition"]["output_contract_id"]
+                contract = json.loads((registry / "output-contracts" / f"{contract_id}.json")
+                                      .read_text(encoding="utf-8"))
+                self.assertEqual(contract["result_schema"]["artifact"], spec["result"])
+                self.assertEqual(contract["result_schema"]["schema_file"], discovery_gate.SCHEMAS[job])
+                self.assertEqual(set(contract["required_files"]), {spec["result"], spec["summary"], "status.json"})
+                for upstream in spec["upstreams"]:
+                    self.assertIn(upstream, discovery_gate.UPSTREAM_STAGED_NAME)
+        self.assertEqual(discovery_gate.AUTOMATIC_JOBS[SRE]["upstreams"], (DEVOPS, discovery_gate.ADOPTED_JOB))
+        self.assertEqual(discovery_gate.UPSTREAM_JOB[SRE], DEVOPS)
+
+    def test_sre_topology_takes_the_same_path_with_its_own_identity_and_summary(self):
+        ids = {spec["persona_job_id"] for spec in discovery_gate.AUTOMATIC_JOBS.values()}
+        self.assertEqual(len(ids | {discovery_gate.PERSONA_JOB_ID}), 4)
+        self.assertEqual(discovery_gate.AUTOMATIC_JOBS[SRE]["persona_job_id"], "d04-sretopology")
+        discovery_gate.set_dispatch_mode(self.run_id, SRE, "automatic")
+        base = discovery_gate.root(self.run_id, SRE)
+        base.mkdir(parents=True)
+        value = {"schema": "appsec-review/operations-topology/1.0", "target": "t", "source_revision": "r",
+                 "services": [], "operational_notes": [], "coverage_gaps": ["no runnable unit declared"]}
+        self.record["upstream"] = {"jobs": {DEVOPS: "a", discovery_gate.ADOPTED_JOB: "b"},
+                                   "devops-project-inventory.json": "1" * 64,
+                                   "repository-partition-map.json": "2" * 64}
+        seen = []
+
+        def dispatch(run_id, base_dir, record):
+            seen.append((base_dir.name, record["job"]))
+            return dict(value), "# Topology\n", {**self.facts, "persona_job_id": "d04-sretopology"}
+
+        accepted = self.run_gate(dispatch, job=SRE)
+        self.assertEqual(seen, [(SRE, SRE)])
+        attempt = base / "attempts" / accepted["attempt_id"]
+        self.assertEqual(state.read_json(attempt / "output.json"), value)
+        self.assertTrue((attempt / "operations-topology-summary.md").is_file())
+        self.assertFalse((attempt / "project-discovery-summary.md").exists())
+        self.assertEqual(discovery_gate.validate(self.run_id, SRE), attempt)
+
+    def test_upstream_record_keeps_the_one_upstream_shape_and_records_every_upstream_for_d04(self):
+        files = {}
+        for name, text in (("map.json", '{"target": "t"}\n'), ("devops.json", '{"projects": []}\n')):
+            files[name] = self.owner / name
+            files[name].write_text(text, encoding="utf-8")
+        paths = {discovery_gate.ADOPTED_JOB: (self.owner / "att-map", files["map.json"]),
+                 DEVOPS: (self.owner / "att-devops", files["devops.json"])}
+        with patch.object(discovery_gate, "_accepted_upstream_path",
+                          side_effect=lambda run_id, job, upstream: paths[upstream]):
+            one = discovery_gate._upstream_record(self.run_id, JOB)
+            two = discovery_gate._upstream_record(self.run_id, SRE)
+        self.assertEqual(one, {"job": discovery_gate.ADOPTED_JOB, "attempt_id": "att-map",
+                               "repository-partition-map.json": state.file_hash(files["map.json"])})
+        self.assertEqual(two, {"jobs": {DEVOPS: "att-devops", discovery_gate.ADOPTED_JOB: "att-map"},
+                               "devops-project-inventory.json": state.file_hash(files["devops.json"]),
+                               "repository-partition-map.json": state.file_hash(files["map.json"])})
+        self.assertEqual(set(discovery_gate._staged_upstream_files(two)),
+                         {"devops-project-inventory.json", "repository-partition-map.json"})
+
+    def test_two_upstream_files_stage_together_and_a_stray_file_is_rejected(self):
+        sources = {}
+        for name, text in (("repository-partition-map.json", '{"target": "t"}\n'),
+                           ("devops-project-inventory.json", '{"projects": []}\n')):
+            path = self.owner / ("src-" + name)
+            path.write_text(text, encoding="utf-8")
+            sources[name] = (path, state.file_hash(path))
+        directory = discovery_gate._stage_upstream_files(self.base, sources)
+        self.assertEqual({p.name for p in directory.iterdir()}, set(sources))
+        self.assertEqual(directory, discovery_gate._stage_upstream_files(self.base, sources))
+        (directory / "extra.json").write_text("{}\n", encoding="utf-8")
+        with self.assertRaises(state.Blocked):
+            discovery_gate._stage_upstream_files(self.base, sources)
 
     def test_upstream_staging_is_content_addressed_and_detects_tampering(self):
         source = self.owner / "map.json"
