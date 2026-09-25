@@ -72,6 +72,10 @@ around it. The object has exactly these keys, each holding the file's full conte
 
 {envelope_keys}
 
+A key marked "JSON object" holds that file's content as a nested JSON object, written directly as
+the key's value. It is never a string, and never a string containing JSON: `"key": {{...}}`, not
+`"key": "{{...}}"`. A key marked "markdown string" holds the file's markdown text as one JSON string.
+
 Every JSON-valued key's content is validated against its published schema before anything is
 accepted; a value that does not validate, an extra or missing key, or any text outside the single
 JSON object causes this entire invocation to be rejected and recorded as failed. Produce exactly
@@ -205,7 +209,9 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
     response-envelope instructions."""
     outer = package.prompt.decode("utf-8")
     fields = _envelope_fields(output_contract)
-    envelope_keys = "\n".join(f'- `"{key}"`: {filename}' for filename, key, _kind in fields)
+    envelope_keys = "\n".join(
+        f'- `"{key}"`: {filename} ({"JSON object" if kind == "json" else "markdown string"})'
+        for filename, key, kind in fields)
     # Every JSON-valued required file gets its literal schema inlined. Today's output contracts
     # declare exactly one JSON artifact (result_schema.artifact/schema_file); this loop still
     # covers every kind=="json" field by filename match rather than assuming there is only one,
