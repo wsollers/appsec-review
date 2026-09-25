@@ -864,8 +864,18 @@ job catalog regenerated. Baseline for the branch: `qualify_phase1.py --check-con
 `diagram drift` on untouched `origin/main` (`08f84ef`) too -- pre-existing and unrelated
 (`docs/design-parity/job-graph.mmd` vs the rendered graph); not addressed in this batch.
 
-**Automatic-dispatch wiring: BUILT 2026-09-25, structurally verified only (47 focused tests, `bash
--n`, design parity, catalog), NOT yet run live.** Same branch.
+**Automatic-dispatch wiring: BUILT 2026-09-25 and LIVE-CONFIRMED the same night (first attempt).**
+Same branch. 47 focused tests, `bash -n`, design parity, catalog, then a real run on
+`zarathustra`: fresh SAT `20260925T032354Z` (UTC), run `20260925T032715Z-440faf`, `--dispatch
+--through dev-project-discovery` -- stages 1-7 PASS, stage 7's Dagster run `29545922`, ~65 s, 15
+citations fresh, validator OK. The model identified `hello-autotools` (C++/C, autotools), image
+`audit-buildenv-cpp:local`, and planned `autoreconf -fi`, `./configure`, `make`, `make check`
+(`script-execution-required`) plus `docker build -t hello-autotools .` (`network-required`).
+**Open finding (William's call):** live D01 routed the build manifests and the Dockerfile to
+`devops-engineer` partitions, but this job's task prompt scopes work to `developer-engineer`
+partitions -- D02 planned from those files anyway. Decide the scope wording (proposal: scope decides
+which code gets a project; build manifests are readable wherever routed) and whether the
+devops-routed `docker build` belongs in this plan or in D03.
 
 - `persona_dispatch.build_request(upstream_root=...)`: optional second readable root
   (`UPSTREAM_ROOT_ID = "upstream-artifacts"`) pinning an upstream job's accepted artifacts;
@@ -893,11 +903,12 @@ job catalog regenerated. Baseline for the branch: `qualify_phase1.py --check-con
   diagram label unchanged (text-level change inside the existing box); a target with no buildable
   project is rejected as "nothing to claim" (same stance as D01 for zero partitions).
 
-**Next:** live-confirm on a fresh SAT: `scripts/system-acceptance-test.sh --dispatch --through
-dev-project-discovery` (stage 6 dispatches too, then stage 7). Expect failures (D01 took five live
-attempts); check lesson 5 (SAT contract gaps) before suspecting a production bug, and turn on
-`invocation.save_llm_transcripts` to read what the model actually said. Continuation prompt:
-`docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`.
+**Next:** (1) decide the scope-wording finding above; (2) merge review for branch
+`d02-output-contract-fix` (Full-protocol contract fix `e17e23e` + D02 `9434b2b` + this record) -- not
+merged; (3) D03 (`02-devops-project-discovery`) and D04 (`02-sre-operations-topology`) are now a
+mechanical repeat: each needs a task prompt and the same dispatch wiring (generalize
+`_run_dev_automatic` rather than copy it a third time); (4) write the D03/D04 continuation prompt and
+update `docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`'s status.
 
 ### Phase 6 -- build and compile database (E01, E02)
 

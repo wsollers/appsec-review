@@ -251,9 +251,28 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-25 -- **D02 LIVE PASS: `02-dev-project-discovery` automatic persona dispatch, first
+  attempt.** Native Linux host `zarathustra` (not WSL), fresh SAT `20260925T032354Z`, run
+  `20260925T032715Z-440faf`, `scripts/system-acceptance-test.sh --dispatch --through
+  dev-project-discovery`: **stages 1-7 PASS**, no failed attempt. Stage 6 (D01 dispatch) took about a
+  minute; stage 7 (D02, Dagster run `29545922`) about 65 seconds. The model, given the target
+  checkout plus the accepted partition map, identified project `hello-autotools` (C++/C,
+  `configure.ac`, `Makefile.am`), chose buildenv image `audit-buildenv-cpp:local`, and proposed the
+  plan `autoreconf -fi`, `./configure`, `make`, `make check` (all `script-execution-required`) plus
+  `docker build -t hello-autotools .` (`network-required`); 15 citations recomputed fresh against the
+  checkout; `discovery_gate.validate` accepted. **Finding, not a failure:** the live D01 map routed
+  `configure.ac`/`Makefile.am` and the `Dockerfile` to `devops-engineer` partitions (`autotools-build`,
+  `container-build`), while D02's task prompt scopes work to `developer-engineer` partitions -- yet
+  D02 planned from exactly those files (and added the Dockerfile's `docker build`, which is not in the
+  fixture answer key). The output is sensible, but the prompt's scope statement and the model's
+  behavior disagree; the scope wording should be decided deliberately (build manifests are readable
+  wherever they are routed; scope decides which code gets a project) rather than left to model
+  judgment. Open, needs William's call, as does whether a devops-routed `docker build` belongs in the
+  developer plan or is D03's. The recorded `diff_note` (live plan vs answer key) is in the SAT
+  record's stage-7 entry.
 - 2026-09-25 -- **D02 built (Phase 5c): `02-dev-project-discovery` automatic persona dispatch.**
-  Structurally verified only (47 focused tests, `bash -n`, design parity, catalog); **not yet run
-  live**. Two commits on branch `d02-output-contract-fix`. (1) `e17e23e`, Full-protocol scope: dropped
+  Structurally verified (47 focused tests, `bash -n`, design parity, catalog); live-confirmed the
+  same night, see the entry above. Two commits on branch `d02-output-contract-fix`. (1) `e17e23e`, Full-protocol scope: dropped
   `safe-command-plan.json` from the `project-discovery` output contract's `required_files` and the
   job template's `outputs.files` -- the plan is a field inside `project-inventory.json`, and the
   extra required file would have made `claude_cli_invoker.build_prompt_text` raise on the first live
