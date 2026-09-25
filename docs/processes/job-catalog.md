@@ -9,7 +9,7 @@ output contracts, lane `config.md` files, and the hand-maintained `docs/processe
 Regenerate after any process change: `python3 docs/processes/job_catalog.py`;
 `--check` fails when this file is stale or a reference is broken.
 
-Covers 5 process models, 44 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 51 lifecycle jobs and 96 artifacts.
+Covers 5 process models, 50 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 51 lifecycle jobs and 102 artifacts.
 
 How to read the rollups: **Enters** is what the model or group consumes but does not produce itself
 (its inputs); **Leaves** is what it produces that nothing inside consumes (its results); **Passes**
@@ -35,9 +35,9 @@ From checking out the system under test to Dagster accepting (queuing) the engag
 
 | Rolled up for the model | Artifacts |
 |---|---|
-| Enters | [`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin)<br>[`job-definitions`](#a-job-definitions)<br>[`dispatch-mode`](#a-dispatch-mode) |
-| Leaves | [`code-location-venv`](#a-code-location-venv)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`launch-request`](#a-launch-request)<br>[`dagster-run-queued`](#a-dagster-run-queued) |
-| Passes between steps | [`sut-checkout`](#a-sut-checkout)<br>[`docker-engine`](#a-docker-engine)<br>[`compose-env`](#a-compose-env)<br>[`host-dirs`](#a-host-dirs)<br>[`dagster-services`](#a-dagster-services)<br>[`code-location`](#a-code-location)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`engagement-definition`](#a-engagement-definition)<br>[`permission-grant`](#a-permission-grant)<br>[`run-dir`](#a-run-dir)<br>[`artifact-manifest`](#a-artifact-manifest)<br>[`resolved-config`](#a-resolved-config)<br>[`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff)<br>[`partition-record`](#a-partition-record)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dev-handoff`](#a-dev-handoff)<br>[`dev-record`](#a-dev-record)<br>[`dev-supplied`](#a-dev-supplied)<br>[`launch-intent`](#a-launch-intent) |
+| Enters | [`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin)<br>[`job-definitions`](#a-job-definitions) |
+| Leaves | [`code-location-venv`](#a-code-location-venv)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`launch-request`](#a-launch-request)<br>[`dagster-run-queued`](#a-dagster-run-queued) |
+| Passes between steps | [`sut-checkout`](#a-sut-checkout)<br>[`docker-engine`](#a-docker-engine)<br>[`compose-env`](#a-compose-env)<br>[`host-dirs`](#a-host-dirs)<br>[`dagster-services`](#a-dagster-services)<br>[`code-location`](#a-code-location)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`engagement-definition`](#a-engagement-definition)<br>[`permission-grant`](#a-permission-grant)<br>[`run-dir`](#a-run-dir)<br>[`artifact-manifest`](#a-artifact-manifest)<br>[`resolved-config`](#a-resolved-config)<br>[`00-intake`](#a-job-00-intake)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff)<br>[`partition-record`](#a-partition-record)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dev-handoff`](#a-dev-handoff)<br>[`dev-record`](#a-dev-record)<br>[`dev-supplied`](#a-dev-supplied)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`devops-handoff`](#a-devops-handoff)<br>[`devops-record`](#a-devops-record)<br>[`devops-supplied`](#a-devops-supplied)<br>[`sre-handoff`](#a-sre-handoff)<br>[`sre-record`](#a-sre-record)<br>[`sre-supplied`](#a-sre-supplied)<br>[`launch-intent`](#a-launch-intent) |
 
 ### Pre-submission process: 1. Check out system under test
 
@@ -75,13 +75,20 @@ From checking out the system under test to Dagster accepting (queuing) the engag
 |---|---|---|---|
 | [phase1_intake (Dagster job)](#step-phase1-intake) | Dagster job | [`artifact-manifest`](#a-artifact-manifest)<br>[`loaded-job-list`](#a-loaded-job-list) | [`resolved-config`](#a-resolved-config)<br>[`00-intake`](#a-job-00-intake) |
 | [Correct inputs after an intake failure](#step-intake-fix) | human task | [`resolved-config`](#a-resolved-config) | [`artifact-manifest`](#a-artifact-manifest) |
+| [discovery_gate.set_dispatch_mode: automatic or supplied](#step-set-dispatch-mode) | operator script | [`00-intake`](#a-job-00-intake) | [`dispatch-mode`](#a-dispatch-mode) |
 | [repository_partition_discovery (Dagster job)](#step-repository-partition-discovery) | Dagster job | [`00-intake`](#a-job-00-intake)<br>[`partition-supplied`](#a-partition-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`partition-handoff`](#a-partition-handoff) |
 | [Write the partition map](#step-partition-analysis) | human task | [`partition-handoff`](#a-partition-handoff)<br>[`sut-checkout`](#a-sut-checkout) | [`partition-record`](#a-partition-record) |
 | [Install the supplied partition map](#step-supply-partition) | operator script | [`partition-record`](#a-partition-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | [`partition-supplied`](#a-partition-supplied) |
 | [dev_project_discovery (Dagster job)](#step-dev-project-discovery) | Dagster job | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`dev-supplied`](#a-dev-supplied)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`dev-handoff`](#a-dev-handoff) |
 | [Write the project discovery](#step-dev-analysis) | human task | [`dev-handoff`](#a-dev-handoff)<br>[`sut-checkout`](#a-sut-checkout)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery) | [`dev-record`](#a-dev-record) |
 | [Install the supplied project discovery](#step-supply-dev) | operator script | [`dev-record`](#a-dev-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | [`dev-supplied`](#a-dev-supplied) |
-| **Group rollup** | | **Enters:** [`loaded-job-list`](#a-loaded-job-list)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | **Leaves:** [`02-dev-project-discovery`](#a-job-02-dev-project-discovery) |
+| [devops_project_discovery (Dagster job)](#step-devops-project-discovery) | Dagster job | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`devops-supplied`](#a-devops-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`devops-handoff`](#a-devops-handoff) |
+| [Write the devops discovery](#step-devops-analysis) | human task | [`devops-handoff`](#a-devops-handoff)<br>[`sut-checkout`](#a-sut-checkout)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery) | [`devops-record`](#a-devops-record) |
+| [Install the supplied devops discovery](#step-supply-devops) | operator script | [`devops-record`](#a-devops-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | [`devops-supplied`](#a-devops-supplied) |
+| [sre_operations_topology (Dagster job)](#step-sre-operations-topology) | Dagster job | [`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`sre-supplied`](#a-sre-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`sre-handoff`](#a-sre-handoff) |
+| [Write the operations topology](#step-sre-analysis) | human task | [`sre-handoff`](#a-sre-handoff)<br>[`sut-checkout`](#a-sut-checkout)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery) | [`sre-record`](#a-sre-record) |
+| [Install the supplied operations topology](#step-supply-sre) | operator script | [`sre-record`](#a-sre-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | [`sre-supplied`](#a-sre-supplied) |
+| **Group rollup** | | **Enters:** [`loaded-job-list`](#a-loaded-job-list)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) | **Leaves:** [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-sre-operations-topology`](#a-job-02-sre-operations-topology) |
 
 ### Pre-submission process: 5. Submit engagement job to Dagster
 
@@ -579,11 +586,11 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | | |
 |---|---|
 | Type | operator script |
-| Runs | `code-location.sh run -B -c "discovery_gate.set_dispatch_mode(<code_location>, <run_id>, '02-repository-partition-discovery', 'automatic')"` |
+| Runs | `code-location.sh run -B -c "discovery_gate.set_dispatch_mode(<run_id>, <job>, 'automatic')" (once per discovery gate)` |
 | BPMN elements | `sp4_mode` |
 | Consumes | [`00-intake`](#a-job-00-intake) |
 | Produces | [`dispatch-mode`](#a-dispatch-mode) |
-| Notes | Opt-in only, per run and per job; unset defaults to supplied. Not called by any Full-protocol file -- a human or the fast-lane SAT sets this before launching the job so dagster_workflow.py never has to know. D01, live-confirmed 2026-09-24. |
+| Notes | Opt-in only, per run and per job; unset defaults to supplied. Not called by any Full-protocol file -- a human or the fast-lane SAT sets this before launching the job so dagster_workflow.py never has to know. All four discovery gates support it: D01 live-confirmed 2026-09-24, D02-D04 2026-09-25. |
 
 <a id="step-repository-partition-discovery"></a>
 
@@ -663,6 +670,86 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | BPMN elements | `sp4_dsupply` |
 | Consumes | [`dev-record`](#a-dev-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) |
 | Produces | [`dev-supplied`](#a-dev-supplied) |
+| Notes | Same checks as supply-partition. |
+
+<a id="step-devops-project-discovery"></a>
+
+### devops_project_discovery (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job devops_project_discovery --wait` |
+| Lifecycle job(s) | [`02-devops-project-discovery`](#job-02-devops-project-discovery) |
+| BPMN elements | `sp4_ogate` |
+| Consumes | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`devops-supplied`](#a-devops-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) |
+| Produces | [`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`devops-handoff`](#a-devops-handoff) |
+| Notes | Same gate pattern; requires the accepted partition map at the same source revision. Automatic mode (D03, live 2026-09-25): persona d03-devops, task-devops-project-discovery.md. |
+
+<a id="step-devops-analysis"></a>
+
+### Write the devops discovery
+
+| | |
+|---|---|
+| Type | human task |
+| Runs | `analyst or agent (fixtures: tracked record)` |
+| BPMN elements | `sp4_oanalyze` |
+| Consumes | [`devops-handoff`](#a-devops-handoff)<br>[`sut-checkout`](#a-sut-checkout)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery) |
+| Produces | [`devops-record`](#a-devops-record) |
+| Notes | Container, CI/CD, IaC, packaging and deploy units; safe command plan (no native build tool, no deploy/publish step). |
+
+<a id="step-supply-devops"></a>
+
+### Install the supplied devops discovery
+
+| | |
+|---|---|
+| Type | operator script |
+| Runs | `fixtures/supply_record.py --run-id <run_id> --job 02-devops-project-discovery` |
+| BPMN elements | `sp4_osupply` |
+| Consumes | [`devops-record`](#a-devops-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) |
+| Produces | [`devops-supplied`](#a-devops-supplied) |
+| Notes | Same checks as supply-partition. |
+
+<a id="step-sre-operations-topology"></a>
+
+### sre_operations_topology (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job sre_operations_topology --wait` |
+| Lifecycle job(s) | [`02-sre-operations-topology`](#job-02-sre-operations-topology) |
+| BPMN elements | `sp4_sgate` |
+| Consumes | [`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`sre-supplied`](#a-sre-supplied)<br>[`dispatch-mode`](#a-dispatch-mode)<br>[`loaded-job-list`](#a-loaded-job-list) |
+| Produces | [`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`sre-handoff`](#a-sre-handoff) |
+| Notes | Same gate pattern; requires the accepted devops record at the same source revision. Automatic mode (D04, live 2026-09-25): persona d04-sretopology, task-sre-operations-topology.md; the devops record and the partition map are staged together as scope, never evidence. |
+
+<a id="step-sre-analysis"></a>
+
+### Write the operations topology
+
+| | |
+|---|---|
+| Type | human task |
+| Runs | `analyst or agent (fixtures: tracked record)` |
+| BPMN elements | `sp4_sanalyze` |
+| Consumes | [`sre-handoff`](#a-sre-handoff)<br>[`sut-checkout`](#a-sut-checkout)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery) |
+| Produces | [`sre-record`](#a-sre-record) |
+| Notes | Declared services, image, ports, dependencies; controls as configured/tested, never observed; live follow-ups in operational_notes. |
+
+<a id="step-supply-sre"></a>
+
+### Install the supplied operations topology
+
+| | |
+|---|---|
+| Type | operator script |
+| Runs | `fixtures/supply_record.py --run-id <run_id> --job 02-sre-operations-topology` |
+| BPMN elements | `sp4_ssupply` |
+| Consumes | [`sre-record`](#a-sre-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir) |
+| Produces | [`sre-supplied`](#a-sre-supplied) |
 | Notes | Same checks as supply-partition. |
 
 <a id="step-launch-job"></a>
@@ -1055,7 +1142,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/02-repository-partition-discovery.json) | target repository path<br>repository file inventory including hidden CI/configuration paths<br>language build environment image catalog<br>existing project inventory *(optional)*<br>static evidence summary *(optional)*<br>API definitions *(optional)*<br>IaC and deployment manifests *(optional)*<br>CI/CD workflows *(optional)*<br>runbooks and service catalog *(optional)*<br>existing component map *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-repository-partition-discovery/` |
 | Output files (registry/output-contracts/repository-partition-map.json) | repository-partition-map.json<br>repository-partition-summary.md<br>status.json |
-| Consumed by | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) |
+| Consumed by | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`devops-analysis`](#step-devops-analysis)<br>[`sre_operations_topology`](#step-sre-operations-topology)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) |
 | Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
 | Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |
 
@@ -1095,7 +1182,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/02-devops-project-discovery.json) | target repository path<br>CI/CD and deployment artifact inventory<br>Dockerfiles *(optional)*<br>IaC *(optional)*<br>environment templates *(optional)*<br>build logs *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-devops-project-discovery/` |
 | Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>status.json |
-| Consumed by | [`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
+| Consumed by | [`sre_operations_topology`](#step-sre-operations-topology)<br>[`sre-analysis`](#step-sre-analysis)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
 | Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |
 
@@ -1948,10 +2035,10 @@ job. Producers and consumers are computed from the catalog.
 
 | Artifact | Kind | Path | Produced by | Consumed by |
 |---|---|---|---|---|
-| <a id="a-dispatch-mode"></a>`dispatch-mode` | file | runs/<run_id>/data/dispatch-mode.json | [`set-dispatch-mode`](#step-set-dispatch-mode) | [`repository_partition_discovery`](#step-repository-partition-discovery) |
+| <a id="a-dispatch-mode"></a>`dispatch-mode` | file | runs/<run_id>/data/dispatch-mode.json | [`set-dispatch-mode`](#step-set-dispatch-mode) | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`sre_operations_topology`](#step-sre-operations-topology) |
 | <a id="a-sut-origin"></a>`sut-origin` | record | remote Git origin of the system under test | -- | [`populate-targets`](#step-populate-targets) |
 | <a id="a-sut-pin"></a>`sut-pin` | record | fixtures/populate-targets.sh (origin URL + commit) | -- | [`populate-targets`](#step-populate-targets) |
-| <a id="a-sut-checkout"></a>`sut-checkout` | file | fixtures/targets/<project>/ (host path) | [`populate-targets`](#step-populate-targets) | [`stage-artifacts`](#step-stage-artifacts)<br>[`partition-analysis`](#step-partition-analysis)<br>[`supply-partition`](#step-supply-partition)<br>[`dev-analysis`](#step-dev-analysis)<br>[`supply-dev`](#step-supply-dev)<br>[`build-index`](#step-build-index)<br>[`legacy-pregather`](#step-legacy-pregather) |
+| <a id="a-sut-checkout"></a>`sut-checkout` | file | fixtures/targets/<project>/ (host path) | [`populate-targets`](#step-populate-targets) | [`stage-artifacts`](#step-stage-artifacts)<br>[`partition-analysis`](#step-partition-analysis)<br>[`supply-partition`](#step-supply-partition)<br>[`dev-analysis`](#step-dev-analysis)<br>[`supply-dev`](#step-supply-dev)<br>[`devops-analysis`](#step-devops-analysis)<br>[`supply-devops`](#step-supply-devops)<br>[`sre-analysis`](#step-sre-analysis)<br>[`supply-sre`](#step-supply-sre)<br>[`build-index`](#step-build-index)<br>[`legacy-pregather`](#step-legacy-pregather) |
 | <a id="a-compose-env"></a>`compose-env` | file | orchestrator/dagster/.env | [`compose-setup`](#step-compose-setup)<br>[`code-location-start`](#step-code-location-start) | [`compose-up`](#step-compose-up)<br>[`code-location-start`](#step-code-location-start) |
 | <a id="a-host-dirs"></a>`host-dirs` | file | orchestrator/dagster/.host/ | [`compose-setup`](#step-compose-setup) | [`compose-up`](#step-compose-up) |
 | <a id="a-docker-engine"></a>`docker-engine` | state | Docker Desktop engine (the only engine; no native docker.service in the distro) | [`docker-check`](#step-docker-check)<br>[`docker-recover`](#step-docker-recover) | [`compose-up`](#step-compose-up) |
@@ -1959,10 +2046,10 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-code-location"></a>`code-location` | state | dagster code-server on the host, gRPC :4000 | [`code-location-start`](#step-code-location-start) | [`code-location-check`](#step-code-location-check)<br>[`code-location-reload`](#step-code-location-reload)<br>[`nop`](#step-nop) |
 | <a id="a-code-location-venv"></a>`code-location-venv` | file | ~/.venvs/appsec-review-dagster/ | [`code-location-start`](#step-code-location-start) | -- |
 | <a id="a-job-definitions"></a>`job-definitions` | file | orchestrator/dagster/definitions.py, appsec-review-process/dagster_workflow.py | -- | [`code-location-start`](#step-code-location-start)<br>[`code-location-reload`](#step-code-location-reload) |
-| <a id="a-loaded-job-list"></a>`loaded-job-list` | state | webserver's loaded repository | [`code-location-reload`](#step-code-location-reload) | [`nop`](#step-nop)<br>[`phase1_intake`](#step-phase1-intake)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`dev_project_discovery`](#step-dev-project-discovery)<br>[`launch-job`](#step-launch-job)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`orchestration_smoke`](#step-orchestration-smoke)<br>[`full_review`](#step-full-review) |
+| <a id="a-loaded-job-list"></a>`loaded-job-list` | state | webserver's loaded repository | [`code-location-reload`](#step-code-location-reload) | [`nop`](#step-nop)<br>[`phase1_intake`](#step-phase1-intake)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`dev_project_discovery`](#step-dev-project-discovery)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`sre_operations_topology`](#step-sre-operations-topology)<br>[`launch-job`](#step-launch-job)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`orchestration_smoke`](#step-orchestration-smoke)<br>[`full_review`](#step-full-review) |
 | <a id="a-engagement-definition"></a>`engagement-definition` | decision | stage_artifacts.py arguments | [`define-engagement`](#step-define-engagement) | [`grant-permissions`](#step-grant-permissions)<br>[`stage-artifacts`](#step-stage-artifacts) |
 | <a id="a-permission-grant"></a>`permission-grant` | decision | named human approval | [`grant-permissions`](#step-grant-permissions) | [`stage-artifacts`](#step-stage-artifacts)<br>[`build-resolution`](#step-build-resolution) |
-| <a id="a-run-dir"></a>`run-dir` | file | runs/<run_id>/ (data/, inputs/, outputs/) | [`run-start`](#step-run-start) | [`stage-artifacts`](#step-stage-artifacts)<br>[`supply-partition`](#step-supply-partition)<br>[`supply-dev`](#step-supply-dev) |
+| <a id="a-run-dir"></a>`run-dir` | file | runs/<run_id>/ (data/, inputs/, outputs/) | [`run-start`](#step-run-start) | [`stage-artifacts`](#step-stage-artifacts)<br>[`supply-partition`](#step-supply-partition)<br>[`supply-dev`](#step-supply-dev)<br>[`supply-devops`](#step-supply-devops)<br>[`supply-sre`](#step-supply-sre) |
 | <a id="a-artifact-manifest"></a>`artifact-manifest` | file | runs/<run_id>/inputs/artifact-manifest.json | [`stage-artifacts`](#step-stage-artifacts)<br>[`intake-fix`](#step-intake-fix) | [`phase1_intake`](#step-phase1-intake)<br>[`launch-job`](#step-launch-job)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_config`](#step-op-workflow-config)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`build_discovery`](#step-build-discovery)<br>[`full_review`](#step-full-review)<br>[`00-intake`](#job-00-intake) |
 | <a id="a-resolved-config"></a>`resolved-config` | file | runs/<run_id>/data/orchestration/dagster/<dagster_run_id>/resolved-config.json | [`phase1_intake`](#step-phase1-intake) | [`intake-fix`](#step-intake-fix) |
 | <a id="a-partition-handoff"></a>`partition-handoff` | file | runs/<run_id>/data/jobs/02-repository-partition-discovery/handoff.md, handoff.json | [`repository_partition_discovery`](#step-repository-partition-discovery) | [`partition-analysis`](#step-partition-analysis) |
@@ -1971,6 +2058,12 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-dev-handoff"></a>`dev-handoff` | file | runs/<run_id>/data/jobs/02-dev-project-discovery/handoff.md, handoff.json | [`dev_project_discovery`](#step-dev-project-discovery) | [`dev-analysis`](#step-dev-analysis) |
 | <a id="a-dev-record"></a>`dev-record` | record | fixtures/supplied/<project>/02-dev-project-discovery.json | [`dev-analysis`](#step-dev-analysis) | [`supply-dev`](#step-supply-dev) |
 | <a id="a-dev-supplied"></a>`dev-supplied` | file | runs/<run_id>/data/jobs/02-dev-project-discovery/supplied/result.json | [`supply-dev`](#step-supply-dev) | [`dev_project_discovery`](#step-dev-project-discovery) |
+| <a id="a-devops-handoff"></a>`devops-handoff` | file | runs/<run_id>/data/jobs/02-devops-project-discovery/handoff.md, handoff.json | [`devops_project_discovery`](#step-devops-project-discovery) | [`devops-analysis`](#step-devops-analysis) |
+| <a id="a-devops-record"></a>`devops-record` | record | fixtures/supplied/<project>/02-devops-project-discovery.json | [`devops-analysis`](#step-devops-analysis) | [`supply-devops`](#step-supply-devops) |
+| <a id="a-devops-supplied"></a>`devops-supplied` | file | runs/<run_id>/data/jobs/02-devops-project-discovery/supplied/result.json | [`supply-devops`](#step-supply-devops) | [`devops_project_discovery`](#step-devops-project-discovery) |
+| <a id="a-sre-handoff"></a>`sre-handoff` | file | runs/<run_id>/data/jobs/02-sre-operations-topology/handoff.md, handoff.json | [`sre_operations_topology`](#step-sre-operations-topology) | [`sre-analysis`](#step-sre-analysis) |
+| <a id="a-sre-record"></a>`sre-record` | record | fixtures/supplied/<project>/02-sre-operations-topology.json | [`sre-analysis`](#step-sre-analysis) | [`supply-sre`](#step-supply-sre) |
+| <a id="a-sre-supplied"></a>`sre-supplied` | file | runs/<run_id>/data/jobs/02-sre-operations-topology/supplied/result.json | [`supply-sre`](#step-supply-sre) | [`sre_operations_topology`](#step-sre-operations-topology) |
 | <a id="a-launch-request"></a>`launch-request` | file | runs/<run_id>/data/orchestration/launches/<request_id>/request.json | [`launch-job`](#step-launch-job) | -- |
 | <a id="a-launch-intent"></a>`launch-intent` | file | runs/<run_id>/data/orchestration/launches/<request_id>/ (SUBMITTING, then ACCEPTED or REJECTED) | [`launch-job`](#step-launch-job) | [`dagster-accept`](#step-dagster-accept) |
 | <a id="a-dagster-run-queued"></a>`dagster-run-queued` | state | Dagster run QUEUED (dagster_run_id, URL) | [`launch-job`](#step-launch-job)<br>[`dagster-accept`](#step-dagster-accept) | -- |
@@ -1995,10 +2088,10 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-lane-handoff"></a>`lane-handoff` | file | runs/<run_id>/ lane hand-off files (create_handoff.py) | [`lane-handoffs`](#step-lane-handoffs) | -- |
 | <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
 | <a id="a-job-02-ossf-scorecard"></a>`02-ossf-scorecard` | job output | runs/<run_id>/data/jobs/02-ossf-scorecard/ | [`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-repository-partition-discovery"></a>`02-repository-partition-discovery` | job output | runs/<run_id>/data/jobs/02-repository-partition-discovery/ | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) |
+| <a id="a-job-02-repository-partition-discovery"></a>`02-repository-partition-discovery` | job output | runs/<run_id>/data/jobs/02-repository-partition-discovery/ | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`devops-analysis`](#step-devops-analysis)<br>[`sre_operations_topology`](#step-sre-operations-topology)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) |
 | <a id="a-job-02-dev-project-discovery"></a>`02-dev-project-discovery` | job output | runs/<run_id>/data/jobs/02-dev-project-discovery/ | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-build-configure`](#job-02-build-configure) |
-| <a id="a-job-02-devops-project-discovery"></a>`02-devops-project-discovery` | job output | runs/<run_id>/data/jobs/02-devops-project-discovery/ | [`02-devops-project-discovery`](#job-02-devops-project-discovery) | [`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-sre-operations-topology"></a>`02-sre-operations-topology` | job output | runs/<run_id>/data/jobs/02-sre-operations-topology/ | [`02-sre-operations-topology`](#job-02-sre-operations-topology) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-devops-project-discovery"></a>`02-devops-project-discovery` | job output | runs/<run_id>/data/jobs/02-devops-project-discovery/ | [`devops_project_discovery`](#step-devops-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) | [`sre_operations_topology`](#step-sre-operations-topology)<br>[`sre-analysis`](#step-sre-analysis)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-sre-operations-topology"></a>`02-sre-operations-topology` | job output | runs/<run_id>/data/jobs/02-sre-operations-topology/ | [`sre_operations_topology`](#step-sre-operations-topology)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-evidence-assembly"></a>`02-evidence-assembly` | job output | runs/<run_id>/data/jobs/02-evidence-assembly/ | [`02-evidence-assembly`](#job-02-evidence-assembly) | [`01-component-characterization`](#job-01-component-characterization) |
 | <a id="a-job-01-component-characterization"></a>`01-component-characterization` | job output | runs/<run_id>/data/jobs/01-component-characterization/ | [`01-component-characterization`](#job-01-component-characterization) | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | <a id="a-job-03-threat-model-dfd-stride"></a>`03-threat-model-dfd-stride` | job output | runs/<run_id>/data/jobs/03-threat-model-dfd-stride/ | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | [`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |

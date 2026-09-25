@@ -27,12 +27,17 @@ flowchart TD
   S4a["S4a partition-discovery gate, nothing supplied<br/>hand-off FAIL as designed (one-time proof)"]:::done
   S4b["S4b supply partition map<br/>fixtures/supply_record.py: ACCEPTED"]:::done
   S5["S5 02-dev-project-discovery<br/>supply_record.py: ACCEPTED"]:::done
-  S6a["S6a build resolution: index, LLM plan, image + trial build loop,<br/>image_build_id catalog (build-resolution.md, ADR-0012)<br/>NEXT: designed"]:::next
+  S5b["S5b devops + SRE topology discovery<br/>ACCEPTED (SAT stages 8-9)"]:::done
+  AD["Automatic persona dispatch D01-D04<br/>SAT --dispatch stages 6-9, live 2026-09-25"]:::done
+  S6a["S6a build resolution: index + classify units, per-unit LLM plan,<br/>image + trial build loop, image_build_id catalog<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::todo
   E01["E01/E02: replay the lock through B13"]:::todo
 
-  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S6a --> S6
+  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6a --> S6
+  AD -.-> S4b
+  AD -.-> S5
+  AD -.-> S5b
   B13 -.-> S6a
   B13 -.-> S6
   E01 -.-> S6
@@ -72,8 +77,9 @@ subprocesses, each with its own diagram:
    budget, scope and permissions (a named human grants anything beyond `read-source`), create the
    run, stage the manifest; staging blocks wrong-platform and legacy runs.
 4. [**Pre-submittal processing**](bpmn/render/pre-submission-4-pre-submittal.svg): intake, then the
-   partition and developer-discovery gates, each with its hand-off loop (produce the record, supply
-   it, relaunch) until accepted.
+   four discovery gates in order (partition map, developer, devops, SRE operations topology). Each
+   is either an automatic persona dispatch (set per gate with `set_dispatch_mode`) or, in supplied
+   mode, a hand-off loop (produce the record, supply it, relaunch) until accepted.
 5. [**Submit to Dagster**](bpmn/render/pre-submission-5-submit.svg): `launch_job.py`'s checks
    (POSIX-staged run, registered job, unchanged request), the duplicate-submission guard (find by
    tags, reattach), durable intent, `launchRun`, then `QUEUED` or `REJECTED`.
@@ -81,8 +87,8 @@ subprocesses, each with its own diagram:
 The model ends at **accepted** (`QUEUED`), not completed. What Dagster does with the engagement job
 after that (fan-out into lanes and queues) is the next diagram. Two gaps the model makes visible:
 the engagement job submitted in step 5 is not yet fully runnable (`full_review` stops at the first
-unimplemented worker), and step 4's hand-off loops are manual today (fixture records are tracked;
-real targets need an analyst or agent).
+unimplemented worker), and step 4's hand-off loops are manual in supplied mode (fixture records are
+tracked); automatic mode needs no hand-authoring (D01-D04, live 2026-09-25).
 
 ## Steps
 

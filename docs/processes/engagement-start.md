@@ -18,8 +18,8 @@ flowchart TD
   P0[Preconditions: Dagster stack + host code location up, images pinned, target checked out on the host] --> S1
   S1[1. Create the run on the POSIX host and stage the artifact manifest] --> S2
   S2[2. engagement_workflow: config -> intake -> 3 preparation branches -> validated join] --> S2b
-  S2b[2b. Discovery gates: repository partition map - supplied record, or D01 automatic dispatch - then developer, devops and SRE operations-topology discovery - supplied, validated records] --> G1{native code in scope?}
-  G1 -- yes --> S3a[3a. Build resolution: index the build signals, LLM build plan, build image + trial configure/build, retry up to build_resolution_attempts, catalog image_build_id - designed, not built]
+  S2b[2b. Discovery gates: repository partition map, then developer, devops and SRE operations-topology discovery - each a supplied, validated record or an automatic persona dispatch, D01-D04] --> G1{native code in scope?}
+  G1 -- yes --> S3a[3a. Build resolution: index and classify units by build root, then per compiled or transpiled unit an LLM build plan, image + trial build, bounded retries, catalog image_build_id - designed, not built]
   S3a -- resolved --> S3[3b. 02-build-configure / 02-native-build: replay the build lock in the catalogued image, compile database]
   S3a -- FAILED BUILD_UNRESOLVED --> S4
   G1 -- no --> S4
@@ -31,22 +31,23 @@ flowchart TD
 
 Built today: 1, 2, 2b, 5 and the `critical_findings_sarif` publisher, all run-owned and validated.
 Step 3a (build resolution: how to build an unknown target, with what tools, and whether it can be
-done at all) is designed in [build-resolution.md](build-resolution.md) (ADR-0012) and not built.
+done at all) is designed in [build-resolution.md](build-resolution.md) (ADR-0012), extended per unit
+by [build-unit-classification.md](build-unit-classification.md), and not built.
 Step 3b is built only partially: `build_execution` configures a single CMake root from the older
 `build_discovery` branch, through the `buildenv-common` wrapper. It refuses other build systems (the
 `hello-autotools` fixture among them), does not consume step 2b's developer project discovery, and
 does not go through the B13 pinned-container adapter. The lifecycle configure worker that does
 (`02-build-configure`, batch E01) is planned: B13 into service, then the C++ build environment, then E01.
 Step 2b's four gates (partition, developer, devops and SRE operations-topology discovery) accept
-supplied, schema- and freshness-validated records (`discovery_gate.py`); three of the four (dev,
-devops, SRE) do not perform the analysis themselves. The first gate, `02-repository-partition-
-discovery` (D01, 2026-09-24), can now also perform its own analysis: a run opted into automatic
+supplied, schema- and freshness-validated records (`discovery_gate.py`) by default, and all four can
+also perform the analysis themselves (automatic persona dispatch, D01-D04; SAT stages 6-9 all
+automatic since SAT `20260925T170552Z`). The first gate, `02-repository-partition-discovery` (D01,
+2026-09-24), was first: a run opted into automatic
 dispatch (`discovery_gate.set_dispatch_mode`, a per-run opt-in file, no change to this gate's
 external `run()` signature) dispatches a real, tools-off persona invocation
 (`claude_cli_invoker.ClaudeCliInvoker`) against the staged checkout instead of expecting a supplied
 file -- the supplied-record path stays available as the default and as an explicit, separately
-tested alternative. The second gate, `02-dev-project-discovery` (D02, built 2026-09-24, not yet run
-live), has the same opt-in: its persona reads the target plus the accepted partition map and itself
+tested alternative. The second gate, `02-dev-project-discovery` (D02, live-confirmed 2026-09-25), has the same opt-in: its persona reads the target plus the accepted partition map and itself
 decides how the project is built (languages, buildenv image, the ordered safe command plan), keeping
 this job's existing accepted-record shape. The third gate, `02-devops-project-discovery` (D03,
 2026-09-25), has the same opt-in through the same shared code path, with its own task prompt. The
