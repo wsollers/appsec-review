@@ -264,8 +264,9 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   stage 8 fails on such an entry. Containers stay static in discovery, and the build lane builds the
   repository's images (revising the morning's "containers static in v1" in
   `build-unit-classification.md`). Running built targets for fuzzing or dynamic testing is a later
-  TODO (`TODO.md` section 10). Not yet re-run live; the SAT script changed, so the next check is a
-  fresh `--dispatch` SAT through `devops-project-discovery`.
+  TODO (`TODO.md` section 10). **Confirmed live** the same day: fresh `--dispatch` SAT through
+  `devops-project-discovery`, run `20260925T173117Z-055b25`, Dagster `d0f5fd8d`, stages 1-8 PASS; the plan is `docker build -t hello-autotools
+  .` [network-required] only, no run step.
 - 2026-09-25 -- **D04 built and LIVE PASS: `02-sre-operations-topology` automatic persona dispatch;
   SAT stages 1-9 all automatic for the first time.** Fresh SAT `20260925T170552Z`, run
   `20260925T170620Z-c6a12e`, `--dispatch --through sre-operations-topology`, on hal5000 WSL

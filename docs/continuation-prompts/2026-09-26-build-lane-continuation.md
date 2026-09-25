@@ -67,8 +67,8 @@ reference (`Flow_sp4_intok_sp4_pgate`) was fixed.
 
 - **No run step in discovery.** The devops prompt forbids running what a definition builds (`docker
   run`/`exec`/`start`, `compose up`/`run`, executing a built binary or entrypoint), and SAT stage 8
-  fails on such a plan entry. **Not yet confirmed live**: the next fresh `--dispatch` SAT through
-  `devops-project-discovery` must show no `docker run` entry.
+  fails on such a plan entry. Confirmed live 2026-09-25 (run `20260925T173117Z-055b25`, Dagster `d0f5fd8d`): the plan is
+  `docker build -t hello-autotools .` only.
 - **Containers stay static in discovery; the build lane builds them** (replaces "containers static
   in v1"). Container units are in the build set as image builds, never run. The build lane's design
   must say how a repository Dockerfile is built in the sandbox (its `RUN` steps are target code and
@@ -83,8 +83,7 @@ container units alongside D02's native plan.
 
 ## 4. Next work (one piece at a time; wait for William's output after each)
 
-1. Confirm the no-run rule live (fresh `--dispatch` SAT through `devops-project-discovery`), then
-   settle the open items in section 3.
+1. Settle the open items in section 3.
 2. Revise ADR-0012 for per-unit resolution, including container image builds (Full protocol: new graph nodes, schemas, contracts;
    AGENTS.md). Update `build-resolution.md` in the same change.
 3. `02-build-index` (deterministic indexer + classification table; `build-index.json` schema;

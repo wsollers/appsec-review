@@ -1019,8 +1019,9 @@ fields (`e915d92`) and the invoker envelope's nested-object rule (`97eeb3d`); se
 --rm hello-autotools World`; the devops prompt now forbids running what a definition builds, and SAT
 stage 8 fails on a `docker`/`podman`/`nerdctl` `run`/`exec`/`start` or `compose up`/`run` entry.
 Containers stay static in discovery; the build lane builds the images and never runs them. Running a
-built target (fuzzing, dynamic testing) is a later TODO (last section of this file). Not yet re-run
-live: the next fresh `--dispatch` SAT through `devops-project-discovery` confirms it.
+built target (fuzzing, dynamic testing) is a later TODO (last section of this file). **Confirmed
+live 2026-09-25:** fresh `--dispatch` SAT through `devops-project-discovery`, run `20260925T173117Z-055b25`, Dagster `d0f5fd8d`: stage 8
+PASS with the plan `docker build -t hello-autotools .` [network-required] and no run step.
 
 ### Phase 5f -- build lane dependency restore: public registries for the POC; local mirror deferred -- TODO
 
