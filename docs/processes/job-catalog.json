@@ -4931,7 +4931,7 @@
    "produces": [
     "build-index"
    ],
-   "notes": "Deterministic indexer: every build signal (build systems, toolchain and dependency declarations, CI and Dockerfile recipes, README build text), bounded and sha256-cited. Executes nothing. docs/processes/build-resolution.md."
+   "notes": "Deterministic indexer: enumerates candidate units (one per build root) and every build signal (build systems, toolchain and dependency declarations, CI and Dockerfile recipes, README build text), bounded and sha256-cited. Assigns no class. Executes nothing. docs/processes/build-resolution.md, ADR-0012 revision 1."
   },
   {
    "id": "build-plan",
@@ -4947,7 +4947,7 @@
    "produces": [
     "build-plan"
    ],
-   "notes": "LLM reads only the index, the buildenv catalog and the schema; returns base image, apt packages, ordered argv commands, feasibility, all cited. Validated before anything is built."
+   "notes": "LLM reads only the index, the buildenv catalog and the schema. Classifies every unit (one cited class; mixed units split), then plans each compiled or transpiled unit: base image, packages, ordered argv commands, feasibility, all cited. Validated per unit before anything is built. Repository Dockerfiles are never planned for building."
   },
   {
    "id": "build-resolution",
@@ -4967,7 +4967,7 @@
     "build-image-catalog",
     "build-lock"
    ],
-   "notes": "Loop up to build_resolution_attempts (default 3): render Dockerfile, build image (apt mirror only), trial configure+build via B13 with no network; on failure the model revises. FAILED(BUILD_UNRESOLVED) when exhausted. On success catalog image_build_<id> and write the lock. build_image_reuse: auto | rebuild | require."
+   "notes": "Per build-set unit, loop up to build_resolution_attempts (default 3): render Dockerfile from the plan, build image (restore during provisioning only), trial configure+build via B13 with no network; on failure the model revises. Each unit ends OK, FAILED(BUILD_UNRESOLVED) or BLOCKED; job status OK / OK_WITH_GAPS / UNRESOLVED / BLOCKED / SKIPPED from the unit outcomes. On success catalog image_build_<id> and write the unit's build-lock entry. Nothing built is run."
   },
   {
    "id": "build_discovery",

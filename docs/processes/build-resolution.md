@@ -2,8 +2,9 @@
 
 Status: **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
 **Extended 2026-09-25** by [build-unit-classification.md](build-unit-classification.md): the loop below runs
-once per compiled or transpiled unit, and a failed unit blocks only that unit's jobs; ADR-0012 still
-describes one native project and needs a per-unit revision.
+once per compiled or transpiled unit, and a failed unit blocks only that unit's jobs. ADR-0012
+[Revision 1](../decisions/ADR-0012-build-resolution.md#revision-1-2026-09-25-per-unit-resolution-model-classification)
+records the per-unit decisions; the section "Per unit" below says what they change here.
 Replaces the "supplied record" route for the build fields of developer discovery and the
 hand-written Phase 4 lock (`appsec-review-process/TODO.md`), and supersedes the CMake-only
 `build_discovery` / `build_execution` preparation jobs.
@@ -45,6 +46,22 @@ flowchart TD
 
 Plan validation failures and trial failures both consume an attempt. One budget,
 `build_resolution_attempts`, bounds the whole loop.
+
+## Per unit (ADR-0012 revision 1, 2026-09-25)
+
+Sections 1-5 describe one project; per unit they change as follows.
+
+| Section | Change |
+|---|---|
+| 1. `02-build-index` | Also enumerates candidate **units** (one per build root; a nested root a parent build uses belongs to the parent; an unused vendored or example copy is recorded, not a unit) with each unit's manifests, lockfiles and cited signals. Assigns no class. |
+| 2. Catalog lookup | Per unit, by that unit's build-input fingerprint. Units with the same image spec share one image. |
+| 3. `02-build-plan` | One classification call over the whole index (every unit gets one cited class; mixed units split), then one plan per build-set unit (`compiled-native`, `compiled-managed`, `transpiled`), validated per unit. Other units get a disposition: interpreted to SAST/SCA, container to Dockerfile analysis and base-image scan, infrastructure to static IaC analysis, unclassified to a gap. |
+| 4. `02-build-resolution` | The loop runs per build-set unit (`build_resolution_attempts` each). Each unit ends `OK`, `FAILED(BUILD_UNRESOLVED)` or `BLOCKED(<reason>)`. Job status: `OK` (all resolved), `OK_WITH_GAPS` (some), `UNRESOLVED` (none), `BLOCKED` (no unit could start), `SKIPPED` (empty build set). |
+| 5. Catalog and lock | `build-lock.json` has one entry per build-set unit; E01/E02 replay only `OK` units. |
+
+Never built: a repository's own Dockerfile (only images our code renders from a plan are built).
+Never run: any built target. Dependencies for non-apt ecosystems follow `TODO.md` Phase 5f (public
+registries for the POC, TLS and lockfile hash verification, restore during provisioning only).
 
 ## 1. `02-build-index` (deterministic)
 
@@ -209,6 +226,7 @@ plan can be audited and replayed.
 | `build_image_id` | none | Pin one catalogued image; implies `require`. |
 | `build_command_timeout_seconds` | 1800 | Per command inside the trial. |
 | `image_build_timeout_seconds` | 1800 | Per image build. |
+| `build_units_max` | 10 (proposed) | Build-set units resolved per run; the rest are recorded `BLOCKED(UNIT_CAP)`, never dropped. |
 
 ## Security notes
 
@@ -245,9 +263,13 @@ The SAT walks these in flow order after the discovery gates and before evidence 
 
 - pre-contracts check the fixture answer keys are **not** in the run and are not among the
   invocation's inputs;
-- after `build-plan` the SAT compares the plan with the answer key (autotools, root `.`,
-  `autoreconf`/`configure`/`make` in that order) and reports differences;
-- `build-resolution` must end `OK` within the attempt budget, catalog an image and write the lock;
+- after `build-index` the SAT checks the units: for hello-autotools, the root (`configure.ac`,
+  `Makefile.am`, with the vendored cJSON compiled inside it) and the `Dockerfile`;
+- after `build-plan` the SAT checks the classes (root `compiled-native`, `Dockerfile` `container`, no
+  plan for the container) and compares the root unit's plan with the answer key (autotools, root `.`,
+  `autoreconf`/`configure`/`make` in that order), reporting differences;
+- `build-resolution` must end `OK` for the root unit within the attempt budget, catalog an image and
+  write its lock entry; no image is built from the repository's `Dockerfile`;
 - a second SAT run with `auto` must reuse the catalogued image (no inference call), and a run with
   `rebuild` must infer again.
 

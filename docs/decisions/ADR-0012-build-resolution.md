@@ -2,6 +2,8 @@
 
 Status: Proposed 2026-09-24 (design direction from William Sollers, 2026-09-24). Design:
 [docs/processes/build-resolution.md](../processes/build-resolution.md).
+**Revised 2026-09-25** for per-unit resolution and model classification: see
+[Revision 1](#revision-1-2026-09-25-per-unit-resolution-model-classification) at the end.
 
 ## Context
 
@@ -80,3 +82,81 @@ to evidence collection without knowing how to build means native evidence can ne
   then `BLOCKED(UNSUPPORTED_ECOSYSTEM)`.
 - Windows and MSVC targets.
 - Pruning of catalogued images.
+
+## Revision 1 (2026-09-25): per-unit resolution, model classification
+
+Status: Proposed 2026-09-25 (decisions by William Sollers, 2026-09-25; recorded in
+[build-unit-classification.md](../processes/build-unit-classification.md) and
+`appsec-review-process/TODO.md` Phase 5g). Amends the decisions above; where they conflict, this
+section wins. The build-lane nodes are still designed, not built.
+
+### Why
+
+The original decision assumes one native project per target. Real targets mix compiled, transpiled
+and interpreted code, container definitions and infrastructure, often in one repository. Building
+executes target code, so only the pieces that need a build for evidence are built, each on its own,
+and a piece that cannot be built must not block the others.
+
+### Decisions
+
+1. **Units.** A unit is one build root: the directory of a defining manifest (`configure.ac`,
+   `CMakeLists.txt`, `meson.build`, `Cargo.toml`, `go.mod`, `package.json`, `pom.xml`,
+   `build.gradle*`, `*.csproj`, `pyproject.toml`, `composer.json`, a `Dockerfile`, a Terraform root, a
+   Helm chart, ...). A nested root that a parent build uses (listed as a subdirectory, a sub-project or
+   compiled sources of the parent) belongs to the parent unit. A vendored or example copy with build
+   files that no in-scope build uses is not a unit, and is recorded as such.
+2. **`02-build-index` stays deterministic** and now enumerates candidate units: for each, its root, its
+   manifests and lockfiles, and its cited signals (build-system and toolchain declarations, extension
+   counts, CI and Dockerfile recipes, README build text, and the markers that separate JavaScript from
+   TypeScript or bundled code). It assigns no class. Bounds, citations and validation are as in
+   decision 1.
+3. **The model classifies every unit** in `02-build-plan`: one class per unit from `compiled-native`,
+   `compiled-managed`, `transpiled`, `interpreted`, `container`, `infrastructure`, `unclassified`,
+   each cited to index signals; a mixed unit (a Python package with a C extension) is split into
+   parts with their own ids. A class with no resolvable citation is rejected like any other claim; a
+   unit the model cannot place is `unclassified` with a coverage gap. The build set is the
+   `compiled-native`, `compiled-managed` and `transpiled` units.
+4. **One plan per build-set unit.** `02-build-plan` returns a plan for each build-set unit in the
+   shape of decision 2 (base image, packages, ordered argv, compile-database producer, feasibility,
+   citations), validated per unit before anything is built. Other units get a disposition, not a
+   plan: `interpreted` to SAST and SCA as source; `container` to Dockerfile analysis and a base-image
+   scan; `infrastructure` to static IaC analysis; `unclassified` to a coverage gap.
+5. **One bounded loop per unit.** `02-build-resolution` runs the decision-4 loop separately for each
+   build-set unit, with `build_resolution_attempts` per unit and a run-wide cap on units. Units that
+   need the same image spec share one catalogued image. Each unit ends `OK`,
+   `FAILED(BUILD_UNRESOLVED)` or `BLOCKED(<reason>)` (`UNSUPPORTED_ECOSYSTEM`, `UNSUPPORTED_PLATFORM`,
+   `MISSING_GRANT`, ...).
+6. **Job status from unit outcomes**, in the worker-result contract's terms: `OK` when every build-set
+   unit resolved; `OK_WITH_GAPS` when at least one resolved and the others are recorded gaps;
+   `UNRESOLVED` when none resolved after bounded work; `BLOCKED` when a precondition for every unit was
+   missing; `SKIPPED` (not applicable) when the build set is empty. A failed unit blocks only the
+   native or managed jobs for that unit.
+7. **The lock is per unit.** `build-lock.json` holds one entry per build-set unit (outcome, image id
+   and digest, rendered Dockerfile hash, ordered argv, compile-database producer, attempt summary).
+   `02-build-configure` and `02-native-build` replay it unit by unit; a unit without an `OK` entry is
+   not replayed.
+8. **Repository Dockerfiles are never built, and nothing is ever run.** The loop builds only images
+   our code renders from a plan (decision 3). Running a built target (fuzzing, dynamic testing) is out
+   of scope for now (`TODO.md` section 10).
+9. **Ecosystems.** apt first (hello-autotools), then npm, Maven/Gradle, cargo and Go modules, NuGet.
+   For the POC, dependencies are restored during provisioning only, from each ecosystem's public
+   registry, with TLS verification and lockfile hash verification (registry-published checksums,
+   recorded as weaker, where the repository pins none); the trial stays offline (`TODO.md` Phase 5f).
+   A local caching proxy is deferred.
+
+### Proposed, needs William's confirmation
+
+- **Model per call.** Classification is one call over the whole index and is a judgment over an
+  unknown repository: `claude-sonnet-5`/`medium`, like the discovery jobs. Per-unit plans stay Haiku,
+  as decided above. (Alternative: Haiku for both.)
+- **Unit cap.** `build_units_max`, default 10 per run; units beyond it are recorded as
+  `BLOCKED(UNIT_CAP)` gaps, never silently dropped.
+
+### Consequences
+
+- `build-index.json` gains `units[]`; `build-plan.json` becomes per unit (classification plus plans);
+  `build-lock.json` becomes per unit. All three schemas are new, so no existing record moves.
+- The three new graph nodes still follow the full job-graph protocol when they are built.
+- The fixture answer key for the SAT becomes two units for hello-autotools: the root autotools unit
+  (`compiled-native`, with the vendored cJSON compiled inside it) and the `Dockerfile` (`container`,
+  not built).

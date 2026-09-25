@@ -873,7 +873,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Runs | `launch_job.py --run-id <run_id> --job build_index --wait (not built)` |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`sut-checkout`](#a-sut-checkout) |
 | Produces | [`build-index`](#a-build-index) |
-| Notes | Deterministic indexer: every build signal (build systems, toolchain and dependency declarations, CI and Dockerfile recipes, README build text), bounded and sha256-cited. Executes nothing. docs/processes/build-resolution.md. |
+| Notes | Deterministic indexer: enumerates candidate units (one per build root) and every build signal (build systems, toolchain and dependency declarations, CI and Dockerfile recipes, README build text), bounded and sha256-cited. Assigns no class. Executes nothing. docs/processes/build-resolution.md, ADR-0012 revision 1. |
 
 <a id="step-build-plan"></a>
 
@@ -885,7 +885,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Runs | `launch_job.py --run-id <run_id> --job build_plan --wait (not built)` |
 | Consumes | [`build-index`](#a-build-index)<br>[`buildenv-catalog`](#a-buildenv-catalog)<br>[`llm-invoker`](#a-llm-invoker) |
 | Produces | [`build-plan`](#a-build-plan) |
-| Notes | LLM reads only the index, the buildenv catalog and the schema; returns base image, apt packages, ordered argv commands, feasibility, all cited. Validated before anything is built. |
+| Notes | LLM reads only the index, the buildenv catalog and the schema. Classifies every unit (one cited class; mixed units split), then plans each compiled or transpiled unit: base image, packages, ordered argv commands, feasibility, all cited. Validated per unit before anything is built. Repository Dockerfiles are never planned for building. |
 
 <a id="step-build-resolution"></a>
 
@@ -897,7 +897,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Runs | `launch_job.py --run-id <run_id> --job build_resolution --wait (not built)` |
 | Consumes | [`build-plan`](#a-build-plan)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`permission-grant`](#a-permission-grant)<br>[`buildenv-image`](#a-buildenv-image)<br>[`llm-invoker`](#a-llm-invoker) |
 | Produces | [`build-attempts`](#a-build-attempts)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`build-lock`](#a-build-lock) |
-| Notes | Loop up to build_resolution_attempts (default 3): render Dockerfile, build image (apt mirror only), trial configure+build via B13 with no network; on failure the model revises. FAILED(BUILD_UNRESOLVED) when exhausted. On success catalog image_build_<id> and write the lock. build_image_reuse: auto \| rebuild \| require. |
+| Notes | Per build-set unit, loop up to build_resolution_attempts (default 3): render Dockerfile from the plan, build image (restore during provisioning only), trial configure+build via B13 with no network; on failure the model revises. Each unit ends OK, FAILED(BUILD_UNRESOLVED) or BLOCKED; job status OK / OK_WITH_GAPS / UNRESOLVED / BLOCKED / SKIPPED from the unit outcomes. On success catalog image_build_<id> and write the unit's build-lock entry. Nothing built is run. |
 
 <a id="step-build-discovery"></a>
 
