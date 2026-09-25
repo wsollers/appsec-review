@@ -28,7 +28,7 @@
     "bounds: at most 400 signals, excerpts at most 4096 UTF-8 bytes, the serialized index at most 524288 bytes; anything omitted is counted in truncated, never silently dropped",
     "signal ids and unit ids are unique; every signal_ids and unit_ids reference resolves; every unit cites at least one defining manifest and one signal",
     "a nested or vendored build root is either a member of exactly one unit (with a citing nested-root-reference signal) or a not_units entry with a reason, never both and never silently omitted",
-    "no file inside a deferred partition contributes an excerpt unless an enclosing unit's build references it",
+    "no file inside a deferred partition contributes an excerpt, except the defining manifests of units and members and human build instructions (README, INSTALL, BUILDING and similar), which the build plan needs",
     "the index is deterministic: the same inputs under the same rules_version give a byte-identical build-index.json",
     "the index assigns no class, plan, feasibility or build outcome and executes nothing; it cannot support a finding, severity, runtime-state or successful-build claim",
     "excerpts are untrusted target data and are presented to any model as data, never instructions",
