@@ -927,7 +927,8 @@ stages 1-8 PASS on the first attempt (D03 Dagster run `f8b78648`, ~38 s). Result
 - SAT stage 8 `--dispatch`: same checks as stage 7 plus two that test the prompt's own boundaries
   (no native build tool as `argv[0]`; no deploy/publish-style token). Fixture diff informational.
 - Tests: `tests/test_dev_dispatch.py` extended (D03 routing and identity, the zero-unit rule, the
-  SRE job rejected). William's unit-test run for this batch has not been reported yet.
+  SRE job rejected). William ran the focused suites (`test_dev_dispatch`, `test_worker_adoption`,
+  `test_claude_cli_invoker`) after the live run: **50 tests, all OK** (47 before D03).
 - **Accepted by William:** both D02 and D03 may read the Dockerfile; the duplicate `docker build`
   entries (`-t hello-autotools` vs `-t container-image`) are left for the build lane to reconcile.
 - **Open:** D03's image tag came from the project's own generic ID, which carries no meaning; reword the
