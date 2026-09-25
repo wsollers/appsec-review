@@ -48,7 +48,9 @@ file -- the supplied-record path stays available as the default and as an explic
 tested alternative. The second gate, `02-dev-project-discovery` (D02, built 2026-09-24, not yet run
 live), has the same opt-in: its persona reads the target plus the accepted partition map and itself
 decides how the project is built (languages, buildenv image, the ordered safe command plan), keeping
-this job's existing accepted-record shape. D03-D04 (devops, SRE discovery) do not have this yet. SRE topology
+this job's existing accepted-record shape. The third gate, `02-devops-project-discovery` (D03,
+2026-09-25), has the same opt-in through the same shared code path, with its own task prompt. D04
+(SRE topology) does not have this yet. SRE topology
 chains after the accepted devops record instead of the partition map directly (2026-09-24): it
 reads the containers/services devops discovery already found.
 Step 4 runs only through the legacy `pipeline/engagement_job.*` path into `scratch/` and is then

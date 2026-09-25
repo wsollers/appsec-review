@@ -4,6 +4,11 @@
   "display_name": "DevOps Project And Pipeline Discovery",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
+  "model": {
+    "model": "claude-sonnet-5",
+    "effort": "medium",
+    "_note": "Pinned explicitly 2026-09-25 (D03 construction, mirrors 02-dev-project-discovery's own pin), not left to model-config.json's process-wide default. Deciding which pipeline, container, IaC and deployment units a repository declares, and which safe commands would inspect them, is a reasoning-heavy judgment call over an unknown target, not classification."
+  },
   "composition": {
     "persona_id": "devops-engineer",
     "role_id": "repo-project-discoverer",
@@ -29,9 +34,6 @@
     "files": [
       "project-inventory.json",
       "project-discovery-summary.md",
-      "safe-command-plan.json",
-      "pipeline-project-inventory.json",
-      "devops-discovery-summary.md",
       "status.json"
     ]
   },
@@ -41,8 +43,9 @@
     "role",
     "domain",
     "tooling_profile",
-    "pipeline_artifacts",
+    "buildenv_catalog",
     "task",
     "output_contract"
-  ]
+  ],
+  "task_prompt": "appsec-review-process/02-evidence-pregather/devops-project-discovery.md"
 }

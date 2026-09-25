@@ -901,14 +901,46 @@ devops-routed `docker build` belongs in this plan or in D03.
 - Judgment calls, not confirmed: the whole accepted partition map is passed to the persona rather
   than pre-filtered to developer-engineer partitions (the task prompt scopes it); BPMN and S2b
   diagram label unchanged (text-level change inside the existing box); a target with no buildable
-  project is rejected as "nothing to claim" (same stance as D01 for zero partitions).
+  project was rejected as "nothing to claim" (same stance as D01 for zero partitions) -- **changed
+  2026-09-25 (Phase 5d): now accepted when a coverage gap explains it.**
 
-**Next:** (1) decide the scope-wording finding above; (2) merge review for branch
-`d02-output-contract-fix` (Full-protocol contract fix `e17e23e` + D02 `9434b2b` + this record) -- not
-merged; (3) D03 (`02-devops-project-discovery`) and D04 (`02-sre-operations-topology`) are now a
-mechanical repeat: each needs a task prompt and the same dispatch wiring (generalize
-`_run_dev_automatic` rather than copy it a third time); (4) write the D03/D04 continuation prompt and
-update `docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`'s status.
+### Phase 5d -- D03: automatic persona dispatch for devops-project-discovery -- BUILT and LIVE-CONFIRMED
+
+Built and confirmed 2026-09-25 on the same branch (`d02-output-contract-fix`). Fresh SAT
+`20260925T044159Z`, run `20260925T044606Z-ee7f02`, `--dispatch --through devops-project-discovery`:
+stages 1-8 PASS on the first attempt (D03 Dagster run `f8b78648`, ~38 s). Result: one unit
+`container-image` (Dockerfile, base `debian:bookworm-slim`), plan `docker build -t container-image .`
+(`network-required`), 10 coverage gaps, 2 fresh citations.
+
+- Task prompt `02-evidence-pregather/devops-project-discovery.md`, composed from three independent
+  drafts (Opus structure; no-placeholder argv rule; `status.json` is runtime-supplied; zero-unit
+  clause). Job template `02-devops-project-discovery.json`: `task_prompt` added, model pinned to
+  `claude-sonnet-5`/`medium` like D02, the unsupported `pipeline_artifacts` prompt section replaced by
+  `buildenv_catalog` (it would have raised "unknown prompt section" at assembly), `outputs.files`
+  trimmed to the contract's real files.
+- `discovery_gate.py`: one shared path for D02 and D03 (`AUTOMATIC_PROJECT_JOBS`,
+  `_run_project_automatic`, `_dispatch_project_persona`, `_automatic_project_inputs`); persona
+  identities `d02-devproject` / `d03-devops`. `02-sre-operations-topology` is deliberately not in the
+  map (different upstream, schema and claim builder).
+- `claude_cli_invoker._claims_from_project_inventory`: a result with no project and no command is
+  valid when `coverage_gaps` says why (the schema has no minimum on `claims`), rejected otherwise.
+- SAT stage 8 `--dispatch`: same checks as stage 7 plus two that test the prompt's own boundaries
+  (no native build tool as `argv[0]`; no deploy/publish-style token). Fixture diff informational.
+- Tests: `tests/test_dev_dispatch.py` extended (D03 routing and identity, the zero-unit rule, the
+  SRE job rejected). William's unit-test run for this batch has not been reported yet.
+- **Accepted by William:** both D02 and D03 may read the Dockerfile; the duplicate `docker build`
+  entries (`-t hello-autotools` vs `-t container-image`) are left for the build lane to reconcile.
+- **Open:** D03's image tag came from the project's own generic ID, which carries no meaning; reword the
+  prompt to prefer a tag the repository declares. The D02 scope wording (build manifests readable
+  wherever routed) is still not changed; low priority since the live D02 run behaved sensibly.
+
+**Next:** (1) merge review for branch `d02-output-contract-fix` (Full-protocol contract fix
+`e17e23e`, D02 `9434b2b`, records, D03) -- not merged; (2) D04 (`02-sre-operations-topology`):
+different upstream (the accepted devops record, `output.json`, not the partition map), different
+schema (`operations-topology.schema.json`) and its own claim builder -- not a mechanical repeat of the
+project-discovery path; (3) write the D04 continuation prompt and update
+`docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`'s status; (4) the
+`diagram drift` failure of `qualify_phase1.py --check-contracts` is still untriaged.
 
 ### Phase 6 -- build and compile database (E01, E02)
 

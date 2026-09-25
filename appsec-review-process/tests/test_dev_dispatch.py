@@ -1,4 +1,4 @@
-"""Focused tests for D02 (02-dev-project-discovery automatic persona dispatch, Phase 5c).
+"""Focused tests for D02/D03 (02-dev-project-discovery and 02-devops-project-discovery automatic persona dispatch, Phase 5c).
 
 Nothing here calls a model: the live call is the SAT's ``--dispatch`` proof. These cover the parts
 that must hold regardless of what the model says -- claim building from ``project-inventory.json``,
@@ -24,6 +24,7 @@ import execution_state as state
 import persona_dispatch as pd
 
 JOB = discovery_gate.CONSUMER_JOB
+DEVOPS = discovery_gate.DEVOPS_JOB
 ALLOWED = ("evidence_gap", "project_inventory", "safe_command_plan")
 
 
@@ -84,8 +85,13 @@ class ClaimBuilderTests(unittest.TestCase):
     def test_claim_class_outside_the_ceiling_and_empty_results_are_rejected(self):
         with self.assertRaises(cci.InvokerOutputError):
             cci._claims_from_project_inventory(inventory(), self.target, ("project_inventory",), "f.json")
+
+    def test_a_result_with_no_unit_is_valid_only_when_a_coverage_gap_explains_it(self):
         empty = inventory()
         empty["projects"], empty["safe_command_plan"] = [], []
+        empty["coverage_gaps"] = ["no devops unit is declared in any devops-routed partition"]
+        self.assertEqual(cci._claims_from_project_inventory(empty, self.target, ALLOWED, "f.json"), [])
+        empty["coverage_gaps"] = []
         with self.assertRaises(cci.InvokerOutputError):
             cci._claims_from_project_inventory(empty, self.target, ALLOWED, "f.json")
 
@@ -155,11 +161,12 @@ class GateTests(unittest.TestCase):
         state.RUNS = self.old_runs
         self.temporary.cleanup()
 
-    def run_gate(self, dispatch, dagster_id="dagster-a", force=False):
-        with patch.object(discovery_gate, "_automatic_dev_inputs", side_effect=lambda run_id: dict(self.record)), \
+    def run_gate(self, dispatch, dagster_id="dagster-a", force=False, job=JOB):
+        with patch.object(discovery_gate, "_automatic_project_inputs",
+                          side_effect=lambda run_id, j: {**self.record, "job": j}), \
              patch.object(discovery_gate, "_require_upstream_inputs"), \
-             patch.object(discovery_gate, "_dispatch_dev_persona", dispatch):
-            return discovery_gate.run(self.run_id, dagster_id, JOB, force)
+             patch.object(discovery_gate, "_dispatch_project_persona", dispatch):
+            return discovery_gate.run(self.run_id, dagster_id, job, force)
 
     def test_accepts_a_dispatched_result_in_the_existing_accepted_record_shape(self):
         calls = []
@@ -224,15 +231,41 @@ class GateTests(unittest.TestCase):
 
     def test_supplied_mode_never_reaches_the_automatic_path(self):
         discovery_gate.set_dispatch_mode(self.run_id, JOB, "supplied")
-        with patch.object(discovery_gate, "_run_dev_automatic") as automatic:
+        with patch.object(discovery_gate, "_run_project_automatic") as automatic:
             with self.assertRaises(Exception):
                 discovery_gate._legacy_run(self.run_id, "dagster-a", JOB)
         automatic.assert_not_called()
 
     def test_automatic_mode_routes_to_the_automatic_path(self):
-        with patch.object(discovery_gate, "_run_dev_automatic", return_value="sentinel") as automatic:
+        with patch.object(discovery_gate, "_run_project_automatic", return_value="sentinel") as automatic:
             self.assertEqual(discovery_gate._legacy_run(self.run_id, "dagster-a", JOB), "sentinel")
-        automatic.assert_called_once_with(self.run_id, "dagster-a", False)
+        automatic.assert_called_once_with(self.run_id, "dagster-a", JOB, False)
+
+    def test_devops_discovery_takes_the_same_path_with_its_own_persona_identity(self):
+        self.assertEqual(discovery_gate.AUTOMATIC_PROJECT_JOBS[DEVOPS],
+                         discovery_gate.DEVOPS_PERSONA_JOB_ID)
+        self.assertNotEqual(discovery_gate.DEVOPS_PERSONA_JOB_ID, discovery_gate.DEV_PERSONA_JOB_ID)
+        discovery_gate.set_dispatch_mode(self.run_id, DEVOPS, "automatic")
+        discovery_gate.root(self.run_id, DEVOPS).mkdir(parents=True)
+        seen = []
+
+        def dispatch(run_id, base, record):
+            seen.append((base.name, record["job"]))
+            return dict(self.value), "# Summary\n", {**self.facts, "persona_job_id": discovery_gate.DEVOPS_PERSONA_JOB_ID}
+
+        accepted = self.run_gate(dispatch, job=DEVOPS)
+        self.assertEqual(seen, [(DEVOPS, DEVOPS)])
+        self.assertEqual((accepted["job"], accepted["persona_job_id"]),
+                         (DEVOPS, discovery_gate.DEVOPS_PERSONA_JOB_ID))
+        attempt = discovery_gate.root(self.run_id, DEVOPS) / "attempts" / accepted["attempt_id"]
+        self.assertEqual(discovery_gate.validate(self.run_id, DEVOPS), attempt)
+        # The dev job in the same run is untouched: no accepted record appears for it.
+        self.assertFalse((self.base / "accepted.json").exists())
+
+    def test_only_the_project_discovery_jobs_have_an_automatic_path(self):
+        self.assertEqual(set(discovery_gate.AUTOMATIC_PROJECT_JOBS), {JOB, DEVOPS})
+        with self.assertRaises(state.Blocked):
+            discovery_gate._run_project_automatic(self.run_id, "dagster-a", "02-sre-operations-topology")
 
     def test_upstream_staging_is_content_addressed_and_detects_tampering(self):
         source = self.owner / "map.json"

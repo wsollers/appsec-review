@@ -251,6 +251,32 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-25 -- **D03 built and LIVE PASS: `02-devops-project-discovery` automatic persona dispatch,
+  first attempt.** Fresh SAT `20260925T044159Z`, run `20260925T044606Z-ee7f02`, `--dispatch --through
+  devops-project-discovery`: **stages 1-8 PASS**, no failed attempt, three real model calls (D01
+  ~69 s, D02 ~50 s, D03 ~38 s; Dagster runs `05962f03`, `08bf5c9f`, `f8b78648`). What was built:
+  the D03 task prompt (`02-evidence-pregather/devops-project-discovery.md`, composed from three
+  independent drafts, kept to Opus's structure plus the no-placeholder argv rule and the note that
+  the runtime supplies `status.json`); the devops job template fixed (`task_prompt` added, model
+  pinned like D02, the unsupported `pipeline_artifacts` section replaced by `buildenv_catalog` -- it
+  would have failed prompt assembly -- and the stale `safe-command-plan.json` /
+  `pipeline-project-inventory.json` / `devops-discovery-summary.md` entries removed from
+  `outputs.files`); `discovery_gate.py` generalized so D02 and D03 share one automatic path
+  (`AUTOMATIC_PROJECT_JOBS`, `_run_project_automatic`; persona identities `d02-devproject` and
+  `d03-devops`); `claude_cli_invoker` now accepts a result with no unit when a coverage gap explains
+  it (`persona-invoker-output.schema.json` has no minimum on `claims`); SAT stage 8 `--dispatch`,
+  with two checks that test the prompt's own boundaries (no native build tool, no deploy/publish
+  step). D03's result: one unit `container-image` (Dockerfile, base `debian:bookworm-slim`), plan
+  `docker build -t container-image .` (`network-required`), 10 coverage gaps, 2 fresh citations.
+  **Observed, accepted (William): both D02 and D03 read the Dockerfile and both plan a `docker
+  build`**, with different tags (`hello-autotools` vs `container-image`); reading overlap is
+  wanted, and the duplicate is left for the build lane to reconcile. **Open:** D03 took the tag from
+  the project's own generic ID, which is meaningless; the prompt's wording ("such as the project's
+  own ID") should prefer a tag the repository declares. Also: the live partition names changed
+  between runs (`autotools-build`/`container-build` on the earlier SAT, `autotools-build-system`/
+  `container-build-dockerfile` here) while the routing shape held -- model output is not
+  deterministic, which the structural (non-byte) acceptance is built for. `discovery_gate.py`
+  changed: any live SAT must be fresh, not `--resume`.
 - 2026-09-25 -- **D02 LIVE PASS: `02-dev-project-discovery` automatic persona dispatch, first
   attempt.** Native Linux host `zarathustra` (not WSL), fresh SAT `20260925T032354Z`, run
   `20260925T032715Z-440faf`, `scripts/system-acceptance-test.sh --dispatch --through

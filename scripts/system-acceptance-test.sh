@@ -13,16 +13,18 @@
 #   scripts/system-acceptance-test.sh [--fixture hello-autotools] --dispatch --through <stage>
 #                                                                start a new SAT whose discovery stages
 #                                                                (02-repository-partition-discovery,
-#                                                                D01, and 02-dev-project-discovery,
-#                                                                D02) opt into automatic persona
+#                                                                D01; 02-dev-project-discovery, D02;
+#                                                                and 02-devops-project-discovery, D03)
+#                                                                opt into automatic persona
 #                                                                dispatch instead of installing the
 #                                                                fixture's supplied records (a real
 #                                                                `claude` CLI call per stage, not a
 #                                                                fixture copy) -- a new SAT only; a
 #                                                                `--resume` reads the choice its own
 #                                                                first run made, --dispatch is ignored.
-#                                                                devops/sre discovery (D03/D04) stay
-#                                                                on their supplied records for now.
+#                                                                devops discovery (D03) dispatches the
+#                                                                same way; sre topology (D04) stays on
+#                                                                its supplied record for now.
 #
 # Every command runs under a contract (run_step, scripts/sat_contract.py):
 #   pre   what it reads is present and valid (schema or structural contract; absent where required)
@@ -51,7 +53,7 @@ STAGES=(
   "engagement-workflow|1|engagement_workflow: intake executed and accepted; 3 preparation branches; join"
   "partition-discovery|1|Gate: hand-off/supplied-record proof (default), or --dispatch: automatic live persona dispatch, schema+citation validated"
   "dev-project-discovery|1|Gate: hand-off + supplied record (default), or --dispatch: automatic live persona dispatch (build tooling + safe command plan), schema+citation validated"
-  "devops-project-discovery|1|Gate: DevOps project discovery (Dockerfile) supplied and accepted"
+  "devops-project-discovery|1|Gate: DevOps project discovery (Dockerfile) supplied and accepted, or --dispatch: automatic live persona dispatch (CI/container/IaC/deploy units + safe command plan)"
   "sre-operations-topology|1|Gate: SRE operations topology supplied and accepted"
   "build-index|0|02-build-index: deterministic, cited index of every build signal; nothing executed"
   "build-plan|0|02-build-plan: LLM build plan from the index only; validated; compared with the answer key"
@@ -908,14 +910,46 @@ print("dev-project-discovery: PASS  hand-off %s; accepted by Dagster %s: %s (%s)
 # Same gate shape as dev-project-discovery (William, 2026-09-24: a real gated record, not a skip),
 # reading the devops-persona partitions of the same partition map -- the Dockerfile's build/release
 # route, not a second native build. Reuses the project-discovery contract and schema.
+#
+# --dispatch (mode "automatic", D03, Phase 5c): same shape as stage 7's --dispatch. A REAL live persona
+# invocation reads the target checkout plus the accepted partition map (scope, not evidence) and itself
+# decides which CI/CD, container, IaC, packaging and deployment units the repository declares and which
+# safe commands would inspect them. Acceptance is schema conformance (enforced by the gate), fresh
+# citations, and structural rules, including two that test the D03 prompt's own boundaries: the plan
+# contains no native build tool (developer discovery owns those) and no deploy/publish step. The diff
+# against the fixture record is informational only.
 stage_devops_project_discovery() {
   require_run devops-project-discovery
-  gate_handoff devops-project-discovery "$DEVOPS_JOB" devops_project_discovery project-discovery
-  local handoff_state="$HANDOFF_STATE" handoff_dagster="$HANDOFF_DAGSTER"
-  gate_supply devops-project-discovery "$DEVOPS_JOB" project-discovery
+  local handoff_state="" handoff_dagster=""
 
-  echo "-- accept: the gate with the supplied discovery must succeed"
-  run_step devops-project-discovery accept "$(contract devops-project-discovery accept <<JSON
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    gate_dispatch_mode devops-project-discovery "$DEVOPS_JOB"
+    handoff_state="automatic-dispatch"
+
+    echo "-- accept: the automatic-dispatch gate must succeed (live persona invocation)"
+    run_step devops-project-discovery accept "$(contract devops-project-discovery accept <<JSON
+{"inputs": [{"path": "{run}/data/dispatch-mode.json", "kind": "file", "equals": {"$DEVOPS_JOB": "automatic"}},
+            {"path": "{run}/data/jobs/$DEVOPS_JOB/supplied/result.json", "kind": "absent"},
+            {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
+ "writes": {"required": ["{run}/data/jobs/$DEVOPS_JOB/accepted.json", "{run}/data/jobs/$DEVOPS_JOB/latest.json", "{run}/data/jobs/$DEVOPS_JOB/attempts/*/output.json",
+                         "{run}/data/jobs/$DEVOPS_JOB/attempts/*/inputs.json", "{run}/data/jobs/$DEVOPS_JOB/attempts/*/status.json"],
+            "allowed": ["{run}/data/jobs/$DEVOPS_JOB/job.lock", "{run}/data/jobs/$DEVOPS_JOB/attempts/*/project-discovery-summary.md",
+                        "{run}/data/jobs/$DEVOPS_JOB/upstream/*/repository-partition-map.json",
+                        "{run}/data/jobs/$DEVOPS_JOB/persona-attempts/*/outputs/persona/*", "{run}/data/jobs/$DEVOPS_JOB/persona-attempts/*/logs/persona/*",
+                        "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
+                        "{run}/data/llm-transcripts/d03-devops/*/transcript.jsonl", "{run}/data/llm-transcripts/d03-devops/*/raw-response.json",
+                        "appsec-review-process/prompt-cache/$DEVOPS_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$DEVOPS_JOB/attempts/*/output.json", "schema": "project-discovery.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$DEVOPS_JOB/accepted.json", "equals": {"status": "OK", "job": "$DEVOPS_JOB", "dispatch_mode": "automatic"}}]}
+JSON
+)" launch devops_project_discovery
+  else
+    gate_handoff devops-project-discovery "$DEVOPS_JOB" devops_project_discovery project-discovery
+    handoff_state="$HANDOFF_STATE"; handoff_dagster="$HANDOFF_DAGSTER"
+    gate_supply devops-project-discovery "$DEVOPS_JOB" project-discovery
+
+    echo "-- accept: the gate with the supplied discovery must succeed"
+    run_step devops-project-discovery accept "$(contract devops-project-discovery accept <<JSON
 {"inputs": [{"path": "{run}/data/jobs/$DEVOPS_JOB/supplied/result.json", "kind": "file", "schema": "project-discovery.schema.json", "equals": {"source_revision": "{pin}"}},
             {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
  "writes": {"required": ["{run}/data/jobs/$DEVOPS_JOB/accepted.json", "{run}/data/jobs/$DEVOPS_JOB/latest.json", "{run}/data/jobs/$DEVOPS_JOB/attempts/*/output.json",
@@ -925,6 +959,7 @@ stage_devops_project_discovery() {
              {"path": "{run}/data/jobs/$DEVOPS_JOB/accepted.json", "equals": {"status": "OK", "job": "$DEVOPS_JOB"}}]}
 JSON
 )" launch devops_project_discovery
+  fi
   launch_status
   [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "devops-project-discovery: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
   gate_validate "$DEVOPS_JOB" || die "devops-project-discovery: discovery_gate.validate rejected the accepted result"
@@ -932,6 +967,60 @@ JSON
   local jobdir="$RUN_DIR/data/jobs/$DEVOPS_JOB" attempt cites summary
   attempt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["attempt_id"])' "$jobdir/accepted.json")"
   cites="$(citations_fresh "$jobdir/attempts/$attempt/output.json")" || die "devops-project-discovery: $cites"
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    summary="$(python3 - "$RUN_DIR" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$DEVOPS_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
+import json, pathlib, sys
+rdir, attempt, record_path, dagster_id, cites = sys.argv[1:]
+rdir = pathlib.Path(rdir); d = rdir / 'data/jobs/02-devops-project-discovery'; att = d / 'attempts' / attempt
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+if ptr.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (ptr.get('dagster_run_id'), dagster_id))
+if ptr.get('dispatch_mode') != 'automatic': bad.append('accepted.json does not record automatic dispatch')
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != attempt: bad.append('accepted attempt is not the latest')
+status = json.loads((att / 'status.json').read_text())
+if status.get('dispatch_mode') != 'automatic': bad.append('status.json does not record automatic dispatch')
+if not (d / 'persona-attempts' / str(ptr.get('persona_attempt_id')) / 'logs/persona').is_dir(): bad.append('the persona invocation record is missing')
+out = json.loads((att / 'output.json').read_text())
+pdir = rdir / 'data/jobs/02-repository-partition-discovery'
+pmap = json.loads((pdir / 'attempts' / json.loads((pdir / 'accepted.json').read_text())['attempt_id'] / 'repository-partition-map.json').read_text())
+if pmap['source_revision'] != out['source_revision']: bad.append('revision differs from the accepted partition map')
+if pmap.get('target') != out.get('target'): bad.append('target %r differs from the accepted partition map %r' % (out.get('target'), pmap.get('target')))
+projects = {p['project_id']: p for p in out.get('projects', [])}
+if not projects: bad.append('the live dispatch produced no devops unit at all (the fixture has a Dockerfile)')
+if len(projects) != len(out.get('projects', [])): bad.append('duplicate project ids')
+for pid, p in projects.items():
+    if not p.get('evidence_citations'): bad.append('unit %s cites no evidence' % pid)
+plan = out.get('safe_command_plan', [])
+if not plan: bad.append('the live dispatch produced no safe command plan')
+native = {'autoreconf', './configure', 'configure', 'make', 'cmake', 'ninja', 'meson'}
+release = {'push', 'deploy', 'publish', 'release', 'apply'}
+for i, c in enumerate(plan):
+    argv = c.get('argv') or []
+    if not (argv and c.get('purpose')): bad.append('command %d has no argv or purpose' % i)
+    if c.get('authorization') not in ('read-only', 'network-required', 'script-execution-required'): bad.append('command %d has no valid authorization' % i)
+    if c.get('project_id') not in projects: bad.append('command %d names unknown project %r' % (i, c.get('project_id')))
+    if not c.get('evidence_citations'): bad.append('command %d cites no evidence' % i)
+    if argv and argv[0] in native: bad.append('command %d plans the native build tool %r, which developer discovery owns' % (i, argv[0]))
+    if any(t in release for t in argv): bad.append('command %d plans a deploy/publish-style step: %s' % (i, ' '.join(argv)))
+if bad: sys.exit('; '.join(bad))
+diff_note = ''
+try:
+    rec = json.loads(pathlib.Path(record_path).read_text())
+    rec_argv, live_argv = [c['argv'] for c in rec['safe_command_plan']], [c['argv'] for c in plan]
+    if rec_argv != live_argv:
+        diff_note = 'informational only, not a failure: live command plan %s differs from the fixture answer key %s' % (live_argv, rec_argv)
+except OSError:
+    pass
+p = out['projects'][0]
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'projects': list(projects),
+                  'root': p.get('root'), 'languages': p.get('languages'), 'manifests': p.get('manifests'),
+                  'buildenv_images': p.get('candidate_buildenv_images'),
+                  'command_plan': [{'argv': c['argv'], 'authorization': c['authorization']} for c in plan],
+                  'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': int(cites),
+                  'persona_attempt_id': ptr.get('persona_attempt_id'), 'model': ptr.get('model'), 'diff_note': diff_note}))
+PY
+)" || die "devops-project-discovery: $summary"
+  else
   summary="$(python3 - "$RUN_DIR" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$DEVOPS_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
 import json, pathlib, sys
 rdir, attempt, record, dagster_id, cites = sys.argv[1:]
@@ -958,6 +1047,7 @@ print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'projects
                   'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': int(cites)}))
 PY
 )" || die "devops-project-discovery: $summary"
+  fi
   checkout_unchanged devops-project-discovery
   record PASS devops-project-discovery "$(python3 -c 'import json,sys; e=json.loads(sys.argv[1]); e.update(handoff=sys.argv[2], handoff_dagster_run_id=sys.argv[3] or None); print(json.dumps(e))' "$summary" "$handoff_state" "$handoff_dagster")"
   printf '%s' "$summary" | python3 -c '

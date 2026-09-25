@@ -434,10 +434,11 @@ def _claims_from_project_inventory(inventory: dict[str, Any], inputs: tuple,
     own, so they stay in the artifact and are not turned into ``evidence_gap`` claims here (a claim
     needs a citation, and borrowing an unrelated file's would be fabricating evidence).
 
-    **Known limitation, flagged not hidden:** a target with no buildable project at all (only
-    ``coverage_gaps``) yields no claims and is rejected as "nothing to claim", the same stance the
-    partition builder takes for zero partitions. A legitimately project-free repository needs this
-    extended, not worked around."""
+    A discovery that legitimately finds no unit at all (no projects, no commands) is a valid result
+    when ``coverage_gaps`` says why -- governing rule 4, partial discovery stays visible: the gaps
+    *are* the finding, and ``persona-invoker-output.schema.json`` places no minimum on ``claims``. So
+    that case returns no claims. With no gap to explain the emptiness it is still rejected, since
+    silence is not a result."""
     by_path = {item.path: item for item in inputs}
     for claim_class in ("project_inventory", "safe_command_plan"):
         if claim_class not in allowed_claim_classes:
@@ -471,8 +472,10 @@ def _claims_from_project_inventory(inventory: dict[str, Any], inputs: tuple,
                           f"[{command.get('authorization')}]")[:2000],
             "file": result_filename, "citations": citations,
         })
-    if not claims:
-        raise InvokerOutputError("model response named no projects or commands at all -- nothing to claim")
+    if not claims and not inventory.get("coverage_gaps"):
+        raise InvokerOutputError(
+            "model response named no projects or commands and recorded no coverage gap explaining "
+            "why -- nothing to claim and no stated reason")
     return claims
 
 
