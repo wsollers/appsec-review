@@ -1,0 +1,46 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "build-classification",
+  "display_name": "Build Unit Classification",
+  "required_files": [
+    "build-classification.json",
+    "build-classification-summary.md",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "budget",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "artifacts_read",
+    "source_revision"
+  ],
+  "result_schema": {
+    "artifact": "build-classification.json",
+    "schema_file": "build-classification.schema.json"
+  },
+  "claim_class": {
+    "claim_class_id": "build_unit_classification",
+    "allowed_assertions": [
+      "statically-inferred-build-class",
+      "index-review",
+      "coverage-gap"
+    ],
+    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+  },
+  "validation_rules": [
+    "build-classification.json must satisfy build-classification.schema.json",
+    "source_revision, index and build_set are orchestrator-owned and set before publication; index names the accepted 02-build-index attempt and the sha256 of its build-index.json",
+    "every unit of the accepted index appears exactly once: as itself (unit_id equal to index_unit_id) or as two or more parts with unit_id '<index_unit_id>::<part>', part matching [a-z0-9][a-z0-9-]*; no unit_id outside the index",
+    "every signal_ids entry exists in the accepted index",
+    "every evidence citation is a repository-relative source_file citation whose content_hash matches the checkout",
+    "an unclassified unit is named in coverage_gaps",
+    "build_set is exactly the unit_ids classed compiled-native, compiled-managed or transpiled",
+    "index_review items are recorded disagreements with the index, never applied to it; they do not by themselves make the result OK_WITH_GAPS",
+    "status OK_WITH_GAPS when any unit is unclassified or coverage_gaps is non-empty",
+    "classes and index review are static inferences; the result cannot promote them to a finding, severity or runtime state, and asserts no successful build"
+  ]
+}

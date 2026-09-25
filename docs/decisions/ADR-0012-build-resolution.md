@@ -3,7 +3,9 @@
 Status: Proposed 2026-09-24 (design direction from William Sollers, 2026-09-24). Design:
 [docs/processes/build-resolution.md](../processes/build-resolution.md).
 **Revised 2026-09-25** for per-unit resolution and model classification: see
-[Revision 1](#revision-1-2026-09-25-per-unit-resolution-model-classification) at the end.
+[Revision 1](#revision-1-2026-09-25-per-unit-resolution-model-classification) at the end, and
+[Revision 2](#revision-2-2026-09-25-classification-is-its-own-job-the-model-reads-the-checkout)
+(classification is its own job; the model reads the checkout).
 
 ## Context
 
@@ -157,3 +159,28 @@ and a piece that cannot be built must not block the others.
 - The fixture answer key for the SAT becomes two units for hello-autotools: the root autotools unit
   (`compiled-native`, with the vendored cJSON compiled inside it) and the `Dockerfile` (`container`,
   not built).
+
+## Revision 2 (2026-09-25): classification is its own job; the model reads the checkout
+
+Status: Proposed 2026-09-25 (decisions by William Sollers, 2026-09-25). Amends decision 2 and
+Revision 1 decisions 3 and 10; where they conflict, this section wins. `02-build-index` (Revision 1
+decision 2) is built; the jobs below are not.
+
+1. **Two jobs, not one.** Classification is `02-build-classify` (after `02-build-index`): one
+   `claude-sonnet-5`/`medium` call over the whole index, output `build-classification.json` (schema
+   `appsec-review/build-classification/1`): one cited class per index unit, mixed units split into
+   parts, and the build set. `02-build-plan` (after `02-build-classify`) makes one Haiku call per
+   build-set unit and outputs `build-plan.json`. Each job has one model, one output contract and one
+   schema, and each is accepted and reused on its own: a rejected plan never forces a new
+   classification.
+2. **The model reads the checkout, not only the index** (replaces "never the checkout itself" in
+   decision 2). Both jobs read the whole target checkout, as the discovery jobs do, with the accepted
+   `build-index.json` (and, for `02-build-plan`, the accepted classification and the buildenv catalog)
+   as upstream artifacts. The model's job includes checking the deterministic scripts' work:
+   `02-build-classify` records where the index is wrong (`index_review`: missed unit, wrong member or
+   not-unit placement, wrong manifest, missed signal). Disagreements are recorded, never applied to
+   the index, and do not by themselves make the result `OK_WITH_GAPS`; unclassified units and
+   coverage gaps do.
+3. **Citations.** Classes and plan items cite checkout files (`source_file`, content hash filled by
+   the orchestrator) and name the index signals they rest on (`signal_ids`), each checked against the
+   accepted index. The upstream artifacts are never citable evidence.

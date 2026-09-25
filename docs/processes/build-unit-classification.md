@@ -85,8 +85,10 @@ workspace is one unit, and its member crates are listed inside it. Class `compil
 
 **The model classifies every unit** (William, 2026-09-25). `02-build-index` stays deterministic: it
 enumerates the candidate units (build roots) and collects their cited signals (manifests, markers,
-extension counts, build-system and toolchain declarations), but assigns no class. `02-build-plan`'s
-persona call then gives every unit exactly one class, with citations to index signals, and splits a
+extension counts, build-system and toolchain declarations), but assigns no class. `02-build-classify`'s
+persona call (its own job since ADR-0012 Revision 2; it reads the checkout as well as the index and
+records where the index is wrong) then gives every unit exactly one class, with citations to checkout
+files and the index signals it rests on, and splits a
 mixed unit (a Python package with a C extension) into its parts. A class with no resolvable citation
 is rejected, as for every other claim, and a unit the model cannot place is `unclassified` with a
 coverage gap. D02/D03 keep proposing per-project commands; the plan cross-checks them and records any

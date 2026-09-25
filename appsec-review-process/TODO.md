@@ -127,12 +127,10 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 
 ### Phase 3 -- B13 into service (B13 follow-up + new batch B16 "container image registry")
 
-- **Decided (William, 2026-09-25): require it.** `verify_container_result` / `load_verified_result`
-  / `to_worker_envelope` take a required `expected_result_sha256`: the `result_sha256` that
-  `run_container` returned, kept by the calling worker in its own attempt record (the worker's
-  `command.json`), outside the scratch mount and the adapter's log directory, and compared before
-  anything else is trusted. Recorded in `docs/adapters/pinned-container-adapter.md`. To implement as
-  the first Phase 3 change, while no lifecycle worker calls the verifier yet (only tests do).
+- Decide the open B13 question: `verify_container_result` / `load_verified_result` /
+  `to_worker_envelope` **require** an externally held `expected_result_sha256`. Recommendation:
+  require it; the hash is returned by `run_container` and kept in the attempt's `command.json`
+  outside the scratch mount. Record in `docs/adapters/pinned-container-adapter.md`.
 - B16: `registry/container-images/<image_id>.json` for every image a step-4 worker uses
   (`audit-static`, `audit-buildenv-cpp`, `audit-native`, `audit-iac`, `audit-container`,
   `scancode-toolkit`, `audit-binary-analysis`), generated from `images/.build-state/<id>/latest.json`
@@ -1089,9 +1087,15 @@ Work order (one piece at a time):
 2. [x] `02-build-index` + `build-index.json` schema + tests; SAT stage 10. Built 2026-09-25 (`6c34ebc`,
    `83ff692`, `2c3d28b`, `62846b6`); readiness `implemented_not_qualified` until the live SAT through
    stage 10 is recorded (then the design-parity entry moves to qualified).
-3. [ ] `02-build-plan` (classification + per-unit plan; `task-build-plan.md`; claim builder); SAT
-   stage 11.
-4. [ ] `02-build-resolution` (per unit); SAT stage 12.
+3. [ ] `02-build-classify` (ADR-0012 Revision 2, William 2026-09-25: its own job, Sonnet, reads the
+   checkout and the accepted index; one cited class per unit, mixed units split, `index_review` of the
+   script's work). Step 1 in progress: schema `build-classification.schema.json`, output contract,
+   role `build-unit-classifier`, job template, `task-build-classify.md`. Then the claim builder and
+   common-envelope persona worker, graph node, SAT stage 11.
+4. [ ] `02-build-plan` (Haiku, one call per build-set unit, reads the checkout, the index, the
+   classification and the buildenv catalog); SAT stage 12.
+5. [ ] `02-build-resolution` (per unit); SAT stage 13. Needs Phase 3 (B13 into service, B16 records,
+   and the required `expected_result_sha256`) first.
 
 ### Phase 6 -- build and compile database (E01, E02)
 
@@ -1375,7 +1379,7 @@ Cross-cutting capability ownership is explicit:
   docs, permission integration. Do not migrate a lifecycle worker in this batch.
 - Acceptance: hostile argv/mount/image/network/capability cases, timeout/cancel/worker-loss/log
   failure, Windows-host/Linux-worker parity, and a harmless pinned fixture container.
-- DECIDED 2026-09-25 (William: require it; see Phase 3). Was: TODO (owner, 2026-09-21; from the PR #29 review): decide whether `verify_container_result` /
+- TODO (owner, 2026-09-21; from the PR #29 review): decide whether `verify_container_result` /
   `load_verified_result` / `to_worker_envelope` should REQUIRE an externally held
   `expected_result_sha256` (the hash `run_container` returned, kept where the attempt cannot reach).
   Today the verifier's checks are consistency checks: an edit to the result or to any one file is

@@ -383,7 +383,7 @@ def validate_manifest(manifest: dict[str, Any], repo: Path = REPO) -> dict[str, 
                         errors.append(f"{job_id}: registry claim-class {field} contains duplicates")
             elif output.get("claim_class") in {
                     "supply_chain_posture_evidence", "supplied_partition_map",
-                    "supplied_project_discovery"}:
+                    "supplied_project_discovery", "build_unit_classification"}:
                 errors.append(f"{job_id}: registry claim-class declaration is missing")
         execution = record.get("execution", {})
         for field in ("worker", "validator"):

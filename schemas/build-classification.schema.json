@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "build-classification.schema.json",
+  "title": "Build Unit Classification",
+  "description": "Output of 02-build-classify (ADR-0012 Revision 1 decision 3; Revision 2: a separate job from 02-build-plan, and the model reads the checkout as well as the index). The persona reviews the deterministic build index against the checkout and gives every index unit exactly one class, or splits a mixed unit into parts with one class each. It also records where it disagrees with the index (a missed unit, a wrong member or not-unit placement): these are recorded, never applied. Orchestrator-owned fields (source_revision, index, build_set, every citation content_hash) are overwritten before publication; the model leaves index and build_set null. Rules the schema subset cannot express are enforced by the job's validator: every index unit covered exactly once (as itself or as two or more parts), part ids derived from their index unit id, every signal id resolving in the accepted index, every unit and review item citing evidence that resolves, and an unclassified unit named in coverage_gaps.",
+  "type": "object",
+  "required": [
+    "schema",
+    "target",
+    "source_revision",
+    "index",
+    "units",
+    "build_set",
+    "index_review",
+    "coverage_gaps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/build-classification/1"
+    },
+    "target": {
+      "type": "string"
+    },
+    "source_revision": {
+      "type": "string",
+      "description": "Orchestrator-owned: the accepted intake's revision."
+    },
+    "index": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Orchestrator-owned: the accepted build index this classification read. null in the model's response; filled before publication (the published file must carry it).",
+      "required": [
+        "attempt_id",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "unit_id",
+          "index_unit_id",
+          "root",
+          "class",
+          "languages",
+          "rationale",
+          "signal_ids",
+          "evidence_citations",
+          "confidence"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "unit_id": {
+            "type": "string",
+            "pattern": "^(dir|file):[^\\s]+$",
+            "description": "The index unit id, or for a part of a split unit '<index unit id>::<part>' with part matching [a-z0-9][a-z0-9-]*."
+          },
+          "index_unit_id": {
+            "type": "string",
+            "pattern": "^(dir|file):[^\\s]+$"
+          },
+          "root": {
+            "type": "string",
+            "description": "Repository-relative root of this unit or part ('.' for the repository root)."
+          },
+          "class": {
+            "type": "string",
+            "enum": [
+              "compiled-native",
+              "compiled-managed",
+              "transpiled",
+              "interpreted",
+              "container",
+              "infrastructure",
+              "unclassified"
+            ]
+          },
+          "languages": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9+#.-]*$"
+            }
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why this class, in terms of the cited evidence."
+          },
+          "signal_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^s[0-9]{4}$"
+            },
+            "description": "Index signals this class rests on; each must exist in the accepted index."
+          },
+          "evidence_citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "evidence-citation.schema.json"
+            },
+            "description": "source_file citations into the checkout."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        }
+      }
+    },
+    "build_set": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "Orchestrator-owned, derived: unit_ids whose class is compiled-native, compiled-managed or transpiled. null in the model's response; filled before publication.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "index_review": {
+      "type": "array",
+      "description": "Where the persona disagrees with the deterministic index. Recorded for 02-build-plan, the SAT and the report; never applied to the index.",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "path",
+          "statement",
+          "evidence_citations"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "missed-unit",
+              "wrong-member",
+              "wrong-not-unit",
+              "wrong-manifest",
+              "missed-signal",
+              "other"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "Repository-relative path the disagreement is about."
+          },
+          "unit_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The index unit concerned, when there is one."
+          },
+          "statement": {
+            "type": "string"
+          },
+          "evidence_citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "evidence-citation.schema.json"
+            }
+          }
+        }
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

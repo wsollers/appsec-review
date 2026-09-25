@@ -1,0 +1,44 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-build-classify",
+  "display_name": "Build Unit Classification",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "model": {
+    "model": "claude-sonnet-5",
+    "effort": "medium",
+    "_note": "ADR-0012 Revision 1 decision 10 (William, 2026-09-25): the classification call, one per run over the whole index, uses claude-sonnet-5/medium like the discovery jobs; per-unit plans (02-build-plan) use Haiku."
+  },
+  "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "build-unit-classifier",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "static-repo-project-inspector",
+    "output_contract_id": "build-classification"
+  },
+  "inputs": {
+    "required": [
+      "target repository path",
+      "accepted build-index.json from 02-build-index"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-build-classify/attempts/<attempt_id>",
+    "files": [
+      "build-classification.json",
+      "build-classification-summary.md",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "task",
+    "output_contract"
+  ],
+  "task_prompt": "appsec-review-process/02-evidence-pregather/task-build-classify.md"
+}
