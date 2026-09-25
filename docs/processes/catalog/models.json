@@ -36,7 +36,7 @@
        {"name": "S3 Intake", "members": ["step:phase1_intake"]},
        {"name": "S4 Partition discovery", "members": ["step:repository_partition_discovery", "step:supply-partition"]},
        {"name": "S5 Developer project discovery", "members": ["step:supply-dev", "step:dev_project_discovery"]},
-       {"name": "S6a Build resolution (designed)", "members": ["step:build-index", "step:build-plan", "step:build-resolution"]},
+       {"name": "S6a Build resolution (index built; plan and resolution designed)", "members": ["step:build-index", "step:build-plan", "step:build-resolution"]},
        {"name": "S6b Build configure (blocked)", "members": ["job:02-build-configure"]}
      ]},
     {"id": "engagement-workflow", "name": "engagement_workflow pipeline (dagster-workflow.mmd)",

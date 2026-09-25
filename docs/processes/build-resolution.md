@@ -1,6 +1,7 @@
 # Build resolution: learning how to build an unknown target
 
-Status: **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
+Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`, SAT stage 10); sections 2-5
+(`02-build-plan`, `02-build-resolution`, catalog and lock) **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
 **Extended 2026-09-25** by [build-unit-classification.md](build-unit-classification.md): the loop below runs
 once per compiled or transpiled unit, and a failed unit blocks only that unit's jobs. ADR-0012
 [Revision 1](../decisions/ADR-0012-build-resolution.md#revision-1-2026-09-25-per-unit-resolution-model-classification)
@@ -63,14 +64,28 @@ Never built: a repository's own Dockerfile (only images our code renders from a 
 Never run: any built target. Dependencies for non-apt ecosystems follow `TODO.md` Phase 5f (public
 registries for the POC, TLS and lockfile hash verification, restore during provisioning only).
 
-## 1. `02-build-index` (deterministic)
+## 1. `02-build-index` (deterministic) -- built
 
-A Python indexer that reads the checkout and writes one bounded, cited index for the model. It
-executes nothing from the target, makes no network calls and makes no judgments. It replaces
-`build_discovery.py`'s collector, which only looks for CMake.
+A Python indexer (`appsec-review-process/build_index.py`) that reads the checkout and writes one
+bounded, cited index for the model. It executes nothing from the target, makes no network calls and
+makes no judgments: it assigns no class. It replaces `build_discovery.py`'s collector, which only
+looks for CMake. It runs in-process on the common worker-result envelope (`deterministic_python`),
+standalone as the Dagster job `build_index` and in `full_review` as `job_02_build_index`.
 
-**Reads:** the accepted intake (source revision, file inventory, families), the accepted partition
-map (roots and deferred partitions; deferred partitions are indexed as names only), the checkout.
+**Reads (the graph's required edges):** the accepted intake (source revision, file inventory and
+`evidence/source.json` fingerprints, excluded paths), the accepted partition map (deferred partitions
+are indexed as names only: see below), the accepted D02 and D03 records (cross-check context only), and
+the staged checkout. Every upstream artifact is pinned by sha256 in the fingerprinted input record, so
+a changed upstream is a new attempt, never a reuse.
+
+**Units.** One per build root: `dir:<root>` for the directory of a defining manifest (`dir:.` for the
+repository root), `file:<path>` for a per-file definition (a `Dockerfile`, `Containerfile` or compose
+file). A nested root, or a vendored tree with no manifest of its own, is a **member** of the enclosing
+unit when the enclosing build files name its path outside a comment (or a quoted workspace glob matches
+it), cited by a `nested-root-reference` signal; otherwise it is its own unit, or a **not-unit** when it
+is an unreferenced vendored or example copy, or lies in a deferred partition. For hello-autotools:
+`dir:.` (`configure.ac`, `Makefile.am`; member `vendor/cJSON-1.7.18`, named by `libcjson_a_SOURCES`)
+and `file:Dockerfile`.
 
 **Collects, each as a signal with path, sha256 and line range:**
 
@@ -82,15 +97,27 @@ map (roots and deferred partitions; deferred partitions are indexed as names onl
 | Human instructions | `README*`, `INSTALL*`, `BUILDING*`, `HACKING*`: only sections whose headings or text match build/install/dependency terms |
 | Layout | file counts by extension, top-level directories, generated-file markers (`configure` present or not) |
 
-**Writes:** `data/jobs/02-build-index/.../outputs/build-index.json` (new schema
-`appsec-review/build-index/1`) and a readable `build-index.md`.
+**Deferred partitions:** files inside them contribute no excerpt, except the manifests of units and
+members and human build instructions (README, INSTALL, BUILDING and similar), which the plan needs and
+which D01 usually defers with the rest of the documentation.
 
-**Bounds:** excerpts at most 4 KiB each, at most 400 signals, index at most 512 KiB; overflow is
-recorded as `truncated` with counts, never silently dropped. Excerpts are wrapped as untrusted
-target data (the model is told they are data, never instructions; AGENTS.md).
+**Writes:** `data/jobs/02-build-index/attempts/<attempt_id>/build-index.json` (schema
+`appsec-review/build-index/1`), a readable `build-index.md` (no excerpt text), `status.json` and the
+envelope `result.json`. Status `OK`, or `OK_WITH_GAPS` when signals were omitted or no unit exists.
 
-**Validates:** schema; every signal's sha256 recomputed from the checkout; same source revision as
-intake; no file outside the checkout.
+**Bounds:** excerpts at most 4 KiB each, at most 400 signals (at most 40 per file), index at most
+512 KiB; one manifest signal per unit is reserved and the rest are kept by priority (manifests,
+nested references, lockfiles, toolchain, dependencies, markers, container, generated, packaging, CI,
+docs). Every omission is counted in `truncated`, never silently dropped. Excerpts are untrusted target
+data (the model is told they are data, never instructions; AGENTS.md); secret-like text matching the
+published-result patterns is replaced by `[REDACTED:<kind>]`, counted, and the validator applies the
+same replacement.
+
+**Validates:** schema; source revision and fingerprint equal the accepted intake's; the index names
+exactly the accepted upstream attempts; every signal's sha256, line range and excerpt recomputed from
+the checkout; no path outside the checkout or through a link; unique ids, every reference resolving,
+every unit citing a manifest and every member a reference; truncation counts consistent; and a
+byte-equal rebuild from the same inputs (the index is deterministic).
 
 ## 2. Image catalog lookup (reuse)
 

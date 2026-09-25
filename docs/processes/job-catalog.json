@@ -2552,7 +2552,7 @@
      }
     },
     {
-     "name": "S6a Build resolution (designed)",
+     "name": "S6a Build resolution (index built; plan and resolution designed)",
      "entries": [
       {
        "ref": "step:build-index",

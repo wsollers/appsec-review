@@ -1084,7 +1084,9 @@ Work order (one piece at a time):
    lane is not in the pre-submission model). Original item: update `build-resolution.md`,
    Mermaid, BPMN (if the flow changes) and the job catalog in the same change (Full protocol for the
    new graph nodes: `job-graph.json`, `design-parity-manifest.json`, schemas, contracts, tests).
-2. [ ] `02-build-index` + `build-index.json` schema + tests; SAT stage 10.
+2. [x] `02-build-index` + `build-index.json` schema + tests; SAT stage 10. Built 2026-09-25 (`6c34ebc`,
+   `83ff692`, `2c3d28b`, `62846b6`); readiness `implemented_not_qualified` until the live SAT through
+   stage 10 is recorded (then the design-parity entry moves to qualified).
 3. [ ] `02-build-plan` (classification + per-unit plan; `task-build-plan.md`; claim builder); SAT
    stage 11.
 4. [ ] `02-build-resolution` (per unit); SAT stage 12.

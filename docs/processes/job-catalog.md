@@ -296,7 +296,7 @@ The steps run so far on hello-autotools, in process-flow order. Source: `docs/pr
 | [dev_project_discovery (Dagster job)](#step-dev-project-discovery) | Dagster job | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`dev-supplied`](#a-dev-supplied)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`dev-handoff`](#a-dev-handoff) |
 | **Group rollup** | | **Enters:** [`dev-record`](#a-dev-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`loaded-job-list`](#a-loaded-job-list) | **Leaves:** [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`dev-handoff`](#a-dev-handoff) |
 
-### Fixture bring-up: S6a Build resolution (designed)
+### Fixture bring-up: S6a Build resolution (index built; plan and resolution designed)
 
 | Step | Type | Consumes | Produces |
 |---|---|---|---|
