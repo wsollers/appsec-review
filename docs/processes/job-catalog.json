@@ -5161,7 +5161,6 @@
    "output_files": [
     "project-inventory.json",
     "project-discovery-summary.md",
-    "safe-command-plan.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/project-discovery.json",
@@ -5241,7 +5240,6 @@
    "output_files": [
     "project-inventory.json",
     "project-discovery-summary.md",
-    "safe-command-plan.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/project-discovery.json",

@@ -33,7 +33,6 @@
     "files": [
       "project-inventory.json",
       "project-discovery-summary.md",
-      "safe-command-plan.json",
       "status.json"
     ]
   },

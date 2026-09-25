@@ -1074,7 +1074,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) (required, contract `repository-partition-map`) |
 | Declared inputs (registry/job-templates/02-dev-project-discovery.json) | target repository path<br>language build environment image catalog<br>developer docs *(optional)*<br>CI workflow files *(optional)*<br>existing component map *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-dev-project-discovery/` |
-| Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>safe-command-plan.json<br>status.json |
+| Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>status.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-build-configure`](#job-02-build-configure) |
 | Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
 | Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |
@@ -1094,7 +1094,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-repository-partition-discovery`](#job-02-repository-partition-discovery) (required, contract `repository-partition-map`) |
 | Declared inputs (registry/job-templates/02-devops-project-discovery.json) | target repository path<br>CI/CD and deployment artifact inventory<br>Dockerfiles *(optional)*<br>IaC *(optional)*<br>environment templates *(optional)*<br>build logs *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-devops-project-discovery/` |
-| Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>safe-command-plan.json<br>status.json |
+| Output files (registry/output-contracts/project-discovery.json) | project-inventory.json<br>project-discovery-summary.md<br>status.json |
 | Consumed by | [`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
 | Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |
