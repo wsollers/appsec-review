@@ -227,7 +227,7 @@ byte-equality with the fixture answer key is not a gate; a differing command pla
 
 Same flag and same two steps for `02-devops-project-discovery`; the gate code is shared with stage 7
 (`discovery_gate.AUTOMATIC_PROJECT_JOBS`), with its own persona identity (`d03-devops`) and its own
-task prompt (`appsec-review-process/02-evidence-pregather/devops-project-discovery.md`). The persona
+task prompt (`appsec-review-process/02-evidence-pregather/task-devops-project-discovery.md`). The persona
 decides which CI/CD, container, IaC, packaging and deployment units the repository declares and
 which safe commands would inspect them; the accepted partition map is scope, not evidence. Overlap
 with developer discovery is deliberate and accepted: both jobs may read the Dockerfile.
