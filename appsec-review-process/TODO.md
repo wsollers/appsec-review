@@ -1085,8 +1085,9 @@ Work order (one piece at a time):
    Mermaid, BPMN (if the flow changes) and the job catalog in the same change (Full protocol for the
    new graph nodes: `job-graph.json`, `design-parity-manifest.json`, schemas, contracts, tests).
 2. [x] `02-build-index` + `build-index.json` schema + tests; SAT stage 10. Built 2026-09-25 (`6c34ebc`,
-   `83ff692`, `2c3d28b`, `62846b6`); readiness `implemented_not_qualified` until the live SAT through
-   stage 10 is recorded (then the design-parity entry moves to qualified).
+   `83ff692`, `2c3d28b`, `62846b6`); SAT PASS through stage 10 (SAT `20260925T211247Z`, run
+   `20260925T211325Z-3a398a`, Dagster `04e8562f`, supplied mode). Readiness stays
+   `implemented_not_qualified` until fault-recovery qualification (reuse, tamper, newer failure) is run live.
 3. [ ] `02-build-classify` (ADR-0012 Revision 2, William 2026-09-25: its own job, Sonnet, reads the
    checkout and the accepted index; one cited class per unit, mixed units split, `index_review` of the
    script's work). Step 1 in progress: schema `build-classification.schema.json`, output contract,

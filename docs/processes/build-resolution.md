@@ -1,6 +1,6 @@
 # Build resolution: learning how to build an unknown target
 
-Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`, SAT stage 10); sections 2-5
+Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`; SAT stage 10 PASS, SAT `20260925T211247Z`); sections 2-5
 (`02-build-plan`, `02-build-resolution`, catalog and lock) **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
 **Extended 2026-09-25** by [build-unit-classification.md](build-unit-classification.md): the loop below runs
 once per compiled or transpiled unit, and a failed unit blocks only that unit's jobs. ADR-0012

@@ -29,7 +29,7 @@ flowchart TD
   S5["S5 02-dev-project-discovery<br/>supply_record.py: ACCEPTED"]:::done
   S5b["S5b devops + SRE topology discovery<br/>ACCEPTED (SAT stages 8-9)"]:::done
   AD["Automatic persona dispatch D01-D04<br/>SAT --dispatch stages 6-9, live 2026-09-25"]:::done
-  S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; live SAT stage 10 pending"]:::done
+  S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; SAT stage 10 PASS"]:::done
   S6a["S6a-2 02-build-plan (classify units, per-unit LLM plan)<br/>then 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::todo
@@ -270,7 +270,10 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   regenerated after the D04 edge change. Secret-like excerpt text is redacted, because the shared
   result validator would otherwise reject any target with a token in a Dockerfile or CI file. For
   hello-autotools the index gives `dir:.` (with member `vendor/cJSON-1.7.18`) and `file:Dockerfile`.
-  **Not yet:** the live SAT through stage 10. **Nothing is built yet:** no build plan, no image, no
+  **SAT PASS through stage 10** the same evening (supplied mode, no model call): SAT
+  `20260925T211247Z`, run `20260925T211325Z-3a398a`, Dagster `04e8562f`: units `dir:.` and
+  `file:Dockerfile` equal the answer key, member `vendor/cJSON-1.7.18`, 29 signals, nothing omitted,
+  clipped or redacted; both discovery records' root `.` matched both units. **Nothing is built yet:** no build plan, no image, no
   compile; those are `02-build-plan` and `02-build-resolution` (next).
 - 2026-09-25 -- **Build lane decisions settled (branch `build-lane-per-unit`).** William: the model
   classifies every unit (the index stays deterministic and assigns no class); one unit per build
