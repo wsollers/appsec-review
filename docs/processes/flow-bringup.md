@@ -257,6 +257,13 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-25 -- **Build lane decisions settled (branch `build-lane-per-unit`).** William: the model
+  classifies every unit (the index stays deterministic and assigns no class); one unit per build
+  root; ecosystem order npm, Maven/Gradle, cargo + Go, NuGet; **repository Dockerfiles are not built**,
+  which replaces the interim note in the entry directly below that the build lane would build them. The build
+  lane builds only our rendered images and compiles the code units in them; a Dockerfile gets static
+  analysis and a base-image scan. Recorded in `build-unit-classification.md` and `TODO.md` Phase 5g.
+  Next: the ADR-0012 revision.
 - 2026-09-25 -- **Decision: no run step in discovery; containers are built by the build lane, never
   run.** D03's live plan had included `docker run --rm hello-autotools World`. William: running the
   target is not discovery. The devops task prompt now forbids planning `docker`/`podman`/`nerdctl`

@@ -1,6 +1,6 @@
 # Build unit classification: what gets built, and how
 
-Status: **DESIGN, not built** (2026-09-25; decisions below). Extends [build resolution](build-resolution.md) /
+Status: **DESIGN, not built** (2026-09-25; decisions below, all settled). Extends [build resolution](build-resolution.md) /
 [ADR-0012](../decisions/ADR-0012-build-resolution.md), which assumes a single native project.
 
 ## Why
@@ -23,9 +23,9 @@ Each unit gets exactly one **class**:
 | `compiled-managed` | Java, Kotlin, Scala (JVM); C#, F# (.NET) | **yes** | bytecode/assemblies for SAST that needs a build, dependency resolution, binary analysis |
 | `transpiled` | TypeScript, TSX/JSX via Babel, CoffeeScript, Elm, Kotlin/JS; a bundler step (webpack, vite, esbuild) over JS | **yes (transpile)** | type-check, emitted JS and source maps, bundle contents |
 | `interpreted` | Python, PHP, Ruby, plain JavaScript/Node, Perl, Lua, shell | no | source goes straight to SAST; manifests and lockfiles to SCA |
-| `container` | `Dockerfile`, `Containerfile`, compose `build:` | **yes (image build only)** | discovery treats the definition statically; the build lane builds the repository's image in the sandbox and never runs it; Dockerfile analysis and base-image scan |
+| `container` | `Dockerfile`, `Containerfile`, compose `build:` | no | the repository's Dockerfile is never built or run: Dockerfile static analysis and a scan of its pinned base image; the code it would compile is built as its own unit in our rendered image |
 | `infrastructure` | Terraform/OpenTofu, CloudFormation, Bicep/ARM, Helm, Kubernetes manifests, Ansible; infra-as-program (CDK, Pulumi) | never applied | static IaC analysis only; CDK/Pulumi are not synthesized |
-| `unclassified` | anything the table cannot place | no | coverage gap, named with its path |
+| `unclassified` | anything the model cannot place with evidence | no | coverage gap, named with its path |
 
 A unit can hold more than one class (a Python package with a C extension). It is then split: the
 extension is a `compiled-native` unit rooted at the package, and the Python code stays `interpreted`.
@@ -35,14 +35,11 @@ extension is a `compiled-native` unit rooted at the package, and the Python code
 ```mermaid
 flowchart TD
   A[Accepted intake + partition map + D02/D03/D04 records] --> I[02-build-index: enumerate units by build root, nothing executed]
-  I --> K[Classify each unit: deterministic table over manifests, extensions, markers]
-  K --> Q{Placed by the table?}
-  Q -- ambiguous or mixed --> L[02-build-plan asks the model to classify, cited; recorded as inferred]
-  Q -- yes --> S
-  L --> S{Class}
+  I --> K[02-build-plan: the model classifies every unit from the index, each class cited]
+  K --> S{Class}
   S -- compiled-native / compiled-managed / transpiled --> BS[BUILD SET]
   S -- interpreted --> INT[No build: source to SAST, manifests and lockfiles to SCA]
-  S -- container --> CT[Build the repository image in the sandbox, never run it; Dockerfile analysis, base and built image scan]
+  S -- container --> CT[Not built or run: Dockerfile static analysis, base image by digest, image scan]
   S -- infrastructure --> IAC[Static IaC analysis only; no init, synth, plan or apply]
   S -- unclassified --> GAP[Coverage gap]
   BS --> E{Ecosystem supported? apt now; npm, Maven/Gradle, Go, cargo for Rust, NuGet need restore support; POC fetches from public registries}
@@ -86,16 +83,19 @@ workspace is one unit, and its member crates are listed inside it. Class `compil
 
 ## Where classification happens
 
-In `02-build-index`, deterministically, from a data table (class by manifest, marker and extension),
-so it is cheap, testable and reproducible. The model is asked only for units the table cannot place or
-that mix classes, and its answer is recorded as `inferred` with citations. D02/D03 keep proposing
-per-project commands; the build index cross-checks them and records any disagreement, as ADR-0012
-already does for build system and project root.
+**The model classifies every unit** (William, 2026-09-25). `02-build-index` stays deterministic: it
+enumerates the candidate units (build roots) and collects their cited signals (manifests, markers,
+extension counts, build-system and toolchain declarations), but assigns no class. `02-build-plan`'s
+persona call then gives every unit exactly one class, with citations to index signals, and splits a
+mixed unit (a Python package with a C extension) into its parts. A class with no resolvable citation
+is rejected, as for every other claim, and a unit the model cannot place is `unclassified` with a
+coverage gap. D02/D03 keep proposing per-project commands; the plan cross-checks them and records any
+disagreement, as ADR-0012 already does for build system and project root.
 
-Intake's `families` table today maps `.js` and `.jsx` to `typescript`; classification needs them apart
-(`interpreted` vs `transpiled`). Either intake gets a separate `javascript` family or the index
-classifies from manifests (`tsconfig.json`, a `typescript`/`@babel/*` dependency, a bundler config)
-rather than extensions alone.
+Intake's `families` table today maps `.js` and `.jsx` to `typescript`, so extensions alone cannot tell
+plain JavaScript (`interpreted`) from TypeScript or bundled JS (`transpiled`). The index must collect
+the signals that do (`tsconfig.json`, a `typescript` or `@babel/*` dependency, a bundler config) so the
+model can cite them.
 
 ## Decisions
 
@@ -103,16 +103,18 @@ Decided by William, 2026-09-25:
 
 - **Transpiled units are in the build set** and go through the same resolution loop as compiled
   units (transpile and type-check in the trial).
-- **Ecosystems after apt: all of them** -- npm, Maven/Gradle, Go modules, cargo (Rust), NuGet. Each is a
-  `package-restore` grant for its registry host(s) plus restore support in the loop; until a unit's ecosystem has one, that unit is
-  `BLOCKED(UNSUPPORTED_ECOSYSTEM)`. Order not yet set; npm first is proposed, since it unblocks the
-  transpile decision above and Node native addons.
-- **Containers: static in discovery, built by the build lane** (revised 2026-09-25, replacing "static
-  in v1"). Discovery only reads container definitions and proposes the build (`docker build`). The
-  build lane builds each repository image in the sandbox. Its `RUN` steps are target code and fetch
-  with network, so the build needs `target-execution` and `package-restore` (or a fixed network)
-  grants, and the build lane's design must say how. Images are never run: no `docker run` or
-  `compose up`, in discovery or in the build lane.
+- **Ecosystems after apt: all of them, in this order** -- npm (unlocks TypeScript and Node native
+  addons), then Maven/Gradle, then cargo (Rust) and Go modules, then NuGet. Each is a `package-restore`
+  grant for its registry host(s) plus restore support in the loop; until a unit's ecosystem has one,
+  that unit is `BLOCKED(UNSUPPORTED_ECOSYSTEM)`.
+- **A unit is one build root**: the directory of a defining manifest; a monorepo has many, and a
+  mixed package is split by class.
+- **The model classifies every unit** (see "Where classification happens").
+- **Repository Dockerfiles are not built** (William, 2026-09-25, final; an interim note that
+  day had the build lane building them). The build lane builds only our own rendered images, in
+  which it compiles the code units. A repository's Dockerfile gets static analysis and a scan of its
+  pinned base image. D03's `docker build` plan entry stays discovery context, not a build step.
+  Nothing is ever run: no `docker run` or `compose up`, in discovery or in the build lane.
 - **Running built targets is out of scope for now** (dynamic testing, fuzzing): see the last section
   of `appsec-review-process/TODO.md`.
 - **Cloud infrastructure: static only.** IaC scanners over the files; no `terraform init`/`validate`,
@@ -122,13 +124,6 @@ Decided by William, 2026-09-25:
   lockfile hash verification (registry-published checksums where the repository pins none, recorded as
   weaker). A local caching proxy is deferred: it is an external service outside this project.
   Tracked in `appsec-review-process/TODO.md` Phase 5f.
-
-Proposed, not yet confirmed:
-
-1. **Owner of classification:** the deterministic table in `02-build-index`, with the model only for
-   ambiguous or mixed units.
-2. **Unit granularity:** one unit per build root, not one per partition.
-3. **Ecosystem order:** npm, then Maven/Gradle, then cargo (Rust) and Go modules, then NuGet.
 
 ## Open
 

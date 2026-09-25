@@ -1018,7 +1018,8 @@ fields (`e915d92`) and the invoker envelope's nested-object rule (`97eeb3d`); se
 **Decided (William, 2026-09-25):** no run step in discovery plans. D03 had also planned `docker run
 --rm hello-autotools World`; the devops prompt now forbids running what a definition builds, and SAT
 stage 8 fails on a `docker`/`podman`/`nerdctl` `run`/`exec`/`start` or `compose up`/`run` entry.
-Containers stay static in discovery; the build lane builds the images and never runs them. Running a
+Containers stay static in discovery (and, decided later the same day, repository Dockerfiles are not
+built by the build lane either: see Phase 5g). Running a
 built target (fuzzing, dynamic testing) is a later TODO (last section of this file). **Confirmed
 live 2026-09-25:** fresh `--dispatch` SAT through `devops-project-discovery`, run `20260925T173117Z-055b25`, Dagster `d0f5fd8d`: stage 8
 PASS with the plan `docker build -t hello-autotools .` [network-required] and no run step.
@@ -1059,6 +1060,31 @@ TODO:
 - [ ] **Deferred (external dependency):** a local caching proxy (Nexus/Artifactory, or
   Verdaccio/Athens per ecosystem) as the single fixed host per ecosystem. Decide product, host and
   ownership before it is built; it replaces the public hosts in the grants and nothing else changes.
+
+### Phase 5g -- build lane per unit: decisions settled, ADR-0012 revision next -- IN PROGRESS
+
+Branch `build-lane-per-unit` (from `main` = `b28dfde`, after PR #40 merged D01-D04). Design:
+`docs/processes/build-unit-classification.md`. Decided by William, 2026-09-25:
+
+- **The model classifies every unit.** `02-build-index` stays deterministic (enumerates build roots and
+  their cited signals, assigns no class); `02-build-plan`'s persona gives each unit one cited class and
+  splits mixed units.
+- **One unit per build root.**
+- **Ecosystem order after apt:** npm, Maven/Gradle, cargo + Go, NuGet (POC restores from public
+  registries, Phase 5f).
+- **Repository Dockerfiles are not built** (final; replaces the interim "build lane builds them"). The
+  build lane builds only our rendered images and compiles code units in them; a Dockerfile gets static
+  analysis and a base-image scan; D03's `docker build` entry is discovery context. Nothing is run.
+
+Work order (one piece at a time):
+
+1. [ ] Revise ADR-0012 for per-unit resolution and model classification; update `build-resolution.md`,
+   Mermaid, BPMN (if the flow changes) and the job catalog in the same change (Full protocol for the
+   new graph nodes: `job-graph.json`, `design-parity-manifest.json`, schemas, contracts, tests).
+2. [ ] `02-build-index` + `build-index.json` schema + tests; SAT stage 10.
+3. [ ] `02-build-plan` (classification + per-unit plan; `task-build-plan.md`; claim builder); SAT
+   stage 11.
+4. [ ] `02-build-resolution` (per unit); SAT stage 12.
 
 ### Phase 6 -- build and compile database (E01, E02)
 
@@ -2121,7 +2147,8 @@ old script outright (no thin wrapper). Full script-by-script survey and priority
 ## 10. Later: running built targets (fuzzing, dynamic testing)
 
 Added 2026-09-25 (William). Today no job runs what it builds: discovery plans only build and inspect
-commands, and the build lane builds images and binaries without running them. Eventually we may want
+commands, and the build lane builds binaries in our own rendered images without running them (it never
+builds a repository Dockerfile). Eventually we may want
 to run them, for example:
 
 - [ ] Fuzzing the built binaries (E-series fuzzing jobs, `13-fuzz-target-triage`): run harnesses
