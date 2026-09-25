@@ -127,10 +127,12 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 
 ### Phase 3 -- B13 into service (B13 follow-up + new batch B16 "container image registry")
 
-- Decide the open B13 question: `verify_container_result` / `load_verified_result` /
-  `to_worker_envelope` **require** an externally held `expected_result_sha256`. Recommendation:
-  require it; the hash is returned by `run_container` and kept in the attempt's `command.json`
-  outside the scratch mount. Record in `docs/adapters/pinned-container-adapter.md`.
+- **Decided (William, 2026-09-25): require it.** `verify_container_result` / `load_verified_result`
+  / `to_worker_envelope` take a required `expected_result_sha256`: the `result_sha256` that
+  `run_container` returned, kept by the calling worker in its own attempt record (the worker's
+  `command.json`), outside the scratch mount and the adapter's log directory, and compared before
+  anything else is trusted. Recorded in `docs/adapters/pinned-container-adapter.md`. To implement as
+  the first Phase 3 change, while no lifecycle worker calls the verifier yet (only tests do).
 - B16: `registry/container-images/<image_id>.json` for every image a step-4 worker uses
   (`audit-static`, `audit-buildenv-cpp`, `audit-native`, `audit-iac`, `audit-container`,
   `scancode-toolkit`, `audit-binary-analysis`), generated from `images/.build-state/<id>/latest.json`
@@ -1373,7 +1375,7 @@ Cross-cutting capability ownership is explicit:
   docs, permission integration. Do not migrate a lifecycle worker in this batch.
 - Acceptance: hostile argv/mount/image/network/capability cases, timeout/cancel/worker-loss/log
   failure, Windows-host/Linux-worker parity, and a harmless pinned fixture container.
-- TODO (owner, 2026-09-21; from the PR #29 review): decide whether `verify_container_result` /
+- DECIDED 2026-09-25 (William: require it; see Phase 3). Was: TODO (owner, 2026-09-21; from the PR #29 review): decide whether `verify_container_result` /
   `load_verified_result` / `to_worker_envelope` should REQUIRE an externally held
   `expected_result_sha256` (the hash `run_container` returned, kept where the attempt cannot reach).
   Today the verifier's checks are consistency checks: an edit to the result or to any one file is

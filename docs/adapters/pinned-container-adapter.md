@@ -226,7 +226,12 @@ caller-supplied facts: editing the result alone, or any one file, is detected. `
 container wrote, no caller-supplied fact predicts it, and a party able to rewrite every file in the
 log directory consistently (logs, `observation.json`, `command.json`, `events.jsonl` and the result)
 is outside what 1.0 detects. A caller that needs more must keep the `result_sha256` that
-`run_container` returned and compare it. Where the shared redactor rewrites an argument (a path or
+`run_container` returned and compare it. **Decided 2026-09-25 (William), not yet implemented:** every
+caller must. The three verification functions will take a required `expected_result_sha256` (the
+value `run_container` returned, kept in the calling worker's own attempt record, outside the scratch
+mount and this log directory) and reject a result whose hash differs before any other check; this
+lands as the first Phase 3 change in `appsec-review-process/TODO.md`, before the first lifecycle
+worker calls the verifier. Where the shared redactor rewrites an argument (a path or
 argv member containing `password`, `token`, `secret` or `api_key`) the record holds less than the
 argv; the comparison binds what remains, and the expectation never comes from the record, so such
 runs verify like any other. `attempt_root` must be given in the spelling the run used: the scratch
