@@ -1007,6 +1007,43 @@ the system.
 
 **Not done yet:** task prompt, template fix, wiring, tests, SAT branch, docs, live run.
 
+### Phase 5f -- build lane dependency restore: public registries for the POC; local mirror deferred -- TODO
+
+Design: `docs/processes/build-unit-classification.md` (draft, 2026-09-25). Decided by William,
+2026-09-25: **for the POC, dependencies are fetched straight from each ecosystem's public registry**,
+verifying TLS certificates and content hashes. A local caching proxy is deferred because it reaches
+outside this project (a separate service to run, own, update and back up).
+
+POC rules (apply to every ecosystem):
+
+- Restore happens only in the provisioning step, under a `package-restore` grant naming the exact
+  public host(s); the trial stays `--network none` and builds offline against what was restored.
+- TLS: normal certificate and hostname verification against the system CA store; never disabled,
+  never a custom insecure trust setting.
+- Hashes: every downloaded artifact is checked against the hash the repository's own lockfile pins
+  (`package-lock.json` `integrity`, `Cargo.lock` `checksum`, `go.sum` plus the Go checksum database,
+  `packages.lock.json` `contentHash`, Gradle `verification-metadata.xml`). A mismatch fails the
+  restore. Where the repository pins no hash (no lockfile; plain Maven), the registry's published
+  checksum is used and recorded as a **weaker, registry-vouched** check, plus a coverage gap.
+- Record every downloaded artifact (name, version, source URL, hash, which check applied) in the
+  attempt, so a result can be audited and replayed.
+
+TODO:
+
+- [ ] Confirm the grant model allows more than one `package-restore` entry per ecosystem: cargo needs
+  `index.crates.io` and `static.crates.io`; Go needs `proxy.golang.org` and `sum.golang.org`; Gradle
+  may need `plugins.gradle.org` beside `repo.maven.apache.org`. A grant is one exact host.
+- [ ] Verify the public host list per ecosystem (npm `registry.npmjs.org`, Maven Central
+  `repo.maven.apache.org`, Go, crates.io, NuGet `api.nuget.org`) against current registry docs; hosts
+  above are from memory.
+- [ ] Per-ecosystem restore/offline-build argv for the resolution loop (`npm ci`, `cargo fetch` then
+  `cargo build --locked --offline`, `go mod download` then `GOFLAGS=-mod=readonly GOPROXY=off`,
+  `mvn dependency:go-offline` then `mvn -o`, `dotnet restore` then `--no-restore`), and how install
+  scripts (npm lifecycle scripts, `build.rs`) are handled: they need `target-execution` too.
+- [ ] **Deferred (external dependency):** a local caching proxy (Nexus/Artifactory, or
+  Verdaccio/Athens per ecosystem) as the single fixed host per ecosystem. Decide product, host and
+  ownership before it is built; it replaces the public hosts in the grants and nothing else changes.
+
 ### Phase 6 -- build and compile database (E01, E02)
 
 - E01 `02-build-configure`: B13 + `audit-buildenv-cpp`, replays the lock's configure argv
