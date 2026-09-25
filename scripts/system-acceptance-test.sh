@@ -14,7 +14,8 @@
 #                                                                start a new SAT whose discovery stages
 #                                                                (02-repository-partition-discovery,
 #                                                                D01; 02-dev-project-discovery, D02;
-#                                                                and 02-devops-project-discovery, D03)
+#                                                                02-devops-project-discovery, D03;
+#                                                                and 02-sre-operations-topology, D04)
 #                                                                opt into automatic persona
 #                                                                dispatch instead of installing the
 #                                                                fixture's supplied records (a real
@@ -22,9 +23,6 @@
 #                                                                fixture copy) -- a new SAT only; a
 #                                                                `--resume` reads the choice its own
 #                                                                first run made, --dispatch is ignored.
-#                                                                devops discovery (D03) dispatches the
-#                                                                same way; sre topology (D04) stays on
-#                                                                its supplied record for now.
 #
 # Every command runs under a contract (run_step, scripts/sat_contract.py):
 #   pre   what it reads is present and valid (schema or structural contract; absent where required)
@@ -1063,8 +1061,36 @@ print("devops-project-discovery: PASS  hand-off %s; accepted by Dagster %s: %s (
 # already found). Its own schema (operations-topology.schema.json), not project-discovery's.
 stage_sre_operations_topology() {
   require_run sre-operations-topology
+  local handoff_state="" handoff_dagster=""
+
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    # D04 (Phase 5e): live persona dispatch. Upstream = the accepted devops record AND the accepted
+    # partition map, staged together under upstream/<digest>/.
+    gate_dispatch_mode sre-operations-topology "$SRE_JOB"
+    handoff_state="automatic-dispatch"
+
+    echo "-- accept: the automatic-dispatch gate must succeed (live persona invocation)"
+    run_step sre-operations-topology accept "$(contract sre-operations-topology accept <<JSON
+{"inputs": [{"path": "{run}/data/dispatch-mode.json", "kind": "file", "equals": {"$SRE_JOB": "automatic"}},
+            {"path": "{run}/data/jobs/$SRE_JOB/supplied/result.json", "kind": "absent"},
+            {"path": "{run}/data/jobs/$DEVOPS_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}},
+            {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
+ "writes": {"required": ["{run}/data/jobs/$SRE_JOB/accepted.json", "{run}/data/jobs/$SRE_JOB/latest.json", "{run}/data/jobs/$SRE_JOB/attempts/*/output.json",
+                         "{run}/data/jobs/$SRE_JOB/attempts/*/inputs.json", "{run}/data/jobs/$SRE_JOB/attempts/*/status.json"],
+            "allowed": ["{run}/data/jobs/$SRE_JOB/job.lock", "{run}/data/jobs/$SRE_JOB/attempts/*/operations-topology-summary.md",
+                        "{run}/data/jobs/$SRE_JOB/upstream/*/repository-partition-map.json",
+                        "{run}/data/jobs/$SRE_JOB/upstream/*/devops-project-inventory.json",
+                        "{run}/data/jobs/$SRE_JOB/persona-attempts/*/outputs/persona/*", "{run}/data/jobs/$SRE_JOB/persona-attempts/*/logs/persona/*",
+                        "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
+                        "{run}/data/llm-transcripts/d04-sretopology/*/transcript.jsonl", "{run}/data/llm-transcripts/d04-sretopology/*/raw-response.json",
+                        "appsec-review-process/prompt-cache/$SRE_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$SRE_JOB/attempts/*/output.json", "schema": "operations-topology.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$SRE_JOB/accepted.json", "equals": {"status": "OK", "job": "$SRE_JOB", "dispatch_mode": "automatic"}}]}
+JSON
+)" launch sre_operations_topology
+  else
   gate_handoff sre-operations-topology "$SRE_JOB" sre_operations_topology operations-topology
-  local handoff_state="$HANDOFF_STATE" handoff_dagster="$HANDOFF_DAGSTER"
+  handoff_state="$HANDOFF_STATE"; handoff_dagster="$HANDOFF_DAGSTER"
   gate_supply sre-operations-topology "$SRE_JOB" operations-topology
 
   echo "-- accept: the gate with the supplied topology must succeed"
@@ -1078,6 +1104,7 @@ stage_sre_operations_topology() {
              {"path": "{run}/data/jobs/$SRE_JOB/accepted.json", "equals": {"status": "OK", "job": "$SRE_JOB"}}]}
 JSON
 )" launch sre_operations_topology
+  fi
   launch_status
   [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "sre-operations-topology: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
   gate_validate "$SRE_JOB" || die "sre-operations-topology: discovery_gate.validate rejected the accepted result"
@@ -1085,6 +1112,64 @@ JSON
   local jobdir="$RUN_DIR/data/jobs/$SRE_JOB" attempt cites summary
   attempt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["attempt_id"])' "$jobdir/accepted.json")"
   cites="$(citations_fresh "$jobdir/attempts/$attempt/output.json")" || die "sre-operations-topology: $cites"
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    summary="$(python3 - "$RUN_DIR" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$SRE_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
+import json, pathlib, re, sys
+rdir, attempt, record_path, dagster_id, cites = sys.argv[1:]
+rdir = pathlib.Path(rdir); d = rdir / 'data/jobs/02-sre-operations-topology'; att = d / 'attempts' / attempt
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+if ptr.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (ptr.get('dagster_run_id'), dagster_id))
+if ptr.get('dispatch_mode') != 'automatic': bad.append('accepted.json does not record automatic dispatch')
+if ptr.get('persona_job_id') != 'd04-sretopology': bad.append('persona identity is %r, expected d04-sretopology' % ptr.get('persona_job_id'))
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != attempt: bad.append('accepted attempt is not the latest')
+status = json.loads((att / 'status.json').read_text())
+if status.get('dispatch_mode') != 'automatic': bad.append('status.json does not record automatic dispatch')
+if not (d / 'persona-attempts' / str(ptr.get('persona_attempt_id')) / 'logs/persona').is_dir(): bad.append('the persona invocation record is missing')
+if not (att / 'operations-topology-summary.md').is_file(): bad.append('operations-topology-summary.md is missing')
+up = json.loads((att / 'inputs.json').read_text()).get('upstream', {})
+if set(up.get('jobs', {})) != {'02-devops-project-discovery', '02-repository-partition-discovery'}:
+    bad.append('inputs.json does not record both upstreams: %r' % sorted(up.get('jobs', {})))
+out = json.loads((att / 'output.json').read_text())
+dd = rdir / 'data/jobs/02-devops-project-discovery'
+devops_out = json.loads((dd / 'attempts' / json.loads((dd / 'accepted.json').read_text())['attempt_id'] / 'output.json').read_text())
+if devops_out['source_revision'] != out['source_revision']: bad.append('revision differs from the accepted devops discovery record')
+if devops_out.get('target') != out.get('target'): bad.append('target %r differs from the accepted devops record %r' % (out.get('target'), devops_out.get('target')))
+services = out.get('services', [])
+ids = [s.get('service_id') for s in services]
+if not services: bad.append('the live dispatch produced no service at all (the fixture image declares an ENTRYPOINT)')
+if len(ids) != len(set(ids)): bad.append('duplicate service_id')
+known = set(ids)
+for s in services:
+    if not s.get('evidence_citations'): bad.append('service %s cites no evidence' % s.get('service_id'))
+    for i, dep in enumerate(s.get('dependencies', [])):
+        if dep.get('target_service_id') not in known: bad.append('dependency target %r does not resolve' % dep.get('target_service_id'))
+        if not dep.get('evidence_citations'): bad.append('service %s dependency %d cites no evidence' % (s.get('service_id'), i))
+if bad: sys.exit('; '.join(bad))
+# Informational only, not failures: wording that reads as observed runtime state, and the fixture diff.
+observed = re.compile(r'(?i)\b(is|are) (running|listening|healthy|reachable|deployed)\b|\bobserved\b')
+texts = list(out.get('operational_notes', [])) + list(out.get('coverage_gaps', []))
+flagged = [t for t in texts if observed.search(t)]
+notes = []
+if flagged: notes.append('%d note(s) use observed-state wording, review by hand: %s' % (len(flagged), flagged[:3]))
+try:
+    rec = json.loads(pathlib.Path(record_path).read_text())
+    rec_s = sorted((s['service_id'], s['kind']) for s in rec['services'])
+    live_s = sorted((s['service_id'], s['kind']) for s in services)
+    if rec_s != live_s: notes.append('live services %s differ from the fixture answer key %s' % (live_s, rec_s))
+except OSError:
+    pass
+followups = sum(1 for t in out.get('operational_notes', []) if t.startswith('Live follow-up:'))
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt,
+                  'services': [{'id': s['service_id'], 'kind': s['kind'], 'image': s.get('image_ref'),
+                                'ports': len(s.get('ports', [])), 'dependencies': len(s.get('dependencies', []))} for s in services],
+                  'operational_notes': len(out.get('operational_notes', [])), 'live_followups': followups,
+                  'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': int(cites),
+                  'persona_attempt_id': ptr.get('persona_attempt_id'), 'model': ptr.get('model'),
+                  'diff_note': ('informational only, not a failure: ' + '; '.join(notes)) if notes else ''}))
+PY
+)" || die "sre-operations-topology: $summary"
+  else
   summary="$(python3 - "$RUN_DIR" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$SRE_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
 import json, pathlib, sys
 rdir, attempt, record, dagster_id, cites = sys.argv[1:]
@@ -1113,12 +1198,15 @@ print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'services
                   'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': int(cites)}))
 PY
 )" || die "sre-operations-topology: $summary"
+  fi
   checkout_unchanged sre-operations-topology
   record PASS sre-operations-topology "$(python3 -c 'import json,sys; e=json.loads(sys.argv[1]); e.update(handoff=sys.argv[2], handoff_dagster_run_id=sys.argv[3] or None); print(json.dumps(e))' "$summary" "$handoff_state" "$handoff_dagster")"
   printf '%s' "$summary" | python3 -c '
 import json,sys; s=json.load(sys.stdin)
 print("sre-operations-topology: PASS  hand-off %s; accepted by Dagster %s: %s; %d coverage gaps; %d citations fresh" % (
-  sys.argv[1], s["dagster_run_id"][:8], ", ".join("%s(%s)" % (x["id"], x["kind"]) for x in s["services"]), s["coverage_gaps"], s["citations_checked"]))' "$handoff_state"
+  sys.argv[1], s["dagster_run_id"][:8], ", ".join("%s(%s)" % (x["id"], x["kind"]) for x in s["services"]), s["coverage_gaps"], s["citations_checked"]))
+if s.get("live_followups") is not None: print("  %d operational notes (%d live follow-ups)" % (s["operational_notes"], s["live_followups"]))
+if s.get("diff_note"): print("  " + s["diff_note"])' "$handoff_state"
 }
 
 # ---- driver --------------------------------------------------------------------------------------

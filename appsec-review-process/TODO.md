@@ -949,7 +949,7 @@ project-discovery path; (3) write the D04 continuation prompt and update
 `docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`'s status; (4) the
 `diagram drift` failure of `qualify_phase1.py --check-contracts` is still untriaged.
 
-### Phase 5e -- D04: automatic persona dispatch for sre-operations-topology -- IN PROGRESS
+### Phase 5e -- D04: automatic persona dispatch for sre-operations-topology -- BUILT, awaiting the live run
 
 Branch `d04-sre-operations-topology-dispatch` (cut from `main` = `3f7b283`). Closes the last supplied
 discovery stage: with `--dispatch`, SAT stage 9 still installs the hand-authored fixture
@@ -1005,7 +1005,12 @@ the system.
 - Tests beside `tests/test_dev_dispatch.py` (model stubbed): claim builder, upstream staging of both
   files, routing and identity, the zero-service rule.
 
-**Not done yet:** task prompt, template fix, wiring, tests, SAT branch, docs, live run.
+**Built 2026-09-25:** task prompt + template (`31ff6b5`); gate wiring (`AUTOMATIC_JOBS`, two-file
+upstream staging, `d04-sretopology`) and `_claims_from_operations_topology` (`bfe12c6`); 10 new tests,
+62 OK on William's Windows/Python 3.13; SAT stage 9 `--dispatch` branch and docs (SAT doc stage 9
+subsection and gaps table, engagement-start). **Not done:** the live run
+(`scripts/system-acceptance-test.sh --dispatch --through sre-operations-topology`, fresh SAT), then
+the flow-bringup log entry and the next continuation prompt (build lane).
 
 ### Phase 5f -- build lane dependency restore: public registries for the POC; local mirror deferred -- TODO
 
