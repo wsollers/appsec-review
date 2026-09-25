@@ -1,8 +1,20 @@
-"""Dagster transition tests; run in code-server with PHASE1_TEST_DATA set."""
+"""Dagster transition tests. Run with the code location's Python (Dagster is installed there):
+
+    cd appsec-review-process
+    ../orchestrator/dagster/code-location.sh run -B -m unittest tests.test_dagster
+
+PHASE1_TEST_DATA, when set, keeps the fixture runs there for inspection; otherwise a temporary
+directory is used. (Written when the code location ran in a container with the app at /opt/app;
+since the code location moved to the host the paths are found from this file's own location.)"""
+import os
+from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
-sys.path.insert(0,'/opt/app')
+HERE = Path(__file__).resolve().parent
+sys.path[:0] = [str(HERE.parents[1] / 'orchestrator' / 'dagster'), str(HERE), str(HERE.parent)]
+os.environ.setdefault('PHASE1_TEST_DATA', tempfile.mkdtemp(prefix='phase1-test-data-'))
 from dagster import DagsterInstance
 from definitions import phase1_intake
 import test_phase1 as fixtures
