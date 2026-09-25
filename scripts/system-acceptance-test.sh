@@ -54,7 +54,8 @@ STAGES=(
   "devops-project-discovery|1|Gate: DevOps project discovery (Dockerfile) supplied and accepted, or --dispatch: automatic live persona dispatch (CI/container/IaC/deploy units + safe command plan)"
   "sre-operations-topology|1|Gate: SRE operations topology supplied and accepted"
   "build-index|1|02-build-index: deterministic, cited index of candidate units and build signals; nothing executed; units equal the answer key"
-  "build-plan|0|02-build-plan: LLM build plan from the index only; validated; compared with the answer key"
+  "build-classify|1|02-build-classify: live persona classifies every unit from the checkout + index; validated; classes equal the answer key"
+  "build-plan|0|02-build-plan: LLM plan per build-set unit from the checkout, index and classification; validated; compared with the answer key"
   "build-resolution|0|02-build-resolution: image + trial configure/build via B13, <= build_resolution_attempts; image_build_<id> catalogued, lock written"
   "build-configure|0|02-build-configure (E01): replay the lock's configure in the catalogued image"
   "native-build|0|02-native-build (E02): compile database and build outputs"
@@ -65,7 +66,7 @@ STAGES=(
   "sarif|0|critical_findings_sarif: accepted SARIF from verified findings"
   "report|0|10-synthesis-report: report generated"
 )
-SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index full_review"
+SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index build_classify full_review"
 SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
 SAT_BUSINESS_GOAL="${SAT_BUSINESS_GOAL:-System acceptance test: full review cycle on the fixture}"
 SAT_PLATFORM="${SAT_PLATFORM:-Linux}"
@@ -76,6 +77,7 @@ DEV_JOB=02-dev-project-discovery
 DEVOPS_JOB=02-devops-project-discovery
 SRE_JOB=02-sre-operations-topology
 BUILD_INDEX_JOB=02-build-index
+BUILD_CLASSIFY_JOB=02-build-classify
 
 die() { echo "SAT: $*" >&2; exit 1; }
 stage_ids() { for s in "${STAGES[@]}"; do echo "${s%%|*}"; done; }
@@ -1309,6 +1311,92 @@ print("build-index: PASS  %s by Dagster %s: units %s; members %s; %d signals (%s
   s["status"], s["dagster_run_id"][:8], ", ".join(s["units"]), s["members"] or "none", s["signals"], ", ".join(s["kinds"]),
   s["not_units"], s["signals_omitted"], s["excerpts_clipped"], s["excerpts_redacted"]))
 print("  cross-check: %s" % s["cross_check"])'
+}
+
+# ---- stage: build-classify -----------------------------------------------------------------------
+# 02-build-classify (TODO Phase 5g item 3, ADR-0012 revision 2): one LIVE persona call
+# (claude-sonnet-5/medium) reads the whole checkout and the accepted build index, gives every index
+# unit a cited class and records where the index is wrong. There is no supplied mode: this stage always
+# calls the model, with or without --dispatch. Acceptance: the job's own validator
+# (build_classify.validate: envelope, pinned index, every unit covered exactly once, signal ids,
+# citation freshness, orchestrator-owned fields), the classification names the accepted index attempt,
+# and each index unit's classes and the build set equal the fixture's answer key
+# (fixtures/supplied/<fixture>/02-build-classify-classes.json). A split of a unit passes when all its
+# parts carry the answer key's class. index_review items are printed for review, never failures.
+stage_build_classify() {
+  require_run build-classify
+  local key="$REPO/fixtures/supplied/$FIXTURE/02-build-classify-classes.json"
+  [[ -f "$key" ]] || die "build-classify: no answer key $key for fixture $FIXTURE"
+
+  echo "-- accept: build_classify must publish an accepted, validated classification (live model call)"
+  run_step build-classify accept "$(contract build-classify accept <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_INDEX_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_INDEX_JOB"}},
+            {"path": "{run}/data/jobs/$BUILD_CLASSIFY_JOB/accepted.json", "kind": "absent"},
+            {"path": "{run}/**/02-build-classify-classes.json", "kind": "absent"},
+            {"path": "{run}/**/02-build-index-units.json", "kind": "absent"}],
+ "writes": {"required": ["{run}/data/jobs/$BUILD_CLASSIFY_JOB/accepted.json", "{run}/data/jobs/$BUILD_CLASSIFY_JOB/latest.json",
+                         "{run}/data/jobs/$BUILD_CLASSIFY_JOB/attempts/*/build-classification.json",
+                         "{run}/data/jobs/$BUILD_CLASSIFY_JOB/attempts/*/build-classification-summary.md",
+                         "{run}/data/jobs/$BUILD_CLASSIFY_JOB/attempts/*/inputs.json", "{run}/data/jobs/$BUILD_CLASSIFY_JOB/attempts/*/status.json",
+                         "{run}/data/jobs/$BUILD_CLASSIFY_JOB/attempts/*/result.json",
+                         "{run}/data/jobs/$BUILD_CLASSIFY_JOB/upstream/*/build-index.json"],
+            "allowed": ["{run}/data/jobs/$BUILD_CLASSIFY_JOB/job.lock",
+                        "{run}/data/jobs/$BUILD_CLASSIFY_JOB/persona-attempts/*/outputs/persona/*",
+                        "{run}/data/jobs/$BUILD_CLASSIFY_JOB/persona-attempts/*/logs/persona/*",
+                        "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
+                        "{run}/data/llm-transcripts/b01-classify/*/transcript.jsonl", "{run}/data/llm-transcripts/b01-classify/*/raw-response.json",
+                        "appsec-review-process/prompt-cache/$BUILD_CLASSIFY_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$BUILD_CLASSIFY_JOB/attempts/*/build-classification.json", "schema": "build-classification.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$BUILD_CLASSIFY_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "persona", "job_id": "$BUILD_CLASSIFY_JOB"}},
+             {"path": "{run}/data/jobs/$BUILD_CLASSIFY_JOB/accepted.json", "equals": {"job": "$BUILD_CLASSIFY_JOB"}}]}
+JSON
+)" launch build_classify
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "build-classify: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import build_classify; build_classify.validate(sys.argv[2]); print("validator OK")' \
+    "$REPO/appsec-review-process" "$RUN_ID" || die "build-classify: build_classify.validate rejected the accepted result"
+
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" "$key" <<'PY'
+import json, pathlib, sys
+rdir, dagster_id, key_path = sys.argv[1:]
+rdir = pathlib.Path(rdir); jobs = rdir / 'data/jobs'; d = jobs / '02-build-classify'
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+attempt = ptr.get('attempt_id'); att = d / 'attempts' / str(attempt)
+if ptr.get('status') not in ('OK', 'OK_WITH_GAPS'): bad.append('accepted status is %r' % ptr.get('status'))
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != attempt: bad.append('accepted attempt is not the latest')
+status = json.loads((att / 'status.json').read_text())
+if status.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (status.get('dagster_run_id'), dagster_id))
+if status.get('persona_job_id') != 'b01-classify': bad.append('persona identity is %r' % status.get('persona_job_id'))
+if not (d / 'persona-attempts' / str(status.get('persona_attempt_id')) / 'logs/persona').is_dir(): bad.append('the persona invocation record is missing')
+value = json.loads((att / 'build-classification.json').read_text())
+index_ptr = json.loads((jobs / '02-build-index/accepted.json').read_text())
+if value['index']['attempt_id'] != index_ptr.get('attempt_id'): bad.append('classification names index attempt %r, accepted is %r' % (value['index']['attempt_id'], index_ptr.get('attempt_id')))
+key = json.loads(pathlib.Path(key_path).read_text())
+by_index = {}
+for u in value['units']:
+    by_index.setdefault(u['index_unit_id'], set()).add(u['class'])
+want = {k: {v} for k, v in key['classes'].items()}
+if by_index != want: bad.append('classes %s differ from the answer key %s' % ({k: sorted(v) for k, v in by_index.items()}, key['classes']))
+units = {u['unit_id']: u['index_unit_id'] for u in value['units']}
+live_set = sorted({units[u] for u in value['build_set']})
+if live_set != sorted(key['build_set']): bad.append('build set covers %s, answer key %s' % (live_set, key['build_set']))
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'status': ptr.get('status'),
+                  'units': [(u['unit_id'], u['class'], u['confidence']) for u in value['units']],
+                  'build_set': value['build_set'], 'coverage_gaps': len(value['coverage_gaps']),
+                  'index_review': [(r['kind'], r['path'], r['statement'][:160]) for r in value['index_review']],
+                  'model': status.get('model'), 'persona_attempt_id': status.get('persona_attempt_id')}))
+PY
+)" || die "build-classify: $summary"
+  checkout_unchanged build-classify
+  record PASS build-classify "$summary"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("build-classify: PASS  %s by Dagster %s: %s; build set %s; %d coverage gaps" % (
+  s["status"], s["dagster_run_id"][:8], ", ".join("%s=%s(%s)" % u for u in s["units"]), s["build_set"], s["coverage_gaps"]))
+print("  index review (%d, informational): %s" % (len(s["index_review"]), s["index_review"] or "none"))'
 }
 
 # ---- driver --------------------------------------------------------------------------------------

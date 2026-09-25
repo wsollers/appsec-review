@@ -67,18 +67,19 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 8 | `devops-project-discovery` (gate; the fixture's Dockerfile; `--dispatch`: D03 live automatic persona dispatch instead) | yes |
 | 9 | `sre-operations-topology` (gate; chains after devops discovery) | yes |
 | 10 | `build-index` (deterministic: candidate units and cited build signals; units equal the answer key) | yes |
-| 11 | `build-plan` (LLM build plan from the index; compared with the fixture answer key) | |
-| 12 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | |
-| 13 | `build-configure` (E01: replay the lock) | |
-| 14 | `native-build` (E02: compile database, binaries) | |
-| 15 | `evidence` (legacy pipeline + hashed import; every tool ran or is a recorded gap) | |
-| 16 | `ossf-scorecard` (needs a network permission grant) | |
-| 17 | `evidence-index` | |
-| 18 | `review-lanes` | |
-| 19 | `sarif` | |
-| 20 | `report` | |
+| 11 | `build-classify` (live persona: one class per unit from the checkout and the index; classes equal the answer key) | yes |
+| 12 | `build-plan` (LLM plan per build-set unit from the checkout, index and classification; compared with the fixture answer key) | |
+| 13 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | |
+| 14 | `build-configure` (E01: replay the lock) | |
+| 15 | `native-build` (E02: compile database, binaries) | |
+| 16 | `evidence` (legacy pipeline + hashed import; every tool ran or is a recorded gap) | |
+| 17 | `ossf-scorecard` (needs a network permission grant) | |
+| 18 | `evidence-index` | |
+| 19 | `review-lanes` | |
+| 20 | `sarif` | |
+| 21 | `report` | |
 
-Stages 10 to 14 are how the system learns to build a target it has never seen and then builds it:
+Stages 10 to 15 are how the system learns to build a target it has never seen and then builds it:
 [build-resolution.md](build-resolution.md) (ADR-0012). They come before evidence collection
 because native evidence depends on a build. A `FAILED(BUILD_UNRESOLVED)` blocks native jobs, not
 the engagement; the SAT fixture must resolve. The fixture's supplied discovery records are answer
@@ -280,6 +281,26 @@ defining manifests, members and not-units equal the answer key (for hello-autoto
 and member cites a signal; no class or plan anywhere; the checkout unchanged. The index is
 deterministic, so the answer-key comparison is pass/fail, unlike the persona stages.
 
+### 11. `build-classify` (live model call, with or without `--dispatch`)
+
+One step, `accept`: `launch_job.py --job build_classify`, one `claude-sonnet-5`/`medium` persona call
+(identity `b01-classify`) that reads the whole checkout plus the accepted `build-index.json` (staged
+under `upstream/`). There is no supplied mode for this job. Pre-contract: an accepted build index; no
+classification yet; neither build answer key anywhere in the run. Post-contract: exactly the job's
+attempt files, the staged index, the persona invocation record under `persona-attempts/`, the run's
+model and binary pins and transcripts when enabled; a schema-valid classification at the pinned
+revision; a `persona` envelope.
+
+Checks that fail the stage: Dagster `SUCCESS`; `build_classify.validate` (envelope, the pinned index,
+every index unit covered exactly once, signal ids in the index, citations fresh against the checkout,
+orchestrator-owned fields); accepted status `OK` or `OK_WITH_GAPS`, accepted by the launched run and
+latest; the persona identity and invocation record present; the classification names the accepted
+index attempt; each index unit's classes and the build set equal the answer key
+(`fixtures/supplied/<fixture>/02-build-classify-classes.json`; for hello-autotools `dir:.` =
+`compiled-native`, `file:Dockerfile` = `container`, build set `dir:.`; a unit split into parts passes
+when every part has the key's class); the checkout unchanged. The model's `index_review` (where it
+says the index is wrong) is printed for review and never fails the stage.
+
 ## Gaps the contracts have exposed
 
 | Gap | Where | Status |
@@ -287,6 +308,6 @@ deterministic, so the answer-key comparison is pass/fail, unlike the persona sta
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
 | SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Done 2026-09-24 (stage 8 devops, stage 9 sre topology both gated and passing live) |
-| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): closed, `--dispatch`, live PASS 2026-09-25 (first attempt; see flow-bringup.md log for the scope finding). Stage 8 (`02-devops-project-discovery`, D03): closed, `--dispatch`, live PASS 2026-09-25 (first attempt). Stage 9 (`02-sre-operations-topology`, D04): closed, `--dispatch`, live PASS 2026-09-25 (SAT `20260925T170552Z`, stages 1-9 all automatic). The build part: stage 10 (`build-index`, deterministic, no model) built 2026-09-25; stages 11-12 (build-resolution.md; per-unit classification, build-unit-classification.md) still open |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): closed, `--dispatch`, live PASS 2026-09-25 (first attempt; see flow-bringup.md log for the scope finding). Stage 8 (`02-devops-project-discovery`, D03): closed, `--dispatch`, live PASS 2026-09-25 (first attempt). Stage 9 (`02-sre-operations-topology`, D04): closed, `--dispatch`, live PASS 2026-09-25 (SAT `20260925T170552Z`, stages 1-9 all automatic). The build part: stage 10 (`build-index`, deterministic, no model) built 2026-09-25, PASS; stage 11 (`build-classify`, live persona) built 2026-09-25; stages 12-13 (plan, resolution; build-resolution.md) still open |
 | The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |

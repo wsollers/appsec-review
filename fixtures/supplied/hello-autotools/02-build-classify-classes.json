@@ -1,0 +1,5 @@
+{
+  "_note": "SAT answer key for stage build-classify (02-build-classify): the class of each index unit and the index units in the build set. A split unit passes when every part carries the class here. index_review is informational. No job may read this file.",
+  "classes": {"dir:.": "compiled-native", "file:Dockerfile": "container"},
+  "build_set": ["dir:."]
+}
