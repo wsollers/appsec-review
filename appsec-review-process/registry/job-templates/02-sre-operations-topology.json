@@ -4,6 +4,11 @@
   "display_name": "SRE Operations Topology Discovery",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
+  "model": {
+    "model": "claude-sonnet-5",
+    "effort": "medium",
+    "_note": "Pinned explicitly 2026-09-25 (D04 construction, mirrors 02-dev-project-discovery and 02-devops-project-discovery). Deciding which declared units run, their kind, image, ports and dependencies, and separating configured from observed controls, is a reasoning-heavy judgment over an unknown target, not classification."
+  },
   "composition": {
     "persona_id": "sre-engineer",
     "role_id": "operations-topology-mapper",
@@ -29,7 +34,6 @@
     "files": [
       "service-inventory.json",
       "operations-topology-summary.md",
-      "live-state-followups.json",
       "status.json"
     ]
   },
@@ -39,8 +43,8 @@
     "role",
     "domain",
     "tooling_profile",
-    "ops_artifacts",
     "task",
     "output_contract"
-  ]
+  ],
+  "task_prompt": "appsec-review-process/02-evidence-pregather/task-sre-operations-topology.md"
 }

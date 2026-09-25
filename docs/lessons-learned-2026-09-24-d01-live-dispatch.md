@@ -1,6 +1,6 @@
 # Lessons learned: D01 live persona dispatch (2026-09-24)
 
-Status: **current, generalizable.** Written after `02-repository-partition-discovery`'s automatic
+Status: **current, generalizable.** Continued by [`lessons-learned-2026-09-25-d02-d04-live-dispatch.md`](lessons-learned-2026-09-25-d02-d04-live-dispatch.md) (D02-D04 went live 2026-09-25; all six lessons below held). Written after `02-repository-partition-discovery`'s automatic
 dispatch mode (D01, unpooled) went from "passes on a hand-authored fixture" to "passes against a
 real `claude` CLI call, live on hal5000, zero contract violations" in one day, via five successive
 live-dispatch failures, each fixed in turn. Full blow-by-blow is in `appsec-review-process/TODO.md`

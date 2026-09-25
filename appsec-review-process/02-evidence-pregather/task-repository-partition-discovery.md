@@ -46,6 +46,15 @@ dependency or deployment-critical script is irrelevant. Record unassigned paths 
 explicitly. Report a category as not found only with the search scope and evidence; otherwise mark
 it uninspected. Partial discovery must remain visible in coverage and status.
 
+Coverage path fields hold paths, never prose: `coverage.inventory_scope`, `coverage.unassigned_paths`,
+`coverage.uninspected_scope`, and every `coverage.category_checks[].search_scope` entry is a
+repository-relative POSIX path or glob pattern in the same syntax as `include_paths`, for example `**`
+(the whole repository as supplied), `src/**`, `.github/**` or `docs/VULNERABILITIES.md`. Never write
+`.`, `./`, a leading `/`, `..`, a description, or a sentence in these fields. A file that is
+referenced but not among the supplied files is listed by its path in `uninspected_scope`. The reason
+for any gap or limit (not supplied, not listed, no directory listing available, budget) goes in
+`coverage.budget_limitations` and the summary, which are free text.
+
 ## Consumers
 
 - `02-dev-project-discovery` consumes developer routes.

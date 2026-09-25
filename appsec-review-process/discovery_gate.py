@@ -70,9 +70,10 @@ CONSUMER_JOB = '02-dev-project-discovery'
 # convention (root(run_id, 'jobs', job)); it only ever appears inside the persona_invocation
 # request/result identity, never as a job-tree path segment.
 PERSONA_JOB_ID = 'd01-partition'
-# Same reason and same shape for 02-dev-project-discovery's own persona invocation identity (D02,
-# Phase 5c): short and opaque, never the 26-char template id, so it can never trip the secret
-# scanner, and distinct from PERSONA_JOB_ID so the two jobs' run-scoped persona identities (and
+# Same shape for every later discovery job's persona invocation identity (D02-D04): short and
+# opaque by convention, kept separate from the template id. Only ids of 32+ characters can match the
+# secret scanner (02-dev-project-discovery is 24, 02-sre-operations-topology 26), so for these this is
+# convention, not a workaround. Each is distinct so the jobs' run-scoped persona identities (and
 # their llm-transcripts/ directories) can never collide inside one run.
 DEV_PERSONA_JOB_ID = 'd02-devproject'
 DEVOPS_JOB = '02-devops-project-discovery'
@@ -83,6 +84,28 @@ DEVOPS_PERSONA_JOB_ID = 'd03-devops'
 # serve both. 02-sre-operations-topology does neither (different upstream, different schema, its own
 # claim builder) and is deliberately not listed.
 AUTOMATIC_PROJECT_JOBS = {CONSUMER_JOB: DEV_PERSONA_JOB_ID, DEVOPS_JOB: DEVOPS_PERSONA_JOB_ID}
+
+# D04 (Phase 5e): 02-sre-operations-topology shares the acceptance path but not the upstream, the
+# result schema or the claim builder, so it is its own entry. Its upstream is the accepted devops
+# record AND the accepted partition map (William, 2026-09-25), staged together in one directory.
+SRE_JOB = '02-sre-operations-topology'
+SRE_PERSONA_JOB_ID = 'd04-sretopology'
+
+# Every job with an automatic persona-dispatch path through _run_project_automatic: its persona
+# identity, the result and summary files the persona returns, and its upstream jobs. The staged
+# upstream file name comes from UPSTREAM_STAGED_NAME.
+AUTOMATIC_JOBS = {
+    CONSUMER_JOB: {'persona_job_id': DEV_PERSONA_JOB_ID, 'result': 'project-inventory.json',
+                   'summary': 'project-discovery-summary.md', 'upstreams': (ADOPTED_JOB,)},
+    DEVOPS_JOB: {'persona_job_id': DEVOPS_PERSONA_JOB_ID, 'result': 'project-inventory.json',
+                 'summary': 'project-discovery-summary.md', 'upstreams': (ADOPTED_JOB,)},
+    SRE_JOB: {'persona_job_id': SRE_PERSONA_JOB_ID, 'result': 'service-inventory.json',
+              'summary': 'operations-topology-summary.md', 'upstreams': (DEVOPS_JOB, ADOPTED_JOB)},
+}
+# The file name each upstream's accepted payload gets inside the staged upstream directory (what the
+# persona sees after the ``upstream-artifacts:`` label, and what the task prompts name).
+UPSTREAM_STAGED_NAME = {ADOPTED_JOB: 'repository-partition-map.json',
+                        DEVOPS_JOB: 'devops-project-inventory.json'}
 
 # Automatic-vs-supplied mode selection, scoped to (run_id, job) so it never needs
 # dagster_workflow.py (Full protocol, AGENTS.md) to change discovery_gate.run()'s external
@@ -233,10 +256,10 @@ def _legacy_run(run_id, dagster_id, job, force=False):
     """Keep the unadopted developer-discovery gate behavior unchanged except schema coverage.
 
     The one addition (D02, generalized for D03): a run that opted a project-discovery job in
-    ``AUTOMATIC_PROJECT_JOBS`` into automatic dispatch (``dispatch-mode.json``) is handed to
+    ``AUTOMATIC_JOBS`` (D02-D04) into automatic dispatch (``dispatch-mode.json``) is handed to
     ``_run_project_automatic`` before anything below runs. Every other job, and those jobs in the
     default ``supplied`` mode, take exactly the path they always did."""
-    if job in AUTOMATIC_PROJECT_JOBS and dispatch_mode(run_id, job) == 'automatic':
+    if job in AUTOMATIC_JOBS and dispatch_mode(run_id, job) == 'automatic':
         return _run_project_automatic(run_id, dagster_id, job, force)
     base = root(run_id, job)
     supplied = supplied_path(run_id, job)
@@ -669,10 +692,10 @@ def _run_partition_automatic(run_id, dagster_id, force=False):
         failed_summary='Automatic repository partition persona dispatch was not accepted.')
 
 
-# ---- D02/D03: automatic persona dispatch for the project-discovery jobs (Phase 5c) ---------------
+# ---- D02-D04: automatic persona dispatch for the chained discovery jobs (Phases 5c-5e) -----------
 #
-# One path serves 02-dev-project-discovery (D02) and 02-devops-project-discovery (D03), keyed by
-# AUTOMATIC_PROJECT_JOBS. Deliberately NOT built on coordinate_worker_lifecycle/record_terminal_current
+# One path serves 02-dev-project-discovery (D02), 02-devops-project-discovery (D03) and
+# 02-sre-operations-topology (D04), keyed by AUTOMATIC_JOBS. Deliberately NOT built on coordinate_worker_lifecycle/record_terminal_current
 # the way D01's automatic path is: these jobs have never been on the common envelope (their accepted
 # record is _legacy_run's small accepted.json/attempts/<id>/output.json shape, and its consumers --
 # 02-build-configure, the SAT stage, validate() -- read exactly that). Moving it onto the envelope is
@@ -681,42 +704,68 @@ def _run_partition_automatic(run_id, dagster_id, force=False):
 # checks (_require_upstream_inputs) and the same accepted-record shape as before. Nothing downstream
 # has to change because the producer changed.
 
-def _accepted_partition_map_path(run_id, job=CONSUMER_JOB):
-    """(attempt dir, path of repository-partition-map.json) of the run's accepted D01 result,
-    re-validated through ``validate`` -- never read straight off disk unchecked. ``job`` only names
-    the asking job in a Blocked message."""
+def _accepted_upstream_path(run_id, job, upstream):
+    """(attempt dir, path of the accepted payload) of ``upstream``'s accepted result for this run,
+    re-validated through ``validate`` -- never read straight off disk unchecked. The partition map is
+    its own artifact on the common envelope; every other upstream is ``_legacy_run``'s
+    ``attempts/<id>/output.json``. ``job`` only names the asking job in a Blocked message."""
     try:
-        attempt = validate(run_id, ADOPTED_JOB)
+        attempt = validate(run_id, upstream)
     except Blocked:
         raise
     except Exception as exc:
-        raise Blocked(job + ': automatic dispatch requires an accepted ' + ADOPTED_JOB
+        raise Blocked(job + ': automatic dispatch requires an accepted ' + upstream
                       + ' result for this run first (' + type(exc).__name__ + ')') from exc
     if attempt is None:
-        raise Blocked(job + ': the accepted ' + ADOPTED_JOB + ' result predates the common '
+        raise Blocked(job + ': the accepted ' + upstream + ' result predates the common '
                       'envelope; re-run it')
-    path = attempt / _upstream_payload_filename(ADOPTED_JOB)
+    path = attempt / _upstream_payload_filename(upstream)
     if not path.is_file():
-        raise Blocked(job + ': the accepted ' + ADOPTED_JOB + ' attempt has no ' + path.name)
+        raise Blocked(job + ': the accepted ' + upstream + ' attempt has no ' + path.name)
     return attempt, path
+
+
+def _accepted_partition_map_path(run_id, job=CONSUMER_JOB):
+    """(attempt dir, path of repository-partition-map.json) of the run's accepted D01 result."""
+    return _accepted_upstream_path(run_id, job, ADOPTED_JOB)
+
+
+def _upstream_record(run_id, job):
+    """The fingerprinted upstream identity. D02/D03 keep their original one-upstream shape
+    (``job``, ``attempt_id``, ``repository-partition-map.json``) so their records do not move; a job
+    with several upstreams (D04) records ``jobs`` (upstream job -> attempt id) instead. In both, every
+    key ending ``.json`` is a staged file name mapped to the sha256 of the accepted payload."""
+    upstreams = AUTOMATIC_JOBS[job]['upstreams']
+    record = {}
+    attempts = {}
+    for upstream in upstreams:
+        attempt, path = _accepted_upstream_path(run_id, job, upstream)
+        attempts[upstream] = attempt.name
+        record[UPSTREAM_STAGED_NAME[upstream]] = file_hash(path)
+    if len(upstreams) == 1:
+        return {'job': upstreams[0], 'attempt_id': attempts[upstreams[0]], **record}
+    return {'jobs': attempts, **record}
+
+
+def _staged_upstream_files(upstream):
+    """Staged file name -> expected sha256, from a fingerprinted upstream record (either shape)."""
+    return {name: value for name, value in upstream.items() if name.endswith('.json')}
 
 
 def _automatic_project_inputs(run_id, job):
     """The record automatic-mode dispatch fingerprints for reuse/tamper-evidence: the target
-    checkout's own content identity, the exact accepted partition map it was scoped by (so a
+    checkout's own content identity, the exact accepted upstream payloads it was scoped by (so a
     changed or re-run upstream is a different input and never reuses an old result), and the source
     of every module this path calls."""
     target_root = _automatic_target_root(run_id, job)
     identity = intake.source_identity(str(target_root))
-    upstream_attempt, map_path = _accepted_partition_map_path(run_id, job)
     return {
         'job': job,
         'mode': 'automatic',
         'target_root': str(target_root),
         'source_snapshot_sha256': 'sha256:' + identity['fingerprint'],
         'source_revision': identity.get('revision'),
-        'upstream': {'job': ADOPTED_JOB, 'attempt_id': upstream_attempt.name,
-                     'repository-partition-map.json': file_hash(map_path)},
+        'upstream': _upstream_record(run_id, job),
         'code': {
             'discovery_gate.py': file_hash(Path(__file__)),
             'persona_dispatch.py': file_hash(ROOT / 'persona_dispatch.py'),
@@ -728,46 +777,67 @@ def _automatic_project_inputs(run_id, job):
     }
 
 
-def _stage_upstream_partition_map(base, map_path, expected_sha256):
-    """Copies the accepted partition map into a content-addressed directory of its own (the one
-    directory the job's second readable root points at) and verifies the copy. The directory holds
-    only this one file: persona_dispatch pins every regular file beneath an upstream root. An
-    existing copy whose bytes no longer match is a tamper/corruption signal, not something to
-    overwrite. ``base`` is the job's own root, so ``base.name`` is the job id."""
-    directory = base / 'upstream' / expected_sha256[:16]
-    target = directory / 'repository-partition-map.json'
-    if not target.is_file():
-        directory.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(map_path, target)
-    if file_hash(target) != expected_sha256:
-        raise Blocked(base.name + ': the staged upstream partition map does not match the accepted '
-                      'partition map it was copied from')
+def _stage_upstream_files(base, sources):
+    """Copies accepted upstream payloads into one content-addressed directory (the one directory the
+    job's second readable root points at) and verifies every copy. ``sources`` maps staged file name
+    -> (source path, expected sha256). The directory must hold exactly these files:
+    persona_dispatch pins every regular file beneath an upstream root, so an extra file would become
+    an input. An existing copy whose bytes no longer match, or a stray file, is a tamper/corruption
+    signal, not something to overwrite. ``base`` is the job's own root, so ``base.name`` is the job
+    id. A single file keeps its original directory name (its own sha256 prefix)."""
+    if len(sources) == 1:
+        key = next(iter(sources.values()))[1][:16]
+    else:
+        key = digest(sorted((name, sha) for name, (_path, sha) in sources.items()))[:16]
+    directory = base / 'upstream' / key
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, (path, expected) in sources.items():
+        target = directory / name
+        if not target.is_file():
+            shutil.copyfile(path, target)
+        if file_hash(target) != expected:
+            raise Blocked(base.name + ': the staged upstream ' + name + ' does not match the accepted '
+                          'upstream result it was copied from')
+    present = {entry.name for entry in directory.iterdir()}
+    if present != set(sources):
+        raise Blocked(base.name + ': the staged upstream directory holds unexpected files: '
+                      + ', '.join(sorted(present - set(sources))))
     return directory
 
 
+def _stage_upstream_partition_map(base, map_path, expected_sha256):
+    """The one-file case of ``_stage_upstream_files`` (D02/D03)."""
+    return _stage_upstream_files(base, {UPSTREAM_STAGED_NAME[ADOPTED_JOB]: (map_path, expected_sha256)})
+
+
 def _dispatch_project_persona(run_id, base, record):
-    """One real persona invocation for the project-discovery job named by ``record['job']``
-    (``AUTOMATIC_PROJECT_JOBS``). Returns ``(value, summary_text,
-    facts)``; raises ``RuntimeError`` (like D01's ``_dispatch_partition_persona``) when the
-    invocation did not complete OK -- nothing is ever published from a failed dispatch. The
-    persona's own attempt tree (request/record/result triple, model output) is kept under
-    ``persona-attempts/<id>/`` for review; it is not the published attempt.
+    """One real persona invocation for the automatic job named by ``record['job']``
+    (``AUTOMATIC_JOBS``: D02, D03, D04). Returns ``(value, summary_text, facts)``; raises
+    ``RuntimeError`` (like D01's ``_dispatch_partition_persona``) when the invocation did not
+    complete OK -- nothing is ever published from a failed dispatch. The persona's own attempt tree
+    (request/record/result triple, model output) is kept under ``persona-attempts/<id>/`` for review;
+    it is not the published attempt.
 
     Orchestrator-owned fields (docs/lessons-learned-2026-09-24-d01-live-dispatch.md, lesson 2),
     overwritten after the model responds and never trusted from it: ``source_revision`` (a git ref
     the model cannot see, ``.git`` is not a readable input), every ``evidence_citations[].content_hash``
-    (an exact SHA-256), and ``target`` (taken from the accepted partition map this job was scoped
-    by, so the two records of one run cannot name different targets)."""
+    (an exact SHA-256), and ``target`` (taken from the accepted partition map, which every automatic
+    job stages, so the records of one run cannot name different targets)."""
     job = record['job']
-    persona_job_id = AUTOMATIC_PROJECT_JOBS[job]
+    spec = AUTOMATIC_JOBS[job]
+    persona_job_id = spec['persona_job_id']
     attempt_id = uuid.uuid4().hex
     persona_attempt = base / 'persona-attempts' / attempt_id
     persona_attempt.mkdir(parents=True)
     target_root = Path(record['target_root'])
     snapshot = record['source_snapshot_sha256']
-    _upstream_attempt, map_path = _accepted_partition_map_path(run_id, job)
-    upstream_dir = _stage_upstream_partition_map(
-        base, map_path, record['upstream']['repository-partition-map.json'])
+    expected = _staged_upstream_files(record['upstream'])
+    sources = {}
+    for upstream in spec['upstreams']:
+        name = UPSTREAM_STAGED_NAME[upstream]
+        _upstream_attempt, path = _accepted_upstream_path(run_id, job, upstream)
+        sources[name] = (path, expected[name])
+    upstream_dir = _stage_upstream_files(base, sources)
 
     mvr.resolve_run_model_versions(run_id)
     store = SchemaStore()
@@ -801,15 +871,15 @@ def _dispatch_project_persona(run_id, base, record):
             + '/logs/persona for the request/record/result triple')
 
     output_root = persona_attempt / Path(*request['output_root'].split('/'))
-    value = read_json(output_root / 'project-inventory.json')
-    upstream_map = read_json(upstream_dir / 'repository-partition-map.json')
+    value = read_json(output_root / spec['result'])
+    upstream_map = read_json(upstream_dir / UPSTREAM_STAGED_NAME[ADOPTED_JOB])
     value['source_revision'] = record['source_revision']
     if isinstance(upstream_map, dict) and isinstance(upstream_map.get('target'), str):
         value['target'] = upstream_map['target']
     by_path = {entry['path']: entry['sha256'] for entry in request['readable_inputs']
                if entry['root'] == pd.DEFAULT_READABLE_ROOT}
     _backfill_citation_content_hashes(value, by_path)
-    summary_text = (output_root / 'project-discovery-summary.md').read_text(encoding='utf-8')
+    summary_text = (output_root / spec['summary']).read_text(encoding='utf-8')
     facts = {'dispatch_mode': 'automatic', 'persona_job_id': persona_job_id,
              'persona_attempt_id': attempt_id, 'persona_result_sha256': result['result_sha256'],
              'model': dict(model_identity)}
@@ -817,7 +887,7 @@ def _dispatch_project_persona(run_id, base, record):
 
 
 def _run_project_automatic(run_id, dagster_id, job, force=False):
-    if job not in AUTOMATIC_PROJECT_JOBS:
+    if job not in AUTOMATIC_JOBS:
         raise Blocked(job + ': has no automatic persona dispatch path')
     base = root(run_id, job)
     record = _automatic_project_inputs(run_id, job)
@@ -841,7 +911,7 @@ def _run_project_automatic(run_id, dagster_id, job, force=False):
     attempt.mkdir(parents=True)
     atomic_json(attempt / 'inputs.json', {**record, 'fingerprint': fingerprint})
     atomic_json(attempt / 'output.json', value)
-    atomic_bytes(attempt / 'project-discovery-summary.md', summary_text.encode('utf-8'))
+    atomic_bytes(attempt / AUTOMATIC_JOBS[job]['summary'], summary_text.encode('utf-8'))
     accepted = {'status': 'OK', 'job': job, 'run_id': run_id, 'attempt_id': attempt_id,
                 'dagster_run_id': dagster_id, 'fingerprint': fingerprint, 'accepted_at': now(),
                 **facts}

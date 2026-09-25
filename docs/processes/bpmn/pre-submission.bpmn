@@ -281,13 +281,13 @@
       <bpmn:exclusiveGateway id="sp4_intok" name="Intake SUCCESS?">
         <bpmn:incoming>Flow_sp4_intake_sp4_intok</bpmn:incoming>
         <bpmn:outgoing>Flow_sp4_intok_sp4_intfix</bpmn:outgoing>
-        <bpmn:outgoing>Flow_sp4_intok_sp4_pgate</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp4_intok_sp4_mode</bpmn:outgoing>
       </bpmn:exclusiveGateway>
       <bpmn:userTask id="sp4_intfix" name="Inspect failure; correct inputs; restage">
         <bpmn:incoming>Flow_sp4_intok_sp4_intfix</bpmn:incoming>
         <bpmn:outgoing>Flow_sp4_intfix_sp4_intake</bpmn:outgoing>
       </bpmn:userTask>
-      <bpmn:scriptTask id="sp4_mode" name="discovery_gate.set_dispatch_mode: automatic (real persona call) or supplied (default)">
+      <bpmn:scriptTask id="sp4_mode" name="set_dispatch_mode per gate: automatic or supplied (default)">
         <bpmn:incoming>Flow_sp4_intok_sp4_mode</bpmn:incoming>
         <bpmn:outgoing>Flow_sp4_mode_sp4_pgate</bpmn:outgoing>
       </bpmn:scriptTask>
@@ -317,7 +317,7 @@
       <bpmn:exclusiveGateway id="sp4_dok" name="Project discovery accepted?">
         <bpmn:incoming>Flow_sp4_dgate_sp4_dok</bpmn:incoming>
         <bpmn:outgoing>Flow_sp4_dok_sp4_danalyze</bpmn:outgoing>
-        <bpmn:outgoing>Flow_sp4_dok_sp4_end</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp4_dok_sp4_ogate</bpmn:outgoing>
       </bpmn:exclusiveGateway>
       <bpmn:userTask id="sp4_danalyze" name="Produce project discovery: manifests, build image, safe command plan">
         <bpmn:incoming>Flow_sp4_dok_sp4_danalyze</bpmn:incoming>
@@ -327,8 +327,44 @@
         <bpmn:incoming>Flow_sp4_danalyze_sp4_dsupply</bpmn:incoming>
         <bpmn:outgoing>Flow_sp4_dsupply_sp4_dgate</bpmn:outgoing>
       </bpmn:scriptTask>
-      <bpmn:endEvent id="sp4_end" name="Pre-submittal complete: intake, partition map, project plan accepted">
-        <bpmn:incoming>Flow_sp4_dok_sp4_end</bpmn:incoming>
+      <bpmn:sendTask id="sp4_ogate" name="Launch and await devops_project_discovery">
+        <bpmn:incoming>Flow_sp4_dok_sp4_ogate</bpmn:incoming>
+        <bpmn:incoming>Flow_sp4_osupply_sp4_ogate</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_ogate_sp4_ook</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:exclusiveGateway id="sp4_ook" name="DevOps discovery accepted?">
+        <bpmn:incoming>Flow_sp4_ogate_sp4_ook</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_ook_sp4_oanalyze</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp4_ook_sp4_sgate</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:userTask id="sp4_oanalyze" name="Produce devops discovery: container, CI/CD, IaC and deploy units, safe command plan">
+        <bpmn:incoming>Flow_sp4_ook_sp4_oanalyze</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_oanalyze_sp4_osupply</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:scriptTask id="sp4_osupply" name="supply_record.py for 02-devops-project-discovery">
+        <bpmn:incoming>Flow_sp4_oanalyze_sp4_osupply</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_osupply_sp4_ogate</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:sendTask id="sp4_sgate" name="Launch and await sre_operations_topology">
+        <bpmn:incoming>Flow_sp4_ook_sp4_sgate</bpmn:incoming>
+        <bpmn:incoming>Flow_sp4_ssupply_sp4_sgate</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_sgate_sp4_sok</bpmn:outgoing>
+      </bpmn:sendTask>
+      <bpmn:exclusiveGateway id="sp4_sok" name="Operations topology accepted?">
+        <bpmn:incoming>Flow_sp4_sgate_sp4_sok</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_sok_sp4_sanalyze</bpmn:outgoing>
+        <bpmn:outgoing>Flow_sp4_sok_sp4_end</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:userTask id="sp4_sanalyze" name="Produce operations topology: services, ports, dependencies, configured controls">
+        <bpmn:incoming>Flow_sp4_sok_sp4_sanalyze</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_sanalyze_sp4_ssupply</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:scriptTask id="sp4_ssupply" name="supply_record.py for 02-sre-operations-topology">
+        <bpmn:incoming>Flow_sp4_sanalyze_sp4_ssupply</bpmn:incoming>
+        <bpmn:outgoing>Flow_sp4_ssupply_sp4_sgate</bpmn:outgoing>
+      </bpmn:scriptTask>
+      <bpmn:endEvent id="sp4_end" name="Pre-submittal complete: intake and all four discovery records accepted">
+        <bpmn:incoming>Flow_sp4_sok_sp4_end</bpmn:incoming>
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="Flow_sp4_start_sp4_intake" sourceRef="sp4_start" targetRef="sp4_intake" />
       <bpmn:sequenceFlow id="Flow_sp4_intake_sp4_intok" sourceRef="sp4_intake" targetRef="sp4_intok" />
@@ -345,13 +381,23 @@
       <bpmn:sequenceFlow id="Flow_sp4_dok_sp4_danalyze" name="no: hand-off issued or record invalid" sourceRef="sp4_dok" targetRef="sp4_danalyze" />
       <bpmn:sequenceFlow id="Flow_sp4_danalyze_sp4_dsupply" sourceRef="sp4_danalyze" targetRef="sp4_dsupply" />
       <bpmn:sequenceFlow id="Flow_sp4_dsupply_sp4_dgate" sourceRef="sp4_dsupply" targetRef="sp4_dgate" />
-      <bpmn:sequenceFlow id="Flow_sp4_dok_sp4_end" name="yes" sourceRef="sp4_dok" targetRef="sp4_end" />
-      <bpmn:textAnnotation id="sp4_n1"><bpmn:text>Gates validate: schema, normalized paths, personas, citation SHA-256 freshness, no finding/severity claims. Dev discovery also requires the accepted partition map at the same revision.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:sequenceFlow id="Flow_sp4_dok_sp4_ogate" name="yes" sourceRef="sp4_dok" targetRef="sp4_ogate" />
+      <bpmn:sequenceFlow id="Flow_sp4_ogate_sp4_ook" sourceRef="sp4_ogate" targetRef="sp4_ook" />
+      <bpmn:sequenceFlow id="Flow_sp4_ook_sp4_oanalyze" name="no: hand-off issued or record invalid" sourceRef="sp4_ook" targetRef="sp4_oanalyze" />
+      <bpmn:sequenceFlow id="Flow_sp4_oanalyze_sp4_osupply" sourceRef="sp4_oanalyze" targetRef="sp4_osupply" />
+      <bpmn:sequenceFlow id="Flow_sp4_osupply_sp4_ogate" sourceRef="sp4_osupply" targetRef="sp4_ogate" />
+      <bpmn:sequenceFlow id="Flow_sp4_ook_sp4_sgate" name="yes" sourceRef="sp4_ook" targetRef="sp4_sgate" />
+      <bpmn:sequenceFlow id="Flow_sp4_sgate_sp4_sok" sourceRef="sp4_sgate" targetRef="sp4_sok" />
+      <bpmn:sequenceFlow id="Flow_sp4_sok_sp4_sanalyze" name="no: hand-off issued or record invalid" sourceRef="sp4_sok" targetRef="sp4_sanalyze" />
+      <bpmn:sequenceFlow id="Flow_sp4_sanalyze_sp4_ssupply" sourceRef="sp4_sanalyze" targetRef="sp4_ssupply" />
+      <bpmn:sequenceFlow id="Flow_sp4_ssupply_sp4_sgate" sourceRef="sp4_ssupply" targetRef="sp4_sgate" />
+      <bpmn:sequenceFlow id="Flow_sp4_sok_sp4_end" name="yes" sourceRef="sp4_sok" targetRef="sp4_end" />
+      <bpmn:textAnnotation id="sp4_n1"><bpmn:text>Gates validate: schema, normalized paths, personas, citation SHA-256 freshness, no finding/severity claims. Dev and devops discovery require the accepted partition map at the same revision; SRE topology requires the accepted devops record (in automatic mode it also receives the partition map as scope).</bpmn:text></bpmn:textAnnotation>
       <bpmn:association id="Assoc_sp4_n1" sourceRef="sp4_pgate" targetRef="sp4_n1" />
       <bpmn:textAnnotation id="sp4_n2"><bpmn:text>Each launch follows "Submit to Dagster" (--wait); Dagster then executes the job in the host code location.</bpmn:text></bpmn:textAnnotation>
       <bpmn:association id="Assoc_sp4_n2" sourceRef="sp4_intake" targetRef="sp4_n2" />
-      <bpmn:textAnnotation id="sp4_n3"><bpmn:text>Automatic mode: this same launch dispatches a real claude CLI persona call, validates the response against the literal output schema, and overwrites source_revision/content_hash with orchestrator-pinned values before publish -- no separate hand-authoring step. The "no" branch below (produce map, then supply_record.py) applies only in supplied mode (the default; live-confirmed 2026-09-24, D01).</bpmn:text></bpmn:textAnnotation>
-      <bpmn:association id="Assoc_sp4_n3" sourceRef="sp4_mode" targetRef="sp4_n3" />
+      <bpmn:textAnnotation id="sp4_n3"><bpmn:text>Automatic mode (all four gates): the same launch dispatches a real claude CLI persona call, validates the response against the literal output schema, builds cited claims, and overwrites source_revision, target and content_hash with orchestrator-pinned values before publish -- no hand-authoring step. The &quot;no&quot; branches (produce the record, then supply_record.py) apply only in supplied mode, the default. Live-confirmed: D01 2026-09-24; D02-D04 2026-09-25 (SAT 20260925T170552Z, stages 1-9 automatic).</bpmn:text></bpmn:textAnnotation>
+      <bpmn:association id="Assoc_sp4_n3" sourceRef="sp4_ogate" targetRef="sp4_n3" />
     </bpmn:subProcess>
     <bpmn:subProcess id="Sub_Submit" name="5. Submit engagement job to Dagster">
       <bpmn:incoming>Flow_Sub_PreSubmit_Sub_Submit</bpmn:incoming>
@@ -667,7 +713,25 @@
       <bpmndi:BPMNShape id="sp4_dok_di" bpmnElement="sp4_dok" isMarkerVisible="true"><dc:Bounds x="1355" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1320" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sp4_danalyze_di" bpmnElement="sp4_danalyze"><dc:Bounds x="1305" y="368" width="150" height="84" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sp4_dsupply_di" bpmnElement="sp4_dsupply"><dc:Bounds x="1095" y="368" width="150" height="84" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="sp4_end_di" bpmnElement="sp4_end"><dc:Bounds x="1572" y="242" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1530" y="284" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_ogate_di" bpmnElement="sp4_ogate"><dc:Bounds x="1515" y="218" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_ook_di" bpmnElement="sp4_ook" isMarkerVisible="true"><dc:Bounds x="1775" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1740" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_oanalyze_di" bpmnElement="sp4_oanalyze"><dc:Bounds x="1725" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_osupply_di" bpmnElement="sp4_osupply"><dc:Bounds x="1515" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_sp4_ogate_sp4_ook_di" bpmnElement="Flow_sp4_ogate_sp4_ook"><di:waypoint x="1665" y="260" /><di:waypoint x="1775" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_ook_sp4_oanalyze_di" bpmnElement="Flow_sp4_ook_sp4_oanalyze"><di:waypoint x="1800" y="285" /><di:waypoint x="1800" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="1806" y="316" width="120" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_oanalyze_sp4_osupply_di" bpmnElement="Flow_sp4_oanalyze_sp4_osupply"><di:waypoint x="1725" y="410" /><di:waypoint x="1665" y="410" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_osupply_sp4_ogate_di" bpmnElement="Flow_sp4_osupply_sp4_ogate"><di:waypoint x="1590" y="368" /><di:waypoint x="1590" y="302" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp4_sgate_di" bpmnElement="sp4_sgate"><dc:Bounds x="1935" y="218" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_sok_di" bpmnElement="sp4_sok" isMarkerVisible="true"><dc:Bounds x="2195" y="235" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="2160" y="187" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_sanalyze_di" bpmnElement="sp4_sanalyze"><dc:Bounds x="2145" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sp4_ssupply_di" bpmnElement="sp4_ssupply"><dc:Bounds x="1935" y="368" width="150" height="84" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_sp4_sgate_sp4_sok_di" bpmnElement="Flow_sp4_sgate_sp4_sok"><di:waypoint x="2085" y="260" /><di:waypoint x="2195" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_sok_sp4_sanalyze_di" bpmnElement="Flow_sp4_sok_sp4_sanalyze"><di:waypoint x="2220" y="285" /><di:waypoint x="2220" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="2226" y="316" width="120" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_sanalyze_sp4_ssupply_di" bpmnElement="Flow_sp4_sanalyze_sp4_ssupply"><di:waypoint x="2145" y="410" /><di:waypoint x="2085" y="410" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_ssupply_sp4_sgate_di" bpmnElement="Flow_sp4_ssupply_sp4_sgate"><di:waypoint x="2010" y="368" /><di:waypoint x="2010" y="302" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_ook_sp4_sgate_di" bpmnElement="Flow_sp4_ook_sp4_sgate"><di:waypoint x="1825" y="260" /><di:waypoint x="1935" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="1831" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_sok_sp4_end_di" bpmnElement="Flow_sp4_sok_sp4_end"><di:waypoint x="2245" y="260" /><di:waypoint x="2412" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="2251" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp4_end_di" bpmnElement="sp4_end"><dc:Bounds x="2412" y="242" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="2370" y="284" width="120" height="42" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_sp4_start_sp4_intake_di" bpmnElement="Flow_sp4_start_sp4_intake"><di:waypoint x="138" y="260" /><di:waypoint x="255" y="260" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_intake_sp4_intok_di" bpmnElement="Flow_sp4_intake_sp4_intok"><di:waypoint x="405" y="260" /><di:waypoint x="515" y="260" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_intok_sp4_intfix_di" bpmnElement="Flow_sp4_intok_sp4_intfix"><di:waypoint x="540" y="285" /><di:waypoint x="540" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="546" y="316" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
@@ -683,13 +747,13 @@
       <bpmndi:BPMNEdge id="Flow_sp4_dok_sp4_danalyze_di" bpmnElement="Flow_sp4_dok_sp4_danalyze"><di:waypoint x="1380" y="285" /><di:waypoint x="1380" y="368" /><bpmndi:BPMNLabel><dc:Bounds x="1386" y="316" width="120" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_danalyze_sp4_dsupply_di" bpmnElement="Flow_sp4_danalyze_sp4_dsupply"><di:waypoint x="1305" y="410" /><di:waypoint x="1245" y="410" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_sp4_dsupply_sp4_dgate_di" bpmnElement="Flow_sp4_dsupply_sp4_dgate"><di:waypoint x="1170" y="368" /><di:waypoint x="1170" y="302" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_sp4_dok_sp4_end_di" bpmnElement="Flow_sp4_dok_sp4_end"><di:waypoint x="1405" y="260" /><di:waypoint x="1572" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="1411" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_sp4_dok_sp4_ogate_di" bpmnElement="Flow_sp4_dok_sp4_ogate"><di:waypoint x="1405" y="260" /><di:waypoint x="1515" y="260" /><bpmndi:BPMNLabel><dc:Bounds x="1411" y="238" width="28" height="30" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="sp4_n1_di" bpmnElement="sp4_n1"><dc:Bounds x="813" y="65" width="380" height="70" /></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Assoc_sp4_n1_di" bpmnElement="Assoc_sp4_n1"><di:waypoint x="750" y="218" /><di:waypoint x="833" y="135" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="sp4_n2_di" bpmnElement="sp4_n2"><dc:Bounds x="246" y="65" width="380" height="55" /></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Assoc_sp4_n2_di" bpmnElement="Assoc_sp4_n2"><di:waypoint x="330" y="218" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="sp4_n3_di" bpmnElement="sp4_n3"><dc:Bounds x="855" y="305" width="360" height="60" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Assoc_sp4_n3_di" bpmnElement="Assoc_sp4_n3"><di:waypoint x="810" y="170" /><di:waypoint x="900" y="305" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="sp4_n3_di" bpmnElement="sp4_n3"><dc:Bounds x="1640" y="20" width="600" height="110" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_sp4_n3_di" bpmnElement="Assoc_sp4_n3"><di:waypoint x="1600" y="218" /><di:waypoint x="1680" y="130" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
   <bpmndi:BPMNDiagram id="Diagram_Sub_Submit" name="5. Submit engagement job to Dagster">

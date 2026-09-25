@@ -18,8 +18,8 @@ flowchart TD
   P0[Preconditions: Dagster stack + host code location up, images pinned, target checked out on the host] --> S1
   S1[1. Create the run on the POSIX host and stage the artifact manifest] --> S2
   S2[2. engagement_workflow: config -> intake -> 3 preparation branches -> validated join] --> S2b
-  S2b[2b. Discovery gates: repository partition map - supplied record, or D01 automatic dispatch - then developer, devops and SRE operations-topology discovery - supplied, validated records] --> G1{native code in scope?}
-  G1 -- yes --> S3a[3a. Build resolution: index the build signals, LLM build plan, build image + trial configure/build, retry up to build_resolution_attempts, catalog image_build_id - designed, not built]
+  S2b[2b. Discovery gates: repository partition map, then developer, devops and SRE operations-topology discovery - each a supplied, validated record or an automatic persona dispatch, D01-D04] --> G1{native code in scope?}
+  G1 -- yes --> S3a[3a. Build resolution: index and classify units by build root, then per compiled or transpiled unit an LLM build plan, image + trial build, bounded retries, catalog image_build_id - designed, not built]
   S3a -- resolved --> S3[3b. 02-build-configure / 02-native-build: replay the build lock in the catalogued image, compile database]
   S3a -- FAILED BUILD_UNRESOLVED --> S4
   G1 -- no --> S4
@@ -31,28 +31,31 @@ flowchart TD
 
 Built today: 1, 2, 2b, 5 and the `critical_findings_sarif` publisher, all run-owned and validated.
 Step 3a (build resolution: how to build an unknown target, with what tools, and whether it can be
-done at all) is designed in [build-resolution.md](build-resolution.md) (ADR-0012) and not built.
+done at all) is designed in [build-resolution.md](build-resolution.md) (ADR-0012), extended per unit
+by [build-unit-classification.md](build-unit-classification.md), and not built.
 Step 3b is built only partially: `build_execution` configures a single CMake root from the older
 `build_discovery` branch, through the `buildenv-common` wrapper. It refuses other build systems (the
 `hello-autotools` fixture among them), does not consume step 2b's developer project discovery, and
 does not go through the B13 pinned-container adapter. The lifecycle configure worker that does
 (`02-build-configure`, batch E01) is planned: B13 into service, then the C++ build environment, then E01.
 Step 2b's four gates (partition, developer, devops and SRE operations-topology discovery) accept
-supplied, schema- and freshness-validated records (`discovery_gate.py`); three of the four (dev,
-devops, SRE) do not perform the analysis themselves. The first gate, `02-repository-partition-
-discovery` (D01, 2026-09-24), can now also perform its own analysis: a run opted into automatic
+supplied, schema- and freshness-validated records (`discovery_gate.py`) by default, and all four can
+also perform the analysis themselves (automatic persona dispatch, D01-D04; SAT stages 6-9 all
+automatic since SAT `20260925T170552Z`). The first gate, `02-repository-partition-discovery` (D01,
+2026-09-24), was first: a run opted into automatic
 dispatch (`discovery_gate.set_dispatch_mode`, a per-run opt-in file, no change to this gate's
 external `run()` signature) dispatches a real, tools-off persona invocation
 (`claude_cli_invoker.ClaudeCliInvoker`) against the staged checkout instead of expecting a supplied
 file -- the supplied-record path stays available as the default and as an explicit, separately
-tested alternative. The second gate, `02-dev-project-discovery` (D02, built 2026-09-24, not yet run
-live), has the same opt-in: its persona reads the target plus the accepted partition map and itself
+tested alternative. The second gate, `02-dev-project-discovery` (D02, live-confirmed 2026-09-25), has the same opt-in: its persona reads the target plus the accepted partition map and itself
 decides how the project is built (languages, buildenv image, the ordered safe command plan), keeping
 this job's existing accepted-record shape. The third gate, `02-devops-project-discovery` (D03,
-2026-09-25), has the same opt-in through the same shared code path, with its own task prompt. D04
-(SRE topology) does not have this yet. SRE topology
-chains after the accepted devops record instead of the partition map directly (2026-09-24): it
-reads the containers/services devops discovery already found.
+2026-09-25), has the same opt-in through the same shared code path, with its own task prompt. The
+fourth, `02-sre-operations-topology` (D04, live-confirmed 2026-09-25), uses the same path
+with its own schema and claim builder. SRE topology chains after the accepted devops record instead
+of the partition map directly (2026-09-24): in automatic mode its persona receives both the accepted
+devops record and the partition map as scope, and maps the declared services, ports and dependencies
+of what devops discovery found.
 Step 4 runs only through the legacy `pipeline/engagement_job.*` path into `scratch/` and is then
 imported into the run; its run-owned replacement (the `02-*` graph nodes) is declared but 45 of the
 51 graph jobs have no worker. Steps 6-7 exist as the tracked prompt harness (`appsec-review-process/
@@ -88,7 +91,7 @@ Per-job inputs and outputs, and their rollup per process model, are in the gener
 |---|---|---|---|---|
 | 1 | `run_process.py --start`, `stage_artifacts.py` | Running stack and host code location; target checkout on the host | `inputs/artifact-manifest.json` | Manifest validates. |
 | 2 | `engagement_workflow` (`launch_job.py --run-id <id> --wait`) | Manifest; `engagement_run_id` tag | `data/jobs/00-intake/whole/accepted.json`: source revision + dirty/untracked fingerprints, language/workspace/build/deployment families, native compile/link-recipe plan, specialist routing; `data/workflows/engagement/accepted.json` after the join | Workflow `OK`. `QUEUED`/`STARTED` are not completion. Intake passing says nothing about native build coverage. |
-| 2b | `repository_partition_discovery`, then `dev_project_discovery`, `devops_project_discovery` and `sre_operations_topology` | Accepted intake; a supplied `supplied/result.json` per gate (fixtures: `fixtures/supply_record.py`), **or**, for the partition gate only, this run opted into automatic dispatch (`discovery_gate.set_dispatch_mode`); dev and devops discovery each also need the accepted partition map at the same source revision; sre topology needs the accepted devops record at the same source revision | `data/jobs/02-repository-partition-discovery/` (partition map, persona routing, review scope), `data/jobs/02-dev-project-discovery/accepted.json`, `data/jobs/02-devops-project-discovery/accepted.json` (project, manifests, build image, safe command plan) and `data/jobs/02-sre-operations-topology/accepted.json` (services, ports, dependencies, coverage gaps) | Without a supplied record (and no automatic-dispatch opt-in) a gate fails with an actionable hand-off (`handoff.md`), never a silent pass. Citations must match the target's current file hashes. |
+| 2b | `repository_partition_discovery`, then `dev_project_discovery`, `devops_project_discovery` and `sre_operations_topology` | Accepted intake; a supplied `supplied/result.json` per gate (fixtures: `fixtures/supply_record.py`), **or** this run opted the gate into automatic dispatch (`discovery_gate.set_dispatch_mode`; all four gates support it); dev and devops discovery each also need the accepted partition map at the same source revision; sre topology needs the accepted devops record at the same source revision | `data/jobs/02-repository-partition-discovery/` (partition map, persona routing, review scope), `data/jobs/02-dev-project-discovery/accepted.json`, `data/jobs/02-devops-project-discovery/accepted.json` (project, manifests, build image, safe command plan) and `data/jobs/02-sre-operations-topology/accepted.json` (services, ports, dependencies, coverage gaps) | Without a supplied record (and no automatic-dispatch opt-in) a gate fails with an actionable hand-off (`handoff.md`), never a silent pass. Citations must match the target's current file hashes. |
 | 3a | `02-build-index`, `02-build-plan`, `02-build-resolution` (designed, [build-resolution.md](build-resolution.md)) | Accepted intake and partition map; `target-execution` and `package-restore` (apt mirror) grants; `build_resolution_attempts` (3), `build_image_reuse` (`auto`) | Cited build index; validated build plan; per-attempt image, logs and exit codes; on success `image_build_<id>` catalogued and `build-lock.json` in the run | `OK`, or `FAILED(BUILD_UNRESOLVED)` after the attempt budget: native jobs blocked, the engagement continues. |
 | 3b | `build_discovery` then `build_execution` (today; replaced by 3a + E01/E02) | Accepted intake; native families present; no current `build-discovery.md` for this exact target | Cited build requirements and command arrays (no execution); then one sandboxed configure inside the hostile-build boundary (`docs/architecture/design-v3.md` §2.2) and `compile_commands.json` when produced | Feasibility gate (ADR-0001 Tier A/B/C) recorded; a missing compile database blocks native lanes, not the engagement. |
 | 4 | today: `pipeline/engagement_job.sh` / `.ps1` outside Dagster; target: `02-*` nodes | Target checkout; images; (today) manual import afterwards | Static prepass, native pregather, `assemble`, `correlate`, `deep_confirm`, retrieval plan, `job-status.json` with explicit degraded status | Every tool records exit/duration/log; a tool that did not run is a coverage gap, never "clean". |

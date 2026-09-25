@@ -13,5 +13,5 @@ commands.
 Do not claim security conclusions from raw tool output in this lane.
 
 For coarse repository partitioning and specialist routing, use the bounded discovery prompt
-`repository-partition-discovery.md`. This companion job interprets static evidence and records
+`task-repository-partition-discovery.md`. This companion job interprets static evidence and records
 uncertainty; keep its completion distinct from the deterministic pipeline's job status.

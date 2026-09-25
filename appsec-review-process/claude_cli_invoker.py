@@ -72,6 +72,10 @@ around it. The object has exactly these keys, each holding the file's full conte
 
 {envelope_keys}
 
+A key marked "JSON object" holds that file's content as a nested JSON object, written directly as
+the key's value. It is never a string, and never a string containing JSON: `"key": {{...}}`, not
+`"key": "{{...}}"`. A key marked "markdown string" holds the file's markdown text as one JSON string.
+
 Every JSON-valued key's content is validated against its published schema before anything is
 accepted; a value that does not validate, an extra or missing key, or any text outside the single
 JSON object causes this entire invocation to be rejected and recorded as failed. Produce exactly
@@ -205,7 +209,9 @@ def build_prompt_text(package: Any, output_contract: dict[str, Any], store: Sche
     response-envelope instructions."""
     outer = package.prompt.decode("utf-8")
     fields = _envelope_fields(output_contract)
-    envelope_keys = "\n".join(f'- `"{key}"`: {filename}' for filename, key, _kind in fields)
+    envelope_keys = "\n".join(
+        f'- `"{key}"`: {filename} ({"JSON object" if kind == "json" else "markdown string"})'
+        for filename, key, kind in fields)
     # Every JSON-valued required file gets its literal schema inlined. Today's output contracts
     # declare exactly one JSON artifact (result_schema.artifact/schema_file); this loop still
     # covers every kind=="json" field by filename match rather than assuming there is only one,
@@ -479,11 +485,65 @@ def _claims_from_project_inventory(inventory: dict[str, Any], inputs: tuple,
     return claims
 
 
+def _claims_from_operations_topology(topology: dict[str, Any], inputs: tuple,
+                                     allowed_claim_classes: tuple[str, ...],
+                                     result_filename: str) -> list[dict[str, Any]]:
+    """D04's claim builder for ``service-inventory.json`` (``operations-topology.schema.json``): one
+    ``service_inventory`` claim per declared service and one ``runtime_dependency_map`` claim per
+    declared or inferred dependency, each citing only evidence that resolves to a pinned target
+    input; a claim left with no resolvable citation is a hard rejection (governing rule 2).
+    ``operational_notes`` and ``coverage_gaps`` are plain strings with no evidence of their own and
+    stay in the artifact, as in the project-inventory builder.
+
+    Same zero-result rule as D03 (William, 2026-09-25): no service at all is valid only when
+    ``coverage_gaps`` says why; silence is rejected."""
+    by_path = {item.path: item for item in inputs}
+    for claim_class in ("service_inventory", "runtime_dependency_map"):
+        if claim_class not in allowed_claim_classes:
+            raise InvokerOutputError(f"claim class {claim_class!r} is not in this request's allowed_claim_classes")
+    claims: list[dict[str, Any]] = []
+    for service in topology.get("services", []):
+        sid = str(service.get("service_id"))
+        citations = _resolved_citations(service.get("evidence_citations"), by_path)
+        if not citations:
+            raise InvokerOutputError(
+                f"service {sid!r} cites no evidence this invoker can resolve to a pinned readable "
+                f"input -- governing rule 2 requires evidence that resolves")
+        ports = ", ".join(f"{p.get('port')}/{p.get('protocol')}{' published' if p.get('exposed') else ''}"
+                          for p in service.get("ports", []) if isinstance(p, dict)) or "none declared"
+        claims.append({
+            "claim_id": f"service-{sid}"[:120], "claim_class": "service_inventory",
+            "statement": (f"Declared {service.get('kind')} {sid!r} runs from image "
+                          f"{service.get('image_ref')!r}; declared ports: {ports}")[:2000],
+            "file": result_filename, "citations": citations,
+        })
+        for index, dependency in enumerate(service.get("dependencies", [])):
+            if not isinstance(dependency, dict):
+                continue
+            dep_citations = _resolved_citations(dependency.get("evidence_citations"), by_path)
+            if not dep_citations:
+                raise InvokerOutputError(
+                    f"services[{sid!r}].dependencies[{index}] cites no evidence this invoker can resolve "
+                    f"to a pinned readable input -- governing rule 2 requires evidence that resolves")
+            claims.append({
+                "claim_id": f"dependency-{sid}-{index}"[:120], "claim_class": "runtime_dependency_map",
+                "statement": (f"{sid!r} depends on {dependency.get('target_service_id')!r} "
+                              f"({dependency.get('kind')}, {dependency.get('basis')})")[:2000],
+                "file": result_filename, "citations": dep_citations,
+            })
+    if not claims and not topology.get("coverage_gaps"):
+        raise InvokerOutputError(
+            "model response named no services and recorded no coverage gap explaining why -- "
+            "nothing to claim and no stated reason")
+    return claims
+
+
 # Result schema file -> the claim builder for that result. An output contract whose result schema is
 # not listed is rejected at claim time (see invoke) rather than silently given no claims.
 _CLAIM_BUILDERS = {
     "repository-partition-map.schema.json": _claims_from_partition_map,
     "project-discovery.schema.json": _claims_from_project_inventory,
+    "operations-topology.schema.json": _claims_from_operations_topology,
 }
 
 

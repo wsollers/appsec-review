@@ -79,7 +79,7 @@ class AdoptionTests(unittest.TestCase):
         self.assertEqual(value["identity"]["claim_class_sha256"],
                          value["claim_class"]["sha256"])
         self.assertEqual(value["prompt"]["path"],
-                         "appsec-review-process/02-evidence-pregather/repository-partition-discovery.md")
+                         "appsec-review-process/02-evidence-pregather/task-repository-partition-discovery.md")
         self.assertEqual(value["inputs"][0]["sha256"],
                          state.file_hash(state.RUNS / self.run_id / "inputs/artifact-manifest.json"))
         second, repeated = handoffs.create_handoff(

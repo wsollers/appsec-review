@@ -27,12 +27,17 @@ flowchart TD
   S4a["S4a partition-discovery gate, nothing supplied<br/>hand-off FAIL as designed (one-time proof)"]:::done
   S4b["S4b supply partition map<br/>fixtures/supply_record.py: ACCEPTED"]:::done
   S5["S5 02-dev-project-discovery<br/>supply_record.py: ACCEPTED"]:::done
-  S6a["S6a build resolution: index, LLM plan, image + trial build loop,<br/>image_build_id catalog (build-resolution.md, ADR-0012)<br/>NEXT: designed"]:::next
+  S5b["S5b devops + SRE topology discovery<br/>ACCEPTED (SAT stages 8-9)"]:::done
+  AD["Automatic persona dispatch D01-D04<br/>SAT --dispatch stages 6-9, live 2026-09-25"]:::done
+  S6a["S6a build resolution: index + classify units, per-unit LLM plan,<br/>image + trial build loop, image_build_id catalog<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::todo
   E01["E01/E02: replay the lock through B13"]:::todo
 
-  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S6a --> S6
+  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6a --> S6
+  AD -.-> S4b
+  AD -.-> S5
+  AD -.-> S5b
   B13 -.-> S6a
   B13 -.-> S6
   E01 -.-> S6
@@ -72,8 +77,9 @@ subprocesses, each with its own diagram:
    budget, scope and permissions (a named human grants anything beyond `read-source`), create the
    run, stage the manifest; staging blocks wrong-platform and legacy runs.
 4. [**Pre-submittal processing**](bpmn/render/pre-submission-4-pre-submittal.svg): intake, then the
-   partition and developer-discovery gates, each with its hand-off loop (produce the record, supply
-   it, relaunch) until accepted.
+   four discovery gates in order (partition map, developer, devops, SRE operations topology). Each
+   is either an automatic persona dispatch (set per gate with `set_dispatch_mode`) or, in supplied
+   mode, a hand-off loop (produce the record, supply it, relaunch) until accepted.
 5. [**Submit to Dagster**](bpmn/render/pre-submission-5-submit.svg): `launch_job.py`'s checks
    (POSIX-staged run, registered job, unchanged request), the duplicate-submission guard (find by
    tags, reattach), durable intent, `launchRun`, then `QUEUED` or `REJECTED`.
@@ -81,8 +87,8 @@ subprocesses, each with its own diagram:
 The model ends at **accepted** (`QUEUED`), not completed. What Dagster does with the engagement job
 after that (fan-out into lanes and queues) is the next diagram. Two gaps the model makes visible:
 the engagement job submitted in step 5 is not yet fully runnable (`full_review` stops at the first
-unimplemented worker), and step 4's hand-off loops are manual today (fixture records are tracked;
-real targets need an analyst or agent).
+unimplemented worker), and step 4's hand-off loops are manual in supplied mode (fixture records are
+tracked); automatic mode needs no hand-authoring (D01-D04, live 2026-09-25).
 
 ## Steps
 
@@ -251,6 +257,39 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-25 -- **Decision: no run step in discovery; containers are built by the build lane, never
+  run.** D03's live plan had included `docker run --rm hello-autotools World`. William: running the
+  target is not discovery. The devops task prompt now forbids planning `docker`/`podman`/`nerdctl`
+  `run`/`exec`/`start` or `compose up`/`run` and any execution of a built binary or entrypoint; SAT
+  stage 8 fails on such an entry. Containers stay static in discovery, and the build lane builds the
+  repository's images (revising the morning's "containers static in v1" in
+  `build-unit-classification.md`). Running built targets for fuzzing or dynamic testing is a later
+  TODO (`TODO.md` section 10). **Confirmed live** the same day: fresh `--dispatch` SAT through
+  `devops-project-discovery`, run `20260925T173117Z-055b25`, Dagster `d0f5fd8d`, stages 1-8 PASS; the plan is `docker build -t hello-autotools
+  .` [network-required] only, no run step.
+- 2026-09-25 -- **D04 built and LIVE PASS: `02-sre-operations-topology` automatic persona dispatch;
+  SAT stages 1-9 all automatic for the first time.** Fresh SAT `20260925T170552Z`, run
+  `20260925T170620Z-c6a12e`, `--dispatch --through sre-operations-topology`, on hal5000 WSL
+  (Ubuntu-24.04, `~/projects/appsec-review`): **stages 1-9 PASS**, four real model calls. Stage 9
+  Dagster run `6ea8a93b`, ~31 s: one service `hello-autotools` (`cli-batch`, matches the fixture
+  answer key), 6 coverage gaps, 9 operational notes (2 `Live follow-up:`), 3 fresh citations, no
+  observed-state wording flagged. Stage 8 (D03) plan `docker build -t hello-autotools .`
+  [network-required] confirms the `3f7b283` tag wording live, plus a new `docker run --rm
+  hello-autotools World` [script-execution-required] entry (open question below). What was built:
+  task prompt `task-sre-operations-topology.md` and template fix (`31ff6b5`); `AUTOMATIC_JOBS`,
+  two-file upstream staging (devops record + partition map) and `_claims_from_operations_topology`
+  (`bfe12c6`); SAT stage 9 `--dispatch` (`4ac1e48`); task prompts renamed to `task-<name>.md` with an
+  enforcing test (`48c3445`). **Two live failures on the way, both prompt wording, both fixed:** (1)
+  SAT `20260925T163629Z` stage 6: the D01 persona wrote sentences into `coverage.inventory_scope` and
+  every `search_scope`; the validator rightly rejected them; the D01 prompt now says those fields hold
+  paths/globs only and reasons go in `budget_limitations` (`e915d92`). (2) Same SAT, stage 8: the D03
+  persona returned `project_inventory` as a JSON-encoded string inside the envelope
+  (`INVOKER_EXCEPTION`); the invoker's envelope instructions now name each key's kind and say JSON
+  files are nested objects, never strings (`97eeb3d`, applies to D01-D04). Environment on the way:
+  Docker Desktop's engine stuck (500 on `/version`; restart fixed it; native `docker.service` stayed
+  disabled); `claude` CLI installed in WSL (the Windows npm shim on the appended Windows PATH had
+  shadowed it: `Exec format error`). Triage aid: a rejected envelope leaves the raw response in the
+  code location's `/tmp/claude-cli-invoker-*/raw-response.json`.
 - 2026-09-25 -- **D03 built and LIVE PASS: `02-devops-project-discovery` automatic persona dispatch,
   first attempt.** Fresh SAT `20260925T044159Z`, run `20260925T044606Z-ee7f02`, `--dispatch --through
   devops-project-discovery`: **stages 1-8 PASS**, no failed attempt, three real model calls (D01

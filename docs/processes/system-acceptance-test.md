@@ -168,9 +168,8 @@ dependency target resolves to a known service id, coverage gaps recorded.
 ### 6. `partition-discovery` with `--dispatch` (D01: live automatic persona dispatch)
 
 Run with `scripts/system-acceptance-test.sh --dispatch --through <stage>` (a new SAT only; a
-`--resume` reads its own SAT's recorded choice, `--dispatch` is ignored). Stages 6, 7 and 8 change
-shape (stages 7 and 8: see the next subsections); stage 9 is unaffected and stays on its supplied
-record (no dispatch mode yet -- D04, tracked separately).
+`--resume` reads its own SAT's recorded choice, `--dispatch` is ignored). Stages 6, 7, 8 and 9 change
+shape (stages 7-9: see the next subsections).
 
 Two steps instead of three: `dispatch-mode`, `accept`. There is no `handoff`/`supply` -- with
 `dispatch-mode.json` set to `"automatic"` for `02-repository-partition-discovery` before the one
@@ -227,7 +226,7 @@ byte-equality with the fixture answer key is not a gate; a differing command pla
 
 Same flag and same two steps for `02-devops-project-discovery`; the gate code is shared with stage 7
 (`discovery_gate.AUTOMATIC_PROJECT_JOBS`), with its own persona identity (`d03-devops`) and its own
-task prompt (`appsec-review-process/02-evidence-pregather/devops-project-discovery.md`). The persona
+task prompt (`appsec-review-process/02-evidence-pregather/task-devops-project-discovery.md`). The persona
 decides which CI/CD, container, IaC, packaging and deployment units the repository declares and
 which safe commands would inspect them; the accepted partition map is scope, not evidence. Overlap
 with developer discovery is deliberate and accepted: both jobs may read the Dockerfile.
@@ -235,10 +234,33 @@ with developer discovery is deliberate and accepted: both jobs may read the Dock
 The checks are stage 7's, plus two that test the D03 prompt's own boundaries and fail the stage if
 broken: the plan contains no native build tool as `argv[0]` (`autoreconf`, `./configure`, `make`,
 `cmake`, `ninja`, `meson` -- developer discovery owns those), and no plan entry contains a
-deploy/publish-style token (`push`, `deploy`, `publish`, `release`, `apply`). A differing command plan
+deploy/publish-style token (`push`, `deploy`, `publish`, `release`, `apply`), and no plan entry runs
+the built target (`docker`/`podman`/`nerdctl` `run`, `exec`, `start`, or `compose up`/`run`; William,
+2026-09-25: running is dynamic testing, not discovery). A differing command plan
 against the fixture record is informational only. A result with no unit at all is valid only when a
 coverage gap explains it (`claude_cli_invoker._claims_from_project_inventory`); the SAT itself still
 requires at least one unit for this fixture, which has a Dockerfile.
+
+### 9. `sre-operations-topology` with `--dispatch` (D04: live automatic persona dispatch)
+
+Same flag and same two steps (`dispatch-mode`, `accept`) for `02-sre-operations-topology`, through the
+same gate path (`discovery_gate.AUTOMATIC_JOBS`), persona identity `d04-sretopology`, task prompt
+`appsec-review-process/02-evidence-pregather/task-sre-operations-topology.md`. The persona receives
+two upstream artifacts as scope, never evidence, staged together under
+`data/jobs/02-sre-operations-topology/upstream/<digest>/`: `devops-project-inventory.json` (the
+accepted devops record's `output.json`) and `repository-partition-map.json`. It maps declared topology
+only: services and their kind, image, ports and dependencies; health, restart and monitoring controls
+go in `operational_notes` as configured or tested, never observed; questions only a live environment
+can settle are `operational_notes` starting `Live follow-up:`.
+
+Checks that fail the stage: automatic dispatch and the `d04-sretopology` identity recorded; the persona
+invocation record present; `operations-topology-summary.md` present; `inputs.json` records both
+upstreams; same `source_revision` and `target` as the accepted devops record; at least one service
+(this fixture's image declares an `ENTRYPOINT`); unique service ids; every dependency target resolves;
+every service and every dependency cites evidence; citations fresh. Informational only: notes that use
+observed-state wording (`is running`, `is healthy`, `observed`, ...), and a differing service list
+(id, kind) against the fixture answer key. A result with no service is valid for the gate only when a
+coverage gap explains it (`claude_cli_invoker._claims_from_operations_topology`).
 
 ## Gaps the contracts have exposed
 
@@ -247,6 +269,6 @@ requires at least one unit for this fixture, which has a Dockerfile.
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
 | SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Done 2026-09-24 (stage 8 devops, stage 9 sre topology both gated and passing live) |
-| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): closed, `--dispatch`, live PASS 2026-09-25 (first attempt; see flow-bringup.md log for the scope finding). Stage 8 (`02-devops-project-discovery`, D03): closed, `--dispatch`, live PASS 2026-09-25 (first attempt). Stage 9 (D04) and the build part (stages 10-12, build-resolution.md): still open |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): closed, `--dispatch`, live PASS 2026-09-25 (first attempt; see flow-bringup.md log for the scope finding). Stage 8 (`02-devops-project-discovery`, D03): closed, `--dispatch`, live PASS 2026-09-25 (first attempt). Stage 9 (`02-sre-operations-topology`, D04): closed, `--dispatch`, live PASS 2026-09-25 (SAT `20260925T170552Z`, stages 1-9 all automatic). The build part (stages 10-12, build-resolution.md; per-unit classification, build-unit-classification.md): still open |
 | The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |

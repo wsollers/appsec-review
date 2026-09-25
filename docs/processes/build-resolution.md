@@ -1,6 +1,9 @@
 # Build resolution: learning how to build an unknown target
 
 Status: **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
+**Extended 2026-09-25** by [build-unit-classification.md](build-unit-classification.md): the loop below runs
+once per compiled or transpiled unit, and a failed unit blocks only that unit's jobs; ADR-0012 still
+describes one native project and needs a per-unit revision.
 Replaces the "supplied record" route for the build fields of developer discovery and the
 hand-written Phase 4 lock (`appsec-review-process/TODO.md`), and supersedes the CMake-only
 `build_discovery` / `build_execution` preparation jobs.
@@ -23,8 +26,10 @@ compares against after the fact; nothing in the process may read them.
 
 ```mermaid
 flowchart TD
-  I[Accepted intake + partition map] --> X[1. 02-build-index: deterministic indexer, nothing executed]
-  X --> R{2. Image catalog lookup - build_image_reuse}
+  I[Accepted intake + partition map + discovery records] --> X[1. 02-build-index: deterministic indexer, nothing executed]
+  X --> K[1b. Split into units by build root and classify each - build-unit-classification.md]
+  K -- interpreted, container, infrastructure, unclassified --> ST[No build: static evidence or a coverage gap]
+  K -- compiled or transpiled: for each unit --> R{2. Image catalog lookup - build_image_reuse}
   R -- auto: candidate found --> T
   R -- rebuild, or no candidate --> P[3. 02-build-plan: LLM infers plan from the index]
   P --> V{plan valid? schema, citations fresh, packages and argv well-formed}

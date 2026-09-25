@@ -8,7 +8,7 @@
        {"name": "1. Check out system under test", "members": ["step:populate-targets"]},
        {"name": "2. Start services", "members": ["step:docker-check", "step:docker-recover", "step:compose-setup", "step:compose-up", "step:code-location-start", "step:code-location-check", "step:code-location-reload"]},
        {"name": "3. Launch engagement", "members": ["step:define-engagement", "step:grant-permissions", "step:run-start", "step:stage-artifacts"]},
-       {"name": "4. Pre-submittal processing", "members": ["step:phase1_intake", "step:intake-fix", "step:repository_partition_discovery", "step:partition-analysis", "step:supply-partition", "step:dev_project_discovery", "step:dev-analysis", "step:supply-dev"]},
+       {"name": "4. Pre-submittal processing", "members": ["step:phase1_intake", "step:intake-fix", "step:set-dispatch-mode", "step:repository_partition_discovery", "step:partition-analysis", "step:supply-partition", "step:dev_project_discovery", "step:dev-analysis", "step:supply-dev", "step:devops_project_discovery", "step:devops-analysis", "step:supply-devops", "step:sre_operations_topology", "step:sre-analysis", "step:supply-sre"]},
        {"name": "5. Submit engagement job to Dagster", "members": ["step:launch-job", "step:dagster-accept"]}
      ]},
     {"id": "engagement-flow", "name": "Engagement flow (engagement-start.md)",

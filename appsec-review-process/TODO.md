@@ -949,6 +949,117 @@ project-discovery path; (3) write the D04 continuation prompt and update
 `docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`'s status; (4) the
 `diagram drift` failure of `qualify_phase1.py --check-contracts` is still untriaged.
 
+### Phase 5e -- D04: automatic persona dispatch for sre-operations-topology -- BUILT and LIVE-CONFIRMED
+
+Branch `d04-sre-operations-topology-dispatch` (cut from `main` = `3f7b283`). Closes the last supplied
+discovery stage: with `--dispatch`, SAT stage 9 still installs the hand-authored fixture
+(`fixtures/supplied/hello-autotools/02-sre-operations-topology.json`), which tests the schema, not
+the system.
+
+**Decisions (William, 2026-09-25):**
+
+1. `live-state-followups.json` dropped from the `operations-topology` contract's `required_files` and
+   the template's `outputs.files` (Full-protocol, own commit `aedb4eb`) -- same bug and fix as D02's
+   `safe-command-plan.json`: the invoker only renders a schema for `result_schema.artifact`, so the
+   first live dispatch would fail before the model is called. Live follow-ups go in
+   `operational_notes`, each prefixed `Live follow-up:`.
+2. Zero services is valid only when `coverage_gaps` says why (the D03 rule); otherwise rejected.
+3. Upstream scope = the accepted devops record **and** the accepted partition map. Both are staged
+   into one content-addressed `upstream/<digest>/` directory (`devops-project-inventory.json`, a copy
+   of `02-devops-project-discovery`'s `attempts/<id>/output.json`; `repository-partition-map.json`),
+   because `persona_dispatch.build_request(upstream_root=...)` pins every regular file beneath one
+   root. Both are scope, never evidence.
+
+**Design:**
+
+- Read first (2026-09-25): role `operations-topology-mapper` allows `service_inventory`,
+  `runtime_dependency_map`, `health_check_inventory`, `observability_gap`, `live_state_followup`;
+  profile `static-ops-topology-inspector` has no `allowed`/`forbidden` lists, and its
+  `observed_topology: forbidden` key only adds to the prohibited set. `claim_ceiling` therefore
+  allows all five role outputs.
+- Claim builder `claude_cli_invoker._claims_from_operations_topology` (for
+  `operations-topology.schema.json`): one `service_inventory` claim per service, one
+  `runtime_dependency_map` claim per dependency, citations resolved only to pinned target files; a
+  claim with no resolvable citation is a hard rejection. `operational_notes` and `coverage_gaps` are
+  plain strings with no evidence of their own and stay in the artifact (same reasoning as D02).
+  No services and no gap is rejected.
+- `validate_job_output._operations_topology_errors` requires every `dependencies[].target_service_id`
+  to be a service in the same record, so a dependency on something the repository does not declare as
+  a service (an external database, a registry) cannot be a dependency entry. The prompt routes those
+  to `operational_notes`/`coverage_gaps`.
+- `discovery_gate.py`: the D02/D03 path is generalized to a per-job spec (persona id, result and
+  summary file names, upstream list), so D04 shares `_run_project_automatic`'s acceptance steps
+  (schema, `_require_upstream_inputs`, and the unchanged `accepted.json`/`attempts/<id>/output.json`
+  shape stage 9's consumers read). Persona identity `d04-sretopology`. Orchestrator overwrites
+  `source_revision`, `target` (from the partition map, as in D02/D03) and every citation
+  `content_hash`. The fingerprint covers both upstream files. Fix the wrong comment above
+  `DEV_PERSONA_JOB_ID` (the id is 24 characters; the scanner needs 32+; the short ids are convention).
+- Template `02-sre-operations-topology.json`: `task_prompt`
+  (`02-evidence-pregather/task-sre-operations-topology.md`), model pin `claude-sonnet-5`/`medium`, and the
+  unsupported `ops_artifacts` prompt section removed (it would raise "unknown prompt section"; the
+  buildenv catalog D03 used in its place is irrelevant to topology).
+- SAT stage 9 `--dispatch`: mirrors stage 8 (dispatch-mode step, accept contract with the extra
+  allowed writes, structural checks: at least one service or an explaining gap; unique ids; every
+  dependency resolves; same `target`/`source_revision` as the accepted devops record; every service
+  and dependency cites evidence). Fixture diff informational.
+- Tests beside `tests/test_dev_dispatch.py` (model stubbed): claim builder, upstream staging of both
+  files, routing and identity, the zero-service rule.
+
+**Built 2026-09-25:** task prompt + template (`31ff6b5`); gate wiring (`AUTOMATIC_JOBS`, two-file
+upstream staging, `d04-sretopology`) and `_claims_from_operations_topology` (`bfe12c6`); 10 new tests,
+62 OK on William's Windows/Python 3.13; SAT stage 9 `--dispatch` branch and docs (SAT doc stage 9
+subsection and gaps table, engagement-start).
+
+**Live 2026-09-25:** fresh SAT `20260925T170552Z`, run `20260925T170620Z-c6a12e`, stages 1-9 PASS
+(hal5000 WSL). Stage 9 Dagster `6ea8a93b`, ~31 s: `hello-autotools` (`cli-batch`), 6 gaps, 9 notes
+(2 live follow-ups), 3 fresh citations. Two prompt-wording fixes found live first: D01 coverage path
+fields (`e915d92`) and the invoker envelope's nested-object rule (`97eeb3d`); see flow-bringup.md log.
+
+**Decided (William, 2026-09-25):** no run step in discovery plans. D03 had also planned `docker run
+--rm hello-autotools World`; the devops prompt now forbids running what a definition builds, and SAT
+stage 8 fails on a `docker`/`podman`/`nerdctl` `run`/`exec`/`start` or `compose up`/`run` entry.
+Containers stay static in discovery; the build lane builds the images and never runs them. Running a
+built target (fuzzing, dynamic testing) is a later TODO (last section of this file). **Confirmed
+live 2026-09-25:** fresh `--dispatch` SAT through `devops-project-discovery`, run `20260925T173117Z-055b25`, Dagster `d0f5fd8d`: stage 8
+PASS with the plan `docker build -t hello-autotools .` [network-required] and no run step.
+
+### Phase 5f -- build lane dependency restore: public registries for the POC; local mirror deferred -- TODO
+
+Design: `docs/processes/build-unit-classification.md` (draft, 2026-09-25). Decided by William,
+2026-09-25: **for the POC, dependencies are fetched straight from each ecosystem's public registry**,
+verifying TLS certificates and content hashes. A local caching proxy is deferred because it reaches
+outside this project (a separate service to run, own, update and back up).
+
+POC rules (apply to every ecosystem):
+
+- Restore happens only in the provisioning step, under a `package-restore` grant naming the exact
+  public host(s); the trial stays `--network none` and builds offline against what was restored.
+- TLS: normal certificate and hostname verification against the system CA store; never disabled,
+  never a custom insecure trust setting.
+- Hashes: every downloaded artifact is checked against the hash the repository's own lockfile pins
+  (`package-lock.json` `integrity`, `Cargo.lock` `checksum`, `go.sum` plus the Go checksum database,
+  `packages.lock.json` `contentHash`, Gradle `verification-metadata.xml`). A mismatch fails the
+  restore. Where the repository pins no hash (no lockfile; plain Maven), the registry's published
+  checksum is used and recorded as a **weaker, registry-vouched** check, plus a coverage gap.
+- Record every downloaded artifact (name, version, source URL, hash, which check applied) in the
+  attempt, so a result can be audited and replayed.
+
+TODO:
+
+- [ ] Confirm the grant model allows more than one `package-restore` entry per ecosystem: cargo needs
+  `index.crates.io` and `static.crates.io`; Go needs `proxy.golang.org` and `sum.golang.org`; Gradle
+  may need `plugins.gradle.org` beside `repo.maven.apache.org`. A grant is one exact host.
+- [ ] Verify the public host list per ecosystem (npm `registry.npmjs.org`, Maven Central
+  `repo.maven.apache.org`, Go, crates.io, NuGet `api.nuget.org`) against current registry docs; hosts
+  above are from memory.
+- [ ] Per-ecosystem restore/offline-build argv for the resolution loop (`npm ci`, `cargo fetch` then
+  `cargo build --locked --offline`, `go mod download` then `GOFLAGS=-mod=readonly GOPROXY=off`,
+  `mvn dependency:go-offline` then `mvn -o`, `dotnet restore` then `--no-restore`), and how install
+  scripts (npm lifecycle scripts, `build.rs`) are handled: they need `target-execution` too.
+- [ ] **Deferred (external dependency):** a local caching proxy (Nexus/Artifactory, or
+  Verdaccio/Athens per ecosystem) as the single fixed host per ecosystem. Decide product, host and
+  ownership before it is built; it replaces the public hosts in the grants and nothing else changes.
+
 ### Phase 6 -- build and compile database (E01, E02)
 
 - E01 `02-build-configure`: B13 + `audit-buildenv-cpp`, replays the lock's configure argv
@@ -2006,3 +2117,16 @@ old script outright (no thin wrapper). Full script-by-script survey and priority
   explicit accepted skip/gap receipts for inapplicable or unavailable evidence.
 - [ ] Obtain independent review of the qualification manifest and residual design deviations before
   claiming parity with `docs/architecture/design-v3.md`.
+
+## 10. Later: running built targets (fuzzing, dynamic testing)
+
+Added 2026-09-25 (William). Today no job runs what it builds: discovery plans only build and inspect
+commands, and the build lane builds images and binaries without running them. Eventually we may want
+to run them, for example:
+
+- [ ] Fuzzing the built binaries (E-series fuzzing jobs, `13-fuzz-target-triage`): run harnesses
+  against what the build lane produced, under the B13 boundary.
+- [ ] Dynamic testing of built container images (start the image, exercise declared ports and
+  entrypoints) under the `dynamic-testing` permission capability, not `target-execution` alone.
+- [ ] Decide where such run steps come from (the build lock, a new plan field, or a dedicated job) and
+  how they are granted; discovery prompts stay build/inspect-only until then.

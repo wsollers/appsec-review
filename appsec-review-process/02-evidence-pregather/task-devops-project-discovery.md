@@ -68,6 +68,11 @@ command requires, in `side_effects`. Never plan a deploy, publish, push, release
 step, and never plan mounting the Docker socket or host credentials. Record each such step you find as a
 coverage gap naming its file and the secret or variable names it declares, never their values.
 
+Never plan running what a definition builds: no `docker run`, `docker exec`, `docker start`, `docker
+compose up` or `docker compose run`, and no command that executes a built binary or an image's
+entrypoint. Running the target is dynamic testing, not discovery; the build lane builds container
+images but never runs them. Describe a declared entrypoint or run command in the summary instead.
+
 ## Output
 
 Return `project-inventory.json`, conforming to `project-discovery.schema.json` as shown under "Required

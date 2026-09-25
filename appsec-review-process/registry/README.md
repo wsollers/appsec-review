@@ -43,7 +43,7 @@ Start coarse scope discovery with `02-repository-partition-discovery`. Its map i
 server, API, infrastructure, delivery, and operations areas, including shared or unresolved scope,
 and routes each area to developer, DevOps, and/or SRE review. Specialist discovery jobs consume
 the map; component characterization subsequently refines it into functional/security components.
-The prompt is `../02-evidence-pregather/repository-partition-discovery.md`. Automatic dispatch is
+The prompt is `../02-evidence-pregather/task-repository-partition-discovery.md`. Automatic dispatch is
 still pending the shared job renderer and validator.
 
 Design rules:
@@ -53,6 +53,9 @@ Design rules:
 - Static-only jobs can emit declared/static-state assessments, not observed runtime claims.
 - Discovery jobs emit candidate claims or control/worklist assessments, not verified findings.
 - Verification jobs independently satisfy or reject proof obligations.
+- A job's task prompt lives in its process folder as `task-<job template id without the NN- prefix>.md`
+  (e.g. `02-evidence-pregather/task-devops-project-discovery.md`) and is named by the template's
+  `task_prompt`; `tests/test_task_prompt_naming.py` enforces it.
 
 The shared output-validation slice is `../validate_job_output.py`. It resolves the declared
 output contract from this registry, requires its files in the common artifact manifest, verifies

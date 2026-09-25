@@ -25,5 +25,5 @@
     "files": ["repository-partition-map.json", "repository-partition-summary.md", "status.json"]
   },
   "prompt_sections": ["governing_rules", "persona", "role", "domain", "tooling_profile", "buildenv_catalog", "task", "output_contract"],
-  "task_prompt": "appsec-review-process/02-evidence-pregather/repository-partition-discovery.md"
+  "task_prompt": "appsec-review-process/02-evidence-pregather/task-repository-partition-discovery.md"
 }

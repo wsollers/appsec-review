@@ -46,5 +46,5 @@
     "task",
     "output_contract"
   ],
-  "task_prompt": "appsec-review-process/02-evidence-pregather/dev-project-discovery.md"
+  "task_prompt": "appsec-review-process/02-evidence-pregather/task-dev-project-discovery.md"
 }
