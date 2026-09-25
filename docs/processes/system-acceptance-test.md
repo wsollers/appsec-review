@@ -234,7 +234,9 @@ with developer discovery is deliberate and accepted: both jobs may read the Dock
 The checks are stage 7's, plus two that test the D03 prompt's own boundaries and fail the stage if
 broken: the plan contains no native build tool as `argv[0]` (`autoreconf`, `./configure`, `make`,
 `cmake`, `ninja`, `meson` -- developer discovery owns those), and no plan entry contains a
-deploy/publish-style token (`push`, `deploy`, `publish`, `release`, `apply`). A differing command plan
+deploy/publish-style token (`push`, `deploy`, `publish`, `release`, `apply`), and no plan entry runs
+the built target (`docker`/`podman`/`nerdctl` `run`, `exec`, `start`, or `compose up`/`run`; William,
+2026-09-25: running is dynamic testing, not discovery). A differing command plan
 against the fixture record is informational only. A result with no unit at all is valid only when a
 coverage gap explains it (`claude_cli_invoker._claims_from_project_inventory`); the SAT itself still
 requires at least one unit for this fixture, which has a Dockerfile.

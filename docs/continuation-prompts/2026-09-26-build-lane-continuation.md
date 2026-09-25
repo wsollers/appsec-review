@@ -61,23 +61,31 @@ and `build-resolution.md` reflect automatic dispatch D01-D04 and per-unit build 
 job catalog has steps and artifacts for the devops and SRE gates; a pre-existing dangling BPMN
 reference (`Flow_sp4_intok_sp4_pgate`) was fixed.
 
-## 3. Decisions open for William (ask before building on them)
+## 3. Decisions
 
-1. **D03 plans `docker run --rm hello-autotools World`** [script-execution-required]. Discovery never
-   executes anything, but a run step in the plan is a request to execute the built target, which is
-   dynamic testing, not building. Given the 2026-09-25 decision that container images are not built
-   in v1 (static only), the recommended answer is to limit the devops prompt's plan to build/inspect
-   commands and record run steps as a coverage gap or a dynamic-testing follow-up. Not decided yet.
-2. The proposed-but-unconfirmed items in `build-unit-classification.md`: classification owned by the
-   build-index table; one unit per build root; ecosystem order (npm, Maven/Gradle, cargo + Go, NuGet).
-3. With containers static in v1, what happens to D02/D03's `docker build` plan entries? The build
-   lane uses D02's native plan and the build-index classification; the `docker build` entries stay
-   as discovery context only. Confirm.
+**Decided by William, 2026-09-25 (late):**
+
+- **No run step in discovery.** The devops prompt forbids running what a definition builds (`docker
+  run`/`exec`/`start`, `compose up`/`run`, executing a built binary or entrypoint), and SAT stage 8
+  fails on such a plan entry. **Not yet confirmed live**: the next fresh `--dispatch` SAT through
+  `devops-project-discovery` must show no `docker run` entry.
+- **Containers stay static in discovery; the build lane builds them** (replaces "containers static
+  in v1"). Container units are in the build set as image builds, never run. The build lane's design
+  must say how a repository Dockerfile is built in the sandbox (its `RUN` steps are target code and
+  fetch with network: `target-execution` plus `package-restore` or fixed-network grants).
+- **Running built targets (fuzzing, dynamic testing) is a later TODO**: section 10 at the bottom of
+  `appsec-review-process/TODO.md`.
+
+**Still open (ask before building on them):** the proposed items in `build-unit-classification.md`
+(classification owned by the build-index table; one unit per build root; ecosystem order npm,
+Maven/Gradle, cargo + Go, NuGet), and how the build lane consumes D03's `docker build` entry for
+container units alongside D02's native plan.
 
 ## 4. Next work (one piece at a time; wait for William's output after each)
 
-1. Settle section 3.
-2. Revise ADR-0012 for per-unit resolution (Full protocol: new graph nodes, schemas, contracts;
+1. Confirm the no-run rule live (fresh `--dispatch` SAT through `devops-project-discovery`), then
+   settle the open items in section 3.
+2. Revise ADR-0012 for per-unit resolution, including container image builds (Full protocol: new graph nodes, schemas, contracts;
    AGENTS.md). Update `build-resolution.md` in the same change.
 3. `02-build-index` (deterministic indexer + classification table; `build-index.json` schema;
    tests), SAT stage 10.

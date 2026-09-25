@@ -23,7 +23,7 @@ Each unit gets exactly one **class**:
 | `compiled-managed` | Java, Kotlin, Scala (JVM); C#, F# (.NET) | **yes** | bytecode/assemblies for SAST that needs a build, dependency resolution, binary analysis |
 | `transpiled` | TypeScript, TSX/JSX via Babel, CoffeeScript, Elm, Kotlin/JS; a bundler step (webpack, vite, esbuild) over JS | **yes (transpile)** | type-check, emitted JS and source maps, bundle contents |
 | `interpreted` | Python, PHP, Ruby, plain JavaScript/Node, Perl, Lua, shell | no | source goes straight to SAST; manifests and lockfiles to SCA |
-| `container` | `Dockerfile`, `Containerfile`, compose `build:` | no (v1) | Dockerfile static analysis; base image pinned and scanned |
+| `container` | `Dockerfile`, `Containerfile`, compose `build:` | **yes (image build only)** | discovery treats the definition statically; the build lane builds the repository's image in the sandbox and never runs it; Dockerfile analysis and base-image scan |
 | `infrastructure` | Terraform/OpenTofu, CloudFormation, Bicep/ARM, Helm, Kubernetes manifests, Ansible; infra-as-program (CDK, Pulumi) | never applied | static IaC analysis only; CDK/Pulumi are not synthesized |
 | `unclassified` | anything the table cannot place | no | coverage gap, named with its path |
 
@@ -42,7 +42,7 @@ flowchart TD
   L --> S{Class}
   S -- compiled-native / compiled-managed / transpiled --> BS[BUILD SET]
   S -- interpreted --> INT[No build: source to SAST, manifests and lockfiles to SCA]
-  S -- container --> CT[v1: Dockerfile static analysis, base image by digest, image scan; images not built]
+  S -- container --> CT[Build the repository image in the sandbox, never run it; Dockerfile analysis, base and built image scan]
   S -- infrastructure --> IAC[Static IaC analysis only; no init, synth, plan or apply]
   S -- unclassified --> GAP[Coverage gap]
   BS --> E{Ecosystem supported? apt now; npm, Maven/Gradle, Go, cargo for Rust, NuGet need restore support; POC fetches from public registries}
@@ -107,8 +107,14 @@ Decided by William, 2026-09-25:
   `package-restore` grant for its registry host(s) plus restore support in the loop; until a unit's ecosystem has one, that unit is
   `BLOCKED(UNSUPPORTED_ECOSYSTEM)`. Order not yet set; npm first is proposed, since it unblocks the
   transpile decision above and Node native addons.
-- **Containers: static in v1.** Dockerfile static analysis plus a scan of the pinned base image; the
-  repository's own images are not built (their `RUN` steps are target code run with network).
+- **Containers: static in discovery, built by the build lane** (revised 2026-09-25, replacing "static
+  in v1"). Discovery only reads container definitions and proposes the build (`docker build`). The
+  build lane builds each repository image in the sandbox. Its `RUN` steps are target code and fetch
+  with network, so the build needs `target-execution` and `package-restore` (or a fixed network)
+  grants, and the build lane's design must say how. Images are never run: no `docker run` or
+  `compose up`, in discovery or in the build lane.
+- **Running built targets is out of scope for now** (dynamic testing, fuzzing): see the last section
+  of `appsec-review-process/TODO.md`.
 - **Cloud infrastructure: static only.** IaC scanners over the files; no `terraform init`/`validate`,
   no `cdk synth` or `pulumi preview`, never `plan`/`apply`.
 

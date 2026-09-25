@@ -992,6 +992,8 @@ plan = out.get('safe_command_plan', [])
 if not plan: bad.append('the live dispatch produced no safe command plan')
 native = {'autoreconf', './configure', 'configure', 'make', 'cmake', 'ninja', 'meson'}
 release = {'push', 'deploy', 'publish', 'release', 'apply'}
+engines = {'docker', 'podman', 'nerdctl'}
+run_verbs = {'run', 'exec', 'start', 'up'}
 for i, c in enumerate(plan):
     argv = c.get('argv') or []
     if not (argv and c.get('purpose')): bad.append('command %d has no argv or purpose' % i)
@@ -1000,6 +1002,8 @@ for i, c in enumerate(plan):
     if not c.get('evidence_citations'): bad.append('command %d cites no evidence' % i)
     if argv and argv[0] in native: bad.append('command %d plans the native build tool %r, which developer discovery owns' % (i, argv[0]))
     if any(t in release for t in argv): bad.append('command %d plans a deploy/publish-style step: %s' % (i, ' '.join(argv)))
+    verb = argv[2] if len(argv) > 2 and argv[1:2] == ['compose'] else (argv[1] if len(argv) > 1 else '')
+    if argv and argv[0] in engines and verb in run_verbs: bad.append('command %d runs the built target (%s), which is dynamic testing, not discovery' % (i, ' '.join(argv)))
 if bad: sys.exit('; '.join(bad))
 diff_note = ''
 try:

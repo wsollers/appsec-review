@@ -257,6 +257,15 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-25 -- **Decision: no run step in discovery; containers are built by the build lane, never
+  run.** D03's live plan had included `docker run --rm hello-autotools World`. William: running the
+  target is not discovery. The devops task prompt now forbids planning `docker`/`podman`/`nerdctl`
+  `run`/`exec`/`start` or `compose up`/`run` and any execution of a built binary or entrypoint; SAT
+  stage 8 fails on such an entry. Containers stay static in discovery, and the build lane builds the
+  repository's images (revising the morning's "containers static in v1" in
+  `build-unit-classification.md`). Running built targets for fuzzing or dynamic testing is a later
+  TODO (`TODO.md` section 10). Not yet re-run live; the SAT script changed, so the next check is a
+  fresh `--dispatch` SAT through `devops-project-discovery`.
 - 2026-09-25 -- **D04 built and LIVE PASS: `02-sre-operations-topology` automatic persona dispatch;
   SAT stages 1-9 all automatic for the first time.** Fresh SAT `20260925T170552Z`, run
   `20260925T170620Z-c6a12e`, `--dispatch --through sre-operations-topology`, on hal5000 WSL

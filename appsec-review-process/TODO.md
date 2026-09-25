@@ -1015,10 +1015,12 @@ subsection and gaps table, engagement-start).
 (2 live follow-ups), 3 fresh citations. Two prompt-wording fixes found live first: D01 coverage path
 fields (`e915d92`) and the invoker envelope's nested-object rule (`97eeb3d`); see flow-bringup.md log.
 
-**Open (carried to the build-lane prompt):** D03 now also plans `docker run --rm hello-autotools
-World` [script-execution-required] -- running the built image, not only building it. Accepted by the
-SAT's checks (not a deploy/publish step), but it executes the target; William to decide whether the
-devops plan may include a run step or the prompt should limit it to build/inspect.
+**Decided (William, 2026-09-25):** no run step in discovery plans. D03 had also planned `docker run
+--rm hello-autotools World`; the devops prompt now forbids running what a definition builds, and SAT
+stage 8 fails on a `docker`/`podman`/`nerdctl` `run`/`exec`/`start` or `compose up`/`run` entry.
+Containers stay static in discovery; the build lane builds the images and never runs them. Running a
+built target (fuzzing, dynamic testing) is a later TODO (last section of this file). Not yet re-run
+live: the next fresh `--dispatch` SAT through `devops-project-discovery` confirms it.
 
 ### Phase 5f -- build lane dependency restore: public registries for the POC; local mirror deferred -- TODO
 
@@ -2114,3 +2116,16 @@ old script outright (no thin wrapper). Full script-by-script survey and priority
   explicit accepted skip/gap receipts for inapplicable or unavailable evidence.
 - [ ] Obtain independent review of the qualification manifest and residual design deviations before
   claiming parity with `docs/architecture/design-v3.md`.
+
+## 10. Later: running built targets (fuzzing, dynamic testing)
+
+Added 2026-09-25 (William). Today no job runs what it builds: discovery plans only build and inspect
+commands, and the build lane builds images and binaries without running them. Eventually we may want
+to run them, for example:
+
+- [ ] Fuzzing the built binaries (E-series fuzzing jobs, `13-fuzz-target-triage`): run harnesses
+  against what the build lane produced, under the B13 boundary.
+- [ ] Dynamic testing of built container images (start the image, exercise declared ports and
+  entrypoints) under the `dynamic-testing` permission capability, not `target-execution` alone.
+- [ ] Decide where such run steps come from (the build lock, a new plan field, or a dedicated job) and
+  how they are granted; discovery prompts stay build/inspect-only until then.
