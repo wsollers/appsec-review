@@ -1,0 +1,62 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-build-index",
+  "display_name": "Build Index",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "build-indexer",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "static-build-indexer",
+    "output_contract_id": "build-index"
+  },
+  "inputs": {
+    "required": [
+      "fresh accepted intake",
+      "accepted repository partition map",
+      "staged target checkout"
+    ],
+    "optional": [
+      "accepted developer project discovery (cross-check context)",
+      "accepted devops project discovery (cross-check context)"
+    ]
+  },
+  "outputs": {
+    "directory": "data/jobs/02-build-index/attempts/<attempt_id>",
+    "files": [
+      "build-index.json",
+      "build-index.md",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": false,
+  "timeout_seconds": 300,
+  "execution": {
+    "worker": "build_index.py",
+    "arguments": [
+      "collect",
+      "--run-id",
+      "{run_id}",
+      "--attempt",
+      "{attempt_id}"
+    ]
+  },
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "all engagements; zero candidate units is a valid index",
+  "permissions": [
+    "read-source",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator"
+}

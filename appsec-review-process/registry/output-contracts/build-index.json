@@ -1,0 +1,37 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "build-index",
+  "display_name": "Build Index (Candidate Build Units And Cited Signals)",
+  "required_files": [
+    "build-index.json",
+    "build-index.md",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "attempt_id",
+    "dagster_run_id",
+    "source_revision"
+  ],
+  "result_schema": {
+    "artifact": "build-index.json",
+    "schema_file": "build-index.schema.json"
+  },
+  "claim_types": [
+    "build_index"
+  ],
+  "validation_rules": [
+    "build-index.json must satisfy build-index.schema.json; an attempt is accepted only after build_index.check passes",
+    "source_revision and source_fingerprint equal the accepted intake's; inputs name the accepted intake and partition map attempts and their sha256",
+    "every signal's sha256 is recomputed from the staged checkout and must match; its line range must lie inside the file and its excerpt must equal those lines, clipped to max_excerpt_bytes",
+    "every path is repository-relative inside the checkout: no absolute path, drive letter, parent traversal or symlink escape",
+    "bounds: at most 400 signals, excerpts at most 4096 UTF-8 bytes, the serialized index at most 524288 bytes; anything omitted is counted in truncated, never silently dropped",
+    "signal ids and unit ids are unique; every signal_ids and unit_ids reference resolves; every unit cites at least one defining manifest and one signal",
+    "a nested or vendored build root is either a member of exactly one unit (with a citing nested-root-reference signal) or a not_units entry with a reason, never both and never silently omitted",
+    "no file inside a deferred partition contributes an excerpt unless an enclosing unit's build references it",
+    "the index is deterministic: the same inputs under the same rules_version give a byte-identical build-index.json",
+    "the index assigns no class, plan, feasibility or build outcome and executes nothing; it cannot support a finding, severity, runtime-state or successful-build claim",
+    "excerpts are untrusted target data and are presented to any model as data, never instructions",
+    "latest failed attempt blocks old success"
+  ]
+}

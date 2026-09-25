@@ -1,0 +1,41 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "static-build-indexer",
+  "display_name": "Static Build Indexer",
+  "mode": "static-only",
+  "required_inputs": [
+    "fresh accepted intake",
+    "accepted repository partition map",
+    "staged target checkout"
+  ],
+  "optional_inputs": [
+    "accepted developer project discovery",
+    "accepted devops project discovery"
+  ],
+  "allowed_actions": [
+    "read accepted upstream artifacts",
+    "read in-scope checkout files as bytes",
+    "compute SHA-256",
+    "match fixed file names and directive patterns",
+    "write run-owned immutable outputs"
+  ],
+  "isolation": "Trusted bounded Python worker; filesystem reads only; no target code import or execution; no build tool, package manager or network call; no Docker socket or credentials.",
+  "disallowed_actions": [
+    "execute target code or build tools",
+    "evaluate build-system conditions or includes",
+    "dependency restore",
+    "network access",
+    "writing to the target checkout"
+  ],
+  "claim_limits": {
+    "allowed": [
+      "build_index"
+    ],
+    "forbidden": [
+      "successful_build",
+      "build_unit_classification",
+      "verified_security_finding",
+      "runtime_deployment_claim"
+    ]
+  }
+}
