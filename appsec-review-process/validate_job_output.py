@@ -940,18 +940,31 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
     errors.extend(_secret_errors(value))
     errors.extend(_claim_class_errors(contract, value))
     source_root = None
-    if contract.get("contract_id") in {"repository-partition-map", "project-discovery"}:
+    if contract.get("contract_id") in {"repository-partition-map", "project-discovery", "build-index"}:
         source_root, source_errors = _source_root(attempt_root, run_id)
         errors.extend(source_errors)
     dispatch = {
         "ossf-scorecard-results": lambda: _scorecard_payload_errors(attempt_root, value),
         "repository-partition-map": lambda: _partition_errors(value, Path(registry_root), source_root),
         "project-discovery": lambda: _project_discovery_errors(value, source_root),
+        "build-index": lambda: _build_index_errors(path, value, source_root),
     }
     validator = dispatch.get(contract.get("contract_id"))
     if validator is not None:
         errors.extend(validator())
     return errors
+
+
+def _build_index_errors(path: Path, value: Any, source_root: Path | None) -> list[str]:
+    """02-build-index content checks against the staged checkout: every cited sha256, line range
+    and (redacted) excerpt recomputed, ids and references resolved, bounds and truncation counts.
+    The worker's own post-validation additionally compares upstream identities and a byte-equal
+    rebuild. Imported here, not at module load: build_index imports this module."""
+    if source_root is None:
+        return []  # _source_root already reported why the checkout is unavailable
+    import build_index
+    return [f"build index: {error}" for error in
+            build_index.check(value, source_root, raw=path.read_bytes())]
 
 
 def _job_contract_errors(job_id: Any, contract_id: Any, graph: dict[str, Any], registry_root: Path) -> list[str]:

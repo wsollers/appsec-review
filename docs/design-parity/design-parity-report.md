@@ -3,7 +3,7 @@
 Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
-Lifecycle jobs: **51**
+Lifecycle jobs: **52**
 Design capabilities: **15**
 
 ## Readiness summary
@@ -11,10 +11,10 @@ Design capabilities: **15**
 | State | Jobs |
 |---|---:|
 | `implemented_and_qualified` | 3 |
-| `implemented_not_qualified` | 1 |
+| `implemented_not_qualified` | 2 |
 | `missing_prerequisites` | 36 |
-| `registered_planned_not_executable` | 9 |
-| `supplied_artifact_gate` | 2 |
+| `registered_planned_not_executable` | 7 |
+| `supplied_artifact_gate` | 4 |
 
 ## Lifecycle inventory
 
@@ -24,8 +24,9 @@ Design capabilities: **15**
 | `02-ossf-scorecard` | true | `actual_worker` | `implemented_and_qualified` | `network` |
 | `02-repository-partition-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
 | `02-dev-project-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
-| `02-devops-project-discovery` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `02-sre-operations-topology` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
+| `02-devops-project-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
+| `02-sre-operations-topology` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
+| `02-build-index` | true | `actual_worker` | `implemented_not_qualified` | `cpu` |
 | `02-evidence-assembly` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `01-component-characterization` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `03-threat-model-dfd-stride` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -128,6 +129,7 @@ Design capabilities: **15**
 - 02-build-configure: missing_registry_composition
 - 02-build-configure: no qualification evidence
 - 02-build-configure: no_live_full_review_qualification
+- 02-build-index: not_yet_live_qualified
 - 02-container-image-inventory: missing_registry_composition
 - 02-container-image-inventory: missing_validator
 - 02-container-image-inventory: missing_worker
@@ -154,12 +156,9 @@ Design capabilities: **15**
 - 02-dev-project-discovery: no qualification evidence
 - 02-dev-project-discovery: not_automatic_analysis_dispatch
 - 02-dev-project-discovery: supplied_result_required
-- 02-devops-project-discovery: missing_validator
-- 02-devops-project-discovery: missing_worker
 - 02-devops-project-discovery: no qualification evidence
-- 02-devops-project-discovery: no_qualification
-- 02-devops-project-discovery: resource pool unassigned
-- 02-devops-project-discovery: unassigned_resource_pool
+- 02-devops-project-discovery: not_automatic_analysis_dispatch
+- 02-devops-project-discovery: supplied_result_required
 - 02-doc-intelligence-ingest: missing_dedicated_output_schema
 - 02-doc-intelligence-ingest: missing_validator
 - 02-doc-intelligence-ingest: missing_worker
@@ -284,13 +283,9 @@ Design capabilities: **15**
 - 02-source-sast: no_qualification
 - 02-source-sast: resource pool unassigned
 - 02-source-sast: unassigned_resource_pool
-- 02-sre-operations-topology: missing_dedicated_output_schema
-- 02-sre-operations-topology: missing_validator
-- 02-sre-operations-topology: missing_worker
 - 02-sre-operations-topology: no qualification evidence
-- 02-sre-operations-topology: no_qualification
-- 02-sre-operations-topology: resource pool unassigned
-- 02-sre-operations-topology: unassigned_resource_pool
+- 02-sre-operations-topology: not_automatic_analysis_dispatch
+- 02-sre-operations-topology: supplied_result_required
 - 02-standards-source-ingest: missing_dedicated_output_schema
 - 02-standards-source-ingest: missing_validator
 - 02-standards-source-ingest: missing_worker

@@ -85,6 +85,39 @@
         }
       ]
     },
+    "02-build-index": {
+      "lane": "02-evidence-pregather",
+      "contract": "build-index",
+      "template": "02-build-index",
+      "implemented": true,
+      "namespace": "02-build-index",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-repository-partition-discovery",
+          "kind": "required",
+          "contract": "repository-partition-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-dev-project-discovery",
+          "kind": "required",
+          "contract": "project-discovery",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-devops-project-discovery",
+          "kind": "required",
+          "contract": "project-discovery",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
     "02-evidence-assembly": {
       "lane": "02-evidence-pregather",
       "contract": "pregather",

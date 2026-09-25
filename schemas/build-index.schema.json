@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "build-index.schema.json",
   "title": "Build Index: deterministic build signals and candidate build units",
-  "description": "Output of 02-build-index (ADR-0012 decision 1 and Revision 1 decision 2). A deterministic, read-only index of the checkout's build signals and its candidate build units (one per build root). It executes nothing, assigns no class and makes no judgment: 02-build-plan's model classifies every unit from it. Every excerpt is untrusted target data. Bounds the schema subset cannot express (at most 400 signals, excerpts at most 4096 UTF-8 bytes, the serialized index at most 524288 bytes, counts >= 0, line numbers >= 1, unique ids, every id reference resolving) are enforced by build_index.check.",
+  "description": "Output of 02-build-index (ADR-0012 decision 1 and Revision 1 decision 2). A deterministic, read-only index of the checkout's build signals and its candidate build units (one per build root). It executes nothing, assigns no class and makes no judgment: 02-build-plan's model classifies every unit from it. Every excerpt is untrusted target data, with secret-like text redacted. Bounds the schema subset cannot express (at most 400 signals, excerpts at most 4096 UTF-8 bytes, the serialized index at most 524288 bytes, counts >= 0, line numbers >= 1, unique ids, every id reference resolving) are enforced by build_index.check.",
   "type": "object",
   "required": [
     "schema",
@@ -88,7 +88,7 @@
           },
           "attempt_id": {
             "type": "string",
-            "pattern": "^[0-9a-f]{32}$"
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$"
           },
           "sha256": {
             "type": "string",
@@ -124,6 +124,7 @@
         "any",
         "signals_omitted",
         "excerpts_clipped",
+        "excerpts_redacted",
         "omitted_by_kind",
         "index_size_limited"
       ],
@@ -136,6 +137,9 @@
           "type": "integer"
         },
         "excerpts_clipped": {
+          "type": "integer"
+        },
+        "excerpts_redacted": {
           "type": "integer"
         },
         "omitted_by_kind": {
@@ -236,6 +240,7 @@
           "line_end",
           "excerpt",
           "excerpt_clipped",
+          "excerpt_redacted",
           "unit_ids"
         ],
         "additionalProperties": false,
@@ -287,6 +292,10 @@
           },
           "excerpt_clipped": {
             "type": "boolean"
+          },
+          "excerpt_redacted": {
+            "type": "boolean",
+            "description": "True when secret-like text (validate_job_output.SECRET_PATTERNS) in the cited lines was replaced by [REDACTED:<label>]; the validator applies the same redaction."
           },
           "unit_ids": {
             "type": "array",

@@ -56,7 +56,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
     root.mkdir(parents=True, exist_ok=True)
     previous=read_json(root/'request.json') if (root/'request.json').exists() else None
     job=job or (previous.get('job','phase1_intake') if previous else 'engagement_workflow')
-    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','full_review'): raise Blocked('unsupported Dagster job')
+    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','full_review'): raise Blocked('unsupported Dagster job')
     resume = [sys.executable,'-B',str(Path(__file__).resolve()),
               '--run-id',run_id,'--launch-id',request_id,'--job',job,'--wait'] + (['--force'] if force else [])
     with Lock(root/'request.lock'):
@@ -112,7 +112,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id',required=True)
     parser.add_argument('--force',action='store_true')
-    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
+    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
     parser.add_argument('--launch-id',help='reattach to this existing launch without resubmitting')
     parser.add_argument('--wait',action='store_true')
     parser.add_argument('--timeout',type=int,default=600)

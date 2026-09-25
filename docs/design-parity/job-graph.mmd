@@ -13,7 +13,14 @@ flowchart TD
   02_devops_project_discovery["02-devops-project-discovery (planned; not dispatched)"]
   02_repository_partition_discovery -->|required| 02_devops_project_discovery
   02_sre_operations_topology["02-sre-operations-topology (planned; not dispatched)"]
-  02_repository_partition_discovery -->|required| 02_sre_operations_topology
+  02_devops_project_discovery -->|required| 02_sre_operations_topology
+  02_build_index_config["02-build-index: resolve job configuration"] --> 02_build_index_pre["02-build-index: pre-validation"]
+  02_build_index_pre --> 02_build_index["02-build-index: work or reuse"]
+  02_build_index --> 02_build_index_post["02-build-index: post-validation and publish"]
+  00_intake_post -->|required| 02_build_index_config
+  02_repository_partition_discovery -->|required| 02_build_index_config
+  02_dev_project_discovery -->|required| 02_build_index_config
+  02_devops_project_discovery -->|required| 02_build_index_config
   02_evidence_assembly["02-evidence-assembly (planned; not dispatched)"]
   02_dev_project_discovery -->|required| 02_evidence_assembly
   02_devops_project_discovery -->|required| 02_evidence_assembly

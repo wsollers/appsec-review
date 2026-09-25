@@ -14,9 +14,9 @@ What it never does: execute, import or evaluate anything from the target; call a
 manager or the network; assign a class, plan or feasibility. Every excerpt is untrusted target data.
 
 The core (``build_index``, ``check``, ``render_markdown``) is pure over (checkout, intake records,
-partition map, upstream identities) so it is fixture-testable; the run-level worker that locates
-the accepted upstream attempts and publishes through the common envelope is added with the graph
-node (TODO Phase 5g item 2, step 3).
+partition map, upstream identities) so it is fixture-testable. ``run`` / ``validate`` at the end are
+the graph node's worker: in-process, on the common worker-result envelope, with every accepted
+upstream (intake, D01, D02, D03) pinned by hash in the fingerprinted input record.
 """
 from __future__ import annotations
 
@@ -26,8 +26,13 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 
-from execution_state import Blocked, beneath
+import discovery_gate
+from execution_state import (ROOT, Blocked, atomic_bytes, atomic_json, beneath, data_path, digest,
+                             file_hash, identifier, now, read_json)
+import phase1
+from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+from validate_job_output import SECRET_PATTERNS
 
 SCHEMA = 'appsec-review/build-index/1'
 RULES_VERSION = 1
@@ -169,10 +174,19 @@ def lines_of(data):
 
 
 def excerpt_of(lines, start, end):
+    """(excerpt, clipped, redacted) for lines ``start``..``end``: clipped to MAX_EXCERPT_BYTES at a
+    character boundary, then every match of the published-result secret patterns
+    (validate_job_output.SECRET_PATTERNS) replaced by ``[REDACTED:<label>]``. Collection and
+    validation share this function, so a redacted excerpt still validates against the checkout,
+    and no secret-like target text reaches the published index."""
     raw = '\n'.join(lines[start - 1:end]).encode('utf-8')
-    if len(raw) <= MAX_EXCERPT_BYTES:
-        return raw.decode('utf-8'), False
-    return raw[:MAX_EXCERPT_BYTES].decode('utf-8', errors='ignore'), True
+    clipped = len(raw) > MAX_EXCERPT_BYTES
+    text = raw[:MAX_EXCERPT_BYTES].decode('utf-8', errors='ignore') if clipped else raw.decode('utf-8')
+    redacted = False
+    for label, pattern in SECRET_PATTERNS:
+        text, count = pattern.subn('[REDACTED:' + label + ']', text)
+        redacted = redacted or count > 0
+    return text, clipped, redacted
 
 
 def serialize(index):
@@ -850,10 +864,11 @@ def _assemble(base, units, members, lockfiles, files, owner_of, co, selected, dr
     signals = []
     for c in sorted(selected, key=lambda c: (c[2], c[3], c[0], c[1], c[4])):
         lines = co.lines(c[2])
-        excerpt, clipped = excerpt_of(lines, c[3], c[4])
+        excerpt, clipped, redacted = excerpt_of(lines, c[3], c[4])
         signals.append({'signal_id': 's%04d' % (len(signals) + 1), 'kind': c[0], 'label': c[1],
                         'path': c[2], 'sha256': co.sha(c[2]), 'line_start': c[3], 'line_end': c[4],
-                        'excerpt': excerpt, 'excerpt_clipped': clipped, 'unit_ids': sorted(c[5])})
+                        'excerpt': excerpt, 'excerpt_clipped': clipped, 'excerpt_redacted': redacted,
+                        'unit_ids': sorted(c[5])})
     by_key = {(s['path'], s['line_start'], s['line_end'], s['kind'], s['label']): s['signal_id'] for s in signals}
     ext_counts, file_counts = {}, {}
     for path in files:
@@ -896,6 +911,7 @@ def _assemble(base, units, members, lockfiles, files, owner_of, co, selected, dr
     index['units'] = out_units
     index['truncated'] = {'any': bool(dropped or clipped or size_limited), 'signals_omitted': len(dropped),
                           'excerpts_clipped': clipped,
+                          'excerpts_redacted': sum(1 for s in signals if s['excerpt_redacted']),
                           'omitted_by_kind': [{'kind': k, 'count': omitted[k]} for k in KINDS if k in omitted],
                           'index_size_limited': size_limited}
     return index
@@ -903,21 +919,25 @@ def _assemble(base, units, members, lockfiles, files, owner_of, co, selected, dr
 
 # --- validation -------------------------------------------------------------------------------
 
-def check(index, checkout, *, intake_result, inputs, partition_map=None, raw=None, expected=None):
+def check(index, checkout, *, intake_result=None, inputs=None, partition_map=None, raw=None, expected=None):
     """Errors (empty when valid). Recomputes every cited sha256, line range and excerpt from the
-    checkout; ``raw`` is the published file's bytes (size bound), ``expected`` a fresh rebuild from
-    the same inputs (determinism: must be equal)."""
+    checkout. The keyword checks run when given: ``intake_result`` (revision and fingerprint),
+    ``inputs`` (the accepted upstream identities), ``partition_map`` (partition context), ``raw``
+    (the published bytes: size bound) and ``expected`` (a fresh rebuild from the same inputs:
+    determinism, must be byte-equal). validate_job_output runs the content checks only."""
     errors = list(validate_document(index, 'build-index.schema.json'))
     if errors:
         return errors
-    if index['source_revision'] != intake_result.get('source_revision'):
-        errors.append('source_revision differs from the accepted intake')
-    if index['source_fingerprint'] != intake_result.get('source_fingerprint'):
-        errors.append('source_fingerprint differs from the accepted intake')
-    if sorted(map(json.dumps, index['inputs'])) != sorted(map(json.dumps, inputs)):
+    if intake_result is not None:
+        if index['source_revision'] != intake_result.get('source_revision'):
+            errors.append('source_revision differs from the accepted intake')
+        if index['source_fingerprint'] != intake_result.get('source_fingerprint'):
+            errors.append('source_fingerprint differs from the accepted intake')
+    if inputs is not None and (sorted(json.dumps(i, sort_keys=True) for i in index['inputs'])
+                               != sorted(json.dumps(i, sort_keys=True) for i in inputs)):
         errors.append('inputs do not name exactly the accepted upstream attempts')
     if partition_map is not None:
-        if partition_map.get('source_revision') != intake_result.get('source_revision'):
+        if partition_map.get('source_revision') != index['source_revision']:
             errors.append('partition map source_revision differs from the accepted intake')
         if index['partition_context'] != _partition_context(partition_map):
             errors.append('partition_context does not match the accepted partition map')
@@ -979,7 +999,8 @@ def check(index, checkout, *, intake_result, inputs, partition_map=None, raw=Non
         if s['line_end'] > max(len(lines), 1):
             errors.append(where + ': line range outside the file')
             continue
-        if excerpt_of(lines, s['line_start'], s['line_end']) != (s['excerpt'], s['excerpt_clipped']):
+        if excerpt_of(lines, s['line_start'], s['line_end']) != (s['excerpt'], s['excerpt_clipped'],
+                                                                   s['excerpt_redacted']):
             errors.append(where + ': excerpt does not equal the cited lines')
     placed = set()
     for u in index['units']:
@@ -1017,6 +1038,8 @@ def check(index, checkout, *, intake_result, inputs, partition_map=None, raw=Non
     clipped = sum(1 for s in index['signals'] if s['excerpt_clipped'])
     if t['excerpts_clipped'] != clipped:
         errors.append('truncated.excerpts_clipped does not match the signals')
+    if t['excerpts_redacted'] != sum(1 for s in index['signals'] if s['excerpt_redacted']):
+        errors.append('truncated.excerpts_redacted does not match the signals')
     if sum(k['count'] for k in t['omitted_by_kind']) != t['signals_omitted']:
         errors.append('truncated.omitted_by_kind does not sum to signals_omitted')
     if t['any'] != bool(t['signals_omitted'] or clipped or t['index_size_limited']):
@@ -1053,6 +1076,7 @@ def render_markdown(index):
             f'- signals omitted: {t["signals_omitted"]}' + (
                 ' (' + ', '.join(f'{k["kind"]} {k["count"]}' for k in t['omitted_by_kind']) + ')' if t['omitted_by_kind'] else ''),
             f'- excerpts clipped at {index["limits"]["max_excerpt_bytes"]} bytes: {t["excerpts_clipped"]}',
+            f'- excerpts with secret-like text redacted: {t["excerpts_redacted"]}',
             f'- index size limited: {"yes" if t["index_size_limited"] else "no"}',
             '', '## Cross-check with discovery', '']
     for c in index['cross_check']:
@@ -1066,3 +1090,217 @@ def render_markdown(index):
             out.append(f'- `{c["job"]}`: no projects')
     out += ['', '## Limitations', ''] + [f'- {l}' for l in index['limitations']]
     return '\n'.join(out) + '\n'
+
+
+# --- run-level worker (02-build-index graph node) ---------------------------------------------
+# Deterministic, in-process, on the common worker-result envelope (coordinate_worker_lifecycle):
+# run-owned immutable attempts, read-only validation before publication, newest failure blocks
+# reuse. Upstreams are the graph's required edges: intake, D01, D02, D03.
+
+JOB = '02-build-index'
+CONTRACT = 'build-index'
+WORKER_KIND = 'deterministic_python'
+UPSTREAM_JOBS = ('02-repository-partition-discovery', '02-dev-project-discovery',
+                 '02-devops-project-discovery')
+CODE_FILES = ('build_index.py', 'execution_state.py', 'schema_validate.py', 'intake.py', 'phase1.py',
+              'discovery_gate.py', 'publish_job_output.py', 'validate_job_output.py',
+              'registry/job-templates/02-build-index.json',
+              'registry/output-contracts/build-index.json')
+
+
+def root(run_id):
+    return data_path(run_id, 'jobs', JOB)
+
+
+def _code_hashes():
+    code = {name: file_hash(ROOT / name) for name in CODE_FILES}
+    code['schemas/build-index.schema.json'] = file_hash(ROOT.parent / 'schemas' / 'build-index.schema.json')
+    return code
+
+
+def _target_root(run_id):
+    """The run's staged checkout, from phase1.stage's manifest (the same source
+    validate_job_output's citation-freshness check reads)."""
+    manifest = read_json(phase1.manifest_path(run_id))
+    target = manifest.get('target') if isinstance(manifest, dict) else None
+    repo_path = target.get('repo_path') if isinstance(target, dict) else None
+    if not repo_path or not Path(repo_path).is_dir():
+        raise Blocked(JOB + ': the run has no staged target checkout (target.repo_path)')
+    return Path(repo_path)
+
+
+def _upstream_attempts(run_id):
+    """job -> (attempt dir, artifact name, artifact path) for every accepted upstream."""
+    pointer = phase1.accepted(run_id, fresh=True)
+    if not pointer or pointer.get('status') != 'OK':
+        raise Blocked(JOB + ': a fresh accepted intake is required')
+    intake_attempt = phase1.job_root(run_id) / 'attempts' / identifier(pointer['attempt_id'])
+    found = {'00-intake': (intake_attempt, 'intake.json', intake_attempt / 'outputs' / 'intake.json')}
+    for job in UPSTREAM_JOBS:
+        try:
+            attempt = discovery_gate.validate(run_id, job)
+        except Blocked:
+            raise
+        except Exception as exc:
+            raise Blocked(f'{JOB}: requires an accepted {job} result for this run first '
+                          f'({type(exc).__name__})') from exc
+        if attempt is None:
+            raise Blocked(f'{JOB}: the accepted {job} result predates the common envelope; re-run it')
+        name = discovery_gate._upstream_payload_filename(job)
+        found[job] = (attempt, name, attempt / name)
+    return found
+
+
+def current_inputs(run_id):
+    """The fingerprinted input record: the exact accepted upstream artifacts, the intake source
+    identity, the checkout path, the rules version and the code that runs."""
+    upstreams = _upstream_attempts(run_id)
+    intake_attempt = upstreams['00-intake'][0]
+    return {
+        'job': JOB, 'rules_version': RULES_VERSION, 'target_root': str(_target_root(run_id)),
+        'upstreams': {job: {'attempt_id': attempt.name, 'artifact': name, 'sha256': file_hash(path)}
+                      for job, (attempt, name, path) in upstreams.items()},
+        'intake_source': {'path': 'evidence/source.json',
+                          'sha256': file_hash(intake_attempt / 'evidence' / 'source.json')},
+        'code': _code_hashes(),
+    }
+
+
+def _index_from_record(run_id, record):
+    """Rebuild the index from exactly the upstream artifacts the record pins (each re-hashed)."""
+
+    def pinned(path, sha256, what):
+        if not path.is_file() or file_hash(path) != sha256:
+            raise Blocked(f'{JOB}: {what} changed since the attempt inputs were recorded')
+        return read_json(path)
+
+    payloads = {}
+    for job, upstream in record['upstreams'].items():
+        if job == '00-intake':
+            attempt = phase1.job_root(run_id) / 'attempts' / identifier(upstream['attempt_id'])
+            path = attempt / 'outputs' / 'intake.json'
+            intake_attempt = attempt
+        else:
+            attempt = discovery_gate.root(run_id, job) / 'attempts' / identifier(upstream['attempt_id'])
+            path = attempt / upstream['artifact']
+        payloads[job] = pinned(path, upstream['sha256'], 'accepted ' + job)
+    source = pinned(intake_attempt / 'evidence' / 'source.json', record['intake_source']['sha256'],
+                    'the intake source identity')
+    target = Path(record['target_root'])
+    if Path(source.get('target', '')).resolve() != target.resolve():
+        raise Blocked(f'{JOB}: the staged checkout is not the tree intake fingerprinted')
+    inputs = [{'job': job, 'artifact': u['artifact'], 'attempt_id': u['attempt_id'], 'sha256': u['sha256']}
+              for job, u in record['upstreams'].items()]
+    index = build_index(target, source, payloads['00-intake'], payloads['02-repository-partition-discovery'],
+                        inputs, {job: payloads[job] for job in CROSS_CHECK_JOBS})
+    context = {'target': target, 'intake_result': payloads['00-intake'], 'inputs': inputs,
+               'partition_map': payloads['02-repository-partition-discovery']}
+    return index, context
+
+
+def gaps_of(index):
+    """Coverage gaps that make the job OK_WITH_GAPS. Clipped or redacted excerpts are normal and
+    recorded in ``truncated``; omitted signals and a unit-less repository are gaps."""
+    gaps = []
+    t = index['truncated']
+    if t['signals_omitted']:
+        kinds = ', '.join(f'{k["kind"]} {k["count"]}' for k in t['omitted_by_kind'])
+        gaps.append(f'{t["signals_omitted"]} build signal(s) omitted by the index bounds ({kinds}).')
+    if t['index_size_limited']:
+        gaps.append('Signals were omitted to keep the index within max_index_bytes.')
+    if not index['units']:
+        gaps.append('No candidate build unit (no defining manifest) was found in scope.')
+    return gaps
+
+
+def _validate_attempt(run_id, attempt, record):
+    if read_json(attempt / 'inputs.json') != record:
+        raise Blocked(f'{JOB}: immutable attempt inputs changed')
+    raw = (attempt / 'build-index.json').read_bytes()
+    index = json.loads(raw)
+    expected, context = _index_from_record(run_id, record)
+    errors = check(index, context['target'], intake_result=context['intake_result'],
+                   inputs=context['inputs'], partition_map=context['partition_map'], raw=raw,
+                   expected=expected)
+    if (attempt / 'build-index.md').read_bytes() != render_markdown(expected).encode('utf-8'):
+        errors.append('build-index.md does not match the index')
+    if errors:
+        raise Blocked(f'{JOB}: build index is invalid: ' + '; '.join(errors[:20]))
+
+
+def run(run_id, dagster_id, force=False):
+    base = root(run_id)
+    resume = f'python -B appsec-review-process/launch_job.py --run-id {run_id} --job build_index --wait'
+
+    def execute_attempt(allocation, record, fingerprint):
+        attempt, started = allocation['attempt'], allocation['started_at']
+        index, _context = _index_from_record(run_id, record)
+        atomic_bytes(attempt / 'build-index.json', serialize(index))
+        atomic_bytes(attempt / 'build-index.md', render_markdown(index).encode('utf-8'))
+        if record['code'] != _code_hashes():
+            raise Blocked(f'{JOB}: implementation changed during work')
+        gaps = gaps_of(index)
+        status = {'process': '02-evidence-pregather', 'budget': 'probe',
+                  'persona_id': 'evidence-custodian', 'role_id': 'build-indexer',
+                  'domain_id': 'repo-project-discovery', 'tooling_profile_id': 'static-build-indexer',
+                  'source_revision': index['source_revision'], 'units': len(index['units']),
+                  'signals': len(index['signals']), 'not_units': len(index['not_units']),
+                  'target_execution': False, 'artifacts_read': [u['job'] for u in index['inputs']],
+                  'run_id': run_id, 'job': JOB, 'attempt_id': allocation['attempt_id'],
+                  'dagster_run_id': dagster_id, 'started_at': started, 'fingerprint': fingerprint}
+        return record_terminal_current(
+            base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
+            worker_kind=WORKER_KIND, output_contract=CONTRACT, input_fingerprint=fingerprint,
+            started_at=started, execution_status='OK_WITH_GAPS' if gaps else 'OK',
+            summary=f'Build index: {len(index["units"])} candidate unit(s), {len(index["signals"])} '
+                    'cited signal(s); nothing executed, no class assigned.',
+            status_record=status, artifact_paths=['build-index.json', 'build-index.md', 'status.json'],
+            gaps=gaps or None,
+            pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, record))
+
+    def on_reuse(admitted):
+        atomic_json(data_path(run_id, 'orchestration', 'dagster', dagster_id, JOB + '-reuse.json'),
+                    {'status': admitted['envelope']['execution_status'], 'reused': True,
+                     'publication_recovered': admitted['recovered_publication'],
+                     'producer': admitted['pointer'], 'time': now()})
+
+    def failure_inputs(exc):
+        return {'run_id': run_id, 'job': JOB, 'preflight_error': f'{type(exc).__name__}: {exc}',
+                'code': _code_hashes()}
+
+    return coordinate_worker_lifecycle(
+        base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id, worker_kind=WORKER_KIND,
+        output_contract=CONTRACT, resume_command=resume, derive_inputs=lambda: current_inputs(run_id),
+        fingerprint_inputs=lambda value: 'sha256:' + digest(value), execute_attempt=execute_attempt,
+        preflight_failure_inputs=failure_inputs, force=force,
+        post_validate=lambda attempt, _envelope, record: _validate_attempt(run_id, attempt, record),
+        on_reuse=on_reuse,
+        blocked_summary='Build index preflight did not complete (an upstream is not accepted or stale).',
+        failed_summary='Build index was not published.')
+
+
+def validate(run_id, pointer=None):
+    """The accepted attempt directory, re-validated end to end (for consumers and the SAT)."""
+    base = root(run_id)
+    pointer = pointer or read_json(base / 'accepted.json')
+    record = current_inputs(run_id)
+    attempt, _envelope = validate_published(base, pointer, 'sha256:' + digest(record),
+                                            expected_run_id=run_id, expected_job_id=JOB)
+    _validate_attempt(run_id, attempt, record)
+    return attempt
+
+
+def main(argv=None):
+    import argparse
+    parser = argparse.ArgumentParser(description='02-build-index: validate an accepted build index.')
+    sub = parser.add_subparsers(dest='command', required=True)
+    check_cmd = sub.add_parser('validate', help='re-validate the accepted attempt of a run')
+    check_cmd.add_argument('--run-id', required=True)
+    args = parser.parse_args(argv)
+    attempt = validate(args.run_id)
+    print(json.dumps({'status': 'PASS', 'attempt': str(attempt)}))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

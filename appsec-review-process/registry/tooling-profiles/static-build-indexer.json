@@ -6,12 +6,10 @@
   "required_inputs": [
     "fresh accepted intake",
     "accepted repository partition map",
+    "accepted developer and devops project discovery",
     "staged target checkout"
   ],
-  "optional_inputs": [
-    "accepted developer project discovery",
-    "accepted devops project discovery"
-  ],
+  "optional_inputs": [],
   "allowed_actions": [
     "read accepted upstream artifacts",
     "read in-scope checkout files as bytes",

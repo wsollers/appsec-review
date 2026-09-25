@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 51 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 52 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -162,7 +162,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 51-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 52-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
 [design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
@@ -175,6 +175,7 @@ graph job.
 | `02-dev-project-discovery` | Validated hand-off gate wired (2026-09-19); blocks with an actionable hand-off until a result is supplied | Present |
 | `02-devops-project-discovery` | Worker blocked | Present |
 | `02-sre-operations-topology` | Worker blocked | Present |
+| `02-build-index` | Deterministic indexer on the common envelope (2026-09-25); requires accepted intake, D01, D02, D03; not yet live-qualified | Present |
 | `02-evidence-assembly` | Worker blocked | Missing |
 | `01-component-characterization` | Worker blocked | Missing |
 | `03-threat-model-dfd-stride` | Worker blocked | Missing |

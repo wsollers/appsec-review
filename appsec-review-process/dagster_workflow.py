@@ -5,6 +5,7 @@ from execution_state import Blocked, Lock, atomic_json, data_path, emergency, no
 from phase1 import Session, config_for
 import workflow
 import build_execution as build_execution_worker
+import build_index as build_index_worker
 import discovery_gate
 import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
@@ -451,6 +452,36 @@ def sre_operations_topology():
     sre_operations_topology_standalone_work(build_execution_config())
 
 
+def run_build_index(context, configured):
+    # 02-build-index (ADR-0012 revision 1; TODO Phase 5g item 2): deterministic, in-process indexer on
+    # the common worker-result envelope. Requires accepted intake, D01, D02 and D03 (the graph's
+    # required edges); executes nothing from the target and assigns no class. See build_index.py.
+    result = build_index_worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
+    path = build_index_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(path / 'build-index.json')),
+        'summary': MetadataValue.path(str(path / 'build-index.md')),
+        'envelope': MetadataValue.path(str(path / 'result.json'))})
+    return result
+
+
+@op(pool=CPU_POOL)
+def build_index_standalone_work(context, configured):
+    return run_build_index(context, configured)
+
+
+@op(name='job_02_build_index', ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+def build_index_work(context, configured, upstream):
+    return run_build_index(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def build_index():
+    build_index_standalone_work(build_execution_config())
+
+
 # Construct the full graph from the same validated lifecycle contract as intake.
 # Missing workers fail explicitly instead of succeeding as no-op placeholders.
 from job_graph import load_graph
@@ -459,12 +490,13 @@ LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure',
                                  '02-repository-partition-discovery','02-dev-project-discovery',
                                  '02-devops-project-discovery','02-sre-operations-topology',
-                                 '02-ossf-scorecard')}
+                                 '02-build-index','02-ossf-scorecard')}
 LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
 LIFECYCLE_OPS['02-sre-operations-topology']=sre_operations_topology_work
+LIFECYCLE_OPS['02-build-index']=build_index_work
 LIFECYCLE_OPS['02-ossf-scorecard']=ossf_scorecard_lifecycle_work
 
 
@@ -487,7 +519,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -497,7 +529,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

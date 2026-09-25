@@ -15,12 +15,11 @@
     "required": [
       "fresh accepted intake",
       "accepted repository partition map",
+      "accepted developer project discovery (cross-check context)",
+      "accepted devops project discovery (cross-check context)",
       "staged target checkout"
     ],
-    "optional": [
-      "accepted developer project discovery (cross-check context)",
-      "accepted devops project discovery (cross-check context)"
-    ]
+    "optional": []
   },
   "outputs": {
     "directory": "data/jobs/02-build-index/attempts/<attempt_id>",
@@ -36,18 +35,8 @@
     "validation",
     "output_contract"
   ],
-  "implemented": false,
+  "implemented": true,
   "timeout_seconds": 300,
-  "execution": {
-    "worker": "build_index.py",
-    "arguments": [
-      "collect",
-      "--run-id",
-      "{run_id}",
-      "--attempt",
-      "{attempt_id}"
-    ]
-  },
   "retry": {
     "max_attempts": 1,
     "transient_reasons": [],

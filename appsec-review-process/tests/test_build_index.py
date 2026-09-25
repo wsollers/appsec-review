@@ -19,8 +19,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import build_index as bi
+import discovery_gate
+import execution_state as state
 import intake
-from execution_state import Blocked
+import phase1
+from execution_state import Blocked, atomic_json, file_hash, read_json
 
 INPUTS = [
     {'job': '00-intake', 'artifact': 'intake.json', 'attempt_id': '0' * 32, 'sha256': 'a' * 64},
@@ -376,6 +379,139 @@ class Symlinks(Checkout):
         self.assertEqual([u['unit_id'] for u in index['units']], ['dir:.'])
         self.assertFalse(any(s['path'] in ('package.json',) or s['path'].startswith('linked/')
                              for s in index['signals']))
+
+
+class Worker(unittest.TestCase):
+    """The graph node's run/validate on the common envelope, over a fixture run. Upstream location
+    (phase1.accepted, discovery_gate.validate) is stubbed to the fixture attempts; everything
+    after that -- pinning, rebuild, publication, validate_job_output -- is real."""
+
+    files = HELLO
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.owner = Path(self.tmp.name)
+        self.old_runs = state.RUNS
+        state.RUNS = self.owner / 'runs'
+        self.run_id = 'bi-fixture'
+        self.target = self.owner / 'target'
+        write_tree(self.target, self.files)
+        atomic_json(state.RUNS / self.run_id / 'inputs' / 'artifact-manifest.json',
+                    {'target': {'repo_path': str(self.target)}})
+        source, result, partition_map = records(self.target, HELLO_MAP)
+        intake_attempt = phase1.job_root(self.run_id) / 'attempts' / '20260925T000000Z-aaaaaaaaaaaa'
+        atomic_json(intake_attempt / 'outputs' / 'intake.json', result)
+        atomic_json(intake_attempt / 'evidence' / 'source.json', source)
+        self.attempts = {'00-intake': (intake_attempt, 'intake.json', intake_attempt / 'outputs' / 'intake.json')}
+        payloads = {'02-repository-partition-discovery': partition_map,
+                    '02-dev-project-discovery': {'projects': [{'project_id': 'hello', 'root': '.'}]},
+                    '02-devops-project-discovery': {'projects': [{'project_id': 'container-image', 'root': '.'}]}}
+        for n, (job, payload) in enumerate(payloads.items()):
+            attempt = discovery_gate.root(self.run_id, job) / 'attempts' / (str(n) * 32)
+            name = discovery_gate._upstream_payload_filename(job)
+            atomic_json(attempt / name, payload)
+            self.attempts[job] = (attempt, name, attempt / name)
+        self.patches = [patch.object(bi, '_upstream_attempts', lambda run_id: dict(self.attempts))]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        state.RUNS = self.old_runs
+        self.tmp.cleanup()
+
+    def test_run_publishes_and_validates(self):
+        pointer = bi.run(self.run_id, 'dagster-1')
+        self.assertEqual(pointer['status'], 'OK')
+        attempt = bi.validate(self.run_id)
+        self.assertEqual(attempt.name, pointer['attempt_id'])
+        index = read_json(attempt / 'build-index.json')
+        self.assertEqual([u['unit_id'] for u in index['units']], ['dir:.', 'file:Dockerfile'])
+        self.assertEqual({i['job'] for i in index['inputs']}, set(self.attempts))
+        self.assertEqual(index['inputs'][0]['attempt_id'], '20260925T000000Z-aaaaaaaaaaaa')
+        status = read_json(attempt / 'status.json')
+        self.assertEqual(status['source_revision'], index['source_revision'])
+        self.assertFalse(status['target_execution'])
+        self.assertEqual([c['status'] for c in index['cross_check']], ['accepted', 'accepted'])
+
+    def test_second_run_reuses(self):
+        first = bi.run(self.run_id, 'dagster-1')
+        second = bi.run(self.run_id, 'dagster-2')
+        self.assertEqual(first['attempt_id'], second['attempt_id'])
+
+    def test_changed_upstream_is_a_new_attempt(self):
+        first = bi.run(self.run_id, 'dagster-1')
+        path = self.attempts['02-dev-project-discovery'][2]
+        atomic_json(path, {'projects': [{'project_id': 'other', 'root': 'src'}]})
+        with self.assertRaises(Blocked):
+            bi.validate(self.run_id)  # the accepted attempt no longer matches its inputs
+        second = bi.run(self.run_id, 'dagster-2')
+        self.assertNotEqual(first['attempt_id'], second['attempt_id'])
+        index = read_json(bi.validate(self.run_id) / 'build-index.json')
+        self.assertEqual(index['cross_check'][0]['roots'], [{'project_id': 'other', 'root': 'src', 'unit_ids': []}])
+
+    def test_tampered_attempt_fails_validation(self):
+        pointer = bi.run(self.run_id, 'dagster-1')
+        attempt = bi.root(self.run_id) / 'attempts' / pointer['attempt_id']
+        (attempt / 'build-index.md').write_text('# edited\n')
+        with self.assertRaises(Blocked):
+            bi.validate(self.run_id)
+
+    def test_shared_contract_validator_checks_content(self):
+        import validate_job_output as vjo
+        pointer = bi.run(self.run_id, 'dagster-1')
+        attempt = bi.root(self.run_id) / 'attempts' / pointer['attempt_id']
+        contract = read_json(ROOT / 'registry' / 'output-contracts' / 'build-index.json')
+        self.assertEqual(vjo.validate_contract_result(attempt, contract, run_id=self.run_id), [])
+        index = read_json(attempt / 'build-index.json')
+        index['signals'][0]['excerpt'] = 'FROM evil'
+        (attempt / 'build-index.json').write_bytes(bi.serialize(index))
+        errors = vjo.validate_contract_result(attempt, contract, run_id=self.run_id)
+        self.assertTrue(any(e.startswith('build index:') and 'excerpt' in e for e in errors), errors)
+
+    def test_checkout_changed_since_intake_does_not_publish(self):
+        (self.target / 'configure.ac').write_text('AC_INIT([changed])\n')
+        with self.assertRaisesRegex(Blocked, 'changed since intake'):
+            bi.run(self.run_id, 'dagster-1')
+        pointer = read_json(bi.root(self.run_id) / 'accepted.json')
+        self.assertNotEqual(pointer.get('status'), 'OK')
+
+    def test_secret_like_text_is_redacted_and_publishes(self):
+        token = 'ghp_' + 'A1b2C3d4' * 5
+        (self.target / 'Dockerfile').write_text('FROM debian\nENV GITHUB_TOKEN=' + token + '\n')
+        source, result, partition_map = records(self.target, HELLO_MAP)
+        atomic_json(self.attempts['00-intake'][0] / 'outputs' / 'intake.json', result)
+        atomic_json(self.attempts['00-intake'][0] / 'evidence' / 'source.json', source)
+        atomic_json(self.attempts['02-repository-partition-discovery'][2], partition_map)
+        pointer = bi.run(self.run_id, 'dagster-1')
+        attempt = bi.validate(self.run_id)
+        text = (attempt / 'build-index.json').read_text()
+        self.assertNotIn(token, text)
+        self.assertIn('[REDACTED:github-token]', text)
+        index = read_json(attempt / 'build-index.json')
+        self.assertEqual(index['truncated']['excerpts_redacted'], 1)
+        self.assertEqual(pointer['status'], 'OK')
+
+    def test_no_units_is_ok_with_gaps(self):
+        for name in ('configure.ac', 'Makefile.am', 'Dockerfile'):
+            (self.target / name).unlink()
+        source, result, partition_map = records(self.target, HELLO_MAP)
+        atomic_json(self.attempts['00-intake'][0] / 'outputs' / 'intake.json', result)
+        atomic_json(self.attempts['00-intake'][0] / 'evidence' / 'source.json', source)
+        atomic_json(self.attempts['02-repository-partition-discovery'][2], partition_map)
+        pointer = bi.run(self.run_id, 'dagster-1')
+        self.assertEqual(pointer['status'], 'OK_WITH_GAPS')
+        envelope = read_json(bi.validate(self.run_id) / 'result.json')
+        self.assertTrue(any('No candidate build unit' in g for g in envelope['gaps']), envelope['gaps'])
+
+    def test_record_pins_every_upstream_and_the_code(self):
+        record = bi.current_inputs(self.run_id)
+        self.assertEqual(set(record['upstreams']), set(self.attempts))
+        for job, (_attempt, _name, path) in self.attempts.items():
+            self.assertEqual(record['upstreams'][job]['sha256'], file_hash(path))
+        self.assertIn('build_index.py', record['code'])
+        self.assertIn('schemas/build-index.schema.json', record['code'])
 
 
 FIXTURE = ROOT.parent / 'fixtures' / 'targets' / 'hello-autotools'

@@ -1268,10 +1268,11 @@ Status vocabulary: `READY` means independently executable now; `BLOCKED(<ids>)` 
 predecessors or decisions; `HUMAN_GATE` produces an ADR/options packet but may not choose policy;
 `INTEGRATION` combines already-qualified producers and should not invent missing worker behavior.
 
-Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, and `02-evidence-index`.
-Every one of the 51 graph job IDs appears in this backlog; a later batch may harden an implemented
+Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, `02-evidence-index`, and `02-build-index`.
+Every one of the 52 graph job IDs appears in this backlog; a later batch may harden an implemented
 node without changing the honest current readiness flag. (42 until 2026-09-20; ADR-0010 task V02
-declared the nine vendor-prepass nodes named under M03, M04 and M05, all `implemented: false`.)
+declared the nine vendor-prepass nodes named under M03, M04 and M05, all `implemented: false`;
+52 from 2026-09-25, when Phase 5g added `02-build-index`, implemented and not yet live-qualified.)
 A closed decision batch is marked `DONE` with the accepted ADR that closed it; `DONE` is not a
 worker-readiness claim.
 

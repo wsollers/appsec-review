@@ -47,7 +47,8 @@
       "dev_project_discovery",
       "devops_project_discovery",
       "phase1_intake",
-      "sre_operations_topology"
+      "sre_operations_topology",
+      "build_index"
     ],
     "standalone_relationships": [
       {
@@ -129,6 +130,13 @@
         "relationship": "standalone and lifecycle-wired supplied-artifact gate; requires an accepted devops-project-discovery record"
       },
       {
+        "job": "build_index",
+        "lifecycle_jobs": [
+          "02-build-index"
+        ],
+        "relationship": "standalone and lifecycle-wired deterministic build index; requires accepted intake, partition map and D02/D03 records"
+      },
+      {
         "job": "full_review",
         "lifecycle_jobs": [
           "00-intake",
@@ -137,6 +145,7 @@
           "02-dev-project-discovery",
           "02-devops-project-discovery",
           "02-sre-operations-topology",
+          "02-build-index",
           "02-evidence-assembly",
           "01-component-characterization",
           "03-threat-model-dfd-stride",
@@ -198,7 +207,8 @@
       "dev_project_discovery",
       "devops_project_discovery",
       "phase1_intake",
-      "sre_operations_topology"
+      "sre_operations_topology",
+      "build_index"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -211,6 +221,7 @@
       "dev_project_discovery",
       "devops_project_discovery",
       "sre_operations_topology",
+      "build_index",
       "full_review"
     ],
     "cancellation_sensor_jobs": [
@@ -224,6 +235,7 @@
       "dev_project_discovery",
       "devops_project_discovery",
       "sre_operations_topology",
+      "build_index",
       "full_review"
     ],
     "queue": {
@@ -636,6 +648,76 @@
         "supplied_result_required"
       ],
       "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
+    },
+    {
+      "id": "02-build-index",
+      "design_refs": [
+        "docs/decisions/ADR-0012-build-resolution.md#revision-1-2026-09-25-per-unit-resolution-model-classification",
+        "docs/processes/build-resolution.md#1-02-build-index-deterministic"
+      ],
+      "graph": {
+        "node": "02-build-index",
+        "implemented": true,
+        "dependencies": [
+          "00-intake",
+          "02-repository-partition-discovery",
+          "02-dev-project-discovery",
+          "02-devops-project-discovery"
+        ]
+      },
+      "registry": {
+        "template": "02-build-index",
+        "persona": "evidence-custodian",
+        "role": "build-indexer",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "static-build-indexer",
+        "output_contract": "build-index"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/build_index.py:run",
+        "validator": "appsec-review-process/build_index.py:validate"
+      },
+      "output": {
+        "contract": "build-index",
+        "contract_file": "appsec-review-process/registry/output-contracts/build-index.json",
+        "schema_file": "schemas/build-index.schema.json",
+        "claim_class": "build_index"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "build_index"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:build_index_work"
+        },
+        "launcher_jobs": [
+          "build_index"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "build_index"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_build_index.py"
+        ]
+      },
+      "gaps": [
+        "not_yet_live_qualified"
+      ],
+      "next_prerequisite": "Live SAT stage 10 (build-index) on hal5000, then record qualification."
     },
     {
       "id": "02-evidence-assembly",
