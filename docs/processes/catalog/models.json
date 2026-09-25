@@ -19,7 +19,7 @@
        {"name": "1. Create and stage the run", "members": ["step:run-start", "step:stage-artifacts"]},
        {"name": "2. engagement_workflow", "members": ["step:engagement_workflow"]},
        {"name": "2b. Discovery gates", "members": ["job:02-repository-partition-discovery", "job:02-dev-project-discovery"]},
-       {"name": "3. Build resolution and build", "members": ["step:build-index", "step:build-plan", "step:build-resolution", "step:build_discovery", "step:build_execution", "job:02-build-configure"]},
+       {"name": "3. Build resolution and build", "members": ["step:build-index", "step:build-classify", "step:build-plan", "step:build-resolution", "step:build_discovery", "step:build_execution", "job:02-build-configure"]},
        {"name": "4. Evidence collection", "members": ["step:legacy-pregather", "lane:02-evidence-pregather"]},
        {"name": "5. Evidence index", "members": ["job:02-evidence-index"]},
        {"name": "6. LLM lanes: characterization, threat model, specialist review", "members": ["step:lane-handoffs", "lane:01-component-characterization", "lane:03-threat-model-dfd-stride", "lane:04-asvs-masvs", "lane:05-native-memory", "lane:06-cve-reachability", "lane:13-fuzz-target-triage", "lane:15-deployment-hardening"]},
@@ -36,7 +36,7 @@
        {"name": "S3 Intake", "members": ["step:phase1_intake"]},
        {"name": "S4 Partition discovery", "members": ["step:repository_partition_discovery", "step:supply-partition"]},
        {"name": "S5 Developer project discovery", "members": ["step:supply-dev", "step:dev_project_discovery"]},
-       {"name": "S6a Build resolution (index built; plan and resolution designed)", "members": ["step:build-index", "step:build-plan", "step:build-resolution"]},
+       {"name": "S6a Build resolution (index and classification built; plan and resolution designed)", "members": ["step:build-index", "step:build-classify", "step:build-plan", "step:build-resolution"]},
        {"name": "S6b Build configure (blocked)", "members": ["job:02-build-configure"]}
      ]},
     {"id": "engagement-workflow", "name": "engagement_workflow pipeline (dagster-workflow.mmd)",

@@ -21,6 +21,10 @@ flowchart TD
   02_repository_partition_discovery -->|required| 02_build_index_config
   02_dev_project_discovery -->|required| 02_build_index_config
   02_devops_project_discovery -->|required| 02_build_index_config
+  02_build_classify_config["02-build-classify: resolve job configuration"] --> 02_build_classify_pre["02-build-classify: pre-validation"]
+  02_build_classify_pre --> 02_build_classify["02-build-classify: work or reuse"]
+  02_build_classify --> 02_build_classify_post["02-build-classify: post-validation and publish"]
+  02_build_index_post -->|required| 02_build_classify_config
   02_evidence_assembly["02-evidence-assembly (planned; not dispatched)"]
   02_dev_project_discovery -->|required| 02_evidence_assembly
   02_devops_project_discovery -->|required| 02_evidence_assembly

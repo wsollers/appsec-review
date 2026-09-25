@@ -40,5 +40,18 @@
     "task",
     "output_contract"
   ],
-  "task_prompt": "appsec-review-process/02-evidence-pregather/task-build-classify.md"
+  "task_prompt": "appsec-review-process/02-evidence-pregather/task-build-classify.md",
+  "implemented": true,
+  "timeout_seconds": 1200,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "applicability": "all engagements with an accepted build index; an index with no unit gives an empty classification explained by a coverage gap",
+  "permissions": [
+    "read-source",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator"
 }

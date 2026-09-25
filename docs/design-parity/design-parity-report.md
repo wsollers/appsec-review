@@ -3,7 +3,7 @@
 Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
-Lifecycle jobs: **52**
+Lifecycle jobs: **53**
 Design capabilities: **15**
 
 ## Readiness summary
@@ -11,7 +11,7 @@ Design capabilities: **15**
 | State | Jobs |
 |---|---:|
 | `implemented_and_qualified` | 3 |
-| `implemented_not_qualified` | 2 |
+| `implemented_not_qualified` | 3 |
 | `missing_prerequisites` | 36 |
 | `registered_planned_not_executable` | 7 |
 | `supplied_artifact_gate` | 4 |
@@ -27,6 +27,7 @@ Design capabilities: **15**
 | `02-devops-project-discovery` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
 | `02-sre-operations-topology` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
 | `02-build-index` | true | `actual_worker` | `implemented_not_qualified` | `cpu` |
+| `02-build-classify` | true | `actual_worker` | `implemented_not_qualified` | `persona_llm` |
 | `02-evidence-assembly` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `01-component-characterization` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `03-threat-model-dfd-stride` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -123,6 +124,7 @@ Design capabilities: **15**
 - 02-binary-triage: no_qualification
 - 02-binary-triage: resource pool unassigned
 - 02-binary-triage: unassigned_resource_pool
+- 02-build-classify: not_yet_live_qualified
 - 02-build-configure: graph_implemented_flag_false
 - 02-build-configure: missing_dedicated_output_schema
 - 02-build-configure: missing_output_contract

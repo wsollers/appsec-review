@@ -48,7 +48,8 @@
       "devops_project_discovery",
       "phase1_intake",
       "sre_operations_topology",
-      "build_index"
+      "build_index",
+      "build_classify"
     ],
     "standalone_relationships": [
       {
@@ -137,6 +138,13 @@
         "relationship": "standalone and lifecycle-wired deterministic build index; requires accepted intake, partition map and D02/D03 records"
       },
       {
+        "job": "build_classify",
+        "lifecycle_jobs": [
+          "02-build-classify"
+        ],
+        "relationship": "standalone and lifecycle-wired persona classification of build units; requires an accepted build index"
+      },
+      {
         "job": "full_review",
         "lifecycle_jobs": [
           "00-intake",
@@ -146,6 +154,7 @@
           "02-devops-project-discovery",
           "02-sre-operations-topology",
           "02-build-index",
+          "02-build-classify",
           "02-evidence-assembly",
           "01-component-characterization",
           "03-threat-model-dfd-stride",
@@ -208,7 +217,8 @@
       "devops_project_discovery",
       "phase1_intake",
       "sre_operations_topology",
-      "build_index"
+      "build_index",
+      "build_classify"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -222,6 +232,7 @@
       "devops_project_discovery",
       "sre_operations_topology",
       "build_index",
+      "build_classify",
       "full_review"
     ],
     "cancellation_sensor_jobs": [
@@ -236,6 +247,7 @@
       "devops_project_discovery",
       "sre_operations_topology",
       "build_index",
+      "build_classify",
       "full_review"
     ],
     "queue": {
@@ -718,6 +730,73 @@
         "not_yet_live_qualified"
       ],
       "next_prerequisite": "Live SAT stage 10 (build-index) on hal5000, then record qualification."
+    },
+    {
+      "id": "02-build-classify",
+      "design_refs": [
+        "docs/decisions/ADR-0012-build-resolution.md#revision-2-2026-09-25-classification-is-its-own-job-the-model-reads-the-checkout",
+        "docs/processes/build-unit-classification.md#where-classification-happens"
+      ],
+      "graph": {
+        "node": "02-build-classify",
+        "implemented": true,
+        "dependencies": [
+          "02-build-index"
+        ]
+      },
+      "registry": {
+        "template": "02-build-classify",
+        "persona": "developer-engineer",
+        "role": "build-unit-classifier",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "static-repo-project-inspector",
+        "output_contract": "build-classification"
+      },
+      "execution": {
+        "mode": "persona",
+        "worker": "appsec-review-process/build_classify.py:run",
+        "validator": "appsec-review-process/build_classify.py:validate"
+      },
+      "output": {
+        "contract": "build-classification",
+        "contract_file": "appsec-review-process/registry/output-contracts/build-classification.json",
+        "schema_file": "schemas/build-classification.schema.json",
+        "claim_class": "build_unit_classification"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "build_classify"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:build_classify_work"
+        },
+        "launcher_jobs": [
+          "build_classify"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "build_classify"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_build_classify.py"
+        ]
+      },
+      "gaps": [
+        "not_yet_live_qualified"
+      ],
+      "next_prerequisite": "Live SAT stage 11 (build-classify, --dispatch) on hal5000, then record qualification."
     },
     {
       "id": "02-evidence-assembly",

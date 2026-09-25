@@ -2,9 +2,9 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 52,
-  "steps": 50,
-  "artifacts": 51,
+  "lifecycle_jobs": 53,
+  "steps": 51,
+  "artifacts": 52,
   "models": 5
  },
  "models": [
@@ -839,13 +839,32 @@
        "declared_inputs": []
       },
       {
+       "ref": "step:build-classify",
+       "id": "build-classify",
+       "name": "build_classify (Dagster job)",
+       "kind": "dagster-job",
+       "consumes": [
+        "job:02-build-index",
+        "build-index",
+        "sut-checkout",
+        "llm-invoker"
+       ],
+       "produces": [
+        "job:02-build-classify",
+        "build-classification"
+       ],
+       "declared_inputs": []
+      },
+      {
        "ref": "step:build-plan",
        "id": "build-plan",
        "name": "02-build-plan (designed)",
        "kind": "planned",
        "consumes": [
         "build-index",
+        "build-classification",
         "buildenv-catalog",
+        "sut-checkout",
         "llm-invoker"
        ],
        "produces": [
@@ -923,14 +942,14 @@
        "job:02-dev-project-discovery",
        "job:02-devops-project-discovery",
        "sut-checkout",
-       "buildenv-catalog",
        "llm-invoker",
+       "buildenv-catalog",
        "permission-grant",
        "buildenv-image",
        "artifact-manifest"
       ],
       "leaves": [
-       "job:02-build-index",
+       "job:02-build-classify",
        "build-attempts",
        "build-lock",
        "workflow-status",
@@ -938,7 +957,9 @@
        "job:02-build-configure"
       ],
       "passes": [
+       "job:02-build-index",
        "build-index",
+       "build-classification",
        "build-plan",
        "build-image-catalog",
        "build-discovery"
@@ -1030,6 +1051,22 @@
         "accepted developer project discovery (cross-check context)",
         "accepted devops project discovery (cross-check context)",
         "staged target checkout"
+       ]
+      },
+      {
+       "ref": "job:02-build-classify",
+       "id": "02-build-classify",
+       "name": "Build Unit Classification",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-build-index"
+       ],
+       "produces": [
+        "job:02-build-classify"
+       ],
+       "declared_inputs": [
+        "target repository path",
+        "accepted build-index.json from 02-build-index"
        ]
       },
       {
@@ -1454,13 +1491,14 @@
       ],
       "leaves": [
        "legacy-pregather",
-       "job:02-build-index",
+       "job:02-build-classify",
        "job:02-evidence-assembly"
       ],
       "passes": [
        "job:02-ossf-scorecard",
        "job:02-devops-project-discovery",
        "job:02-sre-operations-topology",
+       "job:02-build-index",
        "job:02-api-collection-intelligence-ingest",
        "job:02-binary-intelligence-ingest",
        "job:02-doc-intelligence-ingest",
@@ -1500,6 +1538,7 @@
        "accepted developer project discovery (cross-check context)",
        "accepted devops project discovery (cross-check context)",
        "staged target checkout",
+       "accepted build-index.json from 02-build-index",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -2046,8 +2085,8 @@
      "job-definitions",
      "engagement-definition",
      "permission-grant",
-     "buildenv-catalog",
      "llm-invoker",
+     "buildenv-catalog",
      "buildenv-image",
      "critical-findings-md"
     ],
@@ -2057,7 +2096,7 @@
      "prep-native-plan",
      "prep-handoffs",
      "workflow-status",
-     "job:02-build-index",
+     "job:02-build-classify",
      "build-attempts",
      "build-lock",
      "build-execution",
@@ -2075,7 +2114,9 @@
      "job:00-intake",
      "job:02-repository-partition-discovery",
      "job:02-dev-project-discovery",
+     "job:02-build-index",
      "build-index",
+     "build-classification",
      "build-plan",
      "build-image-catalog",
      "build-discovery",
@@ -2141,6 +2182,7 @@
      "accepted developer project discovery (cross-check context)",
      "accepted devops project discovery (cross-check context)",
      "staged target checkout",
+     "accepted build-index.json from 02-build-index",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -2552,7 +2594,7 @@
      }
     },
     {
-     "name": "S6a Build resolution (index built; plan and resolution designed)",
+     "name": "S6a Build resolution (index and classification built; plan and resolution designed)",
      "entries": [
       {
        "ref": "step:build-index",
@@ -2573,13 +2615,32 @@
        "declared_inputs": []
       },
       {
+       "ref": "step:build-classify",
+       "id": "build-classify",
+       "name": "build_classify (Dagster job)",
+       "kind": "dagster-job",
+       "consumes": [
+        "job:02-build-index",
+        "build-index",
+        "sut-checkout",
+        "llm-invoker"
+       ],
+       "produces": [
+        "job:02-build-classify",
+        "build-classification"
+       ],
+       "declared_inputs": []
+      },
+      {
        "ref": "step:build-plan",
        "id": "build-plan",
        "name": "02-build-plan (designed)",
        "kind": "planned",
        "consumes": [
         "build-index",
+        "build-classification",
         "buildenv-catalog",
+        "sut-checkout",
         "llm-invoker"
        ],
        "produces": [
@@ -2614,18 +2675,20 @@
        "job:02-dev-project-discovery",
        "job:02-devops-project-discovery",
        "sut-checkout",
-       "buildenv-catalog",
        "llm-invoker",
+       "buildenv-catalog",
        "permission-grant",
        "buildenv-image"
       ],
       "leaves": [
-       "job:02-build-index",
+       "job:02-build-classify",
        "build-attempts",
        "build-lock"
       ],
       "passes": [
+       "job:02-build-index",
        "build-index",
+       "build-classification",
        "build-plan",
        "build-image-catalog"
       ],
@@ -2674,8 +2737,8 @@
      "partition-record",
      "dev-record",
      "job:02-devops-project-discovery",
-     "buildenv-catalog",
      "llm-invoker",
+     "buildenv-catalog",
      "buildenv-image"
     ],
     "leaves": [
@@ -2683,7 +2746,7 @@
      "resolved-config",
      "partition-handoff",
      "dev-handoff",
-     "job:02-build-index",
+     "job:02-build-classify",
      "build-attempts",
      "build-lock",
      "job:02-build-configure"
@@ -2701,7 +2764,9 @@
      "partition-supplied",
      "dev-supplied",
      "job:02-dev-project-discovery",
+     "job:02-build-index",
      "build-index",
+     "build-classification",
      "build-plan",
      "build-image-catalog"
     ],
@@ -3012,6 +3077,22 @@
         "accepted developer project discovery (cross-check context)",
         "accepted devops project discovery (cross-check context)",
         "staged target checkout"
+       ]
+      },
+      {
+       "ref": "job:02-build-classify",
+       "id": "02-build-classify",
+       "name": "Build Unit Classification",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-build-index"
+       ],
+       "produces": [
+        "job:02-build-classify"
+       ],
+       "declared_inputs": [
+        "target repository path",
+        "accepted build-index.json from 02-build-index"
        ]
       },
       {
@@ -3459,7 +3540,7 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:02-build-index",
+       "job:02-build-classify",
        "job:02-evidence-assembly"
       ],
       "passes": [
@@ -3468,6 +3549,7 @@
        "job:02-dev-project-discovery",
        "job:02-devops-project-discovery",
        "job:02-sre-operations-topology",
+       "job:02-build-index",
        "job:02-api-collection-intelligence-ingest",
        "job:02-binary-intelligence-ingest",
        "job:02-doc-intelligence-ingest",
@@ -3511,6 +3593,7 @@
        "accepted developer project discovery (cross-check context)",
        "accepted devops project discovery (cross-check context)",
        "staged target checkout",
+       "accepted build-index.json from 02-build-index",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -4174,7 +4257,7 @@
      "artifact-manifest"
     ],
     "leaves": [
-     "job:02-build-index",
+     "job:02-build-classify",
      "job:10-synthesis-report"
     ],
     "passes": [
@@ -4184,6 +4267,7 @@
      "job:02-dev-project-discovery",
      "job:02-devops-project-discovery",
      "job:02-sre-operations-topology",
+     "job:02-build-index",
      "job:02-evidence-assembly",
      "job:02-api-collection-intelligence-ingest",
      "job:02-binary-intelligence-ingest",
@@ -4246,6 +4330,7 @@
      "accepted developer project discovery (cross-check context)",
      "accepted devops project discovery (cross-check context)",
      "staged target checkout",
+     "accepted build-index.json from 02-build-index",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -5018,6 +5103,27 @@
    "notes": "build_index.py (built 2026-09-25): deterministic indexer on the common envelope. Enumerates candidate units (one per build root: dir:<root>, or file:<Dockerfile|compose>), places nested and vendored roots as members or not-units with a cited reason, and collects cited build signals (build systems, toolchain and dependency declarations, CI and Dockerfile recipes, README build text, JS/TS markers) under 400 signals / 4 KiB excerpts / 512 KiB, every omission counted. Assigns no class. Executes nothing. docs/processes/build-resolution.md, ADR-0012 revision 1."
   },
   {
+   "id": "build-classify",
+   "name": "build_classify (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job build_classify --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "02-build-classify"
+   ],
+   "consumes": [
+    "job:02-build-index",
+    "build-index",
+    "sut-checkout",
+    "llm-invoker"
+   ],
+   "produces": [
+    "job:02-build-classify",
+    "build-classification"
+   ],
+   "notes": "build_classify.py (built 2026-09-25, ADR-0012 revision 2): one claude-sonnet-5/medium persona call reads the whole checkout and the accepted build index, gives every index unit one cited class (mixed units split into parts), and records where the index is wrong (index_review, never applied). The orchestrator sets source_revision, index, build_set and citation hashes; every unit covered exactly once, signal ids and citations checked before publication."
+  },
+  {
    "id": "build-plan",
    "name": "02-build-plan (designed)",
    "kind": "planned",
@@ -5025,7 +5131,9 @@
    "bpmn": [],
    "consumes": [
     "build-index",
+    "build-classification",
     "buildenv-catalog",
+    "sut-checkout",
     "llm-invoker"
    ],
    "produces": [
@@ -5748,6 +5856,64 @@
    ],
    "produces": [
     "job:02-build-index"
+   ]
+  },
+  {
+   "id": "02-build-classify",
+   "lane": "02-evidence-pregather",
+   "name": "Build Unit Classification",
+   "contract": "build-classification",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "persona",
+   "worker": "appsec-review-process/build_classify.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [
+    "build_classify"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "build-unit-classifier",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "static-repo-project-inspector",
+    "output_contract_id": "build-classification"
+   },
+   "depends_on": [
+    {
+     "job": "02-build-index",
+     "kind": "required",
+     "contract": "build-index"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "target repository path"
+    },
+    {
+     "need": "required",
+     "input": "accepted build-index.json from 02-build-index"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-build-classify.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-build-classify/",
+   "output_files": [
+    "build-classification.json",
+    "build-classification-summary.md",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/build-classification.json",
+   "claim_class": "build_unit_classification",
+   "gaps": [
+    "not_yet_live_qualified"
+   ],
+   "next_prerequisite": "Live SAT stage 11 (build-classify, --dispatch) on hal5000, then record qualification.",
+   "consumes": [
+    "job:02-build-index"
+   ],
+   "produces": [
+    "job:02-build-classify"
    ]
   },
   {
@@ -8815,6 +8981,8 @@
     "step:sre-analysis",
     "step:supply-sre",
     "step:build-index",
+    "step:build-classify",
+    "step:build-plan",
     "step:legacy-pregather"
    ]
   },
@@ -9323,6 +9491,7 @@
    "about": "The model call behind build-plan and its revisions; model and auth mode set in model-config.json (unbuilt_job_defaults[\"02-build-plan\"] until that job template is authored, then its own `model` field; invocation.auth.mode).",
    "produced_by": [],
    "consumed_by": [
+    "step:build-classify",
     "step:build-plan",
     "step:build-resolution"
    ]
@@ -9334,6 +9503,19 @@
    "about": "Bounded, cited index of candidate build units and build signals (schema appsec-review/build-index/1); the build-plan model's only view of the target.",
    "produced_by": [
     "step:build-index"
+   ],
+   "consumed_by": [
+    "step:build-classify",
+    "step:build-plan"
+   ]
+  },
+  "build-classification": {
+   "id": "build-classification",
+   "kind": "file",
+   "path": "runs/<run_id>/data/jobs/02-build-classify/attempts/<attempt_id>/build-classification.json, build-classification-summary.md",
+   "about": "One cited class per build unit (mixed units split), the build set, and the model's recorded disagreements with the index (schema appsec-review/build-classification/1).",
+   "produced_by": [
+    "step:build-classify"
    ],
    "consumed_by": [
     "step:build-plan"
@@ -9524,6 +9706,20 @@
    "produced_by": [
     "step:build-index",
     "job:02-build-index"
+   ],
+   "consumed_by": [
+    "step:build-classify",
+    "job:02-build-classify"
+   ]
+  },
+  "job:02-build-classify": {
+   "id": "job:02-build-classify",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-build-classify/",
+   "about": "Accepted build-classification output of 02-build-classify.",
+   "produced_by": [
+    "step:build-classify",
+    "job:02-build-classify"
    ],
    "consumed_by": []
   },

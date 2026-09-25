@@ -118,6 +118,21 @@
         }
       ]
     },
+    "02-build-classify": {
+      "lane": "02-evidence-pregather",
+      "contract": "build-classification",
+      "template": "02-build-classify",
+      "implemented": true,
+      "namespace": "02-build-classify",
+      "dependencies": [
+        {
+          "job": "02-build-index",
+          "kind": "required",
+          "contract": "build-index",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
     "02-evidence-assembly": {
       "lane": "02-evidence-pregather",
       "contract": "pregather",

@@ -1090,9 +1090,10 @@ Work order (one piece at a time):
    `implemented_not_qualified` until fault-recovery qualification (reuse, tamper, newer failure) is run live.
 3. [ ] `02-build-classify` (ADR-0012 Revision 2, William 2026-09-25: its own job, Sonnet, reads the
    checkout and the accepted index; one cited class per unit, mixed units split, `index_review` of the
-   script's work). Step 1 in progress: schema `build-classification.schema.json`, output contract,
-   role `build-unit-classifier`, job template, `task-build-classify.md`. Then the claim builder and
-   common-envelope persona worker, graph node, SAT stage 11.
+   script's work). Built 2026-09-25: schema, contract, role, template, `task-build-classify.md`
+   (`599f31f`); validator, claim builder and common-envelope persona worker `build_classify.py`
+   (`a193b28`); graph node with a required edge on `02-build-index`, Dagster job `build_classify`
+   (persona_llm pool), design-parity entry. Next: SAT stage 11 (`--dispatch`), then the live run.
 4. [ ] `02-build-plan` (Haiku, one call per build-set unit, reads the checkout, the index, the
    classification and the buildenv catalog); SAT stage 12.
 5. [ ] `02-build-resolution` (per unit); SAT stage 13. Needs Phase 3 (B13 into service, B16 records,
@@ -1277,11 +1278,12 @@ Status vocabulary: `READY` means independently executable now; `BLOCKED(<ids>)` 
 predecessors or decisions; `HUMAN_GATE` produces an ADR/options packet but may not choose policy;
 `INTEGRATION` combines already-qualified producers and should not invent missing worker behavior.
 
-Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, `02-evidence-index`, and `02-build-index`.
-Every one of the 52 graph job IDs appears in this backlog; a later batch may harden an implemented
+Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, `02-evidence-index`, `02-build-index`, and `02-build-classify`.
+Every one of the 53 graph job IDs appears in this backlog; a later batch may harden an implemented
 node without changing the honest current readiness flag. (42 until 2026-09-20; ADR-0010 task V02
 declared the nine vendor-prepass nodes named under M03, M04 and M05, all `implemented: false`;
-52 from 2026-09-25, when Phase 5g added `02-build-index`, implemented and not yet live-qualified.)
+52 from 2026-09-25, when Phase 5g added `02-build-index`, and 53 the same day with `02-build-classify`;
+both implemented, neither live-qualified yet.)
 A closed decision batch is marked `DONE` with the accepted ADR that closed it; `DONE` is not a
 worker-readiness claim.
 
