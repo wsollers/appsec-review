@@ -1114,7 +1114,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-devops-project-discovery`](#job-02-devops-project-discovery) (required, contract `project-discovery`) |
 | Declared inputs (registry/job-templates/02-sre-operations-topology.json) | target repository path<br>deployment and operations artifact inventory<br>runbooks *(optional)*<br>smoke tests *(optional)*<br>monitoring and alerting config *(optional)*<br>service catalog *(optional)*<br>project-intel/repository-partitions/repository-partition-map.json; consume partitions routed to this persona, including supporting review assignments *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-sre-operations-topology/` |
-| Output files (registry/output-contracts/operations-topology.json) | service-inventory.json<br>operations-topology-summary.md<br>live-state-followups.json<br>status.json |
+| Output files (registry/output-contracts/operations-topology.json) | service-inventory.json<br>operations-topology-summary.md<br>status.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `not_automatic_analysis_dispatch`, `supplied_result_required` |
 | Next prerequisite | Implement the shared persona dispatch runtime while retaining supplied-artifact mode. |

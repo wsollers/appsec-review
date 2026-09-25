@@ -29,7 +29,6 @@
     "files": [
       "service-inventory.json",
       "operations-topology-summary.md",
-      "live-state-followups.json",
       "status.json"
     ]
   },
