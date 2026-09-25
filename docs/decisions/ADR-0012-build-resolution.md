@@ -122,7 +122,7 @@ and a piece that cannot be built must not block the others.
    plan: `interpreted` to SAST and SCA as source; `container` to Dockerfile analysis and a base-image
    scan; `infrastructure` to static IaC analysis; `unclassified` to a coverage gap.
 5. **One bounded loop per unit.** `02-build-resolution` runs the decision-4 loop separately for each
-   build-set unit, with `build_resolution_attempts` per unit and a run-wide cap on units. Units that
+   build-set unit, with `build_resolution_attempts` per unit and no cap on the number of units. Units that
    need the same image spec share one catalogued image. Each unit ends `OK`,
    `FAILED(BUILD_UNRESOLVED)` or `BLOCKED(<reason>)` (`UNSUPPORTED_ECOSYSTEM`, `UNSUPPORTED_PLATFORM`,
    `MISSING_GRANT`, ...).
@@ -144,13 +144,10 @@ and a piece that cannot be built must not block the others.
    recorded as weaker, where the repository pins none); the trial stays offline (`TODO.md` Phase 5f).
    A local caching proxy is deferred.
 
-### Proposed, needs William's confirmation
-
-- **Model per call.** Classification is one call over the whole index and is a judgment over an
-  unknown repository: `claude-sonnet-5`/`medium`, like the discovery jobs. Per-unit plans stay Haiku,
-  as decided above. (Alternative: Haiku for both.)
-- **Unit cap.** `build_units_max`, default 10 per run; units beyond it are recorded as
-  `BLOCKED(UNIT_CAP)` gaps, never silently dropped.
+10. **Models** (William, 2026-09-25): the classification call (one per run, over the whole index) uses
+    `claude-sonnet-5`/`medium`, like the discovery jobs; per-unit plans stay Haiku, as decided above.
+11. **No unit cap** (William, 2026-09-25): every build-set unit is resolved; cost scales with the
+    repository, bounded per unit by `build_resolution_attempts`.
 
 ### Consequences
 

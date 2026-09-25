@@ -1079,7 +1079,7 @@ Branch `build-lane-per-unit` (from `main` = `b28dfde`, after PR #40 merged D01-D
 Work order (one piece at a time):
 
 1. [x] Revise ADR-0012 for per-unit resolution and model classification (Revision 1, 2026-09-25;
-   two items proposed, awaiting William: classification model, `build_units_max`); `build-resolution.md`
+   William then decided: Sonnet for the classification call, Haiku for plans; no unit cap); `build-resolution.md`
    "Per unit" section, engagement-start step 3a and the job catalog updated. BPMN unchanged (the build
    lane is not in the pre-submission model). Original item: update `build-resolution.md`,
    Mermaid, BPMN (if the flow changes) and the job catalog in the same change (Full protocol for the
