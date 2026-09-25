@@ -857,22 +857,46 @@ formal batch first. **Do not skip this check and edit the output contract withou
 explicitly called out as Full-protocol scope, unlike everything else D01/D02 construction has
 touched so far.
 
-**Next, once that's resolved:** build the request-builder wiring in `discovery_gate.py` for
-`02-dev-project-discovery` -- **checked 2026-09-24: `discovery_gate.py`'s automatic-dispatch path
-(`_run_partition_automatic`, `_dispatch_partition_persona`, `dispatch_mode`) is currently written
-specifically for `ADOPTED_JOB` ('02-repository-partition-discovery') only; `CONSUMER_JOB`
-('02-dev-project-discovery', already a named constant in this module, currently only used by the
-*supplied*-record path) has no automatic-dispatch equivalent yet.** This is the Phase 5b item 5
-equivalent for D02: generalize the existing automatic-dispatch functions to take the job id (they
-already partially do -- see line ~176's `'repository-partition-map.json' if job == ADOPTED_JOB
-else 'output.json'`, a hint this was anticipated) or duplicate the shape for `CONSUMER_JOB`,
-whichever the existing code makes cleaner once you're reading it fresh; either way it needs to
-read the *accepted* partition map (not the supplied fixture) as an additional readable input,
-filtered to `developer-engineer`-routed partitions, per this task prompt's own scope section.
-Then add a `--dispatch` SAT path for stage 7 mirroring stage 6's, and hand William the exact live
-WSL command -- same delivery pattern as every fix this evening and all of Phase 5b: patch ->
-`Claude outputs/` -> `git am` -> push -> live run -> pasted output back before the next thing
-moves. Continuation prompt for this work:
+**Output-contract gap: FIXED 2026-09-25** on branch `d02-output-contract-fix`, commit `e17e23e`
+(William chose a separate Full-protocol branch; pushed, not merged): `safe-command-plan.json` is no
+longer a required file of the `project-discovery` output contract or an output of the job template;
+job catalog regenerated. Baseline for the branch: `qualify_phase1.py --check-contracts` fails with
+`diagram drift` on untouched `origin/main` (`08f84ef`) too -- pre-existing and unrelated
+(`docs/design-parity/job-graph.mmd` vs the rendered graph); not addressed in this batch.
+
+**Automatic-dispatch wiring: BUILT 2026-09-25, structurally verified only (47 focused tests, `bash
+-n`, design parity, catalog), NOT yet run live.** Same branch.
+
+- `persona_dispatch.build_request(upstream_root=...)`: optional second readable root
+  (`UPSTREAM_ROOT_ID = "upstream-artifacts"`) pinning an upstream job's accepted artifacts;
+  omitted, requests are unchanged (D01 unaffected).
+- `claude_cli_invoker.py`: claims built per result schema (`_CLAIM_BUILDERS`;
+  `_claims_from_project_inventory` = one `project_inventory` claim per project, one
+  `safe_command_plan` claim per command, each rejected unless it cites a resolvable file); the
+  upstream artifact is rendered under its own "Upstream Accepted Artifacts / NOT repository
+  evidence" heading and excluded from citation resolution; fixed a latent `AttributeError` in
+  `_citation_for` (a citation to an unpinned path was documented as "dropped" but crashed).
+- `discovery_gate.py`: `_run_dev_automatic`, `_dispatch_dev_persona`, `_automatic_dev_inputs`,
+  `_stage_upstream_partition_map`. Deliberately NOT on `coordinate_worker_lifecycle`: this job was
+  never on the common envelope and its consumers read the legacy accepted-record shape
+  (`accepted.json`, `attempts/<id>/output.json`); only the *source of the value* changed. The
+  persona's own attempt tree lives under `persona-attempts/<id>/`. Orchestrator-owned fields
+  overwritten after the response (lesson 2): `source_revision`, every citation `content_hash`, and
+  `target` (from the accepted partition map). The input fingerprint includes the accepted partition
+  map's hash, so a changed upstream re-dispatches. **Any live SAT after this must be fresh.**
+- SAT: `--dispatch` now also puts stage 7 in automatic mode (same recorded `partition_dispatch`
+  flag; D03/D04 stay supplied); accept contract + structural post-checks; fixture answer key diff is
+  informational. Also fixed stage 6's contract to allow the `d01-partition` transcript path.
+- Tests: `tests/test_dev_dispatch.py` (19 tests; the model call is stubbed everywhere).
+- Judgment calls, not confirmed: the whole accepted partition map is passed to the persona rather
+  than pre-filtered to developer-engineer partitions (the task prompt scopes it); BPMN and S2b
+  diagram label unchanged (text-level change inside the existing box); a target with no buildable
+  project is rejected as "nothing to claim" (same stance as D01 for zero partitions).
+
+**Next:** live-confirm on a fresh SAT: `scripts/system-acceptance-test.sh --dispatch --through
+dev-project-discovery` (stage 6 dispatches too, then stage 7). Expect failures (D01 took five live
+attempts); check lesson 5 (SAT contract gaps) before suspecting a production bug, and turn on
+`invocation.save_llm_transcripts` to read what the model actually said. Continuation prompt:
 `docs/continuation-prompts/2026-09-24-d02-dev-project-discovery-construction.md`.
 
 ### Phase 6 -- build and compile database (E01, E02)

@@ -14,10 +14,11 @@ cd ~/projects/appsec-review
 scripts/system-acceptance-test.sh --list                                # stages, and which are built
 scripts/system-acceptance-test.sh --through <stage>                     # new SAT from the top
 scripts/system-acceptance-test.sh --resume <sat_id> --through <stage>   # continue an earlier SAT
-scripts/system-acceptance-test.sh --dispatch --through <stage>          # new SAT: stage 6 dispatches
-                                                                        # a real persona invocation
-                                                                        # (D01) instead of installing
-                                                                        # the fixture's supplied record
+scripts/system-acceptance-test.sh --dispatch --through <stage>          # new SAT: stages 6 and 7
+                                                                        # dispatch a real persona
+                                                                        # invocation (D01, D02) instead
+                                                                        # of installing the fixture's
+                                                                        # supplied records
 ```
 
 Start the code location first, in its own terminal (`orchestrator/dagster/code-location.sh start`).
@@ -62,7 +63,7 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 4 | `stage-inputs` | yes |
 | 5 | `engagement-workflow` (config, intake, 3 preparation branches, join) | yes |
 | 6 | `partition-discovery` (gate; `--dispatch`: D01 live automatic persona dispatch instead) | yes |
-| 7 | `dev-project-discovery` (gate) | yes |
+| 7 | `dev-project-discovery` (gate; `--dispatch`: D02 live automatic persona dispatch instead) | yes |
 | 8 | `devops-project-discovery` (gate; the fixture's Dockerfile) | yes |
 | 9 | `sre-operations-topology` (gate; chains after devops discovery) | yes |
 | 10 | `build-index` (deterministic, cited build signals) | |
@@ -167,9 +168,9 @@ dependency target resolves to a known service id, coverage gaps recorded.
 ### 6. `partition-discovery` with `--dispatch` (D01: live automatic persona dispatch)
 
 Run with `scripts/system-acceptance-test.sh --dispatch --through <stage>` (a new SAT only; a
-`--resume` reads its own SAT's recorded choice, `--dispatch` is ignored). Stage 6 alone changes
-shape; stages 7-9 are unaffected (they still read the accepted partition map or chain off it, and
-do not yet have their own dispatch mode -- D02-D04, tracked separately).
+`--resume` reads its own SAT's recorded choice, `--dispatch` is ignored). Stages 6 and 7 change
+shape (stage 7: see the next subsection); stages 8-9 are unaffected and stay on supplied records
+(they do not yet have a dispatch mode -- D03-D04, tracked separately).
 
 Two steps instead of three: `dispatch-mode`, `accept`. There is no `handoff`/`supply` -- with
 `dispatch-mode.json` set to `"automatic"` for `02-repository-partition-discovery` before the one
@@ -193,6 +194,35 @@ reason to reproduce a human's exact partition IDs, names or wording. A diff agai
 record is still computed and printed (`diff_note` in the stage summary) when the two disagree, but
 it is informational only, never a pass/fail gate.
 
+### 7. `dev-project-discovery` with `--dispatch` (D02: live automatic persona dispatch)
+
+Same flag, same two steps (`dispatch-mode`, `accept`), for `02-dev-project-discovery`. This is the
+first job in the pipeline where a model, not a human, decides **how the system under test wants to
+be built**: languages and tooling, a candidate buildenv image per project, and the ordered,
+authorization-labeled (`read-only` / `network-required` / `script-execution-required`)
+`safe_command_plan` -- proposed, never executed. The persona reads the target checkout plus the
+run's accepted `repository-partition-map.json`, handed over as a second, separately labeled readable
+root (`upstream-artifacts`): scope, not citable evidence. If the accepted partition map changes, the
+input fingerprint changes and the job re-dispatches instead of reusing.
+
+`discovery_gate.py` keeps this job's existing accepted-record shape (`accepted.json`,
+`attempts/<id>/output.json`, `inputs.json`, `status.json`) -- 02-dev-project-discovery was never on
+the common worker envelope, and its consumers read exactly that shape; only the source of the value
+changed. Extra artifacts the `accept` contract now allows: `attempts/*/project-discovery-summary.md`,
+`persona-attempts/*/{outputs,logs}/persona/*` (the persona invocation's own request/record/result
+triple, kept for review, never the published attempt), `upstream/*/repository-partition-map.json`
+(the content-addressed copy the persona reads), `job.lock`, and the transcript tunable's
+`llm-transcripts/d02-devproject/*`.
+
+Then: Dagster `SUCCESS`; `discovery_gate.validate` accepts; accepted by the launched Dagster run;
+`accepted.json` and `status.json` record `dispatch_mode: "automatic"`; the persona invocation record
+exists; every citation's SHA-256 recomputed from the live checkout; same `source_revision` and
+`target` as the accepted partition map; at least one project, each with evidence, at least one
+command and a candidate buildenv image; a non-empty command plan in which every entry has argv,
+purpose, a valid authorization, evidence, and a `project_id` that resolves. As for stage 6,
+byte-equality with the fixture answer key is not a gate; a differing command plan is reported as
+`diff_note`, informational only.
+
 ## Gaps the contracts have exposed
 
 | Gap | Where | Status |
@@ -200,6 +230,6 @@ it is informational only, never a pass/fail gate.
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
 | SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Done 2026-09-24 (stage 8 devops, stage 9 sre topology both gated and passing live) |
-| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stages 7-9 (D02-D04) and the build part (stages 10-12, build-resolution.md): still open |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): built, `--dispatch`, **not yet run live**. Stages 8-9 (D03-D04) and the build part (stages 10-12, build-resolution.md): still open |
 | The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |

@@ -45,7 +45,10 @@ dispatch (`discovery_gate.set_dispatch_mode`, a per-run opt-in file, no change t
 external `run()` signature) dispatches a real, tools-off persona invocation
 (`claude_cli_invoker.ClaudeCliInvoker`) against the staged checkout instead of expecting a supplied
 file -- the supplied-record path stays available as the default and as an explicit, separately
-tested alternative. D02-D04 (developer, devops, SRE discovery) do not have this yet. SRE topology
+tested alternative. The second gate, `02-dev-project-discovery` (D02, built 2026-09-24, not yet run
+live), has the same opt-in: its persona reads the target plus the accepted partition map and itself
+decides how the project is built (languages, buildenv image, the ordered safe command plan), keeping
+this job's existing accepted-record shape. D03-D04 (devops, SRE discovery) do not have this yet. SRE topology
 chains after the accepted devops record instead of the partition map directly (2026-09-24): it
 reads the containers/services devops discovery already found.
 Step 4 runs only through the legacy `pipeline/engagement_job.*` path into `scratch/` and is then

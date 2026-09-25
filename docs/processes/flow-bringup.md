@@ -251,6 +251,25 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-25 -- **D02 built (Phase 5c): `02-dev-project-discovery` automatic persona dispatch.**
+  Structurally verified only (47 focused tests, `bash -n`, design parity, catalog); **not yet run
+  live**. Two commits on branch `d02-output-contract-fix`. (1) `e17e23e`, Full-protocol scope: dropped
+  `safe-command-plan.json` from the `project-discovery` output contract's `required_files` and the
+  job template's `outputs.files` -- the plan is a field inside `project-inventory.json`, and the
+  extra required file would have made `claude_cli_invoker.build_prompt_text` raise on the first live
+  attempt. (2) The dispatch itself: `persona_dispatch.build_request(upstream_root=...)` pins the
+  accepted partition map as a second readable root; `claude_cli_invoker.py` builds claims per result
+  schema (`_claims_from_project_inventory`), renders the upstream artifact under its own
+  "not evidence" heading, and no longer crashes on a citation to an unpinned path;
+  `discovery_gate._run_dev_automatic` dispatches, then overwrites the orchestrator-owned fields
+  (`source_revision`, every citation `content_hash`, `target`) and publishes in the job's existing
+  accepted-record shape; SAT stage 7 gains a `--dispatch` path. `discovery_gate.py` changed, so any
+  live SAT must be fresh, not `--resume`. Judgment calls not confirmed with William: the BPMN and the
+  S2b diagram label were left unchanged (a text-level change inside the existing box, as for D01);
+  the whole accepted partition map is passed to the persona rather than pre-filtered to
+  developer-engineer partitions (the task prompt scopes it; the exact accepted bytes stay pinned).
+  Also fixed: the SAT stage-6 dispatch contract now allows the `d01-partition` transcript path the
+  `save_llm_transcripts` tunable actually writes to.
 - 2026-09-24 -- SAT stage 9, `sre-operations-topology`, built: same gate shape again, chaining
   after the accepted `02-devops-project-discovery` record instead of the partition map (its
   `UPSTREAM_JOB`/`SCHEMAS`/`_PAYLOAD_ERRORS` entries in `discovery_gate.py`, its Dagster ops/job in

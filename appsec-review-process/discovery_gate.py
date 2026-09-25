@@ -70,6 +70,11 @@ CONSUMER_JOB = '02-dev-project-discovery'
 # convention (root(run_id, 'jobs', job)); it only ever appears inside the persona_invocation
 # request/result identity, never as a job-tree path segment.
 PERSONA_JOB_ID = 'd01-partition'
+# Same reason and same shape for 02-dev-project-discovery's own persona invocation identity (D02,
+# Phase 5c): short and opaque, never the 26-char template id, so it can never trip the secret
+# scanner, and distinct from PERSONA_JOB_ID so the two jobs' run-scoped persona identities (and
+# their llm-transcripts/ directories) can never collide inside one run.
+DEV_PERSONA_JOB_ID = 'd02-devproject'
 
 # Automatic-vs-supplied mode selection, scoped to (run_id, job) so it never needs
 # dagster_workflow.py (Full protocol, AGENTS.md) to change discovery_gate.run()'s external
@@ -217,7 +222,13 @@ def _require_upstream_inputs(run_id, job, value):
 
 
 def _legacy_run(run_id, dagster_id, job, force=False):
-    """Keep the unadopted developer-discovery gate behavior unchanged except schema coverage."""
+    """Keep the unadopted developer-discovery gate behavior unchanged except schema coverage.
+
+    The one addition (D02): a run that opted 02-dev-project-discovery into automatic dispatch
+    (``dispatch-mode.json``) is handed to ``_run_dev_automatic`` before anything below runs. Every
+    other job, and this job in the default ``supplied`` mode, takes exactly the path it always did."""
+    if job == CONSUMER_JOB and dispatch_mode(run_id, job) == 'automatic':
+        return _run_dev_automatic(run_id, dagster_id, force)
     base = root(run_id, job)
     supplied = supplied_path(run_id, job)
     if not supplied.exists():
@@ -433,7 +444,7 @@ def _run_partition(run_id, dagster_id, force=False):
         failed_summary='Supplied repository partition result was not accepted.')
 
 
-def _automatic_target_root(run_id):
+def _automatic_target_root(run_id, job=ADOPTED_JOB):
     """The run's staged target checkout, sourced the same way validate_job_output.py's own
     citation-freshness check (`_source_root`) reads it -- `phase1.stage`'s manifest, never
     something this module invents. Raises Blocked (not a bare exception) so a missing/unstaged
@@ -443,11 +454,11 @@ def _automatic_target_root(run_id):
     target = manifest.get('target') if isinstance(manifest, dict) else None
     repo_path = target.get('repo_path') if isinstance(target, dict) else None
     if not repo_path:
-        raise Blocked(ADOPTED_JOB + ': automatic dispatch requires a staged target '
+        raise Blocked(job + ': automatic dispatch requires a staged target '
                       '(phase1.stage) -- the run manifest has no target.repo_path')
     path = Path(repo_path)
     if not path.is_dir():
-        raise Blocked(ADOPTED_JOB + ': automatic dispatch target checkout is missing: ' + str(path))
+        raise Blocked(job + ': automatic dispatch target checkout is missing: ' + str(path))
     return path
 
 
@@ -647,6 +658,182 @@ def _run_partition_automatic(run_id, dagster_id, force=False):
         on_reuse=on_reuse,
         blocked_summary='Repository partition automatic-dispatch preflight did not complete.',
         failed_summary='Automatic repository partition persona dispatch was not accepted.')
+
+
+# ---- D02: automatic persona dispatch for 02-dev-project-discovery (Phase 5c) ---------------------
+#
+# Deliberately NOT built on coordinate_worker_lifecycle/record_terminal_current the way D01's
+# automatic path is: 02-dev-project-discovery has never been on the common envelope (its accepted
+# record is _legacy_run's small accepted.json/attempts/<id>/output.json shape, and its consumers --
+# 02-build-configure, the SAT stage, validate() -- read exactly that). Moving it onto the envelope is
+# a separate migration; this change only swaps the *source of the value*: a live persona call
+# instead of a hand-supplied file, then the same schema check, the same upstream/citation-freshness
+# checks (_require_upstream_inputs) and the same accepted-record shape as before. Nothing downstream
+# has to change because the producer changed.
+
+def _accepted_partition_map_path(run_id):
+    """(attempt dir, path of repository-partition-map.json) of the run's accepted D01 result,
+    re-validated through ``validate`` -- never read straight off disk unchecked."""
+    try:
+        attempt = validate(run_id, ADOPTED_JOB)
+    except Blocked:
+        raise
+    except Exception as exc:
+        raise Blocked(CONSUMER_JOB + ': automatic dispatch requires an accepted ' + ADOPTED_JOB
+                      + ' result for this run first (' + type(exc).__name__ + ')') from exc
+    if attempt is None:
+        raise Blocked(CONSUMER_JOB + ': the accepted ' + ADOPTED_JOB + ' result predates the common '
+                      'envelope; re-run it')
+    path = attempt / _upstream_payload_filename(ADOPTED_JOB)
+    if not path.is_file():
+        raise Blocked(CONSUMER_JOB + ': the accepted ' + ADOPTED_JOB + ' attempt has no '
+                      + path.name)
+    return attempt, path
+
+
+def _automatic_dev_inputs(run_id):
+    """The record automatic-mode dispatch fingerprints for reuse/tamper-evidence: the target
+    checkout's own content identity, the exact accepted partition map it was scoped by (so a
+    changed or re-run upstream is a different input and never reuses an old result), and the source
+    of every module this path calls."""
+    target_root = _automatic_target_root(run_id, CONSUMER_JOB)
+    identity = intake.source_identity(str(target_root))
+    upstream_attempt, map_path = _accepted_partition_map_path(run_id)
+    return {
+        'job': CONSUMER_JOB,
+        'mode': 'automatic',
+        'target_root': str(target_root),
+        'source_snapshot_sha256': 'sha256:' + identity['fingerprint'],
+        'source_revision': identity.get('revision'),
+        'upstream': {'job': ADOPTED_JOB, 'attempt_id': upstream_attempt.name,
+                     'repository-partition-map.json': file_hash(map_path)},
+        'code': {
+            'discovery_gate.py': file_hash(Path(__file__)),
+            'persona_dispatch.py': file_hash(ROOT / 'persona_dispatch.py'),
+            'claude_cli_invoker.py': file_hash(ROOT / 'claude_cli_invoker.py'),
+            'persona_invocation.py': file_hash(ROOT / 'persona_invocation.py'),
+            'persona_prompt_assembly.py': file_hash(ROOT / 'persona_prompt_assembly.py'),
+            'validate_job_output.py': file_hash(ROOT / 'validate_job_output.py'),
+        },
+    }
+
+
+def _stage_upstream_partition_map(base, map_path, expected_sha256):
+    """Copies the accepted partition map into a content-addressed directory of its own (the one
+    directory D02's second readable root points at) and verifies the copy. The directory holds only
+    this one file: persona_dispatch pins every regular file beneath an upstream root. An existing
+    copy whose bytes no longer match is a tamper/corruption signal, not something to overwrite."""
+    directory = base / 'upstream' / expected_sha256[:16]
+    target = directory / 'repository-partition-map.json'
+    if not target.is_file():
+        directory.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(map_path, target)
+    if file_hash(target) != expected_sha256:
+        raise Blocked(CONSUMER_JOB + ': the staged upstream partition map does not match the accepted '
+                      'partition map it was copied from')
+    return directory
+
+
+def _dispatch_dev_persona(run_id, base, record):
+    """One real persona invocation for 02-dev-project-discovery. Returns ``(value, summary_text,
+    facts)``; raises ``RuntimeError`` (like D01's ``_dispatch_partition_persona``) when the
+    invocation did not complete OK -- nothing is ever published from a failed dispatch. The
+    persona's own attempt tree (request/record/result triple, model output) is kept under
+    ``persona-attempts/<id>/`` for review; it is not the published attempt.
+
+    Orchestrator-owned fields (docs/lessons-learned-2026-09-24-d01-live-dispatch.md, lesson 2),
+    overwritten after the model responds and never trusted from it: ``source_revision`` (a git ref
+    the model cannot see, ``.git`` is not a readable input), every ``evidence_citations[].content_hash``
+    (an exact SHA-256), and ``target`` (taken from the accepted partition map this job was scoped
+    by, so the two records of one run cannot name different targets)."""
+    attempt_id = uuid.uuid4().hex
+    persona_attempt = base / 'persona-attempts' / attempt_id
+    persona_attempt.mkdir(parents=True)
+    target_root = Path(record['target_root'])
+    snapshot = record['source_snapshot_sha256']
+    _upstream_attempt, map_path = _accepted_partition_map_path(run_id)
+    upstream_dir = _stage_upstream_partition_map(
+        base, map_path, record['upstream']['repository-partition-map.json'])
+
+    mvr.resolve_run_model_versions(run_id)
+    store = SchemaStore()
+    template = ppa.load_job_template(CONSUMER_JOB, store)
+    budget_name = template.get('budget_default')
+    resolved_model = rc.resolve_model(CONSUMER_JOB, budget_name)
+    budget_usd = (rc.load_model_config().get('budget_max_usd_per_call') or {}).get(budget_name)
+
+    def clock():
+        return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    request = pd.build_request(
+        CONSUMER_JOB, run_id=run_id, job_id=DEV_PERSONA_JOB_ID, attempt_id=attempt_id,
+        target_root=target_root, source_snapshot_sha256=snapshot, now=clock(), store=store,
+        upstream_root=upstream_dir)
+    model_identity = request['model']
+    runtime = pi.PersonaRuntime(
+        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd),
+        registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
+        readable_roots={pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: upstream_dir},
+        allowed_models=(model_identity,), source_snapshot_sha256=snapshot,
+        registry_ceiling=None, clock=clock, cancel=threading.Event(), stop_grace_seconds=5)
+    result = pi.run_invocation(
+        runtime, run_id=run_id, job_id=DEV_PERSONA_JOB_ID, attempt_id=attempt_id,
+        attempt_root=persona_attempt, request=request)
+    if result['execution_status'] != 'OK':
+        raise RuntimeError(
+            CONSUMER_JOB + ': persona dispatch did not complete OK (execution_status='
+            + str(result.get('execution_status')) + ', cause=' + str(result.get('cause'))
+            + ', outcome=' + str(result.get('outcome')) + '); see persona-attempts/' + attempt_id
+            + '/logs/persona for the request/record/result triple')
+
+    output_root = persona_attempt / Path(*request['output_root'].split('/'))
+    value = read_json(output_root / 'project-inventory.json')
+    upstream_map = read_json(upstream_dir / 'repository-partition-map.json')
+    value['source_revision'] = record['source_revision']
+    if isinstance(upstream_map, dict) and isinstance(upstream_map.get('target'), str):
+        value['target'] = upstream_map['target']
+    by_path = {entry['path']: entry['sha256'] for entry in request['readable_inputs']
+               if entry['root'] == pd.DEFAULT_READABLE_ROOT}
+    _backfill_citation_content_hashes(value, by_path)
+    summary_text = (output_root / 'project-discovery-summary.md').read_text(encoding='utf-8')
+    facts = {'dispatch_mode': 'automatic', 'persona_job_id': DEV_PERSONA_JOB_ID,
+             'persona_attempt_id': attempt_id, 'persona_result_sha256': result['result_sha256'],
+             'model': dict(model_identity)}
+    return value, summary_text, facts
+
+
+def _run_dev_automatic(run_id, dagster_id, force=False):
+    job = CONSUMER_JOB
+    base = root(run_id, job)
+    record = _automatic_dev_inputs(run_id)
+    record['run_id'] = run_id
+    fingerprint = _input_fingerprint(record)
+    if not force and (base / 'accepted.json').exists():
+        candidate = read_json(base / 'accepted.json')
+        if candidate.get('fingerprint') == fingerprint and candidate.get('status') == 'OK':
+            atomic_json(data_path(run_id, 'orchestration', 'dagster', dagster_id, job + '-reuse.json'),
+                        {'status': 'OK', 'reused': True, 'producer': candidate, 'time': now()})
+            return candidate
+    value, summary_text, facts = _dispatch_dev_persona(run_id, base, record)
+    if not isinstance(value, dict) or not value:
+        raise Blocked(job + ': persona dispatch result is empty or not a JSON object')
+    errors = validate_document(value, SCHEMAS[job])
+    if errors:
+        raise Blocked(job + ': persona dispatch result failed schema validation: ' + '; '.join(errors))
+    _require_upstream_inputs(run_id, job, value)
+    attempt_id = uuid.uuid4().hex
+    attempt = base / 'attempts' / attempt_id
+    attempt.mkdir(parents=True)
+    atomic_json(attempt / 'inputs.json', {**record, 'fingerprint': fingerprint})
+    atomic_json(attempt / 'output.json', value)
+    atomic_bytes(attempt / 'project-discovery-summary.md', summary_text.encode('utf-8'))
+    accepted = {'status': 'OK', 'job': job, 'run_id': run_id, 'attempt_id': attempt_id,
+                'dagster_run_id': dagster_id, 'fingerprint': fingerprint, 'accepted_at': now(),
+                **facts}
+    atomic_json(attempt / 'status.json', accepted)
+    atomic_json(base / 'accepted.json', accepted)
+    atomic_json(base / 'latest.json', {'attempt_id': attempt_id})
+    return {**accepted, 'output': value}
 
 
 def run(run_id, dagster_id, job, force=False):

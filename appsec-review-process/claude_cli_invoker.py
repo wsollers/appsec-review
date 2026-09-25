@@ -52,6 +52,7 @@ from pathlib import Path
 from typing import Any
 
 import claude_binary_resolver as cbr
+import persona_dispatch as pd
 import persona_invocation as pi
 import review_cli as rc
 from execution_state import atomic_bytes, data_path
@@ -164,15 +165,31 @@ def _render_readable_inputs(inputs: tuple) -> str:
     can see them at all, since this invoker grants no tools and no filesystem access. Each is
     fenced and labeled by its pinned root/path, matching ``persona_prompt_assembly``'s own
     labeled-fenced-block convention for registry sections."""
-    parts = ["## Target Repository Files\n",
-             "Every file below is pinned to the exact bytes and path shown; cite it by this path "
-             "when your output contract requires an evidence citation.\n"]
-    for item in inputs:
+    target = [item for item in inputs if item.root != pd.UPSTREAM_ROOT_ID]
+    upstream = [item for item in inputs if item.root == pd.UPSTREAM_ROOT_ID]
+
+    def fenced(item: Any) -> str:
         try:
             text = item.data.decode("utf-8")
         except UnicodeDecodeError:
             text = f"<{len(item.data)} bytes, not UTF-8 text -- not inlined>"
-        parts.append(f"### {item.root}:{item.path}\n\n```\n{text}\n```\n")
+        return f"### {item.root}:{item.path}\n\n```\n{text}\n```\n"
+
+    parts = ["## Target Repository Files\n",
+             "Every file below is pinned to the exact bytes and path shown; cite it by this path "
+             "when your output contract requires an evidence citation.\n"]
+    parts.extend(fenced(item) for item in target)
+    if upstream:
+        # D02: an earlier job's accepted output, handed over as scope. Rendered under its own
+        # heading (and never as citable evidence) so the model cannot mistake it for repository
+        # content -- a citation to one of these paths would fail the downstream freshness check
+        # anyway, since none of them exists in the checkout.
+        parts.append("## Upstream Accepted Artifacts\n")
+        parts.append("Each artifact below is the accepted output of an earlier job in this run, pinned "
+                     "to the exact bytes shown. It defines your scope. It is NOT repository evidence: "
+                     "do not cite these paths in evidence_citations -- cite only files listed under "
+                     "Target Repository Files.\n")
+        parts.extend(fenced(item) for item in upstream)
     return "\n".join(parts)
 
 
@@ -327,7 +344,11 @@ def _citation_for(item: Any, source_type: str, path: str, line_range: str | None
     citation this invoker cannot resolve is dropped from ``invoker-output.json``'s claims rather
     than fabricated; ``persona_invocation``'s own ``UNDECLARED_CITATION`` check is the backstop
     that would reject a claim left with no resolvable citation at all."""
-    if source_type != "source_file" or item.path != path:
+    # `item is None` is the citation naming a path that is not a pinned readable input. The
+    # docstring above always promised such a citation is dropped, not fabricated; the original
+    # `item.path` dereference raised AttributeError on it instead (found reading this module for
+    # D02 -- D01 never hit it live, its model only ever cited pinned paths).
+    if item is None or source_type != "source_file" or item.path != path:
         return None
     return {"root": item.root, "path": item.path, "sha256": item.sha256,
             "locator": line_range or "whole file"}
@@ -384,6 +405,83 @@ def _claims_from_partition_map(partition_map: dict[str, Any], inputs: tuple,
     if not claims:
         raise InvokerOutputError("model response named no partitions at all -- nothing to claim")
     return claims
+
+
+def _resolved_citations(raw: Any, by_path: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every ``source_file`` citation in ``raw`` (a model-written ``evidence_citations`` list) that
+    resolves to a pinned target input, in ``persona_invocation``'s claim-citation shape. Unresolvable
+    ones are dropped, never invented (see ``_citation_for``)."""
+    resolved = []
+    for citation in raw if isinstance(raw, list) else []:
+        if not isinstance(citation, dict):
+            continue
+        item = by_path.get(citation.get("path"))
+        found = _citation_for(item, citation.get("source_type"), citation.get("path"),
+                              citation.get("line_range"))
+        if found is not None:
+            resolved.append(found)
+    return resolved
+
+
+def _claims_from_project_inventory(inventory: dict[str, Any], inputs: tuple,
+                                   allowed_claim_classes: tuple[str, ...],
+                                   result_filename: str) -> list[dict[str, Any]]:
+    """D02's claim builder for ``project-inventory.json`` (``project-discovery.schema.json``): one
+    ``project_inventory`` claim per project and one ``safe_command_plan`` claim per planned command,
+    each citing only evidence that resolves to a pinned target input. Same rule as the partition
+    builder above: a claim left with no resolvable citation is a hard rejection (governing rule 2),
+    never a padded or borrowed one. ``coverage_gaps`` are plain strings with no evidence of their
+    own, so they stay in the artifact and are not turned into ``evidence_gap`` claims here (a claim
+    needs a citation, and borrowing an unrelated file's would be fabricating evidence).
+
+    **Known limitation, flagged not hidden:** a target with no buildable project at all (only
+    ``coverage_gaps``) yields no claims and is rejected as "nothing to claim", the same stance the
+    partition builder takes for zero partitions. A legitimately project-free repository needs this
+    extended, not worked around."""
+    by_path = {item.path: item for item in inputs}
+    for claim_class in ("project_inventory", "safe_command_plan"):
+        if claim_class not in allowed_claim_classes:
+            raise InvokerOutputError(f"claim class {claim_class!r} is not in this request's allowed_claim_classes")
+    claims: list[dict[str, Any]] = []
+    for project in inventory.get("projects", []):
+        pid = str(project.get("project_id"))
+        citations = _resolved_citations(project.get("evidence_citations"), by_path)
+        if not citations:
+            raise InvokerOutputError(
+                f"project {pid!r} cites no evidence this invoker can resolve to a pinned readable "
+                f"input -- governing rule 2 requires evidence that resolves")
+        claims.append({
+            "claim_id": f"project-{pid}"[:120], "claim_class": "project_inventory",
+            "statement": (f"Project {pid!r} at {project.get('root')!r}: languages "
+                          f"{', '.join(map(str, project.get('languages', [])))}; manifests "
+                          f"{', '.join(map(str, project.get('manifests', [])))}; candidate buildenv "
+                          f"images {', '.join(map(str, project.get('candidate_buildenv_images', [])))}")[:2000],
+            "file": result_filename, "citations": citations,
+        })
+    for index, command in enumerate(inventory.get("safe_command_plan", [])):
+        pid = str(command.get("project_id"))
+        citations = _resolved_citations(command.get("evidence_citations"), by_path)
+        if not citations:
+            raise InvokerOutputError(
+                f"safe_command_plan[{index}] for project {pid!r} cites no evidence this invoker can "
+                f"resolve to a pinned readable input -- governing rule 2 requires evidence that resolves")
+        claims.append({
+            "claim_id": f"command-{pid}-{index}"[:120], "claim_class": "safe_command_plan",
+            "statement": (f"{command.get('purpose')}: {' '.join(map(str, command.get('argv', [])))} "
+                          f"[{command.get('authorization')}]")[:2000],
+            "file": result_filename, "citations": citations,
+        })
+    if not claims:
+        raise InvokerOutputError("model response named no projects or commands at all -- nothing to claim")
+    return claims
+
+
+# Result schema file -> the claim builder for that result. An output contract whose result schema is
+# not listed is rejected at claim time (see invoke) rather than silently given no claims.
+_CLAIM_BUILDERS = {
+    "repository-partition-map.schema.json": _claims_from_partition_map,
+    "project-discovery.schema.json": _claims_from_project_inventory,
+}
 
 
 class ClaudeCliInvoker:
@@ -466,8 +564,16 @@ class ClaudeCliInvoker:
 
             result_field = next(key for filename, key, kind in fields if kind == "json")
             result_filename = next(filename for filename, key, kind in fields if kind == "json")
-            claims = _claims_from_partition_map(
-                envelope[result_field], package.inputs, package.allowed_claim_classes, result_filename)
+            builder = _CLAIM_BUILDERS.get(output_contract["result_schema"]["schema_file"])
+            if builder is None:
+                raise InvokerOutputError(
+                    f"no claim builder for result schema "
+                    f"{output_contract['result_schema']['schema_file']!r}")
+            # Only target-repository inputs are citable evidence; an upstream artifact (D02's
+            # accepted partition map) is scope, so it never enters claim citation resolution.
+            target_inputs = tuple(item for item in package.inputs if item.root != pd.UPSTREAM_ROOT_ID)
+            claims = builder(envelope[result_field], target_inputs,
+                             package.allowed_claim_classes, result_filename)
 
             usage_raw = dispatch.get("final_result") if isinstance(dispatch.get("final_result"), dict) else {}
             read_bytes = len(package.prompt) + sum(len(item.data) for item in package.inputs)

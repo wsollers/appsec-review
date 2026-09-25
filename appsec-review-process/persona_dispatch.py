@@ -59,6 +59,12 @@ REGISTRY_DIR = ROOT / "registry"
 
 DEFAULT_INVOKER_ID = "claude-cli"
 DEFAULT_READABLE_ROOT = "target-repository"
+# Second, optional readable root (D02 construction): an upstream job's already-accepted artifacts
+# (today: the accepted repository-partition-map.json that scopes 02-dev-project-discovery), staged
+# by the caller into one directory and pinned by sha256 exactly like target files. Deliberately a
+# separate root id from the target checkout so a consumer of the request (claude_cli_invoker's
+# citation resolution) can tell "evidence you may cite" from "scope you were handed" by root alone.
+UPSTREAM_ROOT_ID = "upstream-artifacts"
 
 # job template's own budget_default -> persona_invocation's request budget object. See this
 # module's docstring for why this table is D01's own and not shared elsewhere yet.
@@ -162,7 +168,8 @@ def _permission_block(job_id: str, *, run_id: str, source_snapshot_sha256: str, 
 def build_request(job_template_id: str, *, run_id: str, job_id: str, attempt_id: str,
                   target_root: Path, source_snapshot_sha256: str, now: str,
                   invoker_id: str = DEFAULT_INVOKER_ID, readable_root_id: str = DEFAULT_READABLE_ROOT,
-                  store: SchemaStore | None = None) -> dict[str, Any]:
+                  store: SchemaStore | None = None,
+                  upstream_root: Path | None = None) -> dict[str, Any]:
     """Builds one ``appsec-review/persona-invocation-request/1.0`` object for ``job_template_id``.
 
     ``job_id`` has no default -- it is a required, caller-chosen run-scoped invocation identity,
@@ -192,7 +199,15 @@ def build_request(job_template_id: str, *, run_id: str, job_id: str, attempt_id:
     the run's accepted intake record, not something this module may invent). Raises
     ``RequestBuildError`` before returning anything if the job template, its composition, the
     target checkout, or the run's pinned model version is missing or invalid; never partially
-    builds a request."""
+    builds a request.
+
+    ``upstream_root`` (optional, D02): a directory of already-accepted upstream artifacts. Every
+    regular file beneath it is pinned as an additional ``readable_inputs`` entry under root
+    ``UPSTREAM_ROOT_ID`` (role ``evidence``, the only role a producing invocation may read -- these
+    are not ``producer_output``: the upstream job is a different job's accepted result, not a
+    producer this invocation reviews). The caller must also map ``UPSTREAM_ROOT_ID`` to this same
+    directory in its ``PersonaRuntime.readable_roots``. Omitted (the default), the request is
+    byte-for-byte what it was before this parameter existed -- D01 is unaffected."""
     store = store or SchemaStore()
 
     try:
@@ -229,6 +244,10 @@ def build_request(job_template_id: str, *, run_id: str, job_id: str, attempt_id:
     except ppa.PromptAssemblyError as exc:
         raise RequestBuildError(str(exc)) from exc
     readable_inputs = _walk_target(target_root, readable_root_id)
+    if upstream_root is not None:
+        if UPSTREAM_ROOT_ID == readable_root_id:
+            raise RequestBuildError("the upstream root id must differ from the target readable root id")
+        readable_inputs = readable_inputs + _walk_target(Path(upstream_root), UPSTREAM_ROOT_ID)
     permission = _permission_block(job_id, run_id=run_id, source_snapshot_sha256=source_snapshot_sha256, now=now)
 
     request = {

@@ -11,15 +11,18 @@
 #                                                                continue an earlier SAT from its first
 #                                                                stage that has not passed
 #   scripts/system-acceptance-test.sh [--fixture hello-autotools] --dispatch --through <stage>
-#                                                                start a new SAT whose partition-
-#                                                                discovery stage (02-repository-
-#                                                                partition-discovery) opts into D01's
-#                                                                automatic persona dispatch instead of
-#                                                                installing the fixture's supplied
-#                                                                record (a real `claude` CLI call, not
-#                                                                a fixture copy) -- a new SAT only; a
+#                                                                start a new SAT whose discovery stages
+#                                                                (02-repository-partition-discovery,
+#                                                                D01, and 02-dev-project-discovery,
+#                                                                D02) opt into automatic persona
+#                                                                dispatch instead of installing the
+#                                                                fixture's supplied records (a real
+#                                                                `claude` CLI call per stage, not a
+#                                                                fixture copy) -- a new SAT only; a
 #                                                                `--resume` reads the choice its own
-#                                                                first run made, --dispatch is ignored
+#                                                                first run made, --dispatch is ignored.
+#                                                                devops/sre discovery (D03/D04) stay
+#                                                                on their supplied records for now.
 #
 # Every command runs under a contract (run_step, scripts/sat_contract.py):
 #   pre   what it reads is present and valid (schema or structural contract; absent where required)
@@ -47,7 +50,7 @@ STAGES=(
   "stage-inputs|1|stage_artifacts.py writes the intake contract (manifest) for this engagement"
   "engagement-workflow|1|engagement_workflow: intake executed and accepted; 3 preparation branches; join"
   "partition-discovery|1|Gate: hand-off/supplied-record proof (default), or --dispatch: automatic live persona dispatch, schema+citation validated"
-  "dev-project-discovery|1|Gate: hand-off with nothing supplied; project discovery supplied and accepted"
+  "dev-project-discovery|1|Gate: hand-off + supplied record (default), or --dispatch: automatic live persona dispatch (build tooling + safe command plan), schema+citation validated"
   "devops-project-discovery|1|Gate: DevOps project discovery (Dockerfile) supplied and accepted"
   "sre-operations-topology|1|Gate: SRE operations topology supplied and accepted"
   "build-index|0|02-build-index: deterministic, cited index of every build signal; nothing executed"
@@ -654,6 +657,7 @@ stage_partition_discovery() {
                         "{run}/data/jobs/$PARTITION_JOB/attempts/*/outputs/persona/*", "{run}/data/jobs/$PARTITION_JOB/attempts/*/logs/persona/*",
                         "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
                         "{run}/data/llm-transcripts/$PARTITION_JOB/*/transcript.jsonl", "{run}/data/llm-transcripts/$PARTITION_JOB/*/raw-response.json",
+                        "{run}/data/llm-transcripts/d01-partition/*/transcript.jsonl", "{run}/data/llm-transcripts/d01-partition/*/raw-response.json",
                         "appsec-review-process/prompt-cache/$PARTITION_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
  "outputs": [{"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/repository-partition-map.json", "schema": "repository-partition-map.schema.json", "equals": {"source_revision": "{pin}"}},
              {"path": "{run}/data/jobs/$PARTITION_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"execution_status": "OK", "worker_kind": "persona"}},
@@ -755,14 +759,47 @@ print("partition-discovery: PASS  hand-off %s; map accepted by Dagster %s: %s; %
 # ---- stage: dev-project-discovery ----------------------------------------------------------------
 # Older gate path: the accepted record carries no output hashes, so the accepted output is compared
 # with the supplied file and the fixture record (recorded as a gap in the evidence).
+#
+# --dispatch (mode "automatic", D02, Phase 5c): no supplied file is ever installed; the run opts
+# 02-dev-project-discovery into discovery_gate.py's automatic path before the one launch. A REAL live
+# persona invocation reads the target checkout plus the accepted partition map (D01's output, as
+# scope) and itself decides how the project wants to be built: languages/tooling, buildenv image and
+# the ordered, authorization-labeled safe command plan. As with stage 6, acceptance can no longer be
+# byte-equality with the fixture answer key; it is schema conformance (enforced by the gate), fresh
+# evidence citations, and structural rules -- and the diff against the fixture record is informational
+# only, never pass/fail.
 stage_dev_project_discovery() {
   require_run dev-project-discovery
-  gate_handoff dev-project-discovery "$DEV_JOB" dev_project_discovery project-discovery
-  local handoff_state="$HANDOFF_STATE" handoff_dagster="$HANDOFF_DAGSTER"
-  gate_supply dev-project-discovery "$DEV_JOB" project-discovery
+  local handoff_state="" handoff_dagster=""
 
-  echo "-- accept: the gate with the supplied discovery must succeed"
-  run_step dev-project-discovery accept "$(contract dev-project-discovery accept <<JSON
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    gate_dispatch_mode dev-project-discovery "$DEV_JOB"
+    handoff_state="automatic-dispatch"
+
+    echo "-- accept: the automatic-dispatch gate must succeed (live persona invocation)"
+    run_step dev-project-discovery accept "$(contract dev-project-discovery accept <<JSON
+{"inputs": [{"path": "{run}/data/dispatch-mode.json", "kind": "file", "equals": {"$DEV_JOB": "automatic"}},
+            {"path": "{run}/data/jobs/$DEV_JOB/supplied/result.json", "kind": "absent"},
+            {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
+ "writes": {"required": ["{run}/data/jobs/$DEV_JOB/accepted.json", "{run}/data/jobs/$DEV_JOB/latest.json", "{run}/data/jobs/$DEV_JOB/attempts/*/output.json",
+                         "{run}/data/jobs/$DEV_JOB/attempts/*/inputs.json", "{run}/data/jobs/$DEV_JOB/attempts/*/status.json"],
+            "allowed": ["{run}/data/jobs/$DEV_JOB/job.lock", "{run}/data/jobs/$DEV_JOB/attempts/*/project-discovery-summary.md",
+                        "{run}/data/jobs/$DEV_JOB/upstream/*/repository-partition-map.json",
+                        "{run}/data/jobs/$DEV_JOB/persona-attempts/*/outputs/persona/*", "{run}/data/jobs/$DEV_JOB/persona-attempts/*/logs/persona/*",
+                        "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
+                        "{run}/data/llm-transcripts/d02-devproject/*/transcript.jsonl", "{run}/data/llm-transcripts/d02-devproject/*/raw-response.json",
+                        "appsec-review-process/prompt-cache/$DEV_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$DEV_JOB/attempts/*/output.json", "schema": "project-discovery.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$DEV_JOB/accepted.json", "equals": {"status": "OK", "job": "$DEV_JOB", "dispatch_mode": "automatic"}}]}
+JSON
+)" launch dev_project_discovery
+  else
+    gate_handoff dev-project-discovery "$DEV_JOB" dev_project_discovery project-discovery
+    handoff_state="$HANDOFF_STATE"; handoff_dagster="$HANDOFF_DAGSTER"
+    gate_supply dev-project-discovery "$DEV_JOB" project-discovery
+
+    echo "-- accept: the gate with the supplied discovery must succeed"
+    run_step dev-project-discovery accept "$(contract dev-project-discovery accept <<JSON
 {"inputs": [{"path": "{run}/data/jobs/$DEV_JOB/supplied/result.json", "kind": "file", "schema": "project-discovery.schema.json", "equals": {"source_revision": "{pin}"}},
             {"path": "{run}/data/jobs/$PARTITION_JOB/accepted.json", "kind": "file", "equals": {"status": "OK"}}],
  "writes": {"required": ["{run}/data/jobs/$DEV_JOB/accepted.json", "{run}/data/jobs/$DEV_JOB/latest.json", "{run}/data/jobs/$DEV_JOB/attempts/*/output.json",
@@ -772,6 +809,7 @@ stage_dev_project_discovery() {
              {"path": "{run}/data/jobs/$DEV_JOB/accepted.json", "equals": {"status": "OK", "job": "$DEV_JOB"}}]}
 JSON
 )" launch dev_project_discovery
+  fi
   launch_status
   [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "dev-project-discovery: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
   gate_validate "$DEV_JOB" || die "dev-project-discovery: discovery_gate.validate rejected the accepted result"
@@ -779,6 +817,57 @@ JSON
   local jobdir="$RUN_DIR/data/jobs/$DEV_JOB" attempt cites summary
   attempt="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["attempt_id"])' "$jobdir/accepted.json")"
   cites="$(citations_fresh "$jobdir/attempts/$attempt/output.json")" || die "dev-project-discovery: $cites"
+  if [[ "$PARTITION_DISPATCH" == 1 ]]; then
+    summary="$(python3 - "$RUN_DIR" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$DEV_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
+import json, pathlib, sys
+rdir, attempt, record_path, dagster_id, cites = sys.argv[1:]
+rdir = pathlib.Path(rdir); d = rdir / 'data/jobs/02-dev-project-discovery'; att = d / 'attempts' / attempt
+bad = []
+ptr = json.loads((d / 'accepted.json').read_text())
+if ptr.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (ptr.get('dagster_run_id'), dagster_id))
+if ptr.get('dispatch_mode') != 'automatic': bad.append('accepted.json does not record automatic dispatch')
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != attempt: bad.append('accepted attempt is not the latest')
+status = json.loads((att / 'status.json').read_text())
+if status.get('dispatch_mode') != 'automatic': bad.append('status.json does not record automatic dispatch')
+if not (d / 'persona-attempts' / str(ptr.get('persona_attempt_id')) / 'logs/persona').is_dir(): bad.append('the persona invocation record is missing')
+out = json.loads((att / 'output.json').read_text())
+pdir = rdir / 'data/jobs/02-repository-partition-discovery'
+pmap = json.loads((pdir / 'attempts' / json.loads((pdir / 'accepted.json').read_text())['attempt_id'] / 'repository-partition-map.json').read_text())
+if pmap['source_revision'] != out['source_revision']: bad.append('revision differs from the accepted partition map')
+if pmap.get('target') != out.get('target'): bad.append('target %r differs from the accepted partition map %r' % (out.get('target'), pmap.get('target')))
+projects = {p['project_id']: p for p in out.get('projects', [])}
+if not projects: bad.append('the live dispatch produced no projects at all')
+if len(projects) != len(out.get('projects', [])): bad.append('duplicate project ids')
+for pid, p in projects.items():
+    if not p.get('evidence_citations'): bad.append('project %s cites no evidence' % pid)
+    if not p.get('commands'): bad.append('project %s lists no build/test commands' % pid)
+    if not p.get('candidate_buildenv_images'): bad.append('project %s names no candidate buildenv image (and no gap says why)' % pid)
+plan = out.get('safe_command_plan', [])
+if not plan: bad.append('the live dispatch produced no safe command plan')
+for i, c in enumerate(plan):
+    if not (c.get('argv') and c.get('purpose')): bad.append('command %d has no argv or purpose' % i)
+    if c.get('authorization') not in ('read-only', 'network-required', 'script-execution-required'): bad.append('command %d has no valid authorization' % i)
+    if c.get('project_id') not in projects: bad.append('command %d names unknown project %r' % (i, c.get('project_id')))
+    if not c.get('evidence_citations'): bad.append('command %d cites no evidence' % i)
+if bad: sys.exit('; '.join(bad))
+diff_note = ''
+try:
+    rec = json.loads(pathlib.Path(record_path).read_text())
+    rec_argv, live_argv = [c['argv'] for c in rec['safe_command_plan']], [c['argv'] for c in plan]
+    if rec_argv != live_argv:
+        diff_note = 'informational only, not a failure: live command plan %s differs from the fixture answer key %s' % (live_argv, rec_argv)
+except OSError:
+    pass
+p = out['projects'][0]
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'projects': list(projects),
+                  'root': p.get('root'), 'languages': p.get('languages'), 'manifests': p.get('manifests'), 'lockfiles': p.get('lockfiles'),
+                  'buildenv_images': p.get('candidate_buildenv_images'),
+                  'command_plan': [{'argv': c['argv'], 'authorization': c['authorization']} for c in plan],
+                  'coverage_gaps': len(out.get('coverage_gaps', [])), 'citations_checked': int(cites),
+                  'persona_attempt_id': ptr.get('persona_attempt_id'), 'model': ptr.get('model'), 'diff_note': diff_note}))
+PY
+)" || die "dev-project-discovery: $summary"
+  else
   summary="$(python3 - "$RUN_DIR" "$attempt" "$REPO/fixtures/supplied/$FIXTURE/$DEV_JOB.json" "$LAUNCH_DAGSTER" "$cites" <<'PY'
 import json, pathlib, sys
 rdir, attempt, record, dagster_id, cites = sys.argv[1:]
@@ -805,6 +894,7 @@ print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'projects
                   'output_hashes_in_accepted_record': False}))
 PY
 )" || die "dev-project-discovery: $summary"
+  fi
   checkout_unchanged dev-project-discovery
   record PASS dev-project-discovery "$(python3 -c 'import json,sys; e=json.loads(sys.argv[1]); e.update(handoff=sys.argv[2], handoff_dagster_run_id=sys.argv[3] or None); print(json.dumps(e))' "$summary" "$handoff_state" "$handoff_dagster")"
   printf '%s' "$summary" | python3 -c '
