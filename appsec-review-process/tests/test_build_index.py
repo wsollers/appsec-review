@@ -381,10 +381,11 @@ class Symlinks(Checkout):
                              for s in index['signals']))
 
 
-class Worker(unittest.TestCase):
-    """The graph node's run/validate on the common envelope, over a fixture run. Upstream location
-    (phase1.accepted, discovery_gate.validate) is stubbed to the fixture attempts; everything
-    after that -- pinning, rebuild, publication, validate_job_output -- is real."""
+class WorkerFixture(unittest.TestCase):
+    """A fixture run with accepted intake, D01, D02 and D03 attempts. Upstream location
+    (phase1.accepted, discovery_gate.validate) is stubbed to the fixture attempts; everything after
+    that -- pinning, rebuild, publication, validate_job_output -- is real. Carries no tests of its
+    own, so later jobs' tests (test_build_classify) can build on it."""
 
     files = HELLO
 
@@ -420,6 +421,10 @@ class Worker(unittest.TestCase):
             p.stop()
         state.RUNS = self.old_runs
         self.tmp.cleanup()
+
+
+class Worker(WorkerFixture):
+    """The graph node's run/validate on the common envelope, over the fixture run."""
 
     def test_run_publishes_and_validates(self):
         pointer = bi.run(self.run_id, 'dagster-1')

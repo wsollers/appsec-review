@@ -946,7 +946,8 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
     errors.extend(_secret_errors(value))
     errors.extend(_claim_class_errors(contract, value))
     source_root = None
-    if contract.get("contract_id") in {"repository-partition-map", "project-discovery", "build-index"}:
+    if contract.get("contract_id") in {"repository-partition-map", "project-discovery", "build-index",
+                                       "build-classification"}:
         source_root, source_errors = _source_root(attempt_root, run_id)
         errors.extend(source_errors)
     dispatch = {
@@ -954,6 +955,7 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
         "repository-partition-map": lambda: _partition_errors(value, Path(registry_root), source_root),
         "project-discovery": lambda: _project_discovery_errors(value, source_root),
         "build-index": lambda: _build_index_errors(path, value, source_root),
+        "build-classification": lambda: _build_classification_errors(attempt_root, value, source_root, run_id),
     }
     validator = dispatch.get(contract.get("contract_id"))
     if validator is not None:
@@ -971,6 +973,19 @@ def _build_index_errors(path: Path, value: Any, source_root: Path | None) -> lis
     import build_index
     return [f"build index: {error}" for error in
             build_index.check(value, source_root, raw=path.read_bytes())]
+
+
+def _build_classification_errors(attempt_root: Path, value: Any, source_root: Path | None,
+                                 run_id: str) -> list[str]:
+    """02-build-classify content checks: the index it names (in the owning run, hash-checked), every
+    index unit covered exactly once, signal ids resolving, orchestrator-owned fields consistent, and
+    citation freshness against the staged checkout. Imported here, not at module load: build_classify
+    imports this module."""
+    if source_root is None:
+        return []  # _source_root already reported why the checkout is unavailable
+    import build_classify
+    return [f"build classification: {error}" for error in
+            build_classify.validate_published_value(attempt_root, value, source_root, run_id)]
 
 
 def _job_contract_errors(job_id: Any, contract_id: Any, graph: dict[str, Any], registry_root: Path) -> list[str]:

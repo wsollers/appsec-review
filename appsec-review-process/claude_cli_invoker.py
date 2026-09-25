@@ -540,10 +540,55 @@ def _claims_from_operations_topology(topology: dict[str, Any], inputs: tuple,
 
 # Result schema file -> the claim builder for that result. An output contract whose result schema is
 # not listed is rejected at claim time (see invoke) rather than silently given no claims.
+def _claims_from_build_classification(value: dict[str, Any], inputs: tuple,
+                                      allowed_claim_classes: tuple[str, ...],
+                                      result_filename: str) -> list[dict[str, Any]]:
+    """02-build-classify's claim builder for ``build-classification.json``: one
+    ``build_unit_classification`` claim per unit (or part) and one ``index_review`` claim per
+    recorded disagreement with the index, each citing only checkout files that resolve to a pinned
+    target input (the staged build index is an upstream artifact, never citable). A classification
+    with no unit is valid only when ``coverage_gaps`` explains it (an index with no unit). Signal ids
+    are not resolved here: the job's own validator checks them against the accepted index."""
+    by_path = {item.path: item for item in inputs}
+    for claim_class in ("build_unit_classification", "index_review"):
+        if claim_class not in allowed_claim_classes:
+            raise InvokerOutputError(f"claim class {claim_class!r} is not in this request's allowed_claim_classes")
+    claims: list[dict[str, Any]] = []
+    for unit in value.get("units", []):
+        uid = str(unit.get("unit_id"))
+        citations = _resolved_citations(unit.get("evidence_citations"), by_path)
+        if not citations:
+            raise InvokerOutputError(
+                f"unit {uid!r} cites no evidence this invoker can resolve to a pinned readable input -- "
+                f"governing rule 2 requires evidence that resolves")
+        claims.append({
+            "claim_id": f"class-{uid}"[:120], "claim_class": "build_unit_classification",
+            "statement": (f"Unit {uid!r} is {unit.get('class')} ({', '.join(map(str, unit.get('languages', [])))}): "
+                          f"{unit.get('rationale', '')}")[:2000],
+            "file": result_filename, "citations": citations,
+        })
+    for index, item in enumerate(value.get("index_review", [])):
+        citations = _resolved_citations(item.get("evidence_citations"), by_path)
+        if not citations:
+            raise InvokerOutputError(
+                f"index_review[{index}] cites no evidence this invoker can resolve to a pinned readable "
+                f"input -- governing rule 2 requires evidence that resolves")
+        claims.append({
+            "claim_id": f"index-review-{index}", "claim_class": "index_review",
+            "statement": f"{item.get('kind')} at {item.get('path')!r}: {item.get('statement', '')}"[:2000],
+            "file": result_filename, "citations": citations,
+        })
+    if not value.get("units") and not value.get("coverage_gaps"):
+        raise InvokerOutputError(
+            "model response classified no unit and recorded no coverage gap explaining why")
+    return claims
+
+
 _CLAIM_BUILDERS = {
     "repository-partition-map.schema.json": _claims_from_partition_map,
     "project-discovery.schema.json": _claims_from_project_inventory,
     "operations-topology.schema.json": _claims_from_operations_topology,
+    "build-classification.schema.json": _claims_from_build_classification,
 }
 
 
