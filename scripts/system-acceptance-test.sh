@@ -1395,7 +1395,7 @@ PY
   printf '%s' "$summary" | python3 -c '
 import json,sys; s=json.load(sys.stdin)
 print("build-classify: PASS  %s by Dagster %s: %s; build set %s; %d coverage gaps" % (
-  s["status"], s["dagster_run_id"][:8], ", ".join("%s=%s(%s)" % u for u in s["units"]), s["build_set"], s["coverage_gaps"]))
+  s["status"], s["dagster_run_id"][:8], ", ".join("%s=%s(%s)" % tuple(u) for u in s["units"]), s["build_set"], s["coverage_gaps"]))
 print("  index review (%d, informational): %s" % (len(s["index_review"]), s["index_review"] or "none"))'
 }
 
