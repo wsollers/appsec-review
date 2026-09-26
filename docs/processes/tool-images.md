@@ -18,7 +18,7 @@ scan jobs themselves (deterministic Python, no persona, configuration passed in)
 | `tool-gitleaks` | gitleaks 8.30.1 | 02-secrets-inventory | vendor-checksums | - |
 | `tool-gosec` | gosec 2.29.0 | 02-source-sast | sigstore-key-checksums, vendor-sha256-file | Go 1.27.1 toolchain |
 | `tool-grype` | grype 0.119.0 | 02-sca-vulnerability-match | sigstore-cert-checksums | - |
-| `tool-hadolint` | hadolint 2.15.1 | 02-container-image-inventory | vendor-checksums | - |
+| `tool-hadolint` | hadolint 2.15.1 | 02-iac-config-scan | vendor-checksums | - |
 | `tool-mobsfscan` | mobsfscan 1.0.1 | 02-mobile-sast | pip lock, 77 wheels (PyPI sha256) | semgrep (Python library mobsfscan imports) |
 | `tool-phpcs` | phpcs 4.0.4 | 02-source-sast | pgp | - |
 | `tool-phpstan` | phpstan 2.2.16 | 02-source-sast | pgp | - |

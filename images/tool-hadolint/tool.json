@@ -3,9 +3,9 @@
   "image_id": "tool-hadolint",
   "tool": "hadolint",
   "version": "2.15.1",
-  "purpose": "Dockerfile lint (hadolint).",
+  "purpose": "Dockerfile lint (hadolint); a tool instance of 02-iac-config-scan (ADR-0010 declared tool id `hadolint`).",
   "feeds": [
-    "02-container-image-inventory"
+    "02-iac-config-scan"
   ],
   "executable": "/opt/tool/bin/hadolint",
   "version_argv": [
