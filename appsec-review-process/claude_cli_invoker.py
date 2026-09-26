@@ -550,11 +550,23 @@ def _claims_from_build_classification(value: dict[str, Any], inputs: tuple,
     with no unit is valid only when ``coverage_gaps`` explains it (an index with no unit). Signal ids
     are not resolved here: the job's own validator checks them against the accepted index."""
     by_path = {item.path: item for item in inputs}
+
+    def claim_key(value: Any) -> str:
+        # Unit ids are "dir:<root>" / "file:<path>"; a claim_id allows only [A-Za-z0-9_-]
+        # (persona-invoker-output.schema.json), so ':' '.' '/' become '-'. The position keeps two
+        # ids that differ only in punctuation apart.
+        return re.sub(r"[^A-Za-z0-9_-]+", "-", str(value)).strip("-") or "unit"
+
+    def one_line(text: str) -> str:
+        # A claim statement may hold no control character (newline included): the model's
+        # rationale often spans lines.
+        return re.sub(r"[\x00-\x1f\x7f]+", " ", text).strip()[:2000]
+
     for claim_class in ("build_unit_classification", "index_review"):
         if claim_class not in allowed_claim_classes:
             raise InvokerOutputError(f"claim class {claim_class!r} is not in this request's allowed_claim_classes")
     claims: list[dict[str, Any]] = []
-    for unit in value.get("units", []):
+    for position, unit in enumerate(value.get("units", [])):
         uid = str(unit.get("unit_id"))
         citations = _resolved_citations(unit.get("evidence_citations"), by_path)
         if not citations:
@@ -562,9 +574,9 @@ def _claims_from_build_classification(value: dict[str, Any], inputs: tuple,
                 f"unit {uid!r} cites no evidence this invoker can resolve to a pinned readable input -- "
                 f"governing rule 2 requires evidence that resolves")
         claims.append({
-            "claim_id": f"class-{uid}"[:120], "claim_class": "build_unit_classification",
-            "statement": (f"Unit {uid!r} is {unit.get('class')} ({', '.join(map(str, unit.get('languages', [])))}): "
-                          f"{unit.get('rationale', '')}")[:2000],
+            "claim_id": f"class-{position}-{claim_key(uid)}"[:120], "claim_class": "build_unit_classification",
+            "statement": one_line(f"Unit {uid!r} is {unit.get('class')} "
+                                  f"({', '.join(map(str, unit.get('languages', [])))}): {unit.get('rationale', '')}"),
             "file": result_filename, "citations": citations,
         })
     for index, item in enumerate(value.get("index_review", [])):
@@ -575,7 +587,7 @@ def _claims_from_build_classification(value: dict[str, Any], inputs: tuple,
                 f"input -- governing rule 2 requires evidence that resolves")
         claims.append({
             "claim_id": f"index-review-{index}", "claim_class": "index_review",
-            "statement": f"{item.get('kind')} at {item.get('path')!r}: {item.get('statement', '')}"[:2000],
+            "statement": one_line(f"{item.get('kind')} at {item.get('path')!r}: {item.get('statement', '')}"),
             "file": result_filename, "citations": citations,
         })
     if not value.get("units") and not value.get("coverage_gaps"):

@@ -192,6 +192,31 @@ class Claims(Base):
         self.assertEqual([c['claim_class'] for c in claims],
                          ['build_unit_classification', 'build_unit_classification', 'index_review'])
 
+    def test_claims_fit_the_invoker_output_schema(self):
+        # Live SAT 20260926T151852Z: claim_id 'class-dir:.' broke the manifest schema's claim_id
+        # pattern and the whole dispatch ended MALFORMED_RESULT. Unit ids carry ':' '.' '/', and a
+        # model rationale may span lines; both must come out schema-valid.
+        import json
+        import re
+        schema = json.loads((Path(bc.ROOT).parent / 'schemas' / 'persona-invoker-output.schema.json').read_text())
+        props = schema['properties']['claims']['items']['properties']
+        id_re, text_re = re.compile(props['claim_id']['pattern']), re.compile(props['statement']['pattern'])
+        value = copy.deepcopy(self.response)
+        value['units'][0]['rationale'] = 'line one\nline two\tand a tab'
+        value['index_review'] = [{'kind': 'missed-signal', 'path': 'Makefile.am', 'unit_id': 'dir:.',
+                                  'statement': 'first\nsecond',
+                                  'evidence_citations': [{'source_type': 'source_file', 'path': 'Makefile.am',
+                                                          'line_range': '9', 'content_hash': None}]}]
+        claims = cci._claims_from_build_classification(
+            value, self.inputs('configure.ac', 'Dockerfile', 'Makefile.am'),
+            ('build_unit_classification', 'index_review'), bc.RESULT)
+        for claim in claims:
+            self.assertRegex(claim['claim_id'], id_re)
+            self.assertRegex(claim['statement'], text_re)
+        ids = [c['claim_id'] for c in claims]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(ids[:2], ['class-0-dir', 'class-1-file-Dockerfile'])
+
     def test_unresolvable_citation_rejected(self):
         with self.assertRaises(cci.InvokerOutputError):
             cci._claims_from_build_classification(self.response, self.inputs('Dockerfile'),
