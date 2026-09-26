@@ -140,6 +140,18 @@ class HelloAutotools(Checkout):
         self.assertEqual(index['not_units'], [])
         self.assertEqual(self.check(index), [])
 
+    def test_vendored_partition_scope_does_not_change_the_member(self):
+        # Live SAT 20260926T172859Z: D01 scoped the vendored partition as `vendor/**`; the member
+        # became `vendor` instead of `vendor/cJSON-1.7.18`. The tree the build names is the member.
+        for include in (['vendor/**'], ['vendor/*'], ['vendor'], ['vendor/cJSON-1.7.18/**']):
+            with self.subTest(include=include):
+                self.map['partitions'] = [dict(p, include_paths=include) if p['partition_id'] == 'vendored-cjson'
+                                          else p for p in HELLO_MAP]
+                index = self.index()
+                self.assertEqual([m['path'] for m in index['units'][0]['members']], ['vendor/cJSON-1.7.18'])
+                self.assertEqual(index['not_units'], [])
+                self.assertEqual(self.check(index), [])
+
     def test_no_class_or_plan_anywhere(self):
         text = bi.serialize(self.index()).decode()
         for word in ('"class"', 'compiled-native', '"plan"', 'feasibility', '"argv"'):

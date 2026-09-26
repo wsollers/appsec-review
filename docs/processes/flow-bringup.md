@@ -258,6 +258,14 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-26 -- **`02-build-index` no longer depends on how D01 phrases a vendored partition.** Fresh
+  `--dispatch` SAT `20260926T172859Z` (run `20260926T173310Z-1707c0`, Dagster `fab76fca`): stages 1-9 PASS
+  with live D01-D04; stage 10 FAIL: member `vendor` instead of `vendor/cJSON-1.7.18`, because the live
+  partition map scoped the vendored partition as `vendor/**` (the fixture record says
+  `vendor/cJSON-1.7.18/**`) and the indexer took the partition's base as the embedded tree. The embedded
+  tree is now the most specific vendored base (a base that only contains other bases is a container);
+  regression test over four scopings; the real fixture indexes to the answer key with the live-style map.
+  Stage 10 had passed only in supplied mode until now.
 - 2026-09-26 -- **Live persona answers now pass the invoker's transport checks, with one bounded repair
   retry (zarathustra, native Linux).** Two live failures, both in `claude_cli_invoker.py`, neither in the
   model's analysis. (1) SAT `20260926T151852Z` (run `20260926T152303Z-d6c38c`, Dagster `4093f70a`): stages

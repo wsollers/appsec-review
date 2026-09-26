@@ -657,7 +657,13 @@ def build_index(checkout, source, intake_result, partition_map, inputs, cross_ch
                           'defining_manifests': manifest_list}
         status[root] = ('unit', unit_id)
 
-    embedded = sorted(b for b in vendored_bases if b not in dir_roots and any(_under(p, b) for p in files))
+    # An embedded (manifest-less) vendored tree is the most specific vendored base: a base that only
+    # contains other bases is a container, not a tree. D01 may scope a vendored partition as
+    # `vendor/**` (live SAT 20260926T172859Z) or `vendor/cJSON-1.7.18/**` (the fixture record); the
+    # tree the build names is `vendor/cJSON-1.7.18` either way, so the index must not depend on how
+    # the model phrased the partition.
+    with_files = {b for b in vendored_bases if b not in dir_roots and any(_under(p, b) for p in files)}
+    embedded = sorted(b for b in with_files if not any(o != b and _under(o + '/', b) for o in with_files))
     order = sorted(set(dir_roots) | set(embedded), key=lambda d: (0 if d == '.' else d.count('/') + 1, d))
     for root in order:
         place(root, manifests_of(root) if root in dir_roots else [])
