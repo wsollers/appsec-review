@@ -43,7 +43,7 @@
     "nvd-api": {"kind": "state", "path": "NVD API (fixed network destination)", "about": "Source of the CVE feed."},
     "nvd-snapshot": {"kind": "file", "path": "data/feeds/nvd/ (or APPSEC_NVD_ROOT), outside every run", "about": "Immutable NVD JSON 2.0 snapshot, published every two hours by schedule."},
     "legacy-pregather": {"kind": "file", "path": "scratch/<project>-engagement/ (legacy pipeline/engagement_job.*)", "about": "Legacy evidence output, imported into a run only through explicit hashed imports."},
-    "buildenv-image": {"kind": "state", "path": "audit-buildenv-cpp (pinned image, via B13)", "about": "C++ build environment; provisioning is Phase 4."},
+    "buildenv-image": {"kind": "state", "path": "audit-buildenv-cpp (pinned image, via B13)", "about": "C++ build environment; extends audit-native with LLVM 21.1.0, fixed CC/CXX, autotools and Bear (built and smoke-verified 2026-09-26)."},
     "buildenv-catalog": {"kind": "record", "path": "appsec-review-process/tooling/buildenv-catalog.json", "about": "Base build images a build plan may choose from."},
     "llm-invoker": {"kind": "state", "path": "PersonaInvoker: claude -p with its current login (subscription, never an API key), model Haiku", "about": "The model call behind build-plan and its revisions; model and auth mode set in model-config.json (unbuilt_job_defaults[\"02-build-plan\"] until that job template is authored, then its own `model` field; invocation.auth.mode)."},
     "build-index": {"kind": "file", "path": "runs/<run_id>/data/jobs/02-build-index/attempts/<attempt_id>/build-index.json, build-index.md", "about": "Bounded, cited index of candidate build units and build signals (schema appsec-review/build-index/1); the build-plan model's only view of the target."},

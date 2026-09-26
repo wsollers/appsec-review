@@ -115,6 +115,12 @@ on a missing record, changed Dockerfile/build fingerprint, changed attempt ident
 id drift. Local records use `digest_kind: image-id`; B13 runs the `sha256:...` image id directly.
 The tracked `fixture-harmless` registry record remains a portable image-index record.
 
+`audit-buildenv-cpp` is one of the six shared records. Its 2026-09-26 rebuild extends
+`audit-native:local`, fixes the ADR-0012 Revision 3 compiler paths, and adds the autotools/Bear
+prerequisites. The generated record is deliberately still ignored: source control carries the
+Dockerfile, declaration, contract tests and documentation, while B16 binds the current host image
+id, Dockerfile hash, build fingerprint and attempt id at startup.
+
 ## Findings from the first build (2026-09-26, cloud workspace, Docker 29.4.3)
 
 - **Semgrep rules are not in any image.** The engine runs offline with a mounted rule set; which rules

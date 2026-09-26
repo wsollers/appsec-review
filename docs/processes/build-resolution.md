@@ -2,6 +2,10 @@
 
 Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`; SAT stage 10 PASS, SAT `20260925T211247Z`); **`02-build-classify` BUILT 2026-09-25** (SAT stage 11 PASS with live upstreams, SAT `20260926T183609Z`); **section 3 (`02-build-plan`) BUILT 2026-09-26** (SAT stage 12 not yet run live); sections 2, 4 and 5
 (`02-build-resolution`, catalog and lock) **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
+The fixed C/C++ base prerequisite, `audit-buildenv-cpp:local`, is **BUILT and smoke-verified
+2026-09-26** on `audit-native:local`: LLVM 21.1.0 at `/opt/llvm`, fixed `CC`/`CXX`, and
+autoconf/automake/libtool/make/Bear/pkg-config. Its successful build pointer and B16 record are
+host-local generated state, not tracked files.
 **Extended 2026-09-25** by [build-unit-classification.md](build-unit-classification.md): the loop below runs
 once per compiled or transpiled unit, and a failed unit blocks only that unit's jobs. ADR-0012
 [Revision 1](../decisions/ADR-0012-build-resolution.md#revision-1-2026-09-25-per-unit-resolution-model-classification)
@@ -37,6 +41,8 @@ flowchart TD
   P --> V{plan valid? schema, citations fresh, packages and argv well-formed}
   V -- no --> P
   V -- yes --> B[4a. Render Dockerfile from the plan, build image - network: distro mirror only]
+  CPP[Fixed C++ base ready: audit-native + LLVM 21.1.0 + autotools/Bear] -.-> B
+  CPP -. fixed CC/CXX .-> T
   B --> T[4b. Trial: configure + build in the image via B13, network none, writable copy of the source]
   T -- success --> C[5. Catalog image_build_id, write the build lock]
   T -- failure, attempts left --> F[Bounded failure excerpt back to the model: revise plan]
@@ -157,7 +163,7 @@ Plans have `configure` and `build` phases only: no test, check or install step (
 - `build_system`, `project_root`, `feasibility` (ADR-0001 tier A/B/C) with reasons;
 - `image`: `base` (an id from `buildenv-catalog.json`, e.g. `audit-buildenv-cpp`) and
   `apt_packages` (name, why, citations);
-- `commands`: ordered, phase `configure` / `build` / `test`, each an argv array with purpose,
+- `commands`: ordered, phase `configure` / `build`, each an argv array with purpose,
   authorization, side effects and citations (the shape of `safe_command_plan` entries in
   `project-discovery.schema.json`), plus `compile_database` (how it is produced, e.g. `bear -- make`);
 - `assumptions` and `unknowns`, each cited.
@@ -186,14 +192,18 @@ For attempt `n = 1 .. build_resolution_attempts` (default **3**, allowed 1-10):
    the recorded id it is reused, otherwise built with `images/image_build.py`. Network is allowed
    **only here**, only to the base distribution's package mirror, under a `package-restore`
    (`ecosystem: apt`) grant (ADR-0011: network only during provisioning, never in a B13 run).
+   C/C++ specs extend the B16-resolved `audit-buildenv-cpp`, whose own build fingerprint binds the
+   immutable local `audit-native` image id. The base fixes `CC=/opt/llvm/bin/clang` and
+   `CXX=/opt/llvm/bin/clang++`; a plan cannot replace them.
 3. **Trial:** copy the checkout into the attempt's scratch (`autoreconf` and `configure` write into
    the tree; the host checkout is never touched), then run each `configure` and `build` command
    through B13: pinned image, `--network none`, `--pull never`, resource limits, per-command
    timeout `build_command_timeout_seconds` (default 1800). Needs a `target-execution` grant; without
    it the job is `BLOCKED(MISSING_GRANT)` before any attempt.
-4. **Judge (deterministic):** every command exited 0, and for native families the compile database
-   is non-empty and names files in the tree. `test` commands are run and recorded but do not decide
-   success.
+4. **Judge (deterministic):** every configure/build command exited 0, and for native families the
+   compile database is non-empty, names files in the tree, and every compiler is allowed by the
+   orchestrator-owned toolchain. There is no test phase (ADR-0012 Revision 3); built targets are
+   never run.
 5. **On failure:** record the attempt (plan, Dockerfile, image id, per-command exit codes, log
    tails), build a failure excerpt (last 200 lines of the failing command, redacted, at most 16 KiB,
    marked as untrusted data) and loop.
@@ -224,7 +234,7 @@ On `OK`:
   (the B16 shape). B13 resolves tracked records in `registry/container-images/` and, for ids
   starting `image_build_` only, these host-local ones. This is a required B13 change.
 - **Build lock** `outputs/build-lock.json` in the run (the Phase 4 `buildenv-lock` shape): image id
-  and local digest, Dockerfile sha256, ordered argv for configure / build / test, compile-database
+  and local digest, Dockerfile sha256, ordered argv for configure / build, compile-database
   producer, attempt summary, source revision. `02-build-configure` (E01) and `02-native-build` (E02)
   replay this lock from a clean copy: if the replay does not reproduce the trial, that is a failure
   of those jobs, not a silent pass.

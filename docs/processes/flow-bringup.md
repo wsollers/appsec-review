@@ -33,7 +33,8 @@ flowchart TD
   S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
   S6p["S6a-3 02-build-plan: per-unit Haiku plan, clang fixed<br/>built 2026-09-26; SAT stage 12 next (live)"]:::next
   S6a["S6a-4 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>designed; needs Phase 3"]:::todo
-  S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
+  CPP["C++ buildenv prerequisite<br/>audit-native + LLVM 21.1.0 + autotools/Bear<br/>built and boundary-smoke PASS 2026-09-26"]:::done
+  S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a and E01"]:::blocked
   B13["Phase 3: B13 verifier binding + B16 registry done 2026-09-27<br/>next: live harmless-fixture Dagster op"]:::todo
   E01["E01/E02: replay the lock through B13"]:::todo
 
@@ -43,6 +44,8 @@ flowchart TD
   AD -.-> S5b
   B13 -.-> S6a
   B13 -.-> S6
+  CPP -.-> S6a
+  CPP -.-> S6
   E01 -.-> S6
 
   classDef done fill:#d8f0d8,stroke:#2e7d32,color:#1b3d1b
@@ -109,7 +112,7 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22 (one-time proof): run `20260922T193334Z-7074be`, Dagster `9565c126` |
 | S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE: reference run, Dagster `278df830` |
 | S5 | dev-project discovery | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery`, then `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | DONE: reference run, Dagster `68d20d4a` |
-| S6 | `02-build-configure` | -- | needs B13 (Phase 3), the C++ buildenv (Phase 4) and an autotools-capable configure worker (E01) | BLOCKED |
+| S6 | `02-build-configure` | -- | C++ buildenv complete; needs the resolution lock (S6a) and an autotools-capable configure worker (E01) | BLOCKED |
 
 ## Run it end to end
 
@@ -249,7 +252,9 @@ needs them; nothing on the path to S6 depends on them.
 **S6 -- Build configure (`02-build-configure`).** The first step that runs the target's own build
 (`autoreconf -fi`, `./configure`). It must go through B13, the pinned-container adapter and the one
 piece of code allowed to run `docker run`, inside the C++ build-environment image. That is why it
-waits on Phase 3 (B13 into service) and Phase 4 (buildenv provisioning).
+waits on the resolution lock and E01. The image prerequisite is complete: `audit-buildenv-cpp`
+extends `audit-native`, fixes the LLVM 21.1.0 `CC`/`CXX` paths, and contains the autotools/Bear
+toolchain; its no-network/read-only boundary smoke passed 2026-09-26.
 
 It also needs a new worker. The op wired to this node today (`build_configure_work`) calls
 `build_execution.py`, which configures only a single CMake root, reads the older `build_discovery`
@@ -278,6 +283,14 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   259 focused adapter/C01/C02 tests, 23 live-Docker B13 tests, 19 cross-slice/live-rendezvous tests,
   72 baseline tests, design parity PASS (53 jobs), and contract qualification PASS. Phase 3 is not
   complete: B16 image registry records and the harmless-fixture Dagster op remain next.
+- 2026-09-26 -- **ADR-0012 Revision 3 C++ build image prerequisite complete.**
+  `audit-buildenv-cpp:local` now extends the immutable local `audit-native:local` image, fixes
+  `CC=/opt/llvm/bin/clang` and `CXX=/opt/llvm/bin/clang++`, and supplies autoconf, automake,
+  libtool, make, Bear and pkg-config. `image_build.py` recorded a successful fingerprint that binds
+  the base image id; a B13-shaped no-network/read-only/cap-drop smoke proved LLVM 21.1.0, every
+  required tool and C/C++ syntax compilation. The successful pointer and B16 record stay ignored
+  host-local state. This removes the image prerequisite from S6a/S6; the resolution worker/lock and
+  E01 remain open.
 - 2026-09-26 -- **SAT PASS through `build-classify`: stages 1-11 all green with every model step live.**
   Fresh `--dispatch` SAT `20260926T183609Z`, run `20260926T184019Z-53d1da`, on zarathustra (native Linux,
   `/mnt/projects-drive/projects/appsec-review`). Stage 10 `build-index` (Dagster `c6993d03`): units `dir:.`

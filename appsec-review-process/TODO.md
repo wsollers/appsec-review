@@ -153,10 +153,15 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 > hand-supplied lock and the `provision-buildenv.md` skill do not. The build fields of the Phase 5
 > developer-discovery record become an answer key for the SAT, not an input.
 
-- `images/audit-buildenv-cpp`: add `autoconf automake libtool pkg-config make bear`; catalog
-  markers add `configure.ac`, `Makefile.am`, `configure`. Rebuild, record the B16 entry.
+- **C++ buildenv prerequisite complete 2026-09-26:** `images/audit-buildenv-cpp` extends the
+  B16-registered `audit-native:local`, adds `autoconf automake libtool pkg-config make bear`, and
+  fixes `CC=/opt/llvm/bin/clang` / `CXX=/opt/llvm/bin/clang++` (LLVM 21.1.0) for ADR-0012 Revision 3.
+  Its build fingerprint binds the immutable `audit-native` image id; the focused live smoke proves
+  every tool and both compiler paths under the no-network/read-only B13 boundary. Its B16 record
+  remains generated host-local state and is never committed. Catalog markers (`configure.ac`,
+  `Makefile.am`, `configure`) remain work for `02-build-resolution`, not image metadata.
 - `schemas/buildenv-lock.schema.json` and `registry/buildenv-locks/<project>.json`: image id +
-  digest, Dockerfile sha256, ordered argv arrays for configure / build / test, `compile_commands`
+  digest, Dockerfile sha256, ordered argv arrays for configure / build, `compile_commands`
   producer (`bear -- make`), attempts log summary, provisioning authority and date.
 - Validate-on-read in `build_execution.py` (and intake's native plan): lock present, digest matches
   a registry record, Dockerfile hash matches; otherwise `BLOCKED(BUILDENV_LOCK_MISSING)`.
@@ -1109,17 +1114,20 @@ Work order (one piece at a time):
    persona worker, claim builder, 23 tests); step 3 (graph node on `02-build-classify`, Dagster job
    `build_plan` on persona_llm, parity entry, 54 jobs, catalog); step 4 (SAT stage 12 with the structural
    answer key `fixtures/supplied/hello-autotools/02-build-plan-structure.json`). Next: the live SAT.
+   **Image prerequisite complete 2026-09-26:** `audit-buildenv-cpp:local` now supplies the fixed
+   LLVM 21.1.0 compiler environment and autotools/Bear toolchain required by Revision 3.
 5. [ ] `02-build-resolution` (per unit); SAT stage 13. Needs Phase 3 (B13 into service, B16 records,
    and the required `expected_result_sha256`) first.
 
 ### Phase 6 -- build and compile database (E01, E02)
 
-- E01 `02-build-configure`: B13 + `audit-buildenv-cpp`, replays the lock's configure argv
+- E01 `02-build-configure`: B13 + the completed `audit-buildenv-cpp`, replays the lock's configure argv
   (`autoreconf -fi`, `./configure`), common-runtime adoption, provenance (image digest, lock hash,
   source revision).
-- E02 `02-native-build`: `bear -- make` and `make check` prerequisites, produces
+- E02 `02-native-build`: `bear -- make` produces
   `compile_commands.json`, objects, binaries and logs as run-owned artifacts; variant = the lock's
-  single variant for now.
+  single variant for now. `make check` belongs to E09 `02-test-execution`, not the build plan
+  (ADR-0012 Revision 3).
 - Done when: both accepted on the fixture with `CONFIGURE_OK`, a 3-entry compile database and the
   `hello` binary recorded with hashes.
 

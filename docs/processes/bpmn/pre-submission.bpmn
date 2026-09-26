@@ -159,7 +159,7 @@
         <bpmn:outgoing>Flow_sp2_wait_sp2_ps</bpmn:outgoing>
         <bpmn:timerEventDefinition />
       </bpmn:intermediateCatchEvent>
-      <bpmn:scriptTask id="sp2_cl" name="code-location.sh start (venv, prerequisites, code-server)">
+      <bpmn:scriptTask id="sp2_cl" name="code-location.sh start (venv, B16 image records, code-server)">
         <bpmn:incoming>Flow_sp2_healthy_sp2_cl</bpmn:incoming>
         <bpmn:outgoing>Flow_sp2_cl_sp2_ip</bpmn:outgoing>
       </bpmn:scriptTask>
@@ -220,7 +220,7 @@
       <bpmn:sequenceFlow id="Flow_sp2_reload_sp2_loaded" sourceRef="sp2_reload" targetRef="sp2_loaded" />
       <bpmn:sequenceFlow id="Flow_sp2_loaded_sp2_loaderr" name="no" sourceRef="sp2_loaded" targetRef="sp2_loaderr" />
       <bpmn:sequenceFlow id="Flow_sp2_loaded_sp2_end" name="yes" sourceRef="sp2_loaded" targetRef="sp2_end" />
-      <bpmn:textAnnotation id="sp2_n1"><bpmn:text>Only this project's Compose project (appsec-review) is started, stopped or inspected.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:textAnnotation id="sp2_n1"><bpmn:text>Only this project's Compose project (appsec-review) is started, stopped or inspected. Startup regenerates B16 records only when every required host image, successful build fingerprint and immutable Docker image id still agree; drift fails closed.</bpmn:text></bpmn:textAnnotation>
       <bpmn:association id="Assoc_sp2_n1" sourceRef="sp2_up" targetRef="sp2_n1" />
     </bpmn:subProcess>
     <bpmn:subProcess id="Sub_Engagement" name="3. Launch engagement">

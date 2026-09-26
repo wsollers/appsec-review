@@ -4592,7 +4592,7 @@
     "code-location",
     "compose-env"
    ],
-   "notes": "Builds the Python 3.12 venv, checks git and libfuzzy, runs dagster code-server start; if the WSL IP changed it updates .env and recreates webserver and daemon."
+   "notes": "Builds the Python 3.12 venv, checks git and libfuzzy, regenerates B16 records only from current successful image fingerprints and immutable Docker image ids, then runs dagster code-server start; image drift fails closed, and if the WSL IP changed it updates .env and recreates webserver and daemon."
   },
   {
    "id": "code-location-check",
@@ -9603,7 +9603,7 @@
    "id": "buildenv-image",
    "kind": "state",
    "path": "audit-buildenv-cpp (pinned image, via B13)",
-   "about": "C++ build environment; provisioning is Phase 4.",
+   "about": "C++ build environment; extends audit-native with LLVM 21.1.0, fixed CC/CXX, autotools and Bear (built and smoke-verified 2026-09-26).",
    "produced_by": [],
    "consumed_by": [
     "step:build-resolution",

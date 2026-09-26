@@ -465,7 +465,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | BPMN elements | `sp2_cl`, `sp2_recreate` |
 | Consumes | [`job-definitions`](#a-job-definitions)<br>[`compose-env`](#a-compose-env) |
 | Produces | [`code-location-venv`](#a-code-location-venv)<br>[`code-location`](#a-code-location)<br>[`compose-env`](#a-compose-env) |
-| Notes | Builds the Python 3.12 venv, checks git and libfuzzy, runs dagster code-server start; if the WSL IP changed it updates .env and recreates webserver and daemon. |
+| Notes | Builds the Python 3.12 venv, checks git and libfuzzy, regenerates B16 records only from current successful image fingerprints and immutable Docker image ids, then runs dagster code-server start; image drift fails closed, and if the WSL IP changed it updates .env and recreates webserver and daemon. |
 
 <a id="step-code-location-check"></a>
 

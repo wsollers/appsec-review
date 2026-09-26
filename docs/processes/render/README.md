@@ -11,5 +11,6 @@ npx -p @mermaid-js/mermaid-cli mmdc -i chart.mmd -o render/<name>.png -b white -
 |---|---|
 | `flow-bringup-status.png` | the chart in `flow-bringup.md` |
 | `engagement-start-flow.png` | the chart in `engagement-start.md` |
+| `build-resolution-flow.png` | the chart in `build-resolution.md` |
 | `dagster-workflow.png` | `docs/dagster/dagster-workflow.mmd` |
 | `dagster-launching-path.png` | the chart in `docs/dagster/dagster-launching.md` |
