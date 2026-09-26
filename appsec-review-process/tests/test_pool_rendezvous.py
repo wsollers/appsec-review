@@ -125,6 +125,7 @@ class Case(unittest.TestCase):
                 self.assertEqual(record[name], entry[name])
             adopted = record["state"] in pr.RESULT_STATES
             self.assertEqual(record["result_file"] is not None, adopted)
+            self.assertEqual(record["adapter_result_sha256"] is not None, adopted)
             self.assertEqual(record["adapter_status"] is not None, adopted)
             self.assertEqual(record["worker_stopped"] is not None, record["state"] == pr.RENDEZVOUS_TIMED_OUT)
             self.assertIn(record["state_reason"], pr.REASONS_BY_STATE[record["state"]])
@@ -375,7 +376,8 @@ class ContractTests(Case):
         errors = pr.verify_manifest(self.ws.root(plan), **self.ws.reader_arguments(spec, context=bare))
         self.assertEqual(len(errors), 1)
         with self.assertRaises(pr.RendezvousError):
-            pr.classify_instance(plan, 1, pool_root=self.ws.root(plan), context=bare, observation=pr.REPORTED)
+            pr.classify_instance(plan, 1, pool_root=self.ws.root(plan), context=bare,
+                                 observation=pr.REPORTED, expected_result_sha256={})
 
     def test_a_pool_of_one_kind_needs_only_that_kind_s_launch_objects(self):
         spec, plan = self.personas(1)
@@ -658,8 +660,9 @@ class AdapterOutcomeTests(Case):
         self.ws.run(spec, plan)
         real = pr._load_result
         for index, field in ((0, "invoker_stopped"), (1, "container_removed")):
-            def doctored(instance, attempt_root, context, field=field, wanted=support.ids(plan)[index]):
-                result = pr.thaw(real(instance, attempt_root, context))
+            def doctored(instance, attempt_root, context, expected_result_sha256=None,
+                         field=field, wanted=support.ids(plan)[index]):
+                result = pr.thaw(real(instance, attempt_root, context, expected_result_sha256))
                 return pr.freeze({**result, field: False} if instance.instance_id == wanted else result)
             with self.subTest(field=field), mock.patch.object(pr, "_load_result", side_effect=doctored):
                 record = pr.classify_instance(plan, index, **self.ws.classifier_arguments(plan),
@@ -918,10 +921,11 @@ class LateFinishTests(Case):
         blocking.release.set()                          # ... and now the late instance finishes, validly
         support.join_pool_threads()
         late_instance = plan.instances[1]
-        self.assertEqual(ce.verify_container_result(
-            late_instance.attempt_root_path(self.ws.root(plan)), **late_instance.ids,
-            request=late_instance.request.request, **self.ws.context().container_verification_arguments()), [])
         self.assertEqual(json.loads(self.ws.result_path(plan, 1).read_text(encoding="utf-8"))["execution_status"], "OK")
+        with self.assertRaises(TypeError):
+            ce.verify_container_result(
+                late_instance.attempt_root_path(self.ws.root(plan)), **late_instance.ids,
+                request=late_instance.request.request, **self.ws.context().container_verification_arguments())
         self.assertEqual(self.raw(plan), before, "the published manifest changed")
         loaded = self.published(spec, plan)
         self.assertEqual(support.states(loaded)[1], pr.RENDEZVOUS_TIMED_OUT)
@@ -1578,7 +1582,8 @@ class VerifierTests(Case):
             "attempt_root": other["attempt_root"], "resource_pool": rp.CPU, "request_sha256": ZERO_SHA,
             "input_fingerprint": ZERO_SHA, "state": pr.SUCCEEDED, "state_reason": pr.REASON_RESULT_REFUSED,
             "adapter_status": "OK", "adapter_cause": None,
-            "result_file": other["result_file"], "invoker_stopped": False, "container_removed": True,
+            "result_file": other["result_file"], "adapter_result_sha256": ZERO_SHA,
+            "invoker_stopped": False, "container_removed": True,
             "worker_stopped": True,
         }
         self.assertEqual(sorted(hostile), sorted(manifest["instances"][1]))

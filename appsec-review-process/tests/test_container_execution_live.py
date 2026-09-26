@@ -238,10 +238,14 @@ class LiveBoundaryTests(unittest.TestCase):
             raise KeyboardInterrupt
         request = support.request(self.target, ["/bin/sleep", "120"])
         with mock.patch.object(ce.deterministic_child, "execute_child", side_effect=interrupted):
-            with self.assertRaises(KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt) as caught:
                 support.run(support.runtime(), self.attempt, request)
+        expected = caught.exception.expected_result_sha256
+        support.remember_expected_result_sha256(self.attempt, expected)
         self.assertEqual(support.verify(self.attempt, request), [])
-        result = ce.load_verified_result(self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR, **support.host_facts())
+        result = ce.load_verified_result(
+            self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR,
+            **support.host_facts(), expected_result_sha256=expected)
         self.assertEqual(result["cause"], "CANCELED")
 
     # -- blocked before any container
@@ -299,11 +303,13 @@ class LiveBoundaryTests(unittest.TestCase):
         self.assertTrue(support.verify(self.attempt, request))
         with self.assertRaises(ce.ContainerRequestError):
             ce.load_verified_result(self.attempt, **support.IDS, request=request,
-                                    images_dir=ce.IMAGES_DIR, **facts)
+                                    images_dir=ce.IMAGES_DIR, **facts,
+                                    expected_result_sha256=support.expected_result_sha256(self.attempt))
         with self.assertRaises(ce.ContainerRequestError):
             ce.to_worker_envelope(self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR,
                                   **facts, input_fingerprint="sha256:" + "b" * 64, output_contract="none",
-                                  output_paths=[], resume_command=None)
+                                  output_paths=[], resume_command=None,
+                                  expected_result_sha256=support.expected_result_sha256(self.attempt))
 
     def test_a_real_run_resealed_with_a_forged_writable_mount_executable_or_user_is_rejected(self):
         request, _ = self.run_argv(["/bin/true"])
@@ -369,7 +375,8 @@ class LiveBoundaryTests(unittest.TestCase):
         envelope = ce.to_worker_envelope(
             self.attempt, **support.IDS, request=request, images_dir=ce.IMAGES_DIR, **support.host_facts(),
             input_fingerprint=ce.fingerprint_material(request, support.fixture_record())["sha256"],
-            output_contract="fixture-contract", output_paths=["scratch/report.txt"], resume_command=None)
+            output_contract="fixture-contract", output_paths=["scratch/report.txt"], resume_command=None,
+            expected_result_sha256=result["result_sha256"])
         self.assertEqual(validate_worker_result(envelope), [])
         self.assertEqual((envelope["worker_kind"], envelope["execution_status"]), ("pinned_container", "OK"))
         log_dir = self.attempt / "logs" / "container"
@@ -377,9 +384,11 @@ class LiveBoundaryTests(unittest.TestCase):
             original = path.read_bytes()
             with self.subTest(tampered=path.name):
                 path.write_bytes(original + b"\n")
-                self.assertTrue(support.verify(self.attempt, request))
+                self.assertTrue(support.verify(
+                    self.attempt, request, expected_result_sha256=result["result_sha256"]))
                 path.write_bytes(original)
-        self.assertEqual(support.verify(self.attempt, request), [])
+        self.assertEqual(support.verify(
+            self.attempt, request, expected_result_sha256=result["result_sha256"]), [])
         command = json.loads((log_dir / "command.json").read_text(encoding="utf-8"))
         self.assertEqual(command["argv"][1:4], ["run", "--name", self.name])
         self.assertIn("@sha256:", " ".join(command["argv"]))

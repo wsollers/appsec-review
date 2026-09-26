@@ -226,17 +226,23 @@ caller-supplied facts: editing the result alone, or any one file, is detected. `
 container wrote, no caller-supplied fact predicts it, and a party able to rewrite every file in the
 log directory consistently (logs, `observation.json`, `command.json`, `events.jsonl` and the result)
 is outside what 1.0 detects. A caller that needs more must keep the `result_sha256` that
-`run_container` returned and compare it. **Decided 2026-09-25 (William), not yet implemented:** every
-caller must. The three verification functions will take a required `expected_result_sha256` (the
+`run_container` returned and compare it. **Implemented 2026-09-27:** every caller must. The three
+verification functions take a required `expected_result_sha256` (the
 value `run_container` returned, kept in the calling worker's own attempt record, outside the scratch
 mount and this log directory) and reject a result whose hash differs before any other check; this
-lands as the first Phase 3 change in `appsec-review-process/TODO.md`, before the first lifecycle
-worker calls the verifier. Where the shared redactor rewrites an argument (a path or
+is the first Phase 3 change in `appsec-review-process/TODO.md`, before the first lifecycle worker
+calls the verifier. Where the shared redactor rewrites an argument (a path or
 argv member containing `password`, `token`, `secret` or `api_key`) the record holds less than the
 argv; the comparison binds what remains, and the expectation never comes from the record, so such
 runs verify like any other. `attempt_root` must be given in the spelling the run used: the scratch
 source is derived from it as a string. The adapter does not hash scratch: worker outputs are
 validated by their output contract.
+
+If `run_container` records a terminal `CANCELED` result and then re-raises `KeyboardInterrupt` or
+`SystemExit`, the exception carries the same value as `expected_result_sha256`; Python control flow
+cannot also return the terminal mapping. The pool rendezvous captures returned (or
+exception-carried) hashes and publishes them outside each adapter log as
+`adapter_result_sha256` before it asks the verifier to adopt a result.
 
 **Execution and verification apply one mount rule.** `request_mount_sources` is the single
 definition of which host directories a request may mount; `run_container` and

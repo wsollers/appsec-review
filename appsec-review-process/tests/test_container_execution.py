@@ -679,7 +679,8 @@ class RequiredInputTests(Sandbox):
         for name in call:
             with self.subTest(run_argument=name), self.assertRaises(TypeError):
                 ce.run_container(support.runtime(), **{k: v for k, v in call.items() if k != name})
-        check = {**support.IDS, "request": call["request"], "images_dir": ce.IMAGES_DIR, **support.host_facts()}
+        check = {**support.IDS, "request": call["request"], "images_dir": ce.IMAGES_DIR,
+                 **support.host_facts(), "expected_result_sha256": "sha256:" + "0" * 64}
         for name in check:
             with self.subTest(verify_argument=name), self.assertRaises(TypeError):
                 ce.verify_container_result(self.attempt, **{k: v for k, v in check.items() if k != name})
@@ -835,7 +836,8 @@ class OutcomeTests(ScriptedCase):
         arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
                      "input_fingerprint": ce.fingerprint_material(request, record)["sha256"],
                      "output_contract": "fixture-contract", "output_paths": [],
-                     "resume_command": "python -B launch_job.py --run-id run-b13", **over}
+                     "resume_command": "python -B launch_job.py --run-id run-b13",
+                     "expected_result_sha256": support.expected_result_sha256(self.attempt), **over}
         return ce.to_worker_envelope(self.attempt, **arguments)
 
     def test_classification_table(self):
@@ -1044,13 +1046,16 @@ class VerifierCase(ScriptedCase):
         self.assertNotIn(MARKER, "\n".join(errors))
         with self.assertRaises(ce.ContainerRequestError) as caught:
             ce.load_verified_result(self.attempt, **{**support.IDS, "request": request,
-                                                     "images_dir": ce.IMAGES_DIR, **support.host_facts(), **over})
+                                                     "images_dir": ce.IMAGES_DIR, **support.host_facts(),
+                                                     "expected_result_sha256": support.expected_result_sha256(
+                                                         self.attempt), **over})
         self.assertNotIn(MARKER, str(caught.exception))
         with self.assertRaises(ce.ContainerRequestError):
             ce.to_worker_envelope(self.attempt, **{
                 **support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
                 "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "fixture-contract",
-                "output_paths": [], "resume_command": None, **over})
+                "output_paths": [], "resume_command": None,
+                "expected_result_sha256": support.expected_result_sha256(self.attempt), **over})
 
     def reseal_file(self, result: dict, name: str, data: bytes):
         (self.log_dir / name).write_bytes(data)
@@ -1060,6 +1065,19 @@ class VerifierCase(ScriptedCase):
 
 
 class VerifierTests(VerifierCase):
+    def test_a_consistently_resealed_log_is_rejected_by_the_caller_held_hash(self):
+        request, _, result = self.produce()
+        expected = result["result_sha256"]
+        forged = self.result_dict()
+        self.reseal_file(forged, "stdout.log", b"a forged but internally consistent result\n")
+        forged["streams"]["stdout"].update(
+            observed_bytes=42, written_bytes=42, dropped_bytes=0, truncated=False)
+        self.write(forged, rehash=True)
+        self.assertNotEqual(self.result_dict()["result_sha256"], expected)
+        self.assertEqual(support.verify(
+            self.attempt, request, expected_result_sha256=expected), [
+                "container-result.json does not match the externally retained result_sha256"])
+
     def test_a_resealed_result_cannot_contradict_the_child_runners_own_record(self):
         # Found in verification: the verifier bound every file's hash but never read command.json,
         # so a failed run resealed as OK, a docker argv rewritten outside the boundary and forged
@@ -1225,7 +1243,8 @@ class VerifierTests(VerifierCase):
             self.assert_rejected(request, images_dir=directory)
         with self.subTest(wrong="attempt root"):
             errors = ce.verify_container_result(self.root / "missing", **support.IDS, request=request,
-                                                images_dir=ce.IMAGES_DIR, **support.host_facts())
+                                                images_dir=ce.IMAGES_DIR, **support.host_facts(),
+                                                expected_result_sha256=support.expected_result_sha256(self.attempt))
             self.assertEqual(errors, ["the attempt root, the expected request and the host facts do not "
                                       "derive a docker run the adapter could have made"])
             self.log_dir.rename(self.attempt / "moved")
@@ -1256,7 +1275,8 @@ class VerifierTests(VerifierCase):
         (self.attempt / "scratch" / "report.json").write_text("{}", encoding="utf-8")
         arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
                      "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "fixture-contract",
-                     "resume_command": None}
+                     "resume_command": None,
+                     "expected_result_sha256": support.expected_result_sha256(self.attempt)}
         envelope = ce.to_worker_envelope(self.attempt, **arguments, output_paths=["scratch/report.json"])
         paths = [artifact["path"] for artifact in envelope["artifacts"]]
         self.assertEqual(paths, [f"logs/container/{n}" for n in list(ce.ATTEMPT_FILES)]
@@ -1301,7 +1321,8 @@ class VerifierMountParityTests(ScriptedCase):
     def envelope_arguments(self, request):
         return {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR, **support.host_facts(),
                 "input_fingerprint": "sha256:" + "0" * 64, "output_contract": "fixture-contract",
-                "output_paths": [], "resume_command": None}
+                "output_paths": [], "resume_command": None,
+                "expected_result_sha256": support.expected_result_sha256(self.attempt)}
 
     def assert_uncertifiable(self, request):
         errors = support.verify(self.attempt, request)
@@ -1309,7 +1330,9 @@ class VerifierMountParityTests(ScriptedCase):
                                   "(missing, linked, sensitive, or the same directory twice): no run of it can exist"])
         with self.assertRaises(ce.ContainerRequestError):
             ce.load_verified_result(self.attempt, **{**support.IDS, "request": request,
-                                                     "images_dir": ce.IMAGES_DIR, **support.host_facts()})
+                                                     "images_dir": ce.IMAGES_DIR, **support.host_facts(),
+                                                     "expected_result_sha256": support.expected_result_sha256(
+                                                         self.attempt)})
         with self.assertRaises(ce.ContainerRequestError):
             ce.to_worker_envelope(self.attempt, **self.envelope_arguments(request))
 
@@ -1457,7 +1480,8 @@ class RecordFeedsNothingTests(ResealCase):
                                         "output_paths": [], "resume_command": None})):
                 with self.subTest(omitted=name, function=function.__name__):
                     arguments = {**support.IDS, "request": request, "images_dir": ce.IMAGES_DIR,
-                                 **facts, **extra}
+                                 **facts, "expected_result_sha256": support.expected_result_sha256(
+                                     self.attempt), **extra}
                     del arguments[name]
                     with self.assertRaises(TypeError):
                         function(self.attempt, **arguments)
@@ -1476,9 +1500,10 @@ class RecordFeedsNothingTests(ResealCase):
 
     def test_a_different_spelling_of_the_attempt_root_does_not_verify(self):
         request, _, _ = self.produce()
+        expected = support.expected_result_sha256(self.attempt)
         moved = self.root / "elsewhere"
         self.attempt.rename(moved)
-        self.assertTrue(support.verify(moved, request))
+        self.assertTrue(support.verify(moved, request, expected_result_sha256=expected))
 
 
 class OutcomeRederivationTests(ResealCase):
@@ -1580,7 +1605,8 @@ class OutcomeRederivationTests(ResealCase):
                 self.assert_rejected(request)
         path.write_bytes(lines(end))            # producible: the START write failed, END did not
         self.reseal()
-        self.assertEqual(support.verify(self.attempt, request), [])
+        self.assertEqual(support.verify(self.attempt, request), [
+            "container-result.json does not match the externally retained result_sha256"])
 
     def test_observation_json_is_closed_and_every_field_is_bound(self):
         request, _, _ = self.produce(scripted=ScriptedDocker(client_exit=1))
@@ -1748,7 +1774,8 @@ class AdapterWiringTests(ScriptedCase):
         with first, second:
             result = adapter.execute(worker_request)
         self.assertEqual(result["execution_status"], "OK")
-        self.assertEqual(support.verify(self.attempt, request), [])
+        self.assertEqual(support.verify(
+            self.attempt, request, expected_result_sha256=result["result_sha256"]), [])
 
     def test_adapter_requires_a_runtime_and_a_container_request(self):
         with self.assertRaises(TypeError):

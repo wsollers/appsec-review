@@ -920,7 +920,8 @@ class CrossInstanceAccessTests(Case):
                 self.assertEqual((result["execution_status"], result["container_name"]),
                                  ("OK", ce.container_name(**instance.ids)))
                 self.assertEqual(ce.verify_container_result(
-                    root, **instance.ids, request=request, **self.context.container_verification_arguments()), [])
+                    root, **instance.ids, request=request, **self.context.container_verification_arguments(),
+                    expected_result_sha256=result["result_sha256"]), [])
                 self.assertEqual((root / "logs" / "container" / ce.REQUEST_FILE).read_bytes(), item.data)
             self.assertEqual(sorted(p.name for p in root.iterdir()),
                              sorted({path.split("/")[0] for path in self.entries[index]["writable_paths"]}))
@@ -1401,7 +1402,10 @@ class ContextCarrierTests(Case):
                 ((pi.verify_invocation_result, pi.load_verified_result), context.persona_verification_arguments())):
             for function in functions:
                 with self.subTest(function=function.__module__ + "." + function.__name__):
-                    self.assertEqual(set(inspect.signature(function).parameters) - instance, set(arguments))
+                    required = set(inspect.signature(function).parameters) - instance
+                    if function.__module__ == "container_execution":
+                        required.remove("expected_result_sha256")
+                    self.assertEqual(required, set(arguments))
         self.assertLess(set(context.container_verification_arguments()),
                         set(inspect.signature(ce.to_worker_envelope).parameters))
         self.assertLess(set(context.persona_verification_arguments()),
@@ -1645,7 +1649,8 @@ class ExpiredGrantTests(Case):
                     result = ce.run_container(context.container_runtime(**launch), **instance.ids,
                                               attempt_root=attempt, request=request)
                 verified = ce.load_verified_result(attempt, **instance.ids, request=request,
-                                                   **context.container_verification_arguments())
+                                                   **context.container_verification_arguments(),
+                                                   expected_result_sha256=result["result_sha256"])
             self.assertEqual((result["execution_status"], result["cause"]), ("BLOCKED", "PERMISSION_DENIED"))
             self.assertEqual(verified["cause"], "PERMISSION_DENIED")
         self.assertEqual(self.verify(plan, spec), [])

@@ -20,6 +20,7 @@ NOW = "2026-09-20T12:00:00Z"
 FIXTURE_IMAGE_ID = "fixture-harmless"
 # Never echoed: a hostile value carries this marker and every message is searched for it.
 MARKER = "zq-hostile-marker"
+_EXPECTED_RESULT_SHA256: dict[str, str] = {}
 
 
 def fixture_record() -> dict:
@@ -95,7 +96,18 @@ def runtime(**over) -> ce.ContainerRuntime:
 
 
 def run(rt: ce.ContainerRuntime, attempt_root: Path, req, **ids):
-    return ce.run_container(rt, **{**IDS, **ids}, attempt_root=attempt_root, request=req)
+    result = ce.run_container(rt, **{**IDS, **ids}, attempt_root=attempt_root, request=req)
+    _EXPECTED_RESULT_SHA256[str(Path(attempt_root).resolve())] = result["result_sha256"]
+    return result
+
+
+def expected_result_sha256(attempt_root: Path) -> str:
+    """The caller-held result digest for a test attempt; never derived from adapter evidence."""
+    return _EXPECTED_RESULT_SHA256[str(Path(attempt_root).resolve())]
+
+
+def remember_expected_result_sha256(attempt_root: Path, value: str) -> None:
+    _EXPECTED_RESULT_SHA256[str(Path(attempt_root).resolve())] = value
 
 
 def host_facts(rt: ce.ContainerRuntime | None = None) -> dict:
@@ -107,5 +119,8 @@ def host_facts(rt: ce.ContainerRuntime | None = None) -> dict:
 
 
 def verify(attempt_root: Path, req, **over) -> list[str]:
+    expected = (over.pop("expected_result_sha256") if "expected_result_sha256" in over
+                else expected_result_sha256(attempt_root))
     return ce.verify_container_result(attempt_root, **{**IDS, "request": req,
-                                                       "images_dir": ce.IMAGES_DIR, **host_facts(), **over})
+                                                       "images_dir": ce.IMAGES_DIR, **host_facts(), **over,
+                                                       "expected_result_sha256": expected})

@@ -59,7 +59,15 @@ class RendezvousWorkspace(c01.PoolWorkspace):
         return {**self.arguments(spec), "rendezvous_parent": self.rendezvous_parent, **over}
 
     def classifier_arguments(self, plan: ps.ExpansionPlan) -> dict:
-        return {"pool_root": self.root(plan), "context": self.context()}
+        expected = {}
+        path = self.manifest_path(plan)
+        if path.is_file():
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            expected = {record["instance_id"]: record["adapter_result_sha256"]
+                        for record in manifest["instances"]
+                        if record["adapter_result_sha256"] is not None}
+        return {"pool_root": self.root(plan), "context": self.context(),
+                "expected_result_sha256": expected}
 
     def verify(self, spec: dict, plan: ps.ExpansionPlan, **over) -> list:
         return pr.verify_manifest(self.root(plan), **self.reader_arguments(spec, **over))

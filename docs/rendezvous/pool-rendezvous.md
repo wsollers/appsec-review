@@ -158,10 +158,13 @@ exception from an adapter's verifier is a refusal** (`invalid`), a `TypeError` f
 adapter signature included: it never propagates out of the coordinator or the verifier, never
 passes, and its text is never kept. This happened for real when B13's verifier gained required
 arguments: every container instance became `invalid` and no pool was `COMPLETE`. A value
-an adapter returned and a worker thread's report are never read for state: a worker that returns
+an adapter returned and a worker thread's report are never read for state, except that B13's
+returned `result_sha256` is retained as the external verification expectation: a worker that returns
 `OK` and leaves nothing on disk is `missing`. `adapter_status` and `adapter_cause` are the verified
 result's `execution_status` and `cause`; `result_file` is `{path, sha256, bytes}` of the adopted
-`invocation-result.json` or `container-result.json`. B14's `invoker_stopped: false` (a stuck
+`invocation-result.json` or `container-result.json`, and `adapter_result_sha256` is the hash the
+coordinator captured outside that adapter log. Later manifest reads pass that published external
+value back to B13's verifier. B14's `invoker_stopped: false` (a stuck
 invoker) is carried through; B14 only records it on `TIMEOUT` and `CANCELED`, so its later output
 is never part of a success.
 
@@ -468,8 +471,8 @@ and the views `validate_design_parity.py --write-generated-views` writes), updat
   through `load_verified_manifest` with the run's `PoolContext`. A `RendezvousError` there means
   **no instance of that pool may be treated as assessed**.
 - Invariants a consumer may rely on: `instances` is the expansion's list, same ids, same order,
-  each once; `counts` sum to `instances`; `outcome == pool_outcome(states)`; `result_file` is
-  non-null exactly for `RESULT_STATES`; only `succeeded` has `adapter_status == "OK"`;
+  each once; `counts` sum to `instances`; `outcome == pool_outcome(states)`; `result_file` and
+  `adapter_result_sha256` are non-null exactly for `RESULT_STATES`; only `succeeded` has `adapter_status == "OK"`;
   `state_reason` is one of `REASONS_BY_STATE[state]`.
 - Mapping a T06 handoff batch: one persona group per handoff (or `count: n` for n independent
   validators of one handoff), the handoff as a readable input with role `handoff` (C01). Keep
@@ -482,4 +485,5 @@ and the views `validate_design_parity.py --write-generated-views` writes), updat
   specification `attempt_id`, hence a new pool root and a new manifest: there is nothing here that
   could fall back to an older one.
 - For a `succeeded` instance use `VerifiedInstance.result` (or the adapter's `to_worker_envelope`
-  with the context's verification arguments); the manifest's `result_file.sha256` pins its bytes.
+  with the context's verification arguments plus `adapter_result_sha256`); the manifest's
+  `result_file.sha256` pins its bytes.

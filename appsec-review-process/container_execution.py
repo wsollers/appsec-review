@@ -904,6 +904,9 @@ def run_container(runtime: ContainerRuntime, *, run_id: str, job_id: str, attemp
                    for stream in ("stdout", "stderr")}
     result = finish(cause, exit_code, streams, removed)
     if interrupt is not None:
+        # Exceptional control flow cannot return the terminal mapping. Preserve the same external
+        # binding on the exception so the caller can retain it before re-raising or cancel routing.
+        setattr(interrupt, "expected_result_sha256", result["result_sha256"])
         raise interrupt
     return result
 
@@ -1054,10 +1057,12 @@ def _read_observation(path: Path) -> dict[str, Any] | None:
 def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
                             request: Any, images_dir: Path, host_flavor: str,
                             docker_host: str | None, docker_executable: Path,
-                            container_user: str) -> list[str]:
+                            container_user: str, expected_result_sha256: str) -> list[str]:
     """Re-derives the on-disk result from the expected request, the registry and the bytes.
 
-    Every argument is required. Messages are fixed text: nothing read from the attempt is echoed.
+    Every argument is required. ``expected_result_sha256`` is the value returned by
+    :func:`run_container`, retained by the caller outside the adapter log and scratch directory.
+    Messages are fixed text: nothing read from the attempt is echoed.
     ``host_flavor``, ``docker_host``, ``docker_executable`` and ``container_user`` are the
     integrator's host facts (the ``ContainerRuntime`` fields of the same names). The first two
     apply the target-mount rule ``run_container`` applies; all four, with ``attempt_root``, let the
@@ -1073,6 +1078,8 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
         raise TypeError("docker_executable must be an absolute Path")
     if not isinstance(container_user, str) or not _USER_RE.match(container_user):
         raise TypeError("container_user must be a numeric uid:gid with neither uid 0 nor gid 0")
+    if not isinstance(expected_result_sha256, str) or not _SHA_RE.match(expected_result_sha256):
+        raise TypeError("expected_result_sha256 must be a sha256 digest returned by run_container")
     request = thaw(request)
     errors = request_errors(request, run_id=run_id, job_id=job_id, attempt_id=attempt_id)
     if errors:
@@ -1115,6 +1122,8 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
         result = json.loads(raw.decode("utf-8"))
     except ValueError:
         return ["container-result.json is not UTF-8 JSON"]
+    if not isinstance(result, dict) or result.get("result_sha256") != expected_result_sha256:
+        return ["container-result.json does not match the externally retained result_sha256"]
     schema_errors = validate_document(result, RESULT_SCHEMA)
     if schema_errors:
         return [f"container-result.json fails its closed schema ({len(schema_errors)} errors)"]
@@ -1223,12 +1232,13 @@ def verify_container_result(attempt_root: Path, *, run_id: str, job_id: str, att
 def load_verified_result(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
                          request: Any, images_dir: Path, host_flavor: str,
                          docker_host: str | None, docker_executable: Path,
-                         container_user: str) -> Mapping[str, Any]:
+                         container_user: str, expected_result_sha256: str) -> Mapping[str, Any]:
     errors = verify_container_result(attempt_root, run_id=run_id, job_id=job_id,
                                      attempt_id=attempt_id, request=request, images_dir=images_dir,
                                      host_flavor=host_flavor, docker_host=docker_host,
                                      docker_executable=docker_executable,
-                                     container_user=container_user)
+                                     container_user=container_user,
+                                     expected_result_sha256=expected_result_sha256)
     if errors:
         raise ContainerRequestError("container result rejected: " + "; ".join(errors))
     request = thaw(request)
@@ -1240,7 +1250,7 @@ def load_verified_result(attempt_root: Path, *, run_id: str, job_id: str, attemp
 
 def to_worker_envelope(attempt_root: Path, *, run_id: str, job_id: str, attempt_id: str,
                        request: Any, images_dir: Path, host_flavor: str, docker_host: str | None,
-                       docker_executable: Path, container_user: str,
+                       docker_executable: Path, container_user: str, expected_result_sha256: str,
                        input_fingerprint: str, output_contract: str, output_paths: list[str],
                        resume_command: str | None) -> dict[str, Any]:
     """Maps the verified on-disk result into ``worker-result-envelope/1.0``.
@@ -1252,7 +1262,8 @@ def to_worker_envelope(attempt_root: Path, *, run_id: str, job_id: str, attempt_
     result = load_verified_result(attempt_root, run_id=run_id, job_id=job_id, attempt_id=attempt_id,
                                   request=request, images_dir=images_dir, host_flavor=host_flavor,
                                   docker_host=docker_host, docker_executable=docker_executable,
-                                  container_user=container_user)
+                                  container_user=container_user,
+                                  expected_result_sha256=expected_result_sha256)
     attempt_root = Path(attempt_root)
     relative = [f"{result['log_path']}/{entry['path']}" for entry in result["files"]]
     relative.append(f"{result['log_path']}/{RESULT_FILE}")

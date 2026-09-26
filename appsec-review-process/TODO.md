@@ -127,10 +127,10 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 
 ### Phase 3 -- B13 into service (B13 follow-up + new batch B16 "container image registry")
 
-- Decide the open B13 question: `verify_container_result` / `load_verified_result` /
-  `to_worker_envelope` **require** an externally held `expected_result_sha256`. Recommendation:
-  require it; the hash is returned by `run_container` and kept in the attempt's `command.json`
-  outside the scratch mount. Record in `docs/adapters/pinned-container-adapter.md`.
+- **Implemented 2026-09-27 (decided by William 2026-09-25):** `verify_container_result` /
+  `load_verified_result` / `to_worker_envelope` require an externally held
+  `expected_result_sha256`. It is the hash returned by `run_container`, retained by the calling
+  worker outside the scratch mount and the adapter log, and compared before the result is trusted.
 - B16: `registry/container-images/<image_id>.json` for every image a step-4 worker uses
   (`audit-buildenv-cpp`, `audit-native`, `audit-iac`, `audit-container`, `scancode-toolkit`,
   `audit-binary-analysis`, and the 13 `tool-*` images of 2026-09-26, `docs/processes/tool-images.md`), generated from `images/.build-state/<id>/latest.json`
@@ -1393,13 +1393,10 @@ Cross-cutting capability ownership is explicit:
   docs, permission integration. Do not migrate a lifecycle worker in this batch.
 - Acceptance: hostile argv/mount/image/network/capability cases, timeout/cancel/worker-loss/log
   failure, Windows-host/Linux-worker parity, and a harmless pinned fixture container.
-- TODO (owner, 2026-09-21; from the PR #29 review): decide whether `verify_container_result` /
-  `load_verified_result` / `to_worker_envelope` should REQUIRE an externally held
-  `expected_result_sha256` (the hash `run_container` returned, kept where the attempt cannot reach).
-  Today the verifier's checks are consistency checks: an edit to the result or to any one file is
-  caught, a consistent rewrite of every file in the log directory is not
-  (`docs/adapters/pinned-container-adapter.md`). Decide before C02 or the first migrated worker calls the
-  verifier; adding a required argument afterwards touches every caller.
+- Implemented 2026-09-27 (William's 2026-09-25 decision): `verify_container_result`,
+  `load_verified_result` and `to_worker_envelope` require the externally retained
+  `expected_result_sha256` returned by `run_container`. A consistently rewritten adapter log is
+  refused when it does not match that caller-held value.
 
 #### B14 — Persona invocation adapter — DONE (PR #32, merged 2026-09-21; dispatch protocol only)
 

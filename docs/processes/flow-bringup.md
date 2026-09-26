@@ -33,7 +33,7 @@ flowchart TD
   S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
   S6a["S6a-3 02-build-plan (per-unit Haiku plan, clang fixed)<br/>then 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
-  B13["Phase 3: B13 into service + B16 image registry"]:::todo
+  B13["Phase 3: B13 verifier binding done 2026-09-27<br/>next: B16 image registry + live Dagster op"]:::todo
   E01["E01/E02: replay the lock through B13"]:::todo
 
   P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6a --> S6
@@ -259,6 +259,15 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-27 -- **Phase 3 first slice: B13 results require the caller-held hash.**
+  `verify_container_result`, `load_verified_result` and `to_worker_envelope` now require the
+  `result_sha256` returned by `run_container`; a fully resealed adapter log is refused when it no
+  longer matches that external value. Cancellation carries the hash on the re-raised exception.
+  C02 captures the value outside the adapter log as `adapter_result_sha256` in its immutable
+  terminal-instance manifest and supplies it on later read-only verification. Local evidence:
+  259 focused adapter/C01/C02 tests, 23 live-Docker B13 tests, 19 cross-slice/live-rendezvous tests,
+  72 baseline tests, design parity PASS (53 jobs), and contract qualification PASS. Phase 3 is not
+  complete: B16 image registry records and the harmless-fixture Dagster op remain next.
 - 2026-09-26 -- **SAT PASS through `build-classify`: stages 1-11 all green with every model step live.**
   Fresh `--dispatch` SAT `20260926T183609Z`, run `20260926T184019Z-53d1da`, on zarathustra (native Linux,
   `/mnt/projects-drive/projects/appsec-review`). Stage 10 `build-index` (Dagster `c6993d03`): units `dir:.`

@@ -277,7 +277,7 @@ _ROOT_ABSENT, _ROOT_NOT_PRIVATE, _NO_EVIDENCE, _NO_RESULT, _RESULT_REFUSED, _VER
 
 
 def _load_result(instance: ps.PlannedInstance, attempt_root: Path,
-                 context: ps.PoolContext) -> Mapping[str, Any] | None:
+                 context: ps.PoolContext, expected_result_sha256: str | None = None) -> Mapping[str, Any] | None:
     """The adapter's own verifier, for this instance's ids and request and the CONTEXT's facts.
     None means refused.
 
@@ -288,8 +288,11 @@ def _load_result(instance: ps.PlannedInstance, attempt_root: Path,
         if instance.worker_kind == ps.PERSONA:
             return pi.load_verified_result(attempt_root, **instance.ids, request=instance.request.request,
                                            **context.persona_verification_arguments())
+        if expected_result_sha256 is None:
+            return None
         return ce.load_verified_result(attempt_root, **instance.ids, request=instance.request.request,
-                                       **context.container_verification_arguments())
+                                       **context.container_verification_arguments(),
+                                       expected_result_sha256=expected_result_sha256)
     except Exception:      # noqa: BLE001 - a refusal of any kind is a refusal; its text is never kept
         return None
 
@@ -298,7 +301,8 @@ def _result_file_name(instance: ps.PlannedInstance) -> str:
     return pi.RESULT_FILE if instance.worker_kind == ps.PERSONA else ce.RESULT_FILE
 
 
-def _disk_facts(instance: ps.PlannedInstance, pool_root: Path, context: ps.PoolContext) -> tuple:
+def _disk_facts(instance: ps.PlannedInstance, pool_root: Path, context: ps.PoolContext,
+                expected_result_sha256: str | None = None) -> tuple:
     attempt_root = instance.attempt_root_path(pool_root)
     if not os.path.lexists(attempt_root):
         return _ROOT_ABSENT, None
@@ -310,7 +314,7 @@ def _disk_facts(instance: ps.PlannedInstance, pool_root: Path, context: ps.PoolC
     if not os.path.lexists(attempt_root.joinpath(*instance.entry["log_path"].split("/"),
                                                  _result_file_name(instance))):
         return _NO_RESULT, None
-    result = _load_result(instance, attempt_root, context)
+    result = _load_result(instance, attempt_root, context, expected_result_sha256)
     return (_VERIFIED, result) if result is not None else (_RESULT_REFUSED, None)
 
 
@@ -341,13 +345,14 @@ def _context_errors(plan: ps.ExpansionPlan, context: Any) -> list:
 
 
 def classify_instance(plan: ps.ExpansionPlan, index: int, *, pool_root: Path, context: ps.PoolContext,
-                      observation: str) -> dict:
+                      observation: str, expected_result_sha256: Mapping[str, str]) -> dict:
     """The manifest entry of one instance: :func:`_disk_facts` now, then :func:`_entry`."""
     errors = _context_errors(plan, context)
     if errors:
         raise RendezvousError("; ".join(errors))
     instance = plan.instances[index]
-    return _entry(instance, _disk_facts(instance, pool_root, context), observation)
+    return _entry(instance, _disk_facts(
+        instance, pool_root, context, expected_result_sha256.get(instance.instance_id)), observation)
 
 
 def _entry(instance: ps.PlannedInstance, facts: tuple, observation: str) -> dict:
@@ -383,7 +388,8 @@ def _entry(instance: ps.PlannedInstance, facts: tuple, observation: str) -> dict
         **{name: entry[name] for name in ("instance_id", "group_id", "ordinal", "worker_kind", "attempt_root",
                                           "resource_pool", "request_sha256", "input_fingerprint")},
         "state": None, "state_reason": None, "adapter_status": None, "adapter_cause": None, "result_file": None,
-        "invoker_stopped": None, "container_removed": None, "worker_stopped": None,
+        "adapter_result_sha256": None, "invoker_stopped": None, "container_removed": None,
+        "worker_stopped": None,
     }
 
     def end(state: str, reason: str) -> dict:
@@ -425,6 +431,7 @@ def _entry(instance: ps.PlannedInstance, facts: tuple, observation: str) -> dict
     data = pi.canonical_bytes(thaw(result)) if persona else ce.canonical_request_bytes(thaw(result))
     record.update({
         "adapter_status": result["execution_status"], "adapter_cause": result["cause"],
+        "adapter_result_sha256": result["result_sha256"],
         "result_file": {"path": f"{entry['attempt_root']}/{entry['log_path']}/{_result_file_name(instance)}",
                         "sha256": _bytes_sha(data), "bytes": len(data)},
         "invoker_stopped" if persona else "container_removed": stopped})
@@ -458,13 +465,15 @@ def manifest_sha256(manifest: Mapping[str, Any]) -> str:
 
 
 def derive_manifest(plan: ps.ExpansionPlan, *, pool_root: Path, context: ps.PoolContext,
-                    observations: Any) -> dict:
+                    observations: Any, expected_result_sha256: Mapping[str, str]) -> dict:
     """The whole manifest from the expansion, the disk and one observation per instance, in the
     expansion's order. No clock, no host path, no free text."""
     errors = _context_errors(plan, context)
     if errors:
         raise RendezvousError("; ".join(errors))
-    facts = [_disk_facts(instance, pool_root, context) for instance in plan.instances]
+    facts = [_disk_facts(instance, pool_root, context,
+                         expected_result_sha256.get(instance.instance_id))
+             for instance in plan.instances]
     return _derive(plan, facts, observations)
 
 
@@ -585,6 +594,7 @@ class _Wait:
         self.threads: dict = {}          # index -> Thread, registered BEFORE it is started
         self.begun: set = set()          # workers that passed the launch gate (under the condition)
         self.exited: set = set()         # instance ids whose worker left its ``finally``
+        self.expected_result_sha256: dict[str, str] = {}  # caller-held adapter return values
         self.unlaunched: dict = {}       # index -> why nothing was ever launched for it
         self.unstartable: set = set()
         self.ended: str | None = None    # why the wait ended for what was never launched
@@ -627,10 +637,14 @@ class _Wait:
             # root that was deleted or replaced, and not on top of anything that is already there.
             if ps.real_directory(attempt_root) and ps.directory_listing(attempt_root) == []:
                 adapter = self.adapters[instance.worker_kind](self.runtimes[instance.worker_kind])
-                adapter.execute(worker_adapters.WorkerRequest(
+                result = adapter.execute(worker_adapters.WorkerRequest(
                     **instance.ids, attempt_root=attempt_root, inputs={key: instance.request.request}))
-        except BaseException:      # noqa: BLE001 - the outcome is read from disk, never from here
-            pass
+                if isinstance(result, Mapping) and isinstance(result.get("result_sha256"), str):
+                    self.expected_result_sha256[instance.instance_id] = result["result_sha256"]
+        except BaseException as exc:      # noqa: BLE001 - the outcome is read from disk, never from here
+            expected = getattr(exc, "expected_result_sha256", None)
+            if isinstance(expected, str):
+                self.expected_result_sha256[instance.instance_id] = expected
         finally:
             with self.condition:
                 self.exited.add(instance.instance_id)
@@ -856,7 +870,8 @@ def run_rendezvous(pool_root: Path, *, expected_spec: Any, context: ps.PoolConte
                 done["observations"] = wait.run()
             if "data" not in done:
                 manifest = derive_manifest(plan, pool_root=pool_root, context=context,
-                                           observations=done["observations"])
+                                           observations=done["observations"],
+                                           expected_result_sha256=wait.expected_result_sha256)
                 data = canonical_bytes(manifest)
                 errors = manifest_errors(data, plan, pool_root=pool_root, context=context)
                 if errors:
@@ -917,7 +932,10 @@ def _check_manifest(raw: Any, plan: ps.ExpansionPlan, pool_root: Path, context: 
                 "duplicate, unknown, reordered or absent instance is refused"], None
     errors = []
     observations = []
-    facts = [_disk_facts(instance, pool_root, context) for instance in plan.instances]
+    expected = {record["instance_id"]: record["adapter_result_sha256"]
+                for record in found["instances"] if record["adapter_result_sha256"] is not None}
+    facts = [_disk_facts(instance, pool_root, context, expected.get(instance.instance_id))
+             for instance in plan.instances]
     for instance, record in zip(plan.instances, found["instances"]):
         for observation in OBSERVATIONS:
             if _entry(instance, facts[instance.index], observation) == record:
