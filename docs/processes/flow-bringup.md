@@ -31,12 +31,13 @@ flowchart TD
   AD["Automatic persona dispatch D01-D04<br/>SAT --dispatch stages 6-9, live 2026-09-25"]:::done
   S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; SAT stage 10 PASS (live upstreams 2026-09-26)"]:::done
   S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
-  S6a["S6a-3 02-build-plan (per-unit Haiku plan, clang fixed)<br/>then 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
+  S6p["S6a-3 02-build-plan: per-unit Haiku plan, clang fixed<br/>built 2026-09-26; SAT stage 12 next (live)"]:::next
+  S6a["S6a-4 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>designed; needs Phase 3"]:::todo
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
   B13["Phase 3: B13 verifier binding + B16 registry done 2026-09-27<br/>next: live harmless-fixture Dagster op"]:::todo
   E01["E01/E02: replay the lock through B13"]:::todo
 
-  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6a --> S6
+  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6p --> S6a --> S6
   AD -.-> S4b
   AD -.-> S5
   AD -.-> S5b

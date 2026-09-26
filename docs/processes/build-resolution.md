@@ -1,7 +1,7 @@
 # Build resolution: learning how to build an unknown target
 
-Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`; SAT stage 10 PASS, SAT `20260925T211247Z`); **`02-build-classify` BUILT 2026-09-25** (SAT stage 11 PASS with live upstreams, SAT `20260926T183609Z`); sections 2-5
-(`02-build-plan`, `02-build-resolution`, catalog and lock) **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
+Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`; SAT stage 10 PASS, SAT `20260925T211247Z`); **`02-build-classify` BUILT 2026-09-25** (SAT stage 11 PASS with live upstreams, SAT `20260926T183609Z`); **section 3 (`02-build-plan`) BUILT 2026-09-26** (SAT stage 12 not yet run live); sections 2, 4 and 5
+(`02-build-resolution`, catalog and lock) **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
 **Extended 2026-09-25** by [build-unit-classification.md](build-unit-classification.md): the loop below runs
 once per compiled or transpiled unit, and a failed unit blocks only that unit's jobs. ADR-0012
 [Revision 1](../decisions/ADR-0012-build-resolution.md#revision-1-2026-09-25-per-unit-resolution-model-classification)
@@ -137,9 +137,20 @@ Before asking the model anything, the job looks for an image that already built 
 the `claude` CLI (`claude -p`) with its current login, the operator's Claude subscription. The model
 is Haiku; authentication and model are set as described in "Model and authentication" below.
 
-**Inputs to the model:** the build index, the buildenv catalog (the base images it may choose
-from), the output schema, and on retries the previous plan and a bounded failure excerpt. Never the
-checkout itself, never the fixture answer keys, never anything outside the run.
+**Built 2026-09-26** (`build_plan.py`; ADR-0012 Revision 2 and Revision 3, which win where this
+section differs): one Haiku call per build-set unit of the accepted `02-build-classify` result.
+
+**Inputs to the model:** the whole checkout (Revision 2), and staged as upstream artifacts the build
+index, the classification, the buildenv catalog (the base images it may choose from) and an
+orchestrator-written `plan-unit.json` naming the one unit; the output schema; on retries (in
+`02-build-resolution`) the previous plan and a bounded failure excerpt. Never the fixture answer keys,
+never anything outside the run.
+
+**The compiler is fixed (Revision 3):** every plan builds with our clang (LLVM 21.1.0 of
+`audit-native`); the plan carries an orchestrator-owned `toolchain`, and the validator rejects any
+compiler choice (`gcc`/`g++`/`cc`/`clang`/... as `argv[0]`, `CC=`, `CXX=`, `CPP=`, `LD=`, `CCLD=`, a
+compiler package). The compile database is the orchestrator's (`bear`, `cmake-export` or `none`).
+Plans have `configure` and `build` phases only: no test, check or install step (nothing built is run).
 
 **Output:** `build-plan.json` (new schema `appsec-review/build-plan/1`):
 

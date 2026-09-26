@@ -1,0 +1,18 @@
+{
+  "schema": "appsec-review/sat-answer-key/build-plan-structure/1",
+  "note": "Structural answer key for SAT stage 12 (William, 2026-09-26: structure pass/fail; exact argv and packages are reported as differences, never failures). Derived from the fixture's own build files (configure.ac, Makefile.am, docs/BUILDING.md) and 02-dev-project-discovery.json. Never staged into a run or shown to a model.",
+  "plans": {
+    "dir:.": {
+      "root": ".",
+      "class": "compiled-native",
+      "build_system": "autotools",
+      "base": "audit-buildenv-cpp",
+      "compile_database": "bear",
+      "ordered_tools": ["autoreconf", "configure", "make"],
+      "reference_argv": [["autoreconf", "-fi"], ["./configure"], ["make"]],
+      "reference_apt_packages": ["autoconf", "automake", "libtool", "make"]
+    }
+  },
+  "no_plan": ["file:Dockerfile"],
+  "toolchain_compiler": "clang"
+}

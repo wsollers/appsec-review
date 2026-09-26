@@ -55,7 +55,7 @@ STAGES=(
   "sre-operations-topology|1|Gate: SRE operations topology supplied and accepted"
   "build-index|1|02-build-index: deterministic, cited index of candidate units and build signals; nothing executed; units equal the answer key"
   "build-classify|1|02-build-classify: live persona classifies every unit from the checkout + index; validated; classes equal the answer key"
-  "build-plan|0|02-build-plan: LLM plan per build-set unit from the checkout, index and classification; validated; compared with the answer key"
+  "build-plan|1|02-build-plan: live Haiku plan per build-set unit from the checkout, index and classification; clang fixed; validated; structure equals the answer key"
   "build-resolution|0|02-build-resolution: image + trial configure/build via B13, <= build_resolution_attempts; image_build_<id> catalogued, lock written"
   "build-configure|0|02-build-configure (E01): replay the lock's configure in the catalogued image"
   "native-build|0|02-native-build (E02): compile database and build outputs"
@@ -66,7 +66,7 @@ STAGES=(
   "sarif|0|critical_findings_sarif: accepted SARIF from verified findings"
   "report|0|10-synthesis-report: report generated"
 )
-SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index build_classify full_review"
+SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index build_classify build_plan full_review"
 SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
 SAT_BUSINESS_GOAL="${SAT_BUSINESS_GOAL:-System acceptance test: full review cycle on the fixture}"
 SAT_PLATFORM="${SAT_PLATFORM:-Linux}"
@@ -78,6 +78,7 @@ DEVOPS_JOB=02-devops-project-discovery
 SRE_JOB=02-sre-operations-topology
 BUILD_INDEX_JOB=02-build-index
 BUILD_CLASSIFY_JOB=02-build-classify
+BUILD_PLAN_JOB=02-build-plan
 
 die() { echo "SAT: $*" >&2; exit 1; }
 stage_ids() { for s in "${STAGES[@]}"; do echo "${s%%|*}"; done; }
@@ -1397,6 +1398,117 @@ import json,sys; s=json.load(sys.stdin)
 print("build-classify: PASS  %s by Dagster %s: %s; build set %s; %d coverage gaps" % (
   s["status"], s["dagster_run_id"][:8], ", ".join("%s=%s(%s)" % tuple(u) for u in s["units"]), s["build_set"], s["coverage_gaps"]))
 print("  index review (%d, informational): %s" % (len(s["index_review"]), s["index_review"] or "none"))'
+}
+
+# ---- stage: build-plan ---------------------------------------------------------------------------
+# 02-build-plan (TODO Phase 5g item 4, ADR-0012 revisions 2-3): one LIVE Haiku persona call per
+# build-set unit of the accepted classification reads the checkout, the accepted index and
+# classification, the buildenv catalog and the orchestrator's plan-unit.json. No supplied mode: this
+# stage always calls the model. Acceptance: the job's own validator (build_plan.validate: envelope,
+# pinned upstreams, one plan per build-set unit, the fixed clang, argv safety, no test/install step,
+# citations fresh), and the plan's STRUCTURE against the fixture answer key
+# (fixtures/supplied/<fixture>/02-build-plan-structure.json; William, 2026-09-26): planned units,
+# root, class, build system, base image, compile-database method, the tools in order, toolchain
+# clang, tier A or B. Exact argv and the package list are printed as differences, never failures.
+stage_build_plan() {
+  require_run build-plan
+  local key="$REPO/fixtures/supplied/$FIXTURE/02-build-plan-structure.json"
+  [[ -f "$key" ]] || die "build-plan: no answer key $key for fixture $FIXTURE"
+
+  echo "-- accept: build_plan must publish an accepted, validated plan (live model call per build-set unit)"
+  run_step build-plan accept "$(contract build-plan accept <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_CLASSIFY_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_CLASSIFY_JOB"}},
+            {"path": "{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "kind": "absent"},
+            {"path": "{run}/**/02-build-plan-structure.json", "kind": "absent"},
+            {"path": "{run}/**/02-build-classify-classes.json", "kind": "absent"},
+            {"path": "{run}/**/02-build-index-units.json", "kind": "absent"}],
+ "writes": {"required": ["{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "{run}/data/jobs/$BUILD_PLAN_JOB/latest.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/attempts/*/build-plan.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/attempts/*/build-plan-summary.md",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/attempts/*/inputs.json", "{run}/data/jobs/$BUILD_PLAN_JOB/attempts/*/status.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/attempts/*/result.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/plan-units/*.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/upstream/*/build-index.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/upstream/*/build-classification.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/upstream/*/buildenv-catalog.json",
+                         "{run}/data/jobs/$BUILD_PLAN_JOB/upstream/*/plan-unit.json"],
+            "allowed": ["{run}/data/jobs/$BUILD_PLAN_JOB/job.lock",
+                        "{run}/data/jobs/$BUILD_PLAN_JOB/persona-attempts/*/outputs/persona/*",
+                        "{run}/data/jobs/$BUILD_PLAN_JOB/persona-attempts/*/logs/persona/*",
+                        "{run}/data/model-versions.json", "{run}/data/claude-binary.json", "{run}/data/*.jsonl",
+                        "{run}/data/llm-transcripts/b02-plan/*/*",
+                        "appsec-review-process/prompt-cache/$BUILD_PLAN_JOB/outer_prompt.md", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$BUILD_PLAN_JOB/attempts/*/build-plan.json", "schema": "build-plan.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$BUILD_PLAN_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "persona", "job_id": "$BUILD_PLAN_JOB"}},
+             {"path": "{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "equals": {"job": "$BUILD_PLAN_JOB"}}]}
+JSON
+)" launch build_plan
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "build-plan: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import build_plan; build_plan.validate(sys.argv[2]); print("validator OK")' \
+    "$REPO/appsec-review-process" "$RUN_ID" || die "build-plan: build_plan.validate rejected the accepted result"
+
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" "$key" <<'PY'
+import json, pathlib, posixpath, sys
+rdir, dagster_id, key_path = sys.argv[1:]
+rdir = pathlib.Path(rdir); jobs = rdir / 'data/jobs'; d = jobs / '02-build-plan'
+bad, diffs = [], []
+ptr = json.loads((d / 'accepted.json').read_text())
+attempt = ptr.get('attempt_id'); att = d / 'attempts' / str(attempt)
+if ptr.get('status') not in ('OK', 'OK_WITH_GAPS'): bad.append('accepted status is %r' % ptr.get('status'))
+if json.loads((d / 'latest.json').read_text()).get('attempt_id') != attempt: bad.append('accepted attempt is not the latest')
+status = json.loads((att / 'status.json').read_text())
+if status.get('dagster_run_id') != dagster_id: bad.append('accepted by %r, launched %r' % (status.get('dagster_run_id'), dagster_id))
+if status.get('persona_job_id') != 'b02-plan': bad.append('persona identity is %r' % status.get('persona_job_id'))
+for inv in status.get('persona_invocations', []):
+    if not (d / 'persona-attempts' / str(inv.get('persona_attempt_id')) / 'logs/persona').is_dir():
+        bad.append('the persona invocation record for %s is missing' % inv.get('unit_id'))
+value = json.loads((att / 'build-plan.json').read_text())
+cptr = json.loads((jobs / '02-build-classify/accepted.json').read_text())
+if value['classification']['attempt_id'] != cptr.get('attempt_id'): bad.append('plan names classification %r, accepted is %r' % (value['classification']['attempt_id'], cptr.get('attempt_id')))
+if value['toolchain']['compiler'] != 'clang': bad.append('toolchain is %r' % value['toolchain'])
+key = json.loads(pathlib.Path(key_path).read_text())
+plans = {p['unit_id']: p for p in value['plans']}
+if sorted(plans) != sorted(key['plans']): bad.append('planned units %s, answer key %s' % (sorted(plans), sorted(key['plans'])))
+for uid in key.get('no_plan', []):
+    if uid in plans: bad.append('%s has a plan (it must not be built)' % uid)
+for uid, want in key['plans'].items():
+    plan = plans.get(uid)
+    if plan is None: continue
+    for field, got in (('root', plan['root']), ('class', plan['class']), ('build_system', plan['build_system']),
+                       ('base', plan['image']['base']), ('compile_database', plan['compile_database']['method'])):
+        if got != want[field]: bad.append('%s %s is %r, answer key %r' % (uid, field, got, want[field]))
+    if plan['feasibility']['tier'] not in ('A', 'B'): bad.append('%s is tier %s' % (uid, plan['feasibility']['tier']))
+    tools = [posixpath.basename(c['argv'][0]) for c in plan['commands']]
+    it = iter(tools)
+    if not all(t in it for t in want['ordered_tools']):
+        bad.append('%s commands %s do not run %s in that order' % (uid, tools, want['ordered_tools']))
+    argv = [c['argv'] for c in plan['commands']]
+    if argv != want['reference_argv']: diffs.append('%s argv %s (reference %s)' % (uid, argv, want['reference_argv']))
+    pkgs = sorted(p['name'] for p in plan['image']['apt_packages'])
+    if pkgs != sorted(want['reference_apt_packages']): diffs.append('%s packages %s (reference %s)' % (uid, pkgs, sorted(want['reference_apt_packages'])))
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id': dagster_id, 'attempt_id': attempt, 'status': ptr.get('status'),
+                  'plans': [(p['unit_id'], p['build_system'], p['feasibility']['tier'],
+                             [' '.join(c['argv']) for c in p['commands']], [x['name'] for x in p['image']['apt_packages']])
+                            for p in value['plans']],
+                  'dispositions': [(x['unit_id'], x['disposition']) for x in value['dispositions']],
+                  'coverage_gaps': len(value['coverage_gaps']), 'diffs': diffs,
+                  'models': sorted({(i.get('model') or {}).get('model_id', '?') for i in status.get('persona_invocations', [])})}))
+PY
+)" || die "build-plan: $summary"
+  checkout_unchanged build-plan
+  record PASS build-plan "$summary"
+  printf '%s' "$summary" | python3 -c '
+import json,sys; s=json.load(sys.stdin)
+print("build-plan: PASS  %s by Dagster %s: %d plan(s); %d coverage gaps; models %s" % (
+  s["status"], s["dagster_run_id"][:8], len(s["plans"]), s["coverage_gaps"], s["models"]))
+for uid, system, tier, commands, packages in s["plans"]:
+    print("  %s: %s, tier %s; packages %s" % (uid, system, tier, packages or "none"))
+    for c in commands: print("    $ %s" % c)
+print("  dispositions: %s" % s["dispositions"])
+print("  differences from the reference (informational): %s" % (s["diffs"] or "none"))'
 }
 
 # ---- driver --------------------------------------------------------------------------------------

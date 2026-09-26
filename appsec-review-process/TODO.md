@@ -1105,7 +1105,10 @@ Work order (one piece at a time):
    classification and the buildenv catalog); SAT stage 12. In progress 2026-09-26: step 1 (ADR-0012
    Revision 3: clang fixed by our code, no test phase; `schemas/build-plan.schema.json`, output contract
    `build-plan` (claim class `build_unit_plan`), role `build-planner`, job template `02-build-plan`
-   (haiku/medium), `task-build-plan.md`). SAT answer key: structural pass/fail (William, 2026-09-26).
+   (haiku/medium), `task-build-plan.md`); step 2 (`build_plan.py`: validator, finalize/merge, per-unit
+   persona worker, claim builder, 23 tests); step 3 (graph node on `02-build-classify`, Dagster job
+   `build_plan` on persona_llm, parity entry, 54 jobs, catalog); step 4 (SAT stage 12 with the structural
+   answer key `fixtures/supplied/hello-autotools/02-build-plan-structure.json`). Next: the live SAT.
 5. [ ] `02-build-resolution` (per unit); SAT stage 13. Needs Phase 3 (B13 into service, B16 records,
    and the required `expected_result_sha256`) first.
 
