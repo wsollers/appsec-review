@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "build-plan.schema.json",
+  "title": "Build Plan",
+  "description": "Output of 02-build-plan (ADR-0012 Revision 2 decision 1; Revision 3: the compiler is fixed by the orchestrator, plans carry no test phase). One persona call (Haiku) per build-set unit of the accepted classification plans how to configure and build that unit inside our build image; each call returns this document with exactly one plan, and the orchestrator merges the per-unit plans into the published file. The model chooses what to install (apt packages) and which configure/build commands to run; it cannot choose the compiler, the image recipe, network, downloads or any command outside the source tree. Orchestrator-owned fields (source_revision, target, index, classification, toolchain, dispositions, every citation content_hash) are overwritten before publication; the model leaves index, classification, toolchain and dispositions null. Rules the schema subset cannot express are enforced by the job's validator (build_plan.check): every build-set unit planned exactly once and nothing else, roots equal to the classification, base images from the buildenv catalog, package names, argv safety (no shell, no redirection, no network tool, no compiler choice, no test or install target), phase order, signal ids resolving in the accepted index, and every citation resolving in the checkout.",
+  "type": "object",
+  "required": [
+    "schema",
+    "target",
+    "source_revision",
+    "index",
+    "classification",
+    "toolchain",
+    "plans",
+    "dispositions",
+    "coverage_gaps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "appsec-review/build-plan/1"
+    },
+    "target": {
+      "type": "string"
+    },
+    "source_revision": {
+      "type": "string",
+      "description": "Orchestrator-owned: the accepted intake's revision."
+    },
+    "index": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "attempt_id",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "description": "Orchestrator-owned: the accepted 02-build-index attempt and the sha256 of its build-index.json. null in the model's response."
+    },
+    "classification": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "attempt_id",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "description": "Orchestrator-owned: the accepted 02-build-classify attempt and the sha256 of its build-classification.json. null in the model's response."
+    },
+    "toolchain": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Orchestrator-owned (ADR-0012 Revision 3): the compiler every plan builds with, fixed by our code, never chosen by the model. null in the model's response.",
+      "required": [
+        "compiler",
+        "cc",
+        "cxx",
+        "llvm_version",
+        "compile_database_compilers"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "compiler": {
+          "const": "clang"
+        },
+        "cc": {
+          "type": "string"
+        },
+        "cxx": {
+          "type": "string"
+        },
+        "llvm_version": {
+          "type": "string"
+        },
+        "compile_database_compilers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The only compiler paths a trial's compile database may name (02-build-resolution judges every entry)."
+        }
+      }
+    },
+    "plans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "unit_id",
+          "root",
+          "class",
+          "build_system",
+          "feasibility",
+          "image",
+          "commands",
+          "compile_database",
+          "assumptions",
+          "unknowns",
+          "signal_ids",
+          "evidence_citations",
+          "confidence"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "unit_id": {
+            "type": "string",
+            "pattern": "^(dir|file):[^\\s]+$",
+            "description": "A build-set unit id of the accepted classification (an index unit id, or '<index unit id>::<part>')."
+          },
+          "root": {
+            "type": "string",
+            "description": "Repository-relative root of the unit ('.' for the repository root); equal to the classification's root for this unit."
+          },
+          "class": {
+            "type": "string",
+            "enum": [
+              "compiled-native",
+              "compiled-managed",
+              "transpiled"
+            ]
+          },
+          "build_system": {
+            "type": "string",
+            "enum": [
+              "autotools",
+              "cmake",
+              "meson",
+              "make",
+              "ninja",
+              "scons",
+              "bazel",
+              "cargo",
+              "go",
+              "maven",
+              "gradle",
+              "npm",
+              "yarn",
+              "pnpm",
+              "dotnet",
+              "msbuild",
+              "other"
+            ]
+          },
+          "feasibility": {
+            "type": "object",
+            "required": [
+              "tier",
+              "reasons"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "tier": {
+                "type": "string",
+                "enum": [
+                  "A",
+                  "B",
+                  "C"
+                ],
+                "description": "ADR-0001: A = builds with the declared toolchain as-is; B = builds with bounded adaptation (packages, flags); C = not buildable in our image (Windows-only, proprietary SDK, unsupported ecosystem). A tier C plan has no commands and names the reason in coverage_gaps."
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "image": {
+            "type": "object",
+            "required": [
+              "base",
+              "apt_packages"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "base": {
+                "type": "string",
+                "description": "A base image id from the buildenv catalog (appsec-review-process/tooling/buildenv-catalog.json), e.g. audit-buildenv-cpp."
+              },
+              "apt_packages": {
+                "type": "array",
+                "maxItems": 60,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "why",
+                    "evidence_citations"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9+.-]{0,62}$"
+                    },
+                    "why": {
+                      "type": "string"
+                    },
+                    "evidence_citations": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "$ref": "evidence-citation.schema.json"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "commands": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "required": [
+                "phase",
+                "argv",
+                "cwd",
+                "purpose",
+                "side_effects",
+                "evidence_citations"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "phase": {
+                  "type": "string",
+                  "enum": [
+                    "configure",
+                    "build"
+                  ]
+                },
+                "argv": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 64,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                },
+                "cwd": {
+                  "type": "string",
+                  "description": "Repository-relative working directory inside the unit ('.' allowed)."
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "side_effects": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "evidence_citations": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "evidence-citation.schema.json"
+                  }
+                }
+              }
+            }
+          },
+          "compile_database": {
+            "type": "object",
+            "required": [
+              "method"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": [
+                  "bear",
+                  "cmake-export",
+                  "none"
+                ],
+                "description": "How the orchestrator obtains compile_commands.json: bear (it wraps every build-phase command in `bear --append --`), cmake-export (CMAKE_EXPORT_COMPILE_COMMANDS=ON, added by the orchestrator), none (not a C/C++ unit)."
+              }
+            }
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unknowns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "signal_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^s[0-9]{4}$"
+            },
+            "description": "Index signals the plan rests on; each must exist in the accepted index."
+          },
+          "evidence_citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "evidence-citation.schema.json"
+            }
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        }
+      }
+    },
+    "dispositions": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "Orchestrator-owned, derived from the classification: every unit outside the build set and where its evidence comes from instead of a build. null in the model's response.",
+      "items": {
+        "type": "object",
+        "required": [
+          "unit_id",
+          "class",
+          "disposition"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "unit_id": {
+            "type": "string"
+          },
+          "class": {
+            "type": "string",
+            "enum": [
+              "interpreted",
+              "container",
+              "infrastructure",
+              "unclassified"
+            ]
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "source-sast-and-sca",
+              "dockerfile-analysis-and-base-image-scan",
+              "static-iac-analysis",
+              "coverage-gap"
+            ]
+          }
+        }
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

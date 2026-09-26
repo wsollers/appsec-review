@@ -184,3 +184,37 @@ decision 2) is built; the jobs below are not.
 3. **Citations.** Classes and plan items cite checkout files (`source_file`, content hash filled by
    the orchestrator) and name the index signals they rest on (`signal_ids`), each checked against the
    accepted index. The upstream artifacts are never citable evidence.
+
+## Revision 3 (2026-09-26): the compiler is fixed; plans carry no test phase
+
+Status: Proposed 2026-09-26 (decisions by William Sollers, 2026-09-26 and 2026-09-25). Amends decision
+2 and `build-resolution.md` sections 3-5; where they conflict, this section wins.
+
+1. **Clang is fixed by our code, never chosen by the model** (William, 2026-09-26: "we want their code
+   to build with clang so that we can capture the various pieces"). Every build uses the LLVM/Clang of
+   our images: LLVM 21.1.0 from `audit-native` at `/opt/llvm`, the same toolchain the Clang Static
+   Analyzer, clang-tidy, IR capture, SVF and `ir-facts` use, so the compile database replays exactly.
+   Not gcc, not MSVC. The build image is `audit-buildenv-cpp` (on `audit-native`), extended as needed
+   but always based on it.
+2. **Where it is enforced.** (a) `build-plan.json` carries an orchestrator-owned `toolchain`
+   (`compiler: clang`, `cc`, `cxx`, `llvm_version`, the allowed compile-database compiler paths); the
+   model writes `null`. (b) The plan validator rejects a compiler as `argv[0]` (`gcc`, `g++`, `cc`,
+   `c++`, `clang`, `clang++`, `cl`, `clang-cl`, versioned forms) and any `CC=`, `CXX=`, `CPP=`, `LD=`
+   or `CCLD=` argument. (c) `02-build-resolution` sets `CC` and `CXX` in the trial environment (rendered
+   into the image as `ENV`), and (d) its judge fails a trial whose compile database has any entry
+   whose compiler is not one of `toolchain.compile_database_compilers`. A repository that only builds
+   with another compiler is a tier C plan with the reason, never a silent switch.
+3. **The compile database is produced by the orchestrator, not the plan.** The plan names a method:
+   `bear` (every build-phase command wrapped as `bear --append -- <argv>`), `cmake-export`
+   (`-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` added), or `none` (not C/C++).
+4. **No test phase.** Plans have `configure` and `build` phases only, and the validator rejects test,
+   check, install and dist targets and test runners (`make check`, `make test`, `make install`,
+   `make distcheck`, `ctest`). This applies the 2026-09-25 decision "nothing built is ever run" to the
+   build lane and supersedes `build-resolution.md` section 4 step 4's "`test` commands are run and
+   recorded". Running tests (E09 `02-test-execution`) moves to `TODO.md` section 10 with the other
+   execution of built targets.
+5. **One schema, merged per unit.** Each Haiku call returns `build-plan.json` with exactly one plan (the
+   unit named in an orchestrator-written `plan-unit.json` staged with the upstream artifacts); the job
+   publishes one `build-plan.json` with every build-set unit's plan, and orchestrator-derived
+   `dispositions` for the units outside the build set. An empty build set is `SKIPPED`
+   (`not-applicable-no-matching-inputs`) with no model call.

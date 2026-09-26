@@ -66,6 +66,12 @@ CLAIM_CLASS_POLICIES = {
             "statically-inferred-build-class", "index-review", "coverage-gap",
         },
     },
+    "build-plan": {
+        "claim_class_id": "build_unit_plan",
+        "allowed_assertions": {
+            "statically-inferred-build-plan", "coverage-gap",
+        },
+    },
 }
 PROMOTION_FIELDS = {
     "finding": {

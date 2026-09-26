@@ -904,6 +904,8 @@ class ExistingContractRegressionTests(unittest.TestCase):
             "declared-project-structure", "statically-inferred-build-plan", "coverage-gap"}),
         "build-classification": ("build_unit_classification", {
             "statically-inferred-build-class", "index-review", "coverage-gap"}),
+        "build-plan": ("build_unit_plan", {
+            "statically-inferred-build-plan", "coverage-gap"}),
     }
 
     def test_their_trusted_policies_are_unchanged_and_they_are_not_vendor_prepass_contracts(self):
