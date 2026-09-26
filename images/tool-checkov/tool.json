@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-checkov",
+  "tool": "checkov",
+  "version": "3.3.19",
+  "purpose": "IaC policy scanning (checkov), offline.",
+  "feeds": [
+    "02-iac-config-scan"
+  ],
+  "executable": "/opt/tool/bin/checkov",
+  "version_argv": [
+    "/opt/tool/bin/checkov",
+    "--version"
+  ],
+  "version_expect": "{version}",
+  "pip_lock": "requirements.txt",
+  "pip_package": "checkov",
+  "assets": [],
+  "smoke": [
+    {
+      "name": "dockerfile-scan",
+      "argv": [
+        "/opt/tool/bin/checkov",
+        "-d",
+        "/workspace",
+        "--framework",
+        "dockerfile",
+        "--skip-download",
+        "--quiet",
+        "-o",
+        "json",
+        "--output-file-path",
+        "/scratch"
+      ],
+      "exit_codes": [
+        0,
+        1
+      ],
+      "workspace": "target",
+      "expect_files": [
+        "results_json.json"
+      ]
+    }
+  ]
+}

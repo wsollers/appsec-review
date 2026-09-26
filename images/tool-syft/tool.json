@@ -1,0 +1,51 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-syft",
+  "tool": "syft",
+  "version": "1.52.0",
+  "purpose": "SBOM generation from manifests, lockfiles and vendored code (syft).",
+  "feeds": [
+    "02-sbom-inventory"
+  ],
+  "executable": "/opt/tool/bin/syft",
+  "version_argv": [
+    "/opt/tool/bin/syft",
+    "version"
+  ],
+  "version_expect": "{version}",
+  "assets": [
+    {
+      "name": "syft",
+      "url": "https://github.com/anchore/syft/releases/download/v{version}/syft_{version}_linux_amd64.tar.gz",
+      "dest": "downloads/syft.tar.gz",
+      "verify": {
+        "kind": "sigstore-cert-checksums",
+        "checksums_url": "https://github.com/anchore/syft/releases/download/v{version}/syft_{version}_checksums.txt",
+        "entry": "syft_{version}_linux_amd64.tar.gz",
+        "signature_url": "https://github.com/anchore/syft/releases/download/v{version}/syft_{version}_checksums.txt.sig",
+        "certificate_url": "https://github.com/anchore/syft/releases/download/v{version}/syft_{version}_checksums.txt.pem",
+        "certificate_identity_regexp": "^https://github\\.com/anchore/syft/\\.github/workflows/",
+        "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"
+      }
+    }
+  ],
+  "smoke": [
+    {
+      "name": "sbom",
+      "argv": [
+        "/opt/tool/bin/syft",
+        "scan",
+        "dir:/workspace",
+        "-o",
+        "cyclonedx-json=/scratch/sbom.cdx.json"
+      ],
+      "exit_codes": [
+        0
+      ],
+      "workspace": "target",
+      "expect_files": [
+        "sbom.cdx.json"
+      ]
+    }
+  ]
+}

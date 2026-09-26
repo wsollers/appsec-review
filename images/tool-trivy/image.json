@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "tool-trivy",
+      "tag": "tool-trivy:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {
+        "TOOL_VERSION": "0.74.0"
+      },
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/aquasecurity/trivy/releases/download/v0.74.0/trivy_0.74.0_Linux-64bit.tar.gz",
+          "dest": "downloads/trivy.tar.gz",
+          "sha256": "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a",
+          "bytes": 50419107
+        }
+      ],
+      "timeout_seconds": 1800
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "appsec-review/tool-pin-record/1",
+  "image_id": "tool-phpcs",
+  "tool": "phpcs",
+  "version": "4.0.4",
+  "pinned_at": "2026-09-26T16:09:21Z",
+  "assets": [
+    {
+      "name": "phpcs",
+      "url": "https://github.com/PHPCSStandards/PHP_CodeSniffer/releases/download/4.0.4/phpcs.phar",
+      "sha256": "4b010cd21d8bc8a17e2504792e3c77ef8259126f24caf7eafe7eddef1fa871e9",
+      "bytes": 1411690,
+      "verification": {
+        "kind": "pgp",
+        "signature_url": "https://github.com/PHPCSStandards/PHP_CodeSniffer/releases/download/4.0.4/phpcs.phar.asc",
+        "signature_sha256": "911584b226c34f0e257266ce2c498e42b072626a0d76015542d0a69f859b580e",
+        "fingerprint": "5CB4F778BF9BC4FB67AE511D96E91A992CF22FF4"
+      }
+    }
+  ]
+}

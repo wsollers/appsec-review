@@ -1,0 +1,33 @@
+{
+  "schema": "appsec-review/tool-pin-record/1",
+  "image_id": "tool-spotbugs",
+  "tool": "spotbugs",
+  "version": "4.10.4",
+  "pinned_at": "2026-09-26T16:10:39Z",
+  "assets": [
+    {
+      "name": "spotbugs",
+      "url": "https://github.com/spotbugs/spotbugs/releases/download/4.10.4/spotbugs-4.10.4.tgz",
+      "sha256": "72bc0d4edd686e462c0f71f42a049b27bf4da6708797ff7b2b56dd202714b4e5",
+      "bytes": 15831983,
+      "verification": {
+        "kind": "pgp",
+        "signature_url": "https://github.com/spotbugs/spotbugs/releases/download/4.10.4/spotbugs-4.10.4.tgz.asc",
+        "signature_sha256": "2106613502a2b6bf6b25529adee486bb0de85a07fad874c2bc9d1ab7b52cc2ff",
+        "fingerprint": "D878D4A823EAE731B729D1A8D2151178A123C97F"
+      }
+    },
+    {
+      "name": "findsecbugs-plugin",
+      "url": "https://repo1.maven.org/maven2/com/h3xstream/findsecbugs/findsecbugs-plugin/1.14.0/findsecbugs-plugin-1.14.0.jar",
+      "sha256": "6fa340344fa433ff46c2985dab1010e8bc739f9395c983594a5240095e92abc8",
+      "bytes": 485755,
+      "verification": {
+        "kind": "pgp",
+        "signature_url": "https://repo1.maven.org/maven2/com/h3xstream/findsecbugs/findsecbugs-plugin/1.14.0/findsecbugs-plugin-1.14.0.jar.asc",
+        "signature_sha256": "1f6c64ab974217dacf6922ac6660e333f8f7c0fc6d6a54705e95918df2522103",
+        "fingerprint": "CFC10B69382CBCF5387E51484ECE492B63E38ACF"
+      }
+    }
+  ]
+}

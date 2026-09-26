@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "tool-gosec",
+      "tag": "tool-gosec:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {
+        "TOOL_VERSION": "2.29.0"
+      },
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/securego/gosec/releases/download/v2.29.0/gosec_2.29.0_linux_amd64.tar.gz",
+          "dest": "downloads/gosec.tar.gz",
+          "sha256": "6431b119741c1f4a50fdfcf94e782e16b9e642afc8c7fa9b5d39d48bf3003095",
+          "bytes": 27920687
+        },
+        {
+          "kind": "download",
+          "url": "https://dl.google.com/go/go1.27.1.linux-amd64.tar.gz",
+          "dest": "downloads/go.tar.gz",
+          "sha256": "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445",
+          "bytes": 70553950
+        }
+      ],
+      "timeout_seconds": 1800
+    }
+  ]
+}

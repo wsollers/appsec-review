@@ -1,0 +1,21 @@
+{
+  "schema": "appsec-review/tool-pin-record/1",
+  "image_id": "tool-phpstan",
+  "tool": "phpstan",
+  "version": "2.2.16",
+  "pinned_at": "2026-09-26T16:09:19Z",
+  "assets": [
+    {
+      "name": "phpstan",
+      "url": "https://github.com/phpstan/phpstan/releases/download/2.2.16/phpstan.phar",
+      "sha256": "1a2fb5460c142502d3cd06272529c18b19fda004ada974bd2581cb9fd6c0a53b",
+      "bytes": 29969107,
+      "verification": {
+        "kind": "pgp",
+        "signature_url": "https://github.com/phpstan/phpstan/releases/download/2.2.16/phpstan.phar.asc",
+        "signature_sha256": "f2a6c4e1e3c3052abdf98640a4fc9fba7a373e1148fee6e7b474a6494074e6da",
+        "fingerprint": "CA7C2C7A30C8E8E1274A847651C67305FFC2E5C0"
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-grype",
+  "tool": "grype",
+  "version": "0.119.0",
+  "purpose": "vulnerability matching of an SBOM against a mirrored, pinned Grype database (grype; ADR-0010 M1).",
+  "feeds": [
+    "02-sca-vulnerability-match"
+  ],
+  "executable": "/opt/tool/bin/grype",
+  "version_argv": [
+    "/opt/tool/bin/grype",
+    "version"
+  ],
+  "version_expect": "{version}",
+  "assets": [
+    {
+      "name": "grype",
+      "url": "https://github.com/anchore/grype/releases/download/v{version}/grype_{version}_linux_amd64.tar.gz",
+      "dest": "downloads/grype.tar.gz",
+      "verify": {
+        "kind": "sigstore-cert-checksums",
+        "checksums_url": "https://github.com/anchore/grype/releases/download/v{version}/grype_{version}_checksums.txt",
+        "entry": "grype_{version}_linux_amd64.tar.gz",
+        "signature_url": "https://github.com/anchore/grype/releases/download/v{version}/grype_{version}_checksums.txt.sig",
+        "certificate_url": "https://github.com/anchore/grype/releases/download/v{version}/grype_{version}_checksums.txt.pem",
+        "certificate_identity_regexp": "^https://github\\.com/anchore/grype/\\.github/workflows/",
+        "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"
+      }
+    }
+  ],
+  "smoke": [
+    {
+      "name": "no-database-refuses",
+      "argv": [
+        "/opt/tool/bin/grype",
+        "db",
+        "status"
+      ],
+      "exit_codes": [
+        1
+      ],
+      "workspace": "none"
+    }
+  ],
+  "notes": "The database is never in the image and never downloaded by a scan: it is the mirrored snapshot (TODO V16) mounted read-only. The smoke run only proves grype refuses to run without one."
+}

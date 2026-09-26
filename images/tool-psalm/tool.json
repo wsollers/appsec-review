@@ -1,0 +1,52 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-psalm",
+  "tool": "psalm",
+  "version": "6.18.1",
+  "purpose": "PHP static analysis with taint analysis (Psalm).",
+  "feeds": [
+    "02-source-sast"
+  ],
+  "executable": "/opt/tool/bin/psalm",
+  "version_argv": [
+    "/opt/tool/bin/psalm",
+    "--version"
+  ],
+  "version_expect": "{version}",
+  "assets": [
+    {
+      "name": "psalm",
+      "url": "https://github.com/vimeo/psalm/releases/download/{version}/psalm.phar",
+      "dest": "downloads/psalm.phar",
+      "verify": {
+        "kind": "pgp",
+        "signature_url": "https://github.com/vimeo/psalm/releases/download/{version}/psalm.phar.asc",
+        "fingerprint": "54F5DF0E979A94C40DEDE5E599BF4D9A33D65E1E"
+      }
+    }
+  ],
+  "smoke": [
+    {
+      "name": "php-fixture",
+      "argv": [
+        "/opt/tool/bin/psalm",
+        "--config=/config/psalm.xml",
+        "--no-cache",
+        "--no-progress",
+        "--threads=1",
+        "--root=/config",
+        "--report=/scratch/psalm.json",
+        "/workspace/hello.php"
+      ],
+      "exit_codes": [
+        0,
+        2
+      ],
+      "workspace": "images/test/php",
+      "config": "smoke-config",
+      "expect_files": [
+        "psalm.json"
+      ]
+    }
+  ]
+}

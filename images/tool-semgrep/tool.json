@@ -1,0 +1,50 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-semgrep",
+  "tool": "semgrep",
+  "version": "1.178.0",
+  "purpose": "source SAST (Semgrep CE engine). Rules are not in the image; they are mounted per run.",
+  "feeds": [
+    "02-source-sast"
+  ],
+  "executable": "/opt/tool/bin/semgrep",
+  "version_argv": [
+    "/opt/tool/bin/semgrep",
+    "--version"
+  ],
+  "version_expect": "{version}",
+  "pip_lock": "requirements.txt",
+  "pip_package": "semgrep",
+  "assets": [],
+  "smoke": [
+    {
+      "name": "pattern-scan",
+      "argv": [
+        "/opt/tool/bin/semgrep",
+        "scan",
+        "--metrics=off",
+        "--disable-version-check",
+        "--oss-only",
+        "--lang",
+        "cpp",
+        "-e",
+        "std::strcpy($DST, $SRC)",
+        "--json",
+        "--output",
+        "/scratch/semgrep.json",
+        "/workspace/src"
+      ],
+      "exit_codes": [
+        0
+      ],
+      "workspace": "target",
+      "expect_files": [
+        "semgrep.json"
+      ],
+      "file_contains": {
+        "semgrep.json": "src/greet.cpp"
+      }
+    }
+  ],
+  "notes": "Rule sourcing is open (images/audit-static-opengrep/Dockerfile: the Semgrep Rules License question). The scan job mounts a pinned, hashed rule set; the image carries none, so a scan without rules is a coverage gap, never a clean result."
+}

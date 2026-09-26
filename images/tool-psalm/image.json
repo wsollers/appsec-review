@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "tool-psalm",
+      "tag": "tool-psalm:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {
+        "TOOL_VERSION": "6.18.1"
+      },
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/vimeo/psalm/releases/download/6.18.1/psalm.phar",
+          "dest": "downloads/psalm.phar",
+          "sha256": "bda02df4550afb1a78e6de203519e8d489ac9358181aeae7a854e9286c1815a5",
+          "bytes": 52612893
+        }
+      ],
+      "timeout_seconds": 1800
+    }
+  ]
+}

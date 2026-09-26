@@ -132,8 +132,8 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
   require it; the hash is returned by `run_container` and kept in the attempt's `command.json`
   outside the scratch mount. Record in `docs/adapters/pinned-container-adapter.md`.
 - B16: `registry/container-images/<image_id>.json` for every image a step-4 worker uses
-  (`audit-static`, `audit-buildenv-cpp`, `audit-native`, `audit-iac`, `audit-container`,
-  `scancode-toolkit`, `audit-binary-analysis`), generated from `images/.build-state/<id>/latest.json`
+  (`audit-buildenv-cpp`, `audit-native`, `audit-iac`, `audit-container`, `scancode-toolkit`,
+  `audit-binary-analysis`, and the 13 `tool-*` images of 2026-09-26, `docs/processes/tool-images.md`), generated from `images/.build-state/<id>/latest.json`
   by a new `images/registry_records.py` (digest, Dockerfile hash, build attempt id); a test ties
   each record's digest to the local image (`docker image inspect`) and fails on drift. Local builds
   get `digest_kind: "image-id"` until a registry push exists.
@@ -1112,12 +1112,19 @@ Work order (one piece at a time):
 
 ### Phase 7 -- static evidence off intake (parallel; one batch each)
 
+**Per-tool images built 2026-09-26** (William: one image per tool, bundle only where a tool needs another
+package): 13 `images/tool-*` images, pinned and vendor-verified by `images/tool_pins.py`, each built and
+smoke-tested inside the B13 boundary. See `docs/processes/tool-images.md`. The scan jobs below use them;
+each job is deterministic Python (no persona, no model) that takes its configuration as job input and
+mounts tool configuration read-only. Still to add: `tool-scancode` (licenses, vendored code), and the
+Grype DB mirror (V16) before `02-sca-vulnerability-match` can run.
+
 | Node | Batch | Tool / image | Fixture expectation |
 |---|---|---|---|
-| `02-source-sast` | D09 | Semgrep in `audit-static` | 3 unconditional hits (VULN-01 `strcpy`, VULN-02 format string, VULN-04 `memcpy` behind macro+template) + VULN-03 (command injection) as a reachability case behind `--report` |
-| `02-secrets-inventory` | M03 | gitleaks in `audit-static` | clean; V06 redaction receipt present |
-| `02-iac-config-scan` | M03 | `audit-iac` | `SKIPPED(not-applicable-no-matching-inputs)` |
-| `02-sbom-inventory` | M05 | syft in `audit-static` | valid SBOM with **one** component: vendored cJSON 1.7.18 (not zero -- updated when the fixture gained a vendored dependency) |
+| `02-source-sast` | D09 | Semgrep: `tool-semgrep` (also `tool-gosec`, `tool-spotbugs`, `tool-phpstan`, `tool-psalm`, `tool-phpcs` per language) | 3 unconditional hits (VULN-01 `strcpy`, VULN-02 format string, VULN-04 `memcpy` behind macro+template) + VULN-03 (command injection) as a reachability case behind `--report` |
+| `02-secrets-inventory` | M03 | `tool-gitleaks` | clean; V06 redaction receipt present |
+| `02-iac-config-scan` | M03 | `tool-checkov`, `tool-trivy` (config) | `SKIPPED(not-applicable-no-matching-inputs)` |
+| `02-sbom-inventory` | M05 | `tool-syft` (+ a vendored-code source: syft finds no component in the fixture) | valid SBOM with **one** component: vendored cJSON 1.7.18 (not zero -- updated when the fixture gained a vendored dependency) |
 | `02-license-scan` | M05 | `scancode-toolkit` | project licence (MIT) plus vendored cJSON's licence (MIT) -- two components, same licence text |
 | `02-dependency-lifecycle` | M05 | `analyze_dependency_lifecycle` + `data/eol-reference.json` | cJSON isn't in a lifecycle/EOL-tracked product family, so still empty/`unknown`-never-inferred-current is the expected outcome even with a real dependency present |
 | `02-sca-vulnerability-match` | M05 + V16/V17/V18 | Grype with mirrored DB, OSV snapshot | **one** match, not zero -- vendored cJSON 1.7.18 against **CVE-2025-57052** (published, affects 1.5.0-1.7.18). This is the fixture's actual test of match accuracy, not just of the zero-input skip path (the publishers are still the real work here) |

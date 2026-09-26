@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/tool-pin-record/1",
+  "image_id": "tool-grype",
+  "tool": "grype",
+  "version": "0.119.0",
+  "pinned_at": "2026-09-26T16:09:13Z",
+  "assets": [
+    {
+      "name": "grype",
+      "url": "https://github.com/anchore/grype/releases/download/v0.119.0/grype_0.119.0_linux_amd64.tar.gz",
+      "sha256": "3fa2dc4b924621ab65404cf08d0b8438d896d80ab949c9d5a4ca283c36004c9b",
+      "bytes": 30482169,
+      "verification": {
+        "kind": "sigstore-cert-checksums",
+        "checksums_url": "https://github.com/anchore/grype/releases/download/v0.119.0/grype_0.119.0_checksums.txt",
+        "checksums_sha256": "9cb7f68e8fa2b039e67f33d1fda29e7224946167f3b8abb43c51a6fff0c0de78",
+        "entry": "grype_0.119.0_linux_amd64.tar.gz",
+        "signature_url": "https://github.com/anchore/grype/releases/download/v0.119.0/grype_0.119.0_checksums.txt.sig",
+        "signature_sha256": "52846bb5260f3efd776d5829ec4350fd849912df8ee409284545327caacd965a",
+        "certificate_url": "https://github.com/anchore/grype/releases/download/v0.119.0/grype_0.119.0_checksums.txt.pem",
+        "certificate_sha256": "edf6c6baa9e2032df11240b04164c8aabfc948708e5850d71a21d6bba9916abd",
+        "certificate_identity_regexp": "^https://github\\.com/anchore/grype/\\.github/workflows/",
+        "certificate_oidc_issuer": "https://token.actions.githubusercontent.com",
+        "cosign_output": "Verified OK"
+      }
+    }
+  ]
+}
