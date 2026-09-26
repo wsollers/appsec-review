@@ -268,6 +268,9 @@ def _fetch(step: dict[str, Any], folder: Path, log) -> None:
         return
     if dest.exists():
         raise BuildFailed("PREBUILD_FILE_CORRUPT", f"{dest} exists but does not match the declared sha256; delete it and rebuild")
+    # A nested dest (downloads/wheels/<file>) has no folder on a fresh checkout: downloads/ is
+    # gitignored. The dest was already checked relative and free of '..' segments.
+    dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
     log(f"download {step['url']} -> {dest.name} ({step['bytes']} bytes expected)")
     try:

@@ -193,3 +193,24 @@ class PipLock(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImageBuildFetch(unittest.TestCase):
+    """images/image_build.py fetch step on a fresh checkout (downloads/ is gitignored, so absent)."""
+
+    def test_nested_download_dest_is_created_and_verified(self):
+        import image_build
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        source = tmp / "wheel.whl"
+        source.write_bytes(b"wheel bytes")
+        folder = tmp / "tool-x"
+        folder.mkdir()
+        step = {"kind": "download", "url": source.as_uri(), "dest": "downloads/wheels/wheel.whl",
+                "sha256": sha(b"wheel bytes"), "bytes": len(b"wheel bytes")}
+        image_build._fetch(step, folder, lambda message: None)
+        self.assertEqual((folder / "downloads" / "wheels" / "wheel.whl").read_bytes(), b"wheel bytes")
+        bad = dict(step, dest="downloads/other/wheel.whl", sha256="0" * 64)
+        with self.assertRaises(image_build.BuildFailed):
+            image_build._fetch(bad, folder, lambda message: None)
+        self.assertFalse((folder / "downloads" / "other" / "wheel.whl").exists())
