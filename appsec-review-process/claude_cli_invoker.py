@@ -86,7 +86,32 @@ one well-formed response.
 class InvokerOutputError(ValueError):
     """The model's response was not a valid, schema-conformant envelope. Raised so
     ``persona_invocation.run_invocation`` records ``INVOKER_EXCEPTION`` / ``FAILED`` -- this module
-    never writes a partial or best-effort ``invoker-output.json`` for a rejected response."""
+    never writes a partial or best-effort ``invoker-output.json`` for a rejected response.
+
+    ``details`` holds the full mechanical reasons (schema error paths and messages) for the repair
+    prompt and the diagnostics file; the exception message itself stays short and never quotes the
+    model's text."""
+
+    def __init__(self, message: str, details: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.details = list(details or [message])
+
+
+REPAIR_INSTRUCTIONS = """
+## Your previous response was rejected -- produce it again, corrected
+
+The previous response to this same request failed these mechanical checks (JSON paths point into
+your response; `$` is the top of the file's object):
+
+{errors}
+
+Produce the complete response again from the beginning, following the response format above
+exactly: one JSON object with exactly the listed keys, each JSON-valued key validating against its
+schema. Do not add any property the schema does not define. The repository content and your task
+are unchanged.
+""".strip()
+MAX_REPAIR_ERRORS = 20
+MAX_REPAIR_ERROR_CHARS = 300
 
 
 def _slug(filename: str) -> str:
@@ -263,10 +288,10 @@ def _persist_llm_transcript(cfg: dict, request: Any, diagnostics_dir: Path) -> N
         if not (run_id and job_id and attempt_id):
             return
         dest = data_path(run_id, "llm-transcripts", job_id, attempt_id)
-        for name in ("transcript.jsonl", "raw-response.json"):
-            source = diagnostics_dir / name
-            if source.exists():
-                atomic_bytes(dest / name, source.read_bytes())
+        for source in sorted(diagnostics_dir.iterdir()):
+            if source.is_file() and (source.name.startswith(("transcript", "raw-response"))
+                                     or source.name == "repair-log.json"):
+                atomic_bytes(dest / source.name, source.read_bytes())
     except Exception:
         pass
 
@@ -313,9 +338,11 @@ def _parse_envelope(result_text: str) -> dict[str, Any]:
     try:
         envelope = json.loads(text)
     except ValueError as exc:
-        raise InvokerOutputError(f"model response is not valid JSON: {type(exc).__name__}") from None
+        raise InvokerOutputError(f"model response is not valid JSON: {type(exc).__name__}",
+                                 [f"the response is not valid JSON ({type(exc).__name__}: {exc})"]) from None
     if not isinstance(envelope, dict):
-        raise InvokerOutputError("model response is valid JSON but not a JSON object")
+        raise InvokerOutputError("model response is valid JSON but not a JSON object",
+                                 ["the response is valid JSON but not a JSON object"])
     return envelope
 
 
@@ -339,7 +366,8 @@ def _validate_envelope(envelope: dict[str, Any], fields: list[tuple[str, str, st
             if errors:
                 raise InvokerOutputError(
                     f"envelope[{key!r}] failed {schema_file}: {len(errors)} error(s) "
-                    f"(first: {errors[0].split(':', 1)[0]})")
+                    f"(first: {errors[0].split(':', 1)[0]})",
+                    [f"{key}: {error}" for error in errors])
 
 
 def _citation_for(item: Any, source_type: str, path: str, line_range: str | None) -> dict[str, Any] | None:
@@ -635,6 +663,78 @@ _CLAIM_BUILDERS = {
 }
 
 
+def _repair_attempts(cfg: dict) -> int:
+    """``model-config.json`` ``invocation.repair_attempts``: how many times a rejected response may
+    be re-asked with its validation errors (William, 2026-09-26: bounded repair retry). Default 1,
+    allowed 0-2; anything else is treated as 1."""
+    value = (cfg.get("invocation") or {}).get("repair_attempts", 1)
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 2 else 1
+
+
+def _repair_prompt(prompt_text: str, error: InvokerOutputError) -> str:
+    lines = [f"- {detail[:MAX_REPAIR_ERROR_CHARS]}" for detail in error.details[:MAX_REPAIR_ERRORS]]
+    if len(error.details) > MAX_REPAIR_ERRORS:
+        lines.append(f"- ... and {len(error.details) - MAX_REPAIR_ERRORS} more")
+    return prompt_text + "\n\n" + REPAIR_INSTRUCTIONS.format(errors="\n".join(lines))
+
+
+def _dispatch_until_accepted(*, dispatch_fn, accept, prompt_text: str, argv_for, budget_usd: float | None,
+                             timeout_seconds: int, repair_attempts: int, input_unit_limit: int | None,
+                             diagnostics_dir: Path, cancel: threading.Event, started: float) -> dict[str, Any]:
+    """One dispatch, then at most ``repair_attempts`` re-asks when the response fails the
+    mechanical checks (envelope, schema, claim builder). Each re-ask is the original prompt plus the
+    rejection reasons, and must fit what is left of the call's time, dollar cap and input-unit
+    ceiling; otherwise the last rejection is raised unchanged. A timeout, cancellation or missing
+    binary is never retried. Every round's transcript and raw response, and ``repair-log.json``,
+    stay in the private diagnostics directory. Returns the accepted envelope and claims with the
+    summed token usage and the number of rejected rounds."""
+    spent_usd, input_tokens, output_tokens = 0.0, 0, 0
+    log: list[dict[str, Any]] = []
+    prompt = prompt_text
+    for round_index in range(repair_attempts + 1):
+        suffix = "" if round_index == 0 else f"-repair-{round_index}"
+        budget = None if budget_usd is None else round(budget_usd - spent_usd, 4)
+        remaining_seconds = int(timeout_seconds - (time.time() - started))
+        try:
+            dispatch = dispatch_fn(argv_for(budget), prompt, max(1, remaining_seconds),
+                                   diagnostics_dir / f"transcript{suffix}.jsonl")
+        except FileNotFoundError as exc:
+            raise pi.InvokerUnavailable(f"claude CLI binary unavailable: {exc}") from exc
+        if cancel.is_set():
+            raise pi.InvokerUnavailable("canceled during dispatch")
+        if dispatch.get("timed_out"):
+            raise TimeoutError("claude CLI dispatch exceeded its timeout")
+        final = dispatch.get("final_result")
+        (diagnostics_dir / f"raw-response{suffix}.json").write_text(
+            json.dumps(final, indent=2, sort_keys=True) if final is not None else "", encoding="utf-8")
+        if isinstance(final, dict):
+            cost = final.get("total_cost_usd")
+            if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+                spent_usd += float(cost)
+            usage = final.get("usage") or {}
+            input_tokens += int(usage.get("input_tokens") or 0)
+            output_tokens += int(usage.get("output_tokens") or 0)
+        try:
+            envelope, claims = accept(dispatch)
+        except InvokerOutputError as exc:
+            log.append({"round": round_index, "reason": str(exc), "details": exc.details[:200]})
+            atomic_bytes(diagnostics_dir / "repair-log.json",
+                         (json.dumps(log, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+            last_round = round_index == repair_attempts
+            no_time = timeout_seconds - (time.time() - started) < 120
+            no_money = budget_usd is not None and budget_usd - spent_usd < 0.05
+            no_units = bool(input_unit_limit) and input_tokens * (round_index + 2) / (round_index + 1) > input_unit_limit
+            if last_round or no_time or no_money or no_units or cancel.is_set():
+                raise InvokerOutputError(
+                    f"{exc} (after {round_index + 1} response(s); diagnostics: {diagnostics_dir})",
+                    exc.details) from None
+            prompt = _repair_prompt(prompt_text, exc)
+            continue
+        return {"envelope": envelope, "claims": claims, "rejected": round_index,
+                "input_tokens": input_tokens, "output_tokens": output_tokens}
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 class ClaudeCliInvoker:
     """The real, live ``PersonaInvoker``. One CLI call per invocation, no tools, strict envelope."""
     invoker_id = "claude-cli"
@@ -662,7 +762,6 @@ class ClaudeCliInvoker:
             binary = cbr.resolve_claude_binary(package.request["run_id"])
         except cbr.ClaudeBinaryError as exc:
             raise pi.InvokerUnavailable(str(exc)) from exc
-        argv = _dispatch_argv(model_alias, self.effort, self.budget_usd, self.timeout_seconds, binary)
 
         # B14's contract is strict: an invoker writes its files and invoker-output.json beneath
         # output_root "and nowhere else" -- persona_invocation.py's own output derivation scans
@@ -675,33 +774,43 @@ class ClaudeCliInvoker:
         # structurally testing this module: the first draft wrote them under
         # output_root/diagnostics/, which is exactly the mistake this paragraph now documents.
         diagnostics_dir = Path(tempfile.mkdtemp(prefix="claude-cli-invoker-"))
-        transcript_path = diagnostics_dir / "transcript.jsonl"
         cfg = rc.load_model_config()
-        try:
-            started = time.time()
-            try:
-                dispatch = self._dispatch_fn(argv, prompt_text, self.timeout_seconds, transcript_path)
-            except FileNotFoundError as exc:
-                raise pi.InvokerUnavailable(f"claude CLI binary unavailable: {exc}") from exc
-            duration_seconds = time.time() - started
-            if cancel.is_set():
-                raise pi.InvokerUnavailable("canceled during dispatch")
-            if dispatch.get("timed_out"):
-                raise TimeoutError("claude CLI dispatch exceeded its timeout")
+        builder = _CLAIM_BUILDERS.get(output_contract["result_schema"]["schema_file"])
+        if builder is None:
+            raise InvokerOutputError(
+                f"no claim builder for result schema {output_contract['result_schema']['schema_file']!r}")
+        result_field = next(key for filename, key, kind in fields if kind == "json")
+        result_filename = next(filename for filename, key, kind in fields if kind == "json")
+        # Only target-repository inputs are citable evidence; an upstream artifact (D02's
+        # accepted partition map) is scope, so it never enters claim citation resolution.
+        target_inputs = tuple(item for item in package.inputs if item.root != pd.UPSTREAM_ROOT_ID)
 
-            (diagnostics_dir / "raw-response.json").write_text(
-                json.dumps(dispatch.get("final_result"), indent=2, sort_keys=True) if dispatch.get("final_result")
-                is not None else "", encoding="utf-8")
+        def accept(dispatch: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+            """Parse, validate and build claims; raises InvokerOutputError with its details."""
             result_text = _extract_result_text(dispatch)
             if not result_text:
-                raise InvokerOutputError(
-                    f"claude CLI dispatch produced no terminal result text (diagnostics: {diagnostics_dir})")
-
+                raise InvokerOutputError("claude CLI dispatch produced no terminal result text",
+                                         ["the response held no result text"])
+            envelope = _parse_envelope(result_text)
+            _validate_envelope(envelope, fields, output_contract, store)
             try:
-                envelope = _parse_envelope(result_text)
-                _validate_envelope(envelope, fields, output_contract, store)
+                claims = _schema_safe_claims(builder(envelope[result_field], target_inputs,
+                                                     package.allowed_claim_classes, result_filename))
             except InvokerOutputError as exc:
-                raise InvokerOutputError(f"{exc} (diagnostics: {diagnostics_dir})") from exc
+                raise InvokerOutputError(str(exc), [f"{result_field}: {exc}"]) from None
+            return envelope, claims
+
+        try:
+            started = time.time()
+            rounds = _dispatch_until_accepted(
+                dispatch_fn=self._dispatch_fn, accept=accept, prompt_text=prompt_text,
+                argv_for=lambda budget: _dispatch_argv(model_alias, self.effort, budget, self.timeout_seconds, binary),
+                budget_usd=self.budget_usd, timeout_seconds=self.timeout_seconds,
+                repair_attempts=_repair_attempts(cfg),
+                input_unit_limit=(package.request.get("budget") or {}).get("input_unit_limit"),
+                diagnostics_dir=diagnostics_dir, cancel=cancel, started=started)
+            duration_seconds = time.time() - started
+            envelope, claims = rounds["envelope"], rounds["claims"]
 
             written_files: list[str] = []
             for filename, key, kind in fields:
@@ -713,32 +822,22 @@ class ClaudeCliInvoker:
                     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
                 written_files.append(filename)
 
-            result_field = next(key for filename, key, kind in fields if kind == "json")
-            result_filename = next(filename for filename, key, kind in fields if kind == "json")
-            builder = _CLAIM_BUILDERS.get(output_contract["result_schema"]["schema_file"])
-            if builder is None:
-                raise InvokerOutputError(
-                    f"no claim builder for result schema "
-                    f"{output_contract['result_schema']['schema_file']!r}")
-            # Only target-repository inputs are citable evidence; an upstream artifact (D02's
-            # accepted partition map) is scope, so it never enters claim citation resolution.
-            target_inputs = tuple(item for item in package.inputs if item.root != pd.UPSTREAM_ROOT_ID)
-            claims = _schema_safe_claims(builder(envelope[result_field], target_inputs,
-                                                 package.allowed_claim_classes, result_filename))
-
-            usage_raw = dispatch.get("final_result") if isinstance(dispatch.get("final_result"), dict) else {}
             read_bytes = len(package.prompt) + sum(len(item.data) for item in package.inputs)
             written_bytes = sum(len((Path(output_root) / f).read_bytes()) for f in written_files)
+            limitations = [f"claude-cli dispatch, {duration_seconds:.1f}s, model={model_alias}, "
+                           f"effort={self.effort}"]
+            if rounds["rejected"]:
+                limitations.append(f"schema repair retry: {rounds['rejected']} rejected response(s) before "
+                                   f"this one; the rejected responses and reasons are kept in the run's "
+                                   f"diagnostics, not in this output")
             pi.write_invoker_output(
                 package, output_root, files=written_files, claims=claims,
-                usage={"input_bytes": read_bytes, "input_units": (usage_raw.get("usage") or {}).get("input_tokens")
-                      or (read_bytes + 3) // 4,
-                      "output_units": (usage_raw.get("usage") or {}).get("output_tokens")
-                      or (written_bytes + 3) // 4,
-                      "tool_calls": 0},
+                usage={"input_bytes": read_bytes,
+                       "input_units": rounds["input_tokens"] or (read_bytes + 3) // 4,
+                       "output_units": rounds["output_tokens"] or (written_bytes + 3) // 4,
+                       "tool_calls": 0},
                 tool_calls=[], verified_invocations=[], injection_suspected=[],
-                limitations=[f"claude-cli dispatch, {duration_seconds:.1f}s, model={model_alias}, "
-                            f"effort={self.effort}"])
+                limitations=limitations)
         finally:
             # Runs on every path -- success, a raised InvokerOutputError/InvokerUnavailable, a
             # timeout, or cancellation -- so a failed dispatch's transcript is captured too, gated

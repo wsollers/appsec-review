@@ -258,6 +258,24 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-26 -- **Live persona answers now pass the invoker's transport checks, with one bounded repair
+  retry (zarathustra, native Linux).** Two live failures, both in `claude_cli_invoker.py`, neither in the
+  model's analysis. (1) SAT `20260926T151852Z` (run `20260926T152303Z-d6c38c`, Dagster `4093f70a`): stages
+  1-10 PASS, stage 11 `build-classify` ended `MALFORMED_RESULT` because the claim builder put the unit id
+  into the claim id (`class-dir:.`) and `persona-invoker-output.schema.json` allows only `[A-Za-z0-9_-]`.
+  Fixed in the builder, then generally: `_schema_safe_claims` normalizes every builder's claims (ids,
+  duplicate ids, control characters in statements and locators) before the manifest. (2) SAT
+  `20260926T164835Z` (run `20260926T165300Z-026987`, Dagster `76977896`): stage 8 `devops-project-discovery`
+  ended `INVOKER_EXCEPTION`: the model added a stray `project_discovery_summary_placeholder` property inside
+  its project inventory, which the schema correctly rejects. William chose a **bounded repair retry**:
+  a response that fails the envelope, schema or claim-builder checks is re-asked with the original prompt
+  plus the validation errors, `invocation.repair_attempts` times (default 1, 0-2), within what is left of
+  the call's time, dollar cap and input-unit ceiling; a second failure still fails closed; timeouts,
+  cancellation and a missing binary are never retried; rejected responses and reasons stay in the
+  private diagnostics (`repair-log.json`), and the published output records only the count. Also found:
+  run one SAT at a time with nothing else writing into the repo (a second SAT tripped stage 7's
+  post-contract, SAT `20260926T161204Z`). Per-tool images (`docs/processes/tool-images.md`) built the same
+  day. Next: a fresh `--dispatch --through build-classify` SAT.
 - 2026-09-25 -- **`02-build-index` built (TODO Phase 5g item 2; branch `build-lane-per-unit`).** The
   first build-lane job: a deterministic indexer (`build_index.py`) that lists candidate build units
   (one per build root) and their cited build signals; it executes nothing and assigns no class.
