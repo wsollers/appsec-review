@@ -6,6 +6,7 @@ from phase1 import Session, config_for
 import workflow
 import build_execution as build_execution_worker
 import build_classify as build_classify_worker
+import build_plan as build_plan_worker
 import build_index as build_index_worker
 import discovery_gate
 import evidence_store
@@ -514,6 +515,36 @@ def build_classify():
     build_classify_standalone_work(build_execution_config())
 
 
+def run_build_plan(context, configured):
+    # 02-build-plan (ADR-0012 revisions 2-3; TODO Phase 5g item 4): one live persona call (Haiku) per
+    # build-set unit reads the checkout, the accepted index and classification, the buildenv catalog
+    # and plan-unit.json; the compiler is fixed (our clang). Published on the common envelope.
+    result = build_plan_worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
+    path = build_plan_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(path / 'build-plan.json')),
+        'summary': MetadataValue.path(str(path / 'build-plan-summary.md')),
+        'envelope': MetadataValue.path(str(path / 'result.json'))})
+    return result
+
+
+@op(pool=PERSONA_POOL)
+def build_plan_standalone_work(context, configured):
+    return run_build_plan(context, configured)
+
+
+@op(name='job_02_build_plan', ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
+def build_plan_work(context, configured, upstream):
+    return run_build_plan(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def build_plan():
+    build_plan_standalone_work(build_execution_config())
+
+
 # Construct the full graph from the same validated lifecycle contract as intake.
 # Missing workers fail explicitly instead of succeeding as no-op placeholders.
 from job_graph import load_graph
@@ -522,7 +553,7 @@ LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure',
                                  '02-repository-partition-discovery','02-dev-project-discovery',
                                  '02-devops-project-discovery','02-sre-operations-topology',
-                                 '02-build-index','02-build-classify','02-ossf-scorecard')}
+                                 '02-build-index','02-build-classify','02-build-plan','02-ossf-scorecard')}
 LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
@@ -530,6 +561,7 @@ LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
 LIFECYCLE_OPS['02-sre-operations-topology']=sre_operations_topology_work
 LIFECYCLE_OPS['02-build-index']=build_index_work
 LIFECYCLE_OPS['02-build-classify']=build_classify_work
+LIFECYCLE_OPS['02-build-plan']=build_plan_work
 LIFECYCLE_OPS['02-ossf-scorecard']=ossf_scorecard_lifecycle_work
 
 
@@ -552,7 +584,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -562,7 +594,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

@@ -49,7 +49,8 @@
       "phase1_intake",
       "sre_operations_topology",
       "build_index",
-      "build_classify"
+      "build_classify",
+      "build_plan"
     ],
     "standalone_relationships": [
       {
@@ -145,6 +146,13 @@
         "relationship": "standalone and lifecycle-wired persona classification of build units; requires an accepted build index"
       },
       {
+        "job": "build_plan",
+        "lifecycle_jobs": [
+          "02-build-plan"
+        ],
+        "relationship": "standalone and lifecycle-wired persona build plan, one Haiku call per build-set unit, compiler fixed (our clang); requires an accepted build classification"
+      },
+      {
         "job": "full_review",
         "lifecycle_jobs": [
           "00-intake",
@@ -155,6 +163,7 @@
           "02-sre-operations-topology",
           "02-build-index",
           "02-build-classify",
+          "02-build-plan",
           "02-evidence-assembly",
           "01-component-characterization",
           "03-threat-model-dfd-stride",
@@ -218,7 +227,8 @@
       "phase1_intake",
       "sre_operations_topology",
       "build_index",
-      "build_classify"
+      "build_classify",
+      "build_plan"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -233,6 +243,7 @@
       "sre_operations_topology",
       "build_index",
       "build_classify",
+      "build_plan",
       "full_review"
     ],
     "cancellation_sensor_jobs": [
@@ -248,6 +259,7 @@
       "sre_operations_topology",
       "build_index",
       "build_classify",
+      "build_plan",
       "full_review"
     ],
     "queue": {
@@ -797,6 +809,73 @@
         "not_yet_live_qualified"
       ],
       "next_prerequisite": "Live SAT stage 11 (build-classify, --dispatch) on hal5000, then record qualification."
+    },
+    {
+      "id": "02-build-plan",
+      "design_refs": [
+        "docs/decisions/ADR-0012-build-resolution.md#revision-3-2026-09-26-the-compiler-is-fixed-plans-carry-no-test-phase",
+        "docs/processes/build-resolution.md#3-02-build-plan-llm-inference"
+      ],
+      "graph": {
+        "node": "02-build-plan",
+        "implemented": true,
+        "dependencies": [
+          "02-build-classify"
+        ]
+      },
+      "registry": {
+        "template": "02-build-plan",
+        "persona": "developer-engineer",
+        "role": "build-planner",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "static-repo-project-inspector",
+        "output_contract": "build-plan"
+      },
+      "execution": {
+        "mode": "persona",
+        "worker": "appsec-review-process/build_plan.py:run",
+        "validator": "appsec-review-process/build_plan.py:validate"
+      },
+      "output": {
+        "contract": "build-plan",
+        "contract_file": "appsec-review-process/registry/output-contracts/build-plan.json",
+        "schema_file": "schemas/build-plan.schema.json",
+        "claim_class": "build_unit_plan"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "build_plan"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:build_plan_work"
+        },
+        "launcher_jobs": [
+          "build_plan"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "build_plan"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_build_plan.py"
+        ]
+      },
+      "gaps": [
+        "not_yet_live_qualified"
+      ],
+      "next_prerequisite": "Live SAT stage 12 (build-plan) with --dispatch, then record qualification."
     },
     {
       "id": "02-evidence-assembly",

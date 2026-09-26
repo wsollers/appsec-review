@@ -3,7 +3,7 @@
 Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
-Lifecycle jobs: **53**
+Lifecycle jobs: **54**
 Design capabilities: **15**
 
 ## Readiness summary
@@ -11,7 +11,7 @@ Design capabilities: **15**
 | State | Jobs |
 |---|---:|
 | `implemented_and_qualified` | 3 |
-| `implemented_not_qualified` | 3 |
+| `implemented_not_qualified` | 4 |
 | `missing_prerequisites` | 36 |
 | `registered_planned_not_executable` | 7 |
 | `supplied_artifact_gate` | 4 |
@@ -28,6 +28,7 @@ Design capabilities: **15**
 | `02-sre-operations-topology` | false | `supplied_gate` | `supplied_artifact_gate` | `cpu` |
 | `02-build-index` | true | `actual_worker` | `implemented_not_qualified` | `cpu` |
 | `02-build-classify` | true | `actual_worker` | `implemented_not_qualified` | `persona_llm` |
+| `02-build-plan` | true | `actual_worker` | `implemented_not_qualified` | `persona_llm` |
 | `02-evidence-assembly` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `01-component-characterization` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `03-threat-model-dfd-stride` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -132,6 +133,7 @@ Design capabilities: **15**
 - 02-build-configure: no qualification evidence
 - 02-build-configure: no_live_full_review_qualification
 - 02-build-index: not_yet_live_qualified
+- 02-build-plan: not_yet_live_qualified
 - 02-container-image-inventory: missing_registry_composition
 - 02-container-image-inventory: missing_validator
 - 02-container-image-inventory: missing_worker

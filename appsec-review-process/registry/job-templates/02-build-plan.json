@@ -44,7 +44,7 @@
     "output_contract"
   ],
   "task_prompt": "appsec-review-process/02-evidence-pregather/task-build-plan.md",
-  "implemented": false,
+  "implemented": true,
   "timeout_seconds": 1200,
   "retry": {
     "max_attempts": 1,

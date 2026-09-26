@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 53,
+  "lifecycle_jobs": 54,
   "steps": 51,
   "artifacts": 52,
   "models": 5
@@ -858,9 +858,10 @@
       {
        "ref": "step:build-plan",
        "id": "build-plan",
-       "name": "02-build-plan (designed)",
-       "kind": "planned",
+       "name": "build_plan (Dagster job)",
+       "kind": "dagster-job",
        "consumes": [
+        "job:02-build-classify",
         "build-index",
         "build-classification",
         "buildenv-catalog",
@@ -868,6 +869,7 @@
         "llm-invoker"
        ],
        "produces": [
+        "job:02-build-plan",
         "build-plan"
        ],
        "declared_inputs": []
@@ -949,7 +951,7 @@
        "artifact-manifest"
       ],
       "leaves": [
-       "job:02-build-classify",
+       "job:02-build-plan",
        "build-attempts",
        "build-lock",
        "workflow-status",
@@ -959,6 +961,7 @@
       "passes": [
        "job:02-build-index",
        "build-index",
+       "job:02-build-classify",
        "build-classification",
        "build-plan",
        "build-image-catalog",
@@ -1067,6 +1070,25 @@
        "declared_inputs": [
         "target repository path",
         "accepted build-index.json from 02-build-index"
+       ]
+      },
+      {
+       "ref": "job:02-build-plan",
+       "id": "02-build-plan",
+       "name": "Build Plan",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-build-classify"
+       ],
+       "produces": [
+        "job:02-build-plan"
+       ],
+       "declared_inputs": [
+        "target repository path",
+        "accepted build-index.json from 02-build-index",
+        "accepted build-classification.json from 02-build-classify",
+        "buildenv-catalog.json (the base images a plan may choose)",
+        "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)"
        ]
       },
       {
@@ -1491,7 +1513,7 @@
       ],
       "leaves": [
        "legacy-pregather",
-       "job:02-build-classify",
+       "job:02-build-plan",
        "job:02-evidence-assembly"
       ],
       "passes": [
@@ -1499,6 +1521,7 @@
        "job:02-devops-project-discovery",
        "job:02-sre-operations-topology",
        "job:02-build-index",
+       "job:02-build-classify",
        "job:02-api-collection-intelligence-ingest",
        "job:02-binary-intelligence-ingest",
        "job:02-doc-intelligence-ingest",
@@ -1539,6 +1562,9 @@
        "accepted devops project discovery (cross-check context)",
        "staged target checkout",
        "accepted build-index.json from 02-build-index",
+       "accepted build-classification.json from 02-build-classify",
+       "buildenv-catalog.json (the base images a plan may choose)",
+       "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -2096,7 +2122,7 @@
      "prep-native-plan",
      "prep-handoffs",
      "workflow-status",
-     "job:02-build-classify",
+     "job:02-build-plan",
      "build-attempts",
      "build-lock",
      "build-execution",
@@ -2116,6 +2142,7 @@
      "job:02-dev-project-discovery",
      "job:02-build-index",
      "build-index",
+     "job:02-build-classify",
      "build-classification",
      "build-plan",
      "build-image-catalog",
@@ -2183,6 +2210,9 @@
      "accepted devops project discovery (cross-check context)",
      "staged target checkout",
      "accepted build-index.json from 02-build-index",
+     "accepted build-classification.json from 02-build-classify",
+     "buildenv-catalog.json (the base images a plan may choose)",
+     "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -2634,9 +2664,10 @@
       {
        "ref": "step:build-plan",
        "id": "build-plan",
-       "name": "02-build-plan (designed)",
-       "kind": "planned",
+       "name": "build_plan (Dagster job)",
+       "kind": "dagster-job",
        "consumes": [
+        "job:02-build-classify",
         "build-index",
         "build-classification",
         "buildenv-catalog",
@@ -2644,6 +2675,7 @@
         "llm-invoker"
        ],
        "produces": [
+        "job:02-build-plan",
         "build-plan"
        ],
        "declared_inputs": []
@@ -2681,13 +2713,14 @@
        "buildenv-image"
       ],
       "leaves": [
-       "job:02-build-classify",
+       "job:02-build-plan",
        "build-attempts",
        "build-lock"
       ],
       "passes": [
        "job:02-build-index",
        "build-index",
+       "job:02-build-classify",
        "build-classification",
        "build-plan",
        "build-image-catalog"
@@ -2746,7 +2779,7 @@
      "resolved-config",
      "partition-handoff",
      "dev-handoff",
-     "job:02-build-classify",
+     "job:02-build-plan",
      "build-attempts",
      "build-lock",
      "job:02-build-configure"
@@ -2766,6 +2799,7 @@
      "job:02-dev-project-discovery",
      "job:02-build-index",
      "build-index",
+     "job:02-build-classify",
      "build-classification",
      "build-plan",
      "build-image-catalog"
@@ -3093,6 +3127,25 @@
        "declared_inputs": [
         "target repository path",
         "accepted build-index.json from 02-build-index"
+       ]
+      },
+      {
+       "ref": "job:02-build-plan",
+       "id": "02-build-plan",
+       "name": "Build Plan",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-build-classify"
+       ],
+       "produces": [
+        "job:02-build-plan"
+       ],
+       "declared_inputs": [
+        "target repository path",
+        "accepted build-index.json from 02-build-index",
+        "accepted build-classification.json from 02-build-classify",
+        "buildenv-catalog.json (the base images a plan may choose)",
+        "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)"
        ]
       },
       {
@@ -3540,7 +3593,7 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:02-build-classify",
+       "job:02-build-plan",
        "job:02-evidence-assembly"
       ],
       "passes": [
@@ -3550,6 +3603,7 @@
        "job:02-devops-project-discovery",
        "job:02-sre-operations-topology",
        "job:02-build-index",
+       "job:02-build-classify",
        "job:02-api-collection-intelligence-ingest",
        "job:02-binary-intelligence-ingest",
        "job:02-doc-intelligence-ingest",
@@ -3594,6 +3648,9 @@
        "accepted devops project discovery (cross-check context)",
        "staged target checkout",
        "accepted build-index.json from 02-build-index",
+       "accepted build-classification.json from 02-build-classify",
+       "buildenv-catalog.json (the base images a plan may choose)",
+       "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -4257,7 +4314,7 @@
      "artifact-manifest"
     ],
     "leaves": [
-     "job:02-build-classify",
+     "job:02-build-plan",
      "job:10-synthesis-report"
     ],
     "passes": [
@@ -4268,6 +4325,7 @@
      "job:02-devops-project-discovery",
      "job:02-sre-operations-topology",
      "job:02-build-index",
+     "job:02-build-classify",
      "job:02-evidence-assembly",
      "job:02-api-collection-intelligence-ingest",
      "job:02-binary-intelligence-ingest",
@@ -4331,6 +4389,9 @@
      "accepted devops project discovery (cross-check context)",
      "staged target checkout",
      "accepted build-index.json from 02-build-index",
+     "accepted build-classification.json from 02-build-classify",
+     "buildenv-catalog.json (the base images a plan may choose)",
+     "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -5125,11 +5186,15 @@
   },
   {
    "id": "build-plan",
-   "name": "02-build-plan (designed)",
-   "kind": "planned",
-   "runs": "launch_job.py --run-id <run_id> --job build_plan --wait (not built)",
+   "name": "build_plan (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job build_plan --wait",
    "bpmn": [],
+   "lifecycle": [
+    "02-build-plan"
+   ],
    "consumes": [
+    "job:02-build-classify",
     "build-index",
     "build-classification",
     "buildenv-catalog",
@@ -5137,9 +5202,10 @@
     "llm-invoker"
    ],
    "produces": [
+    "job:02-build-plan",
     "build-plan"
    ],
-   "notes": "LLM reads only the index, the buildenv catalog and the schema. Classifies every unit (one cited class; mixed units split), then plans each compiled or transpiled unit: base image, packages, ordered argv commands, feasibility, all cited. Validated per unit before anything is built. Repository Dockerfiles are never planned for building."
+   "notes": "build_plan.py (built 2026-09-26, ADR-0012 revisions 2-3): one Haiku persona call per build-set unit reads the whole checkout, the accepted index and classification, the buildenv catalog and an orchestrator-written plan-unit.json, and plans that unit: base image, apt packages, ordered configure/build argv, compile-database method, feasibility tier, all cited. The compiler is fixed (our clang): no compiler, CC=/CXX= or compiler package; no test, check or install step; argv only, offline, inside the tree. The orchestrator sets toolchain, dispositions, upstream refs and citation hashes. An empty build set makes no model call."
   },
   {
    "id": "build-resolution",
@@ -5914,6 +5980,76 @@
    ],
    "produces": [
     "job:02-build-classify"
+   ]
+  },
+  {
+   "id": "02-build-plan",
+   "lane": "02-evidence-pregather",
+   "name": "Build Plan",
+   "contract": "build-plan",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "persona",
+   "worker": "appsec-review-process/build_plan.py:run",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [
+    "build_plan"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "build-planner",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "static-repo-project-inspector",
+    "output_contract_id": "build-plan"
+   },
+   "depends_on": [
+    {
+     "job": "02-build-classify",
+     "kind": "required",
+     "contract": "build-classification"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "target repository path"
+    },
+    {
+     "need": "required",
+     "input": "accepted build-index.json from 02-build-index"
+    },
+    {
+     "need": "required",
+     "input": "accepted build-classification.json from 02-build-classify"
+    },
+    {
+     "need": "required",
+     "input": "buildenv-catalog.json (the base images a plan may choose)"
+    },
+    {
+     "need": "required",
+     "input": "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-build-plan.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-build-plan/",
+   "output_files": [
+    "build-plan.json",
+    "build-plan-summary.md",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/build-plan.json",
+   "claim_class": "build_unit_plan",
+   "gaps": [
+    "not_yet_live_qualified"
+   ],
+   "next_prerequisite": "Live SAT stage 12 (build-plan) with --dispatch, then record qualification.",
+   "consumes": [
+    "job:02-build-classify"
+   ],
+   "produces": [
+    "job:02-build-plan"
    ]
   },
   {
@@ -9720,6 +9856,20 @@
    "produced_by": [
     "step:build-classify",
     "job:02-build-classify"
+   ],
+   "consumed_by": [
+    "step:build-plan",
+    "job:02-build-plan"
+   ]
+  },
+  "job:02-build-plan": {
+   "id": "job:02-build-plan",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-build-plan/",
+   "about": "Accepted build-plan output of 02-build-plan.",
+   "produced_by": [
+    "step:build-plan",
+    "job:02-build-plan"
    ],
    "consumed_by": []
   },
