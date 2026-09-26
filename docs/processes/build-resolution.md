@@ -1,6 +1,6 @@
 # Build resolution: learning how to build an unknown target
 
-Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`; SAT stage 10 PASS, SAT `20260925T211247Z`); **`02-build-classify` BUILT 2026-09-25** (SAT stage 11 PASS with live upstreams, SAT `20260926T183609Z`); **section 3 (`02-build-plan`) BUILT 2026-09-26** (SAT stage 12 not yet run live); sections 2, 4 and 5
+Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`; SAT stage 10 PASS, SAT `20260925T211247Z`); **`02-build-classify` BUILT 2026-09-25** (SAT stage 11 PASS with live upstreams, SAT `20260926T183609Z`); **section 3 (`02-build-plan`) BUILT and live-confirmed 2026-09-26** (fresh automatic-dispatch SAT `20260926T215329Z`, stage 12 PASS); sections 2, 4 and 5
 (`02-build-resolution`, catalog and lock) **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
 The fixed C/C++ base prerequisite, `audit-buildenv-cpp:local`, is **BUILT and smoke-verified
 2026-09-26** on `audit-native:local`: LLVM 21.1.0 at `/opt/llvm`, fixed `CC`/`CXX`, and

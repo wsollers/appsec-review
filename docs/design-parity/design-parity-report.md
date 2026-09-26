@@ -125,15 +125,15 @@ Design capabilities: **15**
 - 02-binary-triage: no_qualification
 - 02-binary-triage: resource pool unassigned
 - 02-binary-triage: unassigned_resource_pool
-- 02-build-classify: not_yet_live_qualified
+- 02-build-classify: fault_recovery_not_qualified
 - 02-build-configure: graph_implemented_flag_false
 - 02-build-configure: missing_dedicated_output_schema
 - 02-build-configure: missing_output_contract
 - 02-build-configure: missing_registry_composition
 - 02-build-configure: no qualification evidence
 - 02-build-configure: no_live_full_review_qualification
-- 02-build-index: not_yet_live_qualified
-- 02-build-plan: not_yet_live_qualified
+- 02-build-index: fault_recovery_not_qualified
+- 02-build-plan: fault_recovery_not_qualified
 - 02-container-image-inventory: missing_registry_composition
 - 02-container-image-inventory: missing_validator
 - 02-container-image-inventory: missing_worker

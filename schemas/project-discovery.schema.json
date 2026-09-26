@@ -22,7 +22,7 @@
           "manifests": {"type": "array", "items": {"type": "string"}},
           "lockfiles": {"type": "array", "items": {"type": "string"}},
           "candidate_buildenv_images": {"type": "array", "items": {"type": "string"}},
-          "commands": {"type": "array", "items": {"type": "string"}},
+          "commands": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}},
           "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
         }

@@ -103,6 +103,22 @@ class AdoptionTests(unittest.TestCase):
                                        "side_effects": [], "evidence_citations": []}]
         self.assertTrue(validate_document(value, "project-discovery.schema.json"))
 
+    def test_project_discovery_rejects_a_non_buildable_project(self):
+        value = {"schema": "appsec-review/project-discovery/1.0", "target": "fixture",
+                 "source_revision": "a" * 40,
+                 "projects": [{"project_id": "vendored-copy", "root": "vendor/copy",
+                               "languages": ["C"], "manifests": [], "lockfiles": [],
+                               "candidate_buildenv_images": ["audit-buildenv-cpp:local"],
+                               "commands": [], "evidence_citations": [{
+                                   "source_type": "source_file", "path": "Makefile.am",
+                                   "line_range": None, "tool_name": None, "tool_rule_id": None,
+                                   "content_hash": "0" * 64, "note": "built by its parent"}],
+                               "confidence": "high"}],
+                 "safe_command_plan": [], "coverage_gaps": []}
+        errors = validate_document(value, "project-discovery.schema.json")
+        self.assertTrue(errors)
+        self.assertIn("$.projects[0].commands", " ".join(errors))
+
     def test_partition_common_envelope_reuse_and_invalid_newer_attempt_no_fallback(self):
         supplied = discovery_gate.supplied_path(self.run_id, discovery_gate.ADOPTED_JOB)
         state.atomic_json(supplied, partition_result(self.source_hash))

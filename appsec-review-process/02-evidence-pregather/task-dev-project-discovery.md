@@ -36,6 +36,13 @@ files actually declare (a `Makefile` target, a `package.json` script, a CI workf
 autotools `configure.ac`) -- never a generic guess at what a project "usually" needs. Cite the exact
 file each claim comes from.
 
+Every entry in `projects` must be independently buildable or testable and must therefore have at
+least one command in `commands`. A vendored dependency, generated-code directory, example or fixture
+with no independent build/test commands is **not a project**: describe it within its owning project
+or in `coverage_gaps`, but do not emit a separate `projects` entry for it. In particular, a vendored
+tree that the parent project's manifest compiles is part of that parent project even when the
+partition map gives the vendored path its own review partition.
+
 ## Safe Command Plan
 
 For every command in a project's build/test sequence, decide and record: its exact argv; its

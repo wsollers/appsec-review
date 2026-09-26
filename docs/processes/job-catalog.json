@@ -2624,7 +2624,7 @@
      }
     },
     {
-     "name": "S6a Build resolution (index and classification built; plan and resolution designed)",
+     "name": "S6a Build resolution (index, classification and plan built; resolution designed)",
      "entries": [
       {
        "ref": "step:build-index",
@@ -2967,7 +2967,7 @@
    "id": "lifecycle",
    "name": "Lifecycle graph (full_review, job-graph.json)",
    "source": "appsec-review-process/job-graph.json",
-   "about": "All 51 lifecycle nodes, grouped by lane in process-manifest.json order.",
+   "about": "All 54 lifecycle nodes, grouped by lane in process-manifest.json order.",
    "groups": [
     {
      "name": "00-intake-recovery",
@@ -5205,7 +5205,7 @@
     "job:02-build-plan",
     "build-plan"
    ],
-   "notes": "build_plan.py (built 2026-09-26, ADR-0012 revisions 2-3): one Haiku persona call per build-set unit reads the whole checkout, the accepted index and classification, the buildenv catalog and an orchestrator-written plan-unit.json, and plans that unit: base image, apt packages, ordered configure/build argv, compile-database method, feasibility tier, all cited. The compiler is fixed (our clang): no compiler, CC=/CXX= or compiler package; no test, check or install step; argv only, offline, inside the tree. The orchestrator sets toolchain, dispositions, upstream refs and citation hashes. An empty build set makes no model call."
+   "notes": "build_plan.py (built and live-confirmed 2026-09-26, SAT 20260926T215329Z, ADR-0012 revisions 2-3): one Haiku persona call per build-set unit reads the whole checkout, the accepted index and classification, the buildenv catalog and an orchestrator-written plan-unit.json, and plans that unit: base image, apt packages, ordered configure/build argv, compile-database method, feasibility tier, all cited. The compiler is fixed (our clang): no compiler, CC=/CXX= or compiler package; no test, check or install step; argv only, offline, inside the tree. The orchestrator sets toolchain, dispositions, upstream refs and citation hashes. An empty build set makes no model call. Fault-recovery qualification remains."
   },
   {
    "id": "build-resolution",
@@ -5911,9 +5911,9 @@
    "outputs_source": "registry/output-contracts/build-index.json",
    "claim_class": null,
    "gaps": [
-    "not_yet_live_qualified"
+    "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Live SAT stage 10 (build-index) on hal5000, then record qualification.",
+   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
    "consumes": [
     "job:00-intake",
     "job:02-repository-partition-discovery",
@@ -5972,9 +5972,9 @@
    "outputs_source": "registry/output-contracts/build-classification.json",
    "claim_class": "build_unit_classification",
    "gaps": [
-    "not_yet_live_qualified"
+    "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Live SAT stage 11 (build-classify, --dispatch) on hal5000, then record qualification.",
+   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
    "consumes": [
     "job:02-build-index"
    ],
@@ -6042,9 +6042,9 @@
    "outputs_source": "registry/output-contracts/build-plan.json",
    "claim_class": "build_unit_plan",
    "gaps": [
-    "not_yet_live_qualified"
+    "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Live SAT stage 12 (build-plan) with --dispatch, then record qualification.",
+   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
    "consumes": [
     "job:02-build-classify"
    ],

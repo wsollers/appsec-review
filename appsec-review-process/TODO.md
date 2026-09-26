@@ -1106,14 +1106,22 @@ Work order (one piece at a time):
    `20260926T184019Z-53d1da`, Dagster `c502e7b6`): classes and build set equal the answer key. Readiness
    `implemented_not_qualified` until fault-recovery qualification. Fixed on the way: schema-safe claims,
    the bounded repair retry (`invocation.repair_attempts`), the indexer's vendored-tree rule.
-4. [ ] `02-build-plan` (Haiku, one call per build-set unit, reads the checkout, the index, the
-   classification and the buildenv catalog); SAT stage 12. In progress 2026-09-26: step 1 (ADR-0012
+4. [x] `02-build-plan` (Haiku, one call per build-set unit, reads the checkout, the index, the
+   classification and the buildenv catalog); SAT stage 12. Built 2026-09-26: step 1 (ADR-0012
    Revision 3: clang fixed by our code, no test phase; `schemas/build-plan.schema.json`, output contract
    `build-plan` (claim class `build_unit_plan`), role `build-planner`, job template `02-build-plan`
    (haiku/medium), `task-build-plan.md`); step 2 (`build_plan.py`: validator, finalize/merge, per-unit
    persona worker, claim builder, 23 tests); step 3 (graph node on `02-build-classify`, Dagster job
    `build_plan` on persona_llm, parity entry, 54 jobs, catalog); step 4 (SAT stage 12 with the structural
-   answer key `fixtures/supplied/hello-autotools/02-build-plan-structure.json`). Next: the live SAT.
+   answer key `fixtures/supplied/hello-autotools/02-build-plan-structure.json`). **SAT PASS through
+   stage 12, 2026-09-26** (zarathustra, the one fresh qualification SAT `20260926T215329Z`, run
+   `20260926T215743Z-4190aa`, build-plan Dagster `bdac97da`): one tier-A autotools plan for `dir:.`,
+   base `audit-buildenv-cpp`, packages `autoconf`, `automake`, `libtool`, configure/build commands
+   `autoreconf -fi`, `./configure`, `make`, and disposition `dockerfile-analysis-and-base-image-scan`
+   for `file:Dockerfile`; zero coverage gaps; model `claude-haiku-4-5-20251001`. The missing `make`
+   package versus the structural reference was informational because the selected base already
+   supplies it. Readiness stays `implemented_not_qualified` until live fault-recovery qualification
+   proves reuse, tamper rejection and newer-failure blocking.
    **Image prerequisite complete 2026-09-26:** `audit-buildenv-cpp:local` now supplies the fixed
    LLVM 21.1.0 compiler environment and autotools/Bear toolchain required by Revision 3.
 5. [ ] `02-build-resolution` (per unit); SAT stage 13. Needs Phase 3 (B13 into service, B16 records,

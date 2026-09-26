@@ -79,6 +79,13 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 20 | `sarif` | |
 | 21 | `report` | |
 
+Stage 12 was live-confirmed on 2026-09-26 by the one fresh automatic-dispatch qualification SAT
+`20260926T215329Z` (engagement `20260926T215743Z-4190aa`, build-plan Dagster run
+`bdac97da-5156-49b8-8ca3-c2550b9d4513`). The accepted plan covered the sole build-set unit with
+the expected autotools configure/build structure and recorded the Dockerfile as static-analysis
+work, not a build input. The remaining readiness gap is fault-recovery qualification, not another
+happy-path SAT.
+
 Phase 3 prerequisite status (2026-09-27): B13's three result-verification entry points require the
 caller-retained `result_sha256`, including C02 handoff and cancellation. B16 now generates and
 Docker-checks the 19 host-local step-4 image records at code-location startup. Neither change builds

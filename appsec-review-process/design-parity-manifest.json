@@ -732,16 +732,18 @@
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "unit"
+          "unit",
+          "live_dagster"
         ],
         "references": [
-          "appsec-review-process/tests/test_build_index.py"
+          "appsec-review-process/tests/test_build_index.py",
+          "docs/processes/flow-bringup.md"
         ]
       },
       "gaps": [
-        "not_yet_live_qualified"
+        "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Live SAT stage 10 (build-index) on hal5000, then record qualification."
+      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
     },
     {
       "id": "02-build-classify",
@@ -799,16 +801,18 @@
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "unit"
+          "unit",
+          "live_dagster"
         ],
         "references": [
-          "appsec-review-process/tests/test_build_classify.py"
+          "appsec-review-process/tests/test_build_classify.py",
+          "docs/processes/flow-bringup.md"
         ]
       },
       "gaps": [
-        "not_yet_live_qualified"
+        "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Live SAT stage 11 (build-classify, --dispatch) on hal5000, then record qualification."
+      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
     },
     {
       "id": "02-build-plan",
@@ -866,16 +870,18 @@
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "unit"
+          "unit",
+          "live_dagster"
         ],
         "references": [
-          "appsec-review-process/tests/test_build_plan.py"
+          "appsec-review-process/tests/test_build_plan.py",
+          "docs/processes/flow-bringup.md"
         ]
       },
       "gaps": [
-        "not_yet_live_qualified"
+        "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Live SAT stage 12 (build-plan) with --dispatch, then record qualification."
+      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
     },
     {
       "id": "02-evidence-assembly",

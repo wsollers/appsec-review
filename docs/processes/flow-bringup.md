@@ -31,11 +31,11 @@ flowchart TD
   AD["Automatic persona dispatch D01-D04<br/>SAT --dispatch stages 6-9, live 2026-09-25"]:::done
   S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; SAT stage 10 PASS (live upstreams 2026-09-26)"]:::done
   S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
-  S6p["S6a-3 02-build-plan: per-unit Haiku plan, clang fixed<br/>built 2026-09-26; SAT stage 12 next (live)"]:::next
-  S6a["S6a-4 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>designed; needs Phase 3"]:::todo
+  S6p["S6a-3 02-build-plan: per-unit Haiku plan, clang fixed<br/>built 2026-09-26; SAT stage 12 PASS 2026-09-26"]:::done
+  S6a["S6a-4 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>designed; blocked on Phase 3 qualification"]:::blocked
   CPP["C++ buildenv prerequisite<br/>audit-native + LLVM 21.1.0 + autotools/Bear<br/>built and boundary-smoke PASS 2026-09-26"]:::done
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a and E01"]:::blocked
-  B13["Phase 3: B13 verifier binding + B16 registry done 2026-09-27<br/>next: live harmless-fixture Dagster op"]:::todo
+  B13["Phase 3: B13 verifier binding + B16 registry done 2026-09-27<br/>next: live harmless-fixture Dagster op"]:::next
   E01["E01/E02: replay the lock through B13"]:::todo
 
   P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6p --> S6a --> S6
@@ -265,6 +265,27 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-26 -- **SAT PASS through `build-plan`: stages 1-12 all green with every model step live.**
+  The one fresh qualification was automatic-dispatch SAT `20260926T215329Z`, engagement
+  `20260926T215743Z-4190aa`, on zarathustra. Exact Dagster runs: engagement workflow
+  `88a013b0-7138-4f15-9978-8667468eeada`; partition `fd304d21-97ba-47d1-bceb-4e034216a1a0`;
+  developer discovery `b923519a-f076-4ad1-a011-c5cbad0c3041`; devops discovery
+  `ab0cc765-1f62-4db4-b922-b930129acdc4`; SRE topology
+  `eb76be64-4351-4e0e-9963-3a9dd443a025`; build index
+  `f38d72a8-42f6-4b6b-82eb-a94df11421fa`; build classification
+  `b449c8a3-477e-4c10-b5fc-25d1d5bb97cd`; build plan
+  `bdac97da-5156-49b8-8ca3-c2550b9d4513`. The accepted D02 result contains only the independently
+  buildable `hello-autotools-cli` project; vendored cJSON remains a member of that root project.
+  Stage 10 found units `dir:.` and `file:Dockerfile`, attached `vendor/cJSON-1.7.18` to the root,
+  and recorded 29 signals with no omissions. Stage 11 classified the root `compiled-native` and
+  the Dockerfile `container`, build set `dir:.`, with zero gaps. Stage 12 used
+  `claude-haiku-4-5-20251001` and published one tier-A autotools plan: base
+  `audit-buildenv-cpp`, packages `autoconf`, `automake`, `libtool`, commands `autoreconf -fi`,
+  `./configure`, `make`, and the Dockerfile disposition `dockerfile-analysis-and-base-image-scan`;
+  zero coverage gaps. Omitting `make` from the apt package list differed from the structural
+  reference but was informational because the fixed base already supplies it. The next SAT stage
+  is `02-build-resolution`; the three built build-lane jobs remain
+  `implemented_not_qualified` until live reuse/tamper/newer-failure recovery qualification.
 - 2026-09-27 -- **B16 host-local image registry implemented; generated-at-start strategy approved
   by William.** `images/registry_records.py` derives ignored B13 records for six shared step-4
   images plus all 13 `tool-*` images from each successful build pointer, re-derives the current

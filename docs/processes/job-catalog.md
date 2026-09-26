@@ -299,7 +299,7 @@ The steps run so far on hello-autotools, in process-flow order. Source: `docs/pr
 | [dev_project_discovery (Dagster job)](#step-dev-project-discovery) | Dagster job | [`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`dev-supplied`](#a-dev-supplied)<br>[`loaded-job-list`](#a-loaded-job-list) | [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`dev-handoff`](#a-dev-handoff) |
 | **Group rollup** | | **Enters:** [`dev-record`](#a-dev-record)<br>[`sut-checkout`](#a-sut-checkout)<br>[`run-dir`](#a-run-dir)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`loaded-job-list`](#a-loaded-job-list) | **Leaves:** [`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`dev-handoff`](#a-dev-handoff) |
 
-### Fixture bring-up: S6a Build resolution (index and classification built; plan and resolution designed)
+### Fixture bring-up: S6a Build resolution (index, classification and plan built; resolution designed)
 
 | Step | Type | Consumes | Produces |
 |---|---|---|---|
@@ -356,7 +356,7 @@ The ops inside the engagement_workflow Dagster job. Source: `docs/dagster/dagste
 
 ## Lifecycle graph (full_review, job-graph.json)
 
-All 51 lifecycle nodes, grouped by lane in process-manifest.json order. Source: `appsec-review-process/job-graph.json`.
+All 54 lifecycle nodes, grouped by lane in process-manifest.json order. Source: `appsec-review-process/job-graph.json`.
 
 | Rolled up for the model | Artifacts |
 |---|---|
@@ -905,7 +905,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-build-plan`](#job-02-build-plan) |
 | Consumes | [`02-build-classify`](#a-job-02-build-classify)<br>[`build-index`](#a-build-index)<br>[`build-classification`](#a-build-classification)<br>[`buildenv-catalog`](#a-buildenv-catalog)<br>[`sut-checkout`](#a-sut-checkout)<br>[`llm-invoker`](#a-llm-invoker) |
 | Produces | [`02-build-plan`](#a-job-02-build-plan)<br>[`build-plan`](#a-build-plan) |
-| Notes | build_plan.py (built 2026-09-26, ADR-0012 revisions 2-3): one Haiku persona call per build-set unit reads the whole checkout, the accepted index and classification, the buildenv catalog and an orchestrator-written plan-unit.json, and plans that unit: base image, apt packages, ordered configure/build argv, compile-database method, feasibility tier, all cited. The compiler is fixed (our clang): no compiler, CC=/CXX= or compiler package; no test, check or install step; argv only, offline, inside the tree. The orchestrator sets toolchain, dispositions, upstream refs and citation hashes. An empty build set makes no model call. |
+| Notes | build_plan.py (built and live-confirmed 2026-09-26, SAT 20260926T215329Z, ADR-0012 revisions 2-3): one Haiku persona call per build-set unit reads the whole checkout, the accepted index and classification, the buildenv catalog and an orchestrator-written plan-unit.json, and plans that unit: base image, apt packages, ordered configure/build argv, compile-database method, feasibility tier, all cited. The compiler is fixed (our clang): no compiler, CC=/CXX= or compiler package; no test, check or install step; argv only, offline, inside the tree. The orchestrator sets toolchain, dispositions, upstream refs and citation hashes. An empty build set makes no model call. Fault-recovery qualification remains. |
 
 <a id="step-build-resolution"></a>
 
@@ -1246,8 +1246,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-build-index/` |
 | Output files (registry/output-contracts/build-index.json) | build-index.json<br>build-index.md<br>status.json |
 | Consumed by | [`build-classify`](#step-build-classify)<br>[`02-build-classify`](#job-02-build-classify) |
-| Gaps | `not_yet_live_qualified` |
-| Next prerequisite | Live SAT stage 10 (build-index) on hal5000, then record qualification. |
+| Gaps | `fault_recovery_not_qualified` |
+| Next prerequisite | Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking. |
 
 <a id="job-02-build-classify"></a>
 
@@ -1266,8 +1266,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-build-classify/` |
 | Output files (registry/output-contracts/build-classification.json) | build-classification.json<br>build-classification-summary.md<br>status.json |
 | Consumed by | [`build-plan`](#step-build-plan)<br>[`02-build-plan`](#job-02-build-plan) |
-| Gaps | `not_yet_live_qualified` |
-| Next prerequisite | Live SAT stage 11 (build-classify, --dispatch) on hal5000, then record qualification. |
+| Gaps | `fault_recovery_not_qualified` |
+| Next prerequisite | Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking. |
 
 <a id="job-02-build-plan"></a>
 
@@ -1286,8 +1286,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-build-plan/` |
 | Output files (registry/output-contracts/build-plan.json) | build-plan.json<br>build-plan-summary.md<br>status.json |
 | Consumed by | -- |
-| Gaps | `not_yet_live_qualified` |
-| Next prerequisite | Live SAT stage 12 (build-plan) with --dispatch, then record qualification. |
+| Gaps | `fault_recovery_not_qualified` |
+| Next prerequisite | Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking. |
 
 <a id="job-02-evidence-assembly"></a>
 
