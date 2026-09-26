@@ -216,5 +216,6 @@ Status: Proposed 2026-09-26 (decisions by William Sollers, 2026-09-26 and 2026-0
 5. **One schema, merged per unit.** Each Haiku call returns `build-plan.json` with exactly one plan (the
    unit named in an orchestrator-written `plan-unit.json` staged with the upstream artifacts); the job
    publishes one `build-plan.json` with every build-set unit's plan, and orchestrator-derived
-   `dispositions` for the units outside the build set. An empty build set is `SKIPPED`
-   (`not-applicable-no-matching-inputs`) with no model call.
+   `dispositions` for the units outside the build set. An empty build set makes no model call and
+   publishes a plan with no plans and every unit's disposition (`OK`); `02-build-resolution` is then
+   the job that is `SKIPPED` (`not-applicable-no-matching-inputs`).

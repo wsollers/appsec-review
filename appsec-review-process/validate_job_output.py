@@ -953,7 +953,7 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
     errors.extend(_claim_class_errors(contract, value))
     source_root = None
     if contract.get("contract_id") in {"repository-partition-map", "project-discovery", "build-index",
-                                       "build-classification"}:
+                                       "build-classification", "build-plan"}:
         source_root, source_errors = _source_root(attempt_root, run_id)
         errors.extend(source_errors)
     dispatch = {
@@ -962,6 +962,7 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
         "project-discovery": lambda: _project_discovery_errors(value, source_root),
         "build-index": lambda: _build_index_errors(path, value, source_root),
         "build-classification": lambda: _build_classification_errors(attempt_root, value, source_root, run_id),
+        "build-plan": lambda: _build_plan_errors(attempt_root, value, source_root, run_id),
     }
     validator = dispatch.get(contract.get("contract_id"))
     if validator is not None:
@@ -992,6 +993,18 @@ def _build_classification_errors(attempt_root: Path, value: Any, source_root: Pa
     import build_classify
     return [f"build classification: {error}" for error in
             build_classify.validate_published_value(attempt_root, value, source_root, run_id)]
+
+
+def _build_plan_errors(attempt_root: Path, value: Any, source_root: Path | None, run_id: str) -> list[str]:
+    """02-build-plan content checks: the classification and index it names (in the owning run,
+    hash-checked), one plan per build-set unit, the fixed clang toolchain, argv safety, and citation
+    freshness against the staged checkout. A SKIPPED attempt publishes no build-plan.json. Imported
+    here, not at module load: build_plan imports this module."""
+    if source_root is None:
+        return []
+    import build_plan
+    return [f"build plan: {error}" for error in
+            build_plan.validate_published_value(attempt_root, value, source_root, run_id)]
 
 
 def _job_contract_errors(job_id: Any, contract_id: Any, graph: dict[str, Any], registry_root: Path) -> list[str]:

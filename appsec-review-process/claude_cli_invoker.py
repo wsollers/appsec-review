@@ -624,6 +624,46 @@ def _claims_from_build_classification(value: dict[str, Any], inputs: tuple,
     return claims
 
 
+def _claims_from_build_plan(value: dict[str, Any], inputs: tuple,
+                            allowed_claim_classes: tuple[str, ...], result_filename: str) -> list[dict[str, Any]]:
+    """02-build-plan's claim builder for ``build-plan.json``: one ``build_unit_plan`` claim per plan,
+    citing every checkout file the plan, its packages and its commands cite that resolves to a pinned
+    target input (the staged upstreams are never citable). A plan left with no resolvable citation is
+    rejected (governing rule 2). Argv safety, the fixed compiler and the unit set are the job's own
+    validator's (build_plan.check)."""
+    by_path = {item.path: item for item in inputs}
+    if "build_unit_plan" not in allowed_claim_classes:
+        raise InvokerOutputError("claim class 'build_unit_plan' is not in this request's allowed_claim_classes")
+    claims: list[dict[str, Any]] = []
+    for position, plan in enumerate(value.get("plans", [])):
+        uid = str(plan.get("unit_id"))
+        raw = list(plan.get("evidence_citations") or [])
+        for package in (plan.get("image") or {}).get("apt_packages", []):
+            raw += list(package.get("evidence_citations") or [])
+        for command in plan.get("commands", []):
+            raw += list(command.get("evidence_citations") or [])
+        citations, seen = [], set()
+        for citation in _resolved_citations(raw, by_path):
+            key = (citation["path"], citation["locator"])
+            if key not in seen:
+                seen.add(key)
+                citations.append(citation)
+        if not citations:
+            raise InvokerOutputError(
+                f"plan for {uid!r} cites no evidence this invoker can resolve to a pinned readable input -- "
+                f"governing rule 2 requires evidence that resolves")
+        commands = "; ".join(" ".join(map(str, c.get("argv", []))) for c in plan.get("commands", []))
+        claims.append({
+            "claim_id": f"plan-{position}-{uid}", "claim_class": "build_unit_plan",
+            "statement": (f"Unit {uid!r} ({plan.get('build_system')}, tier "
+                          f"{(plan.get('feasibility') or {}).get('tier')}): {commands or 'no commands'}"),
+            "file": result_filename, "citations": citations,
+        })
+    if not value.get("plans") and not value.get("coverage_gaps"):
+        raise InvokerOutputError("model response planned no unit and recorded no coverage gap explaining why")
+    return claims
+
+
 _CLAIM_ID_ALLOWED = re.compile(r"[^A-Za-z0-9_-]+")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
 
@@ -660,6 +700,7 @@ _CLAIM_BUILDERS = {
     "project-discovery.schema.json": _claims_from_project_inventory,
     "operations-topology.schema.json": _claims_from_operations_topology,
     "build-classification.schema.json": _claims_from_build_classification,
+    "build-plan.schema.json": _claims_from_build_plan,
 }
 
 

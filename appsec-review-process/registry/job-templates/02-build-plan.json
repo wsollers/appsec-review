@@ -51,7 +51,7 @@
     "transient_reasons": [],
     "side_effect_free": true
   },
-  "applicability": "all engagements with an accepted build classification; an empty build set gives SKIPPED (not-applicable-no-matching-inputs) with no model call",
+  "applicability": "all engagements with an accepted build classification; an empty build set makes no model call and publishes an empty plan with every unit's disposition",
   "permissions": [
     "read-source",
     "write-run-data"
