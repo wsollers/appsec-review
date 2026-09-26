@@ -99,6 +99,22 @@ in `src/greet.cpp`, trivy reports Dockerfile misconfigurations, hadolint reports
 To update a tool: change `version` in its `tool.json`, `pin`, `check`, `image_build.py build`, `smoke`,
 commit the folder. Nothing else changes.
 
+## Host-local B13 registry (B16)
+
+Docker image ids differ between hosts, so the 13 tool records and six shared step-4 image records
+are not committed. `orchestrator/dagster/code-location.sh start` runs:
+
+```bash
+python3 -B images/registry_records.py generate
+```
+
+The generator writes ignored `appsec-review-process/registry/container-images/<image_id>.json`
+records only after all 19 successful build pointers still match the current image inputs and
+`docker image inspect`. It never builds, pulls, or repairs an image. `check` is read-only and fails
+on a missing record, changed Dockerfile/build fingerprint, changed attempt identity, or Docker image
+id drift. Local records use `digest_kind: image-id`; B13 runs the `sha256:...` image id directly.
+The tracked `fixture-harmless` registry record remains a portable image-index record.
+
 ## Findings from the first build (2026-09-26, cloud workspace, Docker 29.4.3)
 
 - **Semgrep rules are not in any image.** The engine runs offline with a mounted rule set; which rules

@@ -58,7 +58,7 @@ def contracts():
     from validate_design_parity import validate_manifest
     kinds={'personas':('persona','persona_id'),'roles':('role','role_id'),'domains':('domain','domain_id'),
            'tooling-profiles':('tooling-profile','tooling_profile_id'),'output-contracts':('output-contract','contract_id'),
-           'job-templates':('job-template','job_template_id')}
+           'job-templates':('job-template','job_template_id'),'container-images':('container-image','image_id')}
     count=0
     for folder,(schema,field) in kinds.items():
         for path in (ROOT/'registry'/folder).glob('*.json'):

@@ -11,6 +11,9 @@
     "repository",
     "digest",
     "digest_kind",
+    "dockerfile_sha256",
+    "build_fingerprint_sha256",
+    "build_attempt_id",
     "purpose",
     "provenance"
   ],
@@ -34,8 +37,21 @@
       "type": "string",
       "enum": [
         "image-index",
-        "image-manifest"
+        "image-manifest",
+        "image-id"
       ]
+    },
+    "dockerfile_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "build_fingerprint_sha256": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}\\Z"
+    },
+    "build_attempt_id": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9:+._-]{1,120}\\Z"
     },
     "purpose": {
       "type": "string",

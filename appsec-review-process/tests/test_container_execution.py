@@ -143,7 +143,25 @@ class ImageRegistryTests(Sandbox):
         record = registry[support.FIXTURE_IMAGE_ID]
         self.assertRegex(ce.image_reference(record), r"\Adocker\.io/library/alpine@sha256:[0-9a-f]{64}\Z")
         for value in registry.values():
-            self.assertNotRegex(ce.image_reference(value).split("@")[0], r":[A-Za-z]")
+            reference = ce.image_reference(value)
+            if value["digest_kind"] == "image-id":
+                self.assertEqual(reference, value["digest"])
+            else:
+                self.assertNotRegex(reference.split("@")[0], r":[A-Za-z]")
+
+    def test_a_host_local_image_id_is_used_directly_not_as_a_repository_digest(self):
+        digest = "sha256:" + "c" * 64
+        record = {**support.fixture_record(), "image_id": "local-tool",
+                  "repository": "docker.io/library/local-tool", "digest": digest,
+                  "digest_kind": "image-id", "dockerfile_sha256": "sha256:" + "d" * 64,
+                  "build_fingerprint_sha256": "sha256:" + "e" * 64,
+                  "build_attempt_id": "2026-09-27T010203Z-deadbeef"}
+        directory = self.root / "images"
+        directory.mkdir()
+        (directory / "local-tool.json").write_text(json.dumps(record), encoding="utf-8")
+        loaded = ce.load_image_registry(directory)["local-tool"]
+        self.assertEqual(ce.image_reference(loaded), digest)
+        self.assertNotIn("@", ce.image_reference(loaded))
 
     def test_registry_records_cannot_carry_a_tag_a_bare_name_or_a_short_digest(self):
         for field, value in (("repository", "docker.io/library/alpine:latest"),

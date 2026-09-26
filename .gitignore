@@ -38,6 +38,9 @@ images/audit-codeql/codeql-bundle-linux64.tar.zst
 /images/scancode-toolkit/src/
 /images/.build-state/
 /images/tool-*/downloads/
+# B16 host-local records are regenerated from image build state at code-location start.
+/appsec-review-process/registry/container-images/*.json
+!/appsec-review-process/registry/container-images/fixture-harmless.json
 
 .claude/worktrees/agent-a07ef96e3c1e186f6
 

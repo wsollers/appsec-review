@@ -33,7 +33,7 @@ flowchart TD
   S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
   S6a["S6a-3 02-build-plan (per-unit Haiku plan, clang fixed)<br/>then 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
-  B13["Phase 3: B13 verifier binding done 2026-09-27<br/>next: B16 image registry + live Dagster op"]:::todo
+  B13["Phase 3: B13 verifier binding + B16 registry done 2026-09-27<br/>next: live harmless-fixture Dagster op"]:::todo
   E01["E01/E02: replay the lock through B13"]:::todo
 
   P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6a --> S6
@@ -259,6 +259,15 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-27 -- **B16 host-local image registry implemented; generated-at-start strategy approved
+  by William.** `images/registry_records.py` derives ignored B13 records for six shared step-4
+  images plus all 13 `tool-*` images from each successful build pointer, re-derives the current
+  build fingerprint, hashes its Dockerfile, and requires the pointer's image id to equal
+  `docker image inspect`. `code-location.sh start` generates all records before importing Dagster;
+  it never builds or pulls. Local records use `digest_kind: image-id`, which B13 passes to Docker
+  directly as `sha256:...`; the portable harmless fixture stays an image-index record. Zarathustra:
+  all 19 records generated and checked against Docker; 9 generator tests including the live drift
+  test and 105 B13 unit/live tests PASS. Phase 3 still needs the harmless-fixture Dagster op.
 - 2026-09-27 -- **Phase 3 first slice: B13 results require the caller-held hash.**
   `verify_container_result`, `load_verified_result` and `to_worker_envelope` now require the
   `result_sha256` returned by `run_container`; a fully resealed adapter log is refused when it no

@@ -413,6 +413,8 @@ def load_image_registry(directory: Path, store: SchemaStore | None = None) -> di
 
 
 def image_reference(record: Mapping[str, Any]) -> str:
+    if record["digest_kind"] == "image-id":
+        return record["digest"]
     return f"{record['repository']}@{record['digest']}"
 
 

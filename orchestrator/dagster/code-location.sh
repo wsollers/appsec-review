@@ -114,6 +114,10 @@ case "${1:-start}" in
     prepare) prepare ;;
     start)
         prepare
+        # B16: local image ids differ by Docker host. Generate the ignored registry records from
+        # successful image-build pointers and prove every id still matches Docker before Dagster
+        # imports any job that may use the pinned-container adapter. This never builds or pulls.
+        "$VENV/bin/python" -B "$REPO/images/registry_records.py" generate
         # Workers now run here, not in the image, so host prerequisites the image used to pin are checked.
         command -v git >/dev/null || echo "code-location: WARNING git not found; intake needs it" >&2
         "$VENV/bin/python" -c "import ctypes; ctypes.CDLL('libfuzzy.so.2')" 2>/dev/null \

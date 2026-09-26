@@ -52,6 +52,11 @@ orchestrator/dagster/code-location.sh check                # "gRPC connection su
 The code location needs a Python 3.12 venv matching `requirements.lock.txt` (the script builds it;
 on Ubuntu install `python3.12-venv`), plus `git` and `libfuzzy2` on the host: intake reads Git
 metadata and `evidence_index` loads `libfuzzy.so.2`. `start` warns if `libfuzzy.so.2` is missing.
+Before Dagster imports job code, `start` also runs the B16 local image-registry generator. All 19
+declared step-4 images must already have successful `images/.build-state` pointers and matching
+local Docker image ids; it builds and pulls nothing. A failure stops startup. Diagnose with
+`python3 -B images/registry_records.py check`, then rebuild the named image if its inputs or id
+drifted.
 Run `reload` after every start or restart of the code location: the webserver launches jobs from
 the job list it last loaded, so until then a newly added job is rejected with
 `PipelineNotFoundError`. `reload` also picks up changed job code: the code location runs
