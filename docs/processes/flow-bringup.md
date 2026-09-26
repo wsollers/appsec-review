@@ -29,13 +29,14 @@ flowchart TD
   S5["S5 02-dev-project-discovery<br/>supply_record.py: ACCEPTED"]:::done
   S5b["S5b devops + SRE topology discovery<br/>ACCEPTED (SAT stages 8-9)"]:::done
   AD["Automatic persona dispatch D01-D04<br/>SAT --dispatch stages 6-9, live 2026-09-25"]:::done
-  S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; SAT stage 10 PASS"]:::done
-  S6a["S6a-2 02-build-plan (classify units, per-unit LLM plan)<br/>then 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
+  S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; SAT stage 10 PASS (live upstreams 2026-09-26)"]:::done
+  S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
+  S6a["S6a-3 02-build-plan (per-unit Haiku plan, clang fixed)<br/>then 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>NEXT: designed"]:::next
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a, Phase 3, E01"]:::blocked
   B13["Phase 3: B13 into service + B16 image registry"]:::todo
   E01["E01/E02: replay the lock through B13"]:::todo
 
-  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6a --> S6
+  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6a --> S6
   AD -.-> S4b
   AD -.-> S5
   AD -.-> S5b
@@ -258,6 +259,17 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-26 -- **SAT PASS through `build-classify`: stages 1-11 all green with every model step live.**
+  Fresh `--dispatch` SAT `20260926T183609Z`, run `20260926T184019Z-53d1da`, on zarathustra (native Linux,
+  `/mnt/projects-drive/projects/appsec-review`). Stage 10 `build-index` (Dagster `c6993d03`): units `dir:.`
+  and `file:Dockerfile`, member `vendor/cJSON-1.7.18`, 29 signals, nothing omitted, clipped or redacted;
+  both discovery records cross-check to both units. Stage 11 `build-classify` (Dagster `c502e7b6`,
+  ~20 s): `dir:.` = `compiled-native` (high), `file:Dockerfile` = `container` (high), build set `dir:.`,
+  0 coverage gaps -- equal to the answer key. One `index_review` item (informational, never applied): the
+  index has no signal for `TESTS = tests/run.sh` (`Makefile.am:32`). Fixes that got here, all 2026-09-26:
+  schema-safe claim ids and statements, the bounded repair retry, the vendored-tree rule in the indexer,
+  and the stage 11 summary line (entries below). **Nothing is built yet**: next is `02-build-plan` with
+  the clang rule (ADR-0012 Revision 3), then Phase 3 and `02-build-resolution`.
 - 2026-09-26 -- **`02-build-index` no longer depends on how D01 phrases a vendored partition.** Fresh
   `--dispatch` SAT `20260926T172859Z` (run `20260926T173310Z-1707c0`, Dagster `fab76fca`): stages 1-9 PASS
   with live D01-D04; stage 10 FAIL: member `vendor` instead of `vendor/cJSON-1.7.18`, because the live

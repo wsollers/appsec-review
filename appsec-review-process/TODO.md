@@ -1088,12 +1088,16 @@ Work order (one piece at a time):
    `83ff692`, `2c3d28b`, `62846b6`); SAT PASS through stage 10 (SAT `20260925T211247Z`, run
    `20260925T211325Z-3a398a`, Dagster `04e8562f`, supplied mode). Readiness stays
    `implemented_not_qualified` until fault-recovery qualification (reuse, tamper, newer failure) is run live.
-3. [ ] `02-build-classify` (ADR-0012 Revision 2, William 2026-09-25: its own job, Sonnet, reads the
+3. [x] `02-build-classify` (ADR-0012 Revision 2, William 2026-09-25: its own job, Sonnet, reads the
    checkout and the accepted index; one cited class per unit, mixed units split, `index_review` of the
    script's work). Built 2026-09-25: schema, contract, role, template, `task-build-classify.md`
    (`599f31f`); validator, claim builder and common-envelope persona worker `build_classify.py`
    (`a193b28`); graph node with a required edge on `02-build-index`, Dagster job `build_classify`
    (persona_llm pool), design-parity entry. Next: SAT stage 11 (`--dispatch`), then the live run.
+   **SAT PASS through stage 11, 2026-09-26** (zarathustra, fresh `--dispatch` SAT `20260926T183609Z`, run
+   `20260926T184019Z-53d1da`, Dagster `c502e7b6`): classes and build set equal the answer key. Readiness
+   `implemented_not_qualified` until fault-recovery qualification. Fixed on the way: schema-safe claims,
+   the bounded repair retry (`invocation.repair_attempts`), the indexer's vendored-tree rule.
 4. [ ] `02-build-plan` (Haiku, one call per build-set unit, reads the checkout, the index, the
    classification and the buildenv catalog); SAT stage 12.
 5. [ ] `02-build-resolution` (per unit); SAT stage 13. Needs Phase 3 (B13 into service, B16 records,
