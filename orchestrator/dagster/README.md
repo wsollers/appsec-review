@@ -1,7 +1,9 @@
 # Local Dagster runner
 
 This stack belongs to appsec-review. It runs the default `engagement_workflow`, the retained
-`phase1_intake` job and the original smoke diagnostic, with persistent queue and instance history.
+`phase1_intake` job and standalone diagnostics, with persistent queue and instance history. The
+`b13_harmless_container` diagnostic is the qualified minimal pinned-container caller: it runs only
+`fixture-harmless`, publishes the common envelope, and makes no scanner or lifecycle claim.
 Phase 1 intake was accepted through A01-A16 on 2026-09-19 (run `20260919T104300Z-ba7b4c`). See the
 [operations guide](../../docs/dagster/operations.md) for staging and launch configuration.
 The normal entry point is `python -B appsec-review-process/launch_job.py --run-id <run_id> --wait`.

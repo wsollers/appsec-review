@@ -50,7 +50,8 @@
       "sre_operations_topology",
       "build_index",
       "build_classify",
-      "build_plan"
+      "build_plan",
+      "b13_harmless_container"
     ],
     "standalone_relationships": [
       {
@@ -153,6 +154,11 @@
         "relationship": "standalone and lifecycle-wired persona build plan, one Haiku call per build-set unit, compiler fixed (our clang); requires an accepted build classification"
       },
       {
+        "job": "b13_harmless_container",
+        "lifecycle_jobs": [],
+        "relationship": "Phase 3 standalone qualification of the B13 pinned-container adapter and common publication boundary; not a scanner or lifecycle node"
+      },
+      {
         "job": "full_review",
         "lifecycle_jobs": [
           "00-intake",
@@ -228,7 +234,8 @@
       "sre_operations_topology",
       "build_index",
       "build_classify",
-      "build_plan"
+      "build_plan",
+      "b13_harmless_container"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -244,6 +251,7 @@
       "build_index",
       "build_classify",
       "build_plan",
+      "b13_harmless_container",
       "full_review"
     ],
     "cancellation_sensor_jobs": [
@@ -260,6 +268,7 @@
       "build_index",
       "build_classify",
       "build_plan",
+      "b13_harmless_container",
       "full_review"
     ],
     "queue": {
@@ -3517,16 +3526,48 @@
           "appsec-review-process/tests/test_worker_result_runtime.py",
           "appsec-review-process/tests/test_worker_adoption.py",
           "appsec-review-process/tests/test_critical_findings_sarif.py",
+          "appsec-review-process/tests/test_b13_harmless.py",
           "appsec-review-process/qualify_worker_adoption.py",
-          "appsec-review-process/qualify_sarif_adoption.py"
+          "appsec-review-process/qualify_sarif_adoption.py",
+          "appsec-review-process/qualify_b13_harmless.py"
         ]
       },
       "gaps": [
         "remaining_workers_not_yet_migrated",
-        "container_persona_pool_controller_adapters_not_implemented"
+        "persona_pool_controller_adapters_not_implemented"
       ],
       "blocking_decisions": [],
       "next_prerequisite": "Add the next bounded contract-specific validation slice without broad worker migration."
+    },
+    {
+      "id": "pinned-container-adapter-runtime",
+      "design_refs": [
+        "docs/architecture/design-v3.md#22-sandboxing-and-isolation",
+        "docs/adapters/pinned-container-adapter.md"
+      ],
+      "jobs": [],
+      "execution_mode": "pinned_container",
+      "readiness": "implemented_and_qualified",
+      "resource_pool": "docker",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration",
+          "live_docker",
+          "live_dagster",
+          "fault_recovery"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_container_execution.py",
+          "appsec-review-process/tests/test_container_execution_live.py",
+          "appsec-review-process/tests/test_b13_harmless.py",
+          "appsec-review-process/qualify_b13_harmless.py",
+          "docs/adapters/pinned-container-adapter.md"
+        ]
+      },
+      "gaps": [],
+      "blocking_decisions": [],
+      "next_prerequisite": "Adopt the qualified adapter in 02-build-resolution, then the bounded scanner workers."
     },
     {
       "id": "dedicated-resource-pools",

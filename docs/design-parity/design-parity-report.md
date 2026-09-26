@@ -4,7 +4,7 @@ Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
 Lifecycle jobs: **54**
-Design capabilities: **15**
+Design capabilities: **16**
 
 ## Readiness summary
 
@@ -456,7 +456,7 @@ Design capabilities: **15**
 - claim-ledger-routing: append_only_claim_ledger_missing
 - claim-ledger-routing: candidate_routing_missing
 - claim-ledger-routing: resource pool unassigned
-- common-worker-result-envelope: container_persona_pool_controller_adapters_not_implemented
+- common-worker-result-envelope: persona_pool_controller_adapters_not_implemented
 - common-worker-result-envelope: remaining_workers_not_yet_migrated
 - common-worker-result-envelope: resource pool unassigned
 - completeness-feedback: completeness_auditor_missing

@@ -491,7 +491,7 @@
       <bpmn:sequenceFlow id="Flow_sp5_resp_sp5_rejected" name="no" sourceRef="sp5_resp" targetRef="sp5_rejected" />
       <bpmn:sequenceFlow id="Flow_sp5_resp_sp5_m" name="yes" sourceRef="sp5_resp" targetRef="sp5_m" />
       <bpmn:sequenceFlow id="Flow_sp5_m_sp5_end" sourceRef="sp5_m" targetRef="sp5_end" />
-      <bpmn:textAnnotation id="sp5_n1"><bpmn:text>With --wait the client then polls to SUCCESS / FAILURE / CANCELED; QUEUED or STARTED is acceptance, not completion.</bpmn:text></bpmn:textAnnotation>
+      <bpmn:textAnnotation id="sp5_n1"><bpmn:text>With --wait the client then polls to SUCCESS / FAILURE / CANCELED; QUEUED or STARTED is acceptance, not completion. The registered b13_harmless_container qualification uses this same launch path and the host code location's Docker pool.</bpmn:text></bpmn:textAnnotation>
       <bpmn:association id="Assoc_sp5_n1" sourceRef="sp5_launch" targetRef="sp5_n1" />
     </bpmn:subProcess>
     <bpmn:endEvent id="End_Accepted" name="Engagement accepted by Dagster">

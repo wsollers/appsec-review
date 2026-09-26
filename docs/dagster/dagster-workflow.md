@@ -3,6 +3,8 @@
 The additional `build_discovery` and `full_review` jobs are described in
 [build discovery and full-graph readiness](../build-discovery/build-discovery-integration.md). The preparation workflow
 below remains the default; registration of downstream jobs does not enable their missing workers.
+The standalone `b13_harmless_container` job sits outside this graph and exists only to qualify the
+B13 adapter, Docker pool, common lifecycle, envelope and publication path.
 
 `launch_job.py` now submits `engagement_workflow` by default. Dagster owns the queue, dependency
 graph, multiprocessing, cancellation and run history. Python functions and subprocesses perform

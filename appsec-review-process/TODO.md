@@ -143,6 +143,13 @@ PASS with the readiness view regenerated, and the whole chain under ten minutes 
 - Done when: a Dagster op on the host runs `fixture-harmless` through B13 and publishes a verified
   envelope; every step-4 image has a registry record; `test_container_execution.py` live tests pass
   against the host Docker.
+- **Complete 2026-09-27:** standalone job `b13_harmless_container` now runs only the tracked
+  `fixture-harmless` image through B13 on the Docker pool and publishes the common envelope after
+  checking the caller-owned `expected_result_sha256`. Bounded live qualification proved success,
+  immutable reuse, a real non-zero container exit, no fallback to the older success, recovery, and
+  reuse of the recovered attempt (run `phase3-b13-1e116590cd`). This is adapter integration proof,
+  not a scanner or lifecycle-node implementation. The next engagement-flow step is
+  `02-build-resolution`.
 
 ### Phase 4 -- build-environment provisioning (supplied) and the C++ buildenv
 
@@ -1409,7 +1416,7 @@ Cross-cutting capability ownership is explicit:
 - Acceptance: current, pending, failed-newer, canceled, corrupt, stale, and missing-prerequisite
   fixtures on Windows/Linux; status remains read-only.
 
-#### B13 — Pinned-container argv adapter — DONE (PR #29, merged 2026-09-21; no lifecycle worker migrated yet)
+#### B13 — Pinned-container argv adapter — DONE (PR #29, merged 2026-09-21; standalone service qualification added 2026-09-27)
 
 - Deliver: one versioned adapter that accepts only registry-resolved image digests and argv arrays,
   uses the maintained wrapper, read-only target mounts, run-owned writable scratch, disabled network
@@ -1422,6 +1429,10 @@ Cross-cutting capability ownership is explicit:
   `load_verified_result` and `to_worker_envelope` require the externally retained
   `expected_result_sha256` returned by `run_container`. A consistently rewritten adapter log is
   refused when it does not match that caller-held value.
+- Qualified in service 2026-09-27: `b13_harmless_container` is the smallest real Dagster caller.
+  It uses no target mount, network, scanner, finding, or lifecycle claim; its caller receipt retains
+  the expected hash outside the adapter log and its output contract requires the receipt and all
+  B13 diagnostics before common publication.
 
 #### B14 — Persona invocation adapter — DONE (PR #32, merged 2026-09-21; dispatch protocol only)
 

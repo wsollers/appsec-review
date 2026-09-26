@@ -1,0 +1,34 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "b13-harmless-container",
+  "display_name": "B13 Harmless Container Qualification",
+  "required_files": [
+    "qualification.json",
+    "status.json",
+    "logs/container/request.json",
+    "logs/container/observation.json",
+    "logs/container/command.json",
+    "logs/container/events.jsonl",
+    "logs/container/stdout.log",
+    "logs/container/stderr.log",
+    "logs/container/container-result.json"
+  ],
+  "required_status_fields": [
+    "status",
+    "attempt_id",
+    "dagster_run_id",
+    "image_reference",
+    "expected_result_sha256",
+    "permission_fingerprint_sha256"
+  ],
+  "claim_types": ["runtime_qualification"],
+  "validation_rules": [
+    "fixed fixture-harmless image id and registry digest",
+    "fixed argv array, no network and no target mounts",
+    "B11 decision re-derived for the exact zero-capability requirement",
+    "caller-retained expected_result_sha256 required by every B13 verification entry point",
+    "adapter request, observation, command, streams and result re-derived before publication",
+    "common worker envelope, immutable reuse, newest-failure blocking and explicit recovery",
+    "qualification evidence only; no scanner, finding, severity or target-runtime claim"
+  ]
+}

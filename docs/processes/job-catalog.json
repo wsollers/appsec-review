@@ -3,8 +3,8 @@
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
   "lifecycle_jobs": 54,
-  "steps": 51,
-  "artifacts": 52,
+  "steps": 52,
+  "artifacts": 55,
   "models": 5
  },
  "models": [
@@ -523,16 +523,37 @@
         "dagster-run-queued"
        ],
        "declared_inputs": []
+      },
+      {
+       "ref": "step:b13-harmless-container",
+       "id": "b13-harmless-container",
+       "name": "b13_harmless_container (Dagster qualification job)",
+       "kind": "dagster-job",
+       "consumes": [
+        "artifact-manifest",
+        "loaded-job-list",
+        "docker-engine",
+        "fixture-harmless-image",
+        "b13-qualification-input"
+       ],
+       "produces": [
+        "b13-qualification-result"
+       ],
+       "declared_inputs": []
       }
      ],
      "rollup": {
       "enters": [
        "artifact-manifest",
-       "loaded-job-list"
+       "loaded-job-list",
+       "docker-engine",
+       "fixture-harmless-image",
+       "b13-qualification-input"
       ],
       "leaves": [
        "launch-request",
-       "dagster-run-queued"
+       "dagster-run-queued",
+       "b13-qualification-result"
       ],
       "passes": [
        "launch-intent"
@@ -545,14 +566,17 @@
     "enters": [
      "sut-origin",
      "sut-pin",
-     "job-definitions"
+     "job-definitions",
+     "fixture-harmless-image",
+     "b13-qualification-input"
     ],
     "leaves": [
      "code-location-venv",
      "job:02-dev-project-discovery",
      "job:02-sre-operations-topology",
      "launch-request",
-     "dagster-run-queued"
+     "dagster-run-queued",
+     "b13-qualification-result"
     ],
     "passes": [
      "sut-checkout",
@@ -2624,6 +2648,42 @@
      }
     },
     {
+     "name": "Phase 3 B13 service qualification",
+     "entries": [
+      {
+       "ref": "step:b13-harmless-container",
+       "id": "b13-harmless-container",
+       "name": "b13_harmless_container (Dagster qualification job)",
+       "kind": "dagster-job",
+       "consumes": [
+        "artifact-manifest",
+        "loaded-job-list",
+        "docker-engine",
+        "fixture-harmless-image",
+        "b13-qualification-input"
+       ],
+       "produces": [
+        "b13-qualification-result"
+       ],
+       "declared_inputs": []
+      }
+     ],
+     "rollup": {
+      "enters": [
+       "artifact-manifest",
+       "loaded-job-list",
+       "docker-engine",
+       "fixture-harmless-image",
+       "b13-qualification-input"
+      ],
+      "leaves": [
+       "b13-qualification-result"
+      ],
+      "passes": [],
+      "declared_inputs": []
+     }
+    },
+    {
      "name": "S6a Build resolution (index, classification and plan built; resolution designed)",
      "entries": [
       {
@@ -2769,6 +2829,8 @@
      "dispatch-mode",
      "partition-record",
      "dev-record",
+     "fixture-harmless-image",
+     "b13-qualification-input",
      "job:02-devops-project-discovery",
      "llm-invoker",
      "buildenv-catalog",
@@ -2779,6 +2841,7 @@
      "resolved-config",
      "partition-handoff",
      "dev-handoff",
+     "b13-qualification-result",
      "job:02-build-plan",
      "build-attempts",
      "build-lock",
@@ -5226,6 +5289,24 @@
     "build-lock"
    ],
    "notes": "Per build-set unit, loop up to build_resolution_attempts (default 3): render Dockerfile from the plan, build image (restore during provisioning only), trial configure+build via B13 with no network; on failure the model revises. Each unit ends OK, FAILED(BUILD_UNRESOLVED) or BLOCKED; job status OK / OK_WITH_GAPS / UNRESOLVED / BLOCKED / SKIPPED from the unit outcomes. On success catalog image_build_<id> and write the unit's build-lock entry. Nothing built is run."
+  },
+  {
+   "id": "b13-harmless-container",
+   "name": "b13_harmless_container (Dagster qualification job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job b13_harmless_container --wait",
+   "bpmn": [],
+   "consumes": [
+    "artifact-manifest",
+    "loaded-job-list",
+    "docker-engine",
+    "fixture-harmless-image",
+    "b13-qualification-input"
+   ],
+   "produces": [
+    "b13-qualification-result"
+   ],
+   "notes": "Standalone Phase 3 integration proof: fixture-harmless only, B13 pinned image and argv, zero-capability permission decision, no mounts or network, Docker pool, common lifecycle/envelope/publication. Bounded live qualification proves immutable reuse, controlled non-zero failure, no fallback, recovery and recovered-attempt reuse. No scanner, finding, severity or lifecycle readiness claim."
   },
   {
    "id": "build_discovery",
@@ -9158,7 +9239,8 @@
     "step:docker-recover"
    ],
    "consumed_by": [
-    "step:compose-up"
+    "step:compose-up",
+    "step:b13-harmless-container"
    ]
   },
   "dagster-services": {
@@ -9225,6 +9307,7 @@
     "step:sre_operations_topology",
     "step:launch-job",
     "step:engagement_workflow",
+    "step:b13-harmless-container",
     "step:orchestration_smoke",
     "step:full_review"
    ]
@@ -9286,6 +9369,7 @@
     "step:engagement_workflow",
     "step:op-workflow_config",
     "step:op-workflow_intake",
+    "step:b13-harmless-container",
     "step:build_discovery",
     "step:full_review",
     "job:00-intake"
@@ -9698,6 +9782,36 @@
    "about": "Image id and digest, Dockerfile hash, ordered argv; replayed by E01/E02 (designed).",
    "produced_by": [
     "step:build-resolution"
+   ],
+   "consumed_by": []
+  },
+  "fixture-harmless-image": {
+   "id": "fixture-harmless-image",
+   "kind": "record",
+   "path": "appsec-review-process/registry/container-images/fixture-harmless.json",
+   "about": "Tracked immutable Alpine image-index record used only for harmless B13 adapter qualification.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:b13-harmless-container"
+   ]
+  },
+  "b13-qualification-input": {
+   "id": "b13-qualification-input",
+   "kind": "file",
+   "path": "runs/<run_id>/inputs/b13-harmless-qualification.json",
+   "about": "Closed success or controlled exit-nonzero request plus a zero-capability B11 permission decision.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:b13-harmless-container"
+   ]
+  },
+  "b13-qualification-result": {
+   "id": "b13-qualification-result",
+   "kind": "file",
+   "path": "runs/<run_id>/data/jobs/b13-harmless-container/accepted.json and attempts/<attempt_id>/result.json",
+   "about": "Verified common envelope and immutable acceptance pointer; caller-owned qualification.json retains the expected B13 result hash outside the adapter log.",
+   "produced_by": [
+    "step:b13-harmless-container"
    ],
    "consumed_by": []
   },

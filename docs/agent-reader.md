@@ -91,6 +91,9 @@ Important job boundaries:
 - `build_execution`: depends on accepted `build_discovery`; runs one sandboxed CMake configure
   step and records whether it produced a non-empty `compile_commands.json`.
 - `evidence_index`: builds accepted searchable evidence for later source/document lookups.
+- `b13_harmless_container`: standalone adapter qualification only; runs `fixture-harmless` through
+  B13 and the Docker pool, then publishes a verified common envelope. It is not a scanner or a
+  lifecycle node.
 - `full_review`: exposes the lifecycle graph, but many workers intentionally block with
   `WORKER_NOT_IMPLEMENTED` until implemented and qualified.
 

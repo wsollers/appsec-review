@@ -40,7 +40,11 @@ class DesignParityTests(unittest.TestCase):
 
     def copy_repo(self, destination):
         repo = Path(destination)
-        shutil.copytree(ROOT, repo / "appsec-review-process", ignore=shutil.ignore_patterns("runs", "__pycache__"))
+        shutil.copytree(
+            ROOT,
+            repo / "appsec-review-process",
+            ignore=shutil.ignore_patterns("runs", "logs", "__pycache__"),
+        )
         shutil.copytree(resolve_repo_path("orchestrator/dagster"), repo / "orchestrator/dagster")
         shutil.copytree(resolve_repo_path("schemas"), repo / "schemas")
         views = self.manifest["generated_views"]
@@ -59,7 +63,7 @@ class DesignParityTests(unittest.TestCase):
         result = validate_manifest(self.manifest)
         self.assertEqual(result["status"], "PASS", result["errors"])
         self.assertEqual(result["job_count"], 54)
-        self.assertEqual(result["capability_count"], 15)
+        self.assertEqual(result["capability_count"], 16)
         self.assertNotIn("resource_pools: no dedicated Dagster resource pools are configured", result["gaps"])
         self.assertEqual(tuple(self.manifest["dagster_inventory"]["resource_pools"]), resource_pools.POOL_IDS)
 
@@ -81,7 +85,11 @@ class DesignParityTests(unittest.TestCase):
     def test_broken_registry_composition_reference(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo = Path(temporary)
-            shutil.copytree(ROOT, repo / "appsec-review-process", ignore=shutil.ignore_patterns("runs", "__pycache__"))
+            shutil.copytree(
+                ROOT,
+                repo / "appsec-review-process",
+                ignore=shutil.ignore_patterns("runs", "logs", "__pycache__"),
+            )
             shutil.copytree(resolve_repo_path("orchestrator/dagster"), repo / "orchestrator/dagster")
             template = repo / "appsec-review-process/registry/job-templates/00-intake.json"
             value = json.loads(template.read_text(encoding="utf-8"))

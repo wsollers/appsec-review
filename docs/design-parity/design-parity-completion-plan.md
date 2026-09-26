@@ -102,7 +102,8 @@ Completed subset:
 - [ ] Broader contract migration, pinned-container argv, persona invocation, pool, and controller
   adapters.
   - Done part: the pinned-container argv adapter (B13, PR #29) and the persona invocation adapter
-    (B14, PR #32, dispatch protocol only); no lifecycle worker is migrated to either.
+    (B14, PR #32, dispatch protocol only). B13 now has a standalone live Dagster qualification;
+    no scanner or lifecycle worker is migrated to either adapter.
 - [ ] Centralize attempt allocation, locking, timeout, cancellation, stream draining, child cleanup,
   publication, reuse, and newer-failure blocking so new workers do not reimplement the state model.
   Atomic publication, reuse validation, collision-safe allocation, interrupted-attempt recovery,
@@ -148,7 +149,8 @@ Validation:
   selected persona prompt, evidence-retrieval instructions, and recorded model/invocation identity.
   (implemented, B14, PR #32; dispatch protocol only, no lifecycle persona job enabled)
 - [x] Implement tool dispatch as pinned-image argv arrays with no legacy-script shell-out.
-  (implemented, B13, PR #29; no lifecycle worker migrated yet)
+  (implemented, B13, PR #29; standalone host-Dagster qualification complete 2026-09-27; no scanner
+  or lifecycle worker migrated yet)
 - [x] Implement a waiter that observes every expected instance to a terminal state without busy
   polling, handles cancellation, and never treats a missing worker as an empty result.
   (implemented, C02, PR #35; unit level, no Dagster op runs it; gaps tracked in the parity manifest)

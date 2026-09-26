@@ -33,6 +33,11 @@ SARIF tooling profile. Its standalone Dagster job consumes only the fixed run-ow
 `inputs/critical-findings.md`; it does not make the still-planned synthesis or verification workers
 implemented and it cannot verify or upgrade a finding.
 
+`b13-harmless-container` is an implemented output contract for the standalone
+`b13_harmless_container` Dagster qualification. It requires the caller-owned expected-hash receipt,
+status, and the complete B13 diagnostic set. It is not a registry job template and makes no scanner,
+finding, severity, or lifecycle-readiness claim.
+
 `02-ossf-scorecard` is an implemented external-evidence ingestion composition. It uses the
 supply-chain evidence curator persona, Scorecard results ingestor role, open-source project posture
 domain, authorized Scorecard API tooling profile and Scorecard results contract. It requires an

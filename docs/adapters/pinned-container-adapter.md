@@ -5,9 +5,9 @@
 Backlog batch B13. `appsec-review-process/container_execution.py` implements
 `appsec-review/pinned-container-adapter/1.0`, and `worker_adapters.PinnedContainerAdapter` exposes
 it through the narrow adapter protocol (`kind = "pinned_container"`). **No lifecycle worker uses it
-yet**: nothing in the graph, the manifest, the launcher, Dagster or `build_execution.py` was
-changed, and `build_execution.py` still calls its bash wrapper. Migrating a worker is a later,
-separately qualified batch (E01, D09, M03 to M05).
+yet.** The standalone `b13_harmless_container` Dagster job now qualifies the adapter integration
+against `fixture-harmless`; it is not a scanner or lifecycle node. `build_execution.py` still calls
+its bash wrapper. Migrating a worker is a later, separately qualified batch (E01, D09, M03 to M05).
 
 The adapter runs one argv array in one registry-pinned image inside a fixed boundary, removes the
 container, and writes one terminal result that a read-only verifier re-derives from disk.
@@ -277,6 +277,12 @@ cause code is the envelope cause, the summary is fixed text, the artifacts are t
 caller-declared output paths (single spellings, regular non-link files beneath the attempt), and
 `acceptance_status` is always `NOT_ACCEPTED` because acceptance belongs to publication.
 
+The qualified standalone caller keeps `run_container`'s returned hash in process memory, writes it
+to caller-owned `qualification.json` outside the adapter log, and supplies that value to
+`to_worker_envelope` before publishing. Its output contract requires that receipt, status, and
+every B13 request/result/observation/child/log file. A fully re-sealed adapter directory cannot
+change the caller's expected value and is rejected.
+
 ## Windows-host and Linux-worker parity
 
 Path translation and list construction are pure and tested for both flavors on any machine.
@@ -329,11 +335,18 @@ prove after every test that no labelled container remains.
    `registry/container-images/`; the folder remains part of the code identity hash.
 2. **Implemented for the 19 current step-4 images by B16:** generate host-local `image-id` records
    at code-location startup. A later registry push may replace them with portable manifest digests.
-3. `build_execution.py` (E01): replace the bash wrapper call with this adapter, then requalify.
-4. `create_job_handoff.py`: fold `fingerprint_material(...)["sha256"]` into the input fingerprint.
-5. `publish_job_output.py` coordinator: map `ContainerRequestError` to `FAILED` and BLOCKED results
+3. **Implemented as a standalone integration proof (2026-09-27):** `b13_harmless_container`
+   exercises the real Dagster launch path, Docker pool, common lifecycle, common envelope and
+   publication boundary. Bounded run `phase3-b13-1e116590cd` proves success/reuse, non-zero failure,
+   no fallback, recovery and reuse after recovery. It deliberately makes no scanner or lifecycle
+   readiness claim.
+4. `build_execution.py` (E01): replace the bash wrapper call with this adapter, then requalify.
+5. `create_job_handoff.py`: fold `fingerprint_material(...)["sha256"]` into the input fingerprint.
+6. Broader coordinators: map `ContainerRequestError` to `FAILED` and BLOCKED results
    to `BLOCKED` envelopes; call `to_worker_envelope` for the terminal record.
-6. B15: assign `pinned_container` work to the Docker pool. C01: give each instance its own
+7. **Implemented for the qualification job:** B15 assigns `b13_harmless_container` to the Docker
+   pool. C01 still gives pooled instances their own
    `attempt_root`, `scratch_path` and `log_path`; the container name is already unique per attempt.
-7. Boundary 1.1: an egress-filtered network mode and an exec tmpfs carve-out, each versioned.
-8. `design-parity-manifest.json` and generated views: record the adapter (integrator step).
+8. Boundary 1.1: an egress-filtered network mode and an exec tmpfs carve-out, each versioned.
+9. **Implemented 2026-09-27:** `design-parity-manifest.json` and generated views record the
+   standalone job, qualification, output contract and remaining persona/pool/controller gap.

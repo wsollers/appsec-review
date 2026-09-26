@@ -20,6 +20,10 @@ adds queued engagement concurrency and parallel preparation after intake. Dagste
 `review_cli.py intake` uses the smaller intake-only service job; use `launch_job.py --job phase1_intake`
 to select it explicitly.
 
+For the bounded pinned-container service qualification, select `--job b13_harmless_container`.
+It uses the tracked `fixture-harmless` digest, no target mount or network, the Docker resource pool,
+and the common lifecycle/publication boundary. It is not a scanner or lifecycle step.
+
 ## Explicit host adapter diagnostics
 
 ```bash

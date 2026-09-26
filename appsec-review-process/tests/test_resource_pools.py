@@ -36,7 +36,7 @@ SUPPORTED_KEYWORDS = {"$schema", "$id", "title", "description", "type", "require
 EXECUTOR_CAPS = {"engagement_workflow": "plan", "build_discovery": 3, "build_execution": 2, "evidence_index": 2,
                  "critical_findings_sarif": 1, "ossf_scorecard": 1, "repository_partition_discovery": 1, "dev_project_discovery": 1,
                  "devops_project_discovery": 1, "sre_operations_topology": 1, "build_index": 1, "build_classify": 1, "build_plan": 1,
-                 "full_review": 3}
+                 "b13_harmless_container": 1, "full_review": 3}
 
 
 def _decorator_calls(path: Path, name: str):

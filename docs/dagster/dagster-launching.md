@@ -124,6 +124,7 @@ monitoring but leaves server execution running.
 | `repository_partition_discovery` | `--job repository_partition_discovery` | Supplied-result gate: accepts a validated repository partition map from `data/jobs/02-repository-partition-discovery/supplied/result.json`, or fails with a hand-off naming that file |
 | `dev_project_discovery` | `--job dev_project_discovery` | Supplied-result gate for developer project discovery; also requires the accepted partition map at the same source revision |
 | `critical_findings_sarif` | `--job critical_findings_sarif` | Strict run-owned conversion of independently verified finding Markdown to accepted SARIF 2.1.0 |
+| `b13_harmless_container` | `--job b13_harmless_container` | Standalone B13/Docker-pool qualification using only `fixture-harmless`; no scanner, target mount, finding, or lifecycle claim |
 | `full_review` | `--job full_review` | All lifecycle/registry jobs; currently stops at the first unimplemented worker |
 
 `$PY -B appsec-review-process/review_cli.py intake --run-id $RUN` selects the intake-only

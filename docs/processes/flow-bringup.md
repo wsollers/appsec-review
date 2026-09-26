@@ -32,10 +32,10 @@ flowchart TD
   S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; SAT stage 10 PASS (live upstreams 2026-09-26)"]:::done
   S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
   S6p["S6a-3 02-build-plan: per-unit Haiku plan, clang fixed<br/>built 2026-09-26; SAT stage 12 PASS 2026-09-26"]:::done
-  S6a["S6a-4 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>designed; blocked on Phase 3 qualification"]:::blocked
+  S6a["S6a-4 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>designed; Phase 3 prerequisite complete"]:::next
   CPP["C++ buildenv prerequisite<br/>audit-native + LLVM 21.1.0 + autotools/Bear<br/>built and boundary-smoke PASS 2026-09-26"]:::done
   S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a and E01"]:::blocked
-  B13["Phase 3: B13 verifier binding + B16 registry done 2026-09-27<br/>next: live harmless-fixture Dagster op"]:::next
+  B13["Phase 3: B13 verifier binding + B16 registry + live harmless Dagster job<br/>complete 2026-09-27"]:::done
   E01["E01/E02: replay the lock through B13"]:::todo
 
   P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6p --> S6a --> S6
@@ -265,6 +265,36 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-27 -- **Phase 3 complete: B13 is in service through a bounded standalone Dagster job.**
+  `b13_harmless_container` ran the tracked digest-only `fixture-harmless` image on the Docker pool,
+  with no target mount, network, scanner, finding, or lifecycle claim. Qualification run
+  `phase3-b13-1e116590cd` proved initial success (Dagster
+  `dd759b7d-6ead-408a-b84b-c15ba04221d1`, attempt `5c18940e2aa045c6bc89f007be2f425a`),
+  immutable reuse (`4bede218-442f-42df-a3e8-b2ec703591e3`), a real `/bin/false` failure
+  (`d3b4e266-0f7e-4680-b840-48f712b6aef2`, attempt
+  `6c6a50892b984144857d5544a73a9909`), recovery without fallback
+  (`353eee33-0df4-41c0-90c3-ecb57a9e14d8`, attempt
+  `dd9db32020b84b2e80e2bf3bfeca567a`), and recovered-attempt reuse
+  (`4d675422-9f2a-455f-84df-52c76acbf03b`). The caller-retained hash matched the adapter result in
+   both successes. Next in the engagement flow is `02-build-resolution`.
+- 2026-09-27 -- **B16 host-local image registry implemented; generated-at-start strategy approved
+  by William.** `images/registry_records.py` derives ignored B13 records for six shared step-4
+  images plus all 13 `tool-*` images from each successful build pointer, re-derives the current
+  build fingerprint, hashes its Dockerfile, and requires the pointer's image id to equal
+  `docker image inspect`. `code-location.sh start` generates all records before importing Dagster;
+  it never builds or pulls. Local records use `digest_kind: image-id`, which B13 passes to Docker
+  directly as `sha256:...`; the portable harmless fixture stays an image-index record. Zarathustra:
+  all 19 records generated and checked against Docker; 9 generator tests including the live drift
+  test and 105 B13 unit/live tests PASS. Phase 3 still needs the harmless-fixture Dagster op.
+- 2026-09-27 -- **Phase 3 first slice: B13 results require the caller-held hash.**
+  `verify_container_result`, `load_verified_result` and `to_worker_envelope` now require the
+  `result_sha256` returned by `run_container`; a fully resealed adapter log is refused when it no
+  longer matches that external value. Cancellation carries the hash on the re-raised exception.
+  C02 captures the value outside the adapter log as `adapter_result_sha256` in its immutable
+  terminal-instance manifest and supplies it on later read-only verification. Local evidence:
+  259 focused adapter/C01/C02 tests, 23 live-Docker B13 tests, 19 cross-slice/live-rendezvous tests,
+  72 baseline tests, design parity PASS (53 jobs), and contract qualification PASS. Phase 3 is not
+  complete: B16 image registry records and the harmless-fixture Dagster op remain next.
 - 2026-09-26 -- **SAT PASS through `build-plan`: stages 1-12 all green with every model step live.**
   The one fresh qualification was automatic-dispatch SAT `20260926T215329Z`, engagement
   `20260926T215743Z-4190aa`, on zarathustra. Exact Dagster runs: engagement workflow
@@ -286,24 +316,6 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
   reference but was informational because the fixed base already supplies it. The next SAT stage
   is `02-build-resolution`; the three built build-lane jobs remain
   `implemented_not_qualified` until live reuse/tamper/newer-failure recovery qualification.
-- 2026-09-27 -- **B16 host-local image registry implemented; generated-at-start strategy approved
-  by William.** `images/registry_records.py` derives ignored B13 records for six shared step-4
-  images plus all 13 `tool-*` images from each successful build pointer, re-derives the current
-  build fingerprint, hashes its Dockerfile, and requires the pointer's image id to equal
-  `docker image inspect`. `code-location.sh start` generates all records before importing Dagster;
-  it never builds or pulls. Local records use `digest_kind: image-id`, which B13 passes to Docker
-  directly as `sha256:...`; the portable harmless fixture stays an image-index record. Zarathustra:
-  all 19 records generated and checked against Docker; 9 generator tests including the live drift
-  test and 105 B13 unit/live tests PASS. Phase 3 still needs the harmless-fixture Dagster op.
-- 2026-09-27 -- **Phase 3 first slice: B13 results require the caller-held hash.**
-  `verify_container_result`, `load_verified_result` and `to_worker_envelope` now require the
-  `result_sha256` returned by `run_container`; a fully resealed adapter log is refused when it no
-  longer matches that external value. Cancellation carries the hash on the re-raised exception.
-  C02 captures the value outside the adapter log as `adapter_result_sha256` in its immutable
-  terminal-instance manifest and supplies it on later read-only verification. Local evidence:
-  259 focused adapter/C01/C02 tests, 23 live-Docker B13 tests, 19 cross-slice/live-rendezvous tests,
-  72 baseline tests, design parity PASS (53 jobs), and contract qualification PASS. Phase 3 is not
-  complete: B16 image registry records and the harmless-fixture Dagster op remain next.
 - 2026-09-26 -- **ADR-0012 Revision 3 C++ build image prerequisite complete.**
   `audit-buildenv-cpp:local` now extends the immutable local `audit-native:local` image, fixes
   `CC=/opt/llvm/bin/clang` and `CXX=/opt/llvm/bin/clang++`, and supplies autoconf, automake,

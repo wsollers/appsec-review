@@ -86,11 +86,12 @@ the expected autotools configure/build structure and recorded the Dockerfile as 
 work, not a build input. The remaining readiness gap is fault-recovery qualification, not another
 happy-path SAT.
 
-Phase 3 prerequisite status (2026-09-27): B13's three result-verification entry points require the
-caller-retained `result_sha256`, including C02 handoff and cancellation. B16 now generates and
-Docker-checks the 19 host-local step-4 image records at code-location startup. Neither change builds
-a new SAT stage by itself; the harmless-fixture Dagster op remains required before stage 13 can use
-B13.
+Phase 3 prerequisite status (2026-09-27): **complete.** B13's three result-verification entry points
+require the caller-retained `result_sha256`, including C02 handoff and cancellation; B16 generates
+and Docker-checks the 19 host-local step-4 image records at code-location startup; and the bounded
+`b13_harmless_container` Dagster qualification proves success, immutable reuse, real non-zero
+container failure, no fallback, recovery, and recovered-attempt reuse. This unblocks construction
+of stage 13; it does not make `build-resolution` itself built.
 
 Stages 10 to 15 are how the system learns to build a target it has never seen and then builds it:
 [build-resolution.md](build-resolution.md) (ADR-0012). They come before evidence collection
