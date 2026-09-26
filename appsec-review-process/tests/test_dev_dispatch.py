@@ -173,6 +173,36 @@ class ClaimBuilderTests(unittest.TestCase):
     def test_citation_for_an_unpinned_path_returns_none_instead_of_raising(self):
         self.assertIsNone(cci._citation_for(None, "source_file", "x", None))
 
+    def test_model_chosen_ids_and_prose_become_schema_valid_claims(self):
+        # A plan's project_id has no pattern in project-discovery.schema.json, and purpose/argv are
+        # free text; the manifest allows only [A-Za-z0-9_-] ids and no control characters. The
+        # invoker normalizes every builder's claims (_schema_safe_claims) before the manifest.
+        import json
+        import re
+        schema = json.loads((Path(cci.__file__).resolve().parent.parent / "schemas"
+                             / "persona-invoker-output.schema.json").read_text())
+        props = schema["properties"]["claims"]["items"]["properties"]
+        id_re, text_re = re.compile(props["claim_id"]["pattern"]), re.compile(props["statement"]["pattern"])
+        locator_re = re.compile(props["citations"]["items"]["properties"]["locator"]["pattern"])
+        value = inventory()
+        extra = dict(value["safe_command_plan"][0], project_id="hello:docker/image.x",
+                     purpose="build the image\nstatically", argv=["docker", "build", "-t", "a\tb", "."])
+        value["safe_command_plan"] += [extra, dict(extra)]
+        claims = cci._schema_safe_claims(
+            cci._claims_from_project_inventory(value, self.target, ALLOWED, "project-inventory.json"))
+        ids = [c["claim_id"] for c in claims]
+        self.assertEqual(len(ids), len(set(ids)))
+        for claim in claims:
+            self.assertRegex(claim["claim_id"], id_re)
+            self.assertRegex(claim["statement"], text_re)
+            for citation in claim["citations"]:
+                self.assertRegex(citation["locator"], locator_re)
+        self.assertEqual(ids[2], "command-hello-docker-image-x-1")
+        self.assertIn("build the image statically", claims[2]["statement"])
+        # Normalization never drops a claim and leaves already-valid claims unchanged.
+        plain = cci._claims_from_project_inventory(inventory(), self.target, ALLOWED, "f.json")
+        self.assertEqual(cci._schema_safe_claims(plain), plain)
+
     def test_every_automatic_result_schema_has_a_claim_builder(self):
         self.assertIn("repository-partition-map.schema.json", cci._CLAIM_BUILDERS)
         self.assertIn("project-discovery.schema.json", cci._CLAIM_BUILDERS)

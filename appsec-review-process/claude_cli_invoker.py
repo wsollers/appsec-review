@@ -596,6 +596,37 @@ def _claims_from_build_classification(value: dict[str, Any], inputs: tuple,
     return claims
 
 
+_CLAIM_ID_ALLOWED = re.compile(r"[^A-Za-z0-9_-]+")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def _one_line(text: Any) -> str:
+    return _CONTROL.sub(" ", str(text)).strip()[:2000]
+
+
+def _schema_safe_claims(claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every builder's claims in the shape ``persona-invoker-output.schema.json`` accepts, applied
+    once for all builders. Model-chosen ids (project, service, unit ids) reach claim ids, and model
+    prose (purpose, rationale, argv, line ranges) reaches statements and locators; the manifest
+    allows ``[A-Za-z0-9_-]`` ids and no control character in text. Without this a live answer with
+    a ':' in an id or a newline in a purpose ends the whole dispatch ``MALFORMED_RESULT`` (live SAT
+    20260926T151852Z, stage 11). Ids that collide after rewriting get a ``-2``, ``-3`` suffix.
+    Nothing is dropped: only characters the transport cannot carry are replaced."""
+    seen: set[str] = set()
+    safe: list[dict[str, Any]] = []
+    for claim in claims:
+        base = _CLAIM_ID_ALLOWED.sub("-", str(claim["claim_id"])).strip("-_")[:120] or "claim"
+        claim_id, n = base, 2
+        while claim_id in seen:
+            suffix = f"-{n}"
+            claim_id, n = base[:120 - len(suffix)] + suffix, n + 1
+        seen.add(claim_id)
+        citations = [dict(c, locator=_one_line(c["locator"]) or "file") for c in claim["citations"]]
+        safe.append(dict(claim, claim_id=claim_id, statement=_one_line(claim["statement"]) or "(no statement)",
+                         citations=citations))
+    return safe
+
+
 _CLAIM_BUILDERS = {
     "repository-partition-map.schema.json": _claims_from_partition_map,
     "project-discovery.schema.json": _claims_from_project_inventory,
@@ -692,8 +723,8 @@ class ClaudeCliInvoker:
             # Only target-repository inputs are citable evidence; an upstream artifact (D02's
             # accepted partition map) is scope, so it never enters claim citation resolution.
             target_inputs = tuple(item for item in package.inputs if item.root != pd.UPSTREAM_ROOT_ID)
-            claims = builder(envelope[result_field], target_inputs,
-                             package.allowed_claim_classes, result_filename)
+            claims = _schema_safe_claims(builder(envelope[result_field], target_inputs,
+                                                 package.allowed_claim_classes, result_filename))
 
             usage_raw = dispatch.get("final_result") if isinstance(dispatch.get("final_result"), dict) else {}
             read_bytes = len(package.prompt) + sum(len(item.data) for item in package.inputs)
