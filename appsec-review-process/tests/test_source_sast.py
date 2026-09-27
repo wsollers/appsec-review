@@ -32,6 +32,20 @@ class SourceSastTests(unittest.TestCase):
         self.assertIn("/inputs/source-sast-rules/rules-v1.yml", request["argv"])
         self.assertNotIn("--config=auto", request["argv"])
 
+    def test_language_requests_are_fixed_offline_and_schema_valid(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target=Path(folder,"target"); target.mkdir()
+            inputs={"target_path":str(target),"source_snapshot_sha256":"sha256:"+"b"*64}
+            for tool in ("gosec","spotbugs","phpstan","psalm","phpcs"):
+                spec=worker.language_adapters.TOOLS[tool]
+                plan={"tool_id":tool,"status":"READY","executed":False,"image_id":"fixture-harmless",
+                      "image_digest":"sha256:"+"a"*64,"argv":spec["argv"]}
+                request=worker._language_request("run","attempt",inputs,plan)
+                self.assertEqual(request["network"],{"mode":"none","destinations":[]})
+                self.assertEqual(request["target_mounts"],[{"host_path":str(target),"container_path":"/workspace"}])
+                self.assertEqual(request["argv"],spec["argv"])
+                self.assertEqual(validate_document(request,"pinned-container-request.schema.json"),[])
+
     def test_normalization_discards_message_snippet_and_severity(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder).resolve()

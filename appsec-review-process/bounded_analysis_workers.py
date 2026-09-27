@@ -7,10 +7,11 @@ canonical producer permission receipt for standalone qualification and later orc
 """
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
-from execution_state import Blocked, atomic_json, digest, file_hash, read_json
+from execution_state import Blocked, atomic_json, digest, file_hash, read_json, tree_hashes
+from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope, validate_immutable_reuse, validate_worker_result
 
@@ -23,6 +24,45 @@ JOBS = {
     "15-stig-srg-validation-worklist": ("stig-srg-validation-worklist.json", "standards-validation-worklist.schema.json", "stig-srg-validation-worklist"),
     "15-deployment-hardening": ("deployment-hardening.json", "deployment-hardening.schema.json", "deployment-hardening"),
 }
+
+
+def load_accepted(pointer_path: Path, *, run_id: str, job_id: str, contract: str,
+                  artifact: str, schema: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load one exact newest accepted common-envelope artifact with full hash re-verification."""
+    pointer_path=Path(pointer_path); base=pointer_path.parent
+    if base.is_symlink() or not base.is_dir() or pointer_path.is_symlink() or not pointer_path.is_file():
+        raise Blocked("bounded analysis: accepted pointer root is unsafe")
+    pointer=read_json(pointer_path)
+    keys={"schema","status","run_id","job","attempt_id","fingerprint","envelope_path","envelope_sha256","hashes","accepted_at"}
+    if (set(pointer)!=keys or pointer.get("schema")!=ACCEPTED_SCHEMA or pointer.get("status") not in {"OK","OK_WITH_GAPS"}
+            or pointer.get("run_id")!=run_id or pointer.get("job")!=job_id or pointer.get("envelope_path")!="result.json"):
+        raise Blocked("bounded analysis: accepted pointer identity is invalid")
+    latest=read_json(base/"latest.json")
+    if latest.get("attempt_id")!=pointer["attempt_id"]: raise Blocked("bounded analysis: accepted pointer is stale")
+    attempt=base/"attempts"/pointer["attempt_id"]
+    if attempt.is_symlink() or not attempt.is_dir() or tree_hashes(attempt)!=pointer["hashes"]:
+        raise Blocked("bounded analysis: accepted attempt tree is invalid")
+    envelope_path=attempt/"result.json"; envelope=read_json(envelope_path)
+    if (file_hash(envelope_path)!=pointer["envelope_sha256"] or validate_worker_result(envelope) or
+            envelope.get("run_id")!=run_id or envelope.get("job_id")!=job_id or
+            envelope.get("attempt_id")!=pointer["attempt_id"] or envelope.get("input_fingerprint")!=pointer["fingerprint"] or
+            envelope.get("output_contract")!=contract or envelope.get("acceptance_status")!="CURRENT"):
+        raise Blocked("bounded analysis: accepted envelope is invalid")
+    artifacts={row.get("path"):row for row in envelope.get("artifacts",[])}
+    if len(artifacts)!=len(envelope.get("artifacts",[])) or artifact not in artifacts:
+        raise Blocked("bounded analysis: accepted artifact is absent or duplicated")
+    for relative,row in artifacts.items():
+        path=attempt.joinpath(*PurePosixPath(relative).parts)
+        try: path.resolve(strict=True).relative_to(attempt.resolve())
+        except (OSError,ValueError) as exc: raise Blocked("bounded analysis: artifact escapes attempt") from exc
+        if path.is_symlink() or not path.is_file() or file_hash(path)!=row.get("sha256"):
+            raise Blocked("bounded analysis: artifact hash is invalid")
+    document=read_json(attempt/artifact)
+    if validate_document(document,schema): raise Blocked("bounded analysis: accepted artifact schema is invalid")
+    binding={"job_id":job_id,"attempt_id":pointer["attempt_id"],"artifact_path":artifact,
+             "artifact_sha256":"sha256:"+file_hash(attempt/artifact),
+             "accepted_pointer_sha256":"sha256:"+file_hash(pointer_path)}
+    return document,binding
 
 
 def _sha(value: Any) -> str:

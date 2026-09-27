@@ -164,6 +164,20 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any]) -> dict[str, 
     }
 
 
+def _language_request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+    if plan.get("status") != "READY" or plan.get("executed") is not False:
+        raise Blocked(f"{JOB}: language tool is not ready for execution")
+    return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": JOB, "attempt_id": adapter_id,
+        "image": {"image_id": plan["image_id"], "digest": plan["image_digest"]},
+        "argv": plan["argv"], "environment": [{"name":"LANG","value":"C"},{"name":"LC_ALL","value":"C"},
+            {"name":"NO_COLOR","value":"1"}],
+        "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
+        "scratch_path":"scratch", "log_path":"logs/container", "network":{"mode":"none","destinations":[]},
+        "permission":_permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
+        "limits":{"timeout_seconds":900,"memory_bytes":2*1024*1024*1024,"cpu_millis":2000,"pids":256,
+            "tmpfs_bytes":256*1024*1024,"stdout_limit_bytes":8*1024*1024,"stderr_limit_bytes":8*1024*1024}}
+
+
 def _relative_source(raw_path: Any, target: Path) -> tuple[str, Path]:
     if not isinstance(raw_path, str) or not raw_path:
         raise RuntimeError(f"{JOB}: Semgrep result has no source path")
@@ -227,23 +241,42 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     result = read_json(attempt / RESULT)
     if validate_document(result, "source-sast.schema.json"):
         raise Blocked(f"{JOB}: result schema validation failed")
-    receipt = read_json(attempt / RECEIPTS)
-    trial = attempt / receipt["trial_path"]
-    request = read_json(trial / "logs/container" / ce.REQUEST_FILE)
     runtime = _runtime(inputs["source_snapshot_sha256"])
-    errors = ce.verify_container_result(
-        trial, run_id=run_id, job_id=JOB, attempt_id=receipt["adapter_attempt_id"],
-        request=request, images_dir=runtime.images_dir,
-        expected_result_sha256=receipt["expected_result_sha256"], **_host(runtime),
-    )
-    if errors:
-        raise Blocked(f"{JOB}: B13 evidence failed re-verification ({len(errors)} errors)")
+    receipt = read_json(attempt / RECEIPTS)
+    records = receipt.get("tools") if isinstance(receipt, dict) else None
+    if not isinstance(records, list) or not records:
+        raise Blocked(f"{JOB}: B13 receipt set is invalid")
+    for record in records:
+        trial = attempt / record["trial_path"]
+        request = read_json(trial / "logs/container" / ce.REQUEST_FILE)
+        errors = ce.verify_container_result(trial, run_id=run_id, job_id=JOB,
+            attempt_id=record["adapter_attempt_id"], request=request, images_dir=runtime.images_dir,
+            expected_result_sha256=record["expected_result_sha256"], **_host(runtime))
+        raw = trial.joinpath(*record["raw_path"].split("/"))
+        if errors or not raw.is_file() or "sha256:" + file_hash(raw) != record["raw_result_sha256"]:
+            raise Blocked(f"{JOB}: B13 evidence failed re-verification for {record.get('tool_id')}")
+    semgrep_record = next((row for row in records if row.get("tool_id") == TOOL_ID), None)
+    if semgrep_record is None: raise Blocked(f"{JOB}: Semgrep receipt is absent")
+    semgrep_trial = attempt / semgrep_record["trial_path"]
     expected = normalize_semgrep(
-        read_json(trial / "scratch" / "semgrep.json"), target=Path(inputs["target_path"]),
+        read_json(semgrep_trial / "scratch" / "semgrep.json"), target=Path(inputs["target_path"]),
         run_id=run_id, attempt_id=attempt.name,
         source_snapshot_sha256=inputs["source_snapshot_sha256"], image=inputs["image"],
-        language_tool_plan=inputs.get("language_tool_plan", []),
+        language_tool_plan=[],
     )
+    executed=set()
+    for record in records:
+        if record["tool_id"] == TOOL_ID: continue
+        plan = next((row for row in inputs.get("language_tool_plan", []) if row["tool_id"] == record["tool_id"]), None)
+        if plan is None or plan["status"] != "READY": raise Blocked(f"{JOB}: language receipt has no pinned plan")
+        raw = attempt.joinpath(*record["trial_path"].split("/"), *record["raw_path"].split("/"))
+        leads = language_adapters.normalize(record["tool_id"], raw.read_bytes(), Path(inputs["target_path"]))
+        expected["leads"].extend(leads); executed.add(record["tool_id"])
+        expected["tools"].append({"tool_id":record["tool_id"],"tool":record["tool_id"],"version":plan["version"],
+            "image_id":plan["image_id"],"image_digest":plan["image_digest"],"ruleset_sha256":plan["image_digest"],"records":len(leads)})
+    expected["leads"].sort(key=lambda row:(row["path"],row["start_line"],row["tool_id"],row["rule_id"]))
+    expected["tools"].sort(key=lambda row:row["tool_id"])
+    expected["coverage_gaps"] = ["Repository-owned C/C++ Semgrep rules do not cover every source-analysis family."] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
     if result != expected:
         raise Blocked(f"{JOB}: normalized result no longer matches immutable Semgrep evidence")
 
@@ -269,27 +302,57 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                                 expected_result_sha256=expected_sha, **_host(runtime))
         if terminal["execution_status"] != "OK":
             raise RuntimeError(f"{JOB}: Semgrep ended {terminal['execution_status']}")
+        receipts = [{"tool_id": TOOL_ID, "adapter_attempt_id": adapter_id,
+                     "trial_path": trial.relative_to(attempt).as_posix(),
+                     "expected_result_sha256": expected_sha, "raw_path":"scratch/semgrep.json",
+                     "raw_result_sha256": "sha256:" + file_hash(trial / "scratch" / "semgrep.json")}]
+        language_leads=[]; language_tools=[]; executed=set()
+        for plan in inputs.get("language_tool_plan", []):
+            if plan["status"] != "READY": continue
+            language_id = plan["tool_id"] + "-" + allocation["attempt_id"][:12]
+            language_trial = attempt / "tools" / plan["tool_id"]
+            language_trial.mkdir(parents=True)
+            language_request = _language_request(run_id, language_id, inputs, plan)
+            language_terminal = ce.run_container(runtime, run_id=run_id, job_id=JOB,
+                attempt_id=language_id, attempt_root=language_trial, request=language_request)
+            language_sha = language_terminal["result_sha256"]
+            ce.load_verified_result(language_trial, run_id=run_id, job_id=JOB, attempt_id=language_id,
+                request=language_request, images_dir=runtime.images_dir,
+                expected_result_sha256=language_sha, **_host(runtime))
+            if language_terminal["execution_status"] != "OK":
+                raise RuntimeError(f"{JOB}: {plan['tool_id']} ended {language_terminal['execution_status']}")
+            raw = language_trial.joinpath(*plan["output"].split("/"))
+            if not raw.is_file() or raw.is_symlink(): raise RuntimeError(f"{JOB}: {plan['tool_id']} produced no bounded output")
+            leads = language_adapters.normalize(plan["tool_id"], raw.read_bytes(), Path(inputs["target_path"]))
+            language_leads.extend(leads); executed.add(plan["tool_id"])
+            language_tools.append({"tool_id":plan["tool_id"],"tool":plan["tool_id"],"version":plan["version"],
+                "image_id":plan["image_id"],"image_digest":plan["image_digest"],
+                "ruleset_sha256":plan["image_digest"],"records":len(leads)})
+            receipts.append({"tool_id":plan["tool_id"],"adapter_attempt_id":language_id,
+                "trial_path":language_trial.relative_to(attempt).as_posix(),"expected_result_sha256":language_sha,
+                "raw_path":plan["output"],"raw_result_sha256":"sha256:"+file_hash(raw)})
         result = normalize_semgrep(
             read_json(trial / "scratch" / "semgrep.json"), target=Path(inputs["target_path"]),
             run_id=run_id, attempt_id=allocation["attempt_id"],
             source_snapshot_sha256=inputs["source_snapshot_sha256"], image=inputs["image"],
-            language_tool_plan=inputs.get("language_tool_plan", []),
+            language_tool_plan=[],
         )
+        result["leads"].extend(language_leads)
+        result["leads"].sort(key=lambda row:(row["path"],row["start_line"],row["tool_id"],row["rule_id"]))
+        result["tools"].extend(language_tools); result["tools"].sort(key=lambda row:row["tool_id"])
+        result["coverage_gaps"] = ["Repository-owned C/C++ Semgrep rules do not cover every source-analysis family."] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
         atomic_json(attempt / RESULT, result)
-        receipt = {"tool_id": TOOL_ID, "adapter_attempt_id": adapter_id,
-                   "trial_path": trial.relative_to(attempt).as_posix(),
-                   "expected_result_sha256": expected_sha,
-                   "raw_result_sha256": "sha256:" + file_hash(trial / "scratch" / "semgrep.json")}
-        atomic_json(attempt / RECEIPTS, receipt)
+        atomic_json(attempt / RECEIPTS, {"tools":receipts})
         (attempt / SUMMARY).write_text(
             "# Source SAST\n\n"
-            f"- Semgrep repository rules: {len(result['leads'])} static-analysis lead(s).\n"
-            "- Coverage: C/C++ happy-path rules only; remaining declared language tools are a gap.\n",
+            f"- Executed pinned offline tools: {len(result['tools'])}.\n"
+            f"- Normalized static-analysis leads: {len(result['leads'])}.\n"
+            f"- Explicit coverage gaps: {len(result['coverage_gaps'])}.\n",
             encoding="utf-8",
         )
         status = {"process": JOB, "status": "OK_WITH_GAPS", "run_id": run_id,
                   "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
-                  "tools_run": 1, "leads": len(result["leads"]), "network": "none",
+                  "tools_run": len(result["tools"]), "leads": len(result["leads"]), "network": "none",
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         return record_terminal_current(

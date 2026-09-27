@@ -39,12 +39,12 @@
         "properties": {
           "lead_id": {"type": "string", "pattern": "^lead_[0-9a-f]{16}\\Z"},
           "tool_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,95}\\Z"},
-          "rule_id": {"type": "string", "enum": ["appsec.c.strcpy", "appsec.c.printf-nonliteral", "appsec.c.memcpy", "appsec.c.system"]},
+          "rule_id": {"type": "string", "pattern": "^[^\\r\\n]{1,256}\\Z"},
           "path": {"type": "string", "pattern": "^[^/\\\\][^\\r\\n]{0,1023}\\Z"},
           "start_line": {"type": "integer"},
           "end_line": {"type": "integer"},
           "source_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
-          "category": {"type": "string", "enum": ["unsafe-copy", "format-string", "memory-copy", "command-execution"]}
+          "category": {"type": "string", "enum": ["unsafe-copy", "format-string", "memory-copy", "command-execution", "language-security-static-analysis"]}
         }
       }
     },
