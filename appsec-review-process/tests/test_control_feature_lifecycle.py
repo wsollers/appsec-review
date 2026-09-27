@@ -93,6 +93,8 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
             "quorum":BINDING, "rescope":BINDING, "remediation_retest":BINDING,
             "remediation_retest_disposition":NA_DISPOSITION,
             "report_sha256":life._sha(report), "publication_manifest_sha256":SHA,
+            "render_publication_manifest_sha256":SHA,
+            "draft_artifacts":{"presentation/report.html":SHA,"presentation/report.pdf":SHA},
             "draft_attempt":"/run/data/jobs/10-synthesis-report/attempts/a1"}
         rows = [(report,BINDING,Path("draft")), (audit,BINDING,Path("audit")),
                 (feedback,BINDING,Path("feedback")), (quorum,BINDING,Path("quorum")),
@@ -108,7 +110,7 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
         self.assertTrue(result["control_evidence"]["remediation_retest"]["skipped_not_applicable"])
         self.assertEqual(validate_document(result, "final-publication-preparation.schema.json"), [])
 
-    def test_final_preparation_rejects_real_control_blockers(self):
+    def test_final_preparation_retains_nonadmitted_quorum_as_reportable_state(self):
         report = {"status":"DRAFT_EVIDENCE_BACKED"}
         audit = {"complete":True, "subject_sha256":life._sha(report)}
         feedback = {"terminal_state":"COMPLETE", "audit_sha256":life._sha(audit)}
@@ -122,13 +124,20 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
             "quorum":BINDING, "rescope":BINDING, "remediation_retest":BINDING,
             "remediation_retest_disposition":NA_DISPOSITION,
             "report_sha256":life._sha(report), "publication_manifest_sha256":SHA,
+            "render_publication_manifest_sha256":SHA,
+            "draft_artifacts":{"presentation/report.html":SHA,"presentation/report.pdf":SHA},
             "draft_attempt":"/run/data/jobs/10-synthesis-report/attempts/a1"}
         rows = [(report,BINDING,Path("draft")), (audit,BINDING,Path("audit")),
                 (feedback,BINDING,Path("feedback")), (quorum,BINDING,Path("quorum")),
                 (rescope,BINDING,Path("rescope")), (remediation,BINDING,Path("remediation"))]
         with mock.patch.object(life, "_current", side_effect=rows):
-            with self.assertRaisesRegex(Blocked, "quorum:c1:INSUFFICIENT_DIVERSITY"):
-                life._produce("run", "final-publication-preparation", inputs)
+            result, status, gaps, skip = life._produce(
+                "run", "final-publication-preparation", inputs)
+        self.assertEqual(status, "OK_WITH_GAPS")
+        self.assertEqual(gaps, ["human-signoff-required"])
+        self.assertIsNone(skip)
+        self.assertEqual(
+            result["control_evidence"]["quorum"]["insufficient_diversity_count"], 1)
 
     def test_remediation_gap_cannot_masquerade_as_non_applicable(self):
         evidence, blockers = life._publication_controls("run",
@@ -149,8 +158,12 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
                 "blockers":["human_signoff_missing"], "human_signoff":None}
         result = {"schema":"appsec-review/final-publication-preparation/1.0", "run_id":"run",
             "status":"PENDING_HUMAN_APPROVAL", "draft_report_sha256":SHA,
-            "draft_publication_manifest_sha256":SHA, "completion_gate":gate,
-            "control_evidence":{"quorum":{"binding":BINDING,"decision_count":0,"admitted_count":0},
+            "draft_publication_manifest_sha256":SHA, "draft_render_manifest_sha256":SHA,
+            "draft_artifacts":{"presentation/report.html":SHA,"presentation/report.pdf":SHA},
+            "completion_gate":gate,
+            "control_evidence":{"quorum":{"binding":BINDING,"decision_count":0,"admitted_count":0,
+                                             "insufficient_diversity_count":0,
+                                             "conflicting_evidence_count":0},
                 "rescope":{"binding":BINDING,"state":"ITERATION_LIMIT",
                            "final_publication_affected":True},
                 "remediation_retest":{"binding":BINDING,"proposal_count":0,"retest_count":0,

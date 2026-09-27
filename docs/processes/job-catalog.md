@@ -1611,7 +1611,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-binary-cfg`](#job-02-binary-cfg) (required, contract `binary-cfg`) |
 | Declared inputs (registry/job-templates/02-binary-intelligence-ingest.json) | accepted native-build binary lineage<br>accepted binary-triage result<br>accepted binary-cfg result<br>run-owned normalized lead evidence<br>source component map *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-binary-intelligence-ingest/` |
-| Output files (registry/output-contracts/binary-intelligence.json) | binary-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
+| Output files (registry/output-contracts/binary-intelligence.json) | binary-intelligence.json<br>status.json<br>permission.json<br>lineage.json<br>applicability-receipt.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1851,7 +1851,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
 | Declared inputs (registry/job-templates/02-debug-symbol-index.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-debug-symbol-index/` |
-| Output files (registry/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json |
+| Output files (registry/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
 | Consumed by | [`02-binary-cfg`](#job-02-binary-cfg) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1871,7 +1871,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
 | Declared inputs (registry/job-templates/02-binary-triage.json) | accepted native-build binary lineage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-binary-triage/` |
-| Output files (registry/output-contracts/binary-triage.json) | binary-triage-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json |
+| Output files (registry/output-contracts/binary-triage.json) | binary-triage-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
 | Consumed by | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -1891,7 +1891,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index) (required, contract `debug-symbol-index`) |
 | Declared inputs (registry/job-templates/02-binary-cfg.json) | accepted native-build binary lineage<br>accepted debug-symbol-index<br>accepted binary-triage<br>registered audit-binary-analysis image |
 | Produces | `runs/<run_id>/data/jobs/02-binary-cfg/` |
-| Output files (registry/output-contracts/binary-cfg.json) | cfg-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json |
+| Output files (registry/output-contracts/binary-cfg.json) | cfg-manifest.json<br>status.json<br>permission.json<br>lineage.json<br>binary-static-raw.json<br>binary-b13-receipts.json<br>applicability-receipt.json |
 | Consumed by | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) |
 | Gaps | `m02_pinned_binary_tool_unavailable`, `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2336,7 +2336,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-native-sast`](#job-02-native-sast) (required, contract `native-sast`)<br>[`02-ir-facts`](#job-02-ir-facts) (required, contract `ir-facts`) |
 | Declared inputs (registry/job-templates/05-native-memory.json) | accepted native SAST/IR evidence<br>hash-bound citations |
 | Produces | `runs/<run_id>/data/jobs/05-native-memory/` |
-| Output files (registry/output-contracts/native-memory-analysis.json) | native-memory-analysis.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
+| Output files (registry/output-contracts/native-memory-analysis.json) | native-memory-analysis.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json<br>applicability-receipt.json |
 | Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2358,7 +2358,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`) |
 | Declared inputs (registry/job-templates/06-cve-reachability.json) | accepted SCA match evidence<br>accepted source projection<br>accepted LLVM IR facts *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/06-cve-reachability/` |
-| Output files (registry/output-contracts/cve-reachability.json) | inputs.json<br>outputs/cve-reachability.json<br>outputs/reachability-evidence-identity.json |
+| Output files (registry/output-contracts/cve-reachability.json) | inputs.json<br>outputs/cve-reachability.json<br>outputs/reachability-evidence-identity.json<br>applicability-receipt.json |
 | Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2380,7 +2380,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `cve-reachability`) |
 | Declared inputs (registry/job-templates/13-fuzz-target-triage.json) | accepted component/native evidence<br>candidate entrypoints |
 | Produces | `runs/<run_id>/data/jobs/13-fuzz-target-triage/` |
-| Output files (registry/output-contracts/fuzz-target-triage.json) | fuzz-target-triage.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
+| Output files (registry/output-contracts/fuzz-target-triage.json) | fuzz-target-triage.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json<br>applicability-receipt.json |
 | Consumed by | [`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | Gaps | `no_live_qualification` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2650,7 +2650,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation) (required, contract `threat-model-reconciliation`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) (required, contract `07-red-team-adversarial`)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation) (required, contract `08-blue-team-refutation`)<br>[`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) (required, contract `12-scoring-prioritization`)<br>[`11-remediation-proposal`](#job-11-remediation-proposal) (optional, contract `11-remediation-proposal`) |
 | Declared inputs (registry/job-templates/10-synthesis-report.json) | exact accepted synthesis-input manifest<br>F03 component map<br>S02 threat model<br>OWASP matrix/gaps/routes<br>L01 ledger<br>L08 verification/scoring |
 | Produces | `runs/<run_id>/data/jobs/10-synthesis-report/` |
-| Output files (registry/output-contracts/synthesis-report-publication.json) | synthesis-input.json<br>report.json<br>report.md<br>coverage-unresolved-appendix.md<br>evidence-trace-index.json<br>publication-manifest.json<br>report.review.json<br>render-publication-manifest.json<br>presentation/report.tex<br>presentation/report.html<br>presentation/report.fragment.html<br>presentation/workbench.html<br>presentation/workbench.fragment.html<br>permission.json<br>lineage.json<br>status.json |
+| Output files (registry/output-contracts/synthesis-report-publication.json) | synthesis-input.json<br>report.json<br>report.md<br>coverage-unresolved-appendix.md<br>evidence-trace-index.json<br>publication-manifest.json<br>report.review.json<br>render-publication-manifest.json<br>presentation/report.tex<br>presentation/report.pdf<br>presentation/report.html<br>presentation/report.fragment.html<br>presentation/workbench.html<br>presentation/workbench.fragment.html<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`completeness-audit`](#job-completeness-audit)<br>[`final-publication-gate`](#job-final-publication-gate) |
 | Gaps | `real_accepted_upstream_chain_pending`, `final_human_approval_and_publication_remain_separate` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2706,9 +2706,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `final_publication_gate`; lifecycle binding: `actual_worker` |
 | Composition | persona `report-artifact-publisher`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
 | Consumes (graph) | [`10-synthesis-report`](#job-10-synthesis-report) (required, contract `synthesis-report-publication`)<br>[`completeness-audit`](#job-completeness-audit) (required, contract `completeness-audit`)<br>[`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis) (required, contract `synthetic-hypothesis-resynthesis`)<br>[`evidence-qualified-quorum`](#job-evidence-qualified-quorum) (required, contract `evidence-qualified-quorum`)<br>[`dynamic-rescope`](#job-dynamic-rescope) (required, contract `bounded-rescope-plan`)<br>[`remediation-retest-feedback`](#job-remediation-retest-feedback) (required, contract `remediation-retest-feedback`) |
-| Declared inputs (registry/job-templates/final-publication-gate.json) | draft publication<br>accepted completeness audit<br>accepted terminal resynthesis<br>authorized human signoff ledger |
+| Declared inputs (registry/job-templates/final-publication-gate.json) | draft publication<br>accepted completeness audit<br>accepted terminal resynthesis<br>current evidence-qualified quorum<br>current bounded rescope plan<br>current remediation/retest feedback or evidence-supported non-applicable skip<br>authorized human signoff ledger |
 | Produces | `runs/<run_id>/data/jobs/final-publication-gate/` |
-| Output files (registry/output-contracts/final-publication-package.json) | report.json<br>evidence-trace-index.json<br>critical-findings.sarif<br>human-signoff-ledger.json<br>final-publication.json |
+| Output files (registry/output-contracts/final-publication-package.json) | report.json<br>evidence-trace-index.json<br>critical-findings.sarif<br>human-signoff-ledger.json<br>completion/completeness-audit.json<br>completion/synthetic-hypothesis-resynthesis.json<br>completion/publication-preparation.json<br>completion/accepted-bindings.json<br>final-publication.json |
 | Consumed by | -- |
 | Next prerequisite | Execute and retain this worker in the fresh Hello full_review run. |
 

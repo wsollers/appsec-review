@@ -5,7 +5,8 @@
   "additionalProperties": false,
   "required": [
     "schema", "run_id", "status", "draft_report_sha256",
-    "draft_publication_manifest_sha256", "completion_gate", "control_evidence", "draft_attempt", "required_action"
+    "draft_publication_manifest_sha256", "draft_render_manifest_sha256", "draft_artifacts",
+    "completion_gate", "control_evidence", "draft_attempt", "required_action"
   ],
   "properties": {
     "schema": {"const": "appsec-review/final-publication-preparation/1.0"},
@@ -13,6 +14,15 @@
     "status": {"const": "PENDING_HUMAN_APPROVAL"},
     "draft_report_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "draft_publication_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "draft_render_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "draft_artifacts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["presentation/report.html", "presentation/report.pdf"],
+      "properties": {
+        "presentation/report.html": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "presentation/report.pdf": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
     "completion_gate": {
       "type": "object",
       "additionalProperties": false,
@@ -34,11 +44,13 @@
       "properties": {
         "quorum": {
           "type": "object", "additionalProperties": false,
-          "required": ["binding", "decision_count", "admitted_count"],
+          "required": ["binding", "decision_count", "admitted_count", "insufficient_diversity_count", "conflicting_evidence_count"],
           "properties": {
             "binding": {"$ref": "control-publication-binding.schema.json"},
             "decision_count": {"type": "integer", "minimum": 0},
-            "admitted_count": {"type": "integer", "minimum": 0}
+            "admitted_count": {"type": "integer", "minimum": 0},
+            "insufficient_diversity_count": {"type": "integer", "minimum": 0},
+            "conflicting_evidence_count": {"type": "integer", "minimum": 0}
           }
         },
         "rescope": {

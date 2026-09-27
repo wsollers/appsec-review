@@ -9,7 +9,7 @@
     "bind the exact newest accepted draft, completeness audit and terminal resynthesis",
     "consume exact accepted quorum, rescope and remediation/retest controls and reject unresolved control blockers",
     "accept the evidence-supported remediation/retest skip only when no verified claims exist",
-    "retain the draft without copying it into the immutable final publication namespace",
+    "retain the exact HTML and PDF draft hashes and their render-manifest binding without copying them into the immutable final publication namespace",
     "state pending human approval and the exact required action without creating a signoff"
   ]
 }

@@ -5,7 +5,7 @@
   "required_files": [
     "synthesis-input.json", "report.json", "report.md", "coverage-unresolved-appendix.md",
     "evidence-trace-index.json", "publication-manifest.json", "report.review.json",
-    "render-publication-manifest.json", "presentation/report.tex", "presentation/report.html",
+    "render-publication-manifest.json", "presentation/report.tex", "presentation/report.pdf", "presentation/report.html",
     "presentation/report.fragment.html", "presentation/workbench.html",
     "presentation/workbench.fragment.html", "permission.json", "lineage.json", "status.json"
   ],
@@ -14,7 +14,7 @@
   "validation_rules": [
     "consume exact current accepted pointers for every required synthesis input",
     "preserve unresolved candidates limitations dissent and separate OWASP denominators",
-    "render HTML and LaTeX from one hash-bound presentation input",
+    "render HTML, LaTeX and PDF from one hash-bound presentation input using the exact pinned audit-report image",
     "publish only DRAFT_EVIDENCE_BACKED with final and human_signoff false"
   ]
 }

@@ -2377,6 +2377,9 @@
         "draft publication",
         "accepted completeness audit",
         "accepted terminal resynthesis",
+        "current evidence-qualified quorum",
+        "current bounded rescope plan",
+        "current remediation/retest feedback or evidence-supported non-applicable skip",
         "authorized human signoff ledger"
        ]
       },
@@ -2453,6 +2456,9 @@
        "draft publication",
        "accepted completeness audit",
        "accepted terminal resynthesis",
+       "current evidence-qualified quorum",
+       "current bounded rescope plan",
+       "current remediation/retest feedback or evidence-supported non-applicable skip",
        "authorized human signoff ledger"
       ]
      }
@@ -2691,6 +2697,9 @@
      "draft publication",
      "accepted completeness audit",
      "accepted terminal resynthesis",
+     "current evidence-qualified quorum",
+     "current bounded rescope plan",
+     "current remediation/retest feedback or evidence-supported non-applicable skip",
      "authorized human signoff ledger"
     ]
    }
@@ -5076,6 +5085,9 @@
         "draft publication",
         "accepted completeness audit",
         "accepted terminal resynthesis",
+        "current evidence-qualified quorum",
+        "current bounded rescope plan",
+        "current remediation/retest feedback or evidence-supported non-applicable skip",
         "authorized human signoff ledger"
        ]
       }
@@ -5115,6 +5127,9 @@
        "draft publication",
        "accepted completeness audit",
        "accepted terminal resynthesis",
+       "current evidence-qualified quorum",
+       "current bounded rescope plan",
+       "current remediation/retest feedback or evidence-supported non-applicable skip",
        "authorized human signoff ledger"
       ]
      }
@@ -5324,6 +5339,9 @@
      "draft publication",
      "accepted completeness audit",
      "accepted terminal resynthesis",
+     "current evidence-qualified quorum",
+     "current bounded rescope plan",
+     "current remediation/retest feedback or evidence-supported non-applicable skip",
      "authorized human signoff ledger"
     ]
    }
@@ -7842,7 +7860,8 @@
     "native-memory-analysis.json",
     "permission-receipt.json",
     "lineage-receipt.json",
-    "status.json"
+    "status.json",
+    "applicability-receipt.json"
    ],
    "outputs_source": "registry/output-contracts/native-memory-analysis.json",
    "claim_class": "candidate_only",
@@ -7906,7 +7925,8 @@
    "output_files": [
     "inputs.json",
     "outputs/cve-reachability.json",
-    "outputs/reachability-evidence-identity.json"
+    "outputs/reachability-evidence-identity.json",
+    "applicability-receipt.json"
    ],
    "outputs_source": "registry/output-contracts/cve-reachability.json",
    "claim_class": "cve_reachability_evidence_lead",
@@ -7980,7 +8000,8 @@
     "fuzz-target-triage.json",
     "permission-receipt.json",
     "lineage-receipt.json",
-    "status.json"
+    "status.json",
+    "applicability-receipt.json"
    ],
    "outputs_source": "registry/output-contracts/fuzz-target-triage.json",
    "claim_class": "planning_evidence",
@@ -8594,6 +8615,7 @@
     "report.review.json",
     "render-publication-manifest.json",
     "presentation/report.tex",
+    "presentation/report.pdf",
     "presentation/report.html",
     "presentation/report.fragment.html",
     "presentation/workbench.html",
@@ -8756,7 +8778,8 @@
     "binary-intelligence.json",
     "status.json",
     "permission.json",
-    "lineage.json"
+    "lineage.json",
+    "applicability-receipt.json"
    ],
    "outputs_source": "registry/output-contracts/binary-intelligence.json",
    "claim_class": "binary_lead_evidence",
@@ -9659,7 +9682,8 @@
     "permission.json",
     "lineage.json",
     "binary-static-raw.json",
-    "binary-b13-receipts.json"
+    "binary-b13-receipts.json",
+    "applicability-receipt.json"
    ],
    "outputs_source": "registry/output-contracts/debug-symbol-index.json",
    "claim_class": "debug_symbol_static_evidence",
@@ -9719,7 +9743,8 @@
     "permission.json",
     "lineage.json",
     "binary-static-raw.json",
-    "binary-b13-receipts.json"
+    "binary-b13-receipts.json",
+    "applicability-receipt.json"
    ],
    "outputs_source": "registry/output-contracts/binary-triage.json",
    "claim_class": "binary_inventory_static_evidence",
@@ -9792,7 +9817,8 @@
     "permission.json",
     "lineage.json",
     "binary-static-raw.json",
-    "binary-b13-receipts.json"
+    "binary-b13-receipts.json",
+    "applicability-receipt.json"
    ],
    "outputs_source": "registry/output-contracts/binary-cfg.json",
    "claim_class": "binary_cfg_static_evidence",
@@ -11176,6 +11202,18 @@
     },
     {
      "need": "required",
+     "input": "current evidence-qualified quorum"
+    },
+    {
+     "need": "required",
+     "input": "current bounded rescope plan"
+    },
+    {
+     "need": "required",
+     "input": "current remediation/retest feedback or evidence-supported non-applicable skip"
+    },
+    {
+     "need": "required",
      "input": "authorized human signoff ledger"
     }
    ],
@@ -11186,6 +11224,10 @@
     "evidence-trace-index.json",
     "critical-findings.sarif",
     "human-signoff-ledger.json",
+    "completion/completeness-audit.json",
+    "completion/synthetic-hypothesis-resynthesis.json",
+    "completion/publication-preparation.json",
+    "completion/accepted-bindings.json",
     "final-publication.json"
    ],
    "outputs_source": "registry/output-contracts/final-publication-package.json",

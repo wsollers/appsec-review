@@ -28,8 +28,8 @@ export JOBS_ROOT="$RUN_ROOT/data/jobs"
 
 Create and stage the run before starting Dagster. `run_process.py` owns the run directory and
 `stage_artifacts.py` owns the engagement definition; do not create either by hand. This Hello
-example uses the minimum static permission. Add a permission beyond `read-source` only when a
-named human has authorized the exact capability required by an applicable worker.
+example grants the minimum run-local permissions required by the automatic evidence workers. It
+does not grant live-network access or unrestricted target execution.
 
 ```bash
 cd "$REPO"
@@ -42,6 +42,9 @@ python3 -B appsec-review-process/stage_artifacts.py \
   --platform Linux \
   --budget full \
   --permission read-source \
+  --permission read-run-data \
+  --permission write-run-data \
+  --permission read-offline-snapshots \
   --execution-environment dagster-read-only-linux
 ```
 
@@ -139,11 +142,15 @@ report with incomplete coverage is not a clean assessment.
 
 Stop short of final publication whenever final preparation fails, or whenever its retained control
 evidence identifies anything beyond the expected `human_signoff_missing` blocker. In particular,
-incomplete completeness obligations, nonterminal resynthesis, adverse evidence-quorum decisions, a rescope plan that still
+incomplete completeness obligations, nonterminal resynthesis, a rescope plan that still
 requires another iteration, an uncovered final-publication node, an orphan remediation retest, an
 authorized proposal without exactly one same-environment retest, or a non-fixed retest are real
 evidence/control blockers. They must be corrected or retained as unresolved evidence; human
 approval cannot override them.
+
+Quorum decisions that retain conflicting evidence or insufficient diversity are not erased and do
+not suppress the draft. They remain unresolved report dispositions, with their counts and exact
+evidence bindings retained by publication preparation for human review.
 
 When those controls are satisfied, `full_review` retains the evidence-backed HTML/LaTeX draft and a
 `PENDING_HUMAN_APPROVAL` preparation result. This is a successful draft outcome, not final

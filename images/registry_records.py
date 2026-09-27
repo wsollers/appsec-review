@@ -39,7 +39,7 @@ TOOL_IMAGE_IDS = (
     "tool-spotbugs", "tool-syft", "tool-trivy", "tool-osv-scanner",
 )
 STEP4_IMAGE_IDS = (
-    "audit-binary-analysis", "audit-buildenv-cpp", "audit-container", "audit-iac",
+    "audit-binary-analysis", "audit-buildenv-cpp", "audit-container", "audit-iac", "audit-report",
     "audit-native", "scancode-toolkit", *TOOL_IMAGE_IDS,
 )
 

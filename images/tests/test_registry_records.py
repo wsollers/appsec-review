@@ -135,7 +135,7 @@ class PureRecords(Workspace):
 class DeclaredSet(unittest.TestCase):
     def test_b16_set_is_the_six_shared_images_and_thirteen_per_tool_images(self):
         self.assertEqual(len(rr.TOOL_IMAGE_IDS), 14)
-        self.assertEqual(len(rr.STEP4_IMAGE_IDS), 20)
+        self.assertEqual(len(rr.STEP4_IMAGE_IDS), 21)
         self.assertEqual(len(rr.STEP4_IMAGE_IDS), len(set(rr.STEP4_IMAGE_IDS)))
         builds = __import__("image_build").load_builds(IMAGES)
         self.assertEqual(set(rr.STEP4_IMAGE_IDS) - set(builds), set())

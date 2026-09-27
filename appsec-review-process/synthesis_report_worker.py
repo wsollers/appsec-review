@@ -111,6 +111,7 @@ def _validate_attempt(attempt: Path, inputs: dict[str, Any], jobs_root: Path) ->
     with tempfile.TemporaryDirectory() as directory:
         check = Path(directory); atomic_json(check / presentation.RENDER_INPUT, expected_review)
         presentation._renderer().render(check / presentation.RENDER_INPUT, check / "presentation")
+        presentation._compile_pdf(check / "presentation")
         if any(file_hash(check / "presentation" / name) !=
                file_hash(attempt / "presentation" / name) for name in presentation.RENDERED):
             raise Blocked(f"{JOB}: rendered presentation differs from the pinned templates")
@@ -141,7 +142,7 @@ def run(run_root: Path, run_id: str, dagster_run_id: str, force: bool = False,
         status = {"process": JOB, "status": status_name,
             "verified_findings": len(report["verified_findings"]),
             "unresolved_candidates": len(report["unresolved_candidates"]),
-            "limitations": len(gaps), "final": False, "presentation": "HTML_AND_LATEX_RENDERED"}
+            "limitations": len(gaps), "final": False, "presentation": "HTML_LATEX_AND_PDF_RENDERED"}
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_run_id, worker_kind="deterministic_python", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],

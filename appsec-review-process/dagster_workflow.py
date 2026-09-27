@@ -567,6 +567,7 @@ def run_synthesis_report(context, configured):
     attempt = synthesis_report_worker.root(run_root) / 'attempts' / result['attempt_id']
     context.add_output_metadata({'output': MetadataValue.path(str(attempt / 'report.json')),
         'html': MetadataValue.path(str(attempt / 'presentation/report.html')),
+        'pdf': MetadataValue.path(str(attempt / 'presentation/report.pdf')),
         'latex': MetadataValue.path(str(attempt / 'presentation/report.tex')),
         'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': result['attempt_id']})
     return result

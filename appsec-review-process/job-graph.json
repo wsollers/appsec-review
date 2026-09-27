@@ -587,7 +587,9 @@
           "job": "05-native-memory",
           "kind": "required",
           "contract": "native-memory-analysis",
-          "allowed_skip_reasons": []
+          "allowed_skip_reasons": [
+            "not-applicable-no-routed-native-unit"
+          ]
         },
         {
           "job": "06-cve-reachability",
@@ -709,7 +711,9 @@
           "job": "05-native-memory",
           "kind": "required",
           "contract": "native-memory-analysis",
-          "allowed_skip_reasons": []
+          "allowed_skip_reasons": [
+            "not-applicable-no-routed-native-unit"
+          ]
         },
         {
           "job": "06-cve-reachability",
@@ -727,7 +731,9 @@
           "job": "13-fuzz-target-triage",
           "kind": "required",
           "contract": "fuzz-target-triage",
-          "allowed_skip_reasons": []
+          "allowed_skip_reasons": [
+            "not-applicable-no-fuzz-target"
+          ]
         }
       ]
     },

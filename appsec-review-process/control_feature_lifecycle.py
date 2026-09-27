@@ -230,9 +230,12 @@ def _publication_controls(run_id: str, quorum: dict[str, Any], quorum_binding: d
     if any(value.get("run_id") != run_id for value in (quorum, rescope, remediation)):
         raise Blocked("final publication preparation: control evidence has mixed run identity")
     decisions = quorum.get("decisions", [])
-    adverse = sorted(row["candidate_id"] + ":" + row["decision"] for row in decisions
-                     if row["decision"] != "ADMITTED")
-    blockers = ["quorum:" + value for value in adverse]
+    # Non-admission is a report disposition, not a publication failure.  The
+    # final report is required to retain conflicting and insufficiently
+    # diverse claims as unresolved evidence; suppressing the whole draft
+    # would erase exactly the coverage state the publication is meant to
+    # disclose.
+    blockers: list[str] = []
     affected = rescope.get("affected_nodes", [])
     final_affected = "final-publication-gate" in affected
     if rescope.get("state") == "RESCOPE_REQUIRED":
@@ -259,7 +262,11 @@ def _publication_controls(run_id: str, quorum: dict[str, Any], quorum_binding: d
         if any(row["state"] != "FIXED" for row in matches):
             blockers.append("remediation:retest-not-fixed:" + proposal_id)
     evidence = {"quorum": {"binding": quorum_binding, "decision_count": len(decisions),
-            "admitted_count": sum(row["decision"] == "ADMITTED" for row in decisions)},
+            "admitted_count": sum(row["decision"] == "ADMITTED" for row in decisions),
+            "insufficient_diversity_count": sum(
+                row["decision"] == "INSUFFICIENT_DIVERSITY" for row in decisions),
+            "conflicting_evidence_count": sum(
+                row["decision"] == "CONFLICTING_EVIDENCE" for row in decisions)},
         "rescope": {"binding": rescope_binding, "state": rescope["state"],
             "final_publication_affected": final_affected},
         "remediation_retest": {"binding": remediation_binding,
@@ -308,15 +315,28 @@ def current_inputs(run_id: str, job_id: str) -> dict[str, Any]:
     _rescope, rescope_binding, _ = _current(run_id, "dynamic-rescope")
     _remediation, remediation_binding, _ = _current(run_id, "remediation-retest-feedback")
     publication = report_attempt / "publication-manifest.json"
+    render_publication = report_attempt / "render-publication-manifest.json"
     if publication.is_symlink() or not publication.is_file():
         raise Blocked("final publication preparation: draft publication manifest is absent")
+    if render_publication.is_symlink() or not render_publication.is_file():
+        raise Blocked("final publication preparation: draft render publication manifest is absent")
     publication_value = read_json(publication)
+    render_value = read_json(render_publication)
     report_records = [row for row in publication_value.get("artifacts", [])
                       if isinstance(row, dict) and row.get("path") == "report.json"]
+    rendered = {row.get("path"): row.get("sha256") for row in render_value.get("artifacts", [])
+                if isinstance(row, dict)}
+    required_rendered = {"presentation/report.html", "presentation/report.pdf"}
     if (validate_document(publication_value, "report-publication-manifest.schema.json") or
+            validate_document(render_value, "report-render-publication.schema.json") or
             len(report_records) != 1 or report_records[0].get("sha256") != report_binding["artifact_sha256"] or
             publication_value.get("run_id") != run_id or publication_value.get("status") != "DRAFT_EVIDENCE_BACKED" or
             publication_value.get("final") is not False or publication_value.get("human_signoff") is not False or
+            render_value.get("run_id") != run_id or
+            render_value.get("report_sha256") != report_binding["artifact_sha256"] or
+            render_value.get("final") is not False or render_value.get("human_signoff") is not False or
+            not required_rendered <= set(rendered) or
+            any(rendered[path] != HASH + file_hash(report_attempt / path) for path in required_rendered) or
             audit.get("run_id") != run_id or audit.get("subject_sha256") != report_binding["artifact_sha256"] or
             feedback.get("run_id") != run_id or feedback.get("audit_sha256") != _sha(audit)):
         raise Blocked("final publication preparation: draft completion lineage is inconsistent")
@@ -325,6 +345,8 @@ def current_inputs(run_id: str, job_id: str) -> dict[str, Any]:
             "remediation_retest": remediation_binding,
             "remediation_retest_disposition": _disposition(run_id, "remediation-retest-feedback"),
             "report_sha256": report_binding["artifact_sha256"], "publication_manifest_sha256": HASH + file_hash(publication),
+            "render_publication_manifest_sha256": HASH + file_hash(render_publication),
+            "draft_artifacts": {path: rendered[path] for path in sorted(required_rendered)},
             "draft_attempt": str(report_attempt)}
 
 
@@ -400,6 +422,8 @@ def _produce(run_id: str, job_id: str, inputs: dict[str, Any]) -> tuple[dict[str
     result = {"schema":"appsec-review/final-publication-preparation/1.0", "run_id":run_id,
         "status":"PENDING_HUMAN_APPROVAL", "draft_report_sha256":inputs["report_sha256"],
         "draft_publication_manifest_sha256":inputs["publication_manifest_sha256"],
+        "draft_render_manifest_sha256":inputs["render_publication_manifest_sha256"],
+        "draft_artifacts":inputs["draft_artifacts"],
         "completion_gate":gate, "control_evidence":controls, "draft_attempt":inputs["draft_attempt"],
         "required_action":"A named human reviewer must approve the exact draft report hash using the authorized append-only signoff workflow."}
     return result, "OK_WITH_GAPS", ["human-signoff-required"], None

@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -27,11 +28,36 @@ class SynthesisReportWorkerTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    @staticmethod
+    def _fake_renderer():
+        class Renderer:
+            @staticmethod
+            def render(_input, root):
+                root = Path(root); root.mkdir(parents=True, exist_ok=True)
+                for name in ("report.tex", "report.html", "report.fragment.html",
+                             "workbench.html", "workbench.fragment.html"):
+                    (root / name).write_text(name + "\n")
+        return Renderer()
+
+    def _run(self, *args, **kwargs):
+        def fake_pdf(root):
+            (Path(root) / "report.pdf").write_bytes(b"%PDF-1.4\n" + b"0" * 2048)
+        with mock.patch.object(presentation, "_renderer", side_effect=self._fake_renderer), \
+             mock.patch.object(presentation, "_compile_pdf", side_effect=fake_pdf):
+            return worker.run(*args, **kwargs)
+
+    def _validate(self, *args, **kwargs):
+        def fake_pdf(root):
+            (Path(root) / "report.pdf").write_bytes(b"%PDF-1.4\n" + b"0" * 2048)
+        with mock.patch.object(presentation, "_renderer", side_effect=self._fake_renderer), \
+             mock.patch.object(presentation, "_compile_pdf", side_effect=fake_pdf):
+            return worker.validate(*args, **kwargs)
+
     def test_exact_accepted_inputs_publish_and_revalidate_html_and_latex(self):
         ids = iter(("report-attempt-1", "report-attempt-2"))
-        first = worker.run(self.run_root, self.run_id, "test-run", attempt_id_factory=lambda: next(ids))
+        first = self._run(self.run_root, self.run_id, "test-run", attempt_id_factory=lambda: next(ids))
         self.assertEqual(first["status"], "OK_WITH_GAPS")
-        attempt = worker.validate(self.run_root, self.run_id)
+        attempt = self._validate(self.run_root, self.run_id)
         report = json.loads((attempt / synthesis.REPORT_JSON).read_text())
         manifest = json.loads((attempt / presentation.RENDER_MANIFEST).read_text())
         self.assertEqual(report["status"], "DRAFT_EVIDENCE_BACKED")
@@ -40,24 +66,24 @@ class SynthesisReportWorkerTests(unittest.TestCase):
         self.assertGreater(len(report["limitations"]), 0)
         self.assertEqual(validate_document(manifest, "report-render-publication.schema.json"), [])
         self.assertFalse(manifest["final"]); self.assertFalse(manifest["human_signoff"])
-        for relative in ("presentation/report.tex", "presentation/report.html", presentation.RENDER_INPUT):
+        for relative in ("presentation/report.tex", "presentation/report.pdf", "presentation/report.html", presentation.RENDER_INPUT):
             self.assertTrue((attempt / relative).is_file(), relative)
         hashes = {name: file_hash(attempt / name) for name in
             (synthesis.REPORT_JSON, synthesis.TRACE, presentation.RENDER_INPUT,
              "presentation/report.tex", "presentation/report.html")}
-        second = worker.run(self.run_root, self.run_id, "test-run-2", force=True,
+        second = self._run(self.run_root, self.run_id, "test-run-2", force=True,
                             attempt_id_factory=lambda: next(ids))
         self.assertEqual(second["status"], "OK_WITH_GAPS")
-        replacement = worker.validate(self.run_root, self.run_id)
+        replacement = self._validate(self.run_root, self.run_id)
         self.assertEqual(hashes, {name: file_hash(replacement / name) for name in hashes})
 
     def test_upstream_pointer_tampering_and_presentation_promotion_fail_closed(self):
-        worker.run(self.run_root, self.run_id, "test-run", attempt_id_factory=lambda: "report-attempt")
+        self._run(self.run_root, self.run_id, "test-run", attempt_id_factory=lambda: "report-attempt")
         pointer_path = self.run_root / "data/jobs/01-component-characterization/accepted.json"
         pointer = json.loads(pointer_path.read_text()); pointer["accepted_at"] = "forged"
         pointer_path.write_text(json.dumps(pointer))
         with self.assertRaises(Blocked):
-            worker.validate(self.run_root, self.run_id)
+            self._validate(self.run_root, self.run_id)
         report = {"schema": "appsec-review/synthesis-report/1.0", "status": "FINAL",
                   "claim_limits": {"final": True}}
         with self.assertRaisesRegex(Blocked, "exact draft"):
