@@ -48,6 +48,7 @@ import test_execution as test_execution_worker
 import test_intelligence_ingest as test_intelligence_worker
 import test_result_ingest as test_result_worker
 import remediation_proposal as remediation_proposal_worker
+import claim_review_lifecycle as claim_review_worker
 import resource_pools
 import json
 import os
@@ -634,11 +635,11 @@ operations_doc_work = automatic_common_lifecycle_op(
 standards_source_work = automatic_common_lifecycle_op(
     '02-standards-source-ingest', standards_source_worker, CPU_POOL)
 debug_symbol_index_work = automatic_common_lifecycle_op(
-    '02-debug-symbol-index', debug_symbol_index_worker, CPU_POOL)
+    '02-debug-symbol-index', debug_symbol_index_worker, OFFLINE_DOCKER_POOL)
 binary_triage_work = automatic_common_lifecycle_op(
-    '02-binary-triage', binary_triage_worker, CPU_POOL)
+    '02-binary-triage', binary_triage_worker, OFFLINE_DOCKER_POOL)
 binary_cfg_work = automatic_common_lifecycle_op(
-    '02-binary-cfg', binary_cfg_worker, CPU_POOL)
+    '02-binary-cfg', binary_cfg_worker, OFFLINE_DOCKER_POOL)
 binary_intelligence_work = automatic_common_lifecycle_op(
     '02-binary-intelligence-ingest', binary_intelligence_worker, CPU_POOL)
 test_execution_lifecycle_work = automatic_common_lifecycle_op(
@@ -649,6 +650,29 @@ test_coverage_lifecycle_work = automatic_common_lifecycle_op(
     '02-test-coverage-ingest', test_coverage_worker, CPU_POOL)
 remediation_proposal_lifecycle_work = automatic_common_lifecycle_op(
     '11-remediation-proposal', remediation_proposal_worker, CPU_POOL)
+
+
+def claim_review_lifecycle_op(stage):
+    @op(name='job_' + stage.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def review_stage(context, configured, upstream):
+        result = claim_review_worker.run(
+            configured['engagement_run_id'], context.run_id, stage,
+            configured['force'])
+        attempt = claim_review_worker.root(
+            configured['engagement_run_id'], stage) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / claim_review_worker.core.STAGES[stage][4])),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return review_stage
+
+
+red_team_lifecycle_work = claim_review_lifecycle_op('07-red-team-adversarial')
+blue_team_lifecycle_work = claim_review_lifecycle_op('08-blue-team-refutation')
+verification_lifecycle_work = claim_review_lifecycle_op('09-independent-verification')
+scoring_lifecycle_work = claim_review_lifecycle_op('12-scoring-prioritization')
 
 
 @op(name='job_02_native_sast', ins={'configured': In(dict), 'upstream': In(list)},
@@ -1414,6 +1438,10 @@ LIFECYCLE_OPS['02-sca-vulnerability-match']=sca_vulnerability_match_lifecycle_wo
 LIFECYCLE_OPS['02-license-scan']=license_scan_lifecycle_work
 LIFECYCLE_OPS['02-dependency-lifecycle']=dependency_lifecycle_lifecycle_work
 LIFECYCLE_OPS['11-remediation-proposal']=remediation_proposal_lifecycle_work
+LIFECYCLE_OPS['07-red-team-adversarial']=red_team_lifecycle_work
+LIFECYCLE_OPS['08-blue-team-refutation']=blue_team_lifecycle_work
+LIFECYCLE_OPS['09-independent-verification']=verification_lifecycle_work
+LIFECYCLE_OPS['12-scoring-prioritization']=scoring_lifecycle_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
