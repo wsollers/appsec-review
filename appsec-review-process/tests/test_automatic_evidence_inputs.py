@@ -154,6 +154,23 @@ class AutomaticEvidenceInputsTests(unittest.TestCase):
         self.assertTrue(projected.is_relative_to(self.run / "data/automatic-inputs/source"))
         self.assertEqual(Path(run.call_args.args[1]).name, "worker-request.json")
 
+    def test_standards_binding_is_automatic_target_derived_and_immutable(self):
+        path = automatic.prepare_standards_binding(self.run_id)
+        binding = state.read_json(path)
+        selected = {item["family"] for item in binding["selected_snapshots"]}
+        unselected = {item["family"] for item in binding["unselected_families"]}
+        self.assertIn("disa_asd_stig", selected)
+        self.assertIn("owasp_asvs", selected)
+        self.assertIn("disa_gpos_srg", unselected)
+        self.assertIn("owasp_masvs", unselected)
+        self.assertNotIn("approved", " ".join(item["selection_basis"] for item in binding["selected_snapshots"]).lower())
+        self.assertEqual(automatic.prepare_standards_binding(self.run_id), path)
+        changed = state.read_json(path)
+        changed["unselected_families"][0]["reason"] = "changed"
+        state.atomic_json(path, changed)
+        with self.assertRaisesRegex(state.Blocked, "differs from accepted source"):
+            automatic.prepare_standards_binding(self.run_id)
+
     def test_missing_permission_stale_upstream_and_changed_request_fail_closed(self):
         value = state.read_json(self.manifest); value["intake_config"]["permissions"].remove("write-run-data")
         state.atomic_json(self.manifest, value)

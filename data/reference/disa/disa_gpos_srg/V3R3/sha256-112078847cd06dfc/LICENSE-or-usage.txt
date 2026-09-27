@@ -1,0 +1,7 @@
+Official source provenance receipt
+
+The raw XCCDF was extracted without semantic modification from the exact DISA package named in
+data/reference/source-lock.json after its SHA-256 was verified. The package was retrieved from the
+official dl.dod.cyber.mil host. This receipt does not invent or assert a license grant; downstream
+publication must preserve the recorded source and the claim boundary that reference material is
+not evidence of target compliance.

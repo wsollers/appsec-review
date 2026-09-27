@@ -2,7 +2,7 @@
 """Offline, immutable S01 standards-source ingestion.
 
 The worker copies only an explicitly bound subset of the repository's already materialized
-OWASP/OpenCRE snapshots into run-owned evidence.  Reference text and mappings are data, never
+OWASP/OpenCRE/DISA snapshots into run-owned evidence.  Reference text and mappings are data, never
 instructions or proof that a target satisfies a control.  This core is deliberately not wired to
 the shared graph or Dagster definitions.
 """
@@ -16,6 +16,7 @@ from typing import Any
 
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, now, read_json
 import phase1
+import automatic_evidence_inputs
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 import reference_snapshots
 from schema_validate import validate_document
@@ -37,6 +38,8 @@ RECORD_SCHEMAS = {
     "owasp_api_security_top_10": "owasp-context-record.schema.json",
     "owasp_llm_top_10": "owasp-context-record.schema.json",
     "opencre": "opencre-crosswalk-record.schema.json",
+    "disa_asd_stig": "disa-control-record.schema.json",
+    "disa_gpos_srg": "disa-control-record.schema.json",
 }
 CODE_FILES = (
     "standards_source_ingest.py", "reference_snapshots.py", "publish_job_output.py",
@@ -60,7 +63,8 @@ def _hash(value: Any) -> str:
 def _code_hashes() -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
     for name in ("standards-source-binding.schema.json", "standards-source-extract.schema.json",
-                 "standards-source-record.schema.json"):
+                 "standards-source-record.schema.json", "disa-control-record.schema.json",
+                 "reference-source-lock.schema.json", "reference-snapshot-manifest.schema.json"):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     return values
 
@@ -93,6 +97,10 @@ def _source_entries() -> dict[str, dict[str, Any]]:
     lock = read_json(SOURCE_LOCK)
     if validate_document(lock, "reference-source-lock.schema.json"):
         raise Blocked(f"{JOB}: source lock fails its schema")
+    try:
+        reference_snapshots.validate_source_lock_semantics(lock)
+    except reference_snapshots.SnapshotError as exc:
+        raise Blocked(f"{JOB}: source lock provenance is invalid") from exc
     entries = lock.get("sources", [])
     families = [item.get("family") for item in entries]
     if len(families) != len(set(families)) or any(family not in RECORD_SCHEMAS for family in families):
@@ -118,6 +126,8 @@ def _verify_snapshot(path: Path) -> dict[str, Any]:
 
 def _binding(run_id: str) -> dict[str, Any]:
     path = data_path(run_id, "inputs", BINDING_NAME)
+    if not path.exists():
+        automatic_evidence_inputs.prepare_standards_binding(run_id)
     if not path.is_file() or path.is_symlink():
         raise Blocked(f"{JOB}: run-owned {BINDING_NAME} is required")
     value = read_json(path)
@@ -148,6 +158,7 @@ def current_inputs(run_id: str) -> dict[str, Any]:
                 lock["upstream_url"] != manifest["upstream"]["url"] or
                 lock["immutable_ref"] != manifest["upstream"]["immutable_ref"] or
                 lock["resolved_commit"] != manifest["upstream"]["resolved_commit"] or
+                lock.get("artifact_sha256") != manifest["upstream"].get("artifact_sha256") or
                 lock.get("tag_object") != manifest["upstream"].get("tag_object") or
                 lock["license_identifier"] != manifest["license"]["identifier"] or
                 lock["expected_record_count"] != manifest["record_counts"]["records"]):
@@ -332,7 +343,7 @@ def run(run_id: str, dagster_run_id: str, force: bool = False) -> dict[str, Any]
             base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_run_id,
             worker_kind=WORKER_KIND, output_contract=CONTRACT, input_fingerprint=fingerprint,
             started_at=allocation["started_at"], execution_status=result["status"],
-            summary=f"Pinned {len(result['records'])} immutable OWASP/OpenCRE reference records.",
+            summary=f"Pinned {len(result['records'])} immutable OWASP/OpenCRE/DISA reference records.",
             status_record=status,
             artifact_paths=[RESULT, "status.json", "permission.json", "lineage.json", *artifacts],
             gaps=result["coverage_gaps"] or None,

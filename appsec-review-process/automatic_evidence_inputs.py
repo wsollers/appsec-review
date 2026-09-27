@@ -20,6 +20,7 @@ import dependency_snapshot_registry as snapshots
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, identifier, read_json, run_path
 import intake
 import phase1
+import reference_snapshots
 from schema_validate import validate_document
 from worker_result import validate_worker_result
 import vendor_evidence_workers as vendor_workers
@@ -45,6 +46,9 @@ RESULTS = {
     "02-sca-vulnerability-match": "outputs/sca-vulnerability-match.json",
     "02-license-scan": "outputs/license-inventory.json",
 }
+STANDARDS_BINDING = "standards-source-binding.json"
+REFERENCE_SOURCE_LOCK = ROOT.parent / "data" / "reference" / "source-lock.json"
+REFERENCE_ROOT = ROOT.parent / "data" / "reference"
 
 
 def _sha(path: Path) -> str:
@@ -265,6 +269,72 @@ def _write_request(path: Path, request: dict[str, Any]) -> None:
     atomic_json(path, request)
 
 
+def _reference_snapshot(family: str, edition: str) -> tuple[Path, dict[str, Any]]:
+    matches = []
+    for path in REFERENCE_ROOT.glob("**/manifest.json"):
+        value = read_json(path)
+        if value.get("family") == family and value.get("edition") == edition:
+            matches.append((path, value))
+    if len(matches) != 1:
+        raise Blocked(f"automatic evidence inputs: expected one offline snapshot for {family}/{edition}")
+    return matches[0]
+
+
+def _standards_selection(source: dict[str, Any]) -> dict[str, bool]:
+    paths = {str(path).lower() for path, value in source.get("files", {}).items()
+             if isinstance(value, dict) and value.get("kind") == "file"}
+    mobile = any(path.endswith(("androidmanifest.xml", ".xcodeproj/project.pbxproj", ".xcworkspace"))
+                 or "/ios/" in f"/{path}" or "/android/" in f"/{path}" for path in paths)
+    api = any(path.endswith(("openapi.json", "openapi.yaml", "openapi.yml", "swagger.json",
+                             "swagger.yaml", "swagger.yml")) for path in paths)
+    llm = any(any(token in path for token in ("openai", "anthropic", "langchain", "llamaindex"))
+              for path in paths)
+    return {"owasp_asvs": True, "owasp_masvs": mobile, "owasp_mastg": mobile,
+            "owasp_top_10": True, "owasp_api_security_top_10": api,
+            "owasp_llm_top_10": llm, "opencre": True, "disa_asd_stig": True,
+            "disa_gpos_srg": False}
+
+
+def prepare_standards_binding(run_id: str) -> Path:
+    """Create the immutable run-owned standards selection from accepted source facts."""
+    run_id = identifier(run_id)
+    _pointer_path, _pointer, source = _accepted_source(run_id)
+    lock = read_json(REFERENCE_SOURCE_LOCK)
+    if validate_document(lock, "reference-source-lock.schema.json"):
+        raise Blocked("automatic evidence inputs: reference source lock is invalid")
+    try:
+        reference_snapshots.validate_source_lock_semantics(lock)
+    except reference_snapshots.SnapshotError as exc:
+        raise Blocked("automatic evidence inputs: reference source provenance is invalid") from exc
+    decisions = _standards_selection(source)
+    known = {item["family"] for item in lock["sources"]}
+    if known != set(decisions):
+        raise Blocked("automatic evidence inputs: standards applicability rules do not cover source lock")
+    selected, unselected = [], []
+    for entry in sorted(lock["sources"], key=lambda item: item["family"]):
+        family = entry["family"]
+        if decisions[family]:
+            manifest_path, manifest = _reference_snapshot(family, entry["edition"])
+            selected.append({"family": family, "edition": entry["edition"],
+                "snapshot_id": manifest["snapshot_id"],
+                "manifest_sha256": _sha(manifest_path),
+                "selection_basis": "Automatic applicability routing from the accepted intake source inventory; reference material only, not an approval or compliance decision."})
+        else:
+            unselected.append({"family": family,
+                "reason": "Accepted intake source paths contain no target evidence for this specialized standards family."})
+    binding = {"schema": "appsec-review/standards-source-binding/1.0", "run_id": run_id,
+               "selected_snapshots": selected, "unselected_families": unselected}
+    if validate_document(binding, "standards-source-binding.schema.json"):
+        raise Blocked("automatic evidence inputs: generated standards binding is invalid")
+    path = data_path(run_id, "inputs", STANDARDS_BINDING)
+    if path.exists():
+        if path.is_symlink() or read_json(path) != binding:
+            raise Blocked("automatic evidence inputs: existing standards binding differs from accepted source")
+    else:
+        atomic_json(path, binding)
+    return path
+
+
 def prepare(run_id: str, job_id: str, dagster_run_id: str, *, generated_at: str | None = None) -> dict[str, str]:
     """Create a closed request and return the exact kwargs for the orchestration adapter."""
     run_id, dagster_run_id = identifier(run_id), identifier(dagster_run_id)
@@ -343,4 +413,5 @@ def prepare(run_id: str, job_id: str, dagster_run_id: str, *, generated_at: str 
     return result
 
 
-__all__ = ["ALL_JOBS", "CONTROL", "prepare", "source_projection", "validate_source_projection"]
+__all__ = ["ALL_JOBS", "CONTROL", "prepare", "prepare_standards_binding", "source_projection",
+           "validate_source_projection"]

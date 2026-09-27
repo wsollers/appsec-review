@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize and verify immutable OWASP/OpenCRE reference snapshots.
+"""Materialize and verify immutable OWASP/OpenCRE/DISA reference snapshots.
 
 Materialization consumes explicit local checkouts pinned by ``source-lock.json``.  It never
 resolves a branch, tag, or live API itself.  OpenCRE's dated API export is likewise supplied as a
@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import html
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -19,6 +20,8 @@ import subprocess
 import sys
 import uuid
 from typing import Any, Iterable
+from urllib.parse import urlparse
+import xml.etree.ElementTree as ET
 
 import yaml
 
@@ -35,6 +38,27 @@ DEFAULT_OUTPUT = REPO_ROOT / "data/reference"
 
 class SnapshotError(RuntimeError):
     pass
+
+
+def validate_source_lock_semantics(lock: dict[str, Any]) -> None:
+    families: set[str] = set()
+    for source in lock.get("sources", []):
+        family = source.get("family")
+        if family in families:
+            raise SnapshotError(f"duplicate reference source family: {family}")
+        families.add(family)
+        if source.get("source_kind") == "disa_xccdf":
+            parsed = urlparse(source.get("upstream_url", ""))
+            if (parsed.scheme != "https" or parsed.hostname != "dl.dod.cyber.mil" or
+                    source.get("resolved_commit") is not None or
+                    not re.fullmatch(r"[0-9a-f]{64}", source.get("artifact_sha256") or "") or
+                    source.get("immutable_ref") != PurePosixPath(parsed.path).name or
+                    not all(source.get(key) for key in
+                            ("xccdf_benchmark_id", "xccdf_version", "xccdf_release"))):
+                raise SnapshotError(f"{family} must bind an official DISA HTTPS artifact and XCCDF identity")
+        elif (not re.fullmatch(r"[0-9a-f]{40}", source.get("resolved_commit") or "") or
+              source.get("artifact_sha256") is not None):
+            raise SnapshotError(f"{family} must bind a Git commit and must not claim an artifact hash")
 
 
 def canonical_json(value: Any) -> bytes:
@@ -114,6 +138,15 @@ def git_output(root: Path, *args: str) -> str:
 
 
 def verify_source_checkout(source: dict[str, Any], root: Path, inputs: list[Path], license_path: Path) -> None:
+    if source["source_kind"] == "disa_xccdf":
+        archive = root / source["immutable_ref"]
+        if (not archive.is_file() or archive.is_symlink() or
+                sha256_file(archive) != source["artifact_sha256"]):
+            raise SnapshotError(f"{source['family']} official archive is absent or differs from its lock")
+        for path in [*inputs, license_path]:
+            if not path.is_file() or path.is_symlink():
+                raise SnapshotError(f"{source['family']} staged input is absent or linked: {path}")
+        return
     if not (root / ".git").exists():
         raise SnapshotError(f"source root is not a Git checkout: {root}")
     head = git_output(root, "rev-parse", "HEAD")
@@ -423,12 +456,87 @@ def normalize_opencre(source: dict[str, Any], root: Path, snapshot_id: str, hash
     return sorted(records, key=lambda row: (row["cre_leaf_id"], row["record_id"]))
 
 
+def _xccdf_text(rule: ET.Element, name: str, namespace: dict[str, str]) -> str:
+    node = rule.find(f"x:{name}", namespace)
+    return "" if node is None else "".join(node.itertext()).strip()
+
+
+def _embedded_text(value: str, tag: str) -> str:
+    if not value:
+        return ""
+    match = re.search(rf"<{re.escape(tag)}>(.*?)</{re.escape(tag)}>", value,
+                      flags=re.DOTALL | re.IGNORECASE)
+    if not match:
+        return ""
+    return html.unescape(re.sub(r"<[^>]+>", "", match.group(1))).strip()
+
+
+def normalize_disa_xccdf(source: dict[str, Any], root: Path, snapshot_id: str,
+                         hashes: dict[str, str]) -> list[dict[str, Any]]:
+    candidates = [path for path in expand_inputs(root, source["raw_includes"])
+                  if path.suffix.lower() == ".xml"]
+    if len(candidates) != 1:
+        raise SnapshotError("DISA source must contain exactly one XCCDF XML document")
+    path = candidates[0]
+    relative = normalized_rel(path, root)
+    try:
+        document = ET.parse(path)
+    except ET.ParseError as exc:
+        raise SnapshotError(f"invalid DISA XCCDF XML: {relative}") from exc
+    namespace = {"x": "http://checklists.nist.gov/xccdf/1.1"}
+    benchmark = document.getroot()
+    version = _xccdf_text(benchmark, "version", namespace)
+    release = next((node.text or "" for node in benchmark.findall("x:plain-text", namespace)
+                    if node.get("id") == "release-info"), "").strip()
+    if (benchmark.get("id") != source.get("xccdf_benchmark_id") or
+            version != source.get("xccdf_version") or
+            f"Release: {source.get('xccdf_release')}" not in release):
+        raise SnapshotError(f"DISA XCCDF benchmark identity differs from locked edition {source['edition']}")
+    profiles = [node.get("id", "").strip() for node in benchmark.findall("x:Profile", namespace)]
+    profiles = sorted(value for value in profiles if value)
+    records: list[dict[str, Any]] = []
+    for group in benchmark.findall("x:Group", namespace):
+        control_id = group.get("id", "").strip()
+        srg_id = _xccdf_text(group, "title", namespace)
+        rule = group.find("x:Rule", namespace)
+        if rule is None:
+            raise SnapshotError(f"DISA XCCDF group {control_id} has no rule")
+        description = _embedded_text(_xccdf_text(rule, "description", namespace), "VulnDiscussion")
+        check_node = rule.find("x:check/x:check-content", namespace)
+        check = "" if check_node is None else "".join(check_node.itertext()).strip()
+        fix = _xccdf_text(rule, "fixtext", namespace)
+        title = _xccdf_text(rule, "title", namespace)
+        rule_id = rule.get("id", "").strip()
+        rule_version = _xccdf_text(rule, "version", namespace)
+        severity = rule.get("severity", "").strip().lower()
+        cci = sorted({(node.text or "").strip() for node in rule.findall("x:ident", namespace)
+                      if node.get("system") == "http://cyber.mil/cci" and (node.text or "").strip()})
+        if not all((control_id, srg_id, rule_id, rule_version, title, description, check, fix)):
+            raise SnapshotError(f"DISA XCCDF control {control_id or '<unknown>'} is incomplete")
+        records.append({
+            "schema": "appsec-review/disa-control-record/1.0", "record_type": "control",
+            "standard_family": source["family"], "standard_version": source["edition"],
+            "control_id": control_id, "rule_id": rule_id, "rule_version": rule_version,
+            "srg_id": srg_id, "title": title, "severity": severity, "text": description,
+            "check": check, "fix": fix, "cci": cci, "profiles": profiles,
+            "proof_obligations": [{"obligation_id": f"{control_id}:check",
+                "text": check, "evidence_classification": "classified",
+                "minimum_evidence_modes": ["manual_inspection"]}],
+            "source": citation(snapshot_id, relative, hashes),
+        })
+    ids = [row["control_id"] for row in records]
+    if len(ids) != len(set(ids)):
+        raise SnapshotError("DISA XCCDF contains duplicate vulnerability IDs")
+    return sorted(records, key=lambda row: row["control_id"])
+
+
 NORMALIZERS = {
     "asvs_flat_json": (normalize_asvs, "owasp-control-record.schema.json"),
     "masvs_markdown": (normalize_masvs, "owasp-control-record.schema.json"),
     "mastg_markdown": (normalize_mastg, "owasp-test-record.schema.json"),
     "context_markdown": (normalize_context, "owasp-context-record.schema.json"),
     "opencre_csv": (normalize_opencre, "opencre-crosswalk-record.schema.json"),
+    "disa_xccdf": (normalize_disa_xccdf, "disa-control-record.schema.json"),
 }
 
 
@@ -439,6 +547,7 @@ def identity_digest(source: dict[str, Any], raw_files: list[dict[str, Any]], lic
         "upstream_url": source["upstream_url"],
         "immutable_ref": source["immutable_ref"],
         "resolved_commit": source["resolved_commit"],
+        "artifact_sha256": source.get("artifact_sha256"),
         "license_sha256": license_hash,
         "extractor": {"name": EXTRACTOR_NAME, "version": EXTRACTOR_VERSION},
         "raw_files": raw_files,
@@ -449,6 +558,8 @@ def identity_digest(source: dict[str, Any], raw_files: list[dict[str, Any]], lic
 def destination_root(output: Path, source: dict[str, Any], snapshot_id: str) -> Path:
     if source["family"] == "opencre":
         return output / "opencre" / snapshot_id
+    if source["family"].startswith("disa_"):
+        return output / "disa" / source["family"] / source["edition"] / snapshot_id
     return output / "owasp" / source["family"] / source["edition"] / snapshot_id
 
 
@@ -522,6 +633,7 @@ def materialize_one(source: dict[str, Any], root: Path, output: Path, retrieved_
                 "url": source["upstream_url"],
                 "immutable_ref": source["immutable_ref"],
                 "resolved_commit": source["resolved_commit"],
+                "artifact_sha256": source.get("artifact_sha256"),
                 "tag_object": source.get("tag_object"),
             },
             "retrieved_at": retrieved_at,
@@ -596,6 +708,8 @@ def verify_snapshot(root: Path) -> dict[str, Any]:
         "owasp_api_security_top_10": "owasp-context-record.schema.json",
         "owasp_llm_top_10": "owasp-context-record.schema.json",
         "opencre": "opencre-crosswalk-record.schema.json",
+        "disa_asd_stig": "disa-control-record.schema.json",
+        "disa_gpos_srg": "disa-control-record.schema.json",
     }.get(manifest["family"])
     if not schema_name:
         raise SnapshotError(f"unsupported snapshot family: {manifest['family']}")
@@ -634,6 +748,7 @@ def main(argv: list[str] | None = None) -> int:
         lock_errors = validate_document(lock, "reference-source-lock.schema.json")
         if lock_errors:
             raise SnapshotError("source lock validation failed:\n" + "\n".join(lock_errors))
+        validate_source_lock_semantics(lock)
         roots = source_map(args.source_root)
         expected = {source["family"] for source in lock.get("sources", [])}
         missing = sorted(expected - set(roots))

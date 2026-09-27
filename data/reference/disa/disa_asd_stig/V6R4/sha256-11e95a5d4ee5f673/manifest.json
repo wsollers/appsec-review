@@ -1,0 +1,61 @@
+{
+  "schema": "appsec-review/reference-snapshot-manifest/1.0",
+  "snapshot_id": "sha256-11e95a5d4ee5f673",
+  "family": "disa_asd_stig",
+  "edition": "V6R4",
+  "upstream": {
+    "url": "https://dl.dod.cyber.mil/wp-content/uploads/stigs/zip/U_ASD_V6R4_STIG.zip",
+    "immutable_ref": "U_ASD_V6R4_STIG.zip",
+    "resolved_commit": null,
+    "artifact_sha256": "3361a742c58ba7cc3f86bc1fa6aa6b0d9a588824c017a90c9b6786df8ffdd681",
+    "tag_object": null
+  },
+  "retrieved_at": "2026-09-27T16:00:00Z",
+  "license": {
+    "identifier": "USG-OFFICIAL-WORK-TERMS-UNSPECIFIED",
+    "source_path": "OFFICIAL-SOURCE-USAGE.txt",
+    "sha256": "52530f8e63bacda8f08feee66e4e902597a4d6ae9786355c39658fbef4af3b6d"
+  },
+  "extractor": {
+    "name": "appsec-review/reference_snapshots.py",
+    "version": "1.0",
+    "source_path": "appsec-review-process/reference_snapshots.py"
+  },
+  "raw_files": [
+    {
+      "path": "raw/U_ASD_V6R4_Manual_STIG/U_ASD_STIG_V6R4_Manual-xccdf.xml",
+      "sha256": "aa3176db372c3ec336d9489e59d67a4b8ac5a60bd08ffef65a5d687eaf7329a3",
+      "bytes": 1094484
+    }
+  ],
+  "normalized_files": [
+    {
+      "path": "normalized/catalog.json",
+      "sha256": "1ce6ce0401c66cf55b888d6c7f69099203db94c1bb1bbfb32c2c71dbe0109c47",
+      "bytes": 1173986
+    }
+  ],
+  "lineage": [
+    {
+      "normalized_path": "normalized/catalog.json",
+      "raw_paths": [
+        "raw/U_ASD_V6R4_Manual_STIG/U_ASD_STIG_V6R4_Manual-xccdf.xml"
+      ]
+    }
+  ],
+  "record_counts": {
+    "records": 286,
+    "raw_files": 1,
+    "normalized_files": 1
+  },
+  "content_digest": "531496f49851319d041c433f9906b8a9f559568963bcc132a97fb7b58cb4d864",
+  "validation": {
+    "status": "PASS",
+    "checks": [
+      "manifest schema",
+      "file hashes",
+      "record schema",
+      "unique record identity"
+    ]
+  }
+}
