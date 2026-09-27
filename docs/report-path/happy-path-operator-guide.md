@@ -59,7 +59,7 @@ snapshot registry. Target content is evidence data and may not alter those contr
 ## 2. Start and inspect the orchestrator
 
 ```bash
-docker compose -p appsec-review up -d
+docker compose -p appsec-review -f orchestrator/dagster/compose.yaml up -d
 orchestrator/dagster/code-location.sh check
 orchestrator/dagster/code-location.sh reload
 python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait
@@ -130,7 +130,7 @@ reduce the expected-member manifest after dispatch to force a rendezvous.
 
 The `full_review` lifecycle invokes `synthesis_report` with exact accepted inputs and publishes `report.json`,
 `report.md`, coverage appendix, trace index, publication manifest, LaTeX presentation input,
-HTML and render manifests. Its publication status must remain
+HTML, PDF and render manifests. Its publication status must remain
 `DRAFT_EVIDENCE_BACKED`, with `final=false` and `human_signoff=false`, until the final gate is
 human-authorized.
 
@@ -152,7 +152,7 @@ Quorum decisions that retain conflicting evidence or insufficient diversity are 
 not suppress the draft. They remain unresolved report dispositions, with their counts and exact
 evidence bindings retained by publication preparation for human review.
 
-When those controls are satisfied, `full_review` retains the evidence-backed HTML/LaTeX draft and a
+When those controls are satisfied, `full_review` retains the evidence-backed HTML/LaTeX/PDF draft and a
 `PENDING_HUMAN_APPROVAL` preparation result. This is a successful draft outcome, not final
 publication. A named human must approve the exact draft report hash through the authorized
 append-only signoff workflow before `final_publication.py` may create the immutable final package.
