@@ -238,10 +238,15 @@ class EvidenceIndexEnrichmentTests(unittest.TestCase):
                 "artifact_sha256, record_path, record_sha256, type_label, authority, redaction, "
                 "source_snapshot_sha256, build_lineage_sha256 FROM derived_records"
             ).fetchone()
+            fts = database.execute(
+                "SELECT record_id FROM derived_chunks WHERE derived_chunks MATCH ?",
+                ('"reporting"',),
+            ).fetchall()
         self.assertEqual(row[0:4], (JOB, ATTEMPT, "doc-intelligence", "doc-intelligence.json"))
         self.assertEqual(row[8], "untrusted_documented_intent")
         self.assertEqual(row[10], "sha256:" + SOURCE)
         self.assertIsNone(row[11])
+        self.assertTrue(fts)
 
     def test_stale_corrupt_and_wrong_shape_pointers_fail_closed(self):
         self.fixture.selection()

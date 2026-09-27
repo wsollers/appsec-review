@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "code-property-graph-record.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "kind", "label", "name", "full_name", "caller", "type_name", "code", "source_path", "source_sha256", "start_line", "start_column", "end_line", "search_text", "redaction", "locator"],
+  "properties": {
+    "record_id": {"type": "string", "pattern": "^cpg_[0-9a-f]{24}$"},
+    "kind": {"enum": ["call", "symbol", "type", "identifier", "memory-operation"]},
+    "label": {"type": "string", "maxLength": 4096}, "name": {"type": "string", "maxLength": 4096},
+    "full_name": {"type": "string", "maxLength": 4096}, "caller": {"type": "string", "maxLength": 4096}, "type_name": {"type": "string", "maxLength": 4096},
+    "code": {"type": "string", "maxLength": 4096}, "source_path": {"type": "string", "minLength": 1},
+    "source_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "start_line": {"type": "integer", "minimum": 1}, "start_column": {"type": ["integer", "null"], "minimum": 1},
+    "end_line": {"type": "integer", "minimum": 1}, "search_text": {"type": "string", "maxLength": 1000},
+    "redaction": {"enum": ["unchanged", "redacted", "withheld"]},
+    "locator": {"type": "object", "additionalProperties": false, "required": ["artifact", "record_id", "source_path", "source_sha256", "line"], "properties": {"artifact": {"const": "code-property-graph.json"}, "record_id": {"type": "string"}, "source_path": {"type": "string"}, "source_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "line": {"type": "integer", "minimum": 1}}}
+  }
+}

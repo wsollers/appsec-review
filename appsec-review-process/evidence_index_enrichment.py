@@ -22,7 +22,7 @@ RESULT = "evidence-index-enrichment.json"
 SCHEMA = "appsec-review/evidence-index-enrichment/1.0"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
-LIMITS = {"max_producers": 32, "max_records": 5000, "max_links": 20000,
+LIMITS = {"max_producers": 32, "max_records": 20000, "max_links": 20000,
           "max_search_text": 1000, "max_query_results": 50}
 
 # job: (contract, result artifact, result schema, indexed top-level arrays, authority)
@@ -33,6 +33,7 @@ PROFILES = {
     "02-operations-doc-ingest": ("operations-doc-intelligence", "operations-doc-intelligence.json", "operations-doc-intelligence.schema.json", ("records",), "untrusted_documented_intent"),
     "02-native-sast": ("native-sast", "native-sast.json", "native-sast.schema.json", ("units",), "derived_evidence"),
     "02-ir-facts": ("ir-facts", "ir-facts.json", "ir-facts.schema.json", ("debug_locations", "facts"), "derived_evidence"),
+    "02-code-property-graph": ("code-property-graph", "code-property-graph.json", "code-property-graph.schema.json", ("records",), "derived_evidence"),
     "02-debug-symbol-index": ("debug-symbol-index", "debug-symbol-index.json", "debug-symbol-index.schema.json", ("records",), "derived_evidence"),
     "02-binary-triage": ("binary-triage", "binary-triage-manifest.json", "binary-triage.schema.json", ("records",), "derived_evidence"),
     "02-binary-cfg": ("binary-cfg", "cfg-manifest.json", "binary-cfg.schema.json", ("records",), "derived_evidence"),
@@ -45,7 +46,8 @@ PROFILES = {
 }
 
 _TEXT_KEYS = frozenset({"title", "summary", "name", "kind", "description", "purpose", "method",
-                        "route", "status", "semantics", "symbol", "function", "test_name", "outcome"})
+                        "route", "status", "semantics", "symbol", "function", "test_name", "outcome",
+                        "full_name", "caller", "type_name", "code", "search_text", "source_path"})
 _IDENTITY_KEYS = ("record_id", "lead_id", "fact_id", "partition_id", "component_id", "relationship_id",
                   "test_id", "artifact_id", "binary_id", "symbol_id", "cfg_id", "location_id", "path")
 

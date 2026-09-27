@@ -561,6 +561,7 @@ class ParityTests(unittest.TestCase):
             "--hostname", "appsec-worker", "--add-host", "appsec-worker:127.0.0.1",
             "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--workdir", "/scratch", "--env", "HOME=/tmp",
+            "--env", "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/scratch",
             "--user", arguments["user"], "--pids-limit", "32", "--memory", "67108864",
             "--memory-swap", "67108864", "--cpus", "0.500",
             "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=4194304",

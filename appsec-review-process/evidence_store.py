@@ -381,7 +381,9 @@ def collect(run_id, attempt):
         record_path TEXT NOT NULL, record_sha256 TEXT NOT NULL, type_label TEXT NOT NULL,
         authority TEXT NOT NULL, redaction TEXT NOT NULL, source_snapshot_sha256 TEXT NOT NULL,
         build_lineage_sha256 TEXT, partition_ids TEXT NOT NULL, component_ids TEXT NOT NULL,
-        search_text TEXT NOT NULL);''')
+        search_text TEXT NOT NULL);
+      CREATE VIRTUAL TABLE derived_chunks USING fts5(record_id UNINDEXED,
+        partition_ids UNINDEXED, component_ids UNINDEXED, search_text, tokenize='unicode61');''')
     total = chunks = 0
     signatures = io.StringIO()
     signatures.write('ssdeep,1.1--blocksize:hash:hash,filename\n')
@@ -427,13 +429,16 @@ def collect(run_id, attempt):
                     chunks += 1
         db.commit()
         for record in derived['records']:
+            partition_ids = json.dumps(record['partition_ids'], separators=(',', ':'))
+            component_ids = json.dumps(record['component_ids'], separators=(',', ':'))
             db.execute('INSERT INTO derived_records VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (
                 record['record_id'], record['producer_job_id'], record['producer_attempt_id'],
                 record['producer_contract'], record['artifact_path'], record['artifact_sha256'], record['record_path'],
                 record['record_sha256'], record['type_label'], record['authority'], record['redaction'],
                 record['source_snapshot_sha256'], record['build_lineage_sha256'],
-                json.dumps(record['partition_ids'], separators=(',', ':')),
-                json.dumps(record['component_ids'], separators=(',', ':')), record['search_text']))
+                partition_ids, component_ids, record['search_text']))
+            db.execute('INSERT INTO derived_chunks VALUES (?,?,?,?)',
+                       (record['record_id'], partition_ids, component_ids, record['search_text']))
         db.commit()
         db.execute("INSERT INTO chunks(chunks) VALUES ('integrity-check')")
         db.commit()
@@ -498,6 +503,17 @@ def check_enrichment(run_id, attempt, plan):
         json.dumps(r['component_ids'], separators=(',', ':')), r['search_text']) for r in found['records'])
     if rows != expected_rows:
         raise Blocked('SQLite derived records differ from the hash-bound enrichment artifact')
+    db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
+    try:
+        fts_rows = db.execute('SELECT record_id,partition_ids,component_ids,search_text '
+                              'FROM derived_chunks ORDER BY record_id').fetchall()
+    finally:
+        db.close()
+    expected_fts = sorted((r['record_id'], json.dumps(r['partition_ids'], separators=(',', ':')),
+                           json.dumps(r['component_ids'], separators=(',', ':')), r['search_text'])
+                          for r in found['records'])
+    if fts_rows != expected_fts:
+        raise Blocked('SQLite derived FTS rows differ from the hash-bound enrichment artifact')
     permission = {'schema': enrichment.PERMISSION_SCHEMA, 'run_id': run_id, 'job_id': JOB,
                   'source_snapshot_sha256': source_snapshot_sha256,
                   'permissions': canonical_permissions(plan)}
@@ -609,12 +625,34 @@ def query(run_id, action, text='', path='', limit=10, start=1, fresh=True):
 
 def query_derived(run_id, text='', partition_id='', component_id='', limit=10, fresh=True):
     with Lock(root(run_id) / 'job.lock'):
-        _pointer, attempt = validate(run_id, fresh=fresh)
-        document = read_json(attempt / enrichment.RESULT)
+        pointer, attempt = validate(run_id, fresh=fresh)
+        if not 1 <= limit <= enrichment.LIMITS['max_query_results'] or len(text) > enrichment.LIMITS['max_search_text']:
+            raise ValueError('derived query bounds: limit 1..50 and text <=1000 characters')
+        db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
+        db.row_factory = sqlite3.Row
+        try:
+            clauses, values = [], []
+            if text.strip():
+                match = ' AND '.join('"' + word.replace('"', '""') + '"' for word in text.split())
+                clauses.append('derived_chunks MATCH ?'); values.append(match)
+            if partition_id:
+                clauses.append('instr(partition_ids,json_quote(?))>0'); values.append(partition_id)
+            if component_id:
+                clauses.append('instr(component_ids,json_quote(?))>0'); values.append(component_id)
+            where = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
+            ids = [row['record_id'] for row in db.execute(
+                'SELECT record_id FROM derived_chunks' + where +
+                (' ORDER BY bm25(derived_chunks),record_id' if text.strip() else ' ORDER BY record_id') +
+                ' LIMIT ?', (*values, limit))]
+        finally:
+            db.close()
+        records = {record['record_id']: record for record in read_json(attempt / enrichment.RESULT)['records']}
+        if read_json(root(run_id) / 'accepted.json') != pointer:
+            raise Blocked('index acceptance changed during derived retrieval; retry after producers complete')
         return {'run_id': run_id, 'attempt_id': attempt.name, 'freshness_checked': fresh,
                 'untrusted_content': True,
-                'results': enrichment.query(document, text=text, partition_id=partition_id,
-                                            component_id=component_id, limit=limit)}
+                'claim_boundary': 'INDEX_HIT_IS_LOCATOR_REQUIRES_PRODUCER_RECORD_DEREFERENCE',
+                'results': [records[record_id] for record_id in ids]}
 
 
 def _query(run_id, action, text='', path='', limit=10, start=1, fresh=True):

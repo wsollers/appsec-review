@@ -88,6 +88,9 @@ BOUNDARY_FLAGS: tuple[str, ...] = (
     "--security-opt", "no-new-privileges",
     "--workdir", SCRATCH_TARGET,
     "--env", "HOME=" + CONTAINER_HOME,
+    # Joern's zstd-jni extracts and dlopens a native library.  /tmp remains noexec for hostile
+    # target processes; the JVM alone uses the one run-owned writable scratch mount.
+    "--env", "JAVA_TOOL_OPTIONS=-Djava.io.tmpdir=/scratch",
 )
 # Options that may appear before the image, each with how many times. Anything else is a defect.
 _ALLOWED_OPTION_COUNTS = {

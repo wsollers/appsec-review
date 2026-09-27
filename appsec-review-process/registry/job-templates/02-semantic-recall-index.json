@@ -1,0 +1,18 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-semantic-recall-index",
+  "display_name": "Optional semantic recall index",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {"persona_id": "evidence-custodian", "role_id": "evidence-indexer", "domain_id": "intake-state", "tooling_profile_id": "local-evidence-retrieval", "output_contract_id": "semantic-recall-index"},
+  "inputs": {"required": ["accepted source snapshot", "accepted symbol/CPG/IR generation manifest", "preseeded hash-pinned embedding model"], "optional": []},
+  "outputs": {"directory": "data/jobs/02-semantic-recall-index/attempts/<attempt_id>", "files": ["semantic-recall-index.json", "permission.json", "lineage.json"]},
+  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
+  "implemented": false,
+  "timeout_seconds": 3600,
+  "execution": {"worker": "semantic_recall_index.py", "arguments": ["{run_id}"]},
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "applicability": "optional bounded semantic recall after accepted lexical and structural producers",
+  "permissions": ["read-source", "read-run-data", "write-run-data"],
+  "coordinator": "intake-coordinator"
+}
