@@ -175,6 +175,15 @@ class Staged:
         base = self.jobs / job_id / "whole"
         attempt = base / "attempts" / attempt_id
         shutil.copytree(source_attempt, attempt)
+        template = json.loads((REGISTRY / "job-templates" / f"{job_id}.json").read_text(encoding="utf-8"))
+        atomic_json(attempt / "permission.json", {
+            "schema": "appsec-review/producer-permission-receipt/1.0", "run_id": self.run_id,
+            "job_id": job_id, "source_snapshot_sha256": self.facts.source_snapshot_sha256,
+            "permissions": template["permissions"]})
+        atomic_json(attempt / "lineage.json", {
+            "schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": self.run_id,
+            "job_id": job_id, "source_snapshot_sha256": self.facts.source_snapshot_sha256,
+            "build_lineage_sha256": "sha256:" + "7" * 64})
         if tool_root is not None:
             for entry in tool_root.iterdir():
                 if entry.name != "attempts":
@@ -1176,7 +1185,8 @@ class ClosedAttemptTests(unittest.TestCase):
         for contract_id, golden in cases:
             staged = stage(self, contract_id, golden=golden)
             entries = {(entry.name, entry.is_dir()) for entry in staged.attempt.iterdir()}
-            self.assertEqual(entries, {("status.json", False), ("manifest.json", False), ("outputs", True)},
+            self.assertEqual(entries, {("status.json", False), ("manifest.json", False),
+                                       ("permission.json", False), ("lineage.json", False), ("outputs", True)},
                              (contract_id, golden))
             self.assertEqual(validator.attempt_closure_errors(staged.attempt), [], (contract_id, golden))
             seen |= entries
