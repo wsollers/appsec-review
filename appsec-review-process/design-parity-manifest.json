@@ -2049,17 +2049,21 @@
         "output_contract": "standards-source-extract"
       },
       "execution": {
-        "mode": "persona",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/standards_source_ingest.py:run",
+        "validator": "appsec-review-process/standards_source_ingest.py:validate"
       },
       "output": {
         "contract": "standards-source-extract",
         "contract_file": "appsec-review-process/registry/output-contracts/standards-source-extract.json",
-        "schema_file": null,
+        "schema_file": "schemas/standards-source-extract.schema.json",
         "claim_class": "planned_contract_output"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-inputs",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2072,21 +2076,21 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "registered_planned_not_executable",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_standards_source_ingest.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime."
+      "next_prerequisite": "Bind the qualified offline core into the shared Dagster lifecycle and complete live fixture qualification."
     },
     {
       "id": "02-test-intelligence-ingest",
