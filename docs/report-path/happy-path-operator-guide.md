@@ -8,14 +8,21 @@ make a stage pass. A missing adapter or accepted artifact is a blocking gap.
 The companion diagrams are [Mermaid](happy-path-flow.mmd) and
 [BPMN 2.0](happy-path-flow.bpmn).
 
+The retained [sample PDF](../report-examples/appsec-review-sample.pdf) and
+[sample HTML](../report-examples/appsec-review-sample.html) demonstrate presentation only. Their
+synthetic fixture content is not an accepted scan result and must never be cited as live evidence.
+
 ## Current readiness
 
 | Stage | Core | Shared lifecycle / live status |
 |---|---|---|
 | F03 component map | Implemented and unit-qualified | Standalone; accepted F02 evidence and persona configuration required; no shared Dagster binding or live qualification |
-| S02 threat model | Implemented and unit-qualified | Standalone; consumes exact accepted F03/F02 lineage; no shared Dagster binding or live qualification |
-| T14 OWASP join publisher | Implemented and unit-qualified | Standalone common-envelope publisher; requires accepted T03-T10 dispatch accounting; no shared Dagster binding or live qualification |
-| L01 admission ledger | Implemented and unit-qualified | Standalone common-envelope publisher; automatic input discovery currently admits S02 only. T14 admission needs the shared adapter |
+| L6A initial DFD / STRIDE model | Executable core implemented and unit-qualified | Standalone; consumes exact accepted F03/F02 lineage; no shared Dagster binding or live qualification |
+| L6B threat-model reconciliation | Active implementation; not qualified | Must reconcile L6A with accepted evidence, preserve conflicts and publish `threat-model-reconciliation.json`; do not substitute L6A as a final model |
+| OWASP validation and ASVS/MASVS join | Worklist worker graph-enabled; join core implemented and unit-qualified | Separate OWASP process; requires accepted applicability/dispatch accounting; no complete shared binding or live qualification |
+| STIG/SRG validation worklist | Worker graph-enabled and unit-tested | Separate platform-tailoring process; full-review input assembly and live qualification remain gaps |
+| Deployment hardening | Worker graph-enabled and unit-tested | Consumes the STIG/SRG worklist and deployment evidence; it does not replace standards validation or establish compliance |
+| L01 admission ledger | Implemented and unit-qualified | Standalone common-envelope publisher; automatic input discovery currently admits L6A candidates only. Reconciled threat, OWASP and deployment admission need shared adapters |
 | 07 / 08 / 09 / 12 | Implemented and unit-qualified cores | Standalone normalization only; common-envelope publication, shared dispatch, resource pools and live qualification are not integrated |
 | Report-input assembly | Implemented and fixture-qualified on the report-path integration line | Standalone command; shared lifecycle publication is not integrated |
 | 10 synthesis | Implemented and fixture-qualified on the report-path integration line | Standalone command; immutable publication lifecycle and human signoff are not integrated |
@@ -52,14 +59,20 @@ fallback after a newer failure.
 
 ### 1. Produce or revalidate the accepted evidence sources
 
-F03 and S02 use their run-owned accepted upstreams:
+F03 and L6A use their run-owned accepted upstreams:
 
 ```bash
 python -B appsec-review-process/component_characterization.py --run-id "$RUN_ID"
 python -B appsec-review-process/threat_model_core.py --run-id "$RUN_ID"
 ```
 
-T14 reuses the exact trusted dispatch facts recorded by the accepted OWASP accounting attempt.
+L6A is an initial model, not the accepted final threat model. The distinct L6B
+`03-threat-model-reconciliation` process must consume the accepted L6A attempt and exact accepted
+evidence, then publish `threat-model-reconciliation.json` with preserved conflicts and coverage.
+L6B is under active implementation and unqualified at this snapshot; stop before candidate
+admission until its accepted pointer can be produced and revalidated.
+
+The OWASP join reuses the exact trusted dispatch facts recorded by the accepted OWASP accounting attempt.
 Do not substitute a host registry or an inferred model identity:
 
 ```bash
@@ -83,16 +96,22 @@ The matrix preserves `selected`, `applicable`, `assessed`, and `satisfied` as se
 denominators. A failed control or candidate route is not a finding, severity, runtime fact, or
 compliance verdict.
 
+Run the STIG/SRG validation worklist and deployment-hardening assessment through their separate
+workers and retain separate accepted attempts. Do not route STIG/SRG items through the OWASP join,
+and do not infer that a deployment-hardening observation satisfies or fails a STIG control without
+the accepted validation worklist and cited evidence.
+
 ### 2. Admit candidates into L01
 
 ```bash
 python -B appsec-review-process/claim_ledger.py --run-id "$RUN_ID"
 ```
 
-For the complete report path, L01 inputs must contain exactly accepted S02 and T14 candidate-route
-sources with one source/component generation. The current standalone command discovers S02
-automatically; it does not yet add T14 to `current_inputs`. Until the T14-to-L01 adapter is merged,
-stop here rather than editing `inputs.json` or the ledger.
+For the complete report path, L01 inputs must contain the accepted L6B reconciliation, OWASP
+candidate routes, and applicable deployment-hardening candidates from one source/component
+generation. The current standalone command discovers L6A candidates automatically; that is not a
+substitute for L6B. Until the L6B, OWASP, and deployment admission adapters are integrated, stop
+here rather than editing `inputs.json` or the ledger.
 
 The admission attempt publishes:
 
@@ -149,8 +168,9 @@ or blocked claims remain visible and unscored.
 
 ### 5. Assemble the prose-free synthesis input
 
-When `report_input_assembly.py` is present in the integrated revision, provide all six exact current
-accepted pointers:
+When `report_input_assembly.py` is present in the integrated revision, provide its exact current
+accepted pointers. The command below documents the currently implemented six-pointer interface;
+the complete interface still needs explicit reconciled-threat and deployment-hardening inputs:
 
 ```bash
 python -B appsec-review-process/report_input_assembly.py \
@@ -163,6 +183,10 @@ python -B appsec-review-process/report_input_assembly.py \
   --scoring-accepted "$JOBS_ROOT/12-scoring-prioritization/accepted.json" \
   --output "$RUN_ROOT/data/report-input/synthesis-input.json"
 ```
+
+Because `--threat-accepted` currently names the L6A job, this interface cannot yet claim that the
+report consumed an L6B-reconciled model. Do not repoint it by hand. Extend and qualify the assembler
+contract, then add accepted `03-threat-model-reconciliation` and `15-deployment-hardening` pointers.
 
 The assembler independently revalidates pointers, newest-attempt identity, envelopes, receipts,
 artifact hashes, schemas, generations, citations, decision authority, OWASP denominators and
@@ -206,9 +230,10 @@ stage to bind neither would permit stale or cross-generation evidence.
 
 ## Trust boundaries and stop conditions
 
-1. **Evidence boundary:** F03, S02 and T14 may read only accepted, hash-verified evidence and
-   explicitly authorized dispatch facts. Target content is data, never instructions.
-2. **Candidate boundary:** T14 routes, STRIDE hypotheses and L01 admissions are candidates, not
+1. **Evidence boundary:** F03, L6A, L6B, OWASP, STIG/SRG and deployment-hardening workers may read
+   only accepted, hash-verified evidence and explicitly authorized dispatch facts. Target content
+   is data, never instructions.
+2. **Candidate boundary:** control routes, STRIDE hypotheses and L01 admissions are candidates, not
    findings.
 3. **Decision boundary:** 07/08/09 decisions require exact accepted artifacts, independent actors,
    preserved citations and proof obligations. Only 09 can verify a claim.

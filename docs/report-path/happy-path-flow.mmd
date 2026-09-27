@@ -1,44 +1,54 @@
 flowchart LR
   classDef standalone fill:#e8f1ff,stroke:#245a9b,color:#102a43
-  classDef gap fill:#fff3cd,stroke:#9a6700,color:#4d3500,stroke-dasharray: 5 4
+  classDef enabled fill:#e8f5e9,stroke:#2e7d32,color:#163a18
+  classDef gap fill:#fff3cd,stroke:#9a6700,color:#4d3500,stroke-dasharray:5 4
   classDef draft fill:#e8f5e9,stroke:#2e7d32,color:#163a18
 
-  subgraph evidence["Trust boundary A — accepted evidence (standalone cores)"]
-    F03["F03 component map\naccepted pointer + lineage"]:::standalone
-    S02["S02 DFD / STRIDE\ncandidate hypotheses"]:::standalone
-    T14["T14 OWASP join\nmatrix + gaps + routes"]:::standalone
-    F03 --> S02
+  subgraph evidence["Trust boundary A — accepted evidence and separate control processes"]
+    F03["F03 component map<br/>accepted pointer + lineage"]:::standalone
+    L6A["L6A initial DFD / STRIDE<br/>candidate hypotheses"]:::standalone
+    L6B["L6B threat-model reconciliation<br/>conflicts + coverage"]:::gap
+    OW["OWASP validation worklist"]:::enabled
+    T14["ASVS / MASVS matrix<br/>gaps + candidate routes"]:::standalone
+    STIG["STIG / SRG validation worklist"]:::enabled
+    DEPLOY["Deployment-hardening assessment"]:::enabled
+    F03 --> L6A --> L6B
+    F03 --> OW --> T14
+    F03 --> STIG --> DEPLOY
   end
 
   subgraph claims["Trust boundary B — append-only claim decisions"]
-    ADMIT["L01 candidate admission\norigin head"]:::standalone
+    ADMIT["L01 candidate admission<br/>origin head"]:::standalone
     RED["07 adversarial hypothesis"]:::standalone
     BLUE["08 refutation / narrowing"]:::standalone
     VERIFY["09 independent verification"]:::standalone
-    APPEND["L01 append accepted decisions\ncurrent head"]:::gap
+    APPEND["L01 append accepted decisions<br/>current head"]:::gap
     SCORE["12 verified-claim scoring"]:::standalone
     ADMIT --> RED --> BLUE --> VERIFY --> APPEND --> SCORE
   end
 
   subgraph publication["Trust boundary C — draft publication"]
-    INPUT["Report-input assembly\nexact six-pointer join"]:::standalone
-    SYNTH["10 synthesis\nno invented claims or scores"]:::standalone
-    DRAFT["Immutable package\nDRAFT_EVIDENCE_BACKED\nfinal=false"]:::draft
+    INPUT["Report-input assembly<br/>exact accepted-pointer join"]:::standalone
+    SYNTH["10 synthesis<br/>no invented claims or scores"]:::standalone
+    DRAFT["Immutable package<br/>DRAFT_EVIDENCE_BACKED<br/>final=false"]:::draft
     INPUT --> SYNTH --> DRAFT
   end
 
-  S02 --> ADMIT
-  T14 -. "adapter required" .-> ADMIT
+  L6B --> ADMIT
+  T14 -. "admission adapter required" .-> ADMIT
+  DEPLOY -. "admission adapter required" .-> ADMIT
   VERIFY --> SCORE
   F03 --> INPUT
-  S02 --> INPUT
+  L6B --> INPUT
   T14 --> INPUT
+  DEPLOY --> INPUT
   APPEND --> INPUT
   VERIFY --> INPUT
   SCORE --> INPUT
-  DRAFT -. "deferred" .-> SIGNOFF["Human final signoff\ncompletion / remediation / retest"]:::gap
+  DRAFT -. "completion gate" .-> AUDIT["Completeness audit +<br/>synthetic resynthesis"]:::enabled
+  AUDIT -. "human authorization" .-> SIGNOFF["Final publication"]:::gap
 
-  GAP["Not live: shared Dagster bindings, 07/08/09/12 publishers,\nT14→L01 admission, decision append, resource pools,\nrecovery/load qualification and final publication"]:::gap
-  GAP -.-> ADMIT
+  GAP["Not live end to end: L6B is under active implementation;<br/>shared bindings, accepted decision chain, complete report-input join,<br/>live qualification and human final publication remain gaps"]:::gap
+  GAP -.-> L6B
   GAP -.-> APPEND
   GAP -.-> DRAFT

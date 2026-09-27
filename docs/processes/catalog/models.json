@@ -22,7 +22,8 @@
        {"name": "3. Build resolution and build", "members": ["step:build-index", "step:build-classify", "step:build-plan", "step:build-resolution", "step:build_discovery", "step:build_execution", "job:02-build-configure", "job:02-native-build"]},
        {"name": "4. Evidence collection", "members": ["step:legacy-pregather", "lane:02-evidence-pregather"]},
        {"name": "5. Evidence index", "members": ["job:02-evidence-index"]},
-       {"name": "6. LLM lanes: characterization, threat model, specialist review", "members": ["step:lane-handoffs", "lane:01-component-characterization", "lane:03-threat-model-dfd-stride", "lane:04-asvs-masvs", "lane:05-native-memory", "lane:06-cve-reachability", "lane:13-fuzz-target-triage", "lane:15-deployment-hardening"]},
+       {"name": "6. Analysis lanes: characterization, L6A threat model, specialist review", "members": ["step:lane-handoffs", "lane:01-component-characterization", "lane:03-threat-model-dfd-stride", "lane:04-asvs-masvs", "lane:05-native-memory", "lane:06-cve-reachability", "lane:13-fuzz-target-triage", "lane:15-deployment-hardening"]},
+       {"name": "6b. L6B evidence-based threat-model reconciliation (active implementation)", "members": ["step:threat-model-reconciliation-active"]},
        {"name": "7. Refutation, verification, scoring, synthesis, report", "members": ["lane:07-red-team-adversarial", "lane:08-blue-team-refutation", "lane:09-independent-verification", "lane:11-remediation-proposal", "lane:12-scoring-prioritization", "lane:10-synthesis-report", "step:critical_findings_sarif"]}
      ]},
     {"id": "fixture-bringup", "name": "Fixture bring-up (flow-bringup.md)",
@@ -51,7 +52,7 @@
      ]},
     {"id": "lifecycle", "name": "Lifecycle graph (full_review, job-graph.json)",
      "source": "appsec-review-process/job-graph.json",
-     "about": "All 54 lifecycle nodes, grouped by lane in process-manifest.json order.",
+     "about": "All current lifecycle nodes, grouped by lane in process-manifest.json order.",
      "groups": "lanes"}
   ]
 }

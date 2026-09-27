@@ -3,8 +3,8 @@
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
   "lifecycle_jobs": 63,
-  "steps": 65,
-  "artifacts": 68,
+  "steps": 66,
+  "artifacts": 69,
   "models": 5
  },
  "models": [
@@ -1799,7 +1799,7 @@
      }
     },
     {
-     "name": "6. LLM lanes: characterization, threat model, specialist review",
+     "name": "6. Analysis lanes: characterization, L6A threat model, specialist review",
      "entries": [
       {
        "ref": "step:lane-handoffs",
@@ -2034,6 +2034,36 @@
        "accepted STIG/SRG source records",
        "accepted platform inventory"
       ]
+     }
+    },
+    {
+     "name": "6b. L6B evidence-based threat-model reconciliation (active implementation)",
+     "entries": [
+      {
+       "ref": "step:threat-model-reconciliation-active",
+       "id": "threat-model-reconciliation-active",
+       "name": "L6B threat-model reconciliation (active implementation)",
+       "kind": "planned",
+       "consumes": [
+        "job:03-threat-model-dfd-stride",
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "threat-model-reconciliation-planned"
+       ],
+       "declared_inputs": []
+      }
+     ],
+     "rollup": {
+      "enters": [
+       "job:03-threat-model-dfd-stride",
+       "job:01-component-characterization"
+      ],
+      "leaves": [
+       "threat-model-reconciliation-planned"
+      ],
+      "passes": [],
+      "declared_inputs": []
      }
     },
     {
@@ -2379,6 +2409,7 @@
      "build-execution",
      "lane-handoff",
      "job:dynamic-rescope",
+     "threat-model-reconciliation-planned",
      "job:evidence-qualified-quorum",
      "job:remediation-retest-feedback",
      "job:final-publication-gate"
@@ -3365,7 +3396,7 @@
    "id": "lifecycle",
    "name": "Lifecycle graph (full_review, job-graph.json)",
    "source": "appsec-review-process/job-graph.json",
-   "about": "All 54 lifecycle nodes, grouped by lane in process-manifest.json order.",
+   "about": "All current lifecycle nodes, grouped by lane in process-manifest.json order.",
    "groups": [
     {
      "name": "00-intake-recovery",
@@ -6031,6 +6062,21 @@
    "notes": "Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps."
   },
   {
+   "id": "threat-model-reconciliation-active",
+   "name": "L6B threat-model reconciliation (active implementation)",
+   "kind": "planned",
+   "runs": "pending executable support for lifecycle job 03-threat-model-reconciliation",
+   "bpmn": [],
+   "consumes": [
+    "job:03-threat-model-dfd-stride",
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "threat-model-reconciliation-planned"
+   ],
+   "notes": "Planned separate L6B process. It will reconcile the accepted L6A DFD/STRIDE model with accepted evidence, preserve conflicts and coverage gaps, and publish threat-model-reconciliation.json. Execution support and qualification are pending; L6A must not be presented as a reconciled final model."
+  },
+  {
    "id": "sbom-inventory",
    "name": "sbom_inventory (Dagster job)",
    "kind": "dagster-job",
@@ -6270,7 +6316,7 @@
    "produces": [
     "job:10-synthesis-report"
    ],
-   "notes": "The whole lifecycle graph (51 nodes); stops at the first node with no worker. Its per-node inputs and outputs are in Appendix B."
+   "notes": "The whole current lifecycle graph; stops at the first node with no worker or accepted prerequisite. Its per-node inputs and outputs are in Appendix B."
   },
   {
    "id": "legacy-pregather",
@@ -11570,6 +11616,16 @@
     "step:cve-reachability"
    ]
   },
+  "threat-model-reconciliation-planned": {
+   "id": "threat-model-reconciliation-planned",
+   "kind": "file",
+   "path": "runs/<run_id>/data/jobs/03-threat-model-reconciliation/attempts/<attempt_id>/threat-model-reconciliation.json",
+   "about": "Planned L6B reconciled model, preserved conflicts and coverage accounting. No executable producer or qualified accepted attempt exists at this snapshot.",
+   "produced_by": [
+    "step:threat-model-reconciliation-active"
+   ],
+   "consumed_by": []
+  },
   "fixture-harmless-image": {
    "id": "fixture-harmless-image",
    "kind": "record",
@@ -11816,6 +11872,7 @@
     "step:owasp-validation-worklist",
     "step:stig-srg-validation-worklist",
     "step:deployment-hardening",
+    "step:threat-model-reconciliation-active",
     "job:03-threat-model-dfd-stride",
     "job:04-asvs-masvs",
     "job:05-native-memory",
@@ -11838,6 +11895,7 @@
    ],
    "consumed_by": [
     "step:fuzz-target-triage",
+    "step:threat-model-reconciliation-active",
     "job:04-asvs-masvs",
     "job:13-fuzz-target-triage",
     "job:07-red-team-adversarial",
