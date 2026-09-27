@@ -18,6 +18,15 @@ from .test_synthesis_sarif import SynthesisSarifTests
 class FinalPublicationTests(unittest.TestCase):
     KEY = b"fixture-final-publication-key-32bytes-minimum"
     ANCHOR = "sha256:" + "9" * 64
+    AUDIT={"schema":"appsec-review/completeness-audit/1.0","run_id":"run-1","expected_count":0,
+        "observed_ids":[],"declared_gap_ids":[],"missing_ids":[],"false_gap_ids":[],"complete":True}
+    FEEDBACK={"schema":"appsec-review/synthetic-feedback/1.0","run_id":"run-1","iteration":1,
+        "max_iterations":1,"terminal_state":"COMPLETE","hypotheses":[],"unresolved_obligation_ids":[]}
+
+    def publish(self,draft,ledger,output,**overrides):
+        args={"authorization_key":self.KEY,"expected_ledger_anchor":self.ANCHOR,
+              "completeness_audit":self.AUDIT,"terminal_feedback":self.FEEDBACK}
+        args.update(overrides); return final.publish(draft,ledger,output,**args)
     def fixture(self, root: Path):
         draft = root / "draft"; draft.mkdir()
         report, trace = SynthesisSarifTests().values()
@@ -41,16 +50,14 @@ class FinalPublicationTests(unittest.TestCase):
     def test_exact_human_approval_publishes_immutable_package(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); draft, ledger = self.fixture(root); output = root / "final"
-            manifest = final.publish(draft, ledger, output, authorization_key=self.KEY,
-                                     expected_ledger_anchor=self.ANCHOR)
+            manifest = self.publish(draft,ledger,output)
             self.assertTrue(manifest["final"]); self.assertTrue(manifest["human_signoff"])
             self.assertEqual(json.loads((output / "final-publication.json").read_text()), manifest)
             self.assertTrue((output / "human-signoff-ledger.json").is_file())
             sarif = json.loads((output / "critical-findings.sarif").read_text())
             self.assertEqual(sarif["runs"][0]["results"][0]["ruleId"], "claim-1")
             with self.assertRaisesRegex(Blocked, "already exists"):
-                final.publish(draft, ledger, output, authorization_key=self.KEY,
-                              expected_ledger_anchor=self.ANCHOR)
+                self.publish(draft,ledger,output)
 
     def test_missing_rejected_or_wrong_report_signoff_blocks(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -61,15 +68,13 @@ class FinalPublicationTests(unittest.TestCase):
                 entry = forged["entries"][-1]
                 entry["entry_hash"] = final._sha({key: value for key, value in entry.items() if key != "entry_hash"})
                 forged["head_hash"] = entry["entry_hash"]
-                with self.assertRaises(Blocked): final.publish(draft, forged, root / ("out-" + entry["decision"]),
-                    authorization_key=self.KEY, expected_ledger_anchor=self.ANCHOR)
+                with self.assertRaises(Blocked): self.publish(draft,forged,root/("out-"+entry["decision"]))
 
     def test_tampered_draft_and_symlink_are_rejected_without_partial_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); draft, ledger = self.fixture(root); output = root / "final"
             atomic_json(draft / "report.json", {"tampered": True})
-            with self.assertRaisesRegex(Blocked, "changed"): final.publish(draft, ledger, output,
-                authorization_key=self.KEY, expected_ledger_anchor=self.ANCHOR)
+            with self.assertRaisesRegex(Blocked, "changed"): self.publish(draft,ledger,output)
             self.assertFalse(output.exists())
 
     def test_append_only_ledger_rejects_chain_tamper(self):
@@ -89,11 +94,9 @@ class FinalPublicationTests(unittest.TestCase):
             entry["entry_hash"]=final._sha({k:v for k,v in entry.items() if k!="entry_hash"})
             forged["head_hash"]=entry["entry_hash"]
             with self.assertRaises(Blocked):
-                final.publish(draft,forged,root/"forged",authorization_key=self.KEY,
-                              expected_ledger_anchor=self.ANCHOR)
+                self.publish(draft,forged,root/"forged")
             with self.assertRaisesRegex(Blocked,"anchor"):
-                final.publish(draft,ledger,root/"wrong-anchor",authorization_key=self.KEY,
-                              expected_ledger_anchor="sha256:"+"8"*64)
+                self.publish(draft,ledger,root/"wrong-anchor",expected_ledger_anchor="sha256:"+"8"*64)
 
     def test_draft_cannot_claim_publisher_owned_path(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -104,8 +107,14 @@ class FinalPublicationTests(unittest.TestCase):
                 "sha256":"sha256:"+file_hash(draft/"human-signoff-ledger.json")})
             atomic_json(draft/"publication-manifest.json",publication)
             with self.assertRaisesRegex(Blocked,"publisher-owned"):
-                final.publish(draft,ledger,root/"final",authorization_key=self.KEY,
-                              expected_ledger_anchor=self.ANCHOR)
+                self.publish(draft,ledger,root/"final")
+
+    def test_incomplete_or_nonterminal_completion_evidence_blocks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); draft,ledger=self.fixture(root)
+            audit={**self.AUDIT,"complete":False,"missing_ids":["o1"],"expected_count":1}
+            with self.assertRaisesRegex(Blocked,"completion validator"):
+                self.publish(draft,ledger,root/"incomplete",completeness_audit=audit)
 
 
 if __name__ == "__main__":

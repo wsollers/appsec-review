@@ -141,7 +141,8 @@ def _safe_artifact(root: Path, relative: str) -> Path:
 
 
 def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Path, *,
-            authorization_key: bytes, expected_ledger_anchor: str) -> dict[str, Any]:
+            authorization_key: bytes, expected_ledger_anchor: str,
+            completeness_audit: dict[str, Any], terminal_feedback: dict[str, Any]) -> dict[str, Any]:
     draft_attempt, final_root = Path(draft_attempt), Path(final_root)
     if final_root.exists():
         raise Blocked("final publication: immutable final package already exists")
@@ -152,6 +153,15 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
     if (publication.get("status") != "DRAFT_EVIDENCE_BACKED" or publication.get("final") is not False or
             publication.get("human_signoff") is not False):
         raise Blocked("final publication: source package is not a non-final evidence-backed draft")
+    audit_errors=validate_document(completeness_audit,"completeness-audit.schema.json")
+    feedback_errors=validate_document(terminal_feedback,"synthetic-hypothesis-resynthesis.schema.json")
+    if audit_errors or feedback_errors:
+        raise Blocked("final publication: completion evidence schema is invalid")
+    if (completeness_audit.get("run_id")!=publication.get("run_id") or
+            terminal_feedback.get("run_id")!=publication.get("run_id") or
+            completeness_audit.get("complete") is not True or
+            terminal_feedback.get("terminal_state") not in {"COMPLETE","UNRESOLVED_AND_REPORTED"}):
+        raise Blocked("final publication: completion validator did not reach a publishable terminal state")
     artifacts = publication.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts:
         raise Blocked("final publication: draft publication has no artifacts")
@@ -189,6 +199,8 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
         manifest = {"schema": FINAL_SCHEMA, "run_id": publication["run_id"],
             "status": "FINAL_APPROVED", "draft_publication_sha256": "sha256:" + file_hash(publication_path),
             "signoff_head_sha256": signoff_ledger["head_hash"], "signoff_id": signoff["signoff_id"],
+            "completeness_audit_sha256": _sha(completeness_audit),
+            "terminal_feedback_sha256": _sha(terminal_feedback),
             "artifacts": [{"path": relative, "sha256": value} for relative, _source, value in verified],
             "final": True, "human_signoff": True}
         errors = validate_document(manifest, "final-publication.schema.json")
@@ -221,7 +233,11 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--authorization-key", type=Path, required=True)
     parser.add_argument("--expected-ledger-anchor", required=True)
+    parser.add_argument("--completeness-audit", type=Path, required=True)
+    parser.add_argument("--terminal-feedback", type=Path, required=True)
     args = parser.parse_args()
     print(json.dumps(publish(args.draft_attempt, read_json(args.signoff_ledger), args.output,
         authorization_key=args.authorization_key.read_bytes(),
-        expected_ledger_anchor=args.expected_ledger_anchor), indent=2))
+        expected_ledger_anchor=args.expected_ledger_anchor,
+        completeness_audit=read_json(args.completeness_audit),
+        terminal_feedback=read_json(args.terminal_feedback)), indent=2))
