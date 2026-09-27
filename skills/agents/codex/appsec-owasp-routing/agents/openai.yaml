@@ -1,0 +1,3 @@
+interface:
+  display_name: "AppSec OWASP Routing"
+  short_description: "Route OWASP controls to target components"
