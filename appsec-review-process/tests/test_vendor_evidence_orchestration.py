@@ -99,6 +99,7 @@ class VendorEvidenceOrchestrationTests(unittest.TestCase):
                 self.assertEqual(build.call_args.kwargs["execution_root"], execution)
                 self.assertEqual(materialize.call_args.args[1], attempt)
                 self.assertEqual(publish.call_args.kwargs["orchestration"].source_snapshot_sha256, self.generation)
+                self.assertEqual(publish.call_args.kwargs["consumer_job_id"], "02-evidence-assembly")
                 self.assertEqual(documents["gaps"], ["gap-tool-a", "gap-tool-b"])
 
     def test_missing_stale_or_noncanonical_paths_fail_closed(self):

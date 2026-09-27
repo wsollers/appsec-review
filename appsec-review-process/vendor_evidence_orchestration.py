@@ -147,6 +147,7 @@ def execute(*, job_id: str, run_id: str, dagster_run_id: str, input_path: str,
     pointer = publish_validated(
         base, attempt, envelope_path, envelope["input_fingerprint"],
         expected_run_id=run_id, expected_job_id=job_id,
+        consumer_job_id="02-evidence-assembly",
         orchestration=OrchestrationFacts(dagster_run_id, generation, observed_at))
     return pointer
 

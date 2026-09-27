@@ -1150,7 +1150,12 @@ class OwnDocumentsTests(unittest.TestCase):
             changed = deepcopy(er.RULESET)
             changed["entropy"].pop(key)
             self.assertNotEqual(er.digest({"module_version": er.MODULE_VERSION, "ruleset": changed}), er.RULESET_SHA256, key)
-        self.assertEqual(er.MODULE_VERSION, "1.1.0")
+        self.assertEqual(er.MODULE_VERSION, "1.1.1")
+
+    def test_automatic_attempt_identity_is_not_treated_as_a_secret(self):
+        attempt_id = "auto-" + hashlib.sha256(b"dagster-run-and-job").hexdigest()[:24]
+        self.assertEqual(er._merged_spans(attempt_id), [])
+        self.assertTrue(er._merged_spans("gh" + "p_" + stream("still-secret", ALNUM, 36)))
 
 
 class CheckoutIndependenceTests(unittest.TestCase):
@@ -1310,11 +1315,11 @@ class VerificationProbeTests(unittest.TestCase):
 
 # Produced by running the redactor over fixtures/evidence-redaction/sarif-snippets, then pinned.
 GOLDEN = {
-    "ruleset_sha256": "4f180f5abeb92829a7ff02d4d9eb560f86dc72fe5897bcc9748b5a783d4fa651",
+    "ruleset_sha256": "b735f952e7a82b1da7d810e128f555b19a171cca10637397d81f4d2360fcf68c",
     "sarif_published_sha256": "bbf1eac71274b50cd3e39a71ff1d0979803ab1ad4d60329a153be848a253e93b",
     "sarif_redactions": {"private-key-block": 0, "named-secret": 8, "url-credential": 0, "bearer-token": 0,
                          "provider-token": 1, "jwt": 0, "high-entropy": 1, "fingerprint": 2},
-    "sarif_receipt_sha256": "9563aca5f463b7f6b83693744ca7da055838f1f1f9495c83fd5aa09282b198e1",
+    "sarif_receipt_sha256": "a806ab62e8748e6dcbd002bc30708c09cac30c3b25ba5881343d3b44a65e55b9",
 }
 
 

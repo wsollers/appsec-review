@@ -34,7 +34,7 @@ from typing import Any, Iterator
 from execution_state import atomic_bytes, beneath, digest
 from schema_validate import validate_document
 
-MODULE_VERSION = "1.1.0"
+MODULE_VERSION = "1.1.1"
 REDACTOR_NAME = "appsec-review-process/evidence_redaction"
 RECEIPT_SCHEMA = "redaction-receipt.schema.json"
 RECEIPT_FILENAME = "redaction-receipt.json"
@@ -155,8 +155,12 @@ RULESET: dict[str, Any] = {
         # `20260919T123919Z-0b9e70`: this repository's run-id shape (UTC stamp plus a short hex
         # suffix). About a third of real run ids were being flagged, which mangled the header of
         # every published document. The suffix carries at most 48 bits and is an identifier.
-        "exempt_patterns": {"utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9a-f]{4,12})?\Z"},
-        "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake", "utc-stamp-id", "public-pem-body", "ssh-public-key"],
+        "exempt_patterns": {
+            "automatic-attempt-id": r"auto-[0-9a-f]{24}\Z",
+            "utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9a-f]{4,12})?\Z",
+        },
+        "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake",
+                   "automatic-attempt-id", "utc-stamp-id", "public-pem-body", "ssh-public-key"],
     },
     "json_extensions": [".json", ".sarif"],
     "text_extensions": [".csv", ".err", ".jsonl", ".log", ".md", ".ndjson", ".out", ".tsv", ".txt", ".xml", ".yaml", ".yml"],
