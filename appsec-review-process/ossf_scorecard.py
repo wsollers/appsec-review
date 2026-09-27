@@ -382,7 +382,11 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         atomic_json(attempt / "manifest.json", manifest)
         # Producer permission and lineage receipts, which 02-evidence-assembly requires from every
         # producer, including a skipped one.
-        source_snapshot = "sha256:" + file_hash(run_path(run_id) / "inputs" / "artifact-manifest.json")
+        # Canonical source identity: the target-tree fingerprint intake records in the manifest.
+        identity = read_json(run_path(run_id) / "inputs" / "artifact-manifest.json").get("source_identity") or {}
+        if not isinstance(identity.get("fingerprint"), str):
+            raise Blocked("OpenSSF Scorecard: accepted intake source identity is missing")
+        source_snapshot = "sha256:" + identity["fingerprint"]
         permissions = read_json(ROOT / "registry" / "job-templates" / "02-ossf-scorecard.json")["permissions"]
         atomic_json(attempt / "permission.json", {
             "schema": "appsec-review/producer-permission-receipt/1.0", "run_id": run_id,
