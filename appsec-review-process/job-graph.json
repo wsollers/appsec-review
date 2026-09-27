@@ -895,7 +895,7 @@
     "02-native-sast": {
       "lane": "02-evidence-pregather",
       "contract": "native-sast",
-      "template": null,
+      "template": "02-native-sast",
       "implemented": false,
       "namespace": "02-native-sast",
       "dependencies": [
@@ -910,14 +910,17 @@
       ],
       "planned_scope": "Compile-database analyzers with generated headers; independent of RE/IR output.",
       "required_artifacts": [
-        "tool-results.json",
-        "coverage.json"
+        "native-sast.json",
+        "b13-receipts.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-ir-capture": {
       "lane": "02-evidence-pregather",
-      "contract": "llvm-ir",
-      "template": null,
+      "contract": "ir-capture",
+      "template": "02-ir-capture",
       "implemented": false,
       "namespace": "02-ir-capture",
       "dependencies": [
@@ -932,21 +935,22 @@
       ],
       "planned_scope": "Instrumented build capture or explicitly labelled compiler replay with matching generated inputs and compiler version.",
       "required_artifacts": [
-        "ir-manifest.json",
-        "translation-unit-coverage.json"
+        "ir-capture.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-ir-link": {
       "lane": "02-evidence-pregather",
-      "contract": "linked-llvm-ir",
-      "template": null,
+      "contract": "ir-link",
+      "template": "02-ir-link",
       "implemented": false,
       "namespace": "02-ir-link",
       "dependencies": [
         {
           "job": "02-ir-capture",
           "kind": "required",
-          "contract": "llvm-ir",
+          "contract": "ir-capture",
           "allowed_skip_reasons": [
             "not-applicable-non-native"
           ]
@@ -954,20 +958,22 @@
       ],
       "planned_scope": "Link per compatible product/module and build variant; preserve failed and excluded translation units.",
       "required_artifacts": [
-        "linked-module-manifest.json"
+        "ir-link.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-ir-facts": {
       "lane": "02-evidence-pregather",
       "contract": "ir-facts",
-      "template": null,
+      "template": "02-ir-facts",
       "implemented": false,
       "namespace": "02-ir-facts",
       "dependencies": [
         {
           "job": "02-ir-link",
           "kind": "required",
-          "contract": "linked-llvm-ir",
+          "contract": "ir-link",
           "allowed_skip_reasons": [
             "not-applicable-non-native"
           ]
@@ -975,14 +981,15 @@
       ],
       "planned_scope": "Extract compiled facts, call edges, debug locations and memory operations; no verified finding claims.",
       "required_artifacts": [
-        "ir-facts-manifest.json",
-        "coverage.json"
+        "ir-facts.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-debug-symbol-index": {
       "lane": "02-evidence-pregather",
       "contract": "debug-symbol-index",
-      "template": null,
+      "template": "02-debug-symbol-index",
       "implemented": false,
       "namespace": "02-debug-symbol-index",
       "dependencies": [
@@ -997,14 +1004,16 @@
       ],
       "planned_scope": "Verify binary/symbol identity, index DWARF/PDB; absence is explicit and does not disable binary triage.",
       "required_artifacts": [
-        "symbol-index.json",
-        "symbol-coverage.json"
+        "debug-symbol-index.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-binary-triage": {
       "lane": "02-evidence-pregather",
       "contract": "binary-triage",
-      "template": null,
+      "template": "02-binary-triage",
       "implemented": false,
       "namespace": "02-binary-triage",
       "dependencies": [
@@ -1019,14 +1028,16 @@
       ],
       "planned_scope": "Static file/header/section/import/string/security-property inspection and bounded Binwalk signatures.",
       "required_artifacts": [
-        "binary-triage-manifest.json",
-        "tool-results.json"
+        "binary-triage.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-binary-cfg": {
       "lane": "02-evidence-pregather",
       "contract": "binary-cfg",
-      "template": null,
+      "template": "02-binary-cfg",
       "implemented": false,
       "namespace": "02-binary-cfg",
       "dependencies": [
@@ -1050,9 +1061,10 @@
       ],
       "planned_scope": "Bounded static Ghidra/angr CFG and call-graph extraction. Record uncertainty and limits; no target execution.",
       "required_artifacts": [
-        "cfg-manifest.json",
-        "tool-results.json",
-        "coverage.json"
+        "binary-cfg.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-test-execution": {

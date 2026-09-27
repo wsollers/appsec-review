@@ -1915,17 +1915,20 @@
         "output_contract": "binary-intelligence"
       },
       "execution": {
-        "mode": "persona",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/binary_intelligence_ingest.py:run",
+        "validator": "appsec-review-process/binary_intelligence_ingest.py:validate"
       },
       "output": {
         "contract": "binary-intelligence",
         "contract_file": "appsec-review-process/registry/output-contracts/binary-intelligence.json",
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "schema_file": "schemas/binary-intelligence.schema.json",
+        "claim_class": "binary_lead_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1938,21 +1941,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "registered_planned_not_executable",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_binary_evidence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "m02_pinned_binary_tool_unavailable",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-doc-intelligence-ingest",
@@ -2475,19 +2479,30 @@
           "02-native-build"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-native-sast",
+        "persona": "evidence-custodian",
+        "role": "native-sast-curator",
+        "domain": "native-static-analysis",
+        "tooling_profile": "pinned-native-sast",
+        "output_contract": "native-sast"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/native_sast.py:run",
+        "validator": "appsec-review-process/native_sast.py:validate"
       },
       "output": {
         "contract": "native-sast",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/native-sast.json",
+        "schema_file": "schemas/native-sast.schema.json",
+        "claim_class": "native_static_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2500,23 +2515,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_native_sast.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "pinned_image_live_qualification_missing",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-ir-capture",
@@ -2531,19 +2545,29 @@
           "02-native-build"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-ir-capture",
+        "persona": "evidence-custodian",
+        "role": "ir-evidence-producer",
+        "domain": "llvm-ir-evidence",
+        "tooling_profile": "llvm-ir-evidence",
+        "output_contract": "ir-capture"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/ir_capture.py:run",
+        "validator": "appsec-review-process/ir_capture.py:validate"
       },
       "output": {
-        "contract": "llvm-ir",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "ir-capture",
+        "contract_file": "appsec-review-process/registry/output-contracts/ir-capture.json",
+        "schema_file": "schemas/ir-capture.schema.json",
+        "claim_class": "ir_static_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2556,23 +2580,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_ir_evidence.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "toolchain_factory_binding_missing",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-ir-link",
@@ -2587,19 +2610,29 @@
           "02-ir-capture"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-ir-link",
+        "persona": "evidence-custodian",
+        "role": "ir-evidence-producer",
+        "domain": "llvm-ir-evidence",
+        "tooling_profile": "llvm-ir-evidence",
+        "output_contract": "ir-link"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/ir_link.py:run",
+        "validator": "appsec-review-process/ir_link.py:validate"
       },
       "output": {
-        "contract": "linked-llvm-ir",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "ir-link",
+        "contract_file": "appsec-review-process/registry/output-contracts/ir-link.json",
+        "schema_file": "schemas/ir-link.schema.json",
+        "claim_class": "ir_static_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2612,23 +2645,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_ir_evidence.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "toolchain_factory_binding_missing",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-ir-facts",
@@ -2643,19 +2675,29 @@
           "02-ir-link"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-ir-facts",
+        "persona": "evidence-custodian",
+        "role": "ir-evidence-producer",
+        "domain": "llvm-ir-evidence",
+        "tooling_profile": "llvm-ir-evidence",
+        "output_contract": "ir-facts"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/ir_facts.py:run",
+        "validator": "appsec-review-process/ir_facts.py:validate"
       },
       "output": {
         "contract": "ir-facts",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/ir-facts.json",
+        "schema_file": "schemas/ir-facts.schema.json",
+        "claim_class": "ir_static_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2668,23 +2710,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_ir_evidence.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "toolchain_factory_binding_missing",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-debug-symbol-index",
@@ -2699,19 +2740,29 @@
           "02-native-build"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-debug-symbol-index",
+        "persona": "reverse-engineer",
+        "role": "binary-intelligence-extractor",
+        "domain": "binary-artifact-analysis",
+        "tooling_profile": "binary-intel-static-analysis",
+        "output_contract": "debug-symbol-index"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/debug_symbol_index.py:run",
+        "validator": "appsec-review-process/debug_symbol_index.py:validate"
       },
       "output": {
         "contract": "debug-symbol-index",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/debug-symbol-index.json",
+        "schema_file": "schemas/debug-symbol-index.schema.json",
+        "claim_class": "debug_symbol_static_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2724,23 +2775,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_binary_evidence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "m02_pinned_binary_tool_unavailable",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-binary-triage",
@@ -2755,19 +2805,29 @@
           "02-native-build"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-binary-triage",
+        "persona": "reverse-engineer",
+        "role": "binary-intelligence-extractor",
+        "domain": "binary-artifact-analysis",
+        "tooling_profile": "binary-intel-static-analysis",
+        "output_contract": "binary-triage"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/binary_triage.py:run",
+        "validator": "appsec-review-process/binary_triage.py:validate"
       },
       "output": {
         "contract": "binary-triage",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/binary-triage.json",
+        "schema_file": "schemas/binary-triage.schema.json",
+        "claim_class": "binary_inventory_static_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2780,23 +2840,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_binary_evidence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "m02_pinned_binary_tool_unavailable",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-binary-cfg",
@@ -2812,19 +2871,29 @@
           "02-debug-symbol-index"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-binary-cfg",
+        "persona": "reverse-engineer",
+        "role": "binary-intelligence-extractor",
+        "domain": "binary-artifact-analysis",
+        "tooling_profile": "binary-intel-static-analysis",
+        "output_contract": "binary-cfg"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/binary_cfg.py:run",
+        "validator": "appsec-review-process/binary_cfg.py:validate"
       },
       "output": {
         "contract": "binary-cfg",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/binary-cfg.json",
+        "schema_file": "schemas/binary-cfg.schema.json",
+        "claim_class": "binary_cfg_static_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2837,23 +2906,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_binary_evidence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "m02_pinned_binary_tool_unavailable",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
     },
     {
       "id": "02-test-execution",
