@@ -5,14 +5,34 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 import xml.etree.ElementTree as ET
 
-TOOLS = {
- "gosec":{"language":"go","image_id":"tool-gosec","version":"2.22.8","output":"scratch/gosec.json","hit_exit_codes":[1],"argv":["/opt/tool/bin/gosec","-fmt=json","-out=/scratch/gosec.json","./..."]},
- "spotbugs":{"language":"java","image_id":"tool-spotbugs","version":"4.9.3","output":"scratch/spotbugs.xml","hit_exit_codes":[],"argv":["/opt/tool/bin/spotbugs","-textui","-xml:withMessages","-output","/scratch/spotbugs.xml","/workspace"]},
- "phpstan":{"language":"php","image_id":"tool-phpstan","version":"2.1.22","output":"logs/container/stdout.log","hit_exit_codes":[1],"argv":["/opt/tool/bin/phpstan","analyse","--no-progress","--error-format=json","--memory-limit=1G","/workspace"]},
- "psalm":{"language":"php","image_id":"tool-psalm","version":"6.13.1","output":"logs/container/stdout.log","hit_exit_codes":[2],"argv":["/opt/tool/bin/psalm","--no-progress","--output-format=json","/workspace"]},
- "phpcs":{"language":"php","image_id":"tool-phpcs","version":"3.13.4","output":"logs/container/stdout.log","hit_exit_codes":[1,2,3],"argv":["/opt/tool/bin/phpcs","--report=json","/workspace"]},
-}
+from execution_state import ROOT, file_hash
+
+TOOL_METADATA_ROOT = ROOT.parent / "images"
+TOOL_IMAGES = {"gosec":"tool-gosec","spotbugs":"tool-spotbugs","phpstan":"tool-phpstan",
+               "psalm":"tool-psalm","phpcs":"tool-phpcs"}
+LANGUAGES = {"gosec":"go","spotbugs":"java","phpstan":"php","psalm":"php","phpcs":"php"}
+OUTPUTS = {"gosec":"scratch/gosec.json","spotbugs":"scratch/spotbugs.xml","phpstan":"logs/container/stdout.log",
+           "psalm":"scratch/psalm.json","phpcs":"scratch/phpcs.json"}
+HIT_EXIT_CODES = {"gosec":[],"spotbugs":[],"phpstan":[1],"psalm":[2],"phpcs":[1,2]}
 SUFFIXES={".go":"go",".java":"java",".php":"php"}
+
+def _metadata(tool_id:str)->tuple[dict[str,Any],str]:
+ path=TOOL_METADATA_ROOT/TOOL_IMAGES[tool_id]/"tool.json"
+ try: value=json.loads(path.read_text())
+ except (OSError,json.JSONDecodeError) as exc: raise ValueError(f"{tool_id} authenticated tool metadata is unavailable") from exc
+ keys=("image_id","tool","version","executable","version_argv","smoke")
+ if (any(key not in value for key in keys) or value["image_id"]!=TOOL_IMAGES[tool_id] or value["tool"]!=tool_id or
+     not isinstance(value["version"],str) or not value["version"] or not isinstance(value["executable"],str) or
+     value["version_argv"][0]!=value["executable"]): raise ValueError(f"{tool_id} tool metadata is invalid")
+ return value,"sha256:"+file_hash(path)
+
+def _argv(tool_id:str, executable:str)->list[str]:
+ if tool_id=="gosec": return [executable,"-fmt","json","-out","/scratch/gosec.json","-no-fail","/workspace/..."]
+ if tool_id=="spotbugs": return [executable,"-textui","-effort:min","-xml:withMessages","-output","/scratch/spotbugs.xml","/workspace"]
+ if tool_id=="phpstan": return [executable,"analyse","--no-progress","--no-interaction","--level","5","--error-format","json","--memory-limit","1G","/workspace"]
+ if tool_id=="psalm": return [executable,"--no-cache","--no-progress","--threads=1","--report=/scratch/psalm.json","/workspace"]
+ if tool_id=="phpcs": return [executable,"--report=json","--report-file=/scratch/phpcs.json","/workspace"]
+ raise ValueError("unknown language SAST tool")
 
 def detected_languages(paths:list[str])->list[str]:
  return sorted({language for path in paths for suffix,language in SUFFIXES.items() if path.lower().endswith(suffix)})
@@ -20,11 +40,19 @@ def detected_languages(paths:list[str])->list[str]:
 def build_plan(languages:list[str], registry:dict[str,dict[str,Any]])->list[dict[str,Any]]:
  if len(languages)!=len(set(languages)) or any(x not in set(SUFFIXES.values()) for x in languages): raise ValueError("source SAST language selection is invalid")
  plan=[]
- for tool_id,spec in sorted(TOOLS.items()):
-  if spec["language"] not in languages: continue
-  image=registry.get(spec["image_id"]); image_digest=image.get("digest") if isinstance(image,dict) else None
-  ready=isinstance(image_digest,str) and image_digest.startswith("sha256:") and len(image_digest)==71
-  plan.append({"language":spec["language"],"tool_id":tool_id,"version":spec["version"],"image_id":spec["image_id"],"image_digest":image_digest if ready else None,"status":"READY" if ready else "UNAVAILABLE","executed":False,"network":{"mode":"none","destinations":[]},"target_read_only":True,"argv":list(spec["argv"]) if ready else [],"output":spec["output"] if ready else None,"hit_exit_codes":list(spec["hit_exit_codes"]) if ready else [],"gap":None if ready else f"{spec['language']} SAST unavailable: pinned image {spec['image_id']} is absent or invalid."})
+ for tool_id,image_id in sorted(TOOL_IMAGES.items()):
+  if LANGUAGES[tool_id] not in languages: continue
+  metadata,metadata_sha256=_metadata(tool_id); image=registry.get(image_id)
+  image_digest=image.get("digest") if isinstance(image,dict) else None
+  ready=(isinstance(image_digest,str) and image_digest.startswith("sha256:") and len(image_digest)==71 and
+         image.get("image_id")==metadata["image_id"])
+  plan.append({"language":LANGUAGES[tool_id],"tool_id":tool_id,"version":metadata["version"],"image_id":image_id,
+    "image_digest":image_digest if ready else None,"tool_metadata_sha256":metadata_sha256,
+    "status":"READY" if ready else "UNAVAILABLE","executed":False,"network":{"mode":"none","destinations":[]},
+    "target_read_only":True,"argv":_argv(tool_id,metadata["executable"]) if ready else [],
+    "version_argv":list(metadata["version_argv"]) if ready else [],"output":OUTPUTS[tool_id] if ready else None,
+    "hit_exit_codes":list(HIT_EXIT_CODES[tool_id]) if ready else [],
+    "gap":None if ready else f"{LANGUAGES[tool_id]} SAST unavailable: authenticated pinned image {image_id} is absent or invalid."})
  return plan
 
 def execution_gaps(plan:list[dict[str,Any]], executed:set[str]|None=None)->list[str]:
@@ -36,8 +64,7 @@ def execution_gaps(plan:list[dict[str,Any]], executed:set[str]|None=None)->list[
 
 def accepted_terminal(plan:dict[str,Any], terminal:dict[str,Any])->bool:
  if terminal.get("execution_status")=="OK" and terminal.get("exit_code")==0: return True
- return (terminal.get("cause")=="CONTAINER_EXIT_NONZERO" and terminal.get("execution_status")=="FAILED" and
-         terminal.get("exit_code") in plan.get("hit_exit_codes",[]))
+ return (terminal.get("cause")=="CONTAINER_EXIT_NONZERO" and terminal.get("execution_status")=="FAILED" and terminal.get("exit_code") in plan.get("hit_exit_codes",[]))
 
 def _source(raw:Any,target:Path)->tuple[str,Path]:
  if not isinstance(raw,str) or not raw: raise ValueError("language SAST record has no source path")
@@ -54,14 +81,13 @@ def _source(raw:Any,target:Path)->tuple[str,Path]:
 
 def _lead(tool:str,rule:Any,path:Any,line:Any,target:Path)->dict[str,Any]:
  if not isinstance(rule,str) or not rule or not isinstance(line,int) or isinstance(line,bool) or line<1: raise ValueError("language SAST rule or line is invalid")
- relative,source=_source(path,target); data=source.read_bytes()
- lines=data.count(b"\n")+(1 if data and not data.endswith(b"\n") else 0)
+ relative,source=_source(path,target); data=source.read_bytes(); lines=data.count(b"\n")+(1 if data and not data.endswith(b"\n") else 0)
  if line>lines: raise ValueError("language SAST line is beyond source")
- base={"tool_id":tool,"rule_id":rule[:256],"path":relative,"start_line":line,"end_line":line,"source_sha256":"sha256:"+hashlib.sha256(source.read_bytes()).hexdigest(),"category":"language-security-static-analysis"}
+ base={"tool_id":tool,"rule_id":rule[:256],"path":relative,"start_line":line,"end_line":line,"source_sha256":"sha256:"+hashlib.sha256(data).hexdigest(),"category":"language-security-static-analysis"}
  return {"lead_id":"lead_"+hashlib.sha256(json.dumps(base,sort_keys=True).encode()).hexdigest()[:16],**base}
 
 def normalize(tool_id:str, content:bytes, target:Path)->list[dict[str,Any]]:
- if tool_id not in TOOLS: raise ValueError("unknown language SAST tool")
+ if tool_id not in TOOL_IMAGES: raise ValueError("unknown language SAST tool")
  try:
   if tool_id=="spotbugs":
    root=ET.fromstring(content); rows=[]

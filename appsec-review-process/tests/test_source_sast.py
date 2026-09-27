@@ -37,14 +37,14 @@ class SourceSastTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target=Path(folder,"target"); target.mkdir()
             inputs={"target_path":str(target),"source_snapshot_sha256":"sha256:"+"b"*64}
-            for tool in ("gosec","spotbugs","phpstan","psalm","phpcs"):
-                spec=worker.language_adapters.TOOLS[tool]
-                plan={"tool_id":tool,"status":"READY","executed":False,"image_id":"fixture-harmless",
-                      "image_digest":"sha256:"+"a"*64,"argv":spec["argv"]}
+            registry={image_id:{"image_id":image_id,"digest":"sha256:"+"a"*64}
+                      for image_id in worker.language_adapters.TOOL_IMAGES.values()}
+            for plan in worker.language_adapters.build_plan(["go","java","php"],registry):
+                tool=plan["tool_id"]
                 request=worker._language_request("run","attempt",inputs,plan)
                 self.assertEqual(request["network"],{"mode":"none","destinations":[]})
                 self.assertEqual(request["target_mounts"],[{"host_path":str(target),"container_path":"/workspace"}])
-                self.assertEqual(request["argv"],spec["argv"])
+                self.assertEqual(request["argv"],plan["argv"])
                 self.assertEqual(validate_document(request,"pinned-container-request.schema.json"),[])
 
     def test_live_language_tool_path_smoke_when_images_and_docker_exist(self):
@@ -107,6 +107,24 @@ class SourceSastTests(unittest.TestCase):
                 worker.normalize_semgrep({"results": [{**base, "check_id": "unknown"}]}, **args)
             with self.assertRaises(RuntimeError):
                 worker.normalize_semgrep({"results": [{**base, "check_id": "appsec.c.memcpy", "path": "../a.cpp"}]}, **args)
+            for start,end in ((2,2),(1,2)):
+                with self.assertRaises(RuntimeError):
+                    worker.normalize_semgrep({"results":[{"check_id":"appsec.c.memcpy","path":"/workspace/a.cpp",
+                        "start":{"line":start},"end":{"line":end}}]},**args)
+
+    def test_language_versions_and_paths_come_from_authenticated_tool_metadata(self):
+        registry={}
+        for tool,image_id in worker.language_adapters.TOOL_IMAGES.items():
+            registry[image_id]={"image_id":image_id,"digest":"sha256:"+"a"*64}
+        plan=worker.language_adapters.build_plan(["go","java","php"],registry)
+        values={item["tool_id"]:item for item in plan}
+        self.assertEqual(values["gosec"]["version"],"2.29.0")
+        self.assertEqual(values["spotbugs"]["version"],"4.10.4")
+        self.assertEqual(values["phpstan"]["version"],"2.2.16")
+        self.assertEqual(values["psalm"]["version"],"6.18.1")
+        self.assertEqual(values["phpcs"]["version"],"4.0.4")
+        self.assertEqual(values["spotbugs"]["argv"][0],"/opt/spotbugs/bin/spotbugs")
+        self.assertTrue(all(item["tool_metadata_sha256"].startswith("sha256:") for item in plan))
 
     def test_contract_registry_records_are_explicitly_not_fully_qualified(self):
         template = json.loads((ROOT / "registry/job-templates/02-source-sast.json").read_text())

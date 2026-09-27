@@ -218,6 +218,10 @@ def normalize_semgrep(raw: dict[str, Any], *, target: Path, run_id: str, attempt
             raise RuntimeError(f"{JOB}: Semgrep result has an invalid start line")
         if not isinstance(end, int) or isinstance(end, bool) or end < start:
             raise RuntimeError(f"{JOB}: Semgrep result has an invalid end line")
+        data = source.read_bytes()
+        lines = data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
+        if start > lines or end > lines:
+            raise RuntimeError(f"{JOB}: Semgrep result line is beyond the current source file")
         key = {"tool_id": TOOL_ID, "rule_id": rule_id, "path": path,
                "start_line": start, "end_line": end, "source_sha256": "sha256:" + file_hash(source)}
         findings.append({"lead_id": "lead_" + digest(key)[:16], **key,

@@ -55,6 +55,11 @@ class BoundedWorkers(unittest.TestCase):
         self.assertEqual({o["job_id"],s["job_id"],d["job_id"]},{"04-owasp-validation-worklist","15-stig-srg-validation-worklist","15-deployment-hardening"})
         self.assertEqual(o["work_items"][0]["assessment_status"],"NOT_ASSESSED")
         self.assertFalse(d["assessments"][0]["runtime_observed"])
+        self.assertEqual(validate_document(o,"owasp-validation-worklist-core.schema.json"),[])
+        self.assertEqual(validate_document(s,"stig-srg-validation-worklist.schema.json"),[])
+        forged=copy.deepcopy(o); forged["schema"]="appsec-review/stig-srg-validation-worklist/1.0"
+        forged["job_id"]="15-stig-srg-validation-worklist"; forged["family"]="stig_srg"
+        self.assertTrue(validate_document(forged,"stig-srg-validation-worklist.schema.json"))
         bad=copy.deepcopy(o["work_items"][0]); bad["gaps"]=[]
         with self.assertRaises(Blocked): workers.standards_worklist(family="owasp",**common,controls=[{k:bad[k] for k in {"control_id","standard_family","standard_version","target_id","applicability","tailoring","evidence_mode","citation_ids","gaps"}}])
 

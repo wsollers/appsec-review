@@ -20,8 +20,8 @@ PERMISSIONS = ["read-run-data", "write-run-data"]
 JOBS = {
     "05-native-memory": ("native-memory-analysis.json", "native-memory-analysis.schema.json", "native-memory-analysis"),
     "13-fuzz-target-triage": ("fuzz-target-triage.json", "fuzz-target-triage.schema.json", "fuzz-target-triage"),
-    "04-owasp-validation-worklist": ("owasp-validation-worklist.json", "standards-validation-worklist.schema.json", "owasp-validation-worklist"),
-    "15-stig-srg-validation-worklist": ("stig-srg-validation-worklist.json", "standards-validation-worklist.schema.json", "stig-srg-validation-worklist"),
+    "04-owasp-validation-worklist": ("owasp-validation-worklist.json", "owasp-validation-worklist-core.schema.json", "owasp-validation-worklist"),
+    "15-stig-srg-validation-worklist": ("stig-srg-validation-worklist.json", "stig-srg-validation-worklist.schema.json", "stig-srg-validation-worklist"),
     "15-deployment-hardening": ("deployment-hardening.json", "deployment-hardening.schema.json", "deployment-hardening"),
 }
 
@@ -185,7 +185,8 @@ def fuzz_triage(*, run_id: str, attempt_id: str, source_generation: str,
 
 def standards_worklist(*, family: str, run_id: str, attempt_id: str, source_generation: str,
                        bindings: list[dict[str, Any]], controls: list[dict[str, Any]]) -> dict[str, Any]:
-    jobs = {"owasp": "04-owasp-validation-worklist", "stig_srg": "15-stig-srg-validation-worklist"}
+    jobs = {"owasp": ("04-owasp-validation-worklist", "appsec-review/owasp-validation-worklist-core/1.0", "owasp-validation-worklist-core.schema.json"),
+            "stig_srg": ("15-stig-srg-validation-worklist", "appsec-review/stig-srg-validation-worklist/1.0", "stig-srg-validation-worklist.schema.json")}
     if family not in jobs: raise Blocked("standards worklist: unknown family")
     keys = {"control_id", "standard_family", "standard_version", "target_id", "applicability",
             "tailoring", "evidence_mode", "citation_ids", "gaps"}
@@ -205,15 +206,15 @@ def standards_worklist(*, family: str, run_id: str, attempt_id: str, source_gene
                 "assessment_status": "NOT_ASSESSED", "finding_created": False,
                 "compliance_claimed": False}
         rows.append(item)
-    job = jobs[family]
-    result = {**_base("appsec-review/standards-validation-worklist/1.0", job, run_id,
+    job, schema_id, schema_file = jobs[family]
+    result = {**_base(schema_id, job, run_id,
                       attempt_id, source_generation, bindings), "family": family,
               "status": "OK_WITH_GAPS" if any(row["gaps"] for row in rows) else "OK",
               "work_items": sorted(rows, key=lambda row: row["work_item_id"]),
               "gaps": sorted({gap for row in rows for gap in row["gaps"]}),
               "claim_limits": {"finding_created": False, "control_satisfied": False,
                                "compliance_claimed": False}}
-    return _validate(result, "standards-validation-worklist.schema.json")
+    return _validate(result, schema_file)
 
 
 def deployment_hardening(*, run_id: str, attempt_id: str, source_generation: str,
