@@ -86,7 +86,10 @@ class IrEvidenceTests(unittest.TestCase):
           "image_digest":"sha256:"+"4"*64,"commands":[{},{}],"compile_database":{"path":"outputs/u/compile_commands.json","sha256":"sha256:"+state.file_hash(db),"entries":1},
           "binaries":[{"source_path":"app","artifact_path":"outputs/u/binaries/app","sha256":"sha256:"+state.file_hash(binary),"size_bytes":binary.stat().st_size}]}],"coverage_gaps":[]}
         state.atomic_json(attempt / "native-build.json", native)
-        state.atomic_json(attempt / "inputs.json", {"source_snapshot_sha256":self.snapshot})
+        state.atomic_json(attempt / "inputs.json", {"source_snapshot_sha256":self.snapshot,
+            "source_tree_sha256":ir._source_tree_identity(self.target),
+            "image_records":{"image_build_aaaaaaaaaaaa":{"sha256":FixtureToolchain.toolchain_sha256,
+              "value":{"digest":FixtureToolchain.image_digest}}}})
         self._publish("02-native-build", "native-1", "native-build.json", "native-build.schema.json",
                       ("outputs/u/compile_commands.json", "outputs/u/binaries/app", "inputs.json"))
 
@@ -114,6 +117,12 @@ class IrEvidenceTests(unittest.TestCase):
         self.assertTrue(facts["debug_locations"])
         self.assertTrue({"pointer-arithmetic", "memory-read"} & {x["kind"] for x in facts["facts"]})
         self.assertTrue({"greet","main"} <= {x["function"] for x in facts["facts"]})
+        sources={item["module_id"]:item for item in facts["sources"]}
+        for item in facts["facts"]:
+            if item["module_id"] is not None:
+                self.assertIn(item["module_id"],sources)
+                self.assertEqual((item["source_path"],item["source_sha256"]),
+                                 (sources[item["module_id"]]["path"],sources[item["module_id"]]["sha256"]))
         encoded = json.dumps(facts).lower()
         self.assertNotIn("severity", encoded); self.assertNotIn("vulnerability", encoded)
         malformed_facts = deepcopy(facts); malformed_facts["facts"][0]["kind"] = "vulnerability-verdict"
@@ -135,7 +144,8 @@ class IrEvidenceTests(unittest.TestCase):
                               {"variant_sha256":"sha256:"+"2"*64,"toolchain_sha256":self.toolchain.toolchain_sha256}],
                    "variants":[{"image_id":self.toolchain.image_id,"image_digest":self.toolchain.image_digest}],
                    "source_snapshot_sha256":self.snapshot,
-                   "checkout_identity_sha256":"sha256:"+intake.source_identity(str(self.target))["fingerprint"],
+                   "source_tree_sha256":ir._source_tree_identity(self.target),
+                   "checkout_identity_sha256":ir._source_tree_identity(self.target),
                    "source_revision":intake.source_identity(str(self.target))["revision"]}
         with mock.patch.object(ir,"_accepted",return_value=(self.owner,capture,{})):
             with self.assertRaisesRegex(state.Blocked,"mixed variants"):
@@ -171,30 +181,56 @@ class IrEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(state.Blocked,"source/checkout generation is stale"):
             ir.link(self.run_id,self.owner/"forged-link",toolchain=self.toolchain)
 
-    def test_f02_actual_producer_consumer_accepts_ir_receipts_and_artifacts(self):
-        supply=self.owner/"f02-supply"; producer=supply/"producers/02-ir-facts"; attempt=producer/"attempts/ir-facts-1"
-        attempt.mkdir(parents=True); source=self.snapshot; build="sha256:"+"9"*64
-        inputs={"run_id":self.run_id,"source_snapshot_sha256":source,"build_lineage_sha256":build}
-        permission,lineage=ir._producer_receipts(self.run_id,"02-ir-facts",inputs)
+    def test_e02_attested_tree_rejects_post_acceptance_checkout_mutation(self):
+        (self.target/"pointer.c").write_text("int main(void) { return 7; }\n",encoding="utf-8")
+        with self.assertRaisesRegex(state.Blocked,"source_tree_sha256 attestation"):
+            ir.capture(self.run_id,self.owner/"mutated",toolchain=self.toolchain)
+
+    def test_resealed_capture_semantics_fail_attempt_validation(self):
+        attempt=self.owner/"validate-forgery"; attempt.mkdir()
+        inputs=ir.current_inputs(self.run_id,"02-ir-capture")
+        captured=ir.capture(self.run_id,attempt,toolchain=self.toolchain)
+        state.atomic_json(attempt/"inputs.json",inputs)
+        state.atomic_json(attempt/"ir-capture.json",captured)
+        permission,lineage=ir._producer_receipts(self.run_id,"02-ir-capture",inputs)
         state.atomic_json(attempt/"permission.json",permission); state.atomic_json(attempt/"lineage.json",lineage)
-        state.atomic_json(attempt/"ir-facts.json",{"schema":"fixture/ir-facts","facts":[]})
-        artifacts=artifact_records(attempt,["permission.json","lineage.json","ir-facts.json"])
-        envelope=terminal_envelope(run_id=self.run_id,job_id="02-ir-facts",attempt_id="ir-facts-1",
-          worker_kind="deterministic_python",execution_status="OK",acceptance_status="CURRENT",
-          input_fingerprint="sha256:"+"8"*64,output_contract="ir-facts",started_at="2026-01-01T00:00:00Z",
-          finished_at="2026-01-01T00:00:01Z",summary="fixture",artifacts=artifacts)
-        state.atomic_json(attempt/"result.json",envelope)
-        pointer={"schema":"appsec-review/accepted-worker-result/1.0","status":"OK","run_id":self.run_id,
-          "job":"02-ir-facts","attempt_id":"ir-facts-1","fingerprint":envelope["input_fingerprint"],
-          "envelope_path":"result.json","envelope_sha256":state.file_hash(attempt/"result.json"),
-          "hashes":tree_hashes(attempt),"accepted_at":"2026-01-01T00:00:02Z"}
-        state.atomic_json(producer/"accepted.json",pointer); state.atomic_json(producer/"latest.json",{"attempt_id":"ir-facts-1"})
-        instance="a"*32; binding={"source_snapshot_sha256":source,"build_lineage_sha256":build,
-          "permissions":ir.PERMISSIONS["02-ir-facts"],"terminal_instance_ids":[instance]}
-        entry,copies=assembly._producer(supply,self.run_id,source,
-          {"job":"02-ir-facts","contract":"ir-facts","allowed_skip_reasons":[]},binding,
-          {instance:{"state":"succeeded","group_id":"ir-facts"}})
-        self.assertEqual(entry["disposition"],"accepted"); self.assertEqual(len(copies),3)
+        ir._validate_attempt("02-ir-capture",attempt,inputs)
+        for field,value in (("native_build",captured["native_build"]|{"attempt_id":"forged"}),
+                            ("source_tree_sha256","sha256:"+"9"*64)):
+            forged=deepcopy(captured); forged[field]=value; state.atomic_json(attempt/"ir-capture.json",forged)
+            with self.subTest(field=field), self.assertRaises(state.Blocked):
+                ir._validate_attempt("02-ir-capture",attempt,inputs)
+        forged=deepcopy(captured); forged["modules"][0]["source_path"]="forged.c"
+        state.atomic_json(attempt/"ir-capture.json",forged)
+        with self.assertRaisesRegex(state.Blocked,"module lineage"):
+            ir._validate_attempt("02-ir-capture",attempt,inputs)
+
+    def test_f02_actual_producer_consumer_accepts_ir_receipts_and_artifacts(self):
+        supply=self.owner/"f02-supply"; source=self.snapshot; build="sha256:"+"9"*64
+        for index,(job,(artifact,_schema,contract)) in enumerate(ir.JOBS.items()):
+            attempt_id=f"{contract}-1"; producer=supply/"producers"/job; attempt=producer/"attempts"/attempt_id
+            attempt.mkdir(parents=True); inputs={"run_id":self.run_id,"source_snapshot_sha256":source,
+                                                "build_lineage_sha256":build}
+            permission,lineage=ir._producer_receipts(self.run_id,job,inputs)
+            state.atomic_json(attempt/"permission.json",permission); state.atomic_json(attempt/"lineage.json",lineage)
+            state.atomic_json(attempt/artifact,{"schema":f"fixture/{contract}"})
+            artifacts=artifact_records(attempt,["permission.json","lineage.json",artifact])
+            envelope=terminal_envelope(run_id=self.run_id,job_id=job,attempt_id=attempt_id,
+              worker_kind="deterministic_python",execution_status="OK",acceptance_status="CURRENT",
+              input_fingerprint="sha256:"+str(index+1)*64,output_contract=contract,started_at="2026-01-01T00:00:00Z",
+              finished_at="2026-01-01T00:00:01Z",summary="fixture",artifacts=artifacts)
+            state.atomic_json(attempt/"result.json",envelope)
+            pointer={"schema":"appsec-review/accepted-worker-result/1.0","status":"OK","run_id":self.run_id,
+              "job":job,"attempt_id":attempt_id,"fingerprint":envelope["input_fingerprint"],
+              "envelope_path":"result.json","envelope_sha256":state.file_hash(attempt/"result.json"),
+              "hashes":tree_hashes(attempt),"accepted_at":"2026-01-01T00:00:02Z"}
+            state.atomic_json(producer/"accepted.json",pointer); state.atomic_json(producer/"latest.json",{"attempt_id":attempt_id})
+            instance=chr(ord('a')+index)*32; binding={"source_snapshot_sha256":source,"build_lineage_sha256":build,
+              "permissions":ir.PERMISSIONS[job],"terminal_instance_ids":[instance]}
+            entry,copies=assembly._producer(supply,self.run_id,source,
+              {"job":job,"contract":contract,"allowed_skip_reasons":[]},binding,
+              {instance:{"state":"succeeded","group_id":job.removeprefix("02-")[:40]}})
+            self.assertEqual(entry["disposition"],"accepted"); self.assertEqual(len(copies),3)
 
     def test_stale_variant_and_malformed_bitcode_facts_fail_closed(self):
         manifest = self.run / "inputs/artifact-manifest.json"
@@ -212,7 +248,8 @@ class IrEvidenceTests(unittest.TestCase):
             with mock.patch.object(ir, "_accepted", return_value=(malformed,
                     {"source_revision":intake.source_identity(str(self.target))["revision"],
                      "source_snapshot_sha256":self.snapshot,
-                     "checkout_identity_sha256":"sha256:"+intake.source_identity(str(self.target))["fingerprint"],
+                     "source_tree_sha256":ir._source_tree_identity(self.target),
+                     "checkout_identity_sha256":ir._source_tree_identity(self.target),
                      "variant_sha256":"sha256:"+"1"*64,"toolchain_sha256":self.toolchain.toolchain_sha256,
                      "image_id":self.toolchain.image_id,"image_digest":self.toolchain.image_digest,
                      "sources":[{"module_id":"m","path":"pointer.c","sha256":"sha256:"+state.file_hash(self.target/"pointer.c")}],

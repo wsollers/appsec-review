@@ -7,6 +7,7 @@ binding and recovery qualification remain integration work.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shlex
@@ -106,12 +107,26 @@ def _target(run_id: str) -> tuple[Path, str, str, str | None]:
     if not value or not path.is_absolute() or not path.is_dir() or path.is_symlink():
         raise Blocked("IR capture requires an absolute real staged target")
     resolved = path.resolve(); identity = intake.source_identity(str(resolved))
-    return resolved, _sha(manifest), "sha256:" + identity["fingerprint"], identity.get("revision")
+    return resolved, _sha(manifest), _source_tree_identity(resolved), identity.get("revision")
+
+
+def _source_tree_identity(target: Path) -> str:
+    """Canonical E02 post-build tree identity; excludes mutable Git administration data."""
+    records: dict[str, dict[str, str]] = {}
+    for current, dirs, files in os.walk(target, topdown=True, followlinks=False):
+        dirs[:] = sorted(name for name in dirs if name != ".git")
+        for name in sorted(files):
+            path = Path(current, name); relative = path.relative_to(target).as_posix()
+            if path.is_symlink(): records[relative] = {"kind": "symlink", "target": os.readlink(path)}
+            elif path.is_file(): records[relative] = {"kind": "file", "sha256": _sha(path)}
+            else: raise Blocked(f"IR evidence checkout contains a special file: {relative}")
+    return "sha256:" + digest(records)
 
 
 def _require_current_source(run_id: str, value: dict[str, Any]) -> Path:
     target, snapshot, checkout, revision = _target(run_id)
     if (value.get("source_snapshot_sha256") != snapshot or
+            value.get("source_tree_sha256") != checkout or
             value.get("checkout_identity_sha256") != checkout or
             (revision is not None and value.get("source_revision") != revision)):
         raise Blocked("IR evidence source/checkout generation is stale")
@@ -168,9 +183,19 @@ def capture(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
     native_inputs = read_json(native_attempt / "inputs.json")
     if native_inputs.get("source_snapshot_sha256") != source_snapshot:
         raise Blocked("native build source snapshot is stale")
+    attested_tree = native_inputs.get("source_tree_sha256")
+    if not isinstance(attested_tree, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", attested_tree):
+        raise Blocked("native build inputs lack source_tree_sha256; E02 must attest the post-build checkout bytes")
+    if checkout_identity != attested_tree:
+        raise Blocked("checkout bytes differ from the accepted native-build source_tree_sha256 attestation")
     if revision is not None and native["source_revision"] != revision:
         raise Blocked("native build revision differs from the checkout")
     for unit in sorted(native["units"], key=lambda item: item["unit_id"]):
+        image_record=native_inputs.get("image_records",{}).get(unit["image_id"])
+        if (not isinstance(image_record,dict) or
+                image_record.get("value",{}).get("digest")!=unit["image_digest"] or
+                image_record.get("sha256")!=toolchain.toolchain_sha256):
+            raise Blocked("IR capture toolchain is not bound to the accepted native-build image record")
         db_path = _relative(native_attempt, unit["compile_database"]["path"])
         if not db_path.is_file() or _sha(db_path) != unit["compile_database"]["sha256"]:
             raise Blocked("native compile database is stale")
@@ -208,7 +233,7 @@ def capture(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
     status = "OK" if modules and not gaps else "OK_WITH_GAPS"
     result = {"schema": "appsec-review/ir-capture/1", "run_id": run_id,
         "source_revision": native["source_revision"], "source_snapshot_sha256": source_snapshot,
-        "checkout_identity_sha256": checkout_identity,
+        "source_tree_sha256": attested_tree, "checkout_identity_sha256": attested_tree,
         "native_build": lineage,
         "variants": variants, "status": status, "modules": modules, "coverage_gaps": gaps}
     if validate_document(result, "ir-capture.schema.json"):
@@ -247,6 +272,7 @@ def link(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
     result = {"schema": "appsec-review/ir-link/1", "run_id": run_id,
         "source_revision": captured["source_revision"],
         "source_snapshot_sha256": captured["source_snapshot_sha256"],
+        "source_tree_sha256": captured["source_tree_sha256"],
         "checkout_identity_sha256": captured["checkout_identity_sha256"], "capture": lineage,
         "variant_sha256": next(iter(variants)), "toolchain_sha256": next(iter(toolchains)),
         "image_id": image_id, "image_digest": image_digest,
@@ -274,37 +300,79 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
         ir_text = toolchain.disassemble(module)
     except Exception as exc:
         raise RuntimeError("linked LLVM module cannot be decoded")
-    records=[]; debug_locations=[]
+    lines=ir_text.splitlines(); records=[]; debug_locations=[]; gaps=list(linked["coverage_gaps"])
+    target=_require_current_source(run_id,linked); source_by_path={item["path"]:item for item in linked["sources"]}
+    metadata_files={}; subprograms={}; scopes={}; locations={}
+    for line in lines:
+        file_match=re.search(r'^!(\d+) = !DIFile\(filename: "([^"]+)", directory: "([^"]*)"',line)
+        if file_match: metadata_files[file_match.group(1)]=(file_match.group(2),file_match.group(3))
+        sub_match=re.search(r'^!(\d+) = (?:distinct )?!DISubprogram\(name: "([^"]+)".*?file: !(\d+)',line)
+        if sub_match: subprograms[sub_match.group(1)]={"function":sub_match.group(2),"file_id":sub_match.group(3)}
+        scope_match=re.search(r'^!(\d+) = .*?scope: !(\d+)',line)
+        if scope_match: scopes[scope_match.group(1)]=scope_match.group(2)
+        location=re.search(r'^!(\d+) = !DILocation\(line: (\d+), column: (\d+), scope: !(\d+)',line)
+        if location: locations[location.group(1)]={"source_line":int(location.group(2)),
+            "source_column":int(location.group(3)),"scope":location.group(4)}
+    def source_for_file(file_id:str)->dict|None:
+        if file_id not in metadata_files: return None
+        filename,directory=metadata_files[file_id]; path=Path(filename)
+        if not path.is_absolute(): path=Path(directory)/path
+        candidates=[]
+        try: candidates.append(path.resolve().relative_to(target.resolve()).as_posix())
+        except ValueError: pass
+        candidates.extend(rel for rel in source_by_path if path.as_posix().endswith('/'+rel) or path.as_posix()==rel)
+        matches={name for name in candidates if name in source_by_path}
+        return source_by_path[next(iter(matches))] if len(matches)==1 else None
+    def subprogram_for(scope:str)->dict|None:
+        seen=set()
+        while scope not in seen:
+            seen.add(scope)
+            if scope in subprograms: return subprograms[scope]
+            if scope not in scopes: return None
+            scope=scopes[scope]
+        return None
+    location_map={}
+    for location_id,item in sorted(locations.items(),key=lambda pair:int(pair[0])):
+        sub=subprogram_for(item["scope"]); source=source_for_file(sub["file_id"]) if sub else None
+        if source is None:
+            gaps.append({"reason":"debug-location-source-ambiguous","debug_location_id":location_id})
+            continue
+        record={"debug_location_id":location_id,"source_line":item["source_line"],
+            "source_column":item["source_column"],"function":sub["function"],
+            "module_id":source["module_id"],"source_path":source["path"],"source_sha256":source["sha256"]}
+        debug_locations.append(record); location_map[location_id]=record
     current_function = None
-    for line_number, line in enumerate(ir_text.splitlines(), 1):
+    for line_number, line in enumerate(lines, 1):
         definition = re.search(r"^define\b.*@([^ (]+)\(", line)
         if definition: current_function = definition.group(1)
         if line.strip() == "}": current_function = None
-        location = re.search(r"!(\d+) = !DILocation\(line: (\d+), column: (\d+)", line)
-        if location:
-            debug_locations.append({"debug_location_id": location.group(1),
-                                    "source_line": int(location.group(2)),
-                                    "source_column": int(location.group(3))})
         kind = ("pointer-arithmetic" if "getelementptr" in line else
                 "memory-read" if re.search(r"\bload\b", line) else
                 "memory-write" if re.search(r"\bstore\b", line) else
                 "memory-intrinsic" if "llvm.mem" in line else None)
         if kind:
+            debug_match=re.search(r"!dbg !(\d+)",line); debug_id=debug_match.group(1) if debug_match else None
+            debug=location_map.get(debug_id) if debug_id else None
+            if debug is None:
+                gaps.append({"reason":"fact-source-ambiguous","ir_line":line_number,"function":current_function})
             records.append({"fact_id": "fact_" + digest({"line": line_number, "text": line.strip()})[:16],
                 "kind": kind, "ir_line": line_number,
-                "function": current_function, "module_id": linked["linked_module"]["path"],
-                "debug_location_id": (re.search(r"!dbg !(\d+)", line).group(1)
-                                      if re.search(r"!dbg !(\d+)", line) else None)})
+                "function": debug["function"] if debug else current_function,
+                "module_id": debug["module_id"] if debug else None,
+                "source_path": debug["source_path"] if debug else None,
+                "source_sha256": debug["source_sha256"] if debug else None,
+                "debug_location_id": debug_id if debug else None})
     result = {"schema": "appsec-review/ir-facts/1", "run_id": run_id,
         "source_revision": linked["source_revision"],
         "source_snapshot_sha256": linked["source_snapshot_sha256"],
+        "source_tree_sha256": linked["source_tree_sha256"],
         "checkout_identity_sha256": linked["checkout_identity_sha256"], "link": lineage,
         "linked_module_sha256": linked["linked_module"]["sha256"],
         "variant_sha256": linked["variant_sha256"], "toolchain_sha256": linked["toolchain_sha256"],
         "image_id": linked["image_id"], "image_digest": linked["image_digest"],
-        "sources": linked["sources"], "status": linked["status"],
+        "sources": linked["sources"], "status": "OK_WITH_GAPS" if gaps else "OK",
         "debug_locations": debug_locations, "facts": records,
-        "coverage_gaps": linked["coverage_gaps"]}
+        "coverage_gaps": gaps}
     if any(key in json.dumps(result).lower() for key in PROHIBITED):
         raise RuntimeError("IR facts attempted a prohibited verdict promotion")
     if validate_document(result, "ir-facts.schema.json"):
@@ -328,22 +396,42 @@ def _code_hashes(job: str) -> dict[str, str]:
 
 def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     if job == "02-ir-capture":
-        attempt, result, lineage = _accepted(run_id, NATIVE_JOB, "native-build.json", "native-build.schema.json")
+        attempt, result, lineage = _accepted(run_id, NATIVE_JOB, "native-build.json", "native-build.schema.json", "native-build")
         target, source, checkout, revision = _target(run_id)
+        native_inputs = read_json(attempt / "inputs.json")
+        if native_inputs.get("source_snapshot_sha256") != source or result.get("source_revision") != revision:
+            raise Blocked("native build source lineage differs from the staged checkout")
+        attested_tree = native_inputs.get("source_tree_sha256")
+        if not isinstance(attested_tree, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", attested_tree):
+            raise Blocked("native build inputs lack source_tree_sha256; E02 must attest the post-build checkout bytes")
+        if checkout != attested_tree:
+            raise Blocked("checkout bytes differ from the accepted native-build source_tree_sha256 attestation")
         detail = {"upstream": lineage, "source_snapshot_sha256": source,
-                  "checkout_identity_sha256": checkout, "source_revision": revision,
+                  "source_tree_sha256": attested_tree, "checkout_identity_sha256": attested_tree,
+                  "source_revision": revision, "upstream_result": result,
                   "target_path": str(target), "native_result_sha256": lineage["result_sha256"],
-                  "compile_databases": [(unit["unit_id"], unit["compile_database"]["sha256"])
+                  "toolchain_bindings": [[unit["unit_id"],
+                      native_inputs.get("image_records",{}).get(unit["image_id"],{}).get("sha256")]
+                      for unit in result["units"]],
+                  "compile_databases": [[unit["unit_id"], unit["compile_database"]["sha256"]]
                                         for unit in result["units"]]}
     elif job == "02-ir-link":
-        attempt, result, lineage = _accepted(run_id, "02-ir-capture", "ir-capture.json", "ir-capture.schema.json")
+        attempt, result, lineage = _accepted(run_id, "02-ir-capture", "ir-capture.json", "ir-capture.schema.json", "ir-capture")
         _require_current_source(run_id, result)
-        detail = {"upstream": lineage, "source_snapshot_sha256": result["source_snapshot_sha256"],
-                  "modules": [(item["module_id"], item["sha256"]) for item in result["modules"]]}
+        detail = {"upstream": lineage, "upstream_result": result,
+                  "source_snapshot_sha256": result["source_snapshot_sha256"],
+                  "source_tree_sha256": result["source_tree_sha256"],
+                  "checkout_identity_sha256": result["checkout_identity_sha256"],
+                  "source_revision": result["source_revision"],
+                  "modules": [[item["module_id"], item["sha256"]] for item in result["modules"]]}
     elif job == "02-ir-facts":
-        attempt, result, lineage = _accepted(run_id, "02-ir-link", "ir-link.json", "ir-link.schema.json")
+        attempt, result, lineage = _accepted(run_id, "02-ir-link", "ir-link.json", "ir-link.schema.json", "ir-link")
         _require_current_source(run_id, result)
-        detail = {"upstream": lineage, "source_snapshot_sha256": result["source_snapshot_sha256"],
+        detail = {"upstream": lineage, "upstream_result": result,
+                  "source_snapshot_sha256": result["source_snapshot_sha256"],
+                  "source_tree_sha256": result["source_tree_sha256"],
+                  "checkout_identity_sha256": result["checkout_identity_sha256"],
+                  "source_revision": result["source_revision"],
                   "linked_module_sha256": result["linked_module"]["sha256"]}
     else:
         raise ValueError(job)
@@ -378,9 +466,114 @@ def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = N
     elif any(key in json.dumps(result).lower() for key in PROHIBITED):
         raise Blocked(f"{job}: result contains prohibited verdict language")
     if inputs is not None:
+        if read_json(attempt / "inputs.json") != inputs:
+            raise Blocked(f"{job}: immutable attempt inputs changed")
+        if current_inputs(inputs["run_id"], job) != inputs:
+            raise Blocked(f"{job}: accepted upstream or source attestation changed")
         expected = _producer_receipts(inputs["run_id"], job, inputs)
         if (read_json(attempt / "permission.json"), read_json(attempt / "lineage.json")) != expected:
             raise Blocked(f"{job}: F02 permission/lineage receipts changed")
+        common = {"run_id": inputs["run_id"], "source_revision": inputs.get("source_revision", result["source_revision"]),
+                  "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+                  "source_tree_sha256": inputs["source_tree_sha256"],
+                  "checkout_identity_sha256": inputs["checkout_identity_sha256"]}
+        if any(result.get(key) != value for key, value in common.items()):
+            raise Blocked(f"{job}: result source lineage differs from immutable inputs")
+        if job == "02-ir-capture":
+            if result["native_build"] != inputs["upstream"]:
+                raise Blocked(f"{job}: native-build pointer lineage differs from immutable inputs")
+            native = inputs["upstream_result"]; native_attempt = data_path(
+                inputs["run_id"], "jobs", NATIVE_JOB, "attempts", inputs["upstream"]["attempt_id"])
+            expected_variants={}; expected_modules={}; expected_empty=[]
+            toolchain_bindings=dict(inputs["toolchain_bindings"])
+            target=Path(inputs["target_path"])
+            for unit in native["units"]:
+                db=_relative(native_attempt,unit["compile_database"]["path"]); entries=read_json(db)
+                variant=_variant(unit,entries)
+                expected_variants[unit["unit_id"]]={"unit_id":unit["unit_id"],"variant_sha256":variant,
+                    "compile_database_sha256":_sha(db),"image_id":unit["image_id"],"image_digest":unit["image_digest"]}
+                if not isinstance(toolchain_bindings.get(unit["unit_id"]),str):
+                    raise Blocked(f"{job}: native image has no immutable toolchain binding")
+                expected_variants[unit["unit_id"]]["toolchain_sha256"]=toolchain_bindings[unit["unit_id"]]
+                for index,entry in enumerate(entries):
+                    words=entry.get("arguments") or shlex.split(entry.get("command",""))
+                    if not words:
+                        expected_empty.append({"unit_id":unit["unit_id"],"compile_index":index,
+                                               "reason":"compile-entry-has-no-argv"}); continue
+                    relative,source=_source_path(target,entry.get("file",""))
+                    module_id="bc_"+digest({"unit":unit["unit_id"],"index":index,"source":relative,"variant":variant})[:16]
+                    expected_modules[module_id]={"unit_id":unit["unit_id"],"compile_index":index,
+                        "source_path":relative,"source_sha256":_sha(source),"compiler":words[0],
+                        "compiler_argv":_capture_argv(words,relative,f"modules/{module_id}.bc"),
+                        "variant_sha256":variant,"path":f"modules/{module_id}.bc"}
+            actual_variants={item["unit_id"]:item for item in result["variants"]}
+            if set(actual_variants)!=set(expected_variants): raise Blocked(f"{job}: variant set differs from native build")
+            for key,want in expected_variants.items():
+                if any(actual_variants[key].get(field)!=value for field,value in want.items()):
+                    raise Blocked(f"{job}: variant lineage differs from native build")
+            seen=set()
+            for module in result["modules"]:
+                want=expected_modules.get(module["module_id"])
+                if want is None or module["module_id"] in seen: raise Blocked(f"{job}: module identity is not in immutable compile inputs")
+                seen.add(module["module_id"])
+                for field,value in want.items():
+                    if module.get(field)!=value: raise Blocked(f"{job}: module lineage differs from immutable compile inputs")
+                if (module["compiler_argv_sha256"]!="sha256:"+digest(module["compiler_argv"]) or
+                        module["toolchain_sha256"]!=actual_variants[module["unit_id"]]["toolchain_sha256"]):
+                    raise Blocked(f"{job}: module compiler/toolchain lineage is inconsistent")
+            failures=[]
+            for gap in result["coverage_gaps"]:
+                if gap in expected_empty: continue
+                key=(gap.get("unit_id"),gap.get("compile_index"))
+                candidates=[value for value in expected_modules.values()
+                            if (value["unit_id"],value["compile_index"])==key]
+                if (len(candidates)!=1 or gap!={"unit_id":key[0],"compile_index":key[1],
+                        "source_path":candidates[0]["source_path"],"reason":"bitcode-capture-failed"}):
+                    raise Blocked(f"{job}: capture coverage gap is not bound to a compile input")
+                failures.append(candidates[0])
+            accounted=seen|{module_id for module_id,value in expected_modules.items() if value in failures}
+            if accounted!=set(expected_modules) or any(gap not in result["coverage_gaps"] for gap in expected_empty):
+                raise Blocked(f"{job}: compile inputs are neither captured nor represented by exact gaps")
+            if result["status"] != ("OK" if result["modules"] and not result["coverage_gaps"] else "OK_WITH_GAPS"):
+                raise Blocked(f"{job}: capture status differs from module/gap evidence")
+        elif job == "02-ir-link":
+            captured=inputs["upstream_result"]
+            if (len({item["variant_sha256"] for item in captured["modules"]})!=1 or
+                    len({item["toolchain_sha256"] for item in captured["modules"]})!=1 or
+                    len({(item["image_id"],item["image_digest"]) for item in captured["variants"]})!=1):
+                raise Blocked(f"{job}: immutable capture inputs mix variants, toolchains, or images")
+            expected_fields={"capture":inputs["upstream"],"variant_sha256":captured["modules"][0]["variant_sha256"],
+                "toolchain_sha256":captured["modules"][0]["toolchain_sha256"],
+                "image_id":captured["variants"][0]["image_id"],"image_digest":captured["variants"][0]["image_digest"],
+                "module_set_sha256":"sha256:"+digest([(x["module_id"],x["sha256"]) for x in captured["modules"]]),
+                "sources":[{"module_id":x["module_id"],"path":x["source_path"],"sha256":x["source_sha256"]} for x in captured["modules"]],
+                "coverage_gaps":captured["coverage_gaps"],"status":"OK_WITH_GAPS" if captured["coverage_gaps"] else "OK"}
+            if any(result.get(key)!=value for key,value in expected_fields.items()):
+                raise Blocked(f"{job}: linked result lineage differs from immutable capture inputs")
+            if (result["linked_module"]["path"]!="linked/application.bc" or
+                    result["linked_module"]["input_module_ids"]!=[x["module_id"] for x in captured["modules"]]):
+                raise Blocked(f"{job}: linked module membership differs from immutable capture inputs")
+        else:
+            linked=inputs["upstream_result"]
+            expected_fields={"link":inputs["upstream"],"linked_module_sha256":linked["linked_module"]["sha256"],
+                "variant_sha256":linked["variant_sha256"],"toolchain_sha256":linked["toolchain_sha256"],
+                "image_id":linked["image_id"],"image_digest":linked["image_digest"],"sources":linked["sources"]}
+            if any(result.get(key)!=value for key,value in expected_fields.items()):
+                raise Blocked(f"{job}: fact result lineage differs from immutable link inputs")
+            if (any(gap not in result["coverage_gaps"] for gap in linked["coverage_gaps"]) or
+                    result["status"] != ("OK_WITH_GAPS" if result["coverage_gaps"] else "OK")):
+                raise Blocked(f"{job}: fact coverage status differs from linked evidence")
+            source_by_module={item["module_id"]:item for item in result["sources"]}
+            debug_by_id={item["debug_location_id"]:item for item in result["debug_locations"]}
+            for record in [*result["debug_locations"],*result["facts"]]:
+                module_id=record.get("module_id")
+                if module_id is not None and (module_id not in source_by_module or
+                        record.get("source_path")!=source_by_module[module_id]["path"] or
+                        record.get("source_sha256")!=source_by_module[module_id]["sha256"]):
+                    raise Blocked(f"{job}: source/module lineage join is invalid")
+            for fact in result["facts"]:
+                if fact["debug_location_id"] is not None and fact["debug_location_id"] not in debug_by_id:
+                    raise Blocked(f"{job}: fact debug-location join is invalid")
 
 
 def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str, Any]:

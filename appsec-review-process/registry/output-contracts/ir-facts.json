@@ -34,7 +34,7 @@
     "validation_rules": [
         "consume only the accepted hash-bound linked module",
         "emit deterministic pointer arithmetic and memory-operation records",
-        "preserve debug metadata identifiers and exact variant lineage",
+        "join debug locations and facts to exact source path, hash, function and captured module identity or emit an ambiguity gap",
         "facts are evidence and never vulnerability verdicts"
     ]
 }

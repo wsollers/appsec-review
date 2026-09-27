@@ -31,9 +31,9 @@
         ]
     },
     "validation_rules": [
-        "bind exact accepted native-build pointer, envelope, result, source snapshot and compile database",
+        "bind exact accepted native-build pointer, envelope, result, source snapshot, canonical E02 source-tree attestation and compile database",
         "derive exact build variant from unit, image and compile entries",
-        "hash every source, compiler argv and bitcode module",
+        "hash every source, compiler argv and bitcode module and bind the accepted pinned image record as the toolchain identity",
         "record zero and partial capture as explicit gaps"
     ]
 }

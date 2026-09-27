@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "ir-link.schema.json",
   "type": "object", "additionalProperties": false,
-  "required": ["schema", "run_id", "source_revision", "source_snapshot_sha256", "checkout_identity_sha256", "capture", "variant_sha256", "toolchain_sha256", "image_id", "image_digest", "module_set_sha256", "status", "linked_module", "sources", "coverage_gaps"],
+  "required": ["schema", "run_id", "source_revision", "source_snapshot_sha256", "source_tree_sha256", "checkout_identity_sha256", "capture", "variant_sha256", "toolchain_sha256", "image_id", "image_digest", "module_set_sha256", "status", "linked_module", "sources", "coverage_gaps"],
   "properties": {
     "schema": {"const": "appsec-review/ir-link/1"}, "run_id": {"type": "string"}, "source_revision": {"type": "string"},
     "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "capture": {"$ref": "ir-upstream-lineage.schema.json"},
     "checkout_identity_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_tree_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "variant_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "toolchain_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "module_set_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "image_id": {"type": "string"}, "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
