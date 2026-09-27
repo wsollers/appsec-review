@@ -183,15 +183,18 @@ class ClaimLifecycleTests(unittest.TestCase):
                     result_name = core.STAGES[job][4]
                     atomic_json(attempt / result_name, document)
                     atomic_json(attempt / "permission.json", core.permission_receipt(job, document))
+                    atomic_json(attempt / "lineage.json", {
+                        "schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": RUN_ID,
+                        "job_id": job, "source_snapshot_sha256": core.source_generation(document),
+                        "build_lineage_sha256": "sha256:" + "b" * 64})
                     atomic_json(attempt / "status.json", {"process": job, "status": "OK",
-                                "claims": len(next(value for value in document.values() if isinstance(value, list))),
-                                "qualification": "implemented_not_qualified"})
+                                "result": result_name, "claim_limit": "CONTROL_DECISION_ONLY"})
                     envelope = terminal_envelope(run_id=RUN_ID, job_id=job, attempt_id=job,
                         worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
                         input_fingerprint="sha256:" + "f" * 64, output_contract=job,
                         started_at="2026-01-01T00:00:00Z", finished_at="2026-01-01T00:00:01Z",
                         summary="fixture", artifacts=artifact_records(
-                            attempt, [result_name, "permission.json", "status.json"]))
+                            attempt, [result_name, "permission.json", "lineage.json", "status.json"]))
                     self.assertEqual(validate_job_output(attempt, envelope, "sha256:" + "f" * 64,
                         expected_run_id=RUN_ID, expected_job_id=job,
                         orchestration=NO_ORCHESTRATION_FACTS), [])
@@ -259,6 +262,74 @@ class AcceptedLedgerTests(unittest.TestCase):
         self.assertEqual(json.loads((output.parent / "permission.json").read_text()),
                          core.permission_receipt("07-red-team-adversarial", result))
 
+    def test_exact_accepted_ledger_publishes_atomic_common_envelope_attempt(self):
+        decisions = Path(self.temp.name) / "attempt-decisions.json"
+        decision_value = fixture("red-decisions.json")
+        route_claims = {item["route_id"]: item["claim_id"] for item in actual_ledger()["entries"]}
+        for item, route_id in zip(decision_value["decisions"], ("route-a", "route-b")):
+            item["claim_id"] = route_claims[route_id]
+        atomic_json(decisions, decision_value)
+        attempt = Path(self.temp.name) / "red-1"
+        published = core.run_attempt("07-red-team-adversarial", self.base / "accepted.json",
+            decisions, attempt, RUN_ID, "red-1", "2026-01-01T00:00:03Z",
+            "2026-01-01T00:00:04Z")
+        self.assertEqual(set(path.name for path in attempt.iterdir()), {
+            "red-team-adversarial.json", "permission.json", "lineage.json", "status.json", "result.json"})
+        envelope = json.loads((attempt / "result.json").read_text())
+        self.assertEqual(envelope["job_id"], "07-red-team-adversarial")
+        self.assertEqual(envelope["attempt_id"], "red-1")
+        self.assertEqual(published["envelope_sha256"], "sha256:" + file_hash(attempt / "result.json"))
+        self.assertEqual(validate_job_output(attempt, envelope, envelope["input_fingerprint"],
+            expected_run_id=RUN_ID, expected_job_id="07-red-team-adversarial",
+            orchestration=NO_ORCHESTRATION_FACTS), [])
+        with self.assertRaises(Blocked):
+            core.run_attempt("07-red-team-adversarial", self.base / "accepted.json",
+                decisions, attempt, RUN_ID, "red-1", "2026-01-01T00:00:03Z",
+                "2026-01-01T00:00:04Z")
+
+    def test_all_four_stages_publish_a_hash_bound_accepted_chain(self):
+        jobs_root = Path(self.temp.name) / "jobs"
+        upstream_pointer = self.base / "accepted.json"
+        stage_specs = [
+            ("07-red-team-adversarial", "red-decisions.json", "hypotheses"),
+            ("08-blue-team-refutation", "blue-decisions.json", "reviews"),
+            ("09-independent-verification", "verification-decisions.json", "verifications"),
+            ("12-scoring-prioritization", "scoring-decisions.json", "priorities"),
+        ]
+        for index, (job, decision_name, records_key) in enumerate(stage_specs, 1):
+            decisions = fixture(decision_name)
+            if index == 1:
+                upstream_rows = actual_ledger()["entries"]
+            else:
+                prior_job = stage_specs[index - 2][0]
+                prior_artifact = core.STAGES[prior_job][4]
+                prior_attempt = jobs_root / prior_job / "attempts" / f"attempt-{index - 1}"
+                upstream_rows = json.loads((prior_attempt / prior_artifact).read_text())[stage_specs[index - 2][2]]
+            claim_ids = [row["claim_id"] for row in sorted(upstream_rows, key=lambda row: row["route_id"])]
+            for decision, claim_id in zip(decisions["decisions"], claim_ids):
+                decision["claim_id"] = claim_id
+            decision_path = Path(self.temp.name) / f"{job}-decisions.json"
+            atomic_json(decision_path, decisions)
+            base = jobs_root / job
+            attempt_id = f"attempt-{index}"
+            attempt = base / "attempts" / attempt_id
+            core.run_attempt(job, upstream_pointer, decision_path, attempt, RUN_ID, attempt_id,
+                f"2026-01-01T00:00:0{index}Z", f"2026-01-01T00:00:1{index}Z")
+            envelope = json.loads((attempt / "result.json").read_text())
+            atomic_json(base / "latest.json", {"attempt_id": attempt_id})
+            atomic_json(base / "accepted.json", {
+                "schema": "appsec-review/accepted-worker-result/1.0", "status": "OK",
+                "run_id": RUN_ID, "job": job, "attempt_id": attempt_id,
+                "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
+                "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
+                "accepted_at": f"2026-01-01T00:00:2{index}Z"})
+            upstream_pointer = base / "accepted.json"
+        score_attempt = jobs_root / "12-scoring-prioritization" / "attempts" / "attempt-4"
+        scoring = json.loads((score_attempt / "scoring-prioritization.json").read_text())
+        self.assertEqual(scoring["priorities"][0]["severity"], "CRITICAL")
+        self.assertEqual(json.loads((score_attempt / "lineage.json").read_text())["job_id"],
+                         "12-scoring-prioritization")
+
     def test_stale_corrupt_and_resealed_wrong_pointer_fail_closed(self):
         atomic_json(self.base / "latest.json", {"attempt_id": "ledger-new"})
         with self.assertRaises(Blocked):
@@ -278,7 +349,10 @@ class AcceptedLedgerTests(unittest.TestCase):
         attempts = self.base / "attempts"
         external = Path(self.temp.name) / "external-attempts"
         attempts.rename(external)
-        attempts.symlink_to(external, target_is_directory=True)
+        try:
+            attempts.symlink_to(external, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks are unavailable: {exc}")
         with self.assertRaises(Blocked):
             core.load_accepted(self.base / "accepted.json", run_id=RUN_ID,
                 job_id="claim-ledger-routing", contract="claim-ledger-core",
@@ -290,7 +364,12 @@ class RegistryAndSchemaTests(unittest.TestCase):
         for job, (_upstream_contract, _artifact, _upstream_schema, schema, result) in core.STAGES.items():
             template = json.loads((ROOT / f"registry/job-templates/{job}.json").read_text())
             contract = json.loads((ROOT / f"registry/output-contracts/{job}.json").read_text())
-            self.assertFalse(template["implemented"])
+            self.assertTrue(template["implemented"])
+            self.assertEqual(template["execution"]["worker"], {
+                "07-red-team-adversarial": "red_team_adversarial.py",
+                "08-blue-team-refutation": "blue_team_refutation.py",
+                "09-independent-verification": "independent_verification.py",
+                "12-scoring-prioritization": "scoring_prioritization.py"}[job])
             self.assertEqual(template["composition"]["output_contract_id"], job)
             self.assertEqual(contract["result_schema"], {"artifact": result, "schema_file": schema})
             self.assertEqual(validate_document(template, "job-template.schema.json"), [])
