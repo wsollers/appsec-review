@@ -140,8 +140,10 @@ class EvidenceAssemblyTests(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(first["assembly_status"], "COMPLETE")
             self.assertEqual(first["manifest_sha256"], worker.manifest_sha256(first))
-            self.assertEqual(len(first["producers"]), 25)
-            self.assertEqual(len(copies), 76)
+            dependencies = read_json(worker.GRAPH)["jobs"][worker.JOB]["dependencies"]
+            self.assertEqual(len(first["producers"]), len(dependencies))
+            self.assertEqual(len(copies), 1 + sum(len(item["artifacts"])
+                                                  for item in first["producers"]))
             artifact = first["producers"][0]["artifacts"][0]
             self.assertEqual(set(artifact), {"producer_job_id", "producer_attempt_id", "producer_path",
                                               "path", "sha256", "media_type"})
