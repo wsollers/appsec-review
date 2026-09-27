@@ -44,7 +44,8 @@ def accepted_native_build(folder: Path, *, source_revision="a" * 40,
     target = folder / "target"; shutil.copytree(FIXTURE / "target", target)
     inputs = {"run_id": run_id, "job": worker.UPSTREAM_JOB,
               "source_snapshot_sha256": "sha256:" + "1" * 64,
-              "source_revision": source_revision, "target_path": str(target.resolve())}
+              "source_revision": source_revision, "target_path": str(target.resolve()),
+              "source_tree_sha256": worker._source_tree_identity(target.resolve())}
     atomic_json(attempt / "inputs.json", inputs)
     result = {"schema": "appsec-review/native-build/1", "run_id": run_id,
         "source_revision": result_revision or source_revision,
@@ -139,11 +140,20 @@ class NativeSastTests(unittest.TestCase):
             first = worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
             (target / "post-build-note.txt").write_text("changed after build\n", encoding="utf-8")
             with self.assertRaises(Blocked):
-                worker._verify_source_tree({"target_path": str(target),
-                                            "source_tree_sha256": first["source_tree_sha256"]})
-            second = worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
-        self.assertNotEqual(first["source_tree_sha256"], second["source_tree_sha256"])
-        self.assertEqual(first["units"], second["units"])
+                worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        self.assertRegex(first["source_tree_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_native_build_without_attested_source_tree_fails_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base, attempt, _target, fingerprint = accepted_native_build(Path(folder))
+            value = json.loads((attempt / "inputs.json").read_text())
+            del value["source_tree_sha256"]
+            atomic_json(attempt / "inputs.json", value)
+            pointer = json.loads((base / "accepted.json").read_text())
+            pointer["hashes"] = tree_hashes(attempt)
+            atomic_json(base / "accepted.json", pointer)
+            with self.assertRaisesRegex(Blocked, "E02 must attest"):
+                worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
 
     def test_wrong_open_stale_or_mismatched_native_build_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -292,7 +302,7 @@ class NativeSastTests(unittest.TestCase):
                 "tools_run": list(worker.TOOLS), "leads": 3, "network": "none",
                 "qualification": "implemented_not_qualified"}
             atomic_json(attempt / "status.json", status)
-            permissions = ["read-run-data", "write-run-data", "execute-container-static-analysis"]
+            permissions = json.loads((ROOT / "registry/job-templates/02-native-sast.json").read_text())["permissions"]
             atomic_json(attempt / "permission.json", {"schema": worker.PERMISSION_SCHEMA,
                 "run_id": "run-e03", "job_id": worker.JOB,
                 "source_snapshot_sha256": result["source_snapshot_sha256"],
@@ -315,7 +325,7 @@ class NativeSastTests(unittest.TestCase):
                 expected_run_id="run-e03", expected_job_id=worker.JOB,
                 orchestration=NO_ORCHESTRATION_FACTS), [])
             self.assertEqual(json.loads((attempt / "permission.json").read_text())["permissions"],
-                             worker.PERMISSIONS)
+                             permissions)
 
     def test_claim_ceiling_rejects_finding_promotion(self):
         contract_path = ROOT / "registry/output-contracts/native-sast.json"
@@ -335,7 +345,7 @@ class NativeSastTests(unittest.TestCase):
             build = "sha256:" + "2" * 64
             atomic_json(attempt / "permission.json", {"schema": assembly.PERMISSION_SCHEMA,
                 "run_id": "run-e03", "job_id": worker.JOB,
-                "source_snapshot_sha256": source, "permissions": worker.PERMISSIONS})
+                "source_snapshot_sha256": source, "permissions": worker._permissions()})
             atomic_json(attempt / "lineage.json", {"schema": assembly.LINEAGE_SCHEMA,
                 "run_id": "run-e03", "job_id": worker.JOB,
                 "source_snapshot_sha256": source, "build_lineage_sha256": build})
@@ -358,12 +368,33 @@ class NativeSastTests(unittest.TestCase):
             entry, copies = assembly._producer(supply, "run-e03", source,
                 {"job": worker.JOB, "contract": worker.CONTRACT, "allowed_skip_reasons": []},
                 {"source_snapshot_sha256": source, "build_lineage_sha256": build,
-                 "permissions": worker.PERMISSIONS, "terminal_instance_ids": [instance_id]},
+                 "permissions": worker._permissions(), "terminal_instance_ids": [instance_id]},
                 {instance_id: {"instance_id": instance_id, "state": "succeeded",
                                "group_id": "native-sast"}})
+            forged = json.loads((attempt / "permission.json").read_text())
+            forged["permissions"] = [*worker._permissions(), "network"]
+            atomic_json(attempt / "permission.json", forged)
+            envelope["artifacts"] = artifact_records(
+                attempt, ["permission.json", "lineage.json", "native-sast.json"])
+            atomic_json(attempt / "result.json", envelope)
+            pointer["envelope_sha256"] = file_hash(attempt / "result.json")
+            pointer["hashes"] = tree_hashes(attempt)
+            atomic_json(producer / "accepted.json", pointer)
+            with self.assertRaises(Blocked):
+                assembly._producer(supply, "run-e03", source,
+                    {"job": worker.JOB, "contract": worker.CONTRACT, "allowed_skip_reasons": []},
+                    {"source_snapshot_sha256": source, "build_lineage_sha256": build,
+                     "permissions": worker._permissions(), "terminal_instance_ids": [instance_id]},
+                    {instance_id: {"instance_id": instance_id, "state": "succeeded",
+                                   "group_id": "native-sast"}})
         self.assertEqual(entry["disposition"], "accepted")
         self.assertEqual(entry["build_lineage_sha256"], build)
         self.assertEqual(len(copies), 3)
+
+    def test_permissions_come_from_canonical_template(self):
+        canonical = worker._permissions()
+        self.assertEqual(canonical, json.loads((ROOT / "registry/job-templates/02-native-sast.json").read_text())["permissions"])
+        self.assertNotIn("execute-container-static-analysis", canonical)
 
 
 if __name__ == "__main__":

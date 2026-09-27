@@ -12,7 +12,7 @@
     "output_contract_id": "native-sast"
   },
   "inputs": {"required": ["exact accepted 02-native-build publication", "caller-held native-build fingerprint", "B16 audit-native record", "tracked native-SAST configuration"], "optional": []},
-  "outputs": {"directory": "data/jobs/02-native-sast/attempts/<attempt_id>", "files": ["native-sast.json", "b13-receipts.json", "native-sast-summary.md", "status.json"]},
+  "outputs": {"directory": "data/jobs/02-native-sast/attempts/<attempt_id>", "files": ["native-sast.json", "b13-receipts.json", "native-sast-summary.md", "status.json", "permission.json", "lineage.json"]},
   "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
   "implemented": false,
   "timeout_seconds": 3600,
