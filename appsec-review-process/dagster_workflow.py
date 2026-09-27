@@ -25,6 +25,7 @@ import control_lane_orchestration as control_lane_jobs
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
 import discovery_gate
+import automatic_discovery
 import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
 import ossf_scorecard as ossf_scorecard_worker
@@ -1108,7 +1109,7 @@ def run_repository_partition_discovery(context, configured):
     # schema-valid repository-partition-map if present; otherwise issues an actionable hand-off
     # and fails clearly (never silently succeeds as a no-op).
     job = '02-repository-partition-discovery'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
     context.add_output_metadata({
         'output': MetadataValue.path(str(path / 'repository-partition-map.json')),
@@ -1138,9 +1139,10 @@ def run_dev_project_discovery(context, configured):
     # project-discovery contract. The gate also requires an accepted partition map (the graph's
     # declared dependency) and checks citation freshness. See discovery_gate.py.
     job = '02-dev-project-discovery'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'project-inventory.json')),
+                                 'envelope': MetadataValue.path(str(path / 'result.json'))})
     return result
 
 
@@ -1166,9 +1168,10 @@ def run_devops_project_discovery(context, configured):
     # contract (container/pipeline build definition). Requires the accepted partition map (the
     # graph's declared dependency) at the same source revision. See discovery_gate.py.
     job = '02-devops-project-discovery'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'project-inventory.json')),
+                                 'envelope': MetadataValue.path(str(path / 'result.json'))})
     return result
 
 
@@ -1195,9 +1198,10 @@ def run_sre_operations_topology(context, configured):
     # revision -- operations topology is read off the containers/services devops discovery found.
     # See discovery_gate.py.
     job = '02-sre-operations-topology'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'service-inventory.json')),
+                                 'envelope': MetadataValue.path(str(path / 'result.json'))})
     return result
 
 
