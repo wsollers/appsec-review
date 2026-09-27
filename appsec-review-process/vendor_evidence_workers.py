@@ -38,6 +38,10 @@ SPECS = {
     "02-binary-hardening": ("binary-hardening", ["binskim"]),
     "02-mobile-sast": ("mobile-sast", ["mobsfscan-android", "mobsfscan-ios"]),
 }
+REGISTRY = Path(__file__).resolve().parent / "registry" / "job-templates"
+PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
+LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
+IMPLEMENTATION = "vendor-evidence-workers-v2-producer-receipts"
 
 PROBE_PATTERNS = {
     "gitleaks": ["**/*"], "key-material-file-inventory": ["**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx"],
@@ -123,7 +127,37 @@ def probe(job_id: str, source_root: Path) -> dict[str, Any]:
 
 def fingerprint(job_id: str, source_root: Path, source_snapshot_sha256: str) -> str:
     listing = [(name, HASH(path.read_bytes())) for name, path in _files(source_root)]
-    return HASH(_dump({"job_id": job_id, "source_snapshot_sha256": source_snapshot_sha256, "files": listing}))
+    return HASH(_dump({"implementation": IMPLEMENTATION, "job_id": job_id,
+                       "source_snapshot_sha256": source_snapshot_sha256, "files": listing}))
+
+
+def producer_receipts(documents: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return common producer receipts derived from tracked permissions and attempt evidence."""
+    header = documents["header"]
+    job_id = header["job_id"]
+    try:
+        template = json.loads((REGISTRY / f"{job_id}.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        raise ValueError(f"{job_id}: registry job template is unreadable") from None
+    permissions = template.get("permissions")
+    if (template.get("job_template_id") != job_id or not isinstance(permissions, list) or not all(
+            isinstance(item, str) and item for item in permissions) or
+            len(set(permissions)) != len(permissions)):
+        raise ValueError(f"{job_id}: registry template permissions are invalid")
+    source = header["source_snapshot_sha256"]
+    lineage_material = {
+        "header": header,
+        "contract_id": documents["contract_id"],
+        "probe": documents["probe"],
+        "tool_results": documents["tool-results.json"],
+    }
+    return (
+        {"schema": PERMISSION_SCHEMA, "run_id": header["run_id"], "job_id": job_id,
+         "source_snapshot_sha256": source, "permissions": permissions},
+        {"schema": LINEAGE_SCHEMA, "run_id": header["run_id"], "job_id": job_id,
+         "source_snapshot_sha256": source,
+         "build_lineage_sha256": HASH(_dump(lineage_material))},
+    )
 
 
 def permission_receipt(job_id: str, run_id: str, source_snapshot_sha256: str, *, now: str) -> dict[str, Any]:
@@ -471,10 +505,13 @@ def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run
         path = staging / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+    header = documents["header"]
+    permission, lineage = producer_receipts(documents)
     attempt.mkdir(parents=True)
     evidence_redaction.redact_tree(staging, attempt / "outputs", on_unhandled="refuse",
                                    limits=evidence_redaction.DEFAULT_LIMITS)
-    header = documents["header"]
+    (attempt / "permission.json").write_bytes(_dump(permission))
+    (attempt / "lineage.json").write_bytes(_dump(lineage))
     status = {"status": documents["status"], "attempt_id": header["attempt_id"],
               "dagster_run_id": dagster_run_id}
     if contract in ("secrets-inventory", "iac-config-evidence"):
@@ -486,12 +523,14 @@ def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run
                                                     "contract_id": contract, "outputs": outputs}))
     if started_at is not None and finished_at is not None:
         from worker_result import artifact_records, terminal_envelope, validate_worker_result
-        artifacts=["manifest.json","status.json",*[entry["path"] for entry in outputs]]
+        artifacts=["manifest.json", "status.json", "permission.json", "lineage.json",
+                   *[entry["path"] for entry in outputs]]
         gaps=[g["gap_id"] for g in documents["coverage.json"]["gaps"]]
         envelope=terminal_envelope(run_id=header["run_id"],job_id=header["job_id"],attempt_id=header["attempt_id"],
             worker_kind="pinned_container",execution_status=documents["status"],
             acceptance_status="CURRENT" if documents["status"] in ("OK","OK_WITH_GAPS","SKIPPED") else "NOT_ACCEPTED",
-            input_fingerprint=HASH(_dump({"header":header,"contract":contract})),output_contract=contract,
+            input_fingerprint=HASH(_dump({"implementation": IMPLEMENTATION, "header": header,
+                                         "contract": contract, "lineage": lineage})),output_contract=contract,
             started_at=started_at,finished_at=finished_at,summary=f"{header['job_id']} vendor evidence attempt",
             artifacts=artifact_records(attempt,artifacts),gaps=gaps,
             skip_reason=SKIP if documents["status"]=="SKIPPED" else None,

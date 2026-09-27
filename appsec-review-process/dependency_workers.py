@@ -35,6 +35,10 @@ JOBS = {
     "lifecycle": ("02-dependency-lifecycle", "dependency-lifecycle", "outputs/dependency-lifecycle.json"),
     "reachability": ("06-cve-reachability", "cve-reachability", "outputs/cve-reachability.json"),
 }
+REGISTRY = Path(__file__).resolve().parent / "registry" / "job-templates"
+PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
+LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
+IMPLEMENTATION = "dependency-workers-v2-producer-receipts"
 PINNED_RECEIPT_SCHEMA = "appsec-review/pinned-tool-evidence/1.0"
 REDACTOR = {
     "name": "appsec-review-process/evidence_redaction",
@@ -82,6 +86,30 @@ def _json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise WorkerBlocked(f"required JSON is not an object: {path.name}")
     return value
+
+
+def _producer_receipts(request: dict[str, Any], job: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Derive assembly receipts from tracked policy and the exact worker request.
+
+    The template, rather than caller input, is the permission authority.  The lineage digest binds
+    the complete closed request except for its publication destination; upstream accepted pointers,
+    tool-result hashes, snapshot identities, and source generation therefore all affect it.
+    """
+    template = _json(REGISTRY / f"{job}.json")
+    permissions = template.get("permissions")
+    if (template.get("job_template_id") != job or not isinstance(permissions, list) or not all(
+            isinstance(item, str) and item for item in permissions) or
+            len(set(permissions)) != len(permissions)):
+        raise WorkerBlocked(f"{job}: registry template permissions are invalid")
+    generation = request["source_snapshot_sha256"]
+    lineage_request = {key: value for key, value in request.items() if key != "output_root"}
+    return (
+        {"schema": PERMISSION_SCHEMA, "run_id": request["run_id"], "job_id": job,
+         "source_snapshot_sha256": generation, "permissions": permissions},
+        {"schema": LINEAGE_SCHEMA, "run_id": request["run_id"], "job_id": job,
+         "source_snapshot_sha256": generation,
+         "build_lineage_sha256": _hash_bytes(_canonical({"request": lineage_request}))},
+    )
 
 
 def _path(value: Any, label: str) -> Path:
@@ -794,9 +822,10 @@ BUILDERS: dict[str, Callable[[dict[str, Any], str], tuple[dict[str, bytes], list
 def run(kind: str, request_path: Path) -> dict[str, Any]:
     request = _json(request_path); job, contract, _ = JOBS[kind]
     _base(request, job)
-    fingerprint = _hash_bytes(_canonical({"kind": kind, "request": request, "implementation": "dependency-workers-v1"}))
+    fingerprint = _hash_bytes(_canonical({"kind": kind, "request": request, "implementation": IMPLEMENTATION}))
     attempt_id = job + "-" + fingerprint[7:27]
     artifacts, gaps = BUILDERS[kind](request, attempt_id)
+    permission, lineage = _producer_receipts(request, job)
     root = Path(request["output_root"]).resolve() / job
     attempt = root / "attempts" / attempt_id
     pointer = root / "accepted.json"
@@ -813,6 +842,9 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
             if (not artifact.is_file() or artifact.is_symlink() or
                     _hash_file(artifact).split(":", 1)[1] != record.get("sha256")):
                 raise WorkerBlocked(f"{job}: immutable attempt artifact changed")
+        if (_json(attempt / "permission.json") != permission or
+                _json(attempt / "lineage.json") != lineage):
+            raise WorkerBlocked(f"{job}: immutable attempt producer receipts changed")
         accepted = _json(pointer)
         if (accepted.get("attempt_id") != attempt_id or
                 _hash_file(attempt / "result.json").split(":", 1)[1] != accepted.get("envelope_sha256")):
@@ -831,7 +863,9 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
             path = staging.joinpath(*PurePosixPath(relative).parts); path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(payload)
         (staging / "inputs.json").write_bytes(_canonical(request))
-        paths = sorted(artifacts) + ["inputs.json"]
+        (staging / "permission.json").write_bytes(_canonical(permission))
+        (staging / "lineage.json").write_bytes(_canonical(lineage))
+        paths = sorted(artifacts) + ["inputs.json", "permission.json", "lineage.json"]
         status = "OK_WITH_GAPS" if gaps else "OK"
         stamp = request["generated_at"]
         envelope = terminal_envelope(run_id=request["run_id"], job_id=job, attempt_id=attempt_id,
