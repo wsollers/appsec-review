@@ -7,7 +7,7 @@ from typing import Any
 
 import bounded_analysis_workers as workers
 import deployment_hardening
-from execution_state import Blocked, atomic_json, beneath, data_path, digest, file_hash, identifier, read_json, run_path
+from execution_state import Blocked, atomic_json, beneath, data_path, digest, file_hash, identifier, now, read_json, run_path
 import model_version_registry as mvr
 import owasp_dispatch
 import owasp_validation_worklist
@@ -211,8 +211,8 @@ def run_deployment(run_id: str, dagster_run_id: str, force: bool = False) -> dic
     if not force and (pointer := _reusable(base, run_id, deployment_hardening.JOB,
                                            prepared["attempt_id"])):
         return pointer
-    workers.publish_attempt(base, prepared["result"], started_at="1970-01-01T00:00:00Z",
-                            finished_at="1970-01-01T00:00:00Z")
+    started = now()
+    workers.publish_attempt(base, prepared["result"], started_at=started, finished_at=now())
     return _publish_bounded(run_id, deployment_hardening.JOB, prepared["attempt_id"])
 
 

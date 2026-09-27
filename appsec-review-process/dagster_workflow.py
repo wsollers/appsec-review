@@ -47,6 +47,7 @@ import doc_intelligence_ingest as doc_intelligence_worker
 import native_sast as native_sast_worker
 import operations_doc_ingest as operations_doc_worker
 import standards_source_ingest as standards_source_worker
+import standards_lifecycle
 import test_coverage_ingest as test_coverage_worker
 import test_execution as test_execution_worker
 import test_intelligence_ingest as test_intelligence_worker
@@ -707,6 +708,27 @@ def analysis_feature_lifecycle_op(job_id):
 native_memory_lifecycle_work = analysis_feature_lifecycle_op('05-native-memory')
 cve_reachability_lifecycle_work = analysis_feature_lifecycle_op('06-cve-reachability')
 fuzz_triage_lifecycle_work = analysis_feature_lifecycle_op('13-fuzz-target-triage')
+
+
+def standards_lifecycle_op(job_id, pool=CPU_POOL):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def standards_stage(context, configured, upstream):
+        result = standards_lifecycle.run(
+            configured['engagement_run_id'], context.run_id, job_id,
+            configured['force'])
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(data_path(
+                configured['engagement_run_id'], 'jobs', job_id))),
+            'attempt_id': result['attempt_id']})
+        return result
+    return standards_stage
+
+
+owasp_worklist_lifecycle_work = standards_lifecycle_op('04-owasp-validation-worklist')
+owasp_join_lifecycle_work = standards_lifecycle_op('04-asvs-masvs', PERSONA_POOL)
+stig_worklist_lifecycle_work = standards_lifecycle_op('15-stig-srg-validation-worklist')
+deployment_lifecycle_work = standards_lifecycle_op('15-deployment-hardening')
 
 
 @op(name='job_02_evidence_assembly', ins={'configured': In(dict), 'upstream': In(list)},
@@ -1471,7 +1493,7 @@ LIFECYCLE_OPS['01-component-characterization']=component_characterization_work
 LIFECYCLE_OPS['02-full-review-input-assembly']=full_review_input_assembly_work
 LIFECYCLE_OPS['03-threat-model-dfd-stride']=threat_model_dfd_stride_work
 LIFECYCLE_OPS['03-threat-model-reconciliation']=threat_model_reconciliation_work
-LIFECYCLE_OPS['04-asvs-masvs']=owasp_join_report_work
+LIFECYCLE_OPS['04-asvs-masvs']=owasp_join_lifecycle_work
 LIFECYCLE_OPS['10-synthesis-report']=synthesis_report_work
 LIFECYCLE_OPS['02-binary-hardening']=binary_hardening_lifecycle_work
 LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
@@ -1507,6 +1529,9 @@ LIFECYCLE_OPS['12-scoring-prioritization']=scoring_lifecycle_work
 LIFECYCLE_OPS['05-native-memory']=native_memory_lifecycle_work
 LIFECYCLE_OPS['06-cve-reachability']=cve_reachability_lifecycle_work
 LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
+LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work
+LIFECYCLE_OPS['15-stig-srg-validation-worklist']=stig_worklist_lifecycle_work
+LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
