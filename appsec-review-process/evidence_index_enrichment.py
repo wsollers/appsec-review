@@ -81,12 +81,50 @@ def _owned(attempt: Path, relative: str) -> Path:
     return path
 
 
+def _plain_directory(owner: Path, path: Path, label: str) -> Path:
+    """Require a real directory lexically and physically beneath its canonical owner."""
+    try:
+        relative = path.relative_to(owner)
+        owner_resolved = owner.resolve(strict=True)
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(owner_resolved)
+    except (OSError, ValueError) as exc:
+        raise Blocked(f"02-evidence-index: selected producer {label} escapes its canonical root") from exc
+    cursor = owner
+    if cursor.is_symlink() or not cursor.is_dir():
+        raise Blocked(f"02-evidence-index: selected producer {label} root is not a real directory")
+    for part in relative.parts:
+        cursor /= part
+        if cursor.is_symlink() or not cursor.is_dir():
+            raise Blocked(f"02-evidence-index: selected producer {label} traverses a linked directory")
+    return path
+
+
+def _root_file(base: Path, name: str, job: str) -> Path:
+    path = base / name
+    try:
+        path.resolve(strict=True).relative_to(base.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise Blocked(f"02-evidence-index: selected producer {job} control file escapes its root") from exc
+    if path.is_symlink() or not path.is_file():
+        raise Blocked(f"02-evidence-index: selected producer {job} control file is not regular")
+    return path
+
+
 def _producer_root(run_id: str, job: str) -> Path:
-    base = data_path(run_id, "jobs", job)
+    try:
+        jobs = data_path(run_id, "jobs")
+    except ValueError as exc:
+        raise Blocked(f"02-evidence-index: selected producer {job} jobs root is unsafe") from exc
+    base = _plain_directory(jobs, jobs / job, job)
     direct, whole = base / "accepted.json", base / "whole/accepted.json"
-    if direct.is_file() == whole.is_file():
+    direct_exists = direct.is_file() and not direct.is_symlink()
+    whole_exists = whole.is_file() and not whole.is_symlink()
+    if direct_exists == whole_exists:
         raise Blocked(f"02-evidence-index: selected producer {job} has no unique accepted root")
-    return base if direct.is_file() else base / "whole"
+    selected = base if direct_exists else _plain_directory(base, base / "whole", job)
+    _root_file(selected, "accepted.json", job)
+    return selected
 
 
 def _template_permissions(job: str) -> list[str]:
@@ -101,7 +139,7 @@ def load_producer(run_id: str, job: str) -> dict[str, Any]:
         raise Blocked("02-evidence-index: producer selection contains an unsupported job")
     contract, result_name, schema_name, arrays, authority = PROFILES[job]
     base = _producer_root(run_id, job)
-    pointer_path = base / "accepted.json"
+    pointer_path = _root_file(base, "accepted.json", job)
     pointer = read_json(pointer_path)
     required = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint", "envelope_path",
                 "envelope_sha256", "hashes", "accepted_at"}
@@ -109,11 +147,16 @@ def load_producer(run_id: str, job: str) -> dict[str, Any]:
             pointer.get("status") not in {"OK", "OK_WITH_GAPS"} or pointer.get("run_id") != run_id or
             pointer.get("job") != job or pointer.get("envelope_path") != "result.json"):
         raise Blocked(f"02-evidence-index: selected producer {job} accepted pointer is invalid")
-    latest = read_json(base / "latest.json")
+    latest = read_json(_root_file(base, "latest.json", job))
     if latest.get("attempt_id") != pointer["attempt_id"]:
         raise Blocked(f"02-evidence-index: selected producer {job} accepted pointer is stale")
-    attempt = base / "attempts" / pointer["attempt_id"]
-    if not attempt.is_dir() or attempt.is_symlink() or tree_hashes(attempt) != pointer["hashes"]:
+    attempts = _plain_directory(base, base / "attempts", job)
+    attempt = _plain_directory(attempts, attempts / pointer["attempt_id"], job)
+    try:
+        hashes = tree_hashes(attempt)
+    except (OSError, ValueError) as exc:
+        raise Blocked(f"02-evidence-index: selected producer {job} attempt tree is unsafe") from exc
+    if hashes != pointer["hashes"]:
         raise Blocked(f"02-evidence-index: selected producer {job} attempt tree is corrupt")
     envelope_path = _owned(attempt, pointer["envelope_path"])
     envelope = read_json(envelope_path)

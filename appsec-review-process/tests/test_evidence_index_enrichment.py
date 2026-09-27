@@ -271,6 +271,38 @@ class EvidenceIndexEnrichmentTests(unittest.TestCase):
         with self.assertRaises(Blocked):
             enrichment.selected_inputs(RUN_ID)
 
+    def test_external_attempts_directory_symlink_fails_closed(self):
+        self.fixture.selection()
+        attempts = self.fixture.base / "attempts"
+        external = Path(self.temp.name) / "external-attempts"
+        attempts.rename(external)
+        attempts.symlink_to(external, target_is_directory=True)
+        with self.assertRaises(Blocked):
+            enrichment.selected_inputs(RUN_ID)
+
+    def test_nested_artifact_symlink_and_path_escape_fail_closed(self):
+        self.fixture.selection()
+        external = Path(self.temp.name) / "external-artifacts"
+        external.mkdir()
+        (external / "extra.json").write_text("{}\n", encoding="utf-8")
+        nested = self.fixture.attempt / "nested"
+        nested.symlink_to(external, target_is_directory=True)
+        with self.assertRaises(Blocked):
+            enrichment.selected_inputs(RUN_ID)
+
+        nested.unlink()
+        self.fixture.reseal()
+        envelope_path = self.fixture.attempt / "result.json"
+        envelope = json.loads(envelope_path.read_text())
+        envelope["artifacts"][0]["path"] = "nested/../../doc-intelligence.json"
+        atomic_json(envelope_path, envelope)
+        pointer = json.loads((self.fixture.base / "accepted.json").read_text())
+        pointer["envelope_sha256"] = file_hash(envelope_path)
+        pointer["hashes"] = tree_hashes(self.fixture.attempt)
+        atomic_json(self.fixture.base / "accepted.json", pointer)
+        with self.assertRaises(Blocked):
+            enrichment.selected_inputs(RUN_ID)
+
     def test_resealed_secret_payload_and_receipt_forgery_fail_contract_validation(self):
         self.fixture.selection()
         payload_path = self.fixture.attempt / "doc-intelligence.json"
