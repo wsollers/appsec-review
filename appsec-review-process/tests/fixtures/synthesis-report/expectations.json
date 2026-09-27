@@ -1,0 +1,7 @@
+{
+  "status": "DRAFT_EVIDENCE_BACKED",
+  "verified_findings": 1,
+  "unresolved_candidates": 1,
+  "owasp_denominators": {"selected": 4, "applicable": 3, "assessed": 2, "satisfied": 1},
+  "publication_artifacts": ["report.json", "report.md", "coverage-unresolved-appendix.md", "evidence-trace-index.json"]
+}

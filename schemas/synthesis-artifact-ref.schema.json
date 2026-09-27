@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"synthesis-artifact-ref.schema.json","type":"object","additionalProperties":false,
+  "required":["job_id","attempt_id","contract_id","artifact_path","artifact_sha256","accepted_pointer_sha256","permission_receipt_sha256","lineage_receipt_sha256"],
+  "properties":{"job_id":{"type":"string","minLength":1},"attempt_id":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$"},"contract_id":{"type":"string","minLength":1},"artifact_path":{"type":"string","minLength":1},"artifact_sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"accepted_pointer_sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"permission_receipt_sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"lineage_receipt_sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"}}
+}

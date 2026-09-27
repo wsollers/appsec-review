@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"synthesis-l08-adapter.schema.json","type":"object","additionalProperties":false,
+  "required":["schema","run_id","ledger_head_id","ledger_head_sha256","records"],
+  "properties":{"schema":{"const":"appsec-review/synthesis-l08-adapter/0.1"},"run_id":{"type":"string"},"ledger_head_id":{"type":"string"},"ledger_head_sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"records":{"type":"array","items":{"$ref":"synthesis-l08-record.schema.json"}}}
+}

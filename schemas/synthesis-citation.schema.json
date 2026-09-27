@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"synthesis-citation.schema.json","type":"object","additionalProperties":false,
+  "required":["citation_id","producer_job_id","producer_attempt_id","artifact_path","artifact_sha256","locator_json","observed_fact"],
+  "properties":{"citation_id":{"type":"string"},"producer_job_id":{"type":"string"},"producer_attempt_id":{"type":"string"},"artifact_path":{"type":"string"},"artifact_sha256":{"type":"string","pattern":"^(sha256:)?[0-9a-f]{64}$"},"locator_json":{"type":["string","null"]},"observed_fact":{"type":"string"}}
+}

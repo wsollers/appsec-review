@@ -1,0 +1,8 @@
+{
+  "schema":"appsec-review/output-contract/0.1","contract_id":"synthesis-report-draft","display_name":"Immutable Evidence-backed Draft Report",
+  "required_files":["report.json","report.md","coverage-unresolved-appendix.md","evidence-trace-index.json","publication-manifest.json","permission.json","lineage.json","status.json"],
+  "required_status_fields":["process","status","verified_findings","unresolved_candidates","limitations","final"],
+  "result_schema":{"artifact":"report.json","schema_file":"synthesis-report.schema.json"},
+  "claim_class":{"claim_class_id":"evidence-backed-draft-report","allowed_assertions":["draft-report","verified-finding-projection","coverage-accounting","unresolved-risk-projection","evidence-trace","publication-manifest"],"forbidden_promotions":["finding","severity","runtime-state"]},
+  "validation_rules":["consume only current accepted hash-bound upstream artifacts","require one source generation, component generation, and ledger head","only independently verified ledger claims may project as findings","preserve selected/applicable/assessed/satisfied separately","preserve dissent, unresolved candidates, limitations and gaps","status is exactly DRAFT_EVIDENCE_BACKED and never FINAL"]
+}
