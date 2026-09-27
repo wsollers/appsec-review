@@ -95,6 +95,18 @@ class FinalPublicationTests(unittest.TestCase):
                 final.publish(draft,ledger,root/"wrong-anchor",authorization_key=self.KEY,
                               expected_ledger_anchor="sha256:"+"8"*64)
 
+    def test_draft_cannot_claim_publisher_owned_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); draft,ledger=self.fixture(root)
+            atomic_json(draft/"human-signoff-ledger.json",{"attacker":True})
+            publication=json.loads((draft/"publication-manifest.json").read_text())
+            publication["artifacts"].append({"path":"human-signoff-ledger.json",
+                "sha256":"sha256:"+file_hash(draft/"human-signoff-ledger.json")})
+            atomic_json(draft/"publication-manifest.json",publication)
+            with self.assertRaisesRegex(Blocked,"publisher-owned"):
+                final.publish(draft,ledger,root/"final",authorization_key=self.KEY,
+                              expected_ledger_anchor=self.ANCHOR)
+
 
 if __name__ == "__main__":
     unittest.main()
