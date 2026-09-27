@@ -1,0 +1,7 @@
+{
+  "schema":"appsec-review/output-contract/0.1","contract_id":"owasp-join-report","display_name":"OWASP Control Accounting And Candidate Routes",
+  "required_files":["owasp-control-status-matrix.json","owasp-coverage-gaps.json","owasp-candidate-promotion-routes.json","permission.json","lineage.json","status.json"],
+  "required_status_fields":["process","status","selected","applicable","assessed","satisfied","coverage_gaps","candidate_routes","claim_limit"],
+  "result_schema":{"artifact":"owasp-control-status-matrix.json","schema_file":"owasp-control-status-matrix.schema.json"},
+  "validation_rules":["consume only load_verified_accounting and its exact accepted upstream artifacts","publish matrix gaps and routes from one deterministic derivation","preserve selected applicable assessed and satisfied denominators separately","permission and lineage receipts bind exact source snapshot dispatch accounting and outputs","control failures and candidate routes do not create findings severity runtime or compliance claims"]
+}
