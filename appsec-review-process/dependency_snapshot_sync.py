@@ -178,16 +178,23 @@ def _activate_grype(archive: Path, destination: Path, spec: dict[str, Any]) -> d
     try:
         defaults = ce.host_defaults()
         executable = defaults["docker_executable"]
+        container_user = defaults["container_user"]
         image = ce.load_image_registry(ce.IMAGES_DIR)["tool-grype"]["digest"]
     except (KeyError, OSError, ce.ContainerRequestError) as exc:
         raise SyncBlocked("pinned Grype image identity is unavailable") from exc
     if executable is None:
         raise SyncBlocked("Docker is unavailable for pinned Grype database activation")
-    destination.chmod(0o777)
+    if not isinstance(container_user, str) or not container_user:
+        raise SyncBlocked("bounded container user is unavailable for Grype database activation")
+    temporary = destination / ".import-tmp"
+    temporary.mkdir()
+    temporary.chmod(0o700)
     common = [str(executable), "run", "--rm", "--network", "none", "--read-only",
               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "128",
+              "--user", container_user,
               "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=64m",
               "-e", "GRYPE_DB_CACHE_DIR=/scratch/grype/db",
+              "-e", "TMPDIR=/scratch/.import-tmp", "-e", "SQLITE_TMPDIR=/scratch/.import-tmp",
               "-v", f"{archive.resolve()}:/input/db.tar.zst:ro",
               "-v", f"{destination.resolve()}:/scratch:rw",
               "--entrypoint", "/opt/tool/bin/grype", image]
@@ -211,6 +218,7 @@ def _activate_grype(archive: Path, destination: Path, spec: dict[str, Any]) -> d
             status.get("schemaVersion") != expected_schema or
             status.get("built") != spec["metadata"]["data_timestamp"]):
         raise SyncBlocked("activated Grype database identity differs from the pinned declaration")
+    shutil.rmtree(temporary)
     present = {item["path"] for item in snapshots.inventory(destination)}
     if not set(spec["required_paths"]).issubset(present):
         raise SyncBlocked("activated Grype database lacks required cache content")

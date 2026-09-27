@@ -39,6 +39,10 @@ values, so they are reduced to `aggregate:<v03-error-name>` plus caller-declared
   closed and has no place for a per-component list, so the list is its own file and
   `coverage-gap-summary.json` names it by path and sha256. `coverage.json` carries one
   `unmapped-components` gap with the same count.
+- `sca-vulnerability-match` requires `outputs/osv-applicability-receipt.json`. The receipt binds the
+  exact accepted SBOM and validated OSV snapshot. OSV Scanner executes only when that SBOM contains
+  a purl-bearing component; otherwise the receipt records `SKIPPED_NA` with
+  `no-purl-bearing-components`, Grype still executes, and the SCA node remains `OK_WITH_GAPS`.
 - `dependency-lifecycle` also requires `outputs/tool-results.json`: V03's coverage rules are defined
   against the tool instance, and the transform's reference-table identity lives in its
   `data_identities`.

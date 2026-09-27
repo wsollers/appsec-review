@@ -7,6 +7,7 @@ worker's immutable publication seam.  Snapshot synchronization deliberately live
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +82,33 @@ def _binding_paths(payload: dict[str, Any], owner: Path, kind: str) -> None:
         _owned(payload.get("reference_table"), owner, "reference table")
     if kind == "reachability":
         _owned(payload.get("reachability_evidence"), owner, "reachability evidence")
+
+
+def _osv_applicability(sbom_binding: dict[str, Any]) -> dict[str, Any]:
+    """Derive OSV Scanner's accepted input class from the exact bound SBOM.
+
+    OSV Scanner's CycloneDX path can only identify components carrying package URLs.  A present
+    SBOM with zero such components is therefore a per-tool non-applicability result, not a reason
+    to skip Grype or the enclosing SCA lifecycle job.
+    """
+    path = Path(sbom_binding["path"])
+    expected = sbom_binding.get("sha256")
+    if expected != "sha256:" + file_hash(path):
+        raise Blocked("dependency orchestration: SBOM changed before OSV applicability evaluation")
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        raise Blocked("dependency orchestration: SBOM is unreadable for OSV applicability evaluation") from None
+    components = document.get("components") if isinstance(document, dict) else None
+    if not isinstance(components, list) or any(not isinstance(item, dict) for item in components):
+        raise Blocked("dependency orchestration: SBOM components are invalid for OSV applicability evaluation")
+    refs = sorted(item.get("component_id") for item in components if isinstance(item.get("purl"), str) and item["purl"])
+    if any(not isinstance(ref, str) for ref in refs):
+        raise Blocked("dependency orchestration: purl-bearing SBOM component lacks an identity")
+    return {"decision": "EXECUTE" if refs else "SKIPPED_NA",
+            "reason": None if refs else "no-purl-bearing-components",
+            "examined_component_count": len(components), "purl_component_count": len(refs),
+            "purl_component_refs": refs}
 
 
 def _canonical_attempt(value: str, owner: Path, job_id: str) -> Path:
@@ -198,19 +226,26 @@ def execute(*, job_id: str, run_id: str, input_path: str, output_root: str,
                 expected_by_kind = {item.get("database_kind"): item for item in expected_identities}
                 if set(expected_by_kind) != {"grype-db", "osv"}:
                     raise Blocked("dependency orchestration: offline snapshot identities are incomplete")
+            applicability = _osv_applicability(payload["sbom"])
             identities = []
             for adapter_kind in ("grype", "osv"):
                 b13_root = attempt / "b13" / adapter_kind
-                b13_root.mkdir(parents=True)
-                result = b13.execute_registered(adapter_kind, snapshot_registry=registry,
-                    max_age_seconds=max_age, run_id=run_id,
-                    adapter_attempt_id=attempt.name + "-" + adapter_kind,
-                    source_snapshot_sha256=generation, attempt_root=b13_root, sbom_root=sbom_root)
-                worker_request[("osv_" if adapter_kind == "osv" else "") + "b13_attempt"] = result["b13_attempt"]
+                if adapter_kind == "osv" and applicability["decision"] == "SKIPPED_NA":
+                    result = b13.resolve_registered_snapshot("osv", snapshot_registry=registry,
+                        max_age_seconds=max_age,
+                        now=datetime.fromisoformat(request["generated_at"].replace("Z", "+00:00")))
+                else:
+                    b13_root.mkdir(parents=True)
+                    result = b13.execute_registered(adapter_kind, snapshot_registry=registry,
+                        max_age_seconds=max_age, run_id=run_id,
+                        adapter_attempt_id=attempt.name + "-" + adapter_kind,
+                        source_snapshot_sha256=generation, attempt_root=b13_root, sbom_root=sbom_root)
+                    worker_request[("osv_" if adapter_kind == "osv" else "") + "b13_attempt"] = result["b13_attempt"]
                 if expected_by_kind is not None and result["database"] != expected_by_kind.get(result["database"].get("database_kind")):
                     raise Blocked("dependency orchestration: offline snapshot changed after input construction")
                 identities.append(result["database"])
-            worker_request.update(databases=identities, max_database_age_seconds=max_age)
+            worker_request.update(databases=identities, max_database_age_seconds=max_age,
+                                  osv_applicability=applicability)
         resolved = attempt / "worker-request.json"
         atomic_json(resolved, worker_request)
         return workers.run(kind, resolved)

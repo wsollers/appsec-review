@@ -43,6 +43,11 @@ the attempt is parsed. Every other contract ignores `orchestration`.
 | V07 `inputs_root` | `container-image-inventory` | `<run>/inputs`, the run's staged inputs. |
 | `sbom_attempt_root` + `expected_sbom`, `license_attempt_root` + `expected_license` | `sca-vulnerability-match`, `license-inventory`, `dependency-lifecycle` | The SAME run's `data/jobs/<upstream job>/<scope>/accepted.json`. `attempt_id` and `sha256` (`"sha256:" + hashes[<result artifact>]`) come from the POINTER. The pointer must be the accepted common format, name this run and job, be `OK`/`OK_WITH_GAPS`, be the newest attempt (`latest.json`), and the attempt tree and envelope must still hash to what the pointer recorded. No accepted upstream is a blocking error, never a skip. |
 | `expected_databases` | `sca-vulnerability-match` | **Fails closed until V18.** `vulnerability_database_bindings(run_root)` raises. |
+
+The SCA node itself is always applicable once its accepted SBOM and both snapshots exist. Its OSV
+subtool has a narrower gate: a bound SBOM with zero purl-bearing components produces the retained
+`outputs/osv-applicability-receipt.json` `SKIPPED_NA` decision, while Grype still runs and both
+snapshot identities remain validated and published.
 | `reference_table_path`, `expected_reference_table` | `dependency-lifecycle` | **Fails closed; no task owns the table yet.** `lifecycle_reference_table_binding(run_root)` raises. |
 | `max_age` | SCA, lifecycle | `job_max_age(contract_id)` returns `NO_AGE_LIMIT` explicitly (ADR-0010 M4). Nothing in the run inputs, launch request or registry carries a job-set limit today. |
 | `now` | SCA, lifecycle | `OrchestrationFacts.now`. Only the command line reads the wall clock. |
