@@ -17,6 +17,8 @@ from execution_state import Blocked, atomic_json, file_hash, tree_hashes
 import full_review_input_assembly as assembly
 from publish_job_output import ACCEPTED_SCHEMA
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
+from worker_result import artifact_records, terminal_envelope
+import intake
 
 
 STAMP = "2026-09-27T12:00:00Z"
@@ -55,6 +57,31 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
             "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
             "envelope_sha256": file_hash(base / "attempts/source-1/result.json"),
             "hashes": tree_hashes(base / "attempts/source-1"), "accepted_at": STAMP})
+        return base / "accepted.json"
+
+    def _accepted_component(self) -> Path:
+        base = self.run / "data/jobs/01-component-characterization"
+        attempt = base / "attempts/component-1"
+        attempt.mkdir(parents=True)
+        value = json.loads((ROOT / "tests/fixtures/component-characterization/hello-autotools.json").read_text())
+        value["functional_components"][0]["representative_locations"] = ["main.c"]
+        value["source_snapshot_sha256"] = "sha256:" + intake.source_identity(self.target)["fingerprint"]
+        atomic_json(attempt / "component-purpose-map.json", value)
+        atomic_json(attempt / "component-purpose-map.md", {"fixture": True})
+        atomic_json(attempt / "status.json", {"process": "01-component-characterization", "status": "OK"})
+        envelope = terminal_envelope(run_id="review-1", job_id="01-component-characterization",
+            attempt_id="component-1", worker_kind="deterministic_python", execution_status="OK",
+            acceptance_status="CURRENT", input_fingerprint="sha256:" + "a" * 64,
+            output_contract="component-map", started_at=STAMP, finished_at=STAMP,
+            summary="fixture component map", artifacts=artifact_records(attempt,
+                ["component-purpose-map.json", "component-purpose-map.md", "status.json"]))
+        atomic_json(attempt / "result.json", envelope)
+        atomic_json(base / "latest.json", {"attempt_id": "component-1", "updated_at": STAMP})
+        atomic_json(base / "accepted.json", {"schema": ACCEPTED_SCHEMA, "status": "OK",
+            "run_id": "review-1", "job": "01-component-characterization", "attempt_id": "component-1",
+            "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
+            "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
+            "accepted_at": STAMP})
         return base / "accepted.json"
 
     def _plan(self, *, sources=None) -> Path:
@@ -120,6 +147,54 @@ class FullReviewInputAssemblyTests(unittest.TestCase):
         result = json.loads((target_root / "attempts/downstream-1/fuzz-target-triage.json").read_text())
         self.assertEqual(result["upstream"][0]["attempt_id"], "source-1")
         self.assertEqual(result["targets"][0]["target_id"], "target-2")
+
+    def test_component_map_derives_exact_first_wave_and_explicit_na_rows(self):
+        pointer = self._accepted_component()
+        plan_path = self.run / "inputs/derived-full-review-plan.json"
+        plan = assembly.derive_plan(pointer, self.run.absolute(), plan_path,
+            run_id="review-1", generated_at=STAMP)
+        self.assertEqual([row["job_id"] for row in plan["launches"]],
+            ["02-sbom-inventory", "02-secrets-inventory", "05-native-memory"])
+        self.assertIn("02-binary-hardening", {row["job_id"] for row in plan["skipped"]})
+        output, result = self._assemble(plan_path)
+        self.assertEqual([row["job_id"] for row in result["requests"]],
+            ["02-sbom-inventory", "02-secrets-inventory", "05-native-memory"])
+        native = json.loads((output / "attempts/assembly-1/requests/05-native-memory.json").read_text())
+        self.assertEqual(native["payload"]["units"][0]["path"], "main.c")
+        self.assertEqual(native["payload"]["units"][0]["citations"][0]["observed_fact"],
+                         "Writes the fixture greeting and exits.")
+
+    def test_derived_requests_dispatch_and_collect_exact_results(self):
+        pointer = self._accepted_component()
+        plan = self.run / "inputs/derived-full-review-plan.json"
+        assembly.derive_plan(pointer, self.run.absolute(), plan, run_id="review-1", generated_at=STAMP)
+        output, _ = self._assemble(plan)
+        observed = []
+
+        def qualified_executor(adapter, job_id, request_path, run_root, attempt_id, dagster_run_id):
+            request = json.loads(request_path.read_text())
+            observed.append((adapter, job_id, request["source_generation"], attempt_id, dagster_run_id))
+            if adapter == "bounded":
+                return assembly._dispatch_one(adapter, job_id, request_path, run_root,
+                                              attempt_id, dagster_run_id)
+            return {"status": "CURRENT", "job_id": job_id,
+                    "request_sha256": "sha256:" + file_hash(request_path)}
+
+        with patch.object(execution_state, "RUNS", self.runs), \
+             patch.object(orchestration, "run_path", execution_state.run_path), \
+             patch.object(orchestration, "data_path", execution_state.data_path):
+            dispatched = assembly.dispatch(output, self.run.absolute(),
+                self.run / "data/jobs/02-full-review-input-dispatch", attempt_id="dispatch-1",
+                dagster_run_id="dagster-1", started_at=STAMP, finished_at=STAMP,
+                executor=qualified_executor)
+        self.assertEqual([row[1] for row in observed],
+            ["02-sbom-inventory", "02-secrets-inventory", "05-native-memory"])
+        self.assertEqual(len(dispatched["results"]), 3)
+        self.assertTrue(all(row["status"] == "CURRENT" for row in dispatched["results"]))
+        self.assertEqual(len(list((self.run / "data/jobs/05-native-memory/attempts").glob("full-dispatch-1-*"))), 1)
+        dispatch_root = self.run / "data/jobs/02-full-review-input-dispatch"
+        pointer_value = json.loads((dispatch_root / "accepted.json").read_text())
+        self.assertEqual(pointer_value["hashes"], tree_hashes(dispatch_root / "attempts/dispatch-1"))
 
     def test_stale_plan_and_mixed_accepted_generation_fail_closed(self):
         plan = self._plan()

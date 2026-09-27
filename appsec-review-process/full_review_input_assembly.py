@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
-"""Assemble exact, run-owned launch requests for the standalone analysis families.
+"""Derive, assemble, and dispatch exact full-review analysis requests.
 
-The assembler is deliberately not a scheduler.  It joins current accepted producer artifacts,
-checks their source generation, resolves a small closed set of config references, and emits the
-request dialect already consumed by each public orchestration adapter.  A later graph binding can
-dispatch these requests without re-deriving or weakening their evidence lineage.
+The derivation seam starts with the accepted component map.  It only selects analyses justified by
+that map and by input classes actually present in the immutable run; absent classes are retained as
+explicit ``SKIPPED_NA`` rows.  Assembly and dispatch remain separate callable seams so orchestration
+can inspect the hash-bound request bundle before invoking any worker.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import bounded_transform_orchestration
 from bounded_analysis_workers import load_accepted
 from bounded_transform_orchestration import REQUEST_SCHEMA as BOUNDED_SCHEMA, FACADES
 from dependency_orchestration import (REQUEST_SCHEMA as DEPENDENCY_SCHEMA,
                                       JOBS as DEPENDENCY_JOBS, _PAYLOAD_KEYS, _TOOL_KEYS)
 from execution_state import Blocked, atomic_json, digest, file_hash, identifier, read_json, tree_hashes
+import intake
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from vendor_evidence_orchestration import REQUEST_SCHEMA as VENDOR_SCHEMA, WORKERS
+import vendor_evidence_orchestration
+import dependency_orchestration
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
 
 JOB = "02-full-review-input-assembly"
@@ -37,6 +42,22 @@ _LAUNCH_KEYS = {
     "bounded": {"adapter", "job_id", "upstream", "payload"},
     "vendor": {"adapter", "job_id", "source_root"},
     "dependency": {"adapter", "job_id", "payload", "tool"},
+}
+
+COMPONENT_SOURCE = {
+    "job_id": "01-component-characterization", "contract": "component-map",
+    "artifact": "component-purpose-map.json", "artifact_schema": "component-purpose-map.schema.json",
+    "generation_pointer": "/source_snapshot_sha256",
+}
+NATIVE_SUFFIXES = {".c": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp",
+                   ".m": "objective-c", ".mm": "objective-cpp"}
+MOBILE_MARKERS = {"androidmanifest.xml", "build.gradle", "build.gradle.kts", "info.plist",
+                  "podfile", "project.pbxproj"}
+DEPENDENCY_SOURCES = {
+    "02-sbom-inventory": ("sbom-inventory", "outputs/sbom-manifest.json", "sbom-inventory.schema.json"),
+    "02-sca-vulnerability-match": ("sca-vulnerability-match", "outputs/sca-vulnerability-match.json",
+                                    "sca-vulnerability-match.schema.json"),
+    "02-license-scan": ("license-inventory", "outputs/license-inventory.json", "license-inventory.schema.json"),
 }
 
 
@@ -141,6 +162,259 @@ def _referenced_aliases(value: Any) -> set[str]:
     return aliases | set().union(*(_referenced_aliases(item) for item in value.values()), set())
 
 
+def _component_source_current(document: dict[str, Any], run_root: Path) -> None:
+    """Bind the component map to the current target rather than conflating two generations.
+
+    Component characterization records the checkout fingerprint.  Adapter requests intentionally
+    record the artifact-manifest hash.  Both are required and they are not interchangeable.
+    """
+    manifest = read_json(run_root / "inputs/artifact-manifest.json")
+    target = manifest.get("target") if isinstance(manifest, dict) else None
+    value = target.get("repo_path") if isinstance(target, dict) else None
+    path = Path(value) if isinstance(value, str) else Path()
+    if not value or not path.is_absolute() or not path.is_dir() or path.is_symlink():
+        raise Blocked("full review input assembly: manifest target is unavailable")
+    identity = intake.source_identity(str(path.resolve()))
+    if document.get("source_snapshot_sha256") != HASH + identity["fingerprint"]:
+        raise Blocked("full review input assembly: component map is stale for the staged target")
+
+
+def _load_dependency_source(pointer: Path, *, run_id: str, spec: dict[str, Any]
+                            ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Revalidate the dependency worker's older accepted-pointer dialect without trusting it."""
+    accepted = read_json(pointer)
+    required = {"schema", "run_id", "job", "attempt_id", "status", "fingerprint",
+                "envelope_path", "envelope_sha256"}
+    if (not isinstance(accepted, dict) or set(accepted) != required or
+            accepted.get("schema") != ACCEPTED_SCHEMA or accepted.get("run_id") != run_id or
+            accepted.get("job") != spec["job_id"] or accepted.get("status") not in {"OK", "OK_WITH_GAPS"} or
+            accepted.get("envelope_path") != "result.json"):
+        raise Blocked("full review input assembly: dependency accepted pointer is invalid")
+    attempt = pointer.parent / "attempts" / identifier(accepted["attempt_id"])
+    envelope_path = attempt / "result.json"
+    if (attempt.is_symlink() or not attempt.is_dir() or envelope_path.is_symlink() or
+            not envelope_path.is_file() or file_hash(envelope_path) != accepted["envelope_sha256"]):
+        raise Blocked("full review input assembly: dependency accepted attempt changed")
+    envelope = read_json(envelope_path)
+    if (validate_worker_result(envelope) or envelope.get("run_id") != run_id or
+            envelope.get("job_id") != spec["job_id"] or envelope.get("attempt_id") != accepted["attempt_id"] or
+            envelope.get("input_fingerprint") != accepted["fingerprint"] or
+            envelope.get("output_contract") != spec["contract"] or envelope.get("acceptance_status") != "CURRENT"):
+        raise Blocked("full review input assembly: dependency accepted envelope is invalid")
+    artifacts = {row.get("path"): row for row in envelope.get("artifacts", []) if isinstance(row, dict)}
+    artifact = spec["artifact"]
+    if artifact not in artifacts or len(artifacts) != len(envelope.get("artifacts", [])):
+        raise Blocked("full review input assembly: dependency accepted artifact is absent")
+    for relative, row in artifacts.items():
+        path = attempt.joinpath(*PurePosixPath(relative).parts)
+        try:
+            path.resolve(strict=True).relative_to(attempt.resolve(strict=True))
+        except (OSError, ValueError) as exc:
+            raise Blocked("full review input assembly: dependency artifact escapes attempt") from exc
+        if path.is_symlink() or not path.is_file() or file_hash(path) != row.get("sha256"):
+            raise Blocked("full review input assembly: dependency artifact changed")
+    document = read_json(attempt / artifact)
+    errors = validate_document(document, spec["artifact_schema"])
+    if errors:
+        raise Blocked("full review input assembly: dependency artifact schema failed: " + errors[0])
+    return document, {"job_id": spec["job_id"], "attempt_id": accepted["attempt_id"],
+        "artifact_path": artifact, "artifact_sha256": HASH + file_hash(attempt / artifact),
+        "accepted_pointer_sha256": HASH + file_hash(pointer)}
+
+
+def _component_citation(component: dict[str, Any], index: int, target: Path) -> tuple[str, dict[str, Any]]:
+    locations = component.get("representative_locations")
+    relative = locations[0] if isinstance(locations, list) and locations else ""
+    source = target / relative
+    if (not relative or source.is_symlink() or not source.is_file() or
+            source.resolve().parent != target.resolve() and target.resolve() not in source.resolve().parents):
+        raise Blocked("full review input assembly: component representative source is unavailable")
+    source_sha = HASH + file_hash(source)
+    citation = {
+        "citation_id": "component-" + digest({"component": component["component_id"],
+                                                "path": relative, "sha256": source_sha})[:20],
+        "artifact_path": relative, "artifact_sha256": source_sha,
+        "locator": relative, "observed_fact": {
+            "$accepted": "component-map", "pointer": f"/functional_components/{index}/observed_purpose"},
+    }
+    return source_sha, citation
+
+
+def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run_id: str,
+                generated_at: str) -> dict[str, Any]:
+    """Derive the applicable first-wave plan from the accepted component map and staged inputs."""
+    run_root, component_pointer, plan_path = Path(run_root), Path(component_pointer), Path(plan_path)
+    identifier(run_id)
+    try:
+        component_pointer.resolve(strict=True).relative_to(run_root.resolve(strict=True))
+        plan_path.resolve(strict=False).relative_to(run_root.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise Blocked("full review input assembly: derivation paths must be run-owned") from exc
+    document, _ = load_accepted(component_pointer, run_id=run_id, **{
+        key: COMPONENT_SOURCE[key] for key in ("job_id", "contract", "artifact")},
+        schema=COMPONENT_SOURCE["artifact_schema"])
+    _component_source_current(document, run_root)
+    manifest = run_root / "inputs/artifact-manifest.json"
+    generation = HASH + file_hash(manifest)
+    target_value = read_json(manifest).get("target", {}).get("repo_path")
+    target = Path(target_value).resolve()
+    try:
+        target_relative = target.relative_to(run_root.resolve()).as_posix()
+    except ValueError as exc:
+        raise Blocked("full review input assembly: staged target must be run-owned for dispatch") from exc
+    source_spec = {"alias": "component-map",
+        "pointer_path": component_pointer.relative_to(run_root).as_posix(), **COMPONENT_SOURCE}
+    source_specs = [source_spec]
+    available: dict[str, str] = {}
+    for job_id, (contract, artifact, artifact_schema) in DEPENDENCY_SOURCES.items():
+        pointer = run_root / "data/jobs" / job_id / "accepted.json"
+        if not pointer.is_file() or pointer.is_symlink():
+            continue
+        alias = {"02-sbom-inventory": "sbom", "02-sca-vulnerability-match": "sca",
+                 "02-license-scan": "license"}[job_id]
+        spec = {"alias": alias, "pointer_path": pointer.relative_to(run_root).as_posix(),
+                "job_id": job_id, "contract": contract, "artifact": artifact,
+                "artifact_schema": artifact_schema, "generation_pointer": "/source_snapshot_sha256"}
+        document_value, _ = _load_dependency_source(pointer, run_id=run_id, spec=spec)
+        if document_value.get("source_snapshot_sha256") != generation:
+            raise Blocked("full review input assembly: current dependency source has mixed generation")
+        source_specs.append(spec)
+        available[job_id] = alias
+    launches: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+
+    native_units, fuzz_targets = [], []
+    for index, component in enumerate(document["functional_components"]):
+        locations = component.get("representative_locations", [])
+        relative = locations[0] if locations else ""
+        suffix = Path(relative).suffix.lower()
+        lanes = set(component.get("downstream_lanes", []))
+        if suffix in NATIVE_SUFFIXES and ("05-native-memory" in lanes or "02-native-build" in lanes):
+            source_sha, citation = _component_citation(component, index, target)
+            native_units.append({"unit_id": component["component_id"], "language": NATIVE_SUFFIXES[suffix],
+                "path": relative, "source_sha256": source_sha, "signals": [],
+                "coverage": ["component-routed-static-triage"], "citations": [citation]})
+        if "13-fuzz-target-triage" in lanes:
+            fuzz_targets.append({"target_id": "component-" + component["component_id"],
+                "component_id": component["component_id"],
+                "entrypoint": component.get("search_terms", ["unknown"])[0], "input_model": "unknown",
+                "buildable": False, "deterministic": False, "isolation": "unknown",
+                "blockers": ["entrypoint and harness feasibility require independent confirmation"],
+                "citation_ids": [{"$accepted": "component-map",
+                                  "pointer": f"/functional_components/{index}/component_id"}]})
+    if native_units:
+        launches.append({"adapter": "bounded", "job_id": "05-native-memory",
+                         "upstream": ["component-map"], "payload": {"units": native_units}})
+    else:
+        skipped.append({"job_id": "05-native-memory", "status": "SKIPPED_NA",
+                        "reason": "component map contains no routed native source unit"})
+    if fuzz_targets:
+        launches.append({"adapter": "bounded", "job_id": "13-fuzz-target-triage",
+                         "upstream": ["component-map"], "payload": {"targets": fuzz_targets}})
+    else:
+        skipped.append({"job_id": "13-fuzz-target-triage", "status": "SKIPPED_NA",
+                        "reason": "component map routes no component to fuzz-target triage"})
+
+    launches.append({"adapter": "vendor", "job_id": "02-secrets-inventory",
+                     "source_root": {"$run_path": target_relative, "kind": "directory"}})
+    names = {path.name.lower() for path in target.rglob("*") if path.is_file() and not path.is_symlink()}
+    iac_present = any(path.suffix.lower() in {".tf", ".tfvars"} or
+                      (path.suffix.lower() in {".yaml", ".yml"} and
+                       any(token in path.as_posix().lower() for token in ("deploy", "k8s", "helm", "terraform")))
+                      for path in target.rglob("*") if path.is_file() and not path.is_symlink())
+    if iac_present:
+        launches.append({"adapter": "vendor", "job_id": "02-iac-config-scan",
+                         "source_root": {"$run_path": target_relative, "kind": "directory"}})
+    else:
+        skipped.append({"job_id": "02-iac-config-scan", "status": "SKIPPED_NA",
+                        "reason": "no IaC input class is present in the staged target"})
+    if names & MOBILE_MARKERS:
+        launches.append({"adapter": "vendor", "job_id": "02-mobile-sast",
+                         "source_root": {"$run_path": target_relative, "kind": "directory"}})
+    else:
+        skipped.append({"job_id": "02-mobile-sast", "status": "SKIPPED_NA",
+                        "reason": "no mobile project marker is present in the staged target"})
+    if any(path.name == "index.json" or path.suffix.lower() in {".tar", ".oci"}
+           for path in (run_root / "inputs").rglob("*") if path.is_file() and not path.is_symlink()):
+        launches.append({"adapter": "vendor", "job_id": "02-container-image-inventory",
+                         "source_root": {"$run_path": "inputs", "kind": "directory"}})
+    else:
+        skipped.append({"job_id": "02-container-image-inventory", "status": "SKIPPED_NA",
+                        "reason": "no container image or OCI layout is staged"})
+    if "02-sbom-inventory" not in available:
+        launches.append({"adapter": "dependency", "job_id": "02-sbom-inventory",
+                         "payload": {"source_files": {"$source_files": target_relative}},
+                         "tool": {"target_path": {"$run_path": target_relative, "kind": "directory"}}})
+        skipped.extend([
+            {"job_id": "02-sca-vulnerability-match", "status": "SKIPPED_NA",
+             "reason": "requires the accepted SBOM produced by this first-wave dispatch"},
+            {"job_id": "02-license-scan", "status": "SKIPPED_NA",
+             "reason": "requires the accepted SBOM produced by this first-wave dispatch"},
+        ])
+    else:
+        sbom_binding = {"$binding": "sbom"}
+        if "02-license-scan" not in available:
+            launches.append({"adapter": "dependency", "job_id": "02-license-scan",
+                             "payload": {"sbom": sbom_binding, "source_files": {"$source_files": target_relative}},
+                             "tool": {"target_path": {"$run_path": target_relative, "kind": "directory"}}})
+        registry = os.environ.get("APPSEC_REVIEW_VULN_SNAPSHOT_REGISTRY")
+        max_age = os.environ.get("APPSEC_REVIEW_VULN_MAX_AGE_SECONDS")
+        if "02-sca-vulnerability-match" in available:
+            pass
+        elif registry and max_age and max_age.isdigit() and Path(registry).is_absolute() and Path(registry).is_dir():
+            _, sbom_accepted = _load_dependency_source(
+                run_root / "data/jobs/02-sbom-inventory/accepted.json", run_id=run_id,
+                spec=next(spec for spec in source_specs if spec["alias"] == "sbom"))
+            sbom_path = (run_root / "data/jobs/02-sbom-inventory/attempts" /
+                         sbom_accepted["attempt_id"] /
+                         "outputs/sbom-manifest.json")
+            launches.append({"adapter": "dependency", "job_id": "02-sca-vulnerability-match",
+                             "payload": {"sbom": sbom_binding},
+                             "tool": {"sbom_root": str(sbom_path.parent), "snapshot_registry": registry,
+                                      "max_database_age_seconds": int(max_age)}})
+        else:
+            skipped.append({"job_id": "02-sca-vulnerability-match", "status": "SKIPPED_NA",
+                            "reason": "offline snapshot registry and explicit age ceiling are not configured"})
+    lifecycle_reference = run_root / "inputs/dependency-lifecycle-reference-table.json"
+    reference_age = os.environ.get("APPSEC_REVIEW_LIFECYCLE_MAX_AGE_DAYS")
+    if ("02-sbom-inventory" in available and "02-license-scan" in available and
+            lifecycle_reference.is_file() and not lifecycle_reference.is_symlink() and
+            reference_age and reference_age.isdigit()):
+        launches.append({"adapter": "dependency", "job_id": "02-dependency-lifecycle",
+            "payload": {"sbom": {"$binding": "sbom"}, "license": {"$binding": "license"},
+                        "reference_table": {"$run_path": "inputs/dependency-lifecycle-reference-table.json",
+                                            "kind": "file"},
+                        "reference_table_sha256": HASH + file_hash(lifecycle_reference),
+                        "max_reference_age_days": int(reference_age)}, "tool": {}})
+    else:
+        skipped.append({"job_id": "02-dependency-lifecycle", "status": "SKIPPED_NA",
+                        "reason": "requires accepted SBOM, license, staged lifecycle reference, and explicit age ceiling"})
+    reachability_evidence = run_root / "inputs/cve-reachability-evidence.json"
+    if ("02-sca-vulnerability-match" in available and reachability_evidence.is_file() and
+            not reachability_evidence.is_symlink()):
+        launches.append({"adapter": "dependency", "job_id": "06-cve-reachability",
+            "payload": {"sca": {"$binding": "sca"},
+                        "reachability_evidence": {"$run_path": "inputs/cve-reachability-evidence.json",
+                                                  "kind": "file"},
+                        "reachability_evidence_sha256": HASH + file_hash(reachability_evidence)}, "tool": {}})
+    else:
+        skipped.append({"job_id": "06-cve-reachability", "status": "SKIPPED_NA",
+                        "reason": "requires accepted SCA and staged reachability evidence"})
+    skipped.append({"job_id": "02-binary-hardening", "status": "SKIPPED_NA",
+                    "reason": "requires an accepted built-binary projection"})
+    plan = {"schema": PLAN_SCHEMA, "run_id": run_id, "source_generation": generation,
+            "generated_at": generated_at, "accepted_sources": source_specs,
+            "launches": sorted(launches, key=lambda row: row["job_id"]),
+            "skipped": sorted(skipped, key=lambda row: row["job_id"])}
+    errors = validate_document(plan, "full-review-input-plan.schema.json")
+    if errors:
+        raise Blocked("full review input assembly: derived plan schema failed: " + errors[0])
+    if plan_path.exists() or plan_path.is_symlink():
+        raise Blocked("full review input assembly: derived plan path already exists")
+    atomic_json(plan_path, plan)
+    return plan
+
+
 def _load_sources(plan: dict[str, Any], run_root: Path) -> dict[str, dict[str, Any]]:
     sources: dict[str, dict[str, Any]] = {}
     for raw in plan["accepted_sources"]:
@@ -149,9 +423,14 @@ def _load_sources(plan: dict[str, Any], run_root: Path) -> dict[str, dict[str, A
         if not isinstance(alias, str) or not alias or alias in sources:
             raise Blocked("full review input assembly: accepted source aliases must be unique")
         pointer = _owned(run_root, source["pointer_path"], f"{alias} accepted pointer", kind="file")
-        document, binding = load_accepted(pointer, run_id=plan["run_id"], job_id=source["job_id"],
-            contract=source["contract"], artifact=source["artifact"], schema=source["artifact_schema"])
-        if _pointer(document, source["generation_pointer"], f"{alias} source generation") != plan["source_generation"]:
+        if source["job_id"] in DEPENDENCY_SOURCES:
+            document, binding = _load_dependency_source(pointer, run_id=plan["run_id"], spec=source)
+        else:
+            document, binding = load_accepted(pointer, run_id=plan["run_id"], job_id=source["job_id"],
+                contract=source["contract"], artifact=source["artifact"], schema=source["artifact_schema"])
+        if source["job_id"] == COMPONENT_SOURCE["job_id"]:
+            _component_source_current(document, run_root)
+        elif _pointer(document, source["generation_pointer"], f"{alias} source generation") != plan["source_generation"]:
             raise Blocked("full review input assembly: accepted sources contain a stale or mixed generation")
         sources[alias] = {"document": document, "binding": binding, "pointer": pointer, "spec": source}
     return sources
@@ -225,7 +504,8 @@ def assemble(plan_path: Path, run_root: Path, output_root: Path, *, attempt_id: 
     if plan_path.is_symlink() or not plan_path.is_file() or output_root.is_symlink():
         raise Blocked("full review input assembly: plan or output path is unsafe")
     plan = read_json(plan_path)
-    _closed(plan, _PLAN_KEYS, "plan")
+    if not isinstance(plan, dict) or set(plan) not in (_PLAN_KEYS, _PLAN_KEYS | {"skipped"}):
+        raise Blocked("full review input assembly: plan shape is not closed")
     if plan["schema"] != PLAN_SCHEMA or not isinstance(plan["accepted_sources"], list) or not isinstance(plan["launches"], list):
         raise Blocked("full review input assembly: plan identity or collections are invalid")
     identifier(plan["run_id"])
@@ -268,7 +548,8 @@ def assemble(plan_path: Path, run_root: Path, output_root: Path, *, attempt_id: 
     result = {"schema": RESULT_SCHEMA, "run_id": plan["run_id"], "job_id": JOB,
               "attempt_id": attempt_id, "source_generation": generation,
               "plan_sha256": HASH + file_hash(plan_path), "accepted_sources": accepted,
-              "requests": sorted(request_rows, key=lambda row: row["job_id"])}
+              "requests": sorted(request_rows, key=lambda row: row["job_id"]),
+              "skipped": plan.get("skipped", [])}
     errors = validate_document(result, "full-review-input-assembly.schema.json")
     if errors:
         raise Blocked("full review input assembly: result schema failed: " + errors[0])
@@ -315,17 +596,122 @@ def validate(output_root: Path) -> dict[str, Any]:
     return result
 
 
+def _dispatch_one(adapter: str, job_id: str, request_path: Path, run_root: Path,
+                  attempt_id: str, dagster_run_id: str) -> Any:
+    run_id = run_root.name
+    if adapter == "bounded":
+        output = run_root / "data/jobs" / job_id
+        return bounded_transform_orchestration.execute(job_id=job_id, run_id=run_id,
+            input_path=str(request_path), output_root=str(output), attempt_id=attempt_id)
+    if adapter == "vendor":
+        output = run_root / "data/jobs" / job_id / "whole"
+        return vendor_evidence_orchestration.execute(job_id=job_id, run_id=run_id,
+            dagster_run_id=dagster_run_id, input_path=str(request_path), output_root=str(output),
+            attempt_root=str(output / "attempts" / attempt_id),
+            execution_root=str(output / "executions" / attempt_id))
+    if adapter == "dependency":
+        output = run_root / "data/jobs"
+        attempt = output / job_id / "orchestration-attempts" / attempt_id
+        return dependency_orchestration.execute(job_id=job_id, run_id=run_id,
+            input_path=str(request_path), output_root=str(output), attempt_root=str(attempt))
+    raise Blocked("full review dispatch: unknown adapter")
+
+
+def dispatch(assembly_root: Path, run_root: Path, dispatch_root: Path, *, attempt_id: str,
+             dagster_run_id: str, started_at: str, finished_at: str,
+             executor: Any = None) -> dict[str, Any]:
+    """Invoke every emitted request and retain an exact result collection.
+
+    ``executor`` is a qualification seam with the same arguments as ``_dispatch_one``.  Production
+    callers omit it and use the already-qualified public orchestration adapters.
+    """
+    assembly_root, run_root, dispatch_root = Path(assembly_root), Path(run_root), Path(dispatch_root)
+    identifier(attempt_id); identifier(dagster_run_id)
+    try:
+        assembly_root.resolve(strict=True).relative_to(run_root.resolve(strict=True))
+        dispatch_root.resolve(strict=False).relative_to(run_root.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise Blocked("full review dispatch: paths must be run-owned") from exc
+    if dispatch_root.exists() or dispatch_root.is_symlink():
+        raise Blocked("full review dispatch: immutable output already exists")
+    assembly = validate(assembly_root)
+    assembly_attempt = assembly_root / "attempts" / assembly["attempt_id"]
+    attempt = dispatch_root / "attempts" / attempt_id
+    (attempt / "results").mkdir(parents=True)
+    runner = executor or _dispatch_one
+    rows, paths = [], []
+    for row in assembly["requests"]:
+        request_path = assembly_attempt / row["path"]
+        worker_attempt_id = ("full-" + attempt_id[:96] + "-" + digest(row["job_id"])[:8])[:119]
+        value = runner(row["adapter"], row["job_id"], request_path, run_root,
+                       worker_attempt_id, dagster_run_id)
+        relative = "results/" + row["job_id"] + ".json"
+        atomic_json(attempt / relative, value)
+        paths.append(relative)
+        rows.append({"job_id": row["job_id"], "adapter": row["adapter"], "status": "CURRENT",
+                     "request_sha256": row["sha256"], "result_path": relative,
+                     "result_sha256": HASH + file_hash(attempt / relative)})
+    result = {"schema": "appsec-review/full-review-dispatch/1.0", "run_id": assembly["run_id"],
+              "job_id": "02-full-review-input-dispatch", "attempt_id": attempt_id,
+              "source_generation": assembly["source_generation"],
+              "assembly_attempt_id": assembly["attempt_id"],
+              "assembly_sha256": HASH + file_hash(assembly_attempt / RESULT),
+              "results": sorted(rows, key=lambda row: row["job_id"]), "skipped": assembly["skipped"]}
+    errors = validate_document(result, "full-review-dispatch.schema.json")
+    if errors:
+        raise Blocked("full review dispatch: result schema failed: " + errors[0])
+    atomic_json(attempt / "full-review-dispatch.json", result)
+    atomic_json(attempt / "status.json", {"process": "02-full-review-input-dispatch", "status": "OK",
+                "dispatched": len(rows), "skipped_na": len(assembly["skipped"])})
+    paths += ["full-review-dispatch.json", "status.json"]
+    fingerprint = HASH + digest({"assembly": result["assembly_sha256"], "requests": assembly["requests"]})
+    envelope = terminal_envelope(run_id=assembly["run_id"], job_id="02-full-review-input-dispatch",
+        attempt_id=attempt_id, worker_kind="deterministic_python", execution_status="OK",
+        acceptance_status="CURRENT", input_fingerprint=fingerprint,
+        output_contract="full-review-dispatch", started_at=started_at, finished_at=finished_at,
+        summary="dispatched every applicable derived full-review request",
+        artifacts=artifact_records(attempt, paths),
+        gaps=[row["job_id"] + ": " + row["reason"] for row in assembly["skipped"]])
+    errors = validate_worker_result(envelope)
+    if errors:
+        raise Blocked("full review dispatch: common envelope is invalid: " + errors[0])
+    atomic_json(attempt / "result.json", envelope)
+    atomic_json(dispatch_root / "latest.json", {"attempt_id": attempt_id, "updated_at": finished_at})
+    atomic_json(dispatch_root / "accepted.json", {"schema": ACCEPTED_SCHEMA, "status": "OK",
+        "run_id": assembly["run_id"], "job": "02-full-review-input-dispatch", "attempt_id": attempt_id,
+        "fingerprint": fingerprint, "envelope_path": "result.json",
+        "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
+        "accepted_at": finished_at})
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--plan", type=Path, required=True)
+    parser.add_argument("--plan", type=Path)
+    parser.add_argument("--component-pointer", type=Path)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--attempt-id", required=True)
     parser.add_argument("--started-at", required=True)
     parser.add_argument("--finished-at", required=True)
+    parser.add_argument("--dispatch-root", type=Path)
+    parser.add_argument("--dagster-run-id")
     args = parser.parse_args()
-    assemble(args.plan, args.run_root, args.output_root, attempt_id=args.attempt_id,
+    if bool(args.plan) == bool(args.component_pointer):
+        parser.error("exactly one of --plan or --component-pointer is required")
+    plan = args.plan
+    if args.component_pointer:
+        plan = args.run_root / "inputs" / "derived-full-review-plan.json"
+        derive_plan(args.component_pointer, args.run_root, plan, run_id=args.run_root.name,
+                    generated_at=args.started_at)
+    assemble(plan, args.run_root, args.output_root, attempt_id=args.attempt_id,
              started_at=args.started_at, finished_at=args.finished_at)
+    if args.dispatch_root:
+        if not args.dagster_run_id:
+            parser.error("--dagster-run-id is required with --dispatch-root")
+        dispatch(args.output_root, args.run_root, args.dispatch_root, attempt_id=args.attempt_id,
+                 dagster_run_id=args.dagster_run_id, started_at=args.started_at,
+                 finished_at=args.finished_at)
     return 0
 
 

@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/qualification-evidence/1.0",
+  "qualified_at": "2026-09-27T12:00:00Z",
+  "subject": "accepted component map to derived full-review requests and result collection",
+  "status": "QUALIFIED_HAPPY_PATH",
+  "tests": {
+    "command": "python3 -m unittest appsec-review-process/tests/test_full_review_input_assembly.py",
+    "result": "6 tests passed"
+  },
+  "flow": [
+    "revalidate accepted 01-component-characterization pointer, envelope, artifact, schema, and checkout fingerprint",
+    "derive deterministic applicable bounded, vendor, and dependency launches",
+    "retain unavailable input classes as SKIPPED_NA with explicit reasons",
+    "assemble exact adapter request dialects with immutable accepted-source bindings",
+    "dispatch the component-derived native-memory request through the public adapter",
+    "exercise vendor and dependency dispatch/result-collection seams with qualified executor doubles",
+    "hash and accept the immutable dispatch result collection"
+  ],
+  "first_wave_fixture": {
+    "dispatched": [
+      "02-sbom-inventory",
+      "02-secrets-inventory",
+      "05-native-memory"
+    ],
+    "not_fabricated": [
+      "binary hardening is SKIPPED_NA without an accepted built-binary projection",
+      "CVE matching and reachability remain SKIPPED_NA until their accepted prerequisite inputs exist",
+      "IaC, mobile, and container workers are SKIPPED_NA when their input classes are absent"
+    ]
+  },
+  "followup_derivation": "Current accepted SBOM, license, and SCA producers are discovered and revalidated. License, offline SCA, lifecycle, and reachability requests are emitted only when their exact accepted and staged prerequisites are available."
+}

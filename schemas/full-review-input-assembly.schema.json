@@ -3,7 +3,7 @@
   "$id": "full-review-input-assembly.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "run_id", "job_id", "attempt_id", "source_generation", "plan_sha256", "accepted_sources", "requests"],
+  "required": ["schema", "run_id", "job_id", "attempt_id", "source_generation", "plan_sha256", "accepted_sources", "requests", "skipped"],
   "properties": {
     "schema": {"const": "appsec-review/full-review-input-assembly/1.0"},
     "run_id": {"type": "string", "minLength": 1},
@@ -40,6 +40,18 @@
           "path": {"type": "string", "pattern": "^requests/[0-9A-Za-z._-]+\\.json$"},
           "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
           "accepted_source_aliases": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["job_id", "status", "reason"],
+        "properties": {
+          "job_id": {"type": "string", "minLength": 1},
+          "status": {"const": "SKIPPED_NA"},
+          "reason": {"type": "string", "minLength": 1}
         }
       }
     }

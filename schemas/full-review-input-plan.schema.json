@@ -10,6 +10,18 @@
     "source_generation": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "generated_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
     "accepted_sources": {"type": "array"},
-    "launches": {"type": "array", "minItems": 1}
+    "launches": {"type": "array", "minItems": 1},
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["job_id", "status", "reason"],
+        "properties": {
+          "job_id": {"type": "string", "minLength": 1},
+          "status": {"const": "SKIPPED_NA"},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
   }
 }
