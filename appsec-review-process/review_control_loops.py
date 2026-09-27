@@ -201,10 +201,16 @@ def remediation_proposals(run_id: str, verified_claims: list[dict[str, Any]],
     rows = []
     for proposal_id in sorted(proposal_map):
         proposal = proposal_map[proposal_id]; claim_id = proposal.get("claim_id")
+        if set(proposal) != {"proposal_id", "claim_id", "state", "author_id", "change_ref",
+                             "rationale", "target_components"}:
+            raise Blocked("review controls: remediation proposal shape is invalid")
         if claim_id not in claims or claims[claim_id].get("status") != "VERIFIED":
             raise Blocked("review controls: remediation proposal lacks a verified claim")
         if proposal.get("state") not in {"PROPOSED", "AUTHORIZED", "DECLINED"}:
             raise Blocked("review controls: remediation proposal state is invalid")
+        if (not proposal.get("change_ref") or not proposal.get("rationale") or
+                not isinstance(proposal.get("target_components"), list)):
+            raise Blocked("review controls: remediation proposal content is incomplete")
         rows.append({**proposal, "fixed": False})
     return {"schema": "appsec-review/remediation-proposals/1.0", "run_id": run_id,
             "proposals": rows, "patches_applied": False}

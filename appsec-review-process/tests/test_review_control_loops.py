@@ -68,7 +68,9 @@ class ReviewControlLoopTests(unittest.TestCase):
 
     def test_remediation_never_claims_fixed_without_same_environment_independent_retest(self):
         proposals = controls.remediation_proposals("run-1", [{"claim_id": "c1", "status": "VERIFIED"}],
-            [{"proposal_id": "r1", "claim_id": "c1", "state": "AUTHORIZED", "author_id": "author"}])
+            [{"proposal_id": "r1", "claim_id": "c1", "state": "AUTHORIZED", "author_id": "author",
+              "change_ref": "patch-1", "rationale": "Bounded fix proposal.",
+              "target_components": ["component-1"]}])
         proposal = proposals["proposals"][0]
         env = {"build": "sha256:" + "b" * 64, "target": "sha256:" + "c" * 64}
         fixed = controls.same_environment_retest("run-1", proposal, env,

@@ -22,7 +22,7 @@ class ProcessTests(unittest.TestCase):
         value=self.invoke(completeness_feedback,{"run_id":"r1","expected":[{"obligation_id":"o1"}],"observed":[],"declared_gaps":[],"routes":{"o1":"worker"},"iteration":1,"max_iterations":2})
         self.assertEqual(value["feedback"]["terminal_state"],"TARGETED_ANALYSIS_REQUIRED")
     def test_remediation_retest_is_separate(self):
-        environment={"image":"sha256:"+"a"*64}; value=self.invoke(remediation_retest,{"run_id":"r1","verified_claims":[{"claim_id":"c1","status":"VERIFIED"}],"proposals":[{"proposal_id":"p1","claim_id":"c1","state":"AUTHORIZED","author_id":"author"}],"retests":[{"proposal_id":"p1","original_environment":environment,"retest":{"environment":environment,"result":"PASSED","executor_id":"executor"},"verifier":{"producer_id":"verifier","decision":"VERIFIED"}}]})
+        environment={"image":"sha256:"+"a"*64}; value=self.invoke(remediation_retest,{"run_id":"r1","verified_claims":[{"claim_id":"c1","status":"VERIFIED"}],"proposals":[{"proposal_id":"p1","claim_id":"c1","state":"AUTHORIZED","author_id":"author","change_ref":"patch-1","rationale":"Bounded fix proposal.","target_components":["component-1"]}],"retests":[{"proposal_id":"p1","original_environment":environment,"retest":{"environment":environment,"result":"PASSED","executor_id":"executor"},"verifier":{"producer_id":"verifier","decision":"VERIFIED"}}]})
         self.assertEqual(value["retests"][0]["state"],"FIXED")
     def test_each_process_can_publish_a_common_immutable_attempt(self):
         cases=[
