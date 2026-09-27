@@ -42,6 +42,8 @@ def deterministic_merge(run_id: str, expected_workers: list[dict[str, str]],
     conflicts: dict[str, set[str]] = defaultdict(set)
     for worker_id in sorted(results):
         result = results[worker_id]
+        if expected[worker_id].get("run_id") != run_id or result.get("run_id") != run_id:
+            raise Blocked("review controls: worker is not bound to this run")
         if result.get("producer_id") != expected[worker_id].get("producer_id"):
             raise Blocked("review controls: worker producer identity changed")
         if result.get("status") not in {"OK", "OK_WITH_GAPS", "FAILED", "BLOCKED", "CANCELED"}:
@@ -89,6 +91,8 @@ def evidence_qualified_quorum(run_id: str, merge: dict[str, Any], *, minimum_pro
     if type(minimum_producers) is not int or minimum_producers < 1:
         raise Blocked("review controls: quorum minimum must be positive")
     expected_hash = merge.get("merge_sha256")
+    if merge.get("run_id") != run_id:
+        raise Blocked("review controls: merge is not bound to this run")
     if expected_hash != _sha({key: value for key, value in merge.items() if key != "merge_sha256"}):
         raise Blocked("review controls: merge hash is invalid")
     if require_complete_pool and merge.get("missing_worker_ids"):
@@ -220,10 +224,20 @@ def same_environment_retest(run_id: str, proposal: dict[str, Any], original_envi
                             retest: dict[str, Any], verifier: dict[str, str]) -> dict[str, Any]:
     if proposal.get("state") != "AUTHORIZED":
         raise Blocked("review controls: retest requires an authorized proposal")
+    required_environment = {"source_sha256", "build_sha256", "target_sha256", "change_ref"}
+    if set(original_environment) != required_environment or any(
+            not isinstance(original_environment[key], str) or not original_environment[key]
+            for key in required_environment):
+        raise Blocked("review controls: original retest environment binding is incomplete")
+    if original_environment["change_ref"] != proposal.get("change_ref"):
+        raise Blocked("review controls: retest change differs from the authorized proposal")
     if retest.get("environment") != original_environment:
         raise Blocked("review controls: retest environment differs from the verified environment")
-    if verifier.get("producer_id") in {proposal.get("author_id"), retest.get("executor_id")}:
+    identities = (proposal.get("author_id"), retest.get("executor_id"), verifier.get("producer_id"))
+    if any(not isinstance(identity, str) or not identity for identity in identities) or len(set(identities)) != 3:
         raise Blocked("review controls: retest verification is not independent")
+    if retest.get("proposal_id") != proposal.get("proposal_id"):
+        raise Blocked("review controls: retest is not bound to its proposal")
     result = retest.get("result")
     if result not in {"PASSED", "FAILED", "BUILD_FAILED", "REGRESSION", "STALE_SOURCE"}:
         raise Blocked("review controls: retest result is invalid")

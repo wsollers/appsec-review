@@ -7,6 +7,8 @@ the draft publication manifest, after an append-only human decision binds the ex
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -20,24 +22,60 @@ import synthesis_sarif
 
 SIGNOFF_SCHEMA = "appsec-review/human-signoff-ledger/1.0"
 FINAL_SCHEMA = "appsec-review/final-publication/1.0"
+PUBLISHER_OWNED = frozenset({
+    "critical-findings.sarif", "human-signoff-ledger.json", "final-publication.json"})
 
 
 def _sha(value: Any) -> str:
     return "sha256:" + digest(value)
 
 
+def sign_authorization(*, run_id: str, reviewer_id: str, report_sha256: str, decision: str,
+                       issued_at: str, authorization_id: str, key: bytes) -> dict[str, str]:
+    """Create a keyed operator authorization receipt; the key remains outside the ledger."""
+    receipt = {"authorization_id": authorization_id, "run_id": run_id,
+        "reviewer_id": reviewer_id, "report_sha256": report_sha256, "decision": decision,
+        "permission": "approve-final-publication", "issued_at": issued_at}
+    payload = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+    return {**receipt, "hmac_sha256": "sha256:" + hmac.new(key, payload, hashlib.sha256).hexdigest()}
+
+
+def _verify_authorization(value: dict[str, Any], *, key: bytes, run_id: str, reviewer_id: str,
+                          report_sha256: str, decision: str) -> None:
+    if not isinstance(key, bytes) or len(key) < 32 or not isinstance(value, dict):
+        raise Blocked("final publication: trusted authorization verifier is unavailable")
+    expected_fields = {"authorization_id", "run_id", "reviewer_id", "report_sha256", "decision",
+                       "permission", "issued_at", "hmac_sha256"}
+    if (set(value) != expected_fields or value.get("run_id") != run_id or
+            value.get("reviewer_id") != reviewer_id or value.get("report_sha256") != report_sha256 or
+            value.get("decision") != decision or value.get("permission") != "approve-final-publication"):
+        raise Blocked("final publication: authorization identity or scope is invalid")
+    unsigned = {name: value[name] for name in expected_fields if name != "hmac_sha256"}
+    payload = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    expected = "sha256:" + hmac.new(key, payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(value.get("hmac_sha256", ""), expected):
+        raise Blocked("final publication: authorization signature is invalid")
+
+
 def append_signoff(ledger: dict[str, Any] | None, *, run_id: str, reviewer_id: str,
-                   report_sha256: str, decision: str, signed_at: str, rationale: str) -> dict[str, Any]:
+                   report_sha256: str, decision: str, signed_at: str, rationale: str,
+                   authorization: dict[str, Any], authorization_key: bytes,
+                   expected_prior_head: str) -> dict[str, Any]:
     if decision not in {"APPROVED", "REJECTED"}:
         raise Blocked("final publication: signoff decision is invalid")
     if not reviewer_id or not signed_at or not rationale or not report_sha256.startswith("sha256:"):
         raise Blocked("final publication: signoff identity or binding is incomplete")
+    _verify_authorization(authorization, key=authorization_key, run_id=run_id,
+                          reviewer_id=reviewer_id, report_sha256=report_sha256, decision=decision)
     current = deepcopy(ledger) if ledger is not None else {
-        "schema": SIGNOFF_SCHEMA, "run_id": run_id, "entries": [], "head_hash": None}
-    if (set(current) != {"schema", "run_id", "entries", "head_hash"} or
+        "schema": SIGNOFF_SCHEMA, "run_id": run_id, "anchor_hash": expected_prior_head,
+        "entries": [], "head_hash": expected_prior_head}
+    if (set(current) != {"schema", "run_id", "anchor_hash", "entries", "head_hash"} or
             current["schema"] != SIGNOFF_SCHEMA or current["run_id"] != run_id):
         raise Blocked("final publication: signoff ledger identity is invalid")
-    previous = None
+    if current["head_hash"] != expected_prior_head:
+        raise Blocked("final publication: external ledger head does not match")
+    previous = current["anchor_hash"]
     for sequence, entry in enumerate(current["entries"]):
         if (entry.get("sequence") != sequence or entry.get("previous_entry_hash") != previous or
                 entry.get("entry_hash") != _sha({key: value for key, value in entry.items()
@@ -50,7 +88,8 @@ def append_signoff(ledger: dict[str, Any] | None, *, run_id: str, reviewer_id: s
         "run_id": run_id, "reviewer_id": reviewer_id, "report_sha256": report_sha256,
         "decision": decision, "signed_at": signed_at})[:24], "reviewer_id": reviewer_id,
         "report_sha256": report_sha256, "decision": decision, "signed_at": signed_at,
-        "rationale": rationale, "previous_entry_hash": previous, "entry_hash": ""}
+        "rationale": rationale, "authorization": deepcopy(authorization),
+        "previous_entry_hash": previous, "entry_hash": ""}
     entry["entry_hash"] = _sha({key: value for key, value in entry.items() if key != "entry_hash"})
     current["entries"].append(entry); current["head_hash"] = entry["entry_hash"]
     errors = validate_document(current, "human-signoff-ledger.schema.json")
@@ -58,18 +97,24 @@ def append_signoff(ledger: dict[str, Any] | None, *, run_id: str, reviewer_id: s
     return current
 
 
-def validate_signoff(ledger: dict[str, Any], *, run_id: str, report_sha256: str) -> dict[str, Any]:
+def validate_signoff(ledger: dict[str, Any], *, run_id: str, report_sha256: str,
+                     authorization_key: bytes, expected_anchor: str) -> dict[str, Any]:
     # Reuse append validation without mutating the caller by walking the chain directly.
     if ledger.get("schema") != SIGNOFF_SCHEMA or ledger.get("run_id") != run_id:
         raise Blocked("final publication: signoff ledger identity is invalid")
     errors = validate_document(ledger, "human-signoff-ledger.schema.json")
     if errors: raise Blocked(f"final publication: signoff ledger schema is invalid ({errors[0]})")
-    previous = None
+    if ledger.get("anchor_hash") != expected_anchor:
+        raise Blocked("final publication: signoff ledger anchor is not trusted")
+    previous = expected_anchor
     for sequence, entry in enumerate(ledger.get("entries", [])):
         if (entry.get("sequence") != sequence or entry.get("previous_entry_hash") != previous or
                 entry.get("entry_hash") != _sha({key: value for key, value in entry.items()
                                                  if key != "entry_hash"})):
             raise Blocked("final publication: signoff ledger chain is invalid")
+        _verify_authorization(entry.get("authorization"), key=authorization_key, run_id=run_id,
+                              reviewer_id=entry.get("reviewer_id"),
+                              report_sha256=entry.get("report_sha256"), decision=entry.get("decision"))
         previous = entry["entry_hash"]
     if ledger.get("head_hash") != previous or not ledger.get("entries"):
         raise Blocked("final publication: signoff ledger is empty or has an invalid head")
@@ -95,7 +140,8 @@ def _safe_artifact(root: Path, relative: str) -> Path:
     return cursor
 
 
-def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Path) -> dict[str, Any]:
+def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Path, *,
+            authorization_key: bytes, expected_ledger_anchor: str) -> dict[str, Any]:
     draft_attempt, final_root = Path(draft_attempt), Path(final_root)
     if final_root.exists():
         raise Blocked("final publication: immutable final package already exists")
@@ -113,6 +159,8 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
     for record in artifacts:
         if not isinstance(record, dict) or set(record) != {"path", "sha256"} or record["path"] in seen:
             raise Blocked("final publication: draft artifact record is invalid")
+        if record["path"] in PUBLISHER_OWNED:
+            raise Blocked("final publication: draft claims a publisher-owned artifact path")
         seen.add(record["path"]); path = _safe_artifact(draft_attempt, record["path"])
         actual = "sha256:" + file_hash(path)
         if actual != record["sha256"]:
@@ -122,7 +170,8 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
     if report_record is None:
         raise Blocked("final publication: draft report.json is absent")
     signoff = validate_signoff(signoff_ledger, run_id=publication["run_id"],
-                               report_sha256=report_record[2])
+                               report_sha256=report_record[2], authorization_key=authorization_key,
+                               expected_anchor=expected_ledger_anchor)
     parent = final_root.parent; parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".final-publication-", dir=parent))
     try:
@@ -133,6 +182,10 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
         synthesis_sarif.convert(staging / "report.json", staging / "evidence-trace-index.json", sarif_path)
         verified.append(("critical-findings.sarif", sarif_path, "sha256:" + file_hash(sarif_path)))
         atomic_json(staging / "human-signoff-ledger.json", signoff_ledger)
+        verified.append(("human-signoff-ledger.json", staging / "human-signoff-ledger.json",
+                         "sha256:" + file_hash(staging / "human-signoff-ledger.json")))
+        if len({relative for relative, _source, _hash in verified}) != len(verified):
+            raise Blocked("final publication: final artifact path collision")
         manifest = {"schema": FINAL_SCHEMA, "run_id": publication["run_id"],
             "status": "FINAL_APPROVED", "draft_publication_sha256": "sha256:" + file_hash(publication_path),
             "signoff_head_sha256": signoff_ledger["head_hash"], "signoff_id": signoff["signoff_id"],
@@ -141,6 +194,18 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
         errors = validate_document(manifest, "final-publication.schema.json")
         if errors: raise Blocked(f"final publication: final manifest is invalid ({errors[0]})")
         atomic_json(staging / "final-publication.json", manifest)
+        expected_files = {relative for relative, _source, _hash in verified} | {"final-publication.json"}
+        actual_files = set()
+        for path in staging.rglob("*"):
+            if path.is_symlink() or not (path.is_file() or path.is_dir()):
+                raise Blocked("final publication: final tree contains an unsafe entry")
+            if path.is_file():
+                actual_files.add(path.relative_to(staging).as_posix())
+        if actual_files != expected_files:
+            raise Blocked("final publication: final tree is not closed")
+        for relative, _source, expected_hash in verified:
+            if "sha256:" + file_hash(staging.joinpath(*Path(relative).parts)) != expected_hash:
+                raise Blocked("final publication: generated artifact changed before publication")
         try: os.replace(staging, final_root)
         except OSError as exc: raise Blocked("final publication: atomic package publication failed") from exc
         return manifest
@@ -154,5 +219,9 @@ if __name__ == "__main__":
     parser.add_argument("--draft-attempt", type=Path, required=True)
     parser.add_argument("--signoff-ledger", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--authorization-key", type=Path, required=True)
+    parser.add_argument("--expected-ledger-anchor", required=True)
     args = parser.parse_args()
-    print(json.dumps(publish(args.draft_attempt, read_json(args.signoff_ledger), args.output), indent=2))
+    print(json.dumps(publish(args.draft_attempt, read_json(args.signoff_ledger), args.output,
+        authorization_key=args.authorization_key.read_bytes(),
+        expected_ledger_anchor=args.expected_ledger_anchor), indent=2))

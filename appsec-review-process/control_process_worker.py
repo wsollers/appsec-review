@@ -9,9 +9,38 @@ import tempfile
 from typing import Any
 
 from execution_state import Blocked, atomic_json, digest, file_hash
+from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
 
 PERMISSIONS = ["read-run-data", "write-run-data"]
+REGISTRY = Path(__file__).resolve().parent / "registry" / "output-contracts"
+
+
+def _validated_contract(job_id: str, contract_id: str, result_name: str,
+                        result: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the registered output contract and validate the exact result it declares."""
+    contract_path = REGISTRY / f"{contract_id}.json"
+    if contract_path.is_symlink() or not contract_path.is_file():
+        raise Blocked(f"{job_id}: registered output contract is absent")
+    import json
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise Blocked(f"{job_id}: registered output contract is unreadable") from exc
+    declared = contract.get("result_schema")
+    required = contract.get("required_files")
+    if (contract.get("contract_id") != contract_id or not isinstance(declared, dict) or
+            declared.get("artifact") != result_name or
+            not isinstance(required, list) or set(required) != {
+                result_name, "permission.json", "lineage.json", "status.json"}):
+        raise Blocked(f"{job_id}: contract/result binding is invalid")
+    schema_name = declared.get("schema_file")
+    if not isinstance(schema_name, str):
+        raise Blocked(f"{job_id}: result schema binding is invalid")
+    errors = validate_document(result, schema_name)
+    if errors:
+        raise Blocked(f"{job_id}: result violates its registered schema ({errors[0]})")
+    return contract
 
 
 def publish(*, run_id: str, job_id: str, attempt_id: str, contract_id: str, result_name: str,
@@ -23,6 +52,7 @@ def publish(*, run_id: str, job_id: str, attempt_id: str, contract_id: str, resu
         raise Blocked(f"{job_id}: immutable attempt already exists")
     if not source_snapshot_sha256.startswith("sha256:"):
         raise Blocked(f"{job_id}: source snapshot binding is invalid")
+    _validated_contract(job_id, contract_id, result_name, result)
     parent = output_root.parent; parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{job_id}-", dir=parent))
     try:

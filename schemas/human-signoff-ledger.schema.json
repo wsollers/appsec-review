@@ -1,8 +1,9 @@
 {
   "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"human-signoff-ledger.schema.json",
-  "type":"object","additionalProperties":false,"required":["schema","run_id","entries","head_hash"],
+  "type":"object","additionalProperties":false,"required":["schema","run_id","anchor_hash","entries","head_hash"],
   "properties":{
     "schema":{"const":"appsec-review/human-signoff-ledger/1.0"},"run_id":{"type":"string","minLength":1},
+    "anchor_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},
     "entries":{"type":"array","items":{"$ref":"human-signoff-entry.schema.json"}},
     "head_hash":{"type":["string","null"],"pattern":"^sha256:[0-9a-f]{64}$"}
   }

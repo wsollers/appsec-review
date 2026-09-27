@@ -14,12 +14,12 @@ import review_control_loops as controls
 
 class ReviewControlLoopTests(unittest.TestCase):
     def workers(self):
-        expected = [{"worker_id": "w1", "producer_id": "p1"},
-                    {"worker_id": "w2", "producer_id": "p2"}]
+        expected = [{"worker_id": "w1", "producer_id": "p1", "run_id":"run-1"},
+                    {"worker_id": "w2", "producer_id": "p2", "run_id":"run-1"}]
         candidate = {"candidate_id": "c1", "subject_id": "component-1", "assertion": "bounded claim",
                      "evidence_sha256": "sha256:" + "a" * 64, "claim_class": "candidate_only"}
-        results = [{"worker_id": "w1", "producer_id": "p1", "status": "OK", "candidates": [candidate]},
-                   {"worker_id": "w2", "producer_id": "p2", "status": "OK", "candidates": [candidate]}]
+        results = [{"worker_id": "w1", "producer_id": "p1", "run_id":"run-1", "status": "OK", "candidates": [candidate]},
+                   {"worker_id": "w2", "producer_id": "p2", "run_id":"run-1", "status": "OK", "candidates": [candidate]}]
         return expected, results
 
     def test_deterministic_merge_and_evidence_qualified_quorum(self):
@@ -72,14 +72,15 @@ class ReviewControlLoopTests(unittest.TestCase):
               "change_ref": "patch-1", "rationale": "Bounded fix proposal.",
               "target_components": ["component-1"]}])
         proposal = proposals["proposals"][0]
-        env = {"build": "sha256:" + "b" * 64, "target": "sha256:" + "c" * 64}
+        env = {"source_sha256":"sha256:"+"a"*64,"build_sha256": "sha256:" + "b" * 64,
+               "target_sha256": "sha256:" + "c" * 64,"change_ref":"patch-1"}
         fixed = controls.same_environment_retest("run-1", proposal, env,
-            {"environment": env, "result": "PASSED", "executor_id": "executor"},
+            {"proposal_id":"r1","environment": env, "result": "PASSED", "executor_id": "executor"},
             {"producer_id": "verifier", "decision": "VERIFIED"})
         self.assertEqual(fixed["state"], "FIXED")
         with self.assertRaisesRegex(Blocked, "differs"):
             controls.same_environment_retest("run-1", proposal, env,
-                {"environment": {**env, "build": "sha256:" + "d" * 64}, "result": "PASSED",
+                {"proposal_id":"r1","environment": {**env, "build_sha256": "sha256:" + "d" * 64}, "result": "PASSED",
                  "executor_id": "executor"}, {"producer_id": "verifier", "decision": "VERIFIED"})
 
     def test_final_gate_requires_complete_terminal_exact_human_signoff(self):
