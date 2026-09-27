@@ -1,0 +1,19 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "intake-review-pool-independent-cell",
+  "display_name": "Independent Intake-derived Review Candidate Cell",
+  "process": "persona-tool-pool-dispatch",
+  "budget_default": "standard",
+  "model": {"model": "claude-sonnet-5", "effort": "high"},
+  "composition": {"persona_id": "reverse-engineer", "role_id": "claim-reviewer", "domain_id": "claim-review-lifecycle", "tooling_profile_id": "claim-review-static", "output_contract_id": "claim-review-pool-candidates"},
+  "inputs": {"required": ["newest accepted intake artifact", "trusted canonical candidate contract"], "optional": []},
+  "outputs": {"directory": "private persona pool instance", "files": ["candidates.json"]},
+  "permissions": ["read-run-data"],
+  "prompt_sections": ["governing_rules", "persona", "role", "domain", "tooling_profile", "task", "output_contract"],
+  "task_prompt": "appsec-review-process/intake-review-pool-task.md",
+  "implemented": true,
+  "applicability": "second independent producer for every non-empty accepted intake scope; zero cells only for a genuinely empty scope",
+  "timeout_seconds": 1800,
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "coordinator": "intake-coordinator"
+}
