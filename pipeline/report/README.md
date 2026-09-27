@@ -6,10 +6,11 @@ Renders the engagement report from one data file into three outputs:
 - `report.html` - the same report with math rendered by KaTeX, for fast iteration
 - `workbench.html` - paste or open any `.tex` and see it rendered live beside the editor
 
-Status: proposal for the open "format and styleguide for LaTeX reporting" decision. Not wired into
-the flow; `examples/hello-autotools.review.json` is **sample data** (tool statuses, scores and
-evidence hashes are illustrative). The code snippets in it are real lines from hello-autotools
-`e3ad863`, the seeded defects in its `docs/VULNERABILITIES.md`.
+Status: the visual style and presentation scoring for the example remain proposals.
+`examples/hello-autotools.review.json` is **sample data** (tool statuses, scores and evidence hashes
+are illustrative). The final-publication adapter is an executable presentation boundary: it verifies
+every retained final-package hash and preserves authoritative lifecycle severity, score, and priority
+without synthesizing CVSS or process-assurance values.
 
 ## Run
 
@@ -18,6 +19,21 @@ bash pipeline/report/render-in-docker.sh                     # pinned image, net
 python3 pipeline/report/render.py --watch               # host: re-render HTML/.tex on every save (needs jinja2, cvss)
 python3 pipeline/report/render.py --pdf --engine lualatex
 ```
+
+To render a retained final publication, first adapt it to renderer JSON, then pass that JSON to the
+same offline Docker renderer (absolute paths are accepted):
+
+```bash
+python3 -B pipeline/report/final_publication_adapter.py \
+  /absolute/path/to/retained/final \
+  --supplemental /absolute/path/to/retained/supplemental-family-qualification.json \
+  --output /absolute/path/to/retained/final.review.json
+bash pipeline/report/render-in-docker.sh /absolute/path/to/retained/final.review.json
+```
+
+Only `report.json.verified_findings` enters the Findings section. Supplemental implementation/test
+qualification remains under `supplemental_qualification`; it provides no finding, evidence, severity,
+priority, or process-assurance credit. DEMO packages remain visibly labeled DEMO in HTML, TeX, and PDF.
 
 Outputs go to `pipeline/report/build/` (git-ignored).
 
@@ -52,6 +68,7 @@ Weights and thresholds live in the data file's `scoring` block.
 ## Files
 
 - `render.py` - scoring model and renderer (Jinja2 with LaTeX-safe delimiters `\VAR{}`, `\BLOCK{}`, `%%`)
+- `final_publication_adapter.py` - fail-closed retained-package verifier and presentation adapter
 - `templates/report.tex.j2`, `templates/report.html.j2`, `templates/workbench.html.j2`
 - `templates/vendor/katex-0.16.11.css` - KaTeX CSS with fonts inlined, so rendering needs no network
 - `examples/hello-autotools.review.json` - sample data

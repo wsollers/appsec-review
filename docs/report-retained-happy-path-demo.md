@@ -34,3 +34,23 @@ The coordinator prefixes the reviewer with `DEMO-OPERATOR:`, uses a `DEMO-AUTHOR
 and records a `DEMO ONLY` rationale. The final package is `<output-root>/final`. Existing output
 roots are never reused or overwritten, and partial signoff arguments fail before any output is
 created.
+
+## Render the retained final package
+
+The presentation adapter verifies the final artifact inventory and preserves the report's
+authoritative severity, lifecycle score, and priority. It does not manufacture a CVSS vector or a
+process-assurance score. Supplemental family qualification remains non-promotional and the rendered
+fixture remains visibly labeled DEMO.
+
+```bash
+python -B pipeline/report/final_publication_adapter.py \
+  /absolute/path/to/retained-final-demo/final \
+  --supplemental /absolute/path/to/retained-final-demo/supplemental-family-qualification.json \
+  --output /absolute/path/to/retained-final-demo/final.review.json
+
+bash pipeline/report/render-in-docker.sh \
+  /absolute/path/to/retained-final-demo/final.review.json
+```
+
+The Docker command runs with no network and writes `pipeline/report/build/report.pdf`; the same
+input also produces the HTML preview and TeX source.

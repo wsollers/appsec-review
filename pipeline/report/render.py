@@ -9,7 +9,6 @@ preview matches the PDF. Math strings are LaTeX and go verbatim to both.
 import argparse, json, math, pathlib, re, subprocess, sys, time
 
 import jinja2
-from cvss import CVSS4
 
 HERE = pathlib.Path(__file__).resolve().parent
 BANDS = [(9.0, "Critical"), (7.0, "High"), (4.0, "Medium"), (0.1, "Low"), (0.0, "None")]
@@ -26,8 +25,11 @@ def band(x):
 
 
 def score(data):
+    data.setdefault("finding_scoring", "proposed_presentation")
+    data.setdefault("process_assurance", "proposed_presentation")
     s = data["scoring"]
     tier = data["report"]["native_tier"]
+    authoritative = data.get("finding_scoring") == "authoritative_retained_publication"
 
     # ---- process assurance ----
     fams = {f["id"]: dict(f, procs=[], credit=0.0, applicable=0) for f in data["families"]}
@@ -63,6 +65,21 @@ def score(data):
     # ---- findings ----
     ev = s["evidence_weight"]; vw = s["verification_weight"]; rw = s["reachability_weight"]
     for fd in data["findings"]:
+        if authoritative:
+            if fd.get("cvss") is not None:
+                raise ValueError("authoritative retained finding must not synthesize a CVSS vector")
+            declared = fd.get("severity_override")
+            value = fd.get("authoritative_score")
+            label = fd.get("priority_label")
+            if declared not in SEV_ORDER or declared == "Refuted" or isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+                raise ValueError("authoritative retained finding score is invalid")
+            if not isinstance(label, str) or not re.fullmatch(r"[A-Za-z0-9:-]+", label):
+                raise ValueError("authoritative retained finding priority is invalid")
+            fd.update(cvss_score=None, cvss_band=None, factors=None, priority=float(value),
+                      severity=declared, priority_tex=(r"S_{lifecycle} = %.1f,\quad priority = \text{%s}"
+                                                       % (value, label)))
+            continue
+        from cvss import CVSS4
         fd["cvss_score"] = float(CVSS4(fd["cvss"]).base_score) if fd.get("cvss") else None
         fd["cvss_band"] = band(fd["cvss_score"])
         e, v, r = ev[fd["evidence_strength"]], vw[fd["verification"]], rw[fd["reachability"]]
@@ -82,23 +99,36 @@ def score(data):
 
     live = [f for f in data["findings"] if f["verification"] != "REFUTED"]
     top = max((f["priority"] or 0) for f in live) if live else 0.0
-    rating = band(top) if top else "None"
-    if rating in ("None", "Low") and assurance < s["assurance_floor_for_clean"]:
+    # A retained publication can carry an independently verified severity without a CVSS vector.
+    # Preserve that declared severity instead of manufacturing a vector merely to drive the cover.
+    declared = [f["severity"] for f in live if f["severity"] != "Refuted"]
+    rating = min(declared, key=SEV_ORDER.index) if declared else (band(top) if top else "None")
+    if not authoritative and rating in ("None", "Low") and assurance < s["assurance_floor_for_clean"]:
         rating = "Indeterminate"
     counts = {k: sum(1 for f in data["findings"] if f["severity"] == k) for k in SEV_ORDER}
 
     gaps = [p for p in data["processes"] if p["status"] in ("OK_WITH_GAPS", "BLOCKED", "FAILED", "NOT_BUILT")]
+    assurance_not_asserted = data.get("process_assurance") == "not_asserted"
+    if assurance_not_asserted:
+        for process in data["processes"]:
+            process["credit"] = None
+        for family in fams.values():
+            family["assurance"] = None
+        assurance_tex = r"A = \text{not asserted by retained publication}"
+    else:
+        assurance_tex = (r"A = \frac{\sum_k w_k A_k}{\sum_k w_k} = "
+                         + r"\frac{" + " + ".join(r"%d \cdot %.2f" % (f["weight"], f["assurance"])
+                                                   for f in fams.values() if f["assurance"] is not None)
+                         + r"}{%d} = \mathbf{%.2f}" % (wsum, assurance))
     data["model"] = {
-        "assurance": assurance, "assurance_pct": round(assurance * 100),
+        "assurance": (None if assurance_not_asserted else assurance),
+        "assurance_pct": (None if assurance_not_asserted else round(assurance * 100)),
         "rating": rating, "top_priority": top, "counts": counts,
         "families": list(fams.values()), "gaps": gaps,
         "n_processes": len(data["processes"]),
         "n_ok": sum(1 for p in data["processes"] if p["status"] == "OK"),
         "n_na": sum(1 for p in data["processes"] if p["status"] == "SKIPPED_NA"),
-        "assurance_tex": (r"A = \frac{\sum_k w_k A_k}{\sum_k w_k} = "
-                          + r"\frac{" + " + ".join(r"%d \cdot %.2f" % (f["weight"], f["assurance"])
-                                                    for f in fams.values() if f["assurance"] is not None)
-                          + r"}{%d} = \mathbf{%.2f}" % (wsum, assurance)),
+        "assurance_tex": assurance_tex,
     }
     data["evidence_by_id"] = {e["id"]: e for e in data["evidence"]}
     return data
@@ -217,7 +247,8 @@ def main():
     def once():
         d = render(a.data, out, a.source_root, a.embed_snippets)
         m = d["model"]
-        print(f"rendered: rating={m['rating']} assurance={m['assurance']:.2f} "
+        assurance = "not asserted" if m["assurance"] is None else f"{m['assurance']:.2f}"
+        print(f"rendered: rating={m['rating']} assurance={assurance} "
               f"findings={len(d['findings'])} gaps={len(m['gaps'])}")
         if a.pdf:
             subprocess.run(["latexmk", f"-{a.engine}", "-interaction=nonstopmode", "-halt-on-error", "-quiet",
