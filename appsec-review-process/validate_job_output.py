@@ -116,6 +116,22 @@ CLAIM_CLASS_POLICIES = {
         "allowed_assertions": {"cfg-record", "coverage-gap"}},
     "binary-intelligence": {"claim_class_id": "binary_lead_evidence",
         "allowed_assertions": {"binary-intelligence-lead", "source-citation", "coverage-gap"}},
+    "doc-intelligence": {
+        "claim_class_id": "static_intelligence_evidence",
+        "allowed_assertions": {"documented-static-intent", "source-citation", "coverage-gap"},
+    },
+    "api-collection-intelligence": {
+        "claim_class_id": "static_intelligence_evidence",
+        "allowed_assertions": {"documented-static-intent", "source-citation", "coverage-gap"},
+    },
+    "test-intelligence": {
+        "claim_class_id": "static_intelligence_evidence",
+        "allowed_assertions": {"documented-static-intent", "source-citation", "coverage-gap"},
+    },
+    "operations-doc-intelligence": {
+        "claim_class_id": "static_intelligence_evidence",
+        "allowed_assertions": {"documented-static-intent", "source-citation", "coverage-gap"},
+    },
     "component-map": {
         "claim_class_id": "component_characterization",
         "allowed_assertions": {

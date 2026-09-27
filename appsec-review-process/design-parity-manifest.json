@@ -1850,20 +1850,24 @@
         "role": "api-collection-intelligence-extractor",
         "domain": "api-collection-artifacts",
         "tooling_profile": "static-api-collection-parser",
-        "output_contract": "intelligence-extract"
+        "output_contract": "api-collection-intelligence"
       },
       "execution": {
-        "mode": "persona",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/api_collection_intelligence_ingest.py:run",
+        "validator": "appsec-review-process/api_collection_intelligence_ingest.py:validate"
       },
       "output": {
-        "contract": "intelligence-extract",
-        "contract_file": "appsec-review-process/registry/output-contracts/intelligence-extract.json",
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "api-collection-intelligence",
+        "contract_file": "appsec-review-process/registry/output-contracts/api-collection-intelligence.json",
+        "schema_file": "schemas/api-collection-intelligence.schema.json",
+        "claim_class": "static_intelligence_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1876,21 +1880,21 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "registered_planned_not_executable",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_static_intelligence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime."
+      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
     },
     {
       "id": "02-binary-intelligence-ingest",
@@ -1977,20 +1981,24 @@
         "role": "doc-intelligence-extractor",
         "domain": "functional-design-docs",
         "tooling_profile": "static-doc-parser",
-        "output_contract": "intelligence-extract"
+        "output_contract": "doc-intelligence"
       },
       "execution": {
-        "mode": "persona",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/doc_intelligence_ingest.py:run",
+        "validator": "appsec-review-process/doc_intelligence_ingest.py:validate"
       },
       "output": {
-        "contract": "intelligence-extract",
-        "contract_file": "appsec-review-process/registry/output-contracts/intelligence-extract.json",
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "doc-intelligence",
+        "contract_file": "appsec-review-process/registry/output-contracts/doc-intelligence.json",
+        "schema_file": "schemas/doc-intelligence.schema.json",
+        "claim_class": "static_intelligence_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2003,21 +2011,21 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "registered_planned_not_executable",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_static_intelligence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime."
+      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
     },
     {
       "id": "02-standards-source-ingest",
@@ -2099,20 +2107,24 @@
         "role": "test-intelligence-extractor",
         "domain": "qa-test-artifacts",
         "tooling_profile": "static-test-doc-parser",
-        "output_contract": "intelligence-extract"
+        "output_contract": "test-intelligence"
       },
       "execution": {
-        "mode": "persona",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/test_intelligence_ingest.py:run",
+        "validator": "appsec-review-process/test_intelligence_ingest.py:validate"
       },
       "output": {
-        "contract": "intelligence-extract",
-        "contract_file": "appsec-review-process/registry/output-contracts/intelligence-extract.json",
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "test-intelligence",
+        "contract_file": "appsec-review-process/registry/output-contracts/test-intelligence.json",
+        "schema_file": "schemas/test-intelligence.schema.json",
+        "claim_class": "static_intelligence_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2125,21 +2137,21 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "registered_planned_not_executable",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_static_intelligence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime."
+      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
     },
     {
       "id": "04-owasp-validation-worklist",
@@ -3131,19 +3143,30 @@
           "00-intake"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-operations-doc-ingest",
+        "persona": "functional-design-doc-consumer",
+        "role": "doc-intelligence-extractor",
+        "domain": "functional-design-docs",
+        "tooling_profile": "static-doc-parser",
+        "output_contract": "operations-doc-intelligence"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/operations_doc_ingest.py:run",
+        "validator": "appsec-review-process/operations_doc_ingest.py:validate"
       },
       "output": {
         "contract": "operations-doc-intelligence",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/operations-doc-intelligence.json",
+        "schema_file": "schemas/operations-doc-intelligence.schema.json",
+        "claim_class": "static_intelligence_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -3156,23 +3179,21 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_static_intelligence_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
     },
     {
       "id": "02-evidence-index",

@@ -2,6 +2,7 @@ import json, shutil, sys, tempfile, unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 import static_intelligence_core as core
+import validate_job_output as output_validator
 from execution_state import file_hash, Blocked
 from schema_validate import validate_document
 
@@ -62,4 +63,6 @@ class StaticIntelTests(unittest.TestCase):
    t=json.loads((ROOT/f'registry/job-templates/{job}.json').read_text()); c=json.loads((ROOT/f'registry/output-contracts/{contract}.json').read_text())
    self.assertFalse(t['implemented']); self.assertEqual(c['result_schema'],{"artifact":result,"schema_file":schema})
    self.assertTrue(set(c['required_files'])<=set(t['outputs']['files']))
+   self.assertEqual(output_validator._claim_class_errors(c,{"records":[]}),[])
+   self.assertTrue(output_validator._claim_class_errors(c,{"severity":"high"}))
 if __name__=='__main__': unittest.main()
