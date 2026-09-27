@@ -21,6 +21,7 @@ from typing import Any, Callable
 from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
 import evidence_redaction
+import container_execution as ce
 from sbom_family_contracts import (
     canonical_advisory_id, databases_digest, declaration_kind, lifecycle_row_for,
     required_gap_reason, spdx_expression_shape_ok, version_scheme_for,
@@ -115,27 +116,86 @@ def _base(request: dict[str, Any], job: str) -> dict[str, Any]:
             "source_snapshot_sha256": request["source_snapshot_sha256"]}
 
 
-def _tool(request: dict[str, Any], job: str) -> tuple[dict[str, Any], dict[str, Any], Path]:
-    output = _path(request.get("tool_output"), "tool_output")
-    receipt_path = _path(request.get("tool_receipt"), "tool_receipt")
+def _tool(request: dict[str, Any], job: str, prefix: str = "") -> tuple[dict[str, Any], dict[str, Any], Path]:
+    output = _path(request.get(prefix + "tool_output"), prefix + "tool_output")
+    receipt_path = _path(request.get(prefix + "tool_receipt"), prefix + "tool_receipt")
     receipt = _json(receipt_path)
     required = {"schema", "run_id", "job_id", "attempt_id", "tool_id", "image_id",
-                "image_digest", "result_sha256", "source_snapshot_sha256", "completed_at"}
+                "image_digest", "result_sha256", "source_snapshot_sha256", "completed_at",
+                "boundary_sha256", "network_mode", "target_read_only", "scratch_writable"}
     if set(receipt) != required or receipt.get("schema") != PINNED_RECEIPT_SCHEMA:
         raise WorkerBlocked(f"{job}: pinned tool receipt is not closed v1.0 evidence")
-    expected = request.get("expected_tool")
-    if not isinstance(expected, dict) or set(expected) != {"tool_id", "image_id", "image_digest"}:
+    expected = request.get(prefix + "expected_tool")
+    if not isinstance(expected, dict) or set(expected) != {"tool_id", "image_id", "image_digest", "boundary_sha256"}:
         raise WorkerBlocked(f"{job}: expected_tool is required")
     if (receipt["run_id"] != request["run_id"] or receipt["job_id"] != job or
             receipt["source_snapshot_sha256"] != request["source_snapshot_sha256"] or
             any(receipt[key] != expected[key] for key in expected)):
         raise WorkerBlocked(f"{job}: pinned tool receipt identity differs from the requested execution")
+    if receipt["network_mode"] != "none" or receipt["target_read_only"] is not True or receipt["scratch_writable"] is not True:
+        raise WorkerBlocked(f"{job}: pinned tool receipt does not prove the offline read-only B13 boundary")
+    if receipt["boundary_sha256"] != ce.boundary_sha256():
+        raise WorkerBlocked(f"{job}: pinned tool receipt names a different execution boundary")
     if not SHA.fullmatch(str(receipt["image_digest"])) or not SHA.fullmatch(str(receipt["result_sha256"])):
         raise WorkerBlocked(f"{job}: pinned tool receipt hashes are invalid")
     if _hash_file(output) != receipt["result_sha256"]:
         raise WorkerBlocked(f"{job}: pinned tool output hash differs from its external receipt")
     _timestamp(receipt["completed_at"], "tool completed_at")
     return _json(output), receipt, output
+
+
+def _source_files(request: dict[str, Any], job: str) -> dict[str, str]:
+    value = request.get("source_files")
+    if not isinstance(value, dict) or not all(isinstance(path, str) and SHA.fullmatch(str(sha))
+                                               for path, sha in value.items()):
+        raise WorkerBlocked(f"{job}: exact accepted source-file hash map is required for raw tool normalization")
+    return value
+
+
+def _location(properties: Any, source_files: dict[str, str], job: str) -> str:
+    candidates = []
+    if isinstance(properties, list):
+        for item in properties:
+            if (isinstance(item, dict) and isinstance(item.get("name"), str) and
+                    item["name"].startswith("syft:location:") and item["name"].endswith(":path") and
+                    isinstance(item.get("value"), str)):
+                candidates.append(item["value"].removeprefix("/workspace/"))
+    exact = sorted({path for path in candidates if path in source_files})
+    if len(exact) == 1: return exact[0]
+    expanded = sorted({path for candidate in candidates for path in source_files
+                       if path == candidate or path.startswith(candidate.rstrip("/") + "/")})
+    if len(expanded) == 1: return expanded[0]
+    raise WorkerBlocked(f"{job}: raw tool component has no unambiguous accepted source location")
+
+
+def _ecosystem(purl: Any) -> str:
+    if isinstance(purl, str) and purl.startswith("pkg:"):
+        value = purl[4:].split("/", 1)[0]
+        aliases = {"go": "golang", "golang": "golang", "python": "pypi", "generic": "generic"}
+        value = aliases.get(value, value)
+        if value in {"npm", "pypi", "maven", "golang", "nuget", "cargo", "gem", "composer", "conan", "deb", "rpm", "apk", "generic"}:
+            return value
+    return "generic"
+
+
+def _sbom_rows(tool: dict[str, Any], request: dict[str, Any], job: str) -> list[dict[str, Any]]:
+    rows = tool.get("components")
+    if tool.get("bomFormat") != "CycloneDX":
+        if not isinstance(rows, list): raise WorkerBlocked(f"{job}: tool export has no components array")
+        return rows
+    if not isinstance(rows, list): raise WorkerBlocked(f"{job}: CycloneDX has no components array")
+    source_files = _source_files(request, job); normalized = []
+    for raw in rows:
+        if not isinstance(raw, dict) or not isinstance(raw.get("name"), str):
+            raise WorkerBlocked(f"{job}: CycloneDX component is malformed")
+        path = _location(raw.get("properties"), source_files, job)
+        purl = raw.get("purl"); ecosystem = _ecosystem(purl)
+        kind = declaration_kind(ecosystem, path)
+        normalized.append({"name": raw["name"], "version": raw.get("version"), "purl": purl,
+            "cpe": raw.get("cpe"), "ecosystem": ecosystem,
+            "declaration": "declared" if kind != "vendored-file-evidence" else "inferred-vendored",
+            "source": {"path": path, "sha256": source_files[path]}})
+    return normalized
 
 
 def _upstream(request: dict[str, Any], key: str, job: str, result_path: str) -> tuple[dict[str, Any], dict[str, str], Path]:
@@ -163,7 +223,9 @@ def _upstream(request: dict[str, Any], key: str, job: str, result_path: str) -> 
         raise WorkerBlocked(f"{job}: {key} accepted pointer does not resolve to immutable evidence")
     envelope = _json(envelope_path)
     if (validate_worker_result(envelope) or envelope.get("attempt_id") != block["attempt_id"] or
-            envelope.get("job_id") != job or envelope.get("acceptance_status") != "CURRENT" or
+            envelope.get("job_id") != job or envelope.get("run_id") != request["run_id"] or
+            envelope.get("acceptance_status") != "CURRENT" or envelope.get("execution_status") != accepted.get("status") or
+            envelope.get("input_fingerprint") != accepted.get("fingerprint") or accepted.get("envelope_path") != "result.json" or
             not any(item.get("path") == result_path and "sha256:" + item.get("sha256", "") == block["sha256"]
                     for item in envelope.get("artifacts", []) if isinstance(item, dict))):
         raise WorkerBlocked(f"{job}: {key} accepted common envelope is invalid")
@@ -183,9 +245,7 @@ def _component_id(value: dict[str, Any]) -> str:
 def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
     job = JOBS["sbom"][0]; base = _base(request, job)
     tool, receipt, output = _tool(request, job)
-    rows = tool.get("components")
-    if not isinstance(rows, list):
-        raise WorkerBlocked(f"{job}: tool export has no components array")
+    rows = _sbom_rows(tool, request, job)
     components = []
     for raw in rows:
         if not isinstance(raw, dict) or not isinstance(raw.get("source"), dict):
@@ -200,8 +260,9 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
         if declaration not in {"declared", "inferred-vendored"}:
             raise WorkerBlocked(f"{job}: component declaration is invalid")
         identity = {key: raw.get(key) for key in ("name", "version", "purl", "cpe", "ecosystem")}
-        component = {"component_id": _component_id({**identity, "source": source}),
-                     "assertion": "component-version-unknown" if raw.get("version") is None else "declared-component-present",
+        assertion = ("inventory-coverage-gap" if declaration == "inferred-vendored" else
+                     "component-version-unknown" if raw.get("version") is None else "declared-component-present")
+        component = {"component_id": _component_id({**identity, "source": source}), "assertion": assertion,
                      "declaration": declaration, **identity,
                      "source": {"evidence_kind": evidence_kind, **source},
                      "tool_id": receipt["tool_id"], "citation": _citation(receipt, output)}
@@ -238,12 +299,61 @@ def _database_block(raw: dict[str, Any], evaluated: str, max_age: int) -> dict[s
             "max_age_seconds": max_age, "age_policy": "within-limit"}
 
 
+def _component_for(component_by_id: dict[str, dict[str, Any]], *, purl: Any = None,
+                   cpes: Any = None) -> tuple[str, str] | None:
+    if isinstance(purl, str):
+        for identifier, component in component_by_id.items():
+            if component.get("purl") == purl: return identifier, "purl"
+    if isinstance(cpes, list):
+        for cpe in cpes:
+            for identifier, component in component_by_id.items():
+                if component.get("cpe") == cpe: return identifier, "cpe"
+    return None
+
+
+def _sca_rows(tool: dict[str, Any], component_by_id: dict[str, dict[str, Any]], database: str,
+              job: str) -> list[dict[str, Any]]:
+    if isinstance(tool.get("matches"), list) and all(isinstance(row, dict) and "component_ref" in row
+                                                     for row in tool["matches"]):
+        return tool["matches"]
+    rows = []
+    if database == "grype" and isinstance(tool.get("matches"), list):
+        for item in tool["matches"]:
+            artifact = item.get("artifact") if isinstance(item, dict) else None
+            vulnerability = item.get("vulnerability") if isinstance(item, dict) else None
+            if not isinstance(artifact, dict) or not isinstance(vulnerability, dict):
+                raise WorkerBlocked(f"{job}: Grype match is malformed")
+            located = _component_for(component_by_id, purl=artifact.get("purl"), cpes=artifact.get("cpes"))
+            if located is None: raise WorkerBlocked(f"{job}: Grype match does not resolve into the exact SBOM")
+            aliases = [vulnerability.get("id")]
+            aliases.extend(row.get("id") for row in vulnerability.get("relatedVulnerabilities", []) if isinstance(row, dict))
+            rows.append({"component_ref": located[0], "aliases": [value for value in aliases if isinstance(value, str)],
+                         "database": "grype-db", "advisory_id": vulnerability.get("id"),
+                         "match_basis": located[1]})
+    elif database == "osv" and isinstance(tool.get("results"), list):
+        for result in tool["results"]:
+            for package in result.get("packages", []) if isinstance(result, dict) else []:
+                package_id = package.get("package") if isinstance(package, dict) else None
+                located = _component_for(component_by_id, purl=package_id.get("purl") if isinstance(package_id, dict) else None)
+                if located is None: raise WorkerBlocked(f"{job}: OSV match does not resolve into the exact SBOM")
+                for vulnerability in package.get("vulnerabilities", []):
+                    if not isinstance(vulnerability, dict): raise WorkerBlocked(f"{job}: OSV advisory is malformed")
+                    aliases = [vulnerability.get("id"), *vulnerability.get("aliases", [])]
+                    rows.append({"component_ref": located[0], "aliases": [v for v in aliases if isinstance(v, str)],
+                                 "database": "osv", "advisory_id": vulnerability.get("id"), "match_basis": "purl"})
+    else:
+        raise WorkerBlocked(f"{job}: raw matcher export has an unsupported shape")
+    return rows
+
+
 def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
     job = JOBS["sca"][0]; base = _base(request, job)
     sbom, binding, _ = _upstream(request, "sbom", JOBS["sbom"][0], JOBS["sbom"][2])
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
     tool, receipt, output = _tool(request, job)
+    supplemental = (_tool(request, job, "osv_")
+                    if any(key.startswith("osv_tool_") for key in request) else None)
     max_age = request.get("max_database_age_seconds")
     if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 0:
         raise WorkerBlocked(f"{job}: explicit non-negative database age ceiling is required")
@@ -266,8 +376,11 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
             evaluated_by = ["grype-db"] + (["osv"] if component.get("purl") else [])
             evaluated.append({"component_ref": component["component_id"], "outcome": "no-advisory-matched",
                               "version_scheme": version_scheme_for(component), "evaluated_by": evaluated_by})
+    raw_matches = _sca_rows(tool, by_id, "grype", job)
+    if supplemental is not None:
+        raw_matches.extend(_sca_rows(supplemental[0], by_id, "osv", job))
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
-    for raw in tool.get("matches", []):
+    for raw in raw_matches:
         if not isinstance(raw, dict) or raw.get("component_ref") not in by_id:
             raise WorkerBlocked(f"{job}: matcher cited a component outside the exact SBOM")
         component = by_id[raw["component_ref"]]
@@ -330,8 +443,32 @@ def build_license(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, b
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
     tool, receipt, output = _tool(request, job); component_ids = {row["component_id"] for row in sbom["components"]}
+    raw_records = tool.get("records")
+    if not isinstance(raw_records, list) and isinstance(tool.get("files"), list):
+        source_files = _source_files(request, job); raw_records = []
+        for file_record in tool["files"]:
+            path = file_record.get("path") if isinstance(file_record, dict) else None
+            if isinstance(path, str): path = path.removeprefix("/workspace/")
+            if path not in source_files: continue
+            detections = file_record.get("license_detections")
+            if not isinstance(detections, list): detections = file_record.get("licenses", [])
+            for detection in detections:
+                if not isinstance(detection, dict): continue
+                expression = (detection.get("license_expression_spdx") or detection.get("spdx_license_key") or
+                              detection.get("key"))
+                if not isinstance(expression, str) or not expression: continue
+                component_ref = None
+                owners = [row for row in sbom["components"]
+                          if path == row["source"]["path"] or path.startswith(str(PurePosixPath(row["source"]["path"]).parent) + "/")]
+                if len(owners) == 1: component_ref = owners[0]["component_id"]
+                raw_records.append({"assertion": "license-text-detected", "component_ref": component_ref,
+                    "license_expression": expression, "expression_state": "spdx-expression",
+                    "claim_source": {"kind": "found-in-file", "path": path, "sha256": source_files[path],
+                                     "start_line": detection.get("start_line"), "end_line": detection.get("end_line")}})
+    if not isinstance(raw_records, list):
+        raise WorkerBlocked(f"{job}: ScanCode export has no files or normalized records")
     records = []
-    for index, raw in enumerate(tool.get("records", []), 1):
+    for index, raw in enumerate(raw_records, 1):
         if not isinstance(raw, dict) or raw.get("component_ref") not in component_ids | {None}:
             raise WorkerBlocked(f"{job}: license record cites an unknown component")
         claim = raw.get("claim_source")

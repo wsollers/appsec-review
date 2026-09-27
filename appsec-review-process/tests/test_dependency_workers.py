@@ -43,11 +43,13 @@ class DependencyWorkersTest(unittest.TestCase):
     def tool(self, job, name, value):
         output = self.write(name + ".json", value)
         expected = {"tool_id": name, "image_id": "tool-" + name,
-                    "image_digest": "sha256:" + hashlib.sha256(("image:" + name).encode()).hexdigest()}
+                    "image_digest": "sha256:" + hashlib.sha256(("image:" + name).encode()).hexdigest(),
+                    "boundary_sha256": workers.ce.boundary_sha256()}
         receipt = self.write(name + "-receipt.json", {
             "schema": workers.PINNED_RECEIPT_SCHEMA, "run_id": self.run_id, "job_id": job,
             "attempt_id": name + "-b13-attempt", **expected, "result_sha256": workers._hash_file(output),
             "source_snapshot_sha256": self.source, "completed_at": self.when,
+            "network_mode": "none", "target_read_only": True, "scratch_writable": True,
         })
         return output, receipt, expected
 
@@ -139,7 +141,8 @@ class DependencyWorkersTest(unittest.TestCase):
     def test_absent_tool_receipt_blocks_without_attempt(self):
         output = self.write("syft.json", {"components": []})
         request = self.request(tool_output=str(output), tool_receipt=str(self.root / "missing.json"),
-                               expected_tool={"tool_id": "syft", "image_id": "tool-syft", "image_digest": "sha256:" + "3" * 64})
+                               expected_tool={"tool_id": "syft", "image_id": "tool-syft", "image_digest": "sha256:" + "3" * 64,
+                                              "boundary_sha256": "sha256:" + "4" * 64})
         with self.assertRaisesRegex(workers.WorkerBlocked, "regular file"):
             self.run_request("sbom", "missing", request)
         self.assertFalse((self.out / "02-sbom-inventory").exists())
