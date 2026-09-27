@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""Nominal, fail-closed workers for the ADR-0010 M03/M04 evidence families.
+
+The module owns deterministic applicability and the parts which do not need a vendor executable.
+Vendor tools are never simulated: an unavailable B13 image becomes a BLOCKED tool instance and a
+named coverage gap.  The resulting documents use the already-accepted V03/V04/V07 contracts and
+can be published through the repository redaction boundary by :func:`materialize_attempt`.
+
+This is deliberately an evidence-lead boundary.  It cannot emit findings, severity, compliance or
+runtime observations.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+import re
+from typing import Any, Iterable
+
+import container_mobile_binary_contracts as cmb
+import evidence_redaction
+import permission_capabilities as permissions
+import secrets_iac_contracts as sic
+import tool_instance_shapes as shapes
+
+SKIP = shapes.SKIP_REASON
+HASH = lambda b: "sha256:" + hashlib.sha256(b).hexdigest()
+REDACTOR = {"name": evidence_redaction.REDACTOR_NAME,
+            "module_version": evidence_redaction.MODULE_VERSION,
+            "ruleset_sha256": evidence_redaction.RULESET_SHA256}
+
+SPECS = {
+    "02-secrets-inventory": ("secrets-inventory", ["gitleaks", "key-material-file-inventory"]),
+    "02-iac-config-scan": ("iac-config-evidence", ["checkov", "trivy-config", "tfsec", "kube-linter",
+                                                      "hadolint", "dockerfile-base-image-inventory"]),
+    "02-container-image-inventory": ("container-image-inventory", ["oci-archive-inventory",
+                                                                      "image-package-and-config-inspection"]),
+    "02-binary-hardening": ("binary-hardening", ["binskim"]),
+    "02-mobile-sast": ("mobile-sast", ["mobsfscan-android", "mobsfscan-ios"]),
+}
+
+PROBE_PATTERNS = {
+    "gitleaks": ["**/*"], "key-material-file-inventory": ["**/*.pem", "**/*.key", "**/*.p12", "**/*.pfx"],
+    "checkov": ["**/*.tf", "**/*.yaml", "**/*.yml"], "trivy-config": ["**/*.tf", "**/*.yaml", "**/*.yml"],
+    "tfsec": ["**/*.tf"], "kube-linter": ["**/*.yaml", "**/*.yml"], "hadolint": ["**/Dockerfile*"],
+    "dockerfile-base-image-inventory": ["**/Dockerfile*"],
+    "oci-archive-inventory": ["**/*.tar", "**/*.oci.tar"],
+    "image-package-and-config-inspection": ["**/*.tar", "**/*.oci.tar"],
+    "binskim": ["**/*.exe", "**/*.dll", "**/*.so", "**/*.dylib"],
+    "mobsfscan-android": ["**/AndroidManifest.xml", "**/build.gradle*"],
+    "mobsfscan-ios": ["**/Info.plist", "**/*.xcodeproj/*"],
+}
+
+KEY_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".jks", ".keystore"}
+
+
+def _dump(value: Any) -> bytes:
+    return (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
+
+
+def _files(root: Path) -> list[tuple[str, Path]]:
+    if not root.is_absolute() or not root.is_dir() or root.is_symlink():
+        raise ValueError("source_root must be an absolute, real directory")
+    values = []
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and not path.is_symlink():
+            relative = path.relative_to(root).as_posix()
+            if all(part not in ("", ".", "..") for part in relative.split("/")):
+                values.append((relative, path))
+    return values
+
+
+def _dockerfile(path: str) -> bool:
+    return Path(path).name == "Dockerfile" or Path(path).name.startswith("Dockerfile.")
+
+
+def _iac(path: str) -> bool:
+    return path.endswith((".tf", ".yaml", ".yml")) or _dockerfile(path)
+
+
+def _android(path: str) -> bool:
+    return Path(path).name == "AndroidManifest.xml" or Path(path).name.startswith("build.gradle")
+
+
+def _ios(path: str) -> bool:
+    return Path(path).name == "Info.plist" or ".xcodeproj/" in path
+
+
+def _binary(path: Path) -> bool:
+    try:
+        return cmb.detect_format(path.read_bytes()[:8]) != "unsupported"
+    except OSError:
+        return False
+
+
+def probe(job_id: str, source_root: Path) -> dict[str, Any]:
+    """Deterministically enumerate candidate inputs.  Bare Java/Kotlin/Swift files are not mobile markers."""
+    if job_id not in SPECS:
+        raise ValueError(f"unknown vendor evidence job {job_id!r}")
+    files = _files(source_root)
+    paths = [name for name, _ in files]
+    if job_id == "02-secrets-inventory":
+        candidates = {"gitleaks": paths,
+                      "key-material-file-inventory": [n for n, _ in files if Path(n).suffix.lower() in KEY_SUFFIXES]}
+    elif job_id == "02-iac-config-scan":
+        tf = [n for n in paths if n.endswith(".tf")]
+        yaml = [n for n in paths if n.endswith((".yaml", ".yml"))]
+        docker = [n for n in paths if _dockerfile(n)]
+        candidates = {"checkov": tf + yaml + docker, "trivy-config": tf + yaml + docker, "tfsec": tf,
+                      "kube-linter": yaml, "hadolint": docker, "dockerfile-base-image-inventory": docker}
+    elif job_id == "02-container-image-inventory":
+        archives = [n for n in paths if n.endswith((".tar", ".oci.tar"))]
+        candidates = {tool: archives for tool in SPECS[job_id][1]}
+    elif job_id == "02-binary-hardening":
+        binaries = [n for n, p in files if _binary(p)]
+        candidates = {"binskim": binaries}
+    else:
+        candidates = {"mobsfscan-android": [n for n in paths if _android(n)],
+                      "mobsfscan-ios": [n for n in paths if _ios(n)]}
+    return {"files_examined": len(files), "candidates": {k: sorted(set(v)) for k, v in candidates.items()}}
+
+
+def fingerprint(job_id: str, source_root: Path, source_snapshot_sha256: str) -> str:
+    listing = [(name, HASH(path.read_bytes())) for name, path in _files(source_root)]
+    return HASH(_dump({"job_id": job_id, "source_snapshot_sha256": source_snapshot_sha256, "files": listing}))
+
+
+def permission_receipt(job_id: str, run_id: str, source_snapshot_sha256: str, *, now: str) -> dict[str, Any]:
+    """Canonical default-deny evaluation for these offline static workers (zero capabilities)."""
+    if job_id not in SPECS:
+        raise ValueError(f"unknown vendor evidence job {job_id!r}")
+    requirement = {"schema": "appsec-review/permission-requirement/1.0", "job_id": job_id,
+                   "capabilities": []}
+    context = {"run_id": run_id, "job_id": job_id, "source_snapshot_sha256": source_snapshot_sha256,
+               "now": now, "registry_ceiling": []}
+    decision = permissions.evaluate(requirement, [], context)
+    permissions.require_granted(decision, requirement=requirement, grants=[], context=context)
+    return {"requirement": requirement, "grants": [], "decision": decision,
+            "fingerprint_sha256": permissions.input_fingerprint_component(decision)}
+
+
+def _header(job_id: str, run_id: str, attempt_id: str, source_sha: str) -> dict[str, str]:
+    return {"run_id": run_id, "job_id": job_id, "attempt_id": attempt_id,
+            "source_snapshot_sha256": source_sha}
+
+
+def _instance(tool: str, status: str, *, executor: str, records: int | None = None,
+              output: tuple[str, bytes, str] | None = None) -> dict:
+    started = status not in ("SKIPPED", "BLOCKED")
+    cause = {"OK": None, "OK_WITH_GAPS": "partial-input-coverage", "SKIPPED": None,
+             "BLOCKED": "image-unavailable", "FAILED": "tool-error"}[status]
+    meaning = {"OK": "findings-present" if records else "clean", "OK_WITH_GAPS": "clean",
+               "SKIPPED": "not-started", "BLOCKED": "not-started", "FAILED": "tool-error"}[status]
+    outputs = []
+    if output:
+        path, data, schema = output
+        outputs = [{"path": path, "sha256": HASH(data), "bytes": len(data), "media_type": "application/json",
+                    "role": "normalized-result", "validation": "schema-validated", "validated_against": schema}]
+    container = executor == "pinned_container"
+    return {"tool_id": tool, "attempt_id": f"{tool}-attempt-0001", "terminal_status": status,
+            "skip_reason": SKIP if status == "SKIPPED" else None, "cause_code": cause,
+            "identity": {"executor_kind": executor,
+                         "image_repository": "registry.invalid/unavailable" if container else None,
+                         "image_digest": HASH(tool.encode()) if container else None,
+                         "executable_sha256": None if container else HASH(("module:" + tool).encode()),
+                         "tool_name": tool, "tool_version": "1.0.0" if started else None,
+                         "data_identities": [],
+                         "redactor": ({"redactor_id": "evidence-redaction",
+                                       "redactor_version": evidence_redaction.MODULE_VERSION,
+                                       "ruleset_sha256": "sha256:" + evidence_redaction.RULESET_SHA256}
+                                      if output else None)},
+            "argv": [tool, "--offline", "/inputs"],
+            "exit": {"exit_code": 0 if started else None, "exit_meaning": meaning, "timed_out": False,
+                     "nonzero_exit_on_findings": False, "findings_exit_codes": []},
+            "outputs": outputs, "result_record_count": records if output else None}
+
+
+def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
+               successful: dict[str, tuple[bytes, int, str]], *, can_skip: bool) -> tuple[str, dict, dict, dict | None, dict]:
+    instances, coverage_tools, gaps, probe_tools, raw = [], [], [], [], {}
+    any_candidates = any(candidates[t] for t in tools)
+    for tool in tools:
+        paths = candidates[tool]
+        if not paths and can_skip:
+            status = "SKIPPED"
+        elif tool in successful:
+            status = "OK"
+        else:
+            status = "BLOCKED"
+        output = None
+        if status == "OK":
+            data, count, schema = successful[tool]
+            relative = f"outputs/tools/{tool}/result.json"
+            raw[relative] = data
+            output = (relative, data, schema)
+        instances.append(_instance(tool, status,
+                                   executor="deterministic_python" if tool in {"key-material-file-inventory",
+                                                                              "dockerfile-base-image-inventory"}
+                                   else "pinned_container",
+                                   records=successful[tool][1] if tool in successful else None, output=output))
+        unanalyzed = [] if status in ("OK", "SKIPPED") else [
+            {"path": p, "reason_code": "tool-instance-did-not-complete"} for p in paths]
+        coverage_tools.append({"tool_id": tool, "applicability": "applicable" if paths else SKIP,
+                               "candidate_input_count": len(paths), "analyzed_input_count": len(paths) if status == "OK" else 0,
+                               "not_analyzed_input_count": len(unanalyzed), "unsupported_input_count": 0,
+                               "not_analyzed_inputs": unanalyzed, "unsupported_inputs": [], "input_lists_truncated": False})
+        if status == "BLOCKED":
+            gaps += [{"gap_id": f"gap-{tool}-blocked", "kind": "tool-instance-blocked", "tool_id": tool,
+                      "affected_input_count": None},
+                     {"gap_id": f"gap-{tool}-inputs", "kind": "inputs-not-analyzed", "tool_id": tool,
+                      "affected_input_count": len(paths)}]
+        probe_tools.append({"tool_id": tool,
+                            "detectors": [{"detector_id": f"{tool}-probe", "patterns_searched": PROBE_PATTERNS[tool],
+                                           "matching_input_count": len(paths)}],
+                            "matching_input_count": len(paths), "applicable": bool(paths)})
+    tool_results = {"schema": "appsec-review/tool-results/1.0", **header, "tool_instances": instances}
+    coverage = {"schema": "appsec-review/scan-coverage/1.0", **header, "tools": coverage_tools, "gaps": gaps}
+    probe_doc = None
+    if can_skip:
+        probe_doc = {"schema": "appsec-review/applicability-probe-receipt/1.0", **header,
+                     "probe": {"probe_id": f"{header['job_id']}-probe", "probe_version": "1.0.0",
+                               "probe_sha256": HASH(header["job_id"].encode())},
+                     "files_examined_count": max(1, sum(len(v) for v in candidates.values())), "tools": probe_tools,
+                     "node_applicable": any_candidates, "skip_reason": None if any_candidates else SKIP}
+    status = shapes.supportable_success_status(tool_results, coverage)
+    if status is None:
+        status = "BLOCKED"
+    return status, tool_results, coverage, probe_doc, raw
+
+
+def _scan_keys(root: Path, paths: list[str]) -> list[dict]:
+    entries = []
+    for path in paths:
+        data = (root / path).read_bytes()[:8192]
+        pem = b"-----BEGIN " in data and b"PRIVATE KEY-----" in data
+        assertion = "private-key-header-present" if pem else "credential-store-file-present"
+        entries.append({"assertion": assertion, "tool_id": "key-material-file-inventory",
+                        "rule_id": "pem-private-key-header" if pem else "key-store-extension",
+                        "data_class": "private-key" if pem else "key-store-file", "confidence": "high",
+                        "location": {"path": path, "path_disposition": "published",
+                                     "start_line": 1 if pem else None, "end_line": 1 if pem else None}})
+    return entries
+
+
+def _scan_base_images(root: Path, paths: list[str]) -> list[dict]:
+    values = []
+    for path in paths:
+        for line_no, line in enumerate((root / path).read_text(errors="replace").splitlines(), 1):
+            match = re.match(r"\s*FROM\s+([^\s]+)", line, re.I)
+            if not match:
+                continue
+            token = match.group(1)
+            form, repository, tag, digest = "literal", token, None, None
+            if token.lower() == "scratch": form, repository = "scratch", None
+            elif "$" in token: form, repository = "build-arg-parameterized", None
+            elif "@sha256:" in token: repository, digest = token.split("@", 1)
+            elif ":" in token.rsplit("/", 1)[-1]: repository, tag = token.rsplit(":", 1)
+            values.append({"reference_form": form, "repository": repository, "tag": tag, "digest": digest,
+                           "location": {"path": path, "path_disposition": "published",
+                                        "start_line": line_no, "end_line": line_no}})
+    return values
+
+
+def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: str,
+                    source_snapshot_sha256: str) -> dict[str, Any]:
+    """Build one deterministic contract document set; no filesystem publication occurs here."""
+    contract, tools = SPECS[job_id]
+    found = probe(job_id, source_root)
+    candidates = found["candidates"]
+    header = _header(job_id, run_id, attempt_id, source_snapshot_sha256)
+    successful: dict[str, tuple[bytes, int, str]] = {}
+    key_entries, base_images = [], []
+    if job_id == "02-secrets-inventory":
+        key_entries = _scan_keys(source_root, candidates["key-material-file-inventory"])
+        raw = _dump({"records": [{"ordinal": n + 1, "path": e["location"]["path"]} for n, e in enumerate(key_entries)]})
+        successful["key-material-file-inventory"] = (raw, len(key_entries), "vendor-key-material-result-1")
+    elif job_id == "02-iac-config-scan" and candidates["dockerfile-base-image-inventory"]:
+        base_images = _scan_base_images(source_root, candidates["dockerfile-base-image-inventory"])
+        raw = _dump({"records": len(base_images)})
+        successful["dockerfile-base-image-inventory"] = (raw, len(base_images), "vendor-base-image-result-1")
+    status, tool_results, coverage, probe_doc, raw_files = _aggregate(
+        header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory")
+
+    docs: dict[str, Any] = {"status": status, "contract_id": contract, "header": header,
+                            "tool-results.json": tool_results, "coverage.json": coverage,
+                            "raw_files": raw_files, "probe": probe_doc}
+    if job_id == "02-secrets-inventory":
+        instance = tool_results["tool_instances"][1]
+        out = instance["outputs"][0]
+        for n, entry in enumerate(key_entries, 1):
+            entry.update({"entry_id": f"SI-{n:06d}", "citation": {"source_class": "raw", "producer": job_id,
+                          "attempt_id": instance["attempt_id"], "path": out["path"],
+                          "sha256": out["sha256"].removeprefix("sha256:")}})
+        docs["secrets-inventory.redacted.json"] = {"schema": "appsec-review/secrets-inventory/1.0", **header,
+                                                    "redactor": REDACTOR, "entries": key_entries}
+    elif job_id == "02-iac-config-scan":
+        instance = tool_results["tool_instances"][-1]
+        out = instance["outputs"][0] if instance["outputs"] else None
+        rendered = []
+        for n, image in enumerate(base_images, 1):
+            image.update({"reference_id": f"BI-{n:06d}", "assertion": "declared-base-image-reference",
+                          "tool_id": "dockerfile-base-image-inventory",
+                          "citation": {"source_class": "raw", "producer": job_id,
+                                       "attempt_id": instance["attempt_id"], "path": out["path"],
+                                       "sha256": out["sha256"].removeprefix("sha256:")}})
+            rendered.append(image)
+        docs["iac-config-evidence.json"] = {"schema": "appsec-review/iac-config-evidence/1.0", **header,
+                                            "redactor": REDACTOR, "rule_hits": []}
+        docs["base-image-inventory.json"] = {"schema": "appsec-review/iac-config-base-image-inventory/1.0", **header,
+                                             "redactor": REDACTOR, "base_images": rendered}
+    elif job_id == "02-mobile-sast":
+        docs["mobile-sast.json"] = {"schema": "appsec-review/mobile-sast/1.0", **header,
+                                    "platforms": [{"platform": "android", "tool_id": "mobsfscan-android",
+                                                   "marker_present": bool(candidates["mobsfscan-android"])},
+                                                  {"platform": "ios", "tool_id": "mobsfscan-ios",
+                                                   "marker_present": bool(candidates["mobsfscan-ios"])}],
+                                    "rule_hits": []}
+    elif job_id == "02-binary-hardening":
+        records = []
+        for path in candidates["binskim"]:
+            data = (source_root / path).read_bytes()
+            records.append({"binary_id": "bin-" + hashlib.sha256(path.encode()).hexdigest()[:12], "tool_id": "binskim",
+                            "path": path, "sha256": HASH(data), "bytes": len(data), "format": cmb.detect_format(data[:8]),
+                            "checks": {name: "not-assessed" for name in cmb.CHECK_FORMATS}, "rule_hits": []})
+        docs["binary-hardening.json"] = {"schema": "appsec-review/binary-hardening/1.0", **header, "binaries": records}
+    else:
+        records = []
+        for path in candidates["oci-archive-inventory"]:
+            data = (source_root / path).read_bytes()
+            records.append({"image_id": "img-" + hashlib.sha256(path.encode()).hexdigest()[:12],
+                            "tool_id": "oci-archive-inventory",
+                            "source": {"kind": "supplied-archive", "archive_path": path,
+                                       "archive_sha256": HASH(data), "archive_bytes": len(data)},
+                            "archive_format": "oci-layout" if path.endswith(".oci.tar") else "docker-save",
+                            "inspection": "not-inspected", "image_manifest_digest": None, "layers": [],
+                            "config": None, "packages": [], "hardening_rule_hits": []})
+        docs["container-image-inventory.json"] = {"schema": "appsec-review/container-image-inventory/1.0", **header,
+                                                  "images": records}
+    return docs
+
+
+def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run_id: str) -> None:
+    """Publish a closed immutable-attempt layout through V06. Existing paths are never reused."""
+    if attempt.exists():
+        raise FileExistsError(str(attempt))
+    staging = attempt.parent / (attempt.name + ".staging")
+    staging.mkdir(parents=True)
+    contract = documents["contract_id"]
+    result_names = {"secrets-inventory": ["secrets-inventory.redacted.json"],
+                    "iac-config-evidence": ["iac-config-evidence.json", "base-image-inventory.json"],
+                    "container-image-inventory": ["container-image-inventory.json"],
+                    "binary-hardening": ["binary-hardening.json"], "mobile-sast": ["mobile-sast.json"]}[contract]
+    payload = {name: _dump(documents[name]) for name in result_names}
+    payload["tool-results.json"] = _dump(documents["tool-results.json"])
+    payload["coverage.json"] = _dump(documents["coverage.json"])
+    if documents["probe"] is not None:
+        probe_name = {"iac-config-evidence": "applicability-probe-receipt.json",
+                      "container-image-inventory": "container-image-applicability.json",
+                      "binary-hardening": "binary-hardening-applicability.json",
+                      "mobile-sast": "mobile-applicability.json"}[contract]
+        payload[probe_name] = _dump(documents["probe"])
+    for relative, data in documents["raw_files"].items():
+        payload[relative.removeprefix("outputs/")] = data
+    for relative, data in payload.items():
+        path = staging / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    attempt.mkdir(parents=True)
+    evidence_redaction.redact_tree(staging, attempt / "outputs", on_unhandled="refuse",
+                                   limits=evidence_redaction.DEFAULT_LIMITS)
+    header = documents["header"]
+    status = {"status": documents["status"], "attempt_id": header["attempt_id"],
+              "dagster_run_id": dagster_run_id}
+    if contract in ("secrets-inventory", "iac-config-evidence"):
+        status.update({"run_id": header["run_id"], "job_id": header["job_id"]})
+    (attempt / "status.json").write_bytes(_dump(status))
+    outputs = [{"path": p.relative_to(attempt).as_posix(), "sha256": HASH(p.read_bytes())}
+               for p in sorted((attempt / "outputs").rglob("*")) if p.is_file()]
+    (attempt / "manifest.json").write_bytes(_dump({"schema": sic.MANIFEST_SCHEMA,
+                                                    "contract_id": contract, "outputs": outputs}))
+    for path in sorted(staging.rglob("*"), reverse=True):
+        if path.is_file(): path.unlink()
+        elif path.is_dir(): path.rmdir()
+    staging.rmdir()
