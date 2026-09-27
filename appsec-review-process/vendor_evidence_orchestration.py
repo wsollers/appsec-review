@@ -13,15 +13,18 @@ from typing import Any
 
 import binary_hardening
 import binary_hardening_input
+import automatic_evidence_inputs as automatic_inputs
 import container_image_inventory
-from execution_state import Blocked, beneath, data_path, file_hash, identifier, read_json, run_path
+from execution_state import Blocked, beneath, data_path, digest, file_hash, identifier, read_json, run_path
 import iac_config_scan
 import mobile_sast
+import vendor_evidence_workers as vendor_workers
 from publish_job_output import mark_attempt_started, publish_validated, record_noncurrent
 import secrets_inventory
 from validate_job_output import OrchestrationFacts
 
-REQUEST_SCHEMA = "appsec-review/vendor-evidence-orchestration-request/1.0"
+REQUEST_SCHEMA = "appsec-review/vendor-evidence-orchestration-request/1.1"
+LEGACY_BINARY_REQUEST_SCHEMA = "appsec-review/vendor-evidence-orchestration-request/1.0"
 WORKERS = {
     "02-secrets-inventory": secrets_inventory,
     "02-iac-config-scan": iac_config_scan,
@@ -29,7 +32,9 @@ WORKERS = {
     "02-binary-hardening": binary_hardening,
     "02-mobile-sast": mobile_sast,
 }
-_REQUEST_KEYS = {"schema", "run_id", "job_id", "source_generation", "generated_at", "source_root"}
+_REQUEST_KEYS = {"schema", "run_id", "job_id", "source_generation", "generated_at",
+                 "source_root", "source_binding", "applicability"}
+_LEGACY_BINARY_REQUEST_KEYS = {"schema", "run_id", "job_id", "source_generation", "generated_at", "source_root"}
 
 
 def _owned(value: Any, owner: Path, label: str, *, directory: bool = False) -> Path:
@@ -87,9 +92,12 @@ def execute(*, job_id: str, run_id: str, dagster_run_id: str, input_path: str,
         request = json.loads(request_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError):
         raise Blocked("vendor evidence orchestration: input request is unreadable") from None
-    if not isinstance(request, dict) or set(request) != _REQUEST_KEYS:
+    legacy_binary = (job_id == "02-binary-hardening" and isinstance(request, dict) and
+                     set(request) == _LEGACY_BINARY_REQUEST_KEYS and
+                     request.get("schema") == LEGACY_BINARY_REQUEST_SCHEMA)
+    if not isinstance(request, dict) or (set(request) != _REQUEST_KEYS and not legacy_binary):
         raise Blocked("vendor evidence orchestration: request shape is not closed")
-    if (request.get("schema") != REQUEST_SCHEMA or request.get("run_id") != run_id or
+    if ((request.get("schema") != REQUEST_SCHEMA and not legacy_binary) or request.get("run_id") != run_id or
             request.get("job_id") != job_id):
         raise Blocked("vendor evidence orchestration: request identity is invalid")
     manifest_path = owner / "inputs" / "artifact-manifest.json"
@@ -99,13 +107,22 @@ def execute(*, job_id: str, run_id: str, dagster_run_id: str, input_path: str,
         raise Blocked("vendor evidence orchestration: request source generation is stale")
     observed_at = _timestamp(request.get("generated_at"))
     source = _owned(request.get("source_root"), owner, "source root", directory=True)
+    projection = None
+    if not legacy_binary:
+        projection, _binding, _files = automatic_inputs.source_projection(run_id)
+        automatic_inputs.validate_source_projection(run_id, projection, request.get("source_binding"))
 
     # The validators independently recover the source boundary from the immutable run manifest.
-    manifest_value = read_json(manifest)
-    declared = manifest_value.get("target", {}).get("repo_path") if isinstance(manifest_value.get("target"), dict) else None
-    if job_id == "02-mobile-sast" and (
-            not isinstance(declared, str) or source != Path(declared).absolute()):
-        raise Blocked("vendor evidence orchestration: source root differs from the run manifest target")
+    if job_id in {"02-secrets-inventory", "02-iac-config-scan", "02-mobile-sast"} and source != projection:
+        raise Blocked("vendor evidence orchestration: source root differs from the accepted source projection")
+    if not legacy_binary:
+        probe = vendor_workers.probe(job_id, source)
+        applicable = any(probe["candidates"].values()) or job_id == "02-secrets-inventory"
+        expected_applicability = {"decision": "EXECUTE" if applicable else "SKIPPED_NA",
+            "skip_reason": None if applicable else vendor_workers.SKIP,
+            "probe_sha256": "sha256:" + digest(probe), "probe": probe}
+        if request.get("applicability") != expected_applicability:
+            raise Blocked("vendor evidence orchestration: applicability evidence is stale or mismatched")
     if job_id == "02-binary-hardening":
         binary_hardening_input.validate(run_id, source)
     if job_id == "02-container-image-inventory" and source != (owner / "inputs").absolute():
