@@ -1,0 +1,36 @@
+# Retained report happy-path demo
+
+This demo exercises accepted fixture producers, report-input assembly, draft synthesis, completion
+controls, human-signoff validation, and final publication. It is a contract demonstration, not a
+scan of a target. The generated finding is fixture data. Analysis, dependency, and vendor-family
+qualification files are indexed separately as supplemental implementation/test coverage and are
+explicitly not promoted into report findings.
+
+From the repository root, retain a draft without any signoff:
+
+```bash
+python -B appsec-review-process/retained_happy_path_demo.py \
+  --output-root /absolute/path/to/retained-demo \
+  --run-id retained-demo
+```
+
+The draft is written to
+`<output-root>/data/jobs/10-synthesis-report/attempts/draft-1`; `demo-index.json` and
+`supplemental-family-qualification.json` provide the retained entry points.
+
+To exercise final publication, the operator must explicitly supply a key of at least 32 bytes, a
+trusted SHA-256 ledger anchor, and a reviewer identity:
+
+```bash
+python -B appsec-review-process/retained_happy_path_demo.py \
+  --output-root /absolute/path/to/retained-final-demo \
+  --run-id retained-final-demo \
+  --authorization-key /absolute/path/to/demo-hmac.key \
+  --ledger-anchor sha256:<64-hex-digits> \
+  --demo-reviewer-id operator-name
+```
+
+The coordinator prefixes the reviewer with `DEMO-OPERATOR:`, uses a `DEMO-AUTHORIZATION` receipt,
+and records a `DEMO ONLY` rationale. The final package is `<output-root>/final`. Existing output
+roots are never reused or overwritten, and partial signoff arguments fail before any output is
+created.
