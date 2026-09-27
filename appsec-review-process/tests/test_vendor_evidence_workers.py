@@ -16,6 +16,7 @@ import secrets_iac_contracts as sic
 import vendor_evidence_workers as workers
 import vendor_evidence_b13 as b13
 import tool_instance_shapes as shapes
+import validate_job_output as validator
 
 SOURCE_SHA = "sha256:" + "a" * 64
 PERMITTED = ["OK", "OK_WITH_GAPS", "SKIPPED", "BLOCKED", "FAILED", "CANCELED"]
@@ -116,6 +117,34 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                         expected_dagster_run_id="dagster-1", node_status=doc["status"],
                         declared_tool_ids=workers.SPECS[job][1], permitted_node_statuses=PERMITTED,
                         on_unhandled="refuse", limits=evidence_redaction.DEFAULT_LIMITS)
+                self.assertEqual(errors, [])
+
+    def test_v04_canonical_run_layout_passes_the_real_dispatch(self):
+        for job, files in {
+                "02-secrets-inventory": {"key.pem": b"-----BEGIN PRIVATE KEY-----\nx\n"},
+                "02-iac-config-scan": {"Dockerfile": b"FROM alpine:3.20\n"}}.items():
+            with self.subTest(job=job), tempfile.TemporaryDirectory() as folder:
+                run_id, attempt_id = "run-canonical-v04", "attempt-canonical-v04"
+                run = Path(folder) / run_id
+                manifest = run / "inputs" / "artifact-manifest.json"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_bytes(json.dumps({"run_id": run_id}, sort_keys=True).encode() + b"\n")
+                source_sha = "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest()
+                source = run / "data" / "source"; source.mkdir(parents=True)
+                for relative, data in files.items():
+                    path = source / relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+                documents = workers.build_documents(job, source, run_id=run_id, attempt_id=attempt_id,
+                                                     source_snapshot_sha256=source_sha)
+                attempt = run / "data/jobs" / job / "whole/attempts" / attempt_id
+                workers.materialize_attempt(documents, attempt, dagster_run_id="dagster-canonical-v04",
+                    started_at="2026-09-27T12:00:00Z", finished_at="2026-09-27T12:00:01Z")
+                contract = json.loads((ROOT / "registry/output-contracts" /
+                    (workers.SPECS[job][0] + ".json")).read_text())
+                errors = validator.validate_vendor_prepass_attempt(attempt, contract, run_id=run_id,
+                    job_id=job, attempt_id=attempt_id, node_status=documents["status"],
+                    orchestration=validator.OrchestrationFacts(
+                        "dagster-canonical-v04", source_sha,
+                        validator.datetime.fromisoformat("2026-09-27T12:00:00+00:00")))
                 self.assertEqual(errors, [])
 
     def test_attempt_is_immutable_and_tamper_is_detected(self):

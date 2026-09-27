@@ -4,7 +4,7 @@
   "display_name": "Binary Intelligence Ingest",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
-  "implemented": false,
+  "implemented": true,
   "permissions": ["read-run-data", "write-run-data"],
   "composition": {
     "persona_id": "reverse-engineer",
@@ -17,11 +17,11 @@
     "required": [
       "accepted native-build binary lineage",
       "accepted binary-triage result",
-      "accepted binary-cfg result",
-      "run-owned normalized lead evidence"
+      "accepted binary-cfg result"
     ],
     "optional": [
-      "source component map"
+      "source component map",
+      "deterministically derived normalized binary leads"
     ]
   },
   "outputs": {

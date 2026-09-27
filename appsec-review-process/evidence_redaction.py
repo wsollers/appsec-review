@@ -34,7 +34,7 @@ from typing import Any, Iterator
 from execution_state import atomic_bytes, beneath, digest
 from schema_validate import validate_document
 
-MODULE_VERSION = "1.1.2"
+MODULE_VERSION = "1.1.3"
 REDACTOR_NAME = "appsec-review-process/evidence_redaction"
 RECEIPT_SCHEMA = "redaction-receipt.schema.json"
 RECEIPT_FILENAME = "redaction-receipt.json"
@@ -113,7 +113,9 @@ RULESET: dict[str, Any] = {
     "xml_prefix": r"<[A-Za-z0-9_:.\-]{0,64}\Z",
     "xml_tail": r"[A-Za-z0-9_:.\-]{0,64}(?:\s[^<>]{0,512})?>(?P<v>[^<]{1,4096})<",
     "unquoted_value": r"[^\s\"',;]{1,4096}",
-    "unquoted_literals": ["false", "nil", "none", "null", "true", "undefined"],
+    # Exact documentation/tool placeholders carry no credential value.  Keep this list closed;
+    # real values following the same secret-named flags still redact.
+    "unquoted_literals": ["<api-key>", "false", "nil", "none", "null", "true", "undefined"],
     "bearer": r"(?i)\bbearer[ \t]+(?P<v>[A-Za-z0-9._~+/=\-]{16,})",
     "url_credential": r"://[^/\s:@]{1,256}:(?P<v>[^/\s@]{1,256})@",
     "jwt": r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}",

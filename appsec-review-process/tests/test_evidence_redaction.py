@@ -1150,7 +1150,7 @@ class OwnDocumentsTests(unittest.TestCase):
             changed = deepcopy(er.RULESET)
             changed["entropy"].pop(key)
             self.assertNotEqual(er.digest({"module_version": er.MODULE_VERSION, "ruleset": changed}), er.RULESET_SHA256, key)
-        self.assertEqual(er.MODULE_VERSION, "1.1.2")
+        self.assertEqual(er.MODULE_VERSION, "1.1.3")
 
     def test_automatic_attempt_identity_is_not_treated_as_a_secret(self):
         attempt_id = "auto-" + hashlib.sha256(b"dagster-run-and-job").hexdigest()[:24]
@@ -1296,6 +1296,17 @@ class VerificationProbeTests(unittest.TestCase):
         receipt, _, _ = self.redact({"benign.txt": text})
         self.assertEqual(receipt["files"][0]["disposition"], "unchanged")
 
+    def test_api_key_documentation_placeholder_is_not_a_credential(self):
+        placeholder = "checkov --bc-api-key <api-key> --output json\n"
+        receipt, published, _ = self.redact({"tool.json": placeholder})
+        self.assertEqual(receipt["files"][0]["disposition"], "unchanged")
+        self.assertEqual((published / "nested" / "tool.json").read_text(encoding="utf-8"), placeholder)
+        actual = "checkov --bc-api-key " + SECRETS["SK_KEY"] + " --output json\n"
+        receipt, published, _ = self.redact({"tool.json": actual})
+        self.assertEqual(receipt["files"][0]["disposition"], "redacted")
+        self.assertNotIn(SECRETS["SK_KEY"],
+                         (published / "nested" / "tool.json").read_text(encoding="utf-8"))
+
     def test_new_bounded_patterns_stay_linear_on_hostile_lines(self):
         import time
         width = LIMITS.max_line_length - 8
@@ -1318,11 +1329,11 @@ class VerificationProbeTests(unittest.TestCase):
 
 # Produced by running the redactor over fixtures/evidence-redaction/sarif-snippets, then pinned.
 GOLDEN = {
-    "ruleset_sha256": "ae0245931d052207f5bda5c0236f28afa9f6d71235d4053f8e67b58527e07b2a",
+    "ruleset_sha256": "f92300607398d85ae92ae5af21411f810786551c819b26d532a94ca13e6c5c06",
     "sarif_published_sha256": "bbf1eac71274b50cd3e39a71ff1d0979803ab1ad4d60329a153be848a253e93b",
     "sarif_redactions": {"private-key-block": 0, "named-secret": 8, "url-credential": 0, "bearer-token": 0,
                          "provider-token": 1, "jwt": 0, "high-entropy": 1, "fingerprint": 2},
-    "sarif_receipt_sha256": "8c4260c62d1660f1d7127407b680df9d34ce5e003a969f15c5ace0c9dcbaeeac",
+    "sarif_receipt_sha256": "b4782898d2c86c6a1fa8056013dca4b2098c69d4f5f5d4761b7c5cb63ca29d34",
 }
 
 

@@ -130,6 +130,35 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
                             "status": "M02_UNRESOLVED"}
         with self.assertRaises(Blocked): core._validate_raw(claimed, "02-binary-triage")
 
+    def test_intelligence_inputs_are_derived_from_accepted_upstreams(self):
+        triage = core.normalize("02-binary-triage",
+            inputs("02-binary-triage", raw("02-binary-triage", self.fixture["triage"])), "a-triage")
+        debug = core.normalize("02-debug-symbol-index",
+            inputs("02-debug-symbol-index", raw("02-debug-symbol-index", self.fixture["debug"])), "a-debug")
+        cfg_raw = raw("02-binary-cfg", self.fixture["cfg"])
+        symbols = {item["name"]: item["symbol_id"] for item in debug["records"][0]["symbols"]}
+        for function in cfg_raw["records"][0]["functions"]:
+            function["symbol_id"] = symbols[function["name"]]
+        cfg = core.normalize("02-binary-cfg", inputs("02-binary-cfg", cfg_raw, {
+            "02-debug-symbol-index": {"attempt_id":"a-debug","contract_id":"debug-symbol-index",
+                "result_sha256":H2,"envelope_sha256":H3,"result":debug},
+            "02-binary-triage": {"attempt_id":"a-triage","contract_id":"binary-triage",
+                "result_sha256":H3,"envelope_sha256":H2,"result":triage}}), "a-cfg")
+        upstream = {
+            "02-binary-triage": {"attempt_id":"a-triage","contract_id":"binary-triage",
+                "result_sha256":H3,"envelope_sha256":H2,"result":triage},
+            "02-binary-cfg": {"attempt_id":"a-cfg","contract_id":"binary-cfg",
+                "result_sha256":H2,"envelope_sha256":H3,"result":cfg}}
+        derived = core._derive_intelligence_raw(copy.deepcopy(NATIVE), upstream)
+        self.assertEqual(derived, core._derive_intelligence_raw(copy.deepcopy(NATIVE), upstream))
+        self.assertTrue(derived["records"])
+        self.assertTrue(all(record["citations"] for record in derived["records"]))
+        self.assertNotIn("finding", json.dumps(derived).lower())
+        mixed = copy.deepcopy(upstream)
+        mixed["02-binary-cfg"]["result"]["image"]["image_digest"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(Blocked, "mixed analysis images"):
+            core._derive_intelligence_raw(copy.deepcopy(NATIVE), mixed)
+
     def test_cfg_rejects_mixed_accepted_generations(self):
         debug = core.normalize("02-debug-symbol-index",
             inputs("02-debug-symbol-index", raw("02-debug-symbol-index", self.fixture["debug"])), "a-debug")
@@ -180,7 +209,8 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
         for job, (contract_id, result_name, schema_name) in core.SPECS.items():
             template = json.loads((ROOT / f"registry/job-templates/{job}.json").read_text())
             contract = json.loads((ROOT / f"registry/output-contracts/{contract_id}.json").read_text())
-            self.assertEqual(template["implemented"], job in core.adapter.SUPPORTED)
+            self.assertEqual(template["implemented"],
+                             job in core.adapter.SUPPORTED or job == "02-binary-intelligence-ingest")
             self.assertEqual(template["composition"]["output_contract_id"], contract_id)
             self.assertEqual(contract["result_schema"], {"artifact": result_name,
                                                          "schema_file": schema_name})

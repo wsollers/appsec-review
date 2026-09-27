@@ -155,11 +155,89 @@ def _code_hashes(job: str) -> dict[str, str]:
     return values
 
 
+def _derive_intelligence_raw(native: dict[str, Any], upstream: dict[str, Any]) -> dict[str, Any]:
+    """Derive review leads only from the accepted triage and CFG generations.
+
+    This is a deterministic join, not a new binary-analysis authority.  Every emitted lead keeps
+    the exact upstream record identity that supports it and remains a proof obligation rather than
+    a finding or verdict.
+    """
+    required = {"02-binary-triage", "02-binary-cfg"}
+    if set(upstream) != required:
+        raise Blocked("02-binary-intelligence-ingest: accepted triage and CFG results are required")
+    native_projection = {key: native[key] for key in
+        ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "result_sha256",
+         "envelope_sha256", "source_revision", "source_snapshot_sha256", "source_tree_sha256")}
+    results = {name: upstream[name]["result"] for name in sorted(required)}
+    if any(value.get("native_build") != native_projection for value in results.values()):
+        raise Blocked("02-binary-intelligence-ingest: upstream evidence crosses native-build generations")
+    images = [value.get("image") for value in results.values()]
+    if images[0] != images[1] or not isinstance(images[0], dict):
+        raise Blocked("02-binary-intelligence-ingest: upstream evidence has mixed analysis images")
+
+    triage = {item["binary_id"]: item for item in results["02-binary-triage"]["records"]}
+    cfg = {item["binary_id"]: item for item in results["02-binary-cfg"]["records"]}
+    binaries = {item["binary_id"]: item for item in native["binaries"]}
+    if set(triage) != set(binaries) or set(cfg) != set(binaries):
+        raise Blocked("02-binary-intelligence-ingest: upstream binary coverage is incomplete or mixed")
+
+    def citation(job: str, binary_id: str, identity: str) -> dict[str, str]:
+        return {"job_id": job, "result_sha256": upstream[job]["result_sha256"],
+                "binary_id": binary_id, "record_identity": identity}
+
+    records: list[dict[str, Any]] = []
+    for binary_id in sorted(binaries):
+        binary, triage_record, cfg_record = binaries[binary_id], triage[binary_id], cfg[binary_id]
+        base = {"binary_id": binary_id, "binary_sha256": binary["sha256"],
+                "build_identity_sha256": binary["build_identity_sha256"]}
+        triage_citation = citation("02-binary-triage", binary_id, triage_record["triage_id"])
+        gaps = sorted(set(triage_record.get("gaps", []) + cfg_record.get("gaps", [])))
+        for imported in sorted(set(triage_record.get("imports", []))):
+            records.append({**base, "lead_type": "dependency", "subject": f"Imported binary dependency: {imported}",
+                "citations": [triage_citation],
+                "proof_obligation": "Correlate the imported dependency with source/build ownership and reachable call sites.",
+                "gaps": gaps})
+        for check, state in sorted(triage_record.get("hardening", {}).items()):
+            records.append({**base, "lead_type": "defense" if state is True else "follow-up",
+                "subject": f"Binary hardening property {check}: {'present' if state is True else 'not confirmed'}",
+                "citations": [triage_citation],
+                "proof_obligation": "Confirm the property against the accepted binary and build configuration before drawing a security conclusion.",
+                "gaps": gaps})
+        for function in cfg_record.get("functions", []):
+            records.append({**base, "lead_type": "symbol", "subject": f"Recovered binary function: {function['name']}",
+                "citations": [citation("02-binary-cfg", binary_id, function["function_id"])],
+                "proof_obligation": "Correlate the recovered function with exact source and data-flow evidence.",
+                "gaps": gaps})
+        for edge in cfg_record.get("edges", []):
+            records.append({**base, "lead_type": "attack-surface", "subject": "Recovered binary call edge",
+                "citations": [citation("02-binary-cfg", binary_id, edge["edge_id"])],
+                "proof_obligation": "Determine whether untrusted input can reach this call edge in the accepted build.",
+                "gaps": gaps})
+        if not any(record["binary_id"] == binary_id for record in records):
+            records.append({**base, "lead_type": "follow-up", "subject": "Binary evidence requires source correlation",
+                "citations": [triage_citation],
+                "proof_obligation": "Resolve the binary to source-level behavior before closing its review coverage.",
+                "gaps": gaps})
+    config = {"static_only": True, "adapter_id": "accepted-binary-evidence-join",
+              "adapter_version": "1"}
+    return {"schema": RAW_SCHEMA, "job_id": "02-binary-intelligence-ingest",
+            "native_build": native_projection, "image": images[0], "config": config,
+            "records": records, "gaps": sorted(set(gap for item in records for gap in item["gaps"]))}
+
+
 def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     if job in adapter.SUPPORTED:
         _attempt, native = _native(run_id)
         return {"run_id": run_id, "job_id": job, "native_build": native,
                 "upstream": _upstream(run_id, job), "image": adapter.image_identity(),
+                "code": _code_hashes(job)}
+    if job == "02-binary-intelligence-ingest":
+        _attempt, native = _native(run_id)
+        upstream = _upstream(run_id, job)
+        raw = _derive_intelligence_raw(native, upstream)
+        return {"run_id": run_id, "job_id": job, "native_build": native,
+                "upstream": upstream, "raw": raw,
+                "raw_evidence_sha256": _hash(raw), "config_sha256": _hash(raw["config"]),
                 "code": _code_hashes(job)}
     path = control_path(run_id, job)
     if not path.is_file() or path.is_symlink():

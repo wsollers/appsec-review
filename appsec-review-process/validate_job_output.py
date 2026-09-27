@@ -1060,7 +1060,11 @@ def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any]
         if family == "V04":
             verifier = (_v04.validate_secrets_attempt if contract_id == _v04.SECRETS_CONTRACT_ID
                         else _v04.validate_iac_attempt)
-            errors = verifier(attempt_root, tool_outputs_root=tool_outputs_root, **common)
+            # Current V04 workers publish authenticated raw outputs below outputs/tools in the
+            # closed attempt.  Retain validation of qualified legacy V04 generations whose tool
+            # attempts lived at the job root; never infer the choice from a document value.
+            v04_tool_root = attempt_root if (attempt_root / "outputs" / "tools").is_dir() else tool_outputs_root
+            errors = verifier(attempt_root, tool_outputs_root=v04_tool_root, **common)
         elif family == "V07":
             inputs_root = owner / "inputs" if contract_id == "container-image-inventory" else source_root
             errors = _v07.verify_attempt(contract_id, attempt_root, inputs_root, expected_header=header, **common)

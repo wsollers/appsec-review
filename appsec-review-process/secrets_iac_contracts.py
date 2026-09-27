@@ -14,8 +14,8 @@ redaction receipt and to the bytes on disk cannot be written in the JSON-Schema 
 Every argument is required and none has a default. `declared_tool_ids` and
 `permitted_node_statuses` come from the node's registered template and graph edge,
 `node_status` from the worker envelope, `on_unhandled` and `limits` are the redaction policy and
-bounds the CONSUMER demands, and `tool_outputs_root` is the directory the `outputs[].path` values of
-`tool-results.json` are relative to (`data/jobs/<node>/`). None of them is read from the documents
+bounds the CONSUMER demands, and `tool_outputs_root` is the caller-selected immutable attempt
+directory (or the qualified legacy job root) that `outputs[].path` values are relative to. None is read from the documents
 under validation: a document cannot vouch for itself.
 
 This module composes and does not re-implement `tool_instance_shapes.validate_node_aggregate`,
