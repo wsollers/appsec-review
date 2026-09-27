@@ -204,6 +204,8 @@ def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, An
             raise Blocked(f"{job}: record crosses binary or build identity")
         records.append(_normalize_record(job, item, binary, inputs))
     records.sort(key=lambda x: (x["binary_id"], json.dumps(x, sort_keys=True)))
+    aggregate_gaps = sorted(set(raw["gaps"] + [
+        f"{record['binary_id']}:{gap}" for record in records for gap in record.get("gaps", [])]))
     upstream = {name: {k: value[k] for k in ("attempt_id", "contract_id", "result_sha256", "envelope_sha256")}
                 for name, value in sorted(inputs["upstream"].items())}
     schema = {
@@ -214,7 +216,7 @@ def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, An
     }[job]
     return {
         "schema": schema, "run_id": inputs["run_id"], "job_id": job,
-        "attempt_id": attempt_id, "status": "OK_WITH_GAPS" if raw["gaps"] else "OK",
+        "attempt_id": attempt_id, "status": "OK_WITH_GAPS" if aggregate_gaps else "OK",
         "native_build": native_projection,
         "upstream": upstream, "authority": {"analysis_authority": "M02_PINNED_ADAPTER",
             "source_tree_sha256": inputs["native_build"]["source_tree_sha256"]}, "image": raw["image"],
@@ -222,7 +224,7 @@ def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, An
                  "adapter_version": raw["config"]["adapter_version"],
                  "config_sha256": inputs["config_sha256"],
                  "raw_evidence_sha256": inputs["raw_evidence_sha256"]},
-        "records": records, "coverage_gaps": sorted(set(raw["gaps"])),
+        "records": records, "coverage_gaps": aggregate_gaps,
     }
 
 
@@ -369,7 +371,7 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
         atomic_json(attempt / "lineage.json", {"schema": LINEAGE_SCHEMA, "run_id": run_id,
             "job_id": job, "source_snapshot_sha256": inputs["native_build"]["source_snapshot_sha256"],
             "build_lineage_sha256": _hash(native_lineage)})
-        status = {"process": job, "status": "OK_WITH_GAPS", "run_id": run_id,
+        status = {"process": job, "status": result["status"], "run_id": run_id,
                   "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
                   "records": len(result["records"]), "static_only": True,
                   "qualification": "implemented_not_qualified", "ended_at": now()}
@@ -377,7 +379,7 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
             dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
-            execution_status="OK_WITH_GAPS", summary=f"Published {len(result['records'])} static evidence record(s).",
+            execution_status=result["status"], summary=f"Published {len(result['records'])} static evidence record(s).",
             status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json"], gaps=result["coverage_gaps"],
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,

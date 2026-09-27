@@ -159,6 +159,17 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
             inputs("02-binary-triage", raw("02-binary-triage", triage_record)), "a")
         self.assertEqual(triage["records"][0]["gaps"], ["packed-state:yes", "stripped-state:yes",
             "unsupported-architecture", "unsupported-or-unknown-binary-format"])
+        self.assertEqual(triage["status"], "OK_WITH_GAPS")
+        self.assertEqual(triage["coverage_gaps"], [
+            f"{BINARY['binary_id']}:packed-state:yes", f"{BINARY['binary_id']}:stripped-state:yes",
+            f"{BINARY['binary_id']}:unsupported-architecture",
+            f"{BINARY['binary_id']}:unsupported-or-unknown-binary-format"])
+
+    def test_clean_records_publish_ok_with_empty_aggregate_gaps(self):
+        result = core.normalize("02-binary-triage",
+            inputs("02-binary-triage", raw("02-binary-triage", self.fixture["triage"])), "a")
+        self.assertEqual(result["status"], "OK")
+        self.assertEqual(result["coverage_gaps"], [])
 
     def test_registry_composition_stays_nominal_static_and_not_executable(self):
         source = (ROOT / "binary_evidence_core.py").read_text()
