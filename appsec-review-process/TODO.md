@@ -1388,6 +1388,18 @@ only characterize evidence cited through it. Full producer completeness, negativ
 Go/Java/PHP SAST expansion and OWASP worklist execution remain later work; they must not be reported
 as complete merely because the nominal fixture path runs.
 
+### Active next happy-path producers — 2026-09-27
+
+F02/F03 cores are merged to `main` at `e7cbdef`. Continue the native evidence chain with two
+file-disjoint implementation lanes; recovery hardening remains deferred.
+
+| Lane | Status | Exclusive scope | Nominal exit condition |
+|---|---|---|---|
+| **E03-core** native SAST | CLAIMED | new native-SAST worker, dedicated schemas/contracts/registry records, fixtures and tests | Consume exact accepted native-build/compile-database lineage; publish pinned clang-tidy/cppcheck/CSA evidence leads and explicit coverage gaps without finding promotion. |
+| **E04/E05-core** IR capture/link/facts | CLAIMED | new IR capture, link and facts workers plus dedicated schemas/contracts/registry records, fixtures and tests | Preserve source/compiler/variant lineage through bitcode capture, deterministic link and pointer/memory facts; uncovered units remain explicit and no vulnerability verdict is emitted. |
+| **Q18** independent qualification | QUEUED, READ-ONLY | both candidate commits and their combined tree | Verify nominal producer contracts, lineage, determinism, fail-closed malformed/stale inputs and compatibility with F02; keep live/Dagster readiness separate. |
+| **D18** master integration | ACTIVE | prompts, TODO, shared graph/parity/Dagster/catalog surfaces | Review and integrate qualified cores serially; do not mark lifecycle jobs executable until real bindings and happy-path evidence exist. |
+
 Cross-cutting capability ownership is explicit:
 
 | Manifest capability | Owning batches |
