@@ -50,7 +50,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "gosec",
@@ -94,7 +95,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "cppcheck",
@@ -136,7 +138,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-owasp-top-ten",
@@ -193,7 +196,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-csharp",
@@ -240,7 +244,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-golang",
@@ -297,7 +302,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-python",
@@ -354,7 +360,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-php",
@@ -401,7 +408,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-java",
@@ -448,7 +456,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-security-audit",
@@ -505,7 +514,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "semgrep-p-terraform",
@@ -552,7 +562,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "php-static-analysis",
@@ -586,7 +597,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "php-parse-coverage",
@@ -624,7 +636,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "ast-grep-target-supplied-rules",
@@ -659,7 +672,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "joern-c2cpg",
@@ -701,7 +715,8 @@
           "validated_against": "joern-cpg-overflowdb"
         }
       ],
-      "result_record_count": 0
+      "result_record_count": 0,
+      "execution_receipt": null
     }
   ]
 }

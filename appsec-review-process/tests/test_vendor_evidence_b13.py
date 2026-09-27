@@ -44,12 +44,14 @@ class B13Tests(unittest.TestCase):
         td=tempfile.TemporaryDirectory(); self.addCleanup(td.cleanup); root=Path(td.name); source=root/'source'; source.mkdir()
         def fake_request(tool_id,**kw):
             if tool_id=='checkov': raise b.VendorToolBlocked('missing')
-            return {'tool':tool_id}
-        def fake_execute(tool_id,**kw): return ({'execution_status':'OK'},b'[]')
-        with mock.patch.object(b,'request',fake_request), mock.patch.object(b,'execute',fake_execute):
+            return {'tool':tool_id,'permission':{},'image':{'image_id':'tool-hadolint','digest':'sha256:'+'a'*64},'argv':['/tool','--offline']}
+        def fake_execute(tool_id,**kw): return ({'execution_status':'OK','request_sha256':'sha256:'+'1'*64,
+            'result_sha256':'sha256:'+'2'*64,'permission_fingerprint_sha256':'sha256:'+'3'*64,'exit_code':0},b'[]')
+        records={'tool-hadolint':{'repository':'docker.io/library/tool-hadolint','digest':'sha256:'+'a'*64,'build_attempt_id':'build-1'}}
+        with mock.patch.object(b,'request',fake_request), mock.patch.object(b,'execute',fake_execute), mock.patch.object(b.ce,'load_image_registry',lambda *_:records):
             result=b.collect('02-iac-config-scan',['checkov','hadolint'],run_id='r',node_attempt_id='node',
                              source_root=source,source_sha='sha256:'+'a'*64,attempt_root=root/'attempt',
-                             now='2026-09-27T12:00:00Z',runtime_factory=lambda *a: Runtime())
+                             now='2026-09-27T12:00:00Z',runtime_factory=lambda *a: Runtime(),version_probe=lambda *a,**k:'2.15.1')
         self.assertEqual(result['checkov']['status'],'BLOCKED')
         self.assertEqual(result['hadolint']['status'],'OK')
 

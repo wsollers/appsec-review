@@ -33,6 +33,7 @@ from schema_validate import SchemaStore, validate_document  # noqa: E402
 TOOL_RESULTS_SCHEMA = "tool-results.schema.json"
 COVERAGE_SCHEMA = "scan-coverage.schema.json"
 PROBE_RECEIPT_SCHEMA = "applicability-probe-receipt.schema.json"
+VENDOR_EXECUTION_RECEIPT_SCHEMA = "vendor-b13-execution-receipt.schema.json"
 
 SKIP_REASON = "not-applicable-no-matching-inputs"
 
@@ -605,4 +606,36 @@ def verify_outputs_on_disk(tool_results: dict, attempt_root) -> list[str]:
             actual = "sha256:" + file_hash(path)
             if actual != output["sha256"]:
                 errors.append(f"outputs-on-disk: {tool_id}: {relative!r} does not have the listed sha256")
+    return errors
+
+
+def verify_vendor_execution_receipts(tool_results: dict, attempt_root) -> list[str]:
+    """Require and bind B13 identity receipts for every successful pinned-container instance."""
+    import hashlib, json
+    from execution_state import beneath
+    root=Path(attempt_root); errors=[]; store=SchemaStore()
+    if not any(isinstance(i.get("execution_receipt"),dict) for i in tool_results.get("tool_instances",[])):
+        return []  # legacy V03 aggregates predate authenticated-receipt projection
+    for instance in tool_results.get("tool_instances",[]):
+        if instance.get("identity",{}).get("executor_kind") != "pinned_container" or not has_validated_output(instance):
+            continue
+        tool=instance["tool_id"]; ref=instance.get("execution_receipt")
+        if not isinstance(ref,dict):
+            errors.append(f"execution-receipt-missing: tool {tool!r} has successful pinned output without B13 receipt")
+            continue
+        try:
+            path=beneath(root,root/ref["path"]); data=path.read_bytes(); receipt=json.loads(data)
+        except Exception:
+            errors.append(f"execution-receipt-invalid: tool {tool!r} receipt is absent or unreadable"); continue
+        if "sha256:"+hashlib.sha256(data).hexdigest()!=ref["sha256"]:
+            errors.append(f"execution-receipt-invalid: tool {tool!r} receipt hash differs")
+        errors += [f"execution-receipt-schema: tool {tool!r}: {error}"
+                   for error in validate_document(receipt,VENDOR_EXECUTION_RECEIPT_SCHEMA,store)]
+        expected={"tool_id":tool,"attempt_id":instance["attempt_id"],"argv":instance["argv"],
+                  "tool_version":instance["identity"]["tool_version"],"tool_name":instance["identity"]["tool_name"],
+                  "image_digest":instance["identity"]["image_digest"]}
+        if any(receipt.get(k)!=v for k,v in expected.items()) or any(receipt.get(k)!=ref[k] for k in
+                ("request_sha256","result_sha256","permission_sha256","permission_fingerprint_sha256",
+                 "image_id","image_digest")):
+            errors.append(f"execution-receipt-mismatch: tool {tool!r} identity is not the verified B13 identity")
     return errors

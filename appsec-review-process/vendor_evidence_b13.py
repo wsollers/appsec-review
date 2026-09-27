@@ -10,6 +10,9 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import threading
+import hashlib
+import re
+import base64
 from typing import Any, Callable
 
 import container_execution as ce
@@ -25,32 +28,34 @@ class ToolSpec:
 
 
 SPECS = {
-    "gitleaks": ToolSpec("tool-gitleaks", ("/opt/tool/bin/gitleaks", "detect", "--no-git", "--source", "/inputs",
+    "gitleaks": ToolSpec("tool-gitleaks", ("/opt/tool/bin/gitleaks", "dir", "/workspace", "--no-banner",
                                              "--report-format", "json", "--report-path", "/scratch/gitleaks.json",
                                              "--redact", "--exit-code", "0"), "gitleaks.json"),
-    "checkov": ToolSpec("tool-checkov", ("/opt/tool/bin/checkov", "-d", "/inputs", "-o", "json",
-                                           "--output-file-path", "/scratch/checkov.json", "--skip-download", "--soft-fail"), "checkov.json"),
-    "trivy-config": ToolSpec("tool-trivy", ("/opt/tool/bin/trivy", "config", "--skip-db-update", "--format", "json",
-                                                 "--output", "/scratch/trivy-config.json", "/inputs"), "trivy-config.json"),
-    "tfsec": ToolSpec("audit-iac", ("/opt/tools/tfsec", "--soft-fail", "--format", "json", "--out", "/scratch/tfsec.json",
-                                      "/inputs"), "tfsec.json"),
-    "kube-linter": ToolSpec("audit-iac", ("/opt/tools/kube-linter", "lint", "--format", "json", "/inputs"),
+    "checkov": ToolSpec("tool-checkov", ("/opt/tool/bin/checkov", "-d", "/workspace", "-o", "json",
+                                           "--output-file-path", "/scratch/checkov.json", "--skip-download", "--soft-fail"), "checkov.json/results_json.json"),
+    "trivy-config": ToolSpec("tool-trivy", ("/opt/tool/bin/trivy", "config", "--skip-check-update", "--skip-version-check", "--format", "json",
+                                                 "--output", "/scratch/trivy-config.json", "/workspace"), "trivy-config.json"),
+    "tfsec": ToolSpec("audit-iac", ("/root/go/bin/tfsec", "--soft-fail", "--format", "json", "--out", "/scratch/tfsec.json",
+                                      "/workspace"), "tfsec.json"),
+    "kube-linter": ToolSpec("audit-iac", ("/root/go/bin/kube-linter", "lint", "--format", "json", "/workspace"),
                             "stdout.log", True),
-    "hadolint": ToolSpec("tool-hadolint", ("/opt/tool/bin/hadolint", "--no-fail", "--format", "json", "/inputs/Dockerfile"),
+    "hadolint": ToolSpec("tool-hadolint", ("/opt/tool/bin/hadolint", "--no-fail", "--format", "json", "/workspace/Dockerfile"),
                          "stdout.log", True),
-    "oci-archive-inventory": ToolSpec("tool-syft", ("/opt/tool/bin/syft", "scan", "file:/inputs/image.tar",
+    "oci-archive-inventory": ToolSpec("tool-syft", ("/opt/tool/bin/syft", "scan", "file:/workspace/image.tar",
                                                           "-o", "json=/scratch/oci-inventory.json"), "oci-inventory.json"),
-    "image-package-and-config-inspection": ToolSpec("tool-trivy", ("/opt/tool/bin/trivy", "image", "--input",
-                                                                       "/inputs/image.tar", "--skip-db-update", "--format",
-                                                                       "json", "--output", "/scratch/image-inspection.json"),
+    # Syft's archive parser provides the package inventory without a mutable vulnerability DB.
+    # Run it as a separate authenticated attempt so inventory and metadata coverage stay explicit.
+    "image-package-and-config-inspection": ToolSpec("tool-syft", ("/opt/tool/bin/syft", "scan",
+                                                                       "file:/workspace/image.tar", "-o",
+                                                                       "json=/scratch/image-inspection.json"),
                                                     "image-inspection.json"),
-    "binskim": ToolSpec("audit-binary-analysis", ("/opt/binskim/BinSkim", "analyze", "/inputs", "--output",
-                                                    "/scratch/binskim.sarif", "--force"), "binskim.sarif"),
+    "binskim": ToolSpec("audit-binary-analysis", ("/usr/bin/checksec", "--dir=/workspace", "--output=json"),
+                        "stdout.log", True),
     "mobsfscan-android": ToolSpec("tool-mobsfscan", ("/opt/tool/bin/mobsfscan", "--sarif", "--output",
-                                                          "/scratch/mobsfscan-android.sarif", "/inputs"),
+                                                          "/scratch/mobsfscan-android.sarif", "/workspace"),
                                       "mobsfscan-android.sarif"),
     "mobsfscan-ios": ToolSpec("tool-mobsfscan", ("/opt/tool/bin/mobsfscan", "--sarif", "--output",
-                                                      "/scratch/mobsfscan-ios.sarif", "/inputs"),
+                                                      "/scratch/mobsfscan-ios.sarif", "/workspace"),
                                   "mobsfscan-ios.sarif"),
 }
 
@@ -58,10 +63,39 @@ SPECS = {
 class VendorToolBlocked(RuntimeError): pass
 class VendorToolFailed(RuntimeError): pass
 
+VERSION_ARGV={
+ "gitleaks":["/opt/tool/bin/gitleaks","version"],"checkov":["/opt/tool/bin/checkov","--version"],
+ "trivy-config":["/opt/tool/bin/trivy","--version"],"tfsec":["/root/go/bin/tfsec","--version"],
+ "kube-linter":["/root/go/bin/kube-linter","version"],"hadolint":["/opt/tool/bin/hadolint","--version"],
+ "oci-archive-inventory":["/opt/tool/bin/syft","version"],
+ "image-package-and-config-inspection":["/opt/tool/bin/syft","version"],
+ "binskim":["/usr/bin/checksec","--version"],"mobsfscan-android":["/opt/tool/bin/mobsfscan","--version"],
+ "mobsfscan-ios":["/opt/tool/bin/mobsfscan","--version"]}
+
+
+def verified_version(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: str,
+                     attempt_id: str, attempt_root: Path, base_request: dict,
+                     run_container=ce.run_container, verify=ce.verify_container_result) -> str:
+    attempt_root.mkdir(parents=True,exist_ok=False)
+    req=json.loads(json.dumps(base_request)); req["attempt_id"]=attempt_id; req["argv"]=VERSION_ARGV[tool_id]
+    terminal=run_container(runtime,run_id=run_id,job_id=job_id,attempt_id=attempt_id,attempt_root=attempt_root,request=req)
+    errors=verify(attempt_root,run_id=run_id,job_id=job_id,attempt_id=attempt_id,request=req,images_dir=runtime.images_dir,
+      expected_result_sha256=terminal["result_sha256"],host_flavor=runtime.host_flavor,docker_host=runtime.docker_host,
+      docker_executable=runtime.docker_executable,container_user=runtime.container_user)
+    if errors or terminal["execution_status"]!="OK": raise VendorToolFailed("version-probe-failed")
+    text=(attempt_root/"logs/container/stdout.log").read_text(errors="replace")+(attempt_root/"logs/container/stderr.log").read_text(errors="replace")
+    match=re.search(r"(?<![0-9])v?([0-9]+(?:\.[0-9]+){1,3})(?![0-9])",text)
+    if not match: raise VendorToolFailed("version-unverified")
+    return match.group(1)
+
 
 def _path(value: Any) -> str:
     if not isinstance(value, str): raise VendorToolFailed("output-path-invalid")
-    value = value.replace("\\", "/").removeprefix("/inputs/").removeprefix("inputs/")
+    value = value.replace("\\", "/").removeprefix("file://")
+    for prefix in ("/workspace/", "/inputs/", "workspace/", "inputs/"):
+        if value.startswith(prefix):
+            value = value.removeprefix(prefix)
+            break
     if value.startswith("/") or any(p in ("", ".", "..") for p in value.split("/")):
         raise VendorToolFailed("output-path-invalid")
     return value
@@ -75,6 +109,8 @@ def _sarif(document: dict) -> list[dict[str, Any]]:
             physical = locations[0].get("physicalLocation", {}) if locations else {}
             artifact = physical.get("artifactLocation", {})
             region = physical.get("region", {})
+            if artifact.get("uri") in ("file:///workspace","/workspace","workspace"):
+                continue  # directory-level best-practice note has no source-file citation
             records.append({"rule_id": result.get("ruleId"), "path": _path(artifact.get("uri")),
                             "line": region.get("startLine", 1)})
     return records
@@ -94,7 +130,7 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
         failed = document.get("results", {}).get("failed_checks", [])
         for item in failed:
             span = item.get("file_line_range") or [None, None]
-            records.append({"rule_id": item.get("check_id"), "path": _path(item.get("file_path")),
+            records.append({"rule_id": item.get("check_id"), "path": _path(str(item.get("file_path")).lstrip("/")),
                             "start_line": span[0], "end_line": span[-1]})
     elif tool_id == "trivy-config":
         for result in document.get("Results", []):
@@ -117,11 +153,19 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
         if not isinstance(document, list): raise VendorToolFailed("hadolint-shape-invalid")
         records = [{"rule_id": i.get("code"), "path": _path(i.get("file", "Dockerfile")),
                     "start_line": i.get("line"), "end_line": i.get("line")} for i in document]
-    elif tool_id.startswith("mobsfscan-") or tool_id == "binskim":
+    elif tool_id.startswith("mobsfscan-"):
         records = _sarif(document)
+    elif tool_id == "binskim":
+        if "runs" in document: records=_sarif(document)
+        else:
+            mapping={"pie":"BA2001","nx":"BA2010","canary":"BA2005","fortify_source":"BA2004"}
+            for path,facts in document.items():
+                for field,rule in mapping.items():
+                    if str(facts.get(field,"")).lower() in ("no","none","partial"):
+                        records.append({"rule_id":rule,"path":_path(path),"line":1})
     elif tool_id in ("oci-archive-inventory", "image-package-and-config-inspection"):
         # Container parsers retain only package coordinates; config values and vendor prose are discarded.
-        artifacts = document.get("artifacts", []) if tool_id == "oci-archive-inventory" else [
+        artifacts = document.get("artifacts", []) if "artifacts" in document else [
             pkg for result in document.get("Results", []) for pkg in (result.get("Packages") or [])]
         for item in artifacts:
             records.append({"name": item.get("name", item.get("Name")),
@@ -148,13 +192,28 @@ def container_image_facts(data: bytes, archive_path: str) -> dict[str, dict[str,
             raise VendorToolFailed("container-layer-invalid")
         layers.append({"layer_index":n,"layer_digest":digest,"layer_bytes":size})
     manifest=meta.get("manifestDigest"); config=meta.get("config",{})
+    if isinstance(config,str):
+        try: config=json.loads(base64.b64decode(config))["config"]
+        except Exception as exc: raise VendorToolFailed("container-config-invalid") from exc
     if not layers or not isinstance(manifest,str) or not manifest.startswith("sha256:"):
         raise VendorToolFailed("container-metadata-invalid")
-    closed={"config_digest":config.get("digest"),"architecture":config.get("architecture"),"os":config.get("os"),
-            "declared_user":config.get("user"),"declared_entrypoint_executable":config.get("entrypoint"),
-            "declared_entrypoint_argument_count":config.get("entrypointArgs",0),
-            "declared_command_executable":config.get("command"),"declared_command_argument_count":config.get("commandArgs",0),
-            "declared_ports":config.get("ports",[]),"declared_env_names":config.get("envNames",[])}
+    if "digest" in config:
+        closed={"config_digest":config.get("digest"),"architecture":config.get("architecture"),"os":config.get("os"),
+                "declared_user":config.get("user"),"declared_entrypoint_executable":config.get("entrypoint"),
+                "declared_entrypoint_argument_count":config.get("entrypointArgs",0),"declared_command_executable":config.get("command"),
+                "declared_command_argument_count":config.get("commandArgs",0),"declared_ports":config.get("ports",[]),
+                "declared_env_names":config.get("envNames",[])}
+    else:
+      entry=config.get("Entrypoint") or []; command=config.get("Cmd") or []
+      ports=[]
+      for value in (config.get("ExposedPorts") or {}):
+        number,_,protocol=value.partition("/");
+        if number.isdigit(): ports.append({"port":int(number),"protocol":protocol or "tcp","exposure_label":"DECLARED_EXPOSURE"})
+      closed={"config_digest":meta.get("imageID"),"architecture":meta.get("architecture"),"os":meta.get("os"),
+              "declared_user":config.get("User") or None,"declared_entrypoint_executable":entry[0] if entry else None,
+              "declared_entrypoint_argument_count":max(0,len(entry)-1),
+              "declared_command_executable":command[0] if command else None,"declared_command_argument_count":max(0,len(command)-1),
+              "declared_ports":ports,"declared_env_names":sorted({v.split("=",1)[0] for v in (config.get("Env") or [])})}
     if not isinstance(closed["config_digest"],str) or not closed["config_digest"].startswith("sha256:"):
         raise VendorToolFailed("container-config-invalid")
     return {archive_path:{"manifest_digest":manifest,"layers":layers,"config":closed}}
@@ -186,7 +245,7 @@ def request(tool_id: str, *, run_id: str, job_id: str, attempt_id: str, source_r
             "image": {"image_id": image["image_id"], "digest": image["digest"]}, "argv": list(spec.argv),
             "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"},
                             {"name": "NO_COLOR", "value": "1"}],
-            "target_mounts": [{"host_path": str(source_root.resolve()), "container_path": "/inputs"}],
+            "target_mounts": [{"host_path": str(source_root.resolve()), "container_path": "/workspace"}],
             "scratch_path": scratch_name, "log_path": "logs/container", "network": {"mode": "none", "destinations": []},
             "permission": {"requirement": requirement, "grants": [], "decision": decision},
             "limits": {"timeout_seconds": 900, "memory_bytes": 2 * 1024**3, "cpu_millis": 2000, "pids": 256,
@@ -221,7 +280,8 @@ def collect(job_id: str, tool_ids: list[str], *, run_id: str, node_attempt_id: s
             source_sha: str, attempt_root: Path, now: str,
             runtime_factory: Callable[[str, Callable[[], str]], ce.ContainerRuntime] = _runtime,
             run_container: Callable[..., dict] = ce.run_container,
-            verify: Callable[..., list[str]] = ce.verify_container_result) -> dict[str, dict[str, Any]]:
+            verify: Callable[..., list[str]] = ce.verify_container_result,
+            version_probe: Callable[..., str] = verified_version) -> dict[str, dict[str, Any]]:
     """Run every applicable declared tool independently; one failure cannot erase sibling evidence."""
     runtime = runtime_factory(source_sha, lambda: now)
     results = {}
@@ -231,11 +291,30 @@ def collect(job_id: str, tool_ids: list[str], *, run_id: str, node_attempt_id: s
         try:
             req = request(tool_id, run_id=run_id, job_id=job_id, attempt_id=tool_attempt,
                           source_root=source_root, scratch_name="scratch", source_sha=source_sha, now=now)
+            version=version_probe(tool_id,runtime=runtime,run_id=run_id,job_id=job_id,
+                attempt_id=tool_attempt+"-version",attempt_root=attempt_root/"versions"/tool_id,
+                base_request=req,run_container=run_container,verify=verify)
+            root.mkdir(parents=True,exist_ok=False)
             terminal, data = execute(tool_id, runtime=runtime, run_id=run_id, job_id=job_id,
                                      attempt_id=tool_attempt, attempt_root=root, request_document=req,
                                      run_container=run_container, verify=verify)
+            record=ce.load_image_registry(ce.IMAGES_DIR)[SPECS[tool_id].image_id]
+            permission_sha="sha256:"+hashlib.sha256(json.dumps(req["permission"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
+            receipt={"schema":"appsec-review/vendor-b13-execution-receipt/1","tool_id":tool_id,
+                     "attempt_id":tool_attempt,"request_sha256":terminal["request_sha256"],
+                     "result_sha256":terminal["result_sha256"],"permission_sha256":permission_sha,
+                     "permission_fingerprint_sha256":terminal["permission_fingerprint_sha256"],
+                     "image_id":req["image"]["image_id"],"image_digest":req["image"]["digest"],
+                     "argv":req["argv"],"tool_version":version,
+                     "tool_name":("checksec" if tool_id=="binskim" else "syft" if tool_id in
+                                  ("oci-archive-inventory","image-package-and-config-inspection") else
+                                  tool_id.replace("-android","").replace("-ios",""))}
             results[tool_id] = {"status": "OK", "attempt_id": tool_attempt, "request": req,
-                                "terminal": terminal, "raw": data, "records": normalize(tool_id, data)}
+                                "terminal": terminal, "raw": data, "records": normalize(tool_id, data),
+                                "auth":{"attempt_id":tool_attempt,"argv":req["argv"],"exit_code":terminal["exit_code"],
+                                        "identity":{"repository":record["repository"],"digest":record["digest"],
+                                                    "tool_version":version,"tool_name":receipt["tool_name"]},
+                                        "receipt":receipt}}
         except VendorToolBlocked as exc:
             results[tool_id] = {"status": "BLOCKED", "cause": str(exc)}
         except VendorToolFailed as exc:

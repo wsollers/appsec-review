@@ -184,6 +184,7 @@ def build_instance(job_id: str, tool_id: str, status: str, records: int | None, 
         "exit": {"exit_code": exit_block[0], "exit_meaning": exit_block[1], "timed_out": False,
                  "nonzero_exit_on_findings": True, "findings_exit_codes": [1]},
         "outputs": outputs, "result_record_count": records if status in ("OK", "OK_WITH_GAPS") else None,
+        "execution_receipt": None,
     }
 
 

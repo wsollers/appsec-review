@@ -34,7 +34,8 @@
       "result_record_count": null,
       "skip_reason": "not-applicable-no-matching-inputs",
       "terminal_status": "SKIPPED",
-      "tool_id": "binskim"
+      "tool_id": "binskim",
+      "execution_receipt": null
     }
   ]
 }

@@ -159,24 +159,29 @@ def _instance(tool: str, status: str, *, executor: str, records: int | None = No
                     "validation": output.get("validation", "schema-validated"),
                     "validated_against": output["schema"]}]
     container = executor == "pinned_container"
-    return {"tool_id": tool, "attempt_id": f"{tool}-attempt-0001", "terminal_status": status,
+    auth=(output or {}).get("auth") if container and status == "OK" else None
+    identity=(auth or {}).get("identity",{})
+    return {"tool_id": tool, "attempt_id": auth["attempt_id"] if auth else f"{tool}-attempt-0001", "terminal_status": status,
             "skip_reason": SKIP if status == "SKIPPED" else None, "cause_code": cause,
             "identity": {"executor_kind": executor,
-                         "image_repository": "registry.invalid/unavailable" if container else None,
-                         "image_digest": HASH(tool.encode()) if container else None,
+                         "image_repository": identity.get("repository") if auth else ("registry.invalid/unavailable" if container else None),
+                         "image_digest": identity.get("digest") if auth else (HASH(tool.encode()) if container else None),
                          "executable_sha256": None if container else HASH(("module:" + tool).encode()),
-                         "tool_name": tool, "tool_version": "1.0.0" if started else None,
-                         "data_identities": ([{"kind": "policy-bundle", "identity_id": f"{tool}-rules",
-                                                "version": "pinned", "sha256": HASH(("rules:"+tool).encode())}]
-                                               if executor == "pinned_container" else []),
+                         "tool_name": identity.get("tool_name",tool), "tool_version": identity.get("tool_version") if auth else ("1.0.0" if started else None),
+                         # The scanner rules ship in the authenticated image. Bind the policy
+                         # identity to that exact image rather than inventing a ruleset hash.
+                         "data_identities": ([{"kind": "policy-bundle", "identity_id": f"{tool}-image-rules",
+                                                "version": identity["tool_version"], "sha256": identity["digest"]}]
+                                               if auth else []),
                          "redactor": ({"redactor_id": "evidence-redaction",
                                        "redactor_version": evidence_redaction.MODULE_VERSION,
                                        "ruleset_sha256": "sha256:" + evidence_redaction.RULESET_SHA256}
                                       if output else None)},
-            "argv": [tool, "--offline", "/inputs"],
-            "exit": {"exit_code": 0 if started else None, "exit_meaning": meaning, "timed_out": False,
+            "argv": auth["argv"] if auth else [tool, "--offline", "/inputs"],
+            "exit": {"exit_code": auth["exit_code"] if auth else (0 if started else None), "exit_meaning": meaning, "timed_out": False,
                      "nonzero_exit_on_findings": False, "findings_exit_codes": []},
-            "outputs": outputs, "result_record_count": records if output else None}
+            "outputs": outputs, "result_record_count": records if output else None,
+            "execution_receipt": auth["execution_receipt"] if auth else None}
 
 
 def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
@@ -289,17 +294,28 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
     for tool, result in vendor_results.items():
         if tool not in tools or result.get("status") != "OK":
             continue
+        auth=result.get("auth")
+        if not isinstance(auth,dict) or not isinstance(auth.get("receipt"),dict):
+            raise ValueError(f"{tool}: successful vendor result lacks verified B13 identity")
+        receipt_data=_dump(auth["receipt"]); receipt_path=f"outputs/tools/{tool}/execution-receipt.json"
+        receipt_ref={"path":receipt_path,"sha256":HASH(receipt_data),
+                     **{k:auth["receipt"][k] for k in ("request_sha256","result_sha256","permission_sha256",
+                                                        "permission_fingerprint_sha256","image_id","image_digest")}}
+        auth={**auth,"execution_receipt":receipt_ref}
         path = "outputs/binskim.sarif" if tool == "binskim" else f"outputs/tools/{tool}/" + (
             f"{tool}.sarif" if tool.startswith("mobsfscan-") else "result.json")
         successful[tool] = {"data": result["raw"], "count": len(result["records"]), "schema":
-            "sarif-2.1.0" if path.endswith(".sarif") else "vendor-json-1", "path": path,
-            "role": "raw-tool-output", "validation": "format-validated"}
+            ("checksec-json-1" if tool == "binskim" else "sarif-2.1.0" if path.endswith(".sarif") else "vendor-json-1"), "path": path,
+            "role": "raw-tool-output", "validation": "format-validated", "auth":auth,
+            "receipt_data":receipt_data,"receipt_path":receipt_path}
     if "binskim" in successful:
         successful["binskim"]["count"] = len(candidates["binskim"])
     if "oci-archive-inventory" in successful:
         successful["oci-archive-inventory"]["count"] = len(candidates["oci-archive-inventory"])
     status, tool_results, coverage, probe_doc, raw_files = _aggregate(
         header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory")
+    for value in successful.values():
+        if "receipt_data" in value: raw_files[value["receipt_path"]]=value["receipt_data"]
 
     docs: dict[str, Any] = {"status": status, "contract_id": contract, "header": header,
                             "tool-results.json": tool_results, "coverage.json": coverage,

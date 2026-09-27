@@ -801,5 +801,6 @@ def verify_attempt(
         if tool_results[field] != expected_header[field]:
             errors.append(f"header-mismatch: tool-results.{field} is not the worker envelope's {expected_header[field]!r}")
     errors += shapes.verify_outputs_on_disk(tool_results, attempt)
+    errors += shapes.verify_vendor_execution_receipts(tool_results, attempt)
     errors += _input_errors(contract_id, result, inputs)
     return errors

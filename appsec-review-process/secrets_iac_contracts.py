@@ -53,7 +53,7 @@ from execution_state import beneath  # noqa: E402
 from schema_validate import SchemaStore, validate_document  # noqa: E402
 from tool_instance_shapes import (  # noqa: E402
     HEADER_FIELDS, RESULT_ROLES, VALIDATED, has_validated_output, output_path_errors,
-    validate_node_aggregate, verify_outputs_on_disk,
+    validate_node_aggregate, verify_outputs_on_disk, verify_vendor_execution_receipts,
 )
 
 SECRETS_CONTRACT_ID = "secrets-inventory"
@@ -479,6 +479,7 @@ def _validate_attempt(contract_id: str, attempt_root: Any, tool_outputs_root: An
     if any(error.startswith("schema:") for error in aggregate):
         return errors
     errors += [f"tool-outputs: {error}" for error in verify_outputs_on_disk(tool_results, tool_outputs_root)]
+    errors += [f"tool-execution: {error}" for error in verify_vendor_execution_receipts(tool_results, attempt)]
 
     # 5. What this contract adds.
     for status in sorted(set(permitted) - set(policy["permitted_node_statuses"])):

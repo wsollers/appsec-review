@@ -44,7 +44,8 @@
       "result_record_count": 5,
       "skip_reason": null,
       "terminal_status": "OK_WITH_GAPS",
-      "tool_id": "binskim"
+      "tool_id": "binskim",
+      "execution_receipt": null
     }
   ]
 }

@@ -44,7 +44,8 @@
       "result_record_count": 2,
       "skip_reason": null,
       "terminal_status": "OK_WITH_GAPS",
-      "tool_id": "oci-archive-inventory"
+      "tool_id": "oci-archive-inventory",
+      "execution_receipt": null
     },
     {
       "argv": [
@@ -85,7 +86,8 @@
       "result_record_count": 4,
       "skip_reason": null,
       "terminal_status": "OK_WITH_GAPS",
-      "tool_id": "image-package-and-config-inspection"
+      "tool_id": "image-package-and-config-inspection",
+      "execution_receipt": null
     }
   ]
 }

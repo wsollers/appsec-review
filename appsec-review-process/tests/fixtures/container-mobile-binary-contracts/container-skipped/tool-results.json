@@ -34,7 +34,8 @@
       "result_record_count": null,
       "skip_reason": "not-applicable-no-matching-inputs",
       "terminal_status": "SKIPPED",
-      "tool_id": "oci-archive-inventory"
+      "tool_id": "oci-archive-inventory",
+      "execution_receipt": null
     },
     {
       "argv": [
@@ -65,7 +66,8 @@
       "result_record_count": null,
       "skip_reason": "not-applicable-no-matching-inputs",
       "terminal_status": "SKIPPED",
-      "tool_id": "image-package-and-config-inspection"
+      "tool_id": "image-package-and-config-inspection",
+      "execution_receipt": null
     }
   ]
 }

@@ -145,7 +145,7 @@ def build_instance(tool_id: str, status: str, outputs: list[dict], record_count)
         "exit": {"exit_code": exit_code, "exit_meaning": meaning, "timed_out": False,
                  "nonzero_exit_on_findings": False, "findings_exit_codes": []},
         "outputs": outputs if has_output else [],
-        "result_record_count": record_count if has_output else None,
+        "result_record_count": record_count if has_output else None, "execution_receipt": None,
     }
 
 

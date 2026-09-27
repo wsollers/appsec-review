@@ -14,6 +14,7 @@ import evidence_redaction
 import secrets_iac_contracts as sic
 import vendor_evidence_workers as workers
 import vendor_evidence_b13 as b13
+import tool_instance_shapes as shapes
 
 SOURCE_SHA = "sha256:" + "a" * 64
 PERMITTED = ["OK", "OK_WITH_GAPS", "SKIPPED", "BLOCKED", "FAILED", "CANCELED"]
@@ -154,6 +155,14 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
         }
         for job,(files,vendor) in cases.items():
             with self.subTest(job=job):
+                for tool,result in vendor.items():
+                    receipt={"schema":"appsec-review/vendor-b13-execution-receipt/1","tool_id":tool,
+                             "attempt_id":f"{tool}-verified-1","request_sha256":"sha256:"+"1"*64,
+                             "result_sha256":"sha256:"+"2"*64,"permission_sha256":"sha256:"+"3"*64,
+                             "permission_fingerprint_sha256":"sha256:"+"4"*64,"image_id":"tool-"+tool.replace("-android","").replace("-ios",""),
+                             "image_digest":"sha256:"+"5"*64,"argv":["/opt/tool/bin/"+tool,"--offline"],"tool_version":"1.0.0","tool_name":tool}
+                    result["auth"]={"attempt_id":receipt["attempt_id"],"argv":receipt["argv"],"exit_code":0,
+                        "identity":{"repository":"docker.io/library/"+receipt["image_id"],"digest":receipt["image_digest"],"tool_version":"1.0.0","tool_name":tool},"receipt":receipt}
                 root=self.make_source(files)
                 def collector(*args,**kwargs): return vendor
                 doc=workers.execute_and_build(job,root,run_id="run-1",attempt_id="attempt-1",source_snapshot_sha256=SOURCE_SHA,execution_root=root.parent/"execution",now="2026-09-27T12:00:00Z",collector=collector)
@@ -164,6 +173,11 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                 self.assertEqual(errors,[])
                 self.assertIn(doc["status"],("OK","OK_WITH_GAPS"))
                 self.assertEqual(json.loads((attempt/"result.json").read_text())["acceptance_status"],"CURRENT")
+                aggregate=json.loads((attempt/"outputs/tool-results.json").read_text())
+                authenticated=next((i for i in aggregate["tool_instances"] if i.get("execution_receipt")),None)
+                self.assertIsNotNone(authenticated)
+                authenticated["argv"]=["/fabricated/tool"]
+                self.assertTrue(any("mismatch" in e for e in shapes.verify_vendor_execution_receipts(aggregate,attempt)))
 
 
 if __name__ == "__main__":

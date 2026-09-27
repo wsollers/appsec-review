@@ -199,7 +199,7 @@ def build_aggregate(header: dict, tool_id: str, executor: str, records: int, dat
         "outputs": [{"path": f"{tool_id}/outputs/result.json", "sha256": sha(data), "bytes": len(data),
                      "media_type": "application/json", "role": "normalized-result", "validation": "schema-validated",
                      "validated_against": "tool-normalized-result.schema.json"}],
-        "result_record_count": records}
+        "result_record_count": records, "execution_receipt": None}
     coverage = {"tool_id": tool_id, "applicability": "applicable", "candidate_input_count": candidates,
                 "analyzed_input_count": candidates, "not_analyzed_input_count": 0, "unsupported_input_count": 0,
                 "not_analyzed_inputs": [], "unsupported_inputs": [], "input_lists_truncated": False}

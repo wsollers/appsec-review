@@ -45,7 +45,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "mobsfscan-ios",
@@ -87,7 +88,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     }
   ]
 }

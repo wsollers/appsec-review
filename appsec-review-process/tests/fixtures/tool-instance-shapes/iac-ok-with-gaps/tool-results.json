@@ -58,7 +58,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "trivy-config",
@@ -97,7 +98,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "tfsec",
@@ -151,7 +153,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "kube-linter",
@@ -186,7 +189,8 @@
         ]
       },
       "outputs": [],
-      "result_record_count": null
+      "result_record_count": null,
+      "execution_receipt": null
     },
     {
       "tool_id": "hadolint",
@@ -229,7 +233,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     },
     {
       "tool_id": "dockerfile-base-image-inventory",
@@ -277,7 +282,8 @@
           "validated_against": "tool-normalized-result.schema.json"
         }
       ],
-      "result_record_count": 7
+      "result_record_count": 7,
+      "execution_receipt": null
     }
   ]
 }
