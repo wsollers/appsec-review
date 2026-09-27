@@ -62,12 +62,15 @@ network access to make a stale scan pass.
 ## 4. Characterize components and assemble review requests
 
 `01-component-characterization` derives stable components, ownership, languages, trust boundaries,
-data flows and evidence coverage. `02-full-review-input-assembly` revalidates a supplied closed
-launch plan and emits bounded requests for analysis families.
+data flows and evidence coverage. `02-full-review-input-assembly` revalidates the accepted component
+map, staged target, source generation and available prerequisites; deterministically derives the
+closed plan; records absent input classes as `SKIPPED_NA`; and automatically dispatches every
+applicable first-wave request.
 
-Current operator gate: automatic derivation of that complete launch plan and automatic dispatch of
-all emitted requests are not yet integrated. Supply the reviewed plan explicitly; do not invent or
-silently omit components.
+The dependency branch is intentionally wave-based. Reinvoke the assembler after accepted SBOM,
+licence and SCA prerequisites appear. It revalidates their pointers, envelopes, artifact hashes and
+source generation before dispatching newly applicable licence, SCA, lifecycle and reachability work.
+Do not hand-edit the plan or convert a prerequisite wait into `SKIPPED_NA`.
 
 ## 5. Run threat and standards branches
 
@@ -115,12 +118,11 @@ report with incomplete coverage is not a clean assessment.
 The nominal workers and retained fixture qualifications exist. Stop short of final publication if
 any of these remain true:
 
-- the full-review plan or request dispatch was not automatically derived and explicitly reviewed;
 - OWASP dispatch facts were supplied but not automatically derived from trusted inputs;
 - the report was not produced by one retained real accepted upstream chain; or
 - a human has not authorized final publication.
 
-Those are the current four known integration gates. They must appear in the draft limitations.
+Those are the current three known integration gates. They must appear in the draft limitations.
 
 For presentation review, compare the retained
 [happy-path demo PDF](../report-examples/appsec-review-happy-path-demo.pdf) and

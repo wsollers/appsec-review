@@ -14,9 +14,11 @@ Covers 5 process models, 66 steps (operator scripts, human tasks, standalone Dag
 The catalog describes declared execution and artifact topology, not engagement completion. The current
 qualified surface includes Joern AST/CPG and LLVM IR search, offline vulnerability matching, ELF
 hardening, L6A/L6B threat modeling, Go/Java/PHP SAST, OWASP T03-T14 publication, full-review input
-assembly and synthesis publication. Remaining integration gates are automatic launch-plan derivation
-and request dispatch, automatic OWASP dispatch-fact derivation, a retained real accepted end-to-end
-report run, and human-authorized final publication. Per-job readiness and accepted run artifacts remain
+assembly and synthesis publication. Component-derived input assembly now deterministically revalidates
+current sources, records explicit `SKIPPED_NA`, dispatches the applicable first wave, and supports
+dependency-wave reinvocation after SBOM, licence and SCA prerequisites. Remaining integration gates are
+automatic OWASP dispatch-fact derivation, a retained real accepted end-to-end report run, and
+human-authorized final publication. Per-job readiness and accepted run artifacts remain
 the authority for whether a check actually ran.
 
 How to read the rollups: **Enters** is what the model or group consumes but does not produce itself
@@ -2210,12 +2212,12 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: `full_review_input_assembly`; lifecycle binding: `actual_worker` |
 | Composition | persona `intake-coordinator`, role `evidence-assembler`, tooling `local-evidence-retrieval` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (registry/job-templates/02-full-review-input-assembly.json) | run artifact manifest<br>current accepted producer pointers<br>closed launch plan |
+| Declared inputs (registry/job-templates/02-full-review-input-assembly.json) | run artifact manifest<br>current accepted component map<br>operator-supplied closed launch plan *(optional)*<br>current accepted SBOM/license/SCA producers for later waves *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-full-review-input-assembly/` |
 | Output files (registry/output-contracts/full-review-input-assembly.json) | full-review-input-assembly.json<br>status.json |
 | Consumed by | -- |
-| Gaps | `automatic_plan_derivation_from_component_map_pending`, `request_dispatch_not_yet_orchestrated` |
-| Next prerequisite | Derive the closed plan automatically from the accepted component map and dispatch the emitted requests in full_review. |
+| Gaps | `later_dependency_waves_require_reinvocation_after_prerequisites_publish` |
+| Next prerequisite | Reinvoke the deterministic assembler after SBOM, license, and SCA prerequisites publish so later dependency waves remain evidence-bound. |
 
 <a id="job-dynamic-rescope"></a>
 

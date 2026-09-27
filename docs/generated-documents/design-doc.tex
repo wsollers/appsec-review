@@ -4,7 +4,7 @@
 \title{appsec-review}
 \docsubtitle{Executive design and operations overview}
 \doctype{Design document}
-\docversion{0.4}
+\docversion{0.5}
 \docstatus{Qualified nominal path}
 \date{2026-09-27}
 \docowner{W. Sollers}
@@ -17,16 +17,16 @@
 appsec-review turns an authorized repository snapshot into traceable security evidence and an
 evidence-backed draft report. It now includes component-aware search, offline vulnerability
 matching, binary hardening, reconciled threat modeling, multi-language SAST, OWASP publication and
-synthesis publication. Four integration gates remain before the first final real-target report:
-automatic full-review plan/dispatch, automatic OWASP dispatch-fact derivation, one retained real
-accepted end-to-end run, and human final authorization.
+synthesis publication. Three integration gates remain before the first final real-target report:
+automatic OWASP dispatch-fact derivation, one retained real accepted end-to-end run, and human final
+authorization.
 \end{bluf}
 
 \metrics[4]{%
 \metric{66}{Lifecycle jobs}{Declared in the current graph}%
 \metric{2}{Search planes}{Text/semantic plus structural}%
 \metric{3}{Decision roles}{Red, blue, independent verifier}%
-\metric{4}{Open gates}{Automation, live chain and signoff}}
+\metric{3}{Open gates}{OWASP facts, live chain and signoff}}
 
 \subsection*{What leadership should know}
 \begin{itemize}
@@ -77,10 +77,12 @@ discovery and evidence into stable component IDs, ownership, languages, trust bo
 flows, build units and coverage. This component map is the shared scope key for threat modeling,
 standards worklists, analysis assignments and report rollups.
 
-The full-review input assembler revalidates a supplied closed launch plan and produces bounded
-requests for vendor, dependency and analysis families. Automatic derivation of the complete plan
-from the component map, and automatic dispatch of every request, are the first remaining integration
-gate.
+The full-review input assembler deterministically revalidates the accepted component map, staged
+target, source generation and accepted dependency prerequisites. It derives the closed plan,
+publishes bounded requests, records absent input classes as \mono{SKIPPED\_NA}, and automatically
+dispatches the applicable first wave. It is reinvoked after accepted SBOM, licence and SCA artifacts
+exist; the same revalidation opens later licence, SCA, lifecycle and reachability waves without
+hand-editing scope.
 
 \section{Static evidence gathered and seeded}
 \begin{tabularx}{\linewidth}{@{}p{0.24\linewidth}X@{}}
@@ -160,7 +162,7 @@ Threat reconciliation & \rag{good} Qualified & L6A plus executable L6B with conf
 Go, Java and PHP SAST & \rag{good} Qualified & Pinned tools produced cited leads in a live qualification.\\
 OWASP T03--T14 publication & \rag{good} Qualified & Deterministic pagination, matrix, gaps and routes retained.\\
 Synthesis publication & \rag{good} Qualified draft & Hash-bound LaTeX/HTML draft path retained.\\
-Automatic full-review plan and dispatch & \rag{warn} Open & Assembler validates a supplied plan; derivation/dispatch is pending.\\
+Component-derived plan and dispatch & \rag{good} Qualified & Revalidation, first-wave dispatch, explicit N/A and dependency-wave reinvocation.\\
 Automatic OWASP dispatch facts & \rag{warn} Open & Trusted facts are still supplied at the integration boundary.\\
 Real accepted end-to-end report & \rag{warn} Open & Fixture qualifications do not replace one complete target run.\\
 Human final publication & \rag{warn} Open & Draft remains final=false and human\_signoff=false.\\
@@ -182,7 +184,7 @@ ad hoc report edits. The operator guide contains commands and stop conditions.
 Incomplete coverage looks clean & Coverage denominators and gaps are mandatory; qualify the real accepted end-to-end run.\\
 Reasoning overstates a scanner hit & Red/blue/verifier separation, cited evidence and verified-only scoring.\\
 Reference data becomes stale & Out-of-band sync, digest/time binding and explicit age policy.\\
-Automation dispatches wrong scope & Derive the closed launch plan from the accepted component map and retain reviewed dispatch receipts.\\
+Automation dispatches wrong scope & Revalidate component generation and prerequisites; retain the plan, N/A rows and dispatch receipts.\\
 Draft published as final & Human authorization and fail-closed final-publication validation.\\
 \bottomrule
 \end{tabularx}
@@ -195,6 +197,6 @@ document summarizes the interaction model for leadership; it does not grant comp
 
 \section{Revision history}
 \begin{revisions}
-\revision{0.4}{2026-09-27}{W. Sollers}{Updated for qualified analysis, OWASP and synthesis publication; recorded four remaining gates.}
+\revision{0.5}{2026-09-27}{W. Sollers}{Documented automatic plan derivation, wave dispatch and three remaining gates.}
 \end{revisions}
 \end{document}

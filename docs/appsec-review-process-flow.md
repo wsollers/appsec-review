@@ -54,9 +54,12 @@ hashes, not copied conclusions, and revalidate the referenced artifact before us
 Repository discovery identifies independently buildable projects and operational surfaces.
 Component characterization derives stable component IDs, ownership, trust boundaries, data flows,
 languages, build units and evidence coverage from accepted discovery and evidence. The
-`02-full-review-input-assembly` worker validates a supplied closed launch plan and produces bounded
-requests for review families. Automatic derivation of that complete plan from the component map,
-and automatic dispatch of every request, remain open integration gaps.
+`02-full-review-input-assembly` deterministically revalidates the current accepted component map,
+staged target identity, source generation and any accepted dependency prerequisites. It derives a
+closed plan, publishes bounded requests, records non-applicable input classes as explicit
+`SKIPPED_NA`, and automatically dispatches the applicable first wave. Dependency families are
+reinvoked in later waves after accepted SBOM, licence and SCA prerequisites become available; the
+same derivation step revalidates every prerequisite before expanding the wave.
 
 ## Analysis families
 
@@ -98,9 +101,8 @@ The synthesis publication worker is executable and fixture-qualified. It produce
 qualification report is honest about unresolved coverage and sets `final=false` and
 `human_signoff=false`.
 
-Four integration gaps remain:
+Three integration gaps remain:
 
-- automatic launch-plan derivation and request dispatch from component characterization;
 - automatic derivation of OWASP trusted dispatch facts;
 - one retained run through the entire real accepted upstream chain; and
 - human-authorized final publication.

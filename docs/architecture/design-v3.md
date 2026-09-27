@@ -29,10 +29,12 @@ Go/Java/PHP SAST, full-review input assembly, the qualified OWASP T03-T14 chain,
 publication to hash-bound LaTeX/HTML draft artifacts. OWASP, STIG/SRG, and deployment hardening are
 separate processes with separate contracts and evidence.
 
-Four integration gates remain: automatically derive and dispatch the complete full-review plan from
-component characterization; automatically derive trusted OWASP dispatch facts; retain one real
+Three integration gates remain: automatically derive trusted OWASP dispatch facts; retain one real
 accepted upstream chain through report generation; and require human authorization for final
-publication. The generated job catalog and design-parity readiness views supersede older dated
+publication. Full-review input assembly now deterministically revalidates the accepted component
+map, target generation and dependency prerequisites, derives and dispatches the applicable first
+wave, records absent input classes as `SKIPPED_NA`, and is reinvoked for later dependency waves after
+accepted SBOM, licence and SCA prerequisites exist. The generated job catalog and design-parity readiness views supersede older dated
 readiness statements elsewhere in this historical design narrative.
 
 ## 2. Baseline operating boundary

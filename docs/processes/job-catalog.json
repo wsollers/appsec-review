@@ -1867,8 +1867,7 @@
        ],
        "declared_inputs": [
         "run artifact manifest",
-        "current accepted producer pointers",
-        "closed launch plan"
+        "current accepted component map"
        ]
       },
       {
@@ -2078,8 +2077,7 @@
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
        "run artifact manifest",
-       "current accepted producer pointers",
-       "closed launch plan",
+       "current accepted component map",
        "run-owned dependency and changed-node request",
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -2636,8 +2634,7 @@
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "run artifact manifest",
-     "current accepted producer pointers",
-     "closed launch plan",
+     "current accepted component map",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -4381,8 +4378,7 @@
        ],
        "declared_inputs": [
         "run artifact manifest",
-        "current accepted producer pointers",
-        "closed launch plan"
+        "current accepted component map"
        ]
       },
       {
@@ -4417,8 +4413,7 @@
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
        "run artifact manifest",
-       "current accepted producer pointers",
-       "closed launch plan",
+       "current accepted component map",
        "run-owned dependency and changed-node request"
       ]
      }
@@ -5261,8 +5256,7 @@
      "explicit manifest-declared source root",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "run artifact manifest",
-     "current accepted producer pointers",
-     "closed launch plan",
+     "current accepted component map",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -7548,11 +7542,15 @@
     },
     {
      "need": "required",
-     "input": "current accepted producer pointers"
+     "input": "current accepted component map"
     },
     {
-     "need": "required",
-     "input": "closed launch plan"
+     "need": "optional",
+     "input": "operator-supplied closed launch plan"
+    },
+    {
+     "need": "optional",
+     "input": "current accepted SBOM/license/SCA producers for later waves"
     }
    ],
    "inputs_source": "registry/job-templates/02-full-review-input-assembly.json",
@@ -7564,10 +7562,9 @@
    "outputs_source": "registry/output-contracts/full-review-input-assembly.json",
    "claim_class": null,
    "gaps": [
-    "automatic_plan_derivation_from_component_map_pending",
-    "request_dispatch_not_yet_orchestrated"
+    "later_dependency_waves_require_reinvocation_after_prerequisites_publish"
    ],
-   "next_prerequisite": "Derive the closed plan automatically from the accepted component map and dispatch the emitted requests in full_review.",
+   "next_prerequisite": "Reinvoke the deterministic assembler after SBOM, license, and SCA prerequisites publish so later dependency waves remain evidence-bound.",
    "consumes": [
     "job:01-component-characterization"
    ],

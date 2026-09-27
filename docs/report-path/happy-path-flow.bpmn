@@ -48,7 +48,7 @@
     <bpmn:task id="Task_Verify" name="09 independently verify, refute or block"/>
     <bpmn:task id="Task_Append" name="L01 append exact accepted decisions; record current head"/>
     <bpmn:task id="Task_Score" name="12 score independently verified claims only"/>
-    <bpmn:task id="Task_ReportInput" name="Validate and assemble exact accepted synthesis input"/>
+    <bpmn:task id="Task_ReportInput" name="Revalidate exact accepted synthesis inputs"/>
     <bpmn:task id="Task_Synthesis" name="10 publish hash-bound evidence-backed draft"/>
     <bpmn:task id="Task_Draft" name="Hash immutable DRAFT_EVIDENCE_BACKED package"/>
     <bpmn:endEvent id="End_Draft" name="Draft ready for human review; not final"/>
@@ -73,7 +73,7 @@
     <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_Synthesis" targetRef="Task_Draft"/>
     <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Draft" targetRef="End_Draft"/>
     <bpmn:textAnnotation id="Note_Standalone"><bpmn:text>L6A and L6B are executable and qualified. OWASP T03-T14 is qualified. OWASP, STIG/SRG and deployment hardening remain distinct processes.</bpmn:text></bpmn:textAnnotation>
-    <bpmn:textAnnotation id="Note_Adapters"><bpmn:text>Open automation gates: derive and dispatch the full-review launch plan from components, and derive trusted OWASP dispatch facts.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Adapters"><bpmn:text>Component-derived full-review inputs are revalidated and first-wave requests dispatch automatically. SKIPPED_NA is explicit; reinvoke after SBOM, licence and SCA prerequisites for later dependency waves. Automatic OWASP dispatch-fact derivation remains open.</bpmn:text></bpmn:textAnnotation>
     <bpmn:textAnnotation id="Note_Final"><bpmn:text>The package is DRAFT_EVIDENCE_BACKED only. One real accepted end-to-end run and human final authorization are still required.</bpmn:text></bpmn:textAnnotation>
     <bpmn:association id="Assoc_Standalone" sourceRef="Note_Standalone" targetRef="Task_Red"/>
     <bpmn:association id="Assoc_Adapters" sourceRef="Note_Adapters" targetRef="Task_Append"/>

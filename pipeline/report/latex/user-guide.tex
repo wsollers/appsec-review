@@ -4,7 +4,7 @@
 \title{Operator Guide}
 \docsubtitle{From authorized checkout to evidence-backed draft report}
 \doctype{User guide}
-\docversion{0.3}
+\docversion{0.4}
 \docstatus{Qualified nominal path}
 \date{2026-09-27}
 \docowner{W. Sollers}
@@ -96,13 +96,13 @@ citations.
 \section{Partition and assemble the review}
 Discovery identifies independently buildable projects and operational surfaces. Component
 characterization assigns stable component IDs, ownership, languages, trust boundaries, flows and
-coverage. The full-review input assembler validates a supplied closed launch plan and emits
-bounded family requests.
+coverage. The full-review input assembler deterministically revalidates the accepted component map,
+staged target, source generation and available prerequisites; derives the closed plan; records absent
+input classes as \mono{SKIPPED\_NA}; and automatically dispatches applicable first-wave requests.
 
-\begin{warning}
-Automatic derivation of the complete launch plan from the component map, and automatic dispatch of
-all emitted requests, remain integration gaps. Review and supply the closed plan explicitly.
-\end{warning}
+Reinvoke the assembler after accepted SBOM, licence and SCA prerequisites appear. It revalidates
+their pointers, envelopes, artifact hashes and source generation before dispatching newly applicable
+licence, SCA, lifecycle and reachability work. Do not hand-edit the derived plan.
 
 \section{Threat and standards branches}
 \begin{description}[style=nextline,font=\sffamily\bfseries]
@@ -144,7 +144,6 @@ The expected status is \mono{DRAFT\_EVIDENCE\_BACKED}, \mono{final=false}, and
 \section{Current completion gates}
 The nominal workers and retained qualifications exist. Final publication still requires:
 \begin{enumerate}
-\item automatic launch-plan derivation and request dispatch from components;
 \item automatic derivation of OWASP trusted dispatch facts;
 \item one retained report produced from the complete real accepted upstream chain; and
 \item explicit human publication authorization.
@@ -178,6 +177,6 @@ Draft publication & Evidence-backed report package that has not received human f
 
 \section{Revision history}
 \begin{revisions}
-\revision{0.3}{2026-09-27}{W. Sollers}{Updated for qualified analysis, standards and synthesis workers; retained current gates.}
+\revision{0.4}{2026-09-27}{W. Sollers}{Documented automatic plan derivation, first-wave dispatch and dependency-wave reinvocation.}
 \end{revisions}
 \end{document}
