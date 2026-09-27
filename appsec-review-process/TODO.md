@@ -21,14 +21,16 @@ The earlier batch backlog and phase plan were removed on 2026-09-27; see git his
 A target is **done** when `full_review` publishes its synthesis report. Build failures, unsupported
 languages and tools that did not run appear as gaps inside the report; they do not block it.
 
-## Before the first run (zarathustra)
+## Before the first run
 
-- [x] Offline Grype v6.1.9 and OSV npm snapshots registered in
-      `appsec-review-process/offline/dependency-snapshots` (2026-09-27); age ceiling 14 days.
-- [ ] Build `tool-microsoft-sbom-tool` and `tool-sbomasm` on zarathustra
-      (`python3 -B images/image_build.py build <id>`), then `python3 -B images/registry_records.py check`.
-- [ ] Stack up: `docker compose -p appsec-review -f orchestrator/dagster/compose.yaml up -d`,
-      `orchestrator/dagster/code-location.sh start` (or `reload` if already running).
+`orchestrator/prepare-host.sh` does every host prerequisite and is safe to re-run;
+`--check` reports what is missing without changing anything, `--buildenvs` also builds the
+per-language build images (expected for appsec-multi-vuln). It covers: offline Grype/OSV snapshots
+within the 14-day ceiling (already registered on zarathustra 2026-09-27), the Dagster stack, the
+images the B13 registry needs (on zarathustra: `audit-report`, `tool-osv-scanner`,
+`tool-microsoft-sbom-tool`, `tool-sbomasm` were missing), B16 registry records, the code location
+(started in the background, log `orchestrator/dagster/.host/code-location.log`), the four target
+clones and a Claude CLI probe.
 
 ## Running a target
 
