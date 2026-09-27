@@ -335,9 +335,16 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
         "ledger_head_sha256": inputs["ledger_head_sha256"],
         "input_manifest_sha256":inputs["input_manifest_sha256"],"generator_sha256":_generator_sha256(),
         "scope": {"target": docs["component"]["target"],
+                  "source_revision": docs["component"].get("source_revision"),
+                  "source_snapshot_sha256": docs["component"].get("source_snapshot_sha256", inputs["source_generation"]),
                   "components": [{"component_id": item["component_id"], "name": item["name"],
                                   "purpose": item["observed_purpose"]}
                                  for item in docs["component"]["functional_components"]]},
+        "component_relationships": [json.dumps(item, sort_keys=True)
+                                    for item in docs["component"].get("component_relationships", [])],
+        "threat_model": {key: [json.dumps(item, sort_keys=True) for item in docs["threat"].get(key, [])]
+                         for key in ("elements", "flows", "trust_boundaries", "abuse_scenarios",
+                                     "attack_trees", "stride_hypotheses", "assumptions", "gaps")},
         "owasp_coverage": {"denominators": matrix["denominators"],
                            "applicability_counts": matrix["applicability_counts"],
                            "assessment_counts": matrix["assessment_counts"]},
