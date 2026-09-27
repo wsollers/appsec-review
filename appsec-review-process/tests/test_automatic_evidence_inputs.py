@@ -92,6 +92,30 @@ class AutomaticEvidenceInputsTests(unittest.TestCase):
         with self.assertRaisesRegex(state.Blocked, "checkout changed"):
             automatic.source_projection(self.run_id)
 
+    def test_equivalent_republished_intake_gets_distinct_immutable_projection(self):
+        first_tree, first_binding, first_files = automatic.source_projection(self.run_id)
+        first_manifest = state.read_json(first_tree.parent / "projection.json")
+
+        second_attempt = self.run / "data/jobs/00-intake/whole/attempts/intake-two"
+        second_attempt.joinpath("evidence").mkdir(parents=True)
+        state.atomic_json(second_attempt / "evidence/source.json", self.source)
+        self.pointer = {"status": "OK", "attempt_id": "intake-two"}
+        state.atomic_json(self.pointer_path, self.pointer)
+        self.accepted_patch.stop()
+        self.accepted_patch = patch.object(automatic.phase1, "accepted", return_value=self.pointer)
+        self.accepted_patch.start()
+
+        second_tree, second_binding, second_files = automatic.source_projection(self.run_id)
+        self.assertNotEqual(first_tree, second_tree)
+        self.assertTrue(first_tree.is_dir())
+        self.assertEqual(state.read_json(first_tree.parent / "projection.json"), first_manifest)
+        self.assertEqual(second_binding["intake_attempt_id"], "intake-two")
+        self.assertNotEqual(first_binding["projection_manifest_sha256"],
+                            second_binding["projection_manifest_sha256"])
+        self.assertEqual(first_files, second_files)
+        self.assertEqual((first_tree / "src/hello.c").read_bytes(),
+                         (second_tree / "src/hello.c").read_bytes())
+
     def test_vendor_requests_use_projection_and_container_inputs_with_closed_receipts(self):
         for job in sorted(automatic.VENDOR_JOBS):
             with self.subTest(job=job):

@@ -160,7 +160,10 @@ def source_projection(run_id: str) -> tuple[Path, dict[str, Any], dict[str, str]
     source_path = (data_path(run_id, "jobs", "00-intake", "whole", "attempts",
                              pointer["attempt_id"], "evidence", "source.json"))
     expected = _projection_manifest(run_id, pointer_path, pointer, source_path, source)
-    projection_id = "source-" + source["fingerprint"][:24]
+    # The immutable projection binds both source bytes and the accepted intake lineage.  A later
+    # full_review may legitimately republish an equivalent intake (for example after a definition
+    # reload), so the source fingerprint alone is not a unique generation identity.
+    projection_id = "source-" + source["fingerprint"][:24] + "-" + digest(expected)[:24]
     base = data_path(run_id, "automatic-inputs", "source")
     destination = base / projection_id
     if destination.exists():
@@ -183,7 +186,12 @@ def source_projection(run_id: str) -> tuple[Path, dict[str, Any], dict[str, str]
             atomic_json(staging / "projection.json", expected)
             if intake.source_identity(source["target"]) != source:
                 raise Blocked("automatic evidence inputs: source changed during projection")
-            os.replace(staging, destination)
+            try:
+                os.replace(staging, destination)
+            except FileExistsError:
+                # Parallel fan-out jobs can construct the same generation concurrently.  Keep the
+                # first immutable winner and validate it below; a different winner remains fatal.
+                shutil.rmtree(staging)
         finally:
             if staging.exists(): shutil.rmtree(staging)
         tree = _validate_projection(destination, expected)
