@@ -46,7 +46,8 @@ class ClaimLedgerTests(unittest.TestCase):
         return ledger.threat_candidates(self.threat_source) + ledger.owasp_candidates(self.owasp_source)
 
     def publish_decision(self, jobs: Path, producer: str, claim_id: str, status: str,
-                         source_generation: str, component_generation: str, attempt_id: str | None = None):
+                         source_generation: str, component_generation: str, attempt_id: str | None = None,
+                         citations: list[dict] | None = None):
         attempt_id = attempt_id or producer.split("-")[0] + "-1"
         specifications = {
             "07-red-team-adversarial": ("red-team-adversarial.json", "hypotheses", "reviewer",
@@ -69,7 +70,7 @@ class ClaimLedgerTests(unittest.TestCase):
                   collection: [{"claim_id": claim_id, "status": status,
                                 "source_generation": source_generation,
                                 "component_generation": component_generation, actor_field: actor,
-                                citation_field: [], "dissent_ids": [], "causal_claim_ids": [],
+                                citation_field: deepcopy(citations or []), "dissent_ids": [], "causal_claim_ids": [],
                                 "supersedes_claim_id": None, "confidence": "medium"}]}
         permission = {"schema": "appsec-review/producer-permission-receipt/1.0", "run_id": "run1",
                       "job_id": producer, "source_snapshot_sha256": source_generation,
@@ -237,12 +238,21 @@ class ClaimLedgerTests(unittest.TestCase):
         claim = prior["claim_states"][0]["claim_id"]
         with tempfile.TemporaryDirectory() as directory:
             jobs = Path(directory) / "jobs"
-            self.publish_decision(jobs, "07-red-team-adversarial", claim, "HYPOTHESIS",
-                                  prior["source_generation"], prior["component_generation"], "red-1")
+            red_base, red_attempt = self.publish_decision(jobs, "07-red-team-adversarial", claim, "HYPOTHESIS",
+                                  prior["source_generation"], prior["component_generation"], "red-1",
+                                  prior["entries"][0]["citations"])
             red = {"claim_id": claim, "producer_job_id": "07-red-team-adversarial"}
             with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
                 reviewed = ledger.build_ledger("run1", "attempt-2", [], prior, [red], jobs)
             self.assertEqual(reviewed["claim_states"][0]["status"], "under_review")
+            self.assertEqual(reviewed["entries"][-1]["citations"], prior["entries"][0]["citations"])
+            forged = execution_state.read_json(red_attempt / "red-team-adversarial.json")
+            forged["hypotheses"][0]["review_citations"][0]["observed_fact"] = "Contradictory reuse."
+            execution_state.atomic_json(red_attempt / "red-team-adversarial.json", forged)
+            self.reseal_decision(red_base, red_attempt, "red-team-adversarial.json")
+            with self.assertRaisesRegex(execution_state.Blocked, "contradictory decision citation"):
+                with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
+                    ledger.build_ledger("run1", "attempt-forged", [], prior, [red], jobs)
             self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
                                   prior["source_generation"], prior["component_generation"], "verify-1")
             verify = {"claim_id": claim, "producer_job_id": "09-independent-verification"}

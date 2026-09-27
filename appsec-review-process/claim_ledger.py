@@ -166,6 +166,23 @@ def _event_id(entry: dict[str, Any]) -> str:
         if key not in {"event_id", "entry_hash"}})[:24]
 
 
+def _merge_citations(existing: Iterable[dict[str, Any]], added: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Preserve first occurrence order, coalesce identical IDs, reject contradictory reuse."""
+    merged: list[dict[str, Any]] = []
+    by_id: dict[str, dict[str, Any]] = {}
+    for citation in [*existing, *added]:
+        citation_id = citation.get("citation_id") if isinstance(citation, dict) else None
+        if not isinstance(citation_id, str) or not citation_id:
+            raise Blocked(f"{JOB}: decision citation identity is absent")
+        prior = by_id.get(citation_id)
+        if prior is not None:
+            if prior != citation:
+                raise Blocked(f"{JOB}: contradictory decision citation reuses {citation_id}")
+            continue
+        copied = deepcopy(citation); by_id[citation_id] = copied; merged.append(copied)
+    return merged
+
+
 def _reject_promotions(value: Any, path: str = "$") -> None:
     if isinstance(value, dict):
         for key, item in value.items():
@@ -422,7 +439,7 @@ def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, An
         entry.update(sequence=len(entries), event_id="", event_type="status_decision", status=status,
             from_status=prior_entry["status"], decision_authority=authority,
             confidence=decision.get("confidence", prior_entry["confidence"]),
-            citations=prior_entry["citations"] + deepcopy(decision.get("citations", [])),
+            citations=_merge_citations(prior_entry["citations"], decision.get("citations", [])),
             dissent_ids=sorted(set(prior_entry["dissent_ids"] + decision.get("dissent_ids", []))),
             causal_claim_ids=sorted(set(decision.get("causal_claim_ids", []))),
             supersedes_claim_id=decision.get("supersedes_claim_id"), previous_entry_hash=previous, entry_hash="")
