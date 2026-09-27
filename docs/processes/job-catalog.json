@@ -1978,7 +1978,8 @@
        "name": "CVE Reachability Evidence",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-sca-vulnerability-match"
+        "job:02-sca-vulnerability-match",
+        "job:02-ir-facts"
        ],
        "produces": [
         "job:06-cve-reachability"
@@ -4599,7 +4600,8 @@
        "name": "CVE Reachability Evidence",
        "kind": "lifecycle",
        "consumes": [
-        "job:02-sca-vulnerability-match"
+        "job:02-sca-vulnerability-match",
+        "job:02-ir-facts"
        ],
        "produces": [
         "job:06-cve-reachability"
@@ -4612,7 +4614,8 @@
      ],
      "rollup": {
       "enters": [
-       "job:02-sca-vulnerability-match"
+       "job:02-sca-vulnerability-match",
+       "job:02-ir-facts"
       ],
       "leaves": [
        "job:06-cve-reachability"
@@ -7906,6 +7909,11 @@
      "job": "02-sca-vulnerability-match",
      "kind": "required",
      "contract": "sca-vulnerability-match"
+    },
+    {
+     "job": "02-ir-facts",
+     "kind": "required",
+     "contract": "ir-facts"
     }
    ],
    "declared_inputs": [
@@ -7937,7 +7945,8 @@
    ],
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
-    "job:02-sca-vulnerability-match"
+    "job:02-sca-vulnerability-match",
+    "job:02-ir-facts"
    ],
    "produces": [
     "job:06-cve-reachability"
@@ -12737,7 +12746,8 @@
    ],
    "consumed_by": [
     "job:02-evidence-assembly",
-    "job:05-native-memory"
+    "job:05-native-memory",
+    "job:06-cve-reachability"
    ]
   },
   "job:02-debug-symbol-index": {

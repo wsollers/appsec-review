@@ -554,6 +554,12 @@
           "kind": "required",
           "contract": "sca-vulnerability-match",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "required",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": []
         }
       ],
       "planned_scope": "Deterministic static reachability classification over the exact accepted SCA matches and explicit hash-bound run-owned evidence. Version matches alone never establish reachability and outputs remain evidence leads.",
