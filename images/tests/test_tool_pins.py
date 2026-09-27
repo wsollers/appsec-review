@@ -41,7 +41,7 @@ class CommittedTools(unittest.TestCase):
 
     def test_hash_bound_text_inputs_are_checkout_stable(self):
         attributes = (IMAGES / ".gitattributes").read_text(encoding="utf-8")
-        self.assertIn("tool-*/requirements.txt text eol=lf", attributes.splitlines())
+        self.assertIn("tool-*/requirements*.txt text eol=lf", attributes.splitlines())
         self.assertIn("tool-*/keys/*.pub text eol=lf", attributes.splitlines())
         paths = [folder / "requirements.txt" for folder in tp.tool_dirs()
                  if (folder / "requirements.txt").is_file()]
