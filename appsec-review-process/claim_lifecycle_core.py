@@ -15,18 +15,26 @@ from schema_validate import validate_document
 from worker_result import validate_worker_result
 
 LEDGER_SCHEMA = "claim-ledger-input.schema.json"
+PERMISSIONS = ["read-run-data", "write-run-data"]
+LEDGER_TRANSITIONS = {
+    "candidate": {"under_review", "unresolved", "superseded"},
+    "under_review": {"narrowed", "verified", "refuted", "unresolved", "superseded"},
+    "narrowed": {"under_review", "verified", "refuted", "unresolved", "superseded"},
+    "unresolved": {"under_review", "verified", "refuted", "narrowed", "superseded"},
+    "verified": {"superseded"}, "refuted": {"superseded"}, "superseded": set(),
+}
 STAGES = {
     "07-red-team-adversarial": ("claim-ledger-core", "claim-decision-ledger.json", LEDGER_SCHEMA,
-                                "red-team-adversarial.schema.json", "red-team-adversarial.json"),
+                                "07-red-team-adversarial.schema.json", "red-team-adversarial.json"),
     "08-blue-team-refutation": ("07-red-team-adversarial", "red-team-adversarial.json",
-                                "red-team-adversarial.schema.json", "blue-team-refutation.schema.json",
+                                "07-red-team-adversarial.schema.json", "08-blue-team-refutation.schema.json",
                                 "blue-team-refutation.json"),
     "09-independent-verification": ("08-blue-team-refutation", "blue-team-refutation.json",
-                                    "blue-team-refutation.schema.json",
-                                    "independent-verification.schema.json",
+                                    "08-blue-team-refutation.schema.json",
+                                    "09-independent-verification.schema.json",
                                     "independent-verification.json"),
     "12-scoring-prioritization": ("09-independent-verification", "independent-verification.json",
-                                  "independent-verification.schema.json",
+                                  "09-independent-verification.schema.json",
                                   "scoring-prioritization.schema.json",
                                   "scoring-prioritization.json"),
 }
@@ -36,10 +44,21 @@ def _sha(value: Any) -> str:
     return "sha256:" + digest(value)
 
 
+def _admission_claim_id(entry: dict[str, Any]) -> str:
+    return "claim-" + digest({"route_id": entry["route_id"],
+        "producer": entry["producer"]["job_id"], "attempt": entry["producer"]["attempt_id"],
+        "artifact": entry["producer"]["artifact_sha256"],
+        "source_generation": entry["source_generation"],
+        "component_generation": entry["component_generation"]})[:24]
+
+
+def _event_id(entry: dict[str, Any]) -> str:
+    return "event-" + digest({key: value for key, value in entry.items()
+        if key not in {"event_id", "entry_hash"}})[:24]
+
+
 def _ledger_view(value: dict[str, Any]) -> dict[str, Any]:
     """Project the stable candidate surface from the accepted L01 ledger without weakening it."""
-    if value.get("schema") == "appsec-review/claim-ledger-input/0.1":
-        return value
     required = {"schema", "run_id", "job_id", "attempt_id", "source_generation",
                 "component_generation", "entries", "head_hash", "claim_states", "claim_limits"}
     if (not isinstance(value, dict) or set(value) != required or
@@ -51,20 +70,72 @@ def _ledger_view(value: dict[str, Any]) -> dict[str, Any]:
     if limits != {"candidate_only": True, "finding_created": False, "severity_assigned": False,
                   "runtime_claimed": False, "compliance_claimed": False}:
         raise Blocked("claim lifecycle: accepted L01 claim ceiling is invalid")
-    previous, latest, events = None, {}, set()
+    entry_keys = {"sequence", "event_id", "event_type", "claim_id", "route_id", "claim_class",
+        "hypothesis", "status", "confidence", "component_ids", "source_generation",
+        "component_generation", "producer", "citations", "proof_obligations", "dissent_ids",
+        "causal_claim_ids", "supersedes_claim_id", "from_status", "decision_authority",
+        "previous_entry_hash", "entry_hash"}
+    producer_keys = {"contract_id", "job_id", "attempt_id", "artifact_path", "artifact_sha256",
+                     "accepted_pointer_sha256"}
+    citation_keys = {"citation_id", "producer_job_id", "producer_attempt_id", "artifact_path",
+                     "artifact_sha256", "locator_json", "observed_fact"}
+    authority_keys = {"contract_id", "job_id", "attempt_id", "role_id", "source_generation",
+        "component_generation", "accepted_pointer_sha256", "envelope_sha256", "artifact_path",
+        "artifact_sha256", "permission_receipt_path", "permission_receipt_sha256", "reason"}
+    previous, latest, admissions, events, routes = None, {}, {}, set(), {}
     for sequence, entry in enumerate(value["entries"]):
-        if (not isinstance(entry, dict) or entry.get("sequence") != sequence or
+        if (not isinstance(entry, dict) or set(entry) != entry_keys or entry.get("sequence") != sequence or
                 entry.get("event_id") in events or entry.get("previous_entry_hash") != previous or
                 entry.get("entry_hash") != _sha({key: item for key, item in entry.items()
                                                  if key != "entry_hash"}) or
                 entry.get("source_generation") != value["source_generation"] or
                 entry.get("component_generation") != value["component_generation"]):
             raise Blocked("claim lifecycle: accepted L01 ledger chain is invalid")
+        if (entry["event_id"] != _event_id(entry) or not isinstance(entry.get("producer"), dict) or
+                set(entry["producer"]) != producer_keys or entry.get("claim_class") != "candidate_only" or
+                not isinstance(entry.get("component_ids"), list) or not entry["component_ids"] or
+                len(entry["component_ids"]) != len(set(entry["component_ids"])) or
+                not isinstance(entry.get("citations"), list) or not entry["citations"] or
+                any(not isinstance(item, dict) or set(item) != citation_keys for item in entry["citations"]) or
+                not isinstance(entry.get("proof_obligations"), list) or not entry["proof_obligations"] or
+                any(not isinstance(item, dict) or set(item) != {"obligation_id", "statement"}
+                    for item in entry["proof_obligations"]) or
+                len({item["citation_id"] for item in entry["citations"]}) != len(entry["citations"]) or
+                len({item["obligation_id"] for item in entry["proof_obligations"]}) != len(entry["proof_obligations"]) or
+                len(entry["dissent_ids"]) != len(set(entry["dissent_ids"])) or
+                len(entry["causal_claim_ids"]) != len(set(entry["causal_claim_ids"])) or
+                (entry["decision_authority"] is not None and
+                 (not isinstance(entry["decision_authority"], dict) or
+                  set(entry["decision_authority"]) != authority_keys))):
+            raise Blocked("claim lifecycle: accepted L01 ledger schema invariants are invalid")
+        prior = latest.get(entry["claim_id"])
+        if entry["event_type"] == "candidate_admitted":
+            if (prior is not None or entry["from_status"] is not None or entry["status"] != "candidate" or
+                    entry["claim_id"] != _admission_claim_id(entry) or entry["route_id"] in routes):
+                raise Blocked("claim lifecycle: accepted L01 admission identity is invalid")
+            routes[entry["route_id"]] = entry["claim_id"]
+            admissions[entry["claim_id"]] = entry
+        elif (entry["event_type"] != "status_decision" or prior is None or
+              entry["from_status"] != prior["status"] or
+              entry["status"] not in LEDGER_TRANSITIONS.get(prior["status"], set()) or
+              entry["route_id"] != admissions[entry["claim_id"]]["route_id"]):
+            raise Blocked("claim lifecycle: accepted L01 status transition is invalid")
         events.add(entry["event_id"]); previous = entry["entry_hash"]; latest[entry["claim_id"]] = entry
     states = [{"claim_id": claim_id, "latest_event_id": latest[claim_id]["event_id"],
                "status": latest[claim_id]["status"]} for claim_id in sorted(latest)]
     if value["head_hash"] != previous or value["claim_states"] != states:
         raise Blocked("claim lifecycle: accepted L01 head or state projection is invalid")
+    claim_ids = set(latest)
+    if any(not set(entry["causal_claim_ids"]) <= claim_ids for entry in value["entries"]):
+        raise Blocked("claim lifecycle: accepted L01 causal identity is missing")
+    causal = {claim_id: set(entry["causal_claim_ids"]) for claim_id, entry in latest.items()}
+    def visit(claim_id: str, trail: set[str]) -> None:
+        if claim_id in trail:
+            raise Blocked("claim lifecycle: accepted L01 causal graph is circular")
+        for predecessor in causal[claim_id]:
+            visit(predecessor, trail | {claim_id})
+    for claim_id in causal:
+        visit(claim_id, set())
     fields = ("claim_id", "route_id", "claim_class", "hypothesis", "status", "confidence",
               "component_ids", "source_generation", "component_generation", "producer", "citations",
               "proof_obligations", "dissent_ids", "causal_claim_ids", "supersedes_claim_id")
@@ -274,6 +345,16 @@ def _validate(result: dict[str, Any], schema: str) -> dict[str, Any]:
     return result
 
 
+def permission_receipt(stage: str, result: dict[str, Any]) -> dict[str, Any]:
+    records = next(value for value in result.values() if isinstance(value, list))
+    generations = {record["source_generation"] for record in records}
+    if len(generations) != 1:
+        raise Blocked("claim lifecycle: permission receipt generation is absent or mixed")
+    return {"schema": "appsec-review/producer-permission-receipt/1.0", "run_id": result["run_id"],
+            "job_id": stage, "source_snapshot_sha256": next(iter(generations)),
+            "permissions": PERMISSIONS}
+
+
 def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
     _validate_ledger(ledger)
     candidates = _index(ledger["candidates"])
@@ -286,7 +367,7 @@ def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[st
             raise Blocked("red team: ledger record is not a candidate")
         reviewer = decision["reviewer"]
         _independent(reviewer, {(candidate["producer"]["job_id"], candidate["producer"]["attempt_id"])})
-        _authority(reviewer, candidate, "red-team")
+        _authority(reviewer, candidate, "red-team-adversary")
         if not decision.get("attacker_case") or not decision.get("citations"):
             raise Blocked("red team: attacker case and citations are required")
         if not _citation_ids(decision["citations"]) <= _citation_ids(candidate["citations"]):
@@ -300,7 +381,7 @@ def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[st
             "dissent_ids": _merge_ids(candidate["dissent_ids"], decision.get("dissent_ids", []))})
     result = {**_base(ledger, binding, "appsec-review/red-team-adversarial/1.0",
                       "07-red-team-adversarial"), "hypotheses": hypotheses}
-    return _validate(result, "red-team-adversarial.schema.json")
+    return _validate(result, "07-red-team-adversarial.schema.json")
 
 
 def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
@@ -312,7 +393,7 @@ def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str,
         _closed(decision, {"claim_id", "reviewer", "disposition", "rationale", "proof_obligations",
                            "citations", "dissent_ids"}, "blue team")
         _independent(decision["reviewer"], {(hypothesis["reviewer"]["job_id"], hypothesis["reviewer"]["attempt_id"])})
-        _authority(decision["reviewer"], hypothesis, "blue-team")
+        _authority(decision["reviewer"], hypothesis, "blue-team-refuter")
         disposition = decision["disposition"]
         obligations = decision["proof_obligations"]
         if {x["obligation_id"] for x in obligations} != {x["obligation_id"] for x in hypothesis["proof_obligations"]}:
@@ -338,7 +419,7 @@ def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str,
             "dissent_ids": _merge_ids(hypothesis["dissent_ids"], decision.get("dissent_ids", []))})
     result = {**_base(red, binding, "appsec-review/blue-team-refutation/1.0",
                       "08-blue-team-refutation"), "reviews": reviews}
-    return _validate(result, "blue-team-refutation.schema.json")
+    return _validate(result, "08-blue-team-refutation.schema.json")
 
 
 def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
@@ -383,7 +464,7 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
             "dissent_ids": _merge_ids(review["dissent_ids"], decision.get("dissent_ids", []))})
     result = {**_base(blue, binding, "appsec-review/independent-verification/1.0",
                       "09-independent-verification"), "verifications": results}
-    return _validate(result, "independent-verification.schema.json")
+    return _validate(result, "09-independent-verification.schema.json")
 
 
 def score(verification: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
@@ -430,4 +511,5 @@ def run_stage(stage: str, accepted_pointer: Path, decisions_path: Path, output_p
                 "09-independent-verification": verify, "12-scoring-prioritization": score}[stage]
     result = function(upstream, binding, decisions)
     atomic_json(output_path, result)
+    atomic_json(output_path.parent / "permission.json", permission_receipt(stage, result))
     return result

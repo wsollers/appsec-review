@@ -28,6 +28,48 @@ def binding(job="upstream", artifact="upstream.json"):
             "artifact_sha256": "sha256:" + "2" * 64}
 
 
+def actual_ledger():
+    source = fixture("claim-ledger.json")
+    candidates = copy.deepcopy(source["candidates"])
+    identities = {}
+    for candidate in candidates:
+        old = candidate["claim_id"]
+        candidate["claim_id"] = core._admission_claim_id(candidate)
+        identities[old] = candidate["claim_id"]
+    entries, previous = [], None
+    for sequence, candidate in enumerate(candidates):
+        candidate["causal_claim_ids"] = [identities[item] for item in candidate["causal_claim_ids"]]
+        if candidate["supersedes_claim_id"] is not None:
+            candidate["supersedes_claim_id"] = identities[candidate["supersedes_claim_id"]]
+        entry = {**candidate, "sequence": sequence, "event_id": "", "event_type": "candidate_admitted",
+                 "from_status": None, "decision_authority": None, "previous_entry_hash": previous,
+                 "entry_hash": ""}
+        entry["event_id"] = core._event_id(entry)
+        entry["entry_hash"] = core._sha({key: value for key, value in entry.items() if key != "entry_hash"})
+        entries.append(entry); previous = entry["entry_hash"]
+    return {"schema": "appsec-review/claim-decision-ledger/1.0", "run_id": RUN_ID,
+        "job_id": "claim-ledger-routing", "attempt_id": "ledger-1",
+        "source_generation": candidates[0]["source_generation"],
+        "component_generation": candidates[0]["component_generation"], "entries": entries,
+        "head_hash": previous, "claim_states": [{"claim_id": item["claim_id"],
+            "latest_event_id": item["event_id"], "status": "candidate"} for item in entries],
+        "claim_limits": {"candidate_only": True, "finding_created": False,
+            "severity_assigned": False, "runtime_claimed": False, "compliance_claimed": False}}
+
+
+def reseal_ledger_content(ledger, *, canonical_events=False):
+    previous = None
+    for sequence, entry in enumerate(ledger["entries"]):
+        entry["sequence"] = sequence; entry["previous_entry_hash"] = previous
+        if canonical_events: entry["event_id"] = core._event_id(entry)
+        entry["entry_hash"] = core._sha({key: value for key, value in entry.items() if key != "entry_hash"})
+        previous = entry["entry_hash"]
+    latest = {entry["claim_id"]: entry for entry in ledger["entries"]}
+    ledger["head_hash"] = previous
+    ledger["claim_states"] = [{"claim_id": key, "latest_event_id": latest[key]["event_id"],
+        "status": latest[key]["status"]} for key in sorted(latest)]
+
+
 class ClaimLifecycleTests(unittest.TestCase):
     def chain(self):
         red = core.red_team(fixture("claim-ledger.json"), binding("claim-ledger-routing", "claim-decision-ledger.json"),
@@ -45,8 +87,8 @@ class ClaimLifecycleTests(unittest.TestCase):
         one = self.chain()
         two = self.chain()
         self.assertEqual(one, two)
-        schemas = ("red-team-adversarial.schema.json", "blue-team-refutation.schema.json",
-                   "independent-verification.schema.json", "scoring-prioritization.schema.json")
+        schemas = ("07-red-team-adversarial.schema.json", "08-blue-team-refutation.schema.json",
+                   "09-independent-verification.schema.json", "scoring-prioritization.schema.json")
         for document, schema in zip(one, schemas):
             self.assertEqual(validate_document(document, schema), [], schema)
             self.assertEqual(document["ledger_head_id"], "entry-2")
@@ -140,6 +182,7 @@ class ClaimLifecycleTests(unittest.TestCase):
                     attempt.mkdir()
                     result_name = core.STAGES[job][4]
                     atomic_json(attempt / result_name, document)
+                    atomic_json(attempt / "permission.json", core.permission_receipt(job, document))
                     atomic_json(attempt / "status.json", {"process": job, "status": "OK",
                                 "claims": len(next(value for value in document.values() if isinstance(value, list))),
                                 "qualification": "implemented_not_qualified"})
@@ -147,38 +190,32 @@ class ClaimLifecycleTests(unittest.TestCase):
                         worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
                         input_fingerprint="sha256:" + "f" * 64, output_contract=job,
                         started_at="2026-01-01T00:00:00Z", finished_at="2026-01-01T00:00:01Z",
-                        summary="fixture", artifacts=artifact_records(attempt, [result_name, "status.json"]))
+                        summary="fixture", artifacts=artifact_records(
+                            attempt, [result_name, "permission.json", "status.json"]))
                     self.assertEqual(validate_job_output(attempt, envelope, "sha256:" + "f" * 64,
                         expected_run_id=RUN_ID, expected_job_id=job,
                         orchestration=NO_ORCHESTRATION_FACTS), [])
 
     def test_stable_l01_ledger_is_hash_chain_verified_and_projected(self):
-        source = fixture("claim-ledger.json")
-        entries, previous = [], None
-        for sequence, candidate in enumerate(source["candidates"]):
-            entry = {**candidate, "sequence": sequence,
-                     "event_id": f"event-{'a' if sequence == 0 else 'b'}" + "0" * 23,
-                     "event_type": "candidate_admitted", "from_status": None,
-                     "decision_authority": None, "previous_entry_hash": previous}
-            entry["entry_hash"] = core._sha(entry)
-            entries.append(entry)
-            previous = entry["entry_hash"]
-        ledger = {"schema": "appsec-review/claim-decision-ledger/1.0", "run_id": RUN_ID,
-                  "job_id": "claim-ledger-routing", "attempt_id": "ledger-1",
-                  "source_generation": source["candidates"][0]["source_generation"],
-                  "component_generation": source["candidates"][0]["component_generation"],
-                  "entries": entries, "head_hash": previous,
-                  "claim_states": [{"claim_id": item["claim_id"], "latest_event_id": item["event_id"],
-                                    "status": "candidate"} for item in entries],
-                  "claim_limits": {"candidate_only": True, "finding_created": False,
-                                   "severity_assigned": False, "runtime_claimed": False,
-                                   "compliance_claimed": False}}
+        ledger = actual_ledger()
         projected = core._ledger_view(ledger)
-        self.assertEqual(projected["candidates"], source["candidates"])
+        self.assertEqual([item["route_id"] for item in projected["candidates"]], ["route-a", "route-b"])
         forged = copy.deepcopy(ledger)
         forged["entries"][0]["hypothesis"] = "forged"
         with self.assertRaises(Blocked):
             core._ledger_view(forged)
+
+    def test_fully_rehashed_noncanonical_event_and_duplicate_route_fail_closed(self):
+        noncanonical = actual_ledger()
+        noncanonical["entries"][0]["event_id"] = "event-" + "f" * 24
+        reseal_ledger_content(noncanonical)
+        with self.assertRaises(Blocked): core._ledger_view(noncanonical)
+        duplicate = actual_ledger()
+        duplicate["entries"][1]["route_id"] = duplicate["entries"][0]["route_id"]
+        duplicate["entries"][1]["claim_id"] = core._admission_claim_id(duplicate["entries"][1])
+        duplicate["entries"][1]["causal_claim_ids"] = []
+        reseal_ledger_content(duplicate, canonical_events=True)
+        with self.assertRaises(Blocked): core._ledger_view(duplicate)
 
 
 class AcceptedLedgerTests(unittest.TestCase):
@@ -187,7 +224,7 @@ class AcceptedLedgerTests(unittest.TestCase):
         self.base = Path(self.temp.name) / "ledger"
         self.attempt = self.base / "attempts" / "ledger-1"
         self.attempt.mkdir(parents=True)
-        atomic_json(self.attempt / "claim-decision-ledger.json", fixture("claim-ledger.json"))
+        atomic_json(self.attempt / "claim-decision-ledger.json", actual_ledger())
         self.reseal()
 
     def tearDown(self):
@@ -211,10 +248,16 @@ class AcceptedLedgerTests(unittest.TestCase):
     def test_exact_accepted_ledger_runs_red_stage(self):
         output = Path(self.temp.name) / "red.json"
         decisions = Path(self.temp.name) / "decisions.json"
-        atomic_json(decisions, fixture("red-decisions.json"))
+        decision_value = fixture("red-decisions.json")
+        route_claims = {item["route_id"]: item["claim_id"] for item in actual_ledger()["entries"]}
+        for item, route_id in zip(decision_value["decisions"], ("route-a", "route-b")):
+            item["claim_id"] = route_claims[route_id]
+        atomic_json(decisions, decision_value)
         result = core.run_stage("07-red-team-adversarial", self.base / "accepted.json", decisions, output, RUN_ID)
         self.assertEqual(json.loads(output.read_text()), result)
         self.assertEqual(result["upstream"]["attempt_id"], "ledger-1")
+        self.assertEqual(json.loads((output.parent / "permission.json").read_text()),
+                         core.permission_receipt("07-red-team-adversarial", result))
 
     def test_stale_corrupt_and_resealed_wrong_pointer_fail_closed(self):
         atomic_json(self.base / "latest.json", {"attempt_id": "ledger-new"})
@@ -257,11 +300,11 @@ class RegistryAndSchemaTests(unittest.TestCase):
         for path in sorted((ROOT.parent / "schemas").glob("*claim-lifecycle*.schema.json")) + [
                 ROOT.parent / "schemas/claim-ledger-input.schema.json",
                 ROOT.parent / "schemas/red-team-hypothesis.schema.json",
-                ROOT.parent / "schemas/red-team-adversarial.schema.json",
+                ROOT.parent / "schemas/07-red-team-adversarial.schema.json",
                 ROOT.parent / "schemas/blue-team-review.schema.json",
-                ROOT.parent / "schemas/blue-team-refutation.schema.json",
+                ROOT.parent / "schemas/08-blue-team-refutation.schema.json",
                 ROOT.parent / "schemas/independent-verification-record.schema.json",
-                ROOT.parent / "schemas/independent-verification.schema.json",
+                ROOT.parent / "schemas/09-independent-verification.schema.json",
                 ROOT.parent / "schemas/scored-priority-record.schema.json",
                 ROOT.parent / "schemas/scoring-prioritization.schema.json"]:
             stack = [json.loads(path.read_text())]

@@ -5,7 +5,7 @@
       "reviewer": {
         "job_id": "07-red-team-adversarial",
         "attempt_id": "red-1",
-        "role_id": "red-team",
+        "role_id": "red-team-adversary",
         "source_generation": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "component_generation": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "artifact_path": "red-assessment.json",
@@ -33,7 +33,7 @@
       "reviewer": {
         "job_id": "07-red-team-adversarial",
         "attempt_id": "red-1",
-        "role_id": "red-team",
+        "role_id": "red-team-adversary",
         "source_generation": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "component_generation": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "artifact_path": "red-assessment.json",

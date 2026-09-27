@@ -5,7 +5,7 @@
       "reviewer": {
         "job_id": "08-blue-team-refutation",
         "attempt_id": "blue-1",
-        "role_id": "blue-team",
+        "role_id": "blue-team-refuter",
         "source_generation": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "component_generation": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "artifact_path": "blue-assessment.json",
@@ -52,7 +52,7 @@
       "reviewer": {
         "job_id": "08-blue-team-refutation",
         "attempt_id": "blue-1",
-        "role_id": "blue-team",
+        "role_id": "blue-team-refuter",
         "source_generation": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "component_generation": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "artifact_path": "blue-assessment.json",
