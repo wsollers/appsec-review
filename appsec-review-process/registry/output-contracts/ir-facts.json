@@ -4,6 +4,7 @@
     "display_name": "LLVM Pointer And Memory Facts",
     "required_files": [
         "ir-facts.json",
+        "b13-receipts.json",
         "permission.json",
         "lineage.json"
     ],

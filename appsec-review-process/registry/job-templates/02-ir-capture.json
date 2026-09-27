@@ -22,6 +22,7 @@
         "directory": "data/jobs/02-ir-capture/attempts/<attempt_id>",
         "files": [
             "ir-capture.json",
+            "b13-receipts.json",
             "permission.json",
             "lineage.json"
         ]

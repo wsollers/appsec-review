@@ -29,7 +29,12 @@ PERMISSIONS = {"02-ir-capture": ["read-source", "write-run-data"],
                "02-ir-link": ["read-run-data", "write-run-data"],
                "02-ir-facts": ["read-run-data", "write-run-data"]}
 PROHIBITED = {"finding", "findings", "severity", "vulnerability", "verdict", "runtime_state"}
-TOOLCHAIN_FACTORY = None  # serialized integration binds the pinned B13 adapter
+def _toolchain_factory(job: str, inputs: dict[str, Any], attempt: Path):
+    from ir_b13_toolchain import factory
+    return factory(job, inputs, attempt)
+
+
+TOOLCHAIN_FACTORY = _toolchain_factory
 
 
 def _sha(path: Path) -> str:
@@ -383,7 +388,8 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
 def _code_hashes(job: str) -> dict[str, str]:
     wrapper = job.replace("02-", "").replace("-", "_") + ".py"
     result = {name: file_hash(ROOT / name) for name in (
-        "ir_evidence.py", wrapper, "publish_job_output.py", "worker_result.py", "validate_job_output.py",
+        "ir_evidence.py", "ir_b13_toolchain.py", "container_execution.py", wrapper,
+        "publish_job_output.py", "worker_result.py", "validate_job_output.py",
         f"registry/job-templates/{job}.json",
         f"registry/output-contracts/{JOBS[job][2]}.json")}
     consumed = {"02-ir-capture": "native-build.schema.json",
@@ -412,6 +418,9 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
                   "target_path": str(target), "native_result_sha256": lineage["result_sha256"],
                   "toolchain_bindings": [[unit["unit_id"],
                       native_inputs.get("image_records",{}).get(unit["image_id"],{}).get("sha256")]
+                      for unit in result["units"]],
+                  "toolchain_records": [[unit["image_id"],
+                      native_inputs.get("image_records",{}).get(unit["image_id"])]
                       for unit in result["units"]],
                   "compile_databases": [[unit["unit_id"], unit["compile_database"]["sha256"]]
                                         for unit in result["units"]]}
@@ -453,7 +462,8 @@ def _producer_receipts(run_id: str, job: str, inputs: dict[str, Any]) -> tuple[d
     return permission, lineage
 
 
-def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = None) -> None:
+def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = None,
+                      *, require_b13: bool = False) -> None:
     result_name, schema, _contract = JOBS[job]
     result = read_json(attempt / result_name)
     if validate_document(result, schema):
@@ -473,6 +483,9 @@ def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = N
         expected = _producer_receipts(inputs["run_id"], job, inputs)
         if (read_json(attempt / "permission.json"), read_json(attempt / "lineage.json")) != expected:
             raise Blocked(f"{job}: F02 permission/lineage receipts changed")
+        if require_b13:
+            from ir_b13_toolchain import validate_receipts
+            validate_receipts(job, inputs, attempt)
         common = {"run_id": inputs["run_id"], "source_revision": inputs.get("source_revision", result["source_revision"]),
                   "source_snapshot_sha256": inputs["source_snapshot_sha256"],
                   "source_tree_sha256": inputs["source_tree_sha256"],
@@ -589,6 +602,7 @@ def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict
         result = (capture(run_id, attempt, toolchain=toolchain) if job == "02-ir-capture" else
                   link(run_id, attempt, toolchain=toolchain) if job == "02-ir-link" else
                   facts(run_id, attempt, toolchain=toolchain))
+        toolchain.publish_receipts()
         atomic_json(attempt / result_name, result)
         permission_receipt, lineage_receipt = _producer_receipts(run_id, job, inputs)
         atomic_json(attempt / "permission.json", permission_receipt)
@@ -606,7 +620,8 @@ def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict
                   "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
                   "ended_at": now()}
         atomic_json(attempt / "status.json", status)
-        artifacts = [result_name, f"{contract}-summary.md", "status.json", "permission.json", "lineage.json"]
+        artifacts = [result_name, f"{contract}-summary.md", "status.json", "permission.json", "lineage.json",
+                     "b13-receipts.json"]
         if job == "02-ir-capture": artifacts.extend(item["path"] for item in result["modules"])
         elif job == "02-ir-link": artifacts.append(result["linked_module"]["path"])
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
@@ -614,7 +629,10 @@ def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=result["status"], summary=f"Published nominal {job} evidence.",
             status_record=status, artifact_paths=artifacts,
-            pre_envelope_validate=lambda path, _status: _validate_attempt(job, path, inputs))
+            gaps=[json.dumps(item, sort_keys=True, separators=(",", ":"))
+                  for item in result["coverage_gaps"]] or None,
+            pre_envelope_validate=lambda path, _status: _validate_attempt(
+                job, path, inputs, require_b13=True))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job,
         dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
@@ -622,7 +640,8 @@ def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict
         fingerprint_inputs=lambda value: "sha256:" + digest(value), execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes(job)},
-        force=force, post_validate=lambda attempt, _envelope, record: _validate_attempt(job, attempt, record),
+        force=force, post_validate=lambda attempt, _envelope, record: _validate_attempt(
+            job, attempt, record, require_b13=True),
         blocked_summary=f"{job} preflight did not complete.", failed_summary=f"{job} did not publish.")
 
 
@@ -631,4 +650,4 @@ def validate(run_id: str, job: str, pointer: dict[str, Any] | None = None) -> Pa
     pointer = pointer or read_json(base / "accepted.json")
     attempt, _ = validate_published(base, pointer, "sha256:" + digest(inputs),
                                     expected_run_id=run_id, expected_job_id=job)
-    _validate_attempt(job, attempt, inputs); return attempt
+    _validate_attempt(job, attempt, inputs, require_b13=True); return attempt

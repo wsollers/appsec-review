@@ -4,6 +4,7 @@
     "display_name": "Deterministic Linked LLVM Module",
     "required_files": [
         "ir-link.json",
+        "b13-receipts.json",
         "permission.json",
         "lineage.json"
     ],

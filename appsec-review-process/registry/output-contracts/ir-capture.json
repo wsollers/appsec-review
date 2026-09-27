@@ -4,6 +4,7 @@
     "display_name": "LLVM Bitcode Capture",
     "required_files": [
         "ir-capture.json",
+        "b13-receipts.json",
         "permission.json",
         "lineage.json"
     ],
