@@ -365,11 +365,8 @@ class RegistryAndSchemaTests(unittest.TestCase):
             template = json.loads((ROOT / f"registry/job-templates/{job}.json").read_text())
             contract = json.loads((ROOT / f"registry/output-contracts/{job}.json").read_text())
             self.assertTrue(template["implemented"])
-            self.assertEqual(template["execution"]["worker"], {
-                "07-red-team-adversarial": "red_team_adversarial.py",
-                "08-blue-team-refutation": "blue_team_refutation.py",
-                "09-independent-verification": "independent_verification.py",
-                "12-scoring-prioritization": "scoring_prioritization.py"}[job])
+            self.assertEqual(template["execution"], {
+                "worker": "claim_review_lifecycle.py", "arguments": ["--stage", job]})
             self.assertEqual(template["composition"]["output_contract_id"], job)
             self.assertEqual(contract["result_schema"], {"artifact": result, "schema_file": schema})
             self.assertEqual(validate_document(template, "job-template.schema.json"), [])
