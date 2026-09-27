@@ -24,6 +24,7 @@ import bounded_transform_orchestration as bounded_transforms
 import dependency_orchestration as dependency_jobs
 import vendor_evidence_orchestration as vendor_evidence_jobs
 import automatic_evidence_inputs
+import analysis_feature_lifecycle
 import control_lane_orchestration as control_lane_jobs
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
@@ -521,7 +522,10 @@ def run_full_review_input_assembly(context, configured):
         plan_path, root_path, output_root, attempt_id=attempt_id,
         started_at=started, finished_at=now())
     attempt = output_root / 'attempts' / attempt_id
-    if context.op_config.get('dispatch', True):
+    # The standalone job can still request the legacy aggregate dispatcher.  In full_review each
+    # planned feature owns its own Dagster node and accepted/skip receipt, so dispatching here would
+    # execute analyzers outside their lifecycle nodes and create duplicate generations.
+    if getattr(context, 'job_name', None) != 'full_review' and context.op_config.get('dispatch', True):
         dispatch_root = Path(context.op_config.get('dispatch_root') or
                              root_path / 'data/jobs/02-full-review-input-dispatch')
         dispatched = full_review_input_assembly_worker.dispatch(
@@ -676,6 +680,28 @@ red_team_lifecycle_work = claim_review_lifecycle_op('07-red-team-adversarial')
 blue_team_lifecycle_work = claim_review_lifecycle_op('08-blue-team-refutation')
 verification_lifecycle_work = claim_review_lifecycle_op('09-independent-verification')
 scoring_lifecycle_work = claim_review_lifecycle_op('12-scoring-prioritization')
+
+
+def analysis_feature_lifecycle_op(job_id):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def analysis_stage(context, configured, upstream):
+        result = analysis_feature_lifecycle.run(
+            configured['engagement_run_id'], context.run_id, job_id,
+            configured['force'])
+        attempt = data_path(configured['engagement_run_id'], 'jobs', job_id,
+                            'attempts', result['attempt_id'])
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / analysis_feature_lifecycle.JOBS[job_id][1])),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return analysis_stage
+
+
+native_memory_lifecycle_work = analysis_feature_lifecycle_op('05-native-memory')
+cve_reachability_lifecycle_work = analysis_feature_lifecycle_op('06-cve-reachability')
+fuzz_triage_lifecycle_work = analysis_feature_lifecycle_op('13-fuzz-target-triage')
 
 
 @op(name='job_02_evidence_assembly', ins={'configured': In(dict), 'upstream': In(list)},
@@ -1473,6 +1499,9 @@ LIFECYCLE_OPS['07-red-team-adversarial']=red_team_lifecycle_work
 LIFECYCLE_OPS['08-blue-team-refutation']=blue_team_lifecycle_work
 LIFECYCLE_OPS['09-independent-verification']=verification_lifecycle_work
 LIFECYCLE_OPS['12-scoring-prioritization']=scoring_lifecycle_work
+LIFECYCLE_OPS['05-native-memory']=native_memory_lifecycle_work
+LIFECYCLE_OPS['06-cve-reachability']=cve_reachability_lifecycle_work
+LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
