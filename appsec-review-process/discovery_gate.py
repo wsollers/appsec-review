@@ -123,10 +123,9 @@ UPSTREAM_STAGED_NAME = {ADOPTED_JOB: 'repository-partition-map.json',
                         DEVOPS_JOB: 'devops-project-inventory.json'}
 
 # Automatic-vs-supplied mode selection, scoped to (run_id, job) so it never needs
-# dagster_workflow.py (Full protocol, AGENTS.md) to change discovery_gate.run()'s external
+# dagster_workflow.py to change discovery_gate.run()'s external
 # signature: dagster_workflow.py calls run(run_id, dagster_id, job, force) identically for every
-# discovery job today (confirmed 2026-09-24), and that call is out of scope for this fast-lane
-# change. A run's dispatch mode instead lives in its own small opt-in data file, defaulting to
+# discovery job today (confirmed 2026-09-24). A run's dispatch mode instead lives in its own small opt-in data file, defaulting to
 # 'supplied' for full backward compatibility -- an existing run, or one nobody has configured,
 # behaves exactly as before.
 DISPATCH_MODES = {'supplied', 'automatic'}

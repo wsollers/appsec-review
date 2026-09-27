@@ -1,72 +1,23 @@
 # Continuation prompts
 
-Every continuation / handoff prompt for this repository lives in this folder. A continuation prompt
-is what a fresh agent session (Claude, Codex or a person) is given to pick work up where an earlier
-session stopped: the state at the time of writing, the working protocol, the lessons to carry, and
-what to do next.
-
-**Looking for where to start? Read the newest dated `*-appsec-review-continuation.md` first.** It says
-which earlier prompts it supersedes.
+A continuation prompt is what a fresh agent session (Claude, Codex or a person) is given to pick up
+where an earlier session stopped: current state, what to do next, and where to look.
 
 ## Rules
 
-- **New prompts go here and nowhere else** — not in `appsec-review-process/`, not in the repository
-  root, not in `Claude outputs/` or any other scratch directory. Commit them; an untracked prompt is
-  invisible to the next session and to other agents.
-- **Naming.** Session handoffs: `YYYY-MM-DD-<short-topic>.md`, dated by the day the prompt is FOR (a
-  prompt written late on the 20th for the next day is `…-21-…`). Task-scoped prompts that stay valid
-  until their task closes: `<task-or-topic>.md` without a date.
-- **A prompt is a snapshot, not an authority.** State in it goes stale within hours. Its first step
-  must re-derive ground truth (`git fetch`, `gh pr list`, `git worktree list`, the live stack's
-  `compose ps`). When a prompt and the tracked docs disagree, the docs, the ADRs under
-  `docs/decisions/`, `appsec-review-process/TODO.md` and run-owned
-  `appsec-review-process/runs/<run_id>/data/` records win — see [`AGENTS.md`](../../AGENTS.md).
-- **Never edit an old prompt to update it.** Write a new one that says what it supersedes, and add
-  it to the index below. Fixing a broken path in an old prompt is fine.
-- **No secrets, tokens, credentials or customer data** — prompts are tracked and pushed.
-- Decisions belong in ADRs and `TODO.md`; a prompt may point at them but must not be the only place
-  a decision is written down.
+- New prompts go here, committed. Name session handoffs `YYYY-MM-DD-<short-topic>.md`.
+- A prompt is a snapshot. Its first step re-derives ground truth (`git fetch`, `git log`, the live
+  stack's `compose ps`, the TODO breakage log). When a prompt and the repo disagree, the repo wins:
+  `appsec-review-process/TODO.md`, the ADRs under `docs/decisions/`, and run records under
+  `appsec-review-process/runs/<run_id>/`.
+- Write a new prompt rather than editing an old one; delete a prompt once a newer one covers it.
+- No secrets, tokens, credentials or customer data.
+
+Earlier prompts (the qualification-era lanes and handoffs up to 2026-09-27) were removed with
+ADR-0013; they remain in git history at `2e98423a`.
 
 ## Index
 
-Session handoffs, newest first:
-
 | Prompt | What it covers |
 |---|---|
-| [2026-09-27-build-configure-stage14.md](2026-09-27-build-configure-stage14.md) | **Start here for the build lane.** Stage 13 `02-build-resolution` is implemented and live-qualified; next is E01 / `02-build-configure`, SAT stage 14, replaying the accepted lock through B13. Supersedes the older build-index/build-lane prompts for next work. |
-| [2026-09-27-static-scan-jobs-dagster.md](2026-09-27-static-scan-jobs-dagster.md) | **Start here for the static scanners.** Turn the 13 per-tool images (`docs/processes/tool-images.md`) into deterministic scan jobs run through B13 and launched by Dagster: Phase 3 (B13 `expected_result_sha256`, B16 registry records) first, then one shared scan-worker module, then `02-secrets-inventory`, `02-iac-config-scan`, `02-source-sast` (semgrep rules decision), SBOM/license. Branch `static-scan-jobs`. A parallel workstream: it does not supersede the build lane, whose next step is `02-build-plan` (SAT PASS through stage 11 on 2026-09-26). |
-| [2026-09-26-build-index-construction.md](2026-09-26-build-index-construction.md) | **Build lane.** Done through `02-build-classify` (SAT stages 1-11 PASS, 2026-09-26, `flow-bringup.md` log); the next build-lane step is `02-build-plan` with ADR-0012 Revision 3 (clang fixed). Original description: Build `02-build-index` (first build-lane node, Full protocol) on branch `build-lane-per-unit`, with every build-lane decision settled in ADR-0012 Revision 1 (units by build root, model classification, per-unit loop, Dockerfiles never built, nothing run). Supersedes the 2026-09-26 build-lane prompt below. |
-| [2026-09-26-build-lane-continuation.md](2026-09-26-build-lane-continuation.md) | Superseded by the build-index prompt above. Build lane next, from a clean D01-D04 baseline: after the D04 docs pass (BPMN subprocess 4 with all four gates, Mermaid, catalog, D02-D04 lessons). Open decisions: D03's `docker run` step, build-unit-classification proposals. Supersedes the 2026-09-25 build-lane prompt below. **Its section 3 is partly out of date:** the build-lane decisions were settled later on 2026-09-25 (model classifies units; repository Dockerfiles are not built); see `build-unit-classification.md` Decisions and `TODO.md` Phase 5g. |
-| [2026-09-25-build-lane-construction.md](2026-09-25-build-lane-construction.md) | Superseded by the 2026-09-26 prompt above. After D04 went live (SAT stages 1-9 all automatic, SAT `20260925T170552Z`): build lane next (`02-build-index`/`-plan`/`-resolution`, per-unit per build-unit-classification.md). hal5000 WSL workflow, Docker Desktop only. Supersedes the D04 prompt below for what comes next. |
-| [2026-09-25-d04-sre-operations-topology-dispatch.md](2026-09-25-d04-sre-operations-topology-dispatch.md) | Scoped to one task: build and live-test D04 (automatic persona dispatch for `02-sre-operations-topology`, SAT stage 9). Done 2026-09-25 (live PASS); superseded by the build-lane prompt above. Written after D01-D03 were built, live-confirmed and merged (PR #39, `main` = `3f7b283`); branch `d04-sre-operations-topology-dispatch` exists and is empty. Native Linux host `zarathustra` workflow, not WSL. Supersedes sections 3-6 of the D02 prompt below for D03/D04 work. |
-| [2026-09-24-d02-dev-project-discovery-construction.md](2026-09-24-d02-dev-project-discovery-construction.md) | Scoped to one task: D02 (`02-dev-project-discovery`) dispatch construction. Done 2026-09-25 (built, live-confirmed and merged with D03); superseded by the D04 prompt above for what comes next. |
-| [2026-09-24-d01-persona-dispatch-construction.md](2026-09-24-d01-persona-dispatch-construction.md) | Scoped to one task: build and live-test D01 (automatic, unpooled persona dispatch for `02-repository-partition-discovery`), per `appsec-review-process/TODO.md` Phase 5b. Meant for a separate conversation from the one doing higher-level SAT architecture/sequencing. Does not supersede the 2026-09-21 prompt below for general coordinator protocol -- that prompt describes an earlier Linux-host/PR-based workflow now superseded in practice by the WSL/patch-based delivery this prompt itself documents (section 4). |
-| [2026-09-21-appsec-review-continuation.md](2026-09-21-appsec-review-continuation.md) | State late 2026-09-20, the subagent/verification protocol, lessons 1–16, next tasks. Supersedes every earlier session handoff before it. |
-
-Task-scoped prompts:
-
-| Prompt | Task |
-|---|---|
-| [stage14-15-fault-recovery-hardening.md](stage14-15-fault-recovery-hardening.md) | H14: harden and independently qualify build-configure/native-build recovery without touching shared integration surfaces. |
-| [source-sast-hardening.md](source-sast-hardening.md) | H16: harden source-SAST recovery and close or precisely retain the Go/Java/PHP tool gaps. |
-| [hardening-test-qualification.md](hardening-test-qualification.md) | Q16: read-only independent verification of H14, H16 and the staged component-characterization core. |
-| [hardening-documentation-integration.md](hardening-documentation-integration.md) | D16: master-agent documentation, review and serialized integration instructions. |
-| [evidence-assembly-core.md](evidence-assembly-core.md) | F02-core: implement the nominal evidence-assembly contract and worker without claiming missing producer readiness. |
-| [component-characterization-core.md](component-characterization-core.md) | F03-core: complete component characterization against exact F02 manifest lineage while shared integration remains serialized. |
-| [native-sast-core.md](native-sast-core.md) | E03-core: implement the nominal compiled-source analyzer producer from accepted native-build lineage. |
-| [ir-evidence-core.md](ir-evidence-core.md) | E04/E05-core: implement nominal IR capture, deterministic link and facts producers without verdict promotion. |
-| [binary-intelligence-core.md](binary-intelligence-core.md) | E06-E08-core: implement nominal debug-symbol, static binary triage, CFG and intelligence producers. |
-| [test-evidence-core.md](test-evidence-core.md) | E09-E10-core: implement nominal authorized test execution plus result and coverage ingestion. |
-| [static-intelligence-ingests.md](static-intelligence-ingests.md) | D05-D08-core: implement bounded document/API/test/runbook intelligence producers and honest zero-input paths. |
-| [report-claim-lifecycle.md](report-claim-lifecycle.md) | Parallel L01 and L05-L08 nominal claim path, followed by evidence-backed draft synthesis. |
-| [design-parity-worker-envelope.md](design-parity-worker-envelope.md) | Design parity Workstream B, batch 9 (common worker envelope); holds run ids `TODO.md` cites. |
-| [scripts-to-pipeline-migration.md](scripts-to-pipeline-migration.md) | Migrating review jobs out of `scripts/` (see the Script Migration Rule in `AGENTS.md`). |
-| [g02-owasp-workbench-decision.md](g02-owasp-workbench-decision.md) | G02 OWASP control workbench decision. |
-
-## History of this folder
-
-Until 2026-09-21 these files were spread over `appsec-review-process/continuation-*.md`,
-`docs/continuation-prompt-*.md` and an untracked `Claude outputs/` directory. They were moved here
-unchanged apart from path references. In the task-scoped prompts that came from
-`appsec-review-process/`, a bare file name in backticks (for example `` `TODO.md` ``) means the file
-of that name under `appsec-review-process/`.
+| [2026-09-28-run-to-report.md](2026-09-28-run-to-report.md) | **Start here.** Run `full_review` on hello-autotools, appsec-multi-vuln, freeciv21 and DOOM-3-BFG through to a report, fixing breakage as found. |

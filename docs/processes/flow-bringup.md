@@ -1,19 +1,13 @@
 # Engagement flow bring-up on `hello-autotools` (working tracker)
 
-Status: **living tracker**, updated as each step is run. We bring the engagement flow up in
-process-flow order on the `hello-autotools` fixture, using the ADR-0011 split: Dagster
-(webserver, daemon, postgres) in Docker Desktop, and the code location plus every operator command
-as host processes in WSL (`Ubuntu-24.04`, clone at `~/projects/appsec-review`). The flow and
-requirements themselves are in [engagement-start.md](engagement-start.md); the phase plan is in
-`appsec-review-process/TODO.md` ("Step 4 plan").
+Status: **history.** Since 2026-09-27 the working tracker is `appsec-review-process/TODO.md`
+(run four targets through to a report, [ADR-0013](../decisions/ADR-0013-run-to-report-first.md)).
+This file keeps the hello-autotools bring-up record: the flow chart below, what each step does, and
+the dated log. The flow and requirements themselves are in [engagement-start.md](engagement-start.md).
 
-**Keeping the docs current (standing rule).** Every change to the process (a script, gate, step, or
-their order) updates, in the same change: the BPMN model [bpmn/pre-submission.bpmn](bpmn/pre-submission.bpmn)
-and its renders (`bpmn/render/`, `bpmn/render/print/`); the Mermaid charts and their renders
-(`render/`); this tracker's status and "What each step does" exposition; the job and artifact
-catalog [job-catalog.md](job-catalog.md) (sources in `catalog/`, regenerate with
-`python3 docs/processes/job_catalog.py`; `--check` fails when it is stale); and the Google Doc
-[AppSecReview - Process.doc](https://docs.google.com/document/d/1OwuRBMoLLoPOL79JlSDUvhUdzgdG_hNDbidD9PHlteI/edit), which mirrors these files for reading outside the repository.
+BPMN, Mermaid renders and the Google Doc mirror are refreshed after each target reaches a report,
+not with every change. `python3 docs/processes/job_catalog.py --check` still runs on graph, registry
+or catalog changes.
 
 ## Flow and status
 

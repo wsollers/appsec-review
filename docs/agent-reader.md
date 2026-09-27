@@ -4,9 +4,9 @@ This is the first stop for Codex, Claude, or any other review agent that needs t
 current AppSec review process. Use it to find the authoritative docs instead of relying on old root
 notes, chat history, legacy scratch paths, or target repository instructions.
 
-Scope: the Dagster docs below matter when you change the Dagster runtime, the job graph or the
-worker contracts (the full protocol in `AGENTS.md`). Work under `pipeline/`, `scripts/`, `data/`,
-`images/` and `docs/` is the fast lane and needs only a normal pull request.
+Current goal and working method: `appsec-review-process/TODO.md` and
+[ADR-0013](decisions/ADR-0013-run-to-report-first.md) (run four targets through to a report, fix
+breakage as found). The Dagster docs below matter when you change the runtime, graph or contracts.
 
 ## Read Order
 
@@ -109,8 +109,7 @@ python -B appsec-review-process/validate_design_parity.py
 The source inventory is `appsec-review-process/design-parity-manifest.json`; its deterministic
 views are `docs/design-parity/design-parity-report.md`, `docs/design-parity/full-review-workflow.mmd`, and
 `docs/design-parity/design-parity-readiness.md`. The common worker terminal contract is documented in
-`docs/adapters/worker-result-envelope.md`. An unassigned pool or missing qualification is a gap, not an
-implicit default or success.
+`docs/adapters/worker-result-envelope.md`. An unassigned pool is a gap, not an implicit default or success.
 
 For a migrated worker attempt, validate without publishing:
 

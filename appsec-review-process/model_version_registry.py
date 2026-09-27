@@ -35,10 +35,7 @@ command to run there.
 **Not yet a registered Dagster job.** William asked for "a job at the start" that does this;
 this module is the callable facility that job would wrap, built and structurally tested first (the
 same order every other D01 piece has followed). Registering it as a formal `job-graph.json` node
-is its own, larger, flagged-not-assumed follow-up: `job-graph.json` is one of exactly three
-surfaces AGENTS.md calls out for the "Full protocol" (branch + review, not the fast lane every
-other D01 file so far has qualified for), and this session has not yet asked William whether that
-step should happen now or stay a follow-up. Until then, callers (the request builder, run-create)
+is a separate follow-up. Until then, callers (the request builder, run-create)
 invoke `resolve_run_model_versions` directly, as an ordinary function call early in a run's life --
 functionally the same "resolve once per run, pin, reuse on resume" behavior William asked for,
 short of the formal job-graph registration.

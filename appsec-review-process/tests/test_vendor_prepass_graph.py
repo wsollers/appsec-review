@@ -80,7 +80,7 @@ class Sources:
 
     def __init__(self):
         for path in (ADR, NODE_FIXTURE, STEP_MAP, PRODUCERS, job_graph.GRAPH, ROOT / "design-parity-manifest.json",
-                     ROOT / "worker-result-contract.json", ROOT / "TODO.md", ROOT / "dagster_workflow.py"):
+                     ROOT / "worker-result-contract.json", ROOT / "dagster_workflow.py"):
             if not path.is_file():
                 raise AssertionError(f"required source is not reachable from the module ROOT: {path}")
         self.adr_text = ADR.read_text(encoding="utf-8")
@@ -142,12 +142,6 @@ class VendorPrepassGraphTests(unittest.TestCase):
         result = validate_manifest(s.manifest)
         self.assertEqual(result["status"], "PASS", result["errors"])
         self.assertEqual(result["job_count"], len(s.jobs))
-        (stated,) = re.findall(r"Every one of the (\d+) graph job IDs appears in this backlog",
-                               (ROOT / "TODO.md").read_text(encoding="utf-8"))
-        self.assertEqual(int(stated), len(s.jobs))
-        backlog = (ROOT / "TODO.md").read_text(encoding="utf-8")
-        for job in s.jobs:
-            self.assertIn(f"`{job}`", backlog, f"{job} is a graph job ID the backlog never names")
 
     # ---- validity and order -----------------------------------------------------------------------
 

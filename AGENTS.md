@@ -12,17 +12,15 @@ engagement path; use [`docs/agent-reader.md`](docs/agent-reader.md) for the Dags
    the run's evidence. A tool that did not run, a skipped scan or missing coverage is reported as a
    gap, never as "no issues found".
 
-## Fast lane (no batch claim, no shared-surface lock, no qualification)
+## How work proceeds
 
-Changes under `pipeline/`, `scripts/`, `data/`, `images/` and `docs/` need only a normal pull
-request. The batch protocol in `appsec-review-process/TODO.md` does not apply to them.
-
-## Full protocol (only for these)
-
-The Dagster runtime (`orchestrator/dagster/`, `dagster_workflow.py`, `launch_job.py`), the job graph
-(`job-graph.json`, `design-parity-manifest.json`) and the worker contracts
-(`worker-result-contract.json`, output contracts, validators) follow the "Independent work
-protocol" in `appsec-review-process/TODO.md`.
+The goal is a `full_review` run through report generation on four targets
+(`appsec-review-process/TODO.md`, [ADR-0013](docs/decisions/ADR-0013-run-to-report-first.md)).
+Run, fix the first breakage, re-run. Small fixes go straight to `main`; record each breakage and fix
+in the TODO breakage log. There is no batch protocol, shared-surface lock or qualification step.
+Before committing, run the tests for the modules you touched plus
+`python3 appsec-review-process/validate_design_parity.py --check-generated-views` and
+`python3 docs/processes/job_catalog.py --check` when you change the graph, registry or catalog sources.
 
 ## Script migration
 
