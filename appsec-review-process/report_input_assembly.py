@@ -25,15 +25,16 @@ SPECS = {
                   "component-purpose-map.schema.json", ()),
     "threat": ("03-threat-model-dfd-stride", "threat-model-core", "integrated-threat-model.json",
                "integrated-threat-model.schema.json", ()),
-    "owasp": ("04-owasp-join-report", "owasp-join-report-core", "owasp-control-status-matrix.json",
+    "owasp": ("04-owasp-join-report", "owasp-join-report", "owasp-control-status-matrix.json",
               "owasp-control-status-matrix.schema.json",
               (("owasp-coverage-gaps.json", "owasp-coverage-gaps-report.schema.json"),
                ("owasp-candidate-promotion-routes.json", "owasp-candidate-promotion-routes.schema.json"))),
-    "ledger": ("claim-ledger-routing", "claim-ledger-core", "claim-decision-ledger.json", None, ()),
+    "ledger": ("claim-ledger-routing", "claim-ledger-core", "claim-decision-ledger.json",
+               "claim-decision-ledger.schema.json", ()),
     "verification": ("09-independent-verification", "09-independent-verification",
-                     "independent-verification.json", None, ()),
+                     "independent-verification.json", "09-independent-verification.schema.json", ()),
     "scoring": ("12-scoring-prioritization", "12-scoring-prioritization",
-                "scoring-prioritization.json", None, ()),
+                "scoring-prioritization.json", "scoring-prioritization.schema.json", ()),
 }
 
 
@@ -150,7 +151,11 @@ def load_accepted(pointer_path: Path, *, run_id: str, name: str) -> dict[str, An
     documents = {}
     for relative, schema in ((primary, primary_schema), *supporting):
         document = read_json(_owned(attempt, relative))
-        if schema and validate_document(document, schema):
+        try:
+            schema_errors = validate_document(document, schema) if schema else []
+        except (FileNotFoundError, ValueError) as exc:
+            raise Blocked(f"{JOB}: authoritative {name} schema is unavailable") from exc
+        if schema_errors:
             raise Blocked(f"{JOB}: accepted {name} artifact fails its closed schema")
         documents[relative] = document
     reference = {"job_id": job_id, "attempt_id": pointer["attempt_id"], "contract_id": contract,

@@ -172,7 +172,8 @@ class ReportInputAssemblyTests(unittest.TestCase):
 
     @staticmethod
     def _validation(document, schema):
-        if schema.startswith("owasp-"):
+        if schema.startswith("owasp-") or schema in {"claim-decision-ledger.schema.json",
+                "09-independent-verification.schema.json", "scoring-prioritization.schema.json"}:
             return []
         return validate_schema(document, schema)
 
