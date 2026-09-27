@@ -124,6 +124,18 @@ CLAIM_CLASS_POLICIES = {
             "review-routing", "unknown", "coverage-gap", "rescope-trigger",
         },
     },
+    "test-execution": {
+        "claim_class_id": "test_evidence",
+        "allowed_assertions": {"test-executed", "test-outcome", "coverage-gap"},
+    },
+    "test-result-intelligence": {
+        "claim_class_id": "test_evidence",
+        "allowed_assertions": {"test-outcome", "coverage-gap"},
+    },
+    "test-coverage-intelligence": {
+        "claim_class_id": "test_evidence",
+        "allowed_assertions": {"source-coverage", "coverage-gap"},
+    },
 }
 PROMOTION_FIELDS = {
     "finding": {

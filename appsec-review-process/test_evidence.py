@@ -287,6 +287,8 @@ def ingest_inputs(run_id:str,job:str)->dict:
     attempt,execution,lineage=accepted(run_id,EXECUTION_JOB,"test-execution.json","test-execution.schema.json","test-execution")
     target_path,source,checkout,revision=target(run_id)
     if execution["source_snapshot_sha256"]!=source: raise Blocked("test execution source generation is stale")
+    if execution["source_tree_sha256"]!=checkout:
+        raise Blocked("test execution source-tree attestation is stale")
     if execution["checkout_identity_sha256"]!=checkout or execution["source_revision"]!=revision:
         raise Blocked("test execution checkout identity is stale")
     kind="test-results" if job==RESULT_JOB else "coverage"

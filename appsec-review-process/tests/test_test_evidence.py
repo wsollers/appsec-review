@@ -9,6 +9,7 @@ import container_execution as ce
 import evidence_assembly as assembly
 import execution_state as state
 import test_evidence as te
+import validate_job_output as output_validator
 from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope
 
@@ -147,5 +148,42 @@ class TestEvidenceTests(unittest.TestCase):
               {"job":job,"contract":contract,"allowed_skip_reasons":[]},binding,
               {instance:{"state":"succeeded","group_id":job.removeprefix("02-")[:40]}})
             self.assertEqual(entry["disposition"],"accepted"); self.assertEqual(len(copies),3)
+
+    def test_claim_policies_validate_owned_contracts_and_reject_promotions(self):
+        result_path=self.owner/"results.xml"; coverage_path=self.owner/"coverage.info"
+        shutil.copyfile(ROOT/"tests/fixtures/test-evidence/results.xml",result_path)
+        shutil.copyfile(ROOT/"tests/fixtures/test-evidence/coverage.info",coverage_path)
+        execution=self.execution({"test-results":result_path,"coverage":coverage_path})
+        values={te.EXECUTION_JOB:execution,te.RESULT_JOB:te.junit(execution,result_path),
+                te.COVERAGE_JOB:te.lcov(execution,coverage_path,self.target)}
+        for job,(_artifact,_schema,contract_id) in te.SPECS.items():
+            contract=te.read_json(ROOT/"registry/output-contracts"/(contract_id+".json"))
+            policy=output_validator.CLAIM_CLASS_POLICIES[contract_id]
+            self.assertEqual(policy["claim_class_id"],contract["claim_class"]["claim_class_id"])
+            self.assertEqual(policy["allowed_assertions"],set(contract["claim_class"]["allowed_assertions"]))
+            attempt=self.owner/("contract-"+contract_id); attempt.mkdir()
+            te.atomic_json(attempt/contract["result_schema"]["artifact"],values[job])
+            self.assertEqual(output_validator.validate_contract_result(attempt,contract,run_id="run1"),[])
+            promoted=deepcopy(values[job]); promoted["severity"]="high"
+            te.atomic_json(attempt/contract["result_schema"]["artifact"],promoted)
+            errors=output_validator.validate_contract_result(attempt,contract,run_id="run1")
+            self.assertTrue(any("severity promotion" in error for error in errors),errors)
+
+    def test_ingest_recomputes_and_requires_current_source_tree(self):
+        execution=self.execution(); current_tree=te.source_tree_sha256(self.target)
+        execution["source_tree_sha256"]=current_tree; execution["checkout_identity_sha256"]=current_tree
+        execution["source_revision"]="rev1"; attempt=self.owner/"execution"; attempt.mkdir()
+        with mock.patch.object(te,"accepted",return_value=(attempt,execution,self.lineage)), \
+             mock.patch.object(te,"target",return_value=(self.target,self.source,current_tree,"rev1")):
+            self.assertEqual(te.ingest_inputs("run1",te.RESULT_JOB)["source_tree_sha256"],current_tree)
+            forged=deepcopy(execution); forged["source_tree_sha256"]="sha256:"+"0"*64
+            with mock.patch.object(te,"accepted",return_value=(attempt,forged,self.lineage)):
+                with self.assertRaisesRegex(te.Blocked,"source-tree attestation is stale"):
+                    te.ingest_inputs("run1",te.RESULT_JOB)
+            (self.target/"src/math.c").write_text("int add(int a,int b){return a-b;}\n")
+            stale_tree=te.source_tree_sha256(self.target)
+            with mock.patch.object(te,"target",return_value=(self.target,self.source,stale_tree,"rev1")):
+                with self.assertRaisesRegex(te.Blocked,"source-tree attestation is stale"):
+                    te.ingest_inputs("run1",te.COVERAGE_JOB)
 
 if __name__=="__main__": unittest.main()
