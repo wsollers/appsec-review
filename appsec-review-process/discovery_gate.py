@@ -90,6 +90,21 @@ AUTOMATIC_PROJECT_JOBS = {CONSUMER_JOB: DEV_PERSONA_JOB_ID, DEVOPS_JOB: DEVOPS_P
 # record AND the accepted partition map (William, 2026-09-25), staged together in one directory.
 SRE_JOB = '02-sre-operations-topology'
 SRE_PERSONA_JOB_ID = 'd04-sretopology'
+# Run-data/source permissions retained in F02 receipts. These are lifecycle IO permissions, not
+# B11 dynamic capabilities: persona_dispatch's static inspector correctly has an empty B11
+# capability set and cannot execute or mutate target content.
+DISCOVERY_PERMISSIONS = ('read-source', 'read-run-data', 'write-run-data')
+PERMISSION_RECEIPT_SCHEMA = 'appsec-review/producer-permission-receipt/1.0'
+LINEAGE_RECEIPT_SCHEMA = 'appsec-review/producer-lineage-receipt/1.0'
+
+
+def _producer_receipts(run_id, job, source_snapshot_sha256):
+    return (
+        {'schema': PERMISSION_RECEIPT_SCHEMA, 'run_id': run_id, 'job_id': job,
+         'source_snapshot_sha256': source_snapshot_sha256,
+         'permissions': list(DISCOVERY_PERMISSIONS)},
+        {'schema': LINEAGE_RECEIPT_SCHEMA, 'run_id': run_id, 'job_id': job,
+         'source_snapshot_sha256': source_snapshot_sha256, 'build_lineage_sha256': None})
 
 # Every job with an automatic persona-dispatch path through _run_project_automatic: its persona
 # identity, the result and summary files the persona returns, and its upstream jobs. The staged
@@ -206,10 +221,17 @@ def issue_handoff(run_id, job, dagster_id):
     return path, resolved_path
 
 
-def _upstream_payload_filename(job):
+def _upstream_payload_filename(job, attempt=None):
     # The adopted partition gate writes its own dedicated artifact name; every other supplied
-    # gate (this module's _legacy_run) writes the generic attempt/output.json shape.
-    return 'repository-partition-map.json' if job == ADOPTED_JOB else 'output.json'
+    # gate historically wrote the generic attempt/output.json shape. Common-envelope automatic
+    # discovery writes the output contract's real artifact name; prefer it when present while
+    # retaining validation of already-retained legacy attempts.
+    if job == ADOPTED_JOB:
+        return 'repository-partition-map.json'
+    named = AUTOMATIC_JOBS.get(job, {}).get('result')
+    if attempt is not None and named and (Path(attempt) / named).is_file():
+        return named
+    return 'output.json'
 
 
 def _require_upstream_inputs(run_id, job, value):
@@ -234,7 +256,7 @@ def _require_upstream_inputs(run_id, job, value):
                       + type(exc).__name__ + ')') from exc
     if upstream_attempt is None:
         raise Blocked(job + ': the accepted ' + upstream + ' result predates the common envelope; re-run it')
-    upstream_value = read_json(upstream_attempt / _upstream_payload_filename(upstream))
+    upstream_value = read_json(upstream_attempt / _upstream_payload_filename(upstream, upstream_attempt))
     if value.get('source_revision') != upstream_value.get('source_revision'):
         raise Blocked(job + ': source_revision ' + str(value.get('source_revision'))
                       + ' does not match the accepted ' + upstream + ' (' + str(upstream_value.get('source_revision')) + ')')
@@ -361,7 +383,9 @@ def _validate_common(run_id, pointer):
     # one -- or validate_published's own fingerprint check fails closed (never silently accepts a
     # supplied-path fingerprint against an automatic-path attempt, or vice versa).
     base = root(run_id, ADOPTED_JOB)
-    if dispatch_mode(run_id, ADOPTED_JOB) == 'automatic':
+    candidate = base / 'attempts' / str(pointer.get('attempt_id', '')) / 'inputs.json'
+    recorded = read_json(candidate) if candidate.is_file() and not candidate.is_symlink() else {}
+    if recorded.get('mode') == 'automatic':
         record = _automatic_partition_inputs(run_id)
     else:
         handoff_file, handoff = read_latest_handoff(run_id, ADOPTED_JOB, 'handoff')
@@ -482,6 +506,12 @@ def _automatic_target_root(run_id, job=ADOPTED_JOB):
     something this module invents. Raises Blocked (not a bare exception) so a missing/unstaged
     target surfaces as a normal preflight failure, exactly like the supplied path's missing-file
     check."""
+    accepted = phase1.accepted(run_id, phase1.JOB, fresh=True)
+    if accepted is None or accepted.get('status') != 'OK':
+        raise Blocked(job + ': automatic dispatch requires fresh accepted intake')
+    intake_attempt = (phase1.job_root(run_id, phase1.JOB, 'whole') / 'attempts' /
+                      accepted['attempt_id'])
+    intake_source = read_json(intake_attempt / 'evidence/source.json')
     manifest = read_json(phase1.manifest_path(run_id))
     target = manifest.get('target') if isinstance(manifest, dict) else None
     repo_path = target.get('repo_path') if isinstance(target, dict) else None
@@ -491,6 +521,9 @@ def _automatic_target_root(run_id, job=ADOPTED_JOB):
     path = Path(repo_path)
     if not path.is_dir():
         raise Blocked(job + ': automatic dispatch target checkout is missing: ' + str(path))
+    intake_target = intake_source.get('target') if isinstance(intake_source, dict) else None
+    if not isinstance(intake_target, str) or Path(intake_target).resolve() != path.resolve():
+        raise Blocked(job + ': accepted intake target differs from the staged run manifest')
     return path
 
 
@@ -499,7 +532,11 @@ def _automatic_partition_inputs(run_id):
     checkout's own content identity (never re-derived from an intermediate hand-off, since there
     is no hand-off in this path) plus the source of every module this path calls, mirroring
     _partition_inputs' 'code' block for the supplied path."""
+    # Availability is part of preflight, before coordinate_worker_lifecycle allocates its
+    # executable attempt. A missing configured CLI/model therefore becomes an actionable BLOCKED
+    # attempt rather than a misleading FAILED model-analysis attempt.
     target_root = _automatic_target_root(run_id)
+    mvr.resolve_run_model_versions(run_id)
     identity = intake.source_identity(str(target_root))
     return {
         'job': ADOPTED_JOB,
@@ -515,6 +552,7 @@ def _automatic_partition_inputs(run_id):
             'persona_prompt_assembly.py': file_hash(ROOT / 'persona_prompt_assembly.py'),
             'publish_job_output.py': file_hash(ROOT / 'publish_job_output.py'),
             'validate_job_output.py': file_hash(ROOT / 'validate_job_output.py'),
+            'automatic_discovery.py': file_hash(ROOT / 'automatic_discovery.py'),
         },
     }
 
@@ -613,6 +651,10 @@ def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerpr
     atomic_json(attempt / 'repository-partition-map.json', partition_map)
     atomic_bytes(attempt / 'repository-partition-summary.md', summary_text.encode('utf-8'))
 
+    permission, lineage = _producer_receipts(run_id, ADOPTED_JOB, source_snapshot_sha256)
+    atomic_json(attempt / 'permission.json', permission)
+    atomic_json(attempt / 'lineage.json', lineage)
+
     persona = request['persona']
     status = {'process': '02-evidence-pregather', 'status': 'OK', 'budget': budget_name,
               'persona_id': persona['persona_id'], 'role_id': persona['role_id'],
@@ -629,8 +671,8 @@ def _dispatch_partition_persona(run_id, dagster_id, allocation, record, fingerpr
         output_contract='repository-partition-map', input_fingerprint=fingerprint,
         started_at=started, execution_status='OK',
         summary='Live persona dispatch produced repository partition analysis.', status_record=status,
-        artifact_paths=['repository-partition-map.json',
-                        'repository-partition-summary.md', 'status.json'],
+        artifact_paths=['repository-partition-map.json', 'repository-partition-summary.md',
+                        'status.json', 'permission.json', 'lineage.json'],
         consumer_job_id=CONSUMER_JOB)
 
 
@@ -667,6 +709,11 @@ def _run_partition_automatic(run_id, dagster_id, force=False):
             raise Blocked('repository partition immutable attempt inputs changed')
         if _validate_partition_payload(read_json(attempt / 'repository-partition-map.json')):
             raise Blocked('accepted repository partition payload is invalid')
+        expected_permission, expected_lineage = _producer_receipts(
+            run_id, ADOPTED_JOB, record['source_snapshot_sha256'])
+        if (read_json(attempt / 'permission.json') != expected_permission or
+                read_json(attempt / 'lineage.json') != expected_lineage):
+            raise Blocked('repository partition permission/lineage receipt changed')
 
     def on_reuse(admitted):
         candidate, envelope = admitted['pointer'], admitted['envelope']
@@ -719,7 +766,7 @@ def _accepted_upstream_path(run_id, job, upstream):
     if attempt is None:
         raise Blocked(job + ': the accepted ' + upstream + ' result predates the common '
                       'envelope; re-run it')
-    path = attempt / _upstream_payload_filename(upstream)
+    path = attempt / _upstream_payload_filename(upstream, attempt)
     if not path.is_file():
         raise Blocked(job + ': the accepted ' + upstream + ' attempt has no ' + path.name)
     return attempt, path
@@ -758,6 +805,7 @@ def _automatic_project_inputs(run_id, job):
     changed or re-run upstream is a different input and never reuses an old result), and the source
     of every module this path calls."""
     target_root = _automatic_target_root(run_id, job)
+    mvr.resolve_run_model_versions(run_id)
     identity = intake.source_identity(str(target_root))
     return {
         'job': job,
@@ -773,6 +821,7 @@ def _automatic_project_inputs(run_id, job):
             'persona_invocation.py': file_hash(ROOT / 'persona_invocation.py'),
             'persona_prompt_assembly.py': file_hash(ROOT / 'persona_prompt_assembly.py'),
             'validate_job_output.py': file_hash(ROOT / 'validate_job_output.py'),
+            'automatic_discovery.py': file_hash(ROOT / 'automatic_discovery.py'),
         },
     }
 
@@ -880,9 +929,13 @@ def _dispatch_project_persona(run_id, base, record):
                if entry['root'] == pd.DEFAULT_READABLE_ROOT}
     _backfill_citation_content_hashes(value, by_path)
     summary_text = (output_root / spec['summary']).read_text(encoding='utf-8')
+    persona = request['persona']
     facts = {'dispatch_mode': 'automatic', 'persona_job_id': persona_job_id,
              'persona_attempt_id': attempt_id, 'persona_result_sha256': result['result_sha256'],
-             'model': dict(model_identity)}
+             'model': dict(model_identity), 'budget': budget_name,
+             'persona_id': persona['persona_id'], 'role_id': persona['role_id'],
+             'domain_id': persona['domain_id'], 'tooling_profile_id': persona['tooling_profile_id'],
+             'artifacts_read': [entry['path'] for entry in request['readable_inputs']]}
     return value, summary_text, facts
 
 
@@ -934,6 +987,12 @@ def validate(run_id, job, pointer=None):
     pointer = pointer or read_json(root(run_id, job) / 'accepted.json')
     if job == ADOPTED_JOB and common_pointer(pointer):
         return _validate_common(run_id, pointer)
+    if job in AUTOMATIC_JOBS and common_pointer(pointer):
+        # Local import avoids a module cycle: automatic_discovery deliberately reuses this
+        # module's qualified request/dispatch helpers, while this compatibility reader delegates
+        # common-envelope validation back to its owning lifecycle adapter.
+        import automatic_discovery
+        return automatic_discovery.validate(run_id, job, pointer)
     if pointer.get('status') != 'OK':
         raise Blocked(job + ': result is not accepted')
     attempt = root(run_id, job) / 'attempts' / pointer['attempt_id']
