@@ -724,6 +724,35 @@ def _claims_from_evidence_producer_binding(value: dict[str, Any], inputs: tuple,
                             "sha256": pointer.sha256, "locator": "whole file"}]}]
 
 
+
+def _fill_pinned_values(envelope: dict[str, Any], result_field: str, output_contract: dict[str, Any],
+                        inputs: tuple) -> None:
+    """Write orchestrator-known identity values into the model's result before validation.
+
+    Hashes and job ids of pinned inputs are facts the orchestrator already holds; asking a model to
+    copy 64-character hex strings fails at random (ADR-0013). For the producer-binding result the
+    four file hashes and the producer job id are filled from the pinned inputs, so the exact-echo
+    check in _claims_from_evidence_producer_binding still runs but cannot fail on a miscopy.
+    """
+    if output_contract.get("result_schema", {}).get("schema_file") != "evidence-producer-binding.schema.json":
+        return
+    value = envelope.get(result_field)
+    if not isinstance(value, dict):
+        return
+    by_name = {Path(item.path).name: item for item in inputs}
+    for field, name in (("accepted_pointer_sha256", "accepted.json"), ("envelope_sha256", "result.json"),
+                        ("permission_sha256", "permission.json"), ("lineage_sha256", "lineage.json")):
+        if name in by_name:
+            value[field] = by_name[name].sha256
+    if "accepted.json" in by_name:
+        try:
+            job = json.loads(by_name["accepted.json"].data).get("job")
+        except ValueError:
+            job = None
+        if isinstance(job, str):
+            value["producer_job_id"] = job
+    value.setdefault("schema", "appsec-review/evidence-producer-binding/1.0")
+
 _CLAIM_BUILDERS = {
     "repository-partition-map.schema.json": _claims_from_partition_map,
     "project-discovery.schema.json": _claims_from_project_inventory,
@@ -863,6 +892,7 @@ class ClaudeCliInvoker:
                 raise InvokerOutputError("claude CLI dispatch produced no terminal result text",
                                          ["the response held no result text"])
             envelope = _parse_envelope(result_text)
+            _fill_pinned_values(envelope, result_field, output_contract, target_inputs)
             _validate_envelope(envelope, fields, output_contract, store)
             try:
                 claims = _schema_safe_claims(builder(envelope[result_field], target_inputs,
