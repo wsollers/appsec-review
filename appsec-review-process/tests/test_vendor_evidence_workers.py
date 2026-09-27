@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -158,7 +159,9 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                 for tool,result in vendor.items():
                     receipt={"schema":"appsec-review/vendor-b13-execution-receipt/1","tool_id":tool,
                              "attempt_id":f"{tool}-verified-1","request_sha256":"sha256:"+"1"*64,
-                             "result_sha256":"sha256:"+"2"*64,"permission_sha256":"sha256:"+"3"*64,
+                             "result_sha256":"sha256:"+"2"*64,
+                             "output_sha256":"sha256:"+hashlib.sha256(result["raw"]).hexdigest(),
+                             "permission_sha256":"sha256:"+"3"*64,
                              "permission_fingerprint_sha256":"sha256:"+"4"*64,"image_id":"tool-"+tool.replace("-android","").replace("-ios",""),
                              "image_digest":"sha256:"+"5"*64,"argv":["/opt/tool/bin/"+tool,"--offline"],"tool_version":"1.0.0","tool_name":tool}
                     result["auth"]={"attempt_id":receipt["attempt_id"],"argv":receipt["argv"],"exit_code":0,
@@ -177,6 +180,9 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                 authenticated=next((i for i in aggregate["tool_instances"] if i.get("execution_receipt")),None)
                 self.assertIsNotNone(authenticated)
                 authenticated["argv"]=["/fabricated/tool"]
+                self.assertTrue(any("mismatch" in e for e in shapes.verify_vendor_execution_receipts(aggregate,attempt)))
+                authenticated["argv"]=vendor[authenticated["tool_id"]]["auth"]["argv"]
+                authenticated["execution_receipt"]["output_sha256"]="sha256:"+"f"*64
                 self.assertTrue(any("mismatch" in e for e in shapes.verify_vendor_execution_receipts(aggregate,attempt)))
 
 

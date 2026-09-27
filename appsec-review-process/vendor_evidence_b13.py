@@ -127,11 +127,28 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
             records.append({"rule_id": item.get("RuleID"), "path": _path(item.get("File")),
                             "start_line": item.get("StartLine"), "end_line": item.get("EndLine")})
     elif tool_id == "checkov":
-        failed = document.get("results", {}).get("failed_checks", [])
-        for item in failed:
-            span = item.get("file_line_range") or [None, None]
-            records.append({"rule_id": item.get("check_id"), "path": _path(str(item.get("file_path")).lstrip("/")),
-                            "start_line": span[0], "end_line": span[-1]})
+        # Checkov emits one object for a single framework and a top-level list for
+        # multi-framework scans. Validate every framework independently before reducing it.
+        frameworks = document if isinstance(document, list) else [document]
+        if not frameworks or len(frameworks) > 64:
+            raise VendorToolFailed("checkov-shape-invalid")
+        for framework in frameworks:
+            if not isinstance(framework, dict) or not isinstance(framework.get("results"), dict):
+                raise VendorToolFailed("checkov-shape-invalid")
+            failed = framework["results"].get("failed_checks")
+            if not isinstance(failed, list) or len(failed) > 100_000:
+                raise VendorToolFailed("checkov-shape-invalid")
+            for item in failed:
+                if not isinstance(item, dict):
+                    raise VendorToolFailed("checkov-shape-invalid")
+                span = item.get("file_line_range")
+                if (not isinstance(span, list) or len(span) != 2 or
+                        not all(isinstance(line, int) and not isinstance(line, bool) and line >= 1 for line in span)):
+                    raise VendorToolFailed("checkov-shape-invalid")
+                if not isinstance(item.get("check_id"), str) or not item["check_id"]:
+                    raise VendorToolFailed("checkov-shape-invalid")
+                records.append({"rule_id": item["check_id"], "path": _path(str(item.get("file_path")).lstrip("/")),
+                                "start_line": span[0], "end_line": span[1]})
     elif tool_id == "trivy-config":
         for result in document.get("Results", []):
             path = _path(result.get("Target"))
@@ -298,11 +315,13 @@ def collect(job_id: str, tool_ids: list[str], *, run_id: str, node_attempt_id: s
             terminal, data = execute(tool_id, runtime=runtime, run_id=run_id, job_id=job_id,
                                      attempt_id=tool_attempt, attempt_root=root, request_document=req,
                                      run_container=run_container, verify=verify)
+            output_sha="sha256:"+hashlib.sha256(data).hexdigest()
             record=ce.load_image_registry(ce.IMAGES_DIR)[SPECS[tool_id].image_id]
             permission_sha="sha256:"+hashlib.sha256(json.dumps(req["permission"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
             receipt={"schema":"appsec-review/vendor-b13-execution-receipt/1","tool_id":tool_id,
                      "attempt_id":tool_attempt,"request_sha256":terminal["request_sha256"],
-                     "result_sha256":terminal["result_sha256"],"permission_sha256":permission_sha,
+                     "result_sha256":terminal["result_sha256"],"output_sha256":output_sha,
+                     "permission_sha256":permission_sha,
                      "permission_fingerprint_sha256":terminal["permission_fingerprint_sha256"],
                      "image_id":req["image"]["image_id"],"image_digest":req["image"]["digest"],
                      "argv":req["argv"],"tool_version":version,

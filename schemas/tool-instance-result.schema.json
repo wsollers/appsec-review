@@ -201,12 +201,13 @@
     "execution_receipt": {
       "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["path", "sha256", "request_sha256", "result_sha256", "permission_sha256", "permission_fingerprint_sha256", "image_id", "image_digest"],
+      "required": ["path", "sha256", "request_sha256", "result_sha256", "output_sha256", "permission_sha256", "permission_fingerprint_sha256", "image_id", "image_digest"],
       "properties": {
         "path": {"type": "string", "pattern": "^[A-Za-z0-9._+@%~,-][A-Za-z0-9._+@%~,/-]{0,1023}$"},
         "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "request_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "result_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "permission_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "permission_fingerprint_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "image_id": {"type": "string", "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"},

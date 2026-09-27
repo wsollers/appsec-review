@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema", "tool_id", "attempt_id", "request_sha256", "result_sha256",
+    "schema", "tool_id", "attempt_id", "request_sha256", "result_sha256", "output_sha256",
     "permission_sha256", "permission_fingerprint_sha256", "image_id", "image_digest",
     "argv", "tool_version", "tool_name"
   ],
@@ -15,6 +15,7 @@
     "attempt_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
     "request_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "result_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "output_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "permission_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "permission_fingerprint_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "image_id": {"type": "string", "pattern": "^[0-9a-z][0-9a-z._-]{0,95}$"},

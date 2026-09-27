@@ -40,6 +40,12 @@ class B13Tests(unittest.TestCase):
         with self.assertRaisesRegex(b.VendorToolFailed,'path'):
             b.normalize('gitleaks',b'[{"RuleID":"x","File":"../escape","StartLine":1,"EndLine":1}]')
 
+    def test_checkov_multi_framework_output_is_normalized_and_bad_siblings_fail_closed(self):
+        raw=b'[{"check_type":"terraform","results":{"failed_checks":[{"check_id":"CKV_TF_1","file_path":"/main.tf","file_line_range":[1,2]}]}},{"check_type":"kubernetes","results":{"failed_checks":[{"check_id":"CKV_K8S_1","file_path":"/pod.yaml","file_line_range":[3,3]}]}}]'
+        self.assertEqual([r["rule_id"] for r in b.normalize("checkov",raw)],["CKV_TF_1","CKV_K8S_1"])
+        with self.assertRaisesRegex(b.VendorToolFailed,"checkov-shape-invalid"):
+            b.normalize("checkov",b'[{"results":{"failed_checks":[]}},"unsupported"]')
+
     def test_collect_runs_each_tool_and_preserves_sibling_failure(self):
         td=tempfile.TemporaryDirectory(); self.addCleanup(td.cleanup); root=Path(td.name); source=root/'source'; source.mkdir()
         def fake_request(tool_id,**kw):

@@ -299,7 +299,7 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
             raise ValueError(f"{tool}: successful vendor result lacks verified B13 identity")
         receipt_data=_dump(auth["receipt"]); receipt_path=f"outputs/tools/{tool}/execution-receipt.json"
         receipt_ref={"path":receipt_path,"sha256":HASH(receipt_data),
-                     **{k:auth["receipt"][k] for k in ("request_sha256","result_sha256","permission_sha256",
+                     **{k:auth["receipt"][k] for k in ("request_sha256","result_sha256","output_sha256","permission_sha256",
                                                         "permission_fingerprint_sha256","image_id","image_digest")}}
         auth={**auth,"execution_receipt":receipt_ref}
         path = "outputs/binskim.sarif" if tool == "binskim" else f"outputs/tools/{tool}/" + (

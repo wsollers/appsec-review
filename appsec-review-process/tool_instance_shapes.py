@@ -633,9 +633,10 @@ def verify_vendor_execution_receipts(tool_results: dict, attempt_root) -> list[s
                    for error in validate_document(receipt,VENDOR_EXECUTION_RECEIPT_SCHEMA,store)]
         expected={"tool_id":tool,"attempt_id":instance["attempt_id"],"argv":instance["argv"],
                   "tool_version":instance["identity"]["tool_version"],"tool_name":instance["identity"]["tool_name"],
-                  "image_digest":instance["identity"]["image_digest"]}
+                  "image_digest":instance["identity"]["image_digest"],
+                  "output_sha256":instance["outputs"][0]["sha256"]}
         if any(receipt.get(k)!=v for k,v in expected.items()) or any(receipt.get(k)!=ref[k] for k in
-                ("request_sha256","result_sha256","permission_sha256","permission_fingerprint_sha256",
+                ("request_sha256","result_sha256","output_sha256","permission_sha256","permission_fingerprint_sha256",
                  "image_id","image_digest")):
             errors.append(f"execution-receipt-mismatch: tool {tool!r} identity is not the verified B13 identity")
     return errors
