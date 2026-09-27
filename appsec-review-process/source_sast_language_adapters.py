@@ -6,11 +6,11 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 TOOLS = {
- "gosec":{"language":"go","image_id":"tool-gosec","version":"2.22.8","output":"scratch/gosec.json","argv":["/opt/tool/bin/gosec","-fmt=json","-out=/scratch/gosec.json","./..."]},
- "spotbugs":{"language":"java","image_id":"tool-spotbugs","version":"4.9.3","output":"scratch/spotbugs.xml","argv":["/opt/tool/bin/spotbugs","-textui","-xml:withMessages","-output","/scratch/spotbugs.xml","/workspace"]},
- "phpstan":{"language":"php","image_id":"tool-phpstan","version":"2.1.22","output":"logs/container/stdout.log","argv":["/opt/tool/bin/phpstan","analyse","--no-progress","--error-format=json","--memory-limit=1G","/workspace"]},
- "psalm":{"language":"php","image_id":"tool-psalm","version":"6.13.1","output":"logs/container/stdout.log","argv":["/opt/tool/bin/psalm","--no-progress","--output-format=json","/workspace"]},
- "phpcs":{"language":"php","image_id":"tool-phpcs","version":"3.13.4","output":"logs/container/stdout.log","argv":["/opt/tool/bin/phpcs","--report=json","/workspace"]},
+ "gosec":{"language":"go","image_id":"tool-gosec","version":"2.22.8","output":"scratch/gosec.json","hit_exit_codes":[1],"argv":["/opt/tool/bin/gosec","-fmt=json","-out=/scratch/gosec.json","./..."]},
+ "spotbugs":{"language":"java","image_id":"tool-spotbugs","version":"4.9.3","output":"scratch/spotbugs.xml","hit_exit_codes":[],"argv":["/opt/tool/bin/spotbugs","-textui","-xml:withMessages","-output","/scratch/spotbugs.xml","/workspace"]},
+ "phpstan":{"language":"php","image_id":"tool-phpstan","version":"2.1.22","output":"logs/container/stdout.log","hit_exit_codes":[1],"argv":["/opt/tool/bin/phpstan","analyse","--no-progress","--error-format=json","--memory-limit=1G","/workspace"]},
+ "psalm":{"language":"php","image_id":"tool-psalm","version":"6.13.1","output":"logs/container/stdout.log","hit_exit_codes":[2],"argv":["/opt/tool/bin/psalm","--no-progress","--output-format=json","/workspace"]},
+ "phpcs":{"language":"php","image_id":"tool-phpcs","version":"3.13.4","output":"logs/container/stdout.log","hit_exit_codes":[1,2,3],"argv":["/opt/tool/bin/phpcs","--report=json","/workspace"]},
 }
 SUFFIXES={".go":"go",".java":"java",".php":"php"}
 
@@ -24,7 +24,7 @@ def build_plan(languages:list[str], registry:dict[str,dict[str,Any]])->list[dict
   if spec["language"] not in languages: continue
   image=registry.get(spec["image_id"]); image_digest=image.get("digest") if isinstance(image,dict) else None
   ready=isinstance(image_digest,str) and image_digest.startswith("sha256:") and len(image_digest)==71
-  plan.append({"language":spec["language"],"tool_id":tool_id,"version":spec["version"],"image_id":spec["image_id"],"image_digest":image_digest if ready else None,"status":"READY" if ready else "UNAVAILABLE","executed":False,"network":{"mode":"none","destinations":[]},"target_read_only":True,"argv":list(spec["argv"]) if ready else [],"output":spec["output"] if ready else None,"gap":None if ready else f"{spec['language']} SAST unavailable: pinned image {spec['image_id']} is absent or invalid."})
+  plan.append({"language":spec["language"],"tool_id":tool_id,"version":spec["version"],"image_id":spec["image_id"],"image_digest":image_digest if ready else None,"status":"READY" if ready else "UNAVAILABLE","executed":False,"network":{"mode":"none","destinations":[]},"target_read_only":True,"argv":list(spec["argv"]) if ready else [],"output":spec["output"] if ready else None,"hit_exit_codes":list(spec["hit_exit_codes"]) if ready else [],"gap":None if ready else f"{spec['language']} SAST unavailable: pinned image {spec['image_id']} is absent or invalid."})
  return plan
 
 def execution_gaps(plan:list[dict[str,Any]], executed:set[str]|None=None)->list[str]:
@@ -33,6 +33,11 @@ def execution_gaps(plan:list[dict[str,Any]], executed:set[str]|None=None)->list[
   if item["status"]=="UNAVAILABLE": gaps.append(item["gap"])
   elif item["tool_id"] not in executed: gaps.append(f"{item['language']} SAST tool {item['tool_id']} has no accepted offline B13 receipt.")
  return gaps
+
+def accepted_terminal(plan:dict[str,Any], terminal:dict[str,Any])->bool:
+ if terminal.get("execution_status")=="OK" and terminal.get("exit_code")==0: return True
+ return (terminal.get("cause")=="CONTAINER_EXIT_NONZERO" and terminal.get("execution_status")=="FAILED" and
+         terminal.get("exit_code") in plan.get("hit_exit_codes",[]))
 
 def _source(raw:Any,target:Path)->tuple[str,Path]:
  if not isinstance(raw,str) or not raw: raise ValueError("language SAST record has no source path")

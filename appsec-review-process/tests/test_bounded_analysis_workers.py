@@ -121,4 +121,11 @@ class BoundedWorkers(unittest.TestCase):
                     self.assertEqual(leads[0]["tool_id"],tool)
             with self.assertRaises(ValueError): language.normalize("gosec",b'{"Issues":[{"rule_id":"G1","file":"../x","line":"1"}]}',target)
 
+    def test_language_exit_semantics_distinguish_clean_hits_errors_and_timeouts(self):
+        plan={"hit_exit_codes":[1]}
+        self.assertTrue(language.accepted_terminal(plan,{"execution_status":"OK","exit_code":0,"cause":None}))
+        self.assertTrue(language.accepted_terminal(plan,{"execution_status":"FAILED","exit_code":1,"cause":"CONTAINER_EXIT_NONZERO"}))
+        self.assertFalse(language.accepted_terminal(plan,{"execution_status":"FAILED","exit_code":2,"cause":"CONTAINER_EXIT_NONZERO"}))
+        self.assertFalse(language.accepted_terminal(plan,{"execution_status":"FAILED","exit_code":None,"cause":"TIMEOUT"}))
+
 if __name__=="__main__": unittest.main()
