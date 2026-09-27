@@ -12,56 +12,39 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import evidence_assembly as worker  # noqa: E402
 from execution_state import Blocked, atomic_json, file_hash, read_json, tree_hashes  # noqa: E402
+import pool_rendezvous as pr  # noqa: E402
+import pool_rendezvous_support as rendezvous_support  # noqa: E402
 from worker_result import artifact_records, terminal_envelope  # noqa: E402
 
 PLAN = read_json(ROOT / "tests" / "fixtures" / "evidence-assembly" / "complete-plan.json")
 
 
-def instance_id(job):
-    return hashlib.sha256(job.encode()).hexdigest()[:32]
+def make_rendezvous(folder):
+    workspace = rendezvous_support.RendezvousWorkspace(Path(folder).resolve())
+    dependencies = read_json(worker.GRAPH)["jobs"][worker.JOB]["dependencies"]
+    groups = []
+    for edge in dependencies:
+        group = workspace.persona_group(edge["job"][3:][:40], 1)
+        group["permission"] = rendezvous_support.c01.permission(
+            job_id=worker.JOB, run_id=PLAN["run_id"])
+        groups.append(group)
+    spec = workspace.spec(groups, pool_id="evidence-assembly", lane="pregather",
+        run_id=PLAN["run_id"], job_id=worker.JOB, attempt_id="terminal-generation-1")
+    plan = workspace.expand(spec)
+    workspace.run(spec, plan, max_parallel=pr.MAX_PARALLEL)
+    return workspace, spec, plan
 
 
-def terminal_manifest(run_id, jobs):
-    instances = []
-    for ordinal, job in enumerate(jobs):
-        iid = instance_id(job)
-        instances.append({"instance_id": iid, "group_id": job[3:][:40], "ordinal": ordinal,
-            "worker_kind": "pinned_container", "attempt_root": "instances/" + iid,
-            "resource_pool": "tool_pool", "request_sha256": "sha256:" + "1" * 64,
-            "input_fingerprint": "sha256:" + hashlib.sha256((job + "-input").encode()).hexdigest(),
-            "state": "succeeded", "state_reason": "verified_adapter_result",
-            "adapter_status": "OK", "adapter_cause": None,
-            "result_file": {"path": f"instances/{iid}/logs/container/container-result.json",
-                            "sha256": "sha256:" + hashlib.sha256(job.encode()).hexdigest(), "bytes": 100},
-            "adapter_result_sha256": "sha256:" + hashlib.sha256((job + "-result").encode()).hexdigest(),
-            "invoker_stopped": None, "container_removed": True, "worker_stopped": None})
-    states = ["succeeded", "failed", "blocked", "canceled", "instance_timed_out",
-              "rendezvous_timed_out", "crashed", "invalid", "not_launched_canceled",
-              "not_launched_rendezvous_timeout", "missing"]
-    value = {"schema": "appsec-review/pool-rendezvous-manifest/1.0",
-        "classification": "appsec-review/pool-instance-classification/1.0",
-        "expansion": "appsec-review/pool-expansion/1.0",
-        "expansion_sha256": "sha256:" + "2" * 64, "spec_sha256": "sha256:" + "3" * 64,
-        "pool_directory": "4" * 32, "pool_id": "evidence-assembly", "lane": "pregather",
-        "run_id": run_id, "job_id": worker.JOB, "attempt_id": "terminal-generation-1",
-        "wait_all": True, "rendezvous_timeout_seconds": 300, "empty_pool_reason": None,
-        "expansion_state": "POPULATED", "outcome": "COMPLETE",
-        "counts": {"instances": len(instances), **{state: len(instances) if state == "succeeded" else 0
-                                                    for state in states}}, "instances": instances}
-    value["manifest_sha256"] = worker.manifest_sha256(value)
-    return value
-
-
-def make_supply(folder, *, omit=(), duplicate=None, source_override=None, build_override=None,
+def make_supply(folder, plan, *, omit=(), duplicate=None, source_override=None, build_override=None,
                 stale=None, corrupt=None):
     supply_root = Path(folder, "supply"); supply_root.mkdir()
     graph = read_json(worker.GRAPH)
     dependencies = graph["jobs"][worker.JOB]["dependencies"]
-    jobs = [edge["job"] for edge in dependencies]
-    atomic_json(supply_root / worker.TERMINAL, terminal_manifest(PLAN["run_id"], jobs))
+    terminal_ids = {item.entry["group_id"]: item.instance_id for item in plan.instances}
     bindings = []
     for edge in dependencies:
         job = edge["job"]
@@ -97,6 +80,8 @@ def make_supply(folder, *, omit=(), duplicate=None, source_override=None, build_
             "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
             "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
             "accepted_at": "2026-09-27T00:00:02Z"}
+        if status == "SKIPPED":
+            pointer["reason"] = skip_reason
         atomic_json(producer_root / "accepted.json", pointer)
         atomic_json(producer_root / "latest.json", {"attempt_id": "stale-attempt" if stale == job else attempt_id})
         binding_source = source_override if source_override and source_override[0] == job else None
@@ -104,7 +89,8 @@ def make_supply(folder, *, omit=(), duplicate=None, source_override=None, build_
         bindings.append({"job_id": job,
             "source_snapshot_sha256": binding_source[1] if binding_source else PLAN["source_snapshot_sha256"],
             "build_lineage_sha256": binding_build[1] if binding_build else PLAN["build_lineage_sha256"],
-            "permissions": PLAN["permissions"], "terminal_instance_ids": [instance_id(job)]})
+            "permissions": PLAN["permissions"],
+            "terminal_instance_ids": [terminal_ids[job[3:][:40]]]})
     if duplicate:
         bindings.append(copy.deepcopy(next(item for item in bindings if item["job_id"] == duplicate)))
     supply = {"schema": worker.SUPPLY_SCHEMA, "run_id": PLAN["run_id"],
@@ -127,13 +113,28 @@ def reseal_producer(supply_root, job):
 
 
 class EvidenceAssemblyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.pool_temporary = tempfile.TemporaryDirectory()
+        cls.workspace, cls.spec, cls.plan = make_rendezvous(cls.pool_temporary.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        rendezvous_support.join_pool_threads()
+        cls.pool_temporary.cleanup()
+
+    def pool_arguments(self):
+        return {"pool_root": self.workspace.root(self.plan), "expected_spec": self.spec,
+                "context": self.workspace.context(),
+                "rendezvous_parent": self.workspace.rendezvous_parent}
+
     def inspect(self, supply):
         return worker.inspect_supply(supply, run_id=PLAN["run_id"],
-                                     source_snapshot_sha256=PLAN["source_snapshot_sha256"])
+            source_snapshot_sha256=PLAN["source_snapshot_sha256"], **self.pool_arguments())
 
     def test_complete_manifest_is_deterministic_hash_bound_and_preserves_citation_identity(self):
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder)
+            supply = make_supply(folder, self.plan)
             first, copies = self.inspect(supply)
             second, _ = self.inspect(supply)
             self.assertEqual(first, second)
@@ -150,7 +151,7 @@ class EvidenceAssemblyTests(unittest.TestCase):
 
     def test_missing_producer_is_explicit_but_incomplete_and_cannot_publish(self):
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder, omit={"02-source-sast"})
+            supply = make_supply(folder, self.plan, omit={"02-source-sast"})
             manifest, _ = self.inspect(supply)
             missing = next(item for item in manifest["producers"] if item["job_id"] == "02-source-sast")
             self.assertEqual(missing["disposition"], "missing")
@@ -159,18 +160,19 @@ class EvidenceAssemblyTests(unittest.TestCase):
             with mock.patch.object(worker, "root", return_value=job_root):
                 with self.assertRaises(Blocked):
                     worker.run(PLAN["run_id"], "dagster-fixture", supply_root=supply,
-                               source_snapshot_sha256=PLAN["source_snapshot_sha256"])
+                               source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                               **self.pool_arguments())
             pointer = read_json(job_root / "accepted.json")
             self.assertEqual(pointer["status"], "BLOCKED")
             self.assertFalse(any(job_root.glob("attempts/*/intel-manifest.json")))
 
     def test_complete_generation_publishes_common_envelope_and_copied_artifacts(self):
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder)
+            supply = make_supply(folder, self.plan)
             job_root = Path(folder, "job")
             with mock.patch.object(worker, "root", return_value=job_root):
                 pointer = worker.run(PLAN["run_id"], "dagster-fixture", supply_root=supply,
-                                     source_snapshot_sha256=PLAN["source_snapshot_sha256"])
+                    source_snapshot_sha256=PLAN["source_snapshot_sha256"], **self.pool_arguments())
             self.assertEqual(pointer["status"], "OK_WITH_GAPS")
             attempt = job_root / "attempts" / pointer["attempt_id"]
             manifest = read_json(attempt / worker.RESULT)
@@ -184,7 +186,7 @@ class EvidenceAssemblyTests(unittest.TestCase):
         for variant in ("corrupt", "stale"):
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as folder:
                 kwargs = {variant: "02-source-sast"}
-                supply = make_supply(folder, **kwargs)
+                supply = make_supply(folder, self.plan, **kwargs)
                 with self.assertRaises(Blocked):
                     self.inspect(supply)
 
@@ -195,19 +197,19 @@ class EvidenceAssemblyTests(unittest.TestCase):
         )
         for kwargs in cases:
             with self.subTest(kwargs=kwargs), tempfile.TemporaryDirectory() as folder:
-                supply = make_supply(folder, **kwargs)
+                supply = make_supply(folder, self.plan, **kwargs)
                 with self.assertRaises(Blocked):
                     self.inspect(supply)
 
     def test_duplicate_producer_binding_fails_closed(self):
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder, duplicate="02-source-sast")
+            supply = make_supply(folder, self.plan, duplicate="02-source-sast")
             with self.assertRaises(Blocked):
                 self.inspect(supply)
 
     def test_unauthorized_skip_and_permission_mismatch_fail_closed(self):
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder)
+            supply = make_supply(folder, self.plan)
             job = PLAN["authorized_skip"]["job_id"]
             producer = supply / "producers" / job
             pointer = read_json(producer / "accepted.json")
@@ -217,39 +219,51 @@ class EvidenceAssemblyTests(unittest.TestCase):
             with self.assertRaises(Blocked):
                 self.inspect(supply)
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder)
+            supply = make_supply(folder, self.plan)
             config = read_json(supply / worker.SUPPLY)
             config["producers"][0]["permissions"] = ["network"]
             atomic_json(supply / worker.SUPPLY, config)
             with self.assertRaises(Blocked):
                 self.inspect(supply)
 
-    def test_terminal_manifest_hash_and_unclaimed_instance_prevent_complete_publication(self):
+    def test_resealed_terminal_request_adapter_and_result_hash_forgery_is_rederived_and_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder)
-            terminal = read_json(supply / worker.TERMINAL)
-            terminal["counts"]["succeeded"] -= 1
-            atomic_json(supply / worker.TERMINAL, terminal)
+            workspace, spec, plan = make_rendezvous(Path(folder, "pool"))
+            supply = make_supply(folder, plan)
+            path = workspace.manifest_path(plan)
+            terminal = read_json(path)
+            terminal["instances"][0]["request_sha256"] = "sha256:" + "0" * 64
+            terminal["instances"][0]["adapter_result_sha256"] = "sha256:" + "1" * 64
+            terminal["instances"][0]["result_file"]["sha256"] = "sha256:" + "2" * 64
+            terminal["manifest_sha256"] = pr.manifest_sha256(terminal)
+            path.unlink(); path.write_bytes(pr.canonical_bytes(terminal))
             with self.assertRaises(Blocked):
-                self.inspect(supply)
+                worker.inspect_supply(supply, run_id=PLAN["run_id"],
+                    source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                    pool_root=workspace.root(plan), expected_spec=spec, context=workspace.context(),
+                    rendezvous_parent=workspace.rendezvous_parent)
+
+    def test_unclaimed_or_wrongly_claimed_terminal_instance_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder)
-            terminal = read_json(supply / worker.TERMINAL)
-            terminal["instances"][0].update(state="failed", adapter_status="FAILED",
-                                               adapter_cause="CONTAINER_EXIT_NONZERO")
-            terminal["counts"]["succeeded"] -= 1; terminal["counts"]["failed"] += 1
-            terminal["outcome"] = "DEGRADED"
-            terminal["manifest_sha256"] = worker.manifest_sha256(terminal)
-            atomic_json(supply / worker.TERMINAL, terminal)
-            with self.assertRaises(Blocked):
-                self.inspect(supply)
-        with tempfile.TemporaryDirectory() as folder:
-            supply = make_supply(folder)
+            supply = make_supply(folder, self.plan)
             config = read_json(supply / worker.SUPPLY)
             config["producers"][0]["terminal_instance_ids"] = [config["producers"][1]["terminal_instance_ids"][0]]
             atomic_json(supply / worker.SUPPLY, config)
             with self.assertRaises(Blocked):
                 self.inspect(supply)
+
+    def test_wrong_or_open_accepted_pointer_shape_is_rejected_even_when_resealed(self):
+        for edit in (lambda pointer: pointer.update(schema="forged/schema"),
+                     lambda pointer: pointer.update(extra="resealed-but-not-common"),
+                     lambda pointer: pointer.update(envelope_path="other.json")):
+            with self.subTest(edit=edit), tempfile.TemporaryDirectory() as folder:
+                supply = make_supply(folder, self.plan)
+                producer = supply / "producers" / "02-source-sast"
+                pointer = read_json(producer / "accepted.json")
+                edit(pointer)
+                atomic_json(producer / "accepted.json", pointer)
+                with self.assertRaises(Blocked):
+                    self.inspect(supply)
 
 
 if __name__ == "__main__":

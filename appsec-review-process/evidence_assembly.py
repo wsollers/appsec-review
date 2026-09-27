@@ -21,9 +21,11 @@ from pathlib import Path, PurePosixPath
 import shutil
 from typing import Any
 
+import pool_rendezvous as pr
 from execution_state import (ROOT, Blocked, atomic_bytes, data_path, digest, file_hash, identifier,
                              now, read_json, tree_hashes)
-from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
+from publish_job_output import (ACCEPTED_SCHEMA, coordinate_worker_lifecycle,
+                                record_terminal_current, validate_published)
 from schema_validate import validate_document
 from worker_result import validate_worker_result
 
@@ -40,7 +42,9 @@ PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 CODE_FILES = (
     "evidence_assembly.py", "execution_state.py", "publish_job_output.py",
-    "validate_job_output.py", "worker_result.py", "registry/job-templates/02-evidence-assembly.json",
+    "validate_job_output.py", "worker_result.py", "pool_rendezvous.py", "pool_specification.py",
+    "worker_adapters.py", "container_execution.py", "persona_invocation.py",
+    "registry/job-templates/02-evidence-assembly.json",
     "registry/output-contracts/pregather.json", "registry/roles/evidence-assembler.json",
     "registry/domains/evidence-assembly.json",
     "registry/tooling-profiles/hash-bound-evidence-assembly.json",
@@ -106,28 +110,19 @@ def _graph() -> tuple[list[dict[str, Any]], str]:
     return dependencies, "sha256:" + file_hash(GRAPH)
 
 
-def _terminal(supply_root: Path, run_id: str) -> tuple[dict[str, Any], str]:
-    path = _owned_file(supply_root, PurePosixPath(TERMINAL), "terminal-instances manifest")
-    value = read_json(path)
-    errors = validate_document(value, "pool-rendezvous-manifest.schema.json")
-    if errors:
-        raise Blocked(f"{JOB}: terminal-instances manifest schema failed ({len(errors)} errors)")
-    if value.get("manifest_sha256") != manifest_sha256(value):
-        raise Blocked(f"{JOB}: terminal-instances manifest hash is invalid")
+def _terminal(pool_root: Path, *, expected_spec: Any, context: Any,
+              rendezvous_parent: Path, run_id: str) -> tuple[dict[str, Any], Path, str]:
+    """Load C02's authority: re-derived expansion, requests and adapter results, never its self-hash."""
+    try:
+        verified = pr.load_verified_manifest(pool_root, expected_spec=expected_spec, context=context,
+                                             rendezvous_parent=rendezvous_parent)
+    except pr.RendezvousError as exc:
+        raise Blocked(f"{JOB}: terminal-instance generation did not re-verify ({exc})") from exc
+    value = pr.thaw(verified.manifest)
     if value.get("run_id") != run_id or value.get("job_id") != JOB:
-        raise Blocked(f"{JOB}: terminal-instances manifest belongs to another run")
-    instance_ids = [item.get("instance_id") for item in value["instances"]]
-    if len(instance_ids) != len(set(instance_ids)):
-        raise Blocked(f"{JOB}: terminal-instances manifest repeats an instance")
-    states = ("succeeded", "failed", "blocked", "canceled", "instance_timed_out",
-              "rendezvous_timed_out", "crashed", "invalid", "not_launched_canceled",
-              "not_launched_rendezvous_timeout", "missing")
-    found_states = [item.get("state") for item in value["instances"]]
-    expected_counts = {"instances": len(found_states),
-                       **{state: found_states.count(state) for state in states}}
-    if value.get("counts") != expected_counts:
-        raise Blocked(f"{JOB}: terminal-instances counts do not match the instances")
-    return value, "sha256:" + file_hash(path)
+        raise Blocked(f"{JOB}: verified terminal-instance generation belongs to another run/job")
+    path = pr.rendezvous_root(verified.plan, rendezvous_parent) / pr.MANIFEST_FILE
+    return value, path, "sha256:" + file_hash(path)
 
 
 def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
@@ -144,9 +139,12 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
     latest = read_json(_owned_file(producer_root, PurePosixPath("latest.json"),
                                    f"{job} latest pointer"))
     required_pointer = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint",
-                        "envelope_path", "envelope_sha256", "hashes"}
-    if (not required_pointer.issubset(pointer) or pointer["run_id"] != run_id or
-            pointer["job"] != job or latest.get("attempt_id") != pointer["attempt_id"]):
+                        "envelope_path", "envelope_sha256", "hashes", "accepted_at"}
+    if pointer.get("status") == "SKIPPED":
+        required_pointer.add("reason")
+    if (set(pointer) != required_pointer or pointer.get("schema") != ACCEPTED_SCHEMA or
+            pointer.get("envelope_path") != "result.json" or pointer.get("run_id") != run_id or
+            pointer.get("job") != job or latest.get("attempt_id") != pointer.get("attempt_id")):
         raise Blocked(f"{JOB}: {job} accepted/latest pointer identity is stale or incomplete")
     try:
         attempt_id = identifier(pointer["attempt_id"])
@@ -171,6 +169,8 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
             envelope.get("acceptance_status") != "CURRENT" or
             envelope.get("output_contract") != edge["contract"]):
         raise Blocked(f"{JOB}: {job} envelope/pointer/edge identity mismatch")
+    if envelope["execution_status"] == "SKIPPED" and pointer["reason"] != envelope["skip_reason"]:
+        raise Blocked(f"{JOB}: {job} accepted pointer skip reason differs from its envelope")
     if envelope["execution_status"] not in {"OK", "OK_WITH_GAPS", "SKIPPED"}:
         raise Blocked(f"{JOB}: {job} is not an accepted terminal producer")
 
@@ -225,7 +225,8 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
     return entry, copies
 
 
-def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: str
+def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: str,
+                   pool_root: Path, expected_spec: Any, context: Any, rendezvous_parent: Path
                    ) -> tuple[dict[str, Any], list[tuple[Path, str]]]:
     """Return the deterministic candidate manifest and copy plan; never writes."""
     supply_root = _real_directory(supply_root, "supply_root")
@@ -235,7 +236,9 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
         raise Blocked(f"{JOB}: assembly supply schema failed ({len(errors)} errors)")
     if supply["run_id"] != run_id or supply["source_snapshot_sha256"] != source_snapshot_sha256:
         raise Blocked(f"{JOB}: supply run/source identity mismatch")
-    terminal, terminal_file_sha = _terminal(supply_root, run_id)
+    terminal, terminal_path, terminal_file_sha = _terminal(
+        pool_root, expected_spec=expected_spec, context=context,
+        rendezvous_parent=rendezvous_parent, run_id=run_id)
     dependencies, graph_sha = _graph()
     bindings = {item["job_id"]: item for item in supply["producers"]}
     if len(bindings) != len(supply["producers"]):
@@ -245,7 +248,7 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
         raise Blocked(f"{JOB}: supply contains a producer outside the graph join")
     terminal_by_id = {item["instance_id"]: item for item in terminal["instances"]}
     claimed: set[str] = set()
-    producers, copies, gaps = [], [(supply_root / TERMINAL, TERMINAL)], []
+    producers, copies, gaps = [], [(terminal_path, TERMINAL)], []
     for edge in dependencies:
         job = edge["job"]
         binding = bindings.get(job)
@@ -312,25 +315,46 @@ def _code_hashes() -> dict[str, str]:
     return result
 
 
-def current_inputs(run_id: str, supply_root: Path, source_snapshot_sha256: str) -> dict[str, Any]:
+def current_inputs(run_id: str, supply_root: Path, source_snapshot_sha256: str, *,
+                   pool_root: Path, expected_spec: Any, context: Any,
+                   rendezvous_parent: Path) -> dict[str, Any]:
     supply_root = _real_directory(supply_root, "supply_root")
+    pool_root = _real_directory(pool_root, "pool_root")
+    rendezvous_parent = _real_directory(rendezvous_parent, "rendezvous_parent")
+    terminal, terminal_path, terminal_file_sha = _terminal(
+        pool_root, expected_spec=expected_spec, context=context,
+        rendezvous_parent=rendezvous_parent, run_id=run_id)
     return {"run_id": run_id, "job": JOB, "supply_root": str(supply_root),
             "source_snapshot_sha256": source_snapshot_sha256,
-            "supply_hashes": tree_hashes(supply_root), "code": _code_hashes()}
+            "supply_hashes": tree_hashes(supply_root), "pool_root": str(pool_root),
+            "pool_hashes": tree_hashes(pool_root), "rendezvous_parent": str(rendezvous_parent),
+            "rendezvous_hashes": tree_hashes(rendezvous_parent),
+            "expected_spec_sha256": _hash(expected_spec),
+            "terminal_manifest_sha256": terminal["manifest_sha256"],
+            "terminal_file_sha256": terminal_file_sha,
+            "terminal_path": str(terminal_path), "code": _code_hashes()}
 
 
-def _derive_from_record(record: dict[str, Any]):
+def _derive_from_record(record: dict[str, Any], *, expected_spec: Any, context: Any):
     supply_root = Path(record["supply_root"])
-    if tree_hashes(supply_root) != record["supply_hashes"]:
+    pool_root = Path(record["pool_root"])
+    rendezvous_parent = Path(record["rendezvous_parent"])
+    if (_hash(expected_spec) != record["expected_spec_sha256"] or
+            tree_hashes(supply_root) != record["supply_hashes"] or
+            tree_hashes(pool_root) != record["pool_hashes"] or
+            tree_hashes(rendezvous_parent) != record["rendezvous_hashes"]):
         raise Blocked(f"{JOB}: supplied generation changed after inputs were recorded")
     return inspect_supply(supply_root, run_id=record["run_id"],
-                          source_snapshot_sha256=record["source_snapshot_sha256"])
+                          source_snapshot_sha256=record["source_snapshot_sha256"],
+                          pool_root=pool_root, expected_spec=expected_spec, context=context,
+                          rendezvous_parent=rendezvous_parent)
 
 
-def _validate_attempt(attempt: Path, record: dict[str, Any]) -> None:
+def _validate_attempt(attempt: Path, record: dict[str, Any], *, expected_spec: Any,
+                      context: Any) -> None:
     if read_json(attempt / "inputs.json") != record:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
-    expected, _copies = _derive_from_record(record)
+    expected, _copies = _derive_from_record(record, expected_spec=expected_spec, context=context)
     found = read_json(attempt / RESULT)
     if found != expected or found["manifest_sha256"] != manifest_sha256(found):
         raise Blocked(f"{JOB}: intel manifest is stale or changed")
@@ -346,14 +370,18 @@ def _validate_attempt(attempt: Path, record: dict[str, Any]) -> None:
 
 
 def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha256: str,
+        pool_root: Path, expected_spec: Any, context: Any, rendezvous_parent: Path,
         force: bool = False) -> dict[str, Any]:
     """Nominal worker entry point; deliberately has no graph/Dagster binding yet."""
     base = root(run_id)
-    resume = f"evidence_assembly.run({run_id!r}, <dagster-id>, supply_root=<path>, source_snapshot_sha256=<hash>)"
+    resume = (f"evidence_assembly.run({run_id!r}, <dagster-id>, supply_root=<path>, "
+              "source_snapshot_sha256=<hash>, pool_root=<path>, expected_spec=<spec>, "
+              "context=<PoolContext>, rendezvous_parent=<path>)")
 
     def derive():
-        record = current_inputs(run_id, supply_root, source_snapshot_sha256)
-        manifest, _copies = _derive_from_record(record)
+        record = current_inputs(run_id, supply_root, source_snapshot_sha256, pool_root=pool_root,
+            expected_spec=expected_spec, context=context, rendezvous_parent=rendezvous_parent)
+        manifest, _copies = _derive_from_record(record, expected_spec=expected_spec, context=context)
         if manifest["assembly_status"] != "COMPLETE":
             missing = [item["job_id"] for item in manifest["producers"]
                        if item["disposition"] == "missing"]
@@ -362,7 +390,7 @@ def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha2
 
     def execute(allocation, record, fingerprint):
         attempt = allocation["attempt"]
-        manifest, copies = _derive_from_record(record)
+        manifest, copies = _derive_from_record(record, expected_spec=expected_spec, context=context)
         for source, relative in copies:
             target = attempt.joinpath(*PurePosixPath(relative).parts)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -385,24 +413,28 @@ def run(run_id: str, dagster_id: str, *, supply_root: Path, source_snapshot_sha2
             execution_status="OK_WITH_GAPS" if gaps else "OK",
             summary=f"Assembled {len(manifest['producers'])} terminal producer records without executing target content.",
             status_record=status, artifact_paths=artifact_paths, gaps=gaps or None,
-            pre_envelope_validate=lambda path, _status: _validate_attempt(path, record))
+            pre_envelope_validate=lambda path, _status: _validate_attempt(
+                path, record, expected_spec=expected_spec, context=context))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
         worker_kind=WORKER_KIND, output_contract=CONTRACT, resume_command=resume,
         derive_inputs=derive, fingerprint_inputs=lambda value: _hash(value),
         execute_attempt=execute, preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": JOB,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes()}, force=force,
-        post_validate=lambda attempt, _envelope, record: _validate_attempt(attempt, record),
+        post_validate=lambda attempt, _envelope, record: _validate_attempt(
+            attempt, record, expected_spec=expected_spec, context=context),
         blocked_summary="Evidence assembly preflight refused incomplete, stale, or corrupt producers.",
         failed_summary="Evidence assembly did not publish.")
 
 
 def validate(run_id: str, *, supply_root: Path, source_snapshot_sha256: str,
+             pool_root: Path, expected_spec: Any, context: Any, rendezvous_parent: Path,
              pointer: dict[str, Any] | None = None) -> Path:
     base = root(run_id)
-    record = current_inputs(run_id, supply_root, source_snapshot_sha256)
+    record = current_inputs(run_id, supply_root, source_snapshot_sha256, pool_root=pool_root,
+        expected_spec=expected_spec, context=context, rendezvous_parent=rendezvous_parent)
     pointer = pointer or read_json(base / "accepted.json")
     attempt, _envelope = validate_published(base, pointer, _hash(record),
         expected_run_id=run_id, expected_job_id=JOB)
-    _validate_attempt(attempt, record)
+    _validate_attempt(attempt, record, expected_spec=expected_spec, context=context)
     return attempt
