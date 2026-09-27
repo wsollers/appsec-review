@@ -20,6 +20,7 @@ import synthesis_report_worker
 import bounded_transform_orchestration as bounded_transforms
 import dependency_orchestration as dependency_jobs
 import vendor_evidence_orchestration as vendor_evidence_jobs
+import automatic_evidence_inputs
 import control_lane_orchestration as control_lane_jobs
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
@@ -32,6 +33,20 @@ import owasp_dispatch
 import owasp_join_publisher as owasp_join_publisher_worker
 import ir_evidence as ir_evidence_worker
 import joern_cpg as joern_cpg_worker
+import api_collection_intelligence_ingest as api_collection_intelligence_worker
+import binary_cfg as binary_cfg_worker
+import binary_intelligence_ingest as binary_intelligence_worker
+import binary_triage as binary_triage_worker
+import debug_symbol_index as debug_symbol_index_worker
+import doc_intelligence_ingest as doc_intelligence_worker
+import native_sast as native_sast_worker
+import operations_doc_ingest as operations_doc_worker
+import standards_source_ingest as standards_source_worker
+import test_coverage_ingest as test_coverage_worker
+import test_execution as test_execution_worker
+import test_intelligence_ingest as test_intelligence_worker
+import test_result_ingest as test_result_worker
+import remediation_proposal as remediation_proposal_worker
 import resource_pools
 import json
 import os
@@ -586,6 +601,69 @@ def code_property_graph():
     code_property_graph_standalone_work(build_execution_config())
 
 
+def run_automatic_common_worker(context, configured, worker):
+    """Run a worker whose complete input is derived from accepted run-owned state."""
+    result = worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
+    base = worker.root(configured['engagement_run_id']) if hasattr(worker, 'root') else data_path(
+        configured['engagement_run_id'], 'jobs', worker.JOB)
+    attempt = base / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(attempt / getattr(worker, 'RESULT', 'result.json'))),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+def automatic_common_lifecycle_op(job_id, worker, pool):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def automatic_worker(context, configured, upstream):
+        return run_automatic_common_worker(context, configured, worker)
+    return automatic_worker
+
+
+api_collection_intelligence_work = automatic_common_lifecycle_op(
+    '02-api-collection-intelligence-ingest', api_collection_intelligence_worker, CPU_POOL)
+doc_intelligence_work = automatic_common_lifecycle_op(
+    '02-doc-intelligence-ingest', doc_intelligence_worker, CPU_POOL)
+test_intelligence_work = automatic_common_lifecycle_op(
+    '02-test-intelligence-ingest', test_intelligence_worker, CPU_POOL)
+operations_doc_work = automatic_common_lifecycle_op(
+    '02-operations-doc-ingest', operations_doc_worker, CPU_POOL)
+standards_source_work = automatic_common_lifecycle_op(
+    '02-standards-source-ingest', standards_source_worker, CPU_POOL)
+debug_symbol_index_work = automatic_common_lifecycle_op(
+    '02-debug-symbol-index', debug_symbol_index_worker, CPU_POOL)
+binary_triage_work = automatic_common_lifecycle_op(
+    '02-binary-triage', binary_triage_worker, CPU_POOL)
+binary_cfg_work = automatic_common_lifecycle_op(
+    '02-binary-cfg', binary_cfg_worker, CPU_POOL)
+binary_intelligence_work = automatic_common_lifecycle_op(
+    '02-binary-intelligence-ingest', binary_intelligence_worker, CPU_POOL)
+test_execution_lifecycle_work = automatic_common_lifecycle_op(
+    '02-test-execution', test_execution_worker, OFFLINE_DOCKER_POOL)
+test_result_lifecycle_work = automatic_common_lifecycle_op(
+    '02-test-result-ingest', test_result_worker, CPU_POOL)
+test_coverage_lifecycle_work = automatic_common_lifecycle_op(
+    '02-test-coverage-ingest', test_coverage_worker, CPU_POOL)
+remediation_proposal_lifecycle_work = automatic_common_lifecycle_op(
+    '11-remediation-proposal', remediation_proposal_worker, CPU_POOL)
+
+
+@op(name='job_02_native_sast', ins={'configured': In(dict), 'upstream': In(list)},
+    pool=OFFLINE_DOCKER_POOL)
+def native_sast_lifecycle_work(context, configured, upstream):
+    run_id = configured['engagement_run_id']
+    base = native_build_worker.root(run_id)
+    pointer = read_json(base / 'accepted.json')
+    result = native_sast_worker.run(run_id, context.run_id, native_build_root=base,
+        native_build_fingerprint=pointer['fingerprint'], force=configured['force'])
+    attempt = native_sast_worker.root(run_id) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(attempt / native_sast_worker.RESULT)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': result['attempt_id']})
+    return result
+
+
 def run_ir_evidence(context, configured, job_id):
     result = ir_evidence_worker.run_job(
         configured['engagement_run_id'], context.run_id, job_id, configured['force'])
@@ -873,6 +951,43 @@ def run_vendor_evidence_job(context, configured, job_id):
         'envelope': MetadataValue.path(str(root / 'attempts' / result['attempt_id'] / 'result.json')),
         'attempt_id': result['attempt_id']})
     return result
+
+
+def run_automatic_evidence_job(context, configured, job_id):
+    run_id = configured['engagement_run_id']
+    request = automatic_evidence_inputs.prepare(run_id, job_id, context.run_id)
+    if job_id in automatic_evidence_inputs.VENDOR_JOBS:
+        result = vendor_evidence_jobs.execute(job_id=job_id, run_id=run_id,
+            dagster_run_id=context.run_id, **request)
+        base = data_path(run_id, 'jobs', job_id, 'whole')
+    else:
+        result = dependency_jobs.execute(job_id=job_id, run_id=run_id, **request)
+        base = data_path(run_id, 'jobs', job_id)
+    attempt = base / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(base)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'attempt_id': result['attempt_id'],
+        'automatic_request': MetadataValue.path(request['input_path'])})
+    return result
+
+
+def automatic_evidence_lifecycle_op(job_id, pool):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def automatic_evidence(context, configured, upstream):
+        return run_automatic_evidence_job(context, configured, job_id)
+    return automatic_evidence
+
+
+secrets_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-secrets-inventory', OFFLINE_DOCKER_POOL)
+iac_config_scan_lifecycle_work = automatic_evidence_lifecycle_op('02-iac-config-scan', OFFLINE_DOCKER_POOL)
+container_image_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-container-image-inventory', OFFLINE_DOCKER_POOL)
+mobile_sast_lifecycle_work = automatic_evidence_lifecycle_op('02-mobile-sast', OFFLINE_DOCKER_POOL)
+sbom_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-sbom-inventory', OFFLINE_DOCKER_POOL)
+sca_vulnerability_match_lifecycle_work = automatic_evidence_lifecycle_op('02-sca-vulnerability-match', OFFLINE_DOCKER_POOL)
+license_scan_lifecycle_work = automatic_evidence_lifecycle_op('02-license-scan', OFFLINE_DOCKER_POOL)
+dependency_lifecycle_lifecycle_work = automatic_evidence_lifecycle_op('02-dependency-lifecycle', CPU_POOL)
 
 
 @op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
@@ -1273,6 +1388,28 @@ LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
 LIFECYCLE_OPS['02-ir-link']=ir_link_work
 LIFECYCLE_OPS['02-ir-facts']=ir_facts_work
 LIFECYCLE_OPS['02-code-property-graph']=code_property_graph_work
+LIFECYCLE_OPS['02-api-collection-intelligence-ingest']=api_collection_intelligence_work
+LIFECYCLE_OPS['02-doc-intelligence-ingest']=doc_intelligence_work
+LIFECYCLE_OPS['02-test-intelligence-ingest']=test_intelligence_work
+LIFECYCLE_OPS['02-operations-doc-ingest']=operations_doc_work
+LIFECYCLE_OPS['02-standards-source-ingest']=standards_source_work
+LIFECYCLE_OPS['02-native-sast']=native_sast_lifecycle_work
+LIFECYCLE_OPS['02-debug-symbol-index']=debug_symbol_index_work
+LIFECYCLE_OPS['02-binary-triage']=binary_triage_work
+LIFECYCLE_OPS['02-binary-cfg']=binary_cfg_work
+LIFECYCLE_OPS['02-binary-intelligence-ingest']=binary_intelligence_work
+LIFECYCLE_OPS['02-test-execution']=test_execution_lifecycle_work
+LIFECYCLE_OPS['02-test-result-ingest']=test_result_lifecycle_work
+LIFECYCLE_OPS['02-test-coverage-ingest']=test_coverage_lifecycle_work
+LIFECYCLE_OPS['02-secrets-inventory']=secrets_inventory_lifecycle_work
+LIFECYCLE_OPS['02-iac-config-scan']=iac_config_scan_lifecycle_work
+LIFECYCLE_OPS['02-container-image-inventory']=container_image_inventory_lifecycle_work
+LIFECYCLE_OPS['02-mobile-sast']=mobile_sast_lifecycle_work
+LIFECYCLE_OPS['02-sbom-inventory']=sbom_inventory_lifecycle_work
+LIFECYCLE_OPS['02-sca-vulnerability-match']=sca_vulnerability_match_lifecycle_work
+LIFECYCLE_OPS['02-license-scan']=license_scan_lifecycle_work
+LIFECYCLE_OPS['02-dependency-lifecycle']=dependency_lifecycle_lifecycle_work
+LIFECYCLE_OPS['11-remediation-proposal']=remediation_proposal_lifecycle_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
