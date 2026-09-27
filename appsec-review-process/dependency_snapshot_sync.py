@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import shutil
+import subprocess
 import tarfile
 import tempfile
 from typing import Any, Callable
@@ -68,8 +69,11 @@ def _authorize(url: str, grants: Any, *, run_id: str, source: str, now: str) -> 
 def _spec(value: Any) -> dict[str, Any]:
     fields = {"database_kind", "url", "sha256", "bytes", "archive", "metadata",
               "required_paths", "max_extracted_bytes", "max_files"}
-    if (not isinstance(value, dict) or set(value) != fields or value.get("database_kind") not in snapshots.KINDS or
-            value.get("archive") not in {"tar", "tar.gz", "zip"} or not isinstance(value.get("url"), str) or
+    present = set(value) if isinstance(value, dict) else set()
+    if (not isinstance(value, dict) or present not in (fields, fields | {"target_path"}) or
+            value.get("database_kind") not in snapshots.KINDS or
+            value.get("archive") not in {"file", "tar", "tar.gz", "tar.zst", "zip"} or
+            not isinstance(value.get("url"), str) or
             not snapshots.SHA.fullmatch(str(value.get("sha256"))) or isinstance(value.get("bytes"), bool) or
             not isinstance(value.get("bytes"), int) or not 0 < value["bytes"] <= HARD_MAX_ARCHIVE_BYTES or
             isinstance(value.get("max_extracted_bytes"), bool) or not isinstance(value.get("max_extracted_bytes"), int) or
@@ -84,6 +88,12 @@ def _spec(value: Any) -> dict[str, Any]:
         path = _safe_member(name); required.append(path.as_posix())
     if not required or len(required) != len(set(required)):
         raise SyncBlocked("snapshot sync requires a unique non-empty required path set")
+    if value["archive"] == "file":
+        target = _safe_member(value.get("target_path"))
+        if target.as_posix() not in required:
+            raise SyncBlocked("file snapshot target must be one of the required paths")
+    elif "target_path" in value:
+        raise SyncBlocked("target_path is valid only for a file snapshot")
     return value
 
 
@@ -110,7 +120,10 @@ def _copy_member(incoming, target: Path, state: dict[str, int], spec: dict[str, 
 
 def _extract(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
     state = {"files": 0, "bytes": 0}
-    if spec["archive"] == "zip":
+    if spec["archive"] == "file":
+        with archive.open("rb") as incoming:
+            _copy_member(incoming, destination.joinpath(*_safe_member(spec["target_path"]).parts), state, spec)
+    elif spec["archive"] == "zip":
         with zipfile.ZipFile(archive) as source:
             for item in source.infolist():
                 path = _safe_member(item.filename)
@@ -120,7 +133,33 @@ def _extract(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
                 with source.open(item) as incoming:
                     _copy_member(incoming, destination.joinpath(*path.parts), state, spec)
     else:
-        with tarfile.open(archive, "r:gz" if spec["archive"] == "tar.gz" else "r:") as source:
+        expanded = archive
+        if spec["archive"] == "tar.zst":
+            expanded = archive.with_name("archive.tar")
+            limit = spec["max_extracted_bytes"] + (spec["max_files"] + 2) * 512
+            try:
+                process = subprocess.Popen(["/usr/bin/zstd", "--decompress", "--stdout", str(archive)],
+                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            except OSError as exc:
+                raise SyncBlocked("zstd decompressor is unavailable") from exc
+            written = 0
+            try:
+                assert process.stdout is not None
+                with expanded.open("xb") as output:
+                    while True:
+                        chunk = process.stdout.read(1024 * 1024)
+                        if not chunk: break
+                        written += len(chunk)
+                        if written > limit:
+                            process.kill()
+                            raise SyncBlocked("snapshot archive exceeds its decompressed tar limit")
+                        output.write(chunk)
+                if process.wait() != 0:
+                    raise SyncBlocked("snapshot archive zstd decompression failed")
+            finally:
+                if process.poll() is None:
+                    process.kill(); process.wait()
+        with tarfile.open(expanded, "r:gz" if spec["archive"] == "tar.gz" else "r:") as source:
             for item in source:
                 path = _safe_member(item.name)
                 if item.isdir(): continue
