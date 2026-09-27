@@ -58,6 +58,8 @@ def _code_hashes(job: str) -> dict[str, str]:
         ROOT.parent / "schemas/static-intelligence-record.schema.json")
     values["schemas/static-intelligence-source.schema.json"] = file_hash(
         ROOT.parent / "schemas/static-intelligence-source.schema.json")
+    values["schemas/static-intelligence-binding.schema.json"] = file_hash(
+        ROOT.parent / "schemas/static-intelligence-binding.schema.json")
     return values
 
 

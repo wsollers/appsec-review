@@ -1,1 +1,60 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"doc-intelligence.schema.json","type":"object","additionalProperties":false,"required":["schema","run_id","job_id","attempt_id","status","source","sources","records","coverage_gaps","static_only"],"properties":{"schema":{"const":"appsec-review/doc-intelligence/1"},"run_id":{"type":"string"},"job_id":{"const":"02-doc-intelligence-ingest"},"attempt_id":{"type":"string"},"status":{"enum":["OK","OK_WITH_GAPS"]},"source":{"type":"object"},"sources":{"type":"array","items":{"$ref":"static-intelligence-source.schema.json"}},"records":{"type":"array","items":{"$ref":"static-intelligence-record.schema.json"}},"coverage_gaps":{"type":"array","items":{"type":"string"}},"static_only":{"const":true}}}
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "doc-intelligence.schema.json",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "schema",
+        "run_id",
+        "job_id",
+        "attempt_id",
+        "status",
+        "source",
+        "sources",
+        "records",
+        "coverage_gaps",
+        "static_only"
+    ],
+    "properties": {
+        "schema": {
+            "const": "appsec-review/doc-intelligence/1"
+        },
+        "run_id": {
+            "type": "string"
+        },
+        "job_id": {
+            "const": "02-doc-intelligence-ingest"
+        },
+        "attempt_id": {
+            "type": "string"
+        },
+        "status": {
+            "enum": [
+                "OK",
+                "OK_WITH_GAPS"
+            ]
+        },
+        "source": {"$ref":"static-intelligence-binding.schema.json"},
+        "sources": {
+            "type": "array",
+            "items": {
+                "$ref": "static-intelligence-source.schema.json"
+            }
+        },
+        "records": {
+            "type": "array",
+            "items": {
+                "$ref": "static-intelligence-record.schema.json"
+            }
+        },
+        "coverage_gaps": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "static_only": {
+            "const": true
+        }
+    }
+}
