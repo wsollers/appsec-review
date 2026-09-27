@@ -8,18 +8,8 @@
   "properties": {
     "schema": {"const": "appsec-review/owasp-applicability-request/1.0"},
     "run_id": {"type": "string"},
-    "input_manifest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["attempt_id", "accepted_pointer_path", "accepted_pointer_sha256", "manifest_path", "manifest_sha256"],
-      "properties": {
-        "attempt_id": {"type": "string"},
-        "accepted_pointer_path": {"type": "string"},
-        "accepted_pointer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "manifest_path": {"type": "string"},
-        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-      }
-    },
+    "input_manifest": {"$ref": "owasp-input-manifest-binding.schema.json"},
+    "component_map": {"$ref": "owasp-component-map-binding.schema.json"},
     "assigned_reviewer": {
       "type": "object",
       "additionalProperties": false,
@@ -48,7 +38,14 @@
               "rationale": {"type": "string"},
               "decided_at": {"type": "string"}
             }
-          }
+          },
+          "tags": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "trust_role": {"type": "string"},
+          "evidence_roots": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "classification_state": {"enum": ["known", "partial", "unknown"]},
+          "component_type": {"type": "string"},
+          "coarse_group": {"type": "string"},
+          "deployability": {"type": "string"}
         }
       }
     },

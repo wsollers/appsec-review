@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "owasp-component-routing.schema.json",
+  "title": "Complete component routing into OWASP applicability",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "selection_id", "source_snapshot_sha256", "generation_sha256", "component_map", "input_manifest", "component_count", "selected_control_count", "expected_target_count", "component_ids", "rule_ids", "gaps", "claim_limits"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-component-routing/1.0"},
+    "run_id": {"type": "string"},
+    "selection_id": {"type": "string"},
+    "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generation_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "component_map": {"$ref": "owasp-component-map-binding.schema.json"},
+    "input_manifest": {"$ref": "owasp-input-manifest-binding.schema.json"},
+    "component_count": {"type": "integer", "minimum": 1},
+    "selected_control_count": {"type": "integer", "minimum": 1},
+    "expected_target_count": {"type": "integer", "minimum": 1},
+    "component_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+    "rule_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "gaps": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["gap_id", "component_id", "kind", "summary", "rescope_required"],
+      "properties": {
+        "gap_id": {"type": "string"}, "component_id": {"type": "string"},
+        "kind": {"const": "cannot_determine"}, "summary": {"type": "string"},
+        "rescope_required": {"const": true}
+      }
+    }},
+    "claim_limits": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  }
+}

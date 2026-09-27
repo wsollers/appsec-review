@@ -57,6 +57,7 @@
       "source_sast",
       "native_memory_analysis",
       "fuzz_target_triage",
+      "owasp_component_routing",
       "owasp_validation_worklist",
       "stig_srg_validation_worklist",
       "deployment_hardening",
@@ -219,6 +220,14 @@
           "13-fuzz-target-triage"
         ],
         "relationship": "config-driven standalone bounded transform; full-review input assembly remains blocked"
+      },
+      {
+        "job": "owasp_component_routing",
+        "lifecycle_jobs": [
+          "01-component-characterization",
+          "04-owasp-validation-worklist"
+        ],
+        "relationship": "automatic accepted component-map to T04 applicability-request bridge; T03/T04-T14 remain separate OWASP processes"
       },
       {
         "job": "owasp_validation_worklist",
@@ -448,6 +457,7 @@
       "source_sast",
       "native_memory_analysis",
       "fuzz_target_triage",
+      "owasp_component_routing",
       "owasp_validation_worklist",
       "stig_srg_validation_worklist",
       "deployment_hardening",
@@ -491,6 +501,7 @@
       "source_sast",
       "native_memory_analysis",
       "fuzz_target_triage",
+      "owasp_component_routing",
       "owasp_validation_worklist",
       "stig_srg_validation_worklist",
       "deployment_hardening",
@@ -535,6 +546,7 @@
       "source_sast",
       "native_memory_analysis",
       "fuzz_target_triage",
+      "owasp_component_routing",
       "owasp_validation_worklist",
       "stig_srg_validation_worklist",
       "deployment_hardening",

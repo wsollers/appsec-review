@@ -108,6 +108,12 @@ CLAIM_CLASS_POLICIES = {
             "applicability", "tailoring", "evidence-requirement", "coverage-gap",
         },
     },
+    "owasp-applicability-request": {
+        "claim_class_id": "control_routing",
+        "allowed_assertions": {
+            "component-classification", "applicability", "coverage-gap", "rescope-trigger",
+        },
+    },
     "stig-srg-validation-worklist": {
         "claim_class_id": "control_worklist",
         "allowed_assertions": {

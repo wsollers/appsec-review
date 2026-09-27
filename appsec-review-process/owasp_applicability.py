@@ -23,6 +23,7 @@ from execution_state import (
 )
 import reference_snapshots
 from schema_validate import validate_document
+from publish_job_output import validate_published
 
 
 JOB_ID = "04-owasp-applicability"
@@ -91,6 +92,105 @@ def _load_input_manifest(run_id: str, reference: dict[str, Any]) -> dict[str, An
     if manifest["run_id"] != run_id or manifest["selection_id"] != manifest["selection"]["selection_id"]:
         raise Blocked("T03 input manifest run/selection mismatch")
     return manifest
+
+
+def _validate_component_binding(run_id: str, request: dict[str, Any],
+                                input_manifest: dict[str, Any]) -> None:
+    """Recheck the assembler's accepted component-map lineage at the T04 trust boundary."""
+    binding = request.get("component_map")
+    if binding is None:  # Historical explicit T04 requests remain supported.
+        return
+    data_root = data_path(run_id)
+    pointer_path = _run_file(data_root, binding["accepted_pointer_path"],
+                             binding["accepted_pointer_sha256"])
+    if pointer_path.relative_to(data_root).parts != ("jobs", "01-component-characterization", "accepted.json"):
+        raise ValueError("component-map pointer is not the characterization accepted pointer")
+    pointer = read_json(pointer_path)
+    fingerprint = pointer.get("fingerprint")
+    if not isinstance(fingerprint, str):
+        raise Blocked("component-map accepted pointer lacks its fingerprint")
+    attempt, envelope = validate_published(
+        pointer_path.parent, pointer, fingerprint, expected_run_id=run_id,
+        expected_job_id="01-component-characterization")
+    if pointer["attempt_id"] != binding["attempt_id"]:
+        raise Blocked("component-map request does not name the newest accepted attempt")
+    artifact_path = _run_file(data_root, binding["artifact_path"], binding["artifact_sha256"])
+    expected = attempt / "component-purpose-map.json"
+    artifacts = {row.get("path"): row.get("sha256") for row in envelope.get("artifacts", [])}
+    if (artifact_path.absolute() != expected.absolute() or
+            artifacts.get("component-purpose-map.json") != binding["artifact_sha256"]):
+        raise Blocked("component-map request artifact is not published by the accepted attempt")
+    component_map = read_json(artifact_path)
+    errors = validate_document(component_map, "component-purpose-map.schema.json")
+    if errors:
+        raise Blocked("component-map request artifact no longer validates")
+    if (component_map["source_snapshot_sha256"] != binding["source_snapshot_sha256"] or
+            component_map["evidence_manifest_lineage"]["generation_sha256"] != binding["generation_sha256"]):
+        raise Blocked("component-map request has mixed source/generation lineage")
+    entry_matches = []
+    for entry in input_manifest["entries"]:
+        producer = entry.get("producer") or {}
+        if (entry.get("kind") == "component_map" and
+                entry.get("artifact") == {"path": binding["artifact_path"],
+                                           "sha256": binding["artifact_sha256"]} and
+                producer.get("job_id") == "01-component-characterization" and
+                producer.get("attempt_id") == binding["attempt_id"] and
+                producer.get("accepted_pointer_path") == binding["accepted_pointer_path"] and
+                producer.get("accepted_pointer_sha256") == binding["accepted_pointer_sha256"] and
+                (entry.get("source_snapshot") or {}).get("snapshot_id") == binding["source_snapshot_sha256"]):
+            entry_matches.append(entry)
+    if len(entry_matches) != 1:
+        raise Blocked("T03 manifest does not admit the exact bound component map")
+    source_components = {row["component_id"]: row for row in component_map["functional_components"]}
+    projected = {row["component_id"]: row for row in request["components"]}
+    if len(projected) != len(request["components"]) or set(projected) != set(source_components):
+        raise Blocked("applicability request does not project every component exactly once")
+    tags = {component_id: [] for component_id in source_components}
+    for tag in component_map["tag_cloud"]:
+        for component_id in tag["component_ids"]:
+            tags.setdefault(component_id, []).append(tag["tag"])
+    for component_id, source in source_components.items():
+        row = projected[component_id]
+        expected_roots = sorted(set(source["path_patterns"] + source["representative_locations"]))
+        affected = {value for unknown in component_map["unknowns"]
+                    for value in unknown["affected_component_ids"]}
+        state = ("unknown" if source["confidence"] == "low" or
+                 source["ownership"]["kind"] == "unknown" or source["deployability"] == "unknown"
+                 else "partial" if component_id in affected or source["confidence"] == "medium"
+                 else "known")
+        if (row["classification_hash"] != digest(source) or
+                row["name"] != source["name"] or row["input_ids"] != [entry_matches[0]["input_id"]] or
+                row["scope_status"] != "in_scope" or row["scope_authority"] is not None or
+                row.get("tags") != sorted(set(tags.get(component_id, []))) or
+                row.get("trust_role") != source["trust_boundary_relevance"] or
+                row.get("evidence_roots") != expected_roots or row.get("classification_state") != state or
+                row.get("component_type") != source["component_type"] or
+                row.get("coarse_group") != source["coarse_group"] or
+                row.get("deployability") != source["deployability"]):
+            raise Blocked(f"{component_id}: projected classification differs from the accepted map")
+
+
+def _validate_assembled_request_path(run_id: str, request_path: Path,
+                                     request: dict[str, Any]) -> None:
+    """Automatic requests are consumed only from the newest accepted assembler attempt."""
+    if "component_map" not in request:
+        return
+    base = data_path(run_id, "jobs", "04-owasp-component-routing")
+    pointer_path = base / "accepted.json"
+    if not pointer_path.is_file() or pointer_path.is_symlink():
+        raise Blocked("automatic applicability request has no accepted routing assembly")
+    pointer = read_json(pointer_path)
+    fingerprint = pointer.get("fingerprint")
+    if not isinstance(fingerprint, str):
+        raise Blocked("routing assembly pointer lacks its input fingerprint")
+    attempt, envelope = validate_published(
+        base, pointer, fingerprint, expected_run_id=run_id,
+        expected_job_id="04-owasp-component-routing")
+    expected = attempt / "owasp-applicability-request.json"
+    artifacts = {row.get("path"): row.get("sha256") for row in envelope.get("artifacts", [])}
+    if (request_path.absolute() != expected.absolute() or
+            artifacts.get("owasp-applicability-request.json") != file_hash(request_path)):
+        raise Blocked("automatic applicability request is not the newest accepted assembler artifact")
 
 
 def _reference_root(root: Path, pin: dict[str, Any]) -> Path:
@@ -217,6 +317,13 @@ def _base_row(selection_id: str, control: dict[str, Any], component: dict[str, A
         "proof_obligations": control["proof_obligations"],
         "component_name": component["name"], "classification_hash": component["classification_hash"],
         "classification_input_ids": component["input_ids"], "override_ids": [],
+        "component_tags": component.get("tags", []),
+        "component_trust_role": component.get("trust_role", ""),
+        "component_evidence_roots": component.get("evidence_roots", []),
+        "component_classification_state": component.get("classification_state", "unknown"),
+        "component_type": component.get("component_type", ""),
+        "component_coarse_group": component.get("coarse_group", ""),
+        "component_deployability": component.get("deployability", "unknown"),
         "rescope_state": "none", "invalidated_result_ids": [], "rescope_actions": [],
     }
 
@@ -394,6 +501,8 @@ def _build(request: dict[str, Any], input_manifest: dict[str, Any], controls: li
              "claim_limits": ["Applicability is not control satisfaction, a finding, severity, exploitability, or certification.",
                               "out_of_scope is an engagement boundary and is not technical not_applicable.",
                               "cannot_determine and conditional targets remain visible gaps."]}
+    if "component_map" in request:
+        model["component_map"] = request["component_map"]
     applicable = {"schema": "appsec-review/owasp-applicable-controls/1.0", "run_id": request["run_id"],
                   "selection_id": selection_id,
                   "rows": [row for row in rows if row["applicability_status"] in {"applicable", "conditional"}]}
@@ -417,6 +526,7 @@ def _validate_request(run_id: str, request: dict[str, Any], reference_root: Path
     if request["run_id"] != run_id:
         raise ValueError("applicability request run mismatch")
     input_manifest = _load_input_manifest(run_id, request["input_manifest"])
+    _validate_component_binding(run_id, request, input_manifest)
     controls, profiles = _selected_controls(input_manifest, reference_root)
     return _build(request, input_manifest, controls, profiles, instant)
 
@@ -459,6 +569,7 @@ def build(run_id: str, request_path: Path | None = None, *, reference_root: Path
         raise Blocked("create the run through run_process.py --start first")
     request_path = beneath(root, Path(request_path or (root / "inputs" / "owasp-applicability-request.json")))
     request = read_json(request_path)
+    _validate_assembled_request_path(run_id, request_path, request)
     instant = clock()
     if instant.tzinfo is None:
         raise ValueError("applicability clock must be timezone-aware")

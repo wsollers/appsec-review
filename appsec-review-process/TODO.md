@@ -1425,6 +1425,16 @@ index but its changed lifecycle needs live requalification and common-envelope m
 may consume it. OWASP T11-T13 remains a standalone core until T14 supplies its common publication,
 graph and Dagster bindings.
 
+**OWASP component-routing assembler (2026-09-27): UNIT-QUALIFIED, REGISTERED STANDALONE.**
+`04-owasp-component-routing` now derives the complete T04 applicability request from the newest
+accepted `01-component-characterization` map and newest accepted T03 OWASP manifest. It preserves
+exact accepted pointer/artifact/source-generation lineage, projects every functional component with
+tags, trust role and evidence roots, and records unknown or unmatched classifications as
+`cannot_determine` rescope gaps without inferring N/A. T04 independently revalidates the accepted
+assembler artifact and component projection. The remaining integration boundary is the existing
+one: T03 and T04-T14 are still separate OWASP processes and require full-review graph composition
+plus live qualification; the assembler itself is no longer a hand-authored-input gap.
+
 **First-report milestone reached 2026-09-27.** T14 publishes the OWASP matrix, gaps and routes in a
 common accepted envelope. L01 and the nominal L05-L08 adversarial/refutation/independent-
 verification/scoring chain preserve distinct lifecycle-origin and final ledger heads, bind accepted

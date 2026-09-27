@@ -10,6 +10,7 @@
     "run_id": {"type": "string"},
     "selection_id": {"type": "string"},
     "input_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "component_map": {"$ref": "owasp-component-map-binding.schema.json"},
     "generated_at": {"type": "string"},
     "assigned_reviewer": {
       "type": "object",

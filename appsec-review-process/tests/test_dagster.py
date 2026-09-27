@@ -35,7 +35,7 @@ class DagsterTests(unittest.TestCase):
         self.assertIn('critical_findings_sarif',{job.name for job in repository.get_all_jobs()})
         self.assertIn('ossf_scorecard',{job.name for job in repository.get_all_jobs()})
         self.assertIn('repository_partition_discovery',{job.name for job in repository.get_all_jobs()})
-        for job in ('native_memory_analysis','fuzz_target_triage','owasp_validation_worklist',
+        for job in ('native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist',
                     'stig_srg_validation_worklist','deployment_hardening','sbom_inventory',
                     'sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability',
                     'persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum',

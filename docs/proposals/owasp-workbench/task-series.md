@@ -152,6 +152,11 @@ technical N/A, and ambiguous cases remain visible gaps.
 Implemented by `appsec-review-process/owasp_applicability.py` and the closed T04 applicability
 schemas documented in `schemas/README.md`. The worker:
 
+- receives its complete request automatically from `owasp_component_routing.py`, which binds the
+  newest accepted component-purpose map to the newest accepted T03 manifest, projects every
+  functional component, preserves tags/trust roles/evidence roots and source generation, and leaves
+  unknown or unmatched classifications as explicit `cannot_determine`/rescope gaps;
+
 - consumes an explicit `runs/<run_id>/inputs/owasp-applicability-request.json` and verifies the
   accepted T03 pointer, manifest, and selected reference snapshots again before publication;
 - enumerates the full selected-control by component matrix itself, so a caller cannot silently
@@ -173,6 +178,12 @@ CLI foundation:
 
 ```text
 python -B appsec-review-process/owasp_applicability.py --run-id <run_id>
+```
+
+The full accepted-input bridge and T04 happy path can be run without hand-authoring the request:
+
+```text
+python -B appsec-review-process/owasp_component_routing.py --run-id <run_id> --run-applicability
 ```
 
 This is not a registered graph job and does not dispatch validators or launch dynamic work. T05

@@ -48,11 +48,15 @@ Composable review schemas (added for the registry/worklist layer):
   run-owned artifact references, and accepted raw/derived intelligence manifest. The contract is
   static/offline, rejects dynamic/network/mutation permissions, treats indexes as locators, and
   records stale-but-valid NVD as a gap rather than control or finding proof.
-- `owasp-applicability-request.schema.json`, `owasp-applicability-citation.schema.json`,
+- `owasp-applicability-request.schema.json`, `owasp-component-routing.schema.json`,
+  `owasp-component-map-binding.schema.json`, `owasp-input-manifest-binding.schema.json`,
+  `owasp-applicability-citation.schema.json`,
   `owasp-applicability-signal.schema.json`, `owasp-applicability-decision.schema.json`, and
   `owasp-applicability-override.schema.json` -- the T04 request and closed decision primitives.
   They require typed positive signals, canonical citations, named authority, and an append-only
-  assigned-reviewer override chain; absence is deliberately not a signal type.
+  assigned-reviewer override chain; absence is deliberately not a signal type. The routing and
+  binding schemas preserve the newest accepted component-map pointer, source generation, complete
+  component projection, and explicit `cannot_determine`/rescope accounting before T04.
 - `owasp-applicability-row.schema.json`, `owasp-applicability-model.schema.json`,
   `owasp-applicable-controls.schema.json`, and `owasp-applicability-gaps.schema.json` -- the complete
   selected-control/component applicability matrix, its dispatch-eligible projection, and unresolved
