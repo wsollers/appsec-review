@@ -179,6 +179,17 @@ class DependencyWorkersTest(unittest.TestCase):
             self.run_request("sbom", "missing", request)
         self.assertFalse((self.out / "02-sbom-inventory").exists())
 
+    def test_valid_cyclonedx_without_components_is_accepted_with_bounded_gap(self):
+        output, receipt, expected = self.tool("02-sbom-inventory", "syft", {
+            "bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
+            "metadata": {"component": {"type": "file", "name": "/workspace"}}})
+        envelope = self.run_request("sbom", "empty-cyclonedx", self.request(
+            tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected))
+        result = json.loads(self.result_path(envelope, "outputs/sbom-manifest.json").read_text())
+        self.assertEqual(result["components"], [])
+        self.assertEqual(envelope["execution_status"], "OK_WITH_GAPS")
+        self.assertEqual(envelope["gaps"], ["no-dependency-components-detected"])
+
     def test_mutated_receipt_from_real_attempt_is_rejected(self):
         _output, receipt, binding = self.tool("02-sbom-inventory", "syft", {"components": []})
         forged = json.loads(receipt.read_text()); forged["tool_id"] = "caller-selected-tool"

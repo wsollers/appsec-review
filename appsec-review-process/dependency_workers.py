@@ -246,7 +246,12 @@ def _sbom_rows(tool: dict[str, Any], request: dict[str, Any], job: str) -> list[
     if tool.get("bomFormat") != "CycloneDX":
         if not isinstance(rows, list): raise WorkerBlocked(f"{job}: tool export has no components array")
         return rows
-    if not isinstance(rows, list): raise WorkerBlocked(f"{job}: CycloneDX has no components array")
+    # CycloneDX permits an omitted components member when a scan discovers no
+    # dependency components.  Preserve that as an empty, evidence-backed
+    # inventory; malformed non-list values still fail closed.
+    if rows is None: rows = []
+    if not isinstance(rows, list): raise WorkerBlocked(f"{job}: CycloneDX components is not an array")
+    if not rows: return []
     source_files = _source_files(request, job); normalized = []
     for raw in rows:
         if not isinstance(raw, dict) or not isinstance(raw.get("name"), str):
@@ -350,8 +355,9 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
               "components": components}
     errors = validate_document(result, "sbom-inventory.schema.json")
     if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors)")
+    gaps = [] if components else ["no-dependency-components-detected"]
     return {"outputs/sbom.cdx.json": cdx_bytes, "outputs/sbom-manifest.json": _canonical(result),
-            "outputs/pinned-tool-evidence.json": _canonical(receipt)}, []
+            "outputs/pinned-tool-evidence.json": _canonical(receipt)}, gaps
 
 
 def _database_block(raw: dict[str, Any], evaluated: str, max_age: int) -> dict[str, Any]:
