@@ -1412,6 +1412,11 @@ qualifies E03-E05, two new implementation lanes close the remaining compiled-evi
 | **Q18** independent qualification | ACTIVE, READ-ONLY | E03-E05 candidates, then E06-E10 candidates | Approve nominal cores and F02 compatibility separately from shared/live readiness. |
 | **D18** master/report path | ACTIVE | shared integration and the remaining D05-D08/S01/F01/F02/F03/threat/OWASP/synthesis sequence | Integrate serially and keep advancing the shortest honest path to a generated report. |
 
+The next independent producer lane is **D05-D08-core** (CLAIMED): document, API-collection, static
+test-intelligence and operations-document ingestion. It owns only new dedicated workers,
+schemas/contracts/registry records, fixtures and focused tests. The fixture's zero-input/README-only
+paths must publish explicit skips/gaps and F02-compatible receipts, never fabricated intelligence.
+
 First-report milestone: produce one immutable, evidence-backed draft report for the tracked fixture.
 It requires accepted native/source/IR/binary/test evidence, F01/F02 assembly, F03 component mapping,
 the threat/OWASP worklists, independent verification, scoring and `10-synthesis-report`. It does not
