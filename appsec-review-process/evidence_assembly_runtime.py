@@ -143,9 +143,11 @@ def _build(run_root: Path, run_id: str, dagster_run_id: str, *, force: bool,
     outer = {"path": PROMPT, "sha256": _sha(prompt.read_bytes()), "bytes": prompt.stat().st_size}
     permission = _permission(run_id, snapshot, now)
     budget = dict(persona_dispatch.PERSONA_BUDGETS[template["budget_default"]])
+    # Output units include model thinking; keep the template's probe budget for output units and
+    # time (100k units, 900 s) so a long think does not fail an instance whose values are filled
+    # mechanically anyway (ADR-0013).
     budget.update({"input_byte_limit": 2 * 1024 * 1024, "input_unit_limit": 100_000,
-                   "output_byte_limit": 128 * 1024, "output_unit_limit": 20_000,
-                   "output_file_limit": 4, "timeout_seconds": 300})
+                   "output_byte_limit": 128 * 1024, "output_file_limit": 4})
     groups = []
     for edge, source, _binding in sources:
         producer_root = source["root"]
@@ -171,7 +173,7 @@ def _build(run_root: Path, run_id: str, dagster_run_id: str, *, force: bool,
         "max_persona_output_units": len(groups) * budget["output_unit_limit"],
         "max_total_timeout_seconds": len(groups) * budget["timeout_seconds"]},
         "resource_pool_policy": {"allowed_pools": [resource_pools.PERSONA_LLM]}, "wait_all": True,
-        "rendezvous_timeout_seconds": max(600, len(groups) * 300), "empty_pool_reason": None,
+        "rendezvous_timeout_seconds": max(600, len(groups) * budget["timeout_seconds"]), "empty_pool_reason": None,
         "worker_groups": groups}
     pool_parent = run_root / "data" / "jobs" / evidence_assembly.JOB / "pools"
     rendezvous_parent = run_root / "data" / "jobs" / evidence_assembly.JOB / "rendezvous"

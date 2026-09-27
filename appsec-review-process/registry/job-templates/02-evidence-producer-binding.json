@@ -18,7 +18,7 @@
   "implemented": true,
   "permissions": ["read-run-data"],
   "applicability": "each graph-required evidence-assembly producer",
-  "timeout_seconds": 300,
+  "timeout_seconds": 900,
   "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
   "coordinator": "intake-coordinator"
 }
