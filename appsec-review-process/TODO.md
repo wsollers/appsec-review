@@ -1400,6 +1400,18 @@ file-disjoint implementation lanes; recovery hardening remains deferred.
 | **Q18** independent qualification | QUEUED, READ-ONLY | both candidate commits and their combined tree | Verify nominal producer contracts, lineage, determinism, fail-closed malformed/stale inputs and compatibility with F02; keep live/Dagster readiness separate. |
 | **D18** master integration | ACTIVE | prompts, TODO, shared graph/parity/Dagster/catalog surfaces | Review and integrate qualified cores serially; do not mark lifecycle jobs executable until real bindings and happy-path evidence exist. |
 
+### Active report-path continuation — 2026-09-27
+
+The target is the first evidence-backed report, not hardening completeness. While Q18 independently
+qualifies E03-E05, two new implementation lanes close the remaining compiled-evidence branches:
+
+| Lane | Status | Exclusive scope | Nominal exit condition |
+|---|---|---|---|
+| **E06-E08-core** binary/debug intelligence | CLAIMED | debug-symbol index, binary triage, CFG and binary-intelligence workers plus dedicated schemas/contracts/registry/tests | Bind accepted binary/build/source identities through deterministic symbol, static triage and CFG evidence; unsupported/stripped/M02 gaps remain explicit and no binary executes. |
+| **E09-E10-core** test evidence | CLAIMED | test execution, result-ingest and coverage-ingest workers plus dedicated schemas/contracts/registry/tests | Execute only an authorized bounded test plan, then bind normalized outcomes and source coverage to the exact execution/binary/source generation. |
+| **Q18** independent qualification | ACTIVE, READ-ONLY | E03-E05 candidates, then E06-E10 candidates | Approve nominal cores and F02 compatibility separately from shared/live readiness. |
+| **D18** master/report path | ACTIVE | shared integration and the remaining D05-D08/S01/F01/F02/F03/threat/OWASP/synthesis sequence | Integrate serially and keep advancing the shortest honest path to a generated report. |
+
 Cross-cutting capability ownership is explicit:
 
 | Manifest capability | Owning batches |

@@ -55,6 +55,8 @@ Task-scoped prompts:
 | [component-characterization-core.md](component-characterization-core.md) | F03-core: complete component characterization against exact F02 manifest lineage while shared integration remains serialized. |
 | [native-sast-core.md](native-sast-core.md) | E03-core: implement the nominal compiled-source analyzer producer from accepted native-build lineage. |
 | [ir-evidence-core.md](ir-evidence-core.md) | E04/E05-core: implement nominal IR capture, deterministic link and facts producers without verdict promotion. |
+| [binary-intelligence-core.md](binary-intelligence-core.md) | E06-E08-core: implement nominal debug-symbol, static binary triage, CFG and intelligence producers. |
+| [test-evidence-core.md](test-evidence-core.md) | E09-E10-core: implement nominal authorized test execution plus result and coverage ingestion. |
 | [design-parity-worker-envelope.md](design-parity-worker-envelope.md) | Design parity Workstream B, batch 9 (common worker envelope); holds run ids `TODO.md` cites. |
 | [scripts-to-pipeline-migration.md](scripts-to-pipeline-migration.md) | Migrating review jobs out of `scripts/` (see the Script Migration Rule in `AGENTS.md`). |
 | [g02-owasp-workbench-decision.md](g02-owasp-workbench-decision.md) | G02 OWASP control workbench decision. |
