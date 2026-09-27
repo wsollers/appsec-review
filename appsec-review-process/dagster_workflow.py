@@ -22,6 +22,7 @@ import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
 import ossf_scorecard as ossf_scorecard_worker
 import owasp_component_routing as owasp_component_routing_worker
+import ir_evidence as ir_evidence_worker
 import resource_pools
 import json
 import os
@@ -400,6 +401,69 @@ def source_sast_standalone_work(context, configured):
      op_retry_policy=RetryPolicy(max_retries=0))
 def source_sast():
     source_sast_standalone_work(build_execution_config())
+
+
+def run_ir_evidence(context, configured, job_id):
+    result = ir_evidence_worker.run_job(
+        configured['engagement_run_id'], context.run_id, job_id, configured['force'])
+    attempt = data_path(configured['engagement_run_id'], 'jobs', job_id,
+                        'attempts', result['attempt_id'])
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(attempt)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(pool=OFFLINE_DOCKER_POOL)
+def ir_capture_work(context, configured, _native_build):
+    return run_ir_evidence(context, configured, '02-ir-capture')
+
+
+@op(pool=OFFLINE_DOCKER_POOL)
+def ir_capture_standalone_work(context, configured):
+    return run_ir_evidence(context, configured, '02-ir-capture')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def ir_capture():
+    ir_capture_standalone_work(build_execution_config())
+
+
+@op(pool=OFFLINE_DOCKER_POOL)
+def ir_link_work(context, configured, _capture):
+    return run_ir_evidence(context, configured, '02-ir-link')
+
+
+@op(pool=OFFLINE_DOCKER_POOL)
+def ir_link_standalone_work(context, configured):
+    return run_ir_evidence(context, configured, '02-ir-link')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def ir_link():
+    ir_link_standalone_work(build_execution_config())
+
+
+@op(pool=OFFLINE_DOCKER_POOL)
+def ir_facts_work(context, configured, _linked):
+    return run_ir_evidence(context, configured, '02-ir-facts')
+
+
+@op(pool=OFFLINE_DOCKER_POOL)
+def ir_facts_standalone_work(context, configured):
+    return run_ir_evidence(context, configured, '02-ir-facts')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def ir_facts():
+    ir_facts_standalone_work(build_execution_config())
 
 
 BOUNDED_TRANSFORM_CONFIG = {'input_path': str, 'output_root': str, 'attempt_id': str}
@@ -969,6 +1033,7 @@ LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
                                  '02-binary-hardening',
+                                 '02-ir-capture','02-ir-link','02-ir-facts',
                                  '02-repository-partition-discovery','02-dev-project-discovery',
                                  '02-devops-project-discovery','02-sre-operations-topology',
                                  '02-build-index','02-build-classify','02-build-plan',
@@ -977,6 +1042,9 @@ LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-native-build']=native_build_work
 LIFECYCLE_OPS['02-source-sast']=source_sast_work
 LIFECYCLE_OPS['02-binary-hardening']=binary_hardening_lifecycle_work
+LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
+LIFECYCLE_OPS['02-ir-link']=ir_link_work
+LIFECYCLE_OPS['02-ir-facts']=ir_facts_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
@@ -1007,7 +1075,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -1017,7 +1085,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

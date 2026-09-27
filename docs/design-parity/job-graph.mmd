@@ -44,7 +44,7 @@ flowchart TD
   02_test_intelligence_ingest -->|required| 02_evidence_assembly
   02_source_sast_post -->|required| 02_evidence_assembly
   02_native_sast -->|required| 02_evidence_assembly
-  02_ir_facts -->|required| 02_evidence_assembly
+  02_ir_facts_post -->|required| 02_evidence_assembly
   02_test_result_ingest -->|required| 02_evidence_assembly
   02_test_coverage_ingest -->|required| 02_evidence_assembly
   02_operations_doc_ingest -->|required| 02_evidence_assembly
@@ -72,7 +72,7 @@ flowchart TD
   05_native_memory --> 05_native_memory_post["05-native-memory: post-validation and publish"]
   01_component_characterization -->|required| 05_native_memory_config
   02_native_sast -->|required| 05_native_memory_config
-  02_ir_facts -->|required| 05_native_memory_config
+  02_ir_facts_post -->|required| 05_native_memory_config
   06_cve_reachability_config["06-cve-reachability: resolve job configuration"] --> 06_cve_reachability_pre["06-cve-reachability: pre-validation"]
   06_cve_reachability_pre --> 06_cve_reachability["06-cve-reachability: work or reuse"]
   06_cve_reachability --> 06_cve_reachability_post["06-cve-reachability: post-validation and publish"]
@@ -154,12 +154,18 @@ flowchart TD
   00_intake_post -->|required| 02_source_sast_config
   02_native_sast["02-native-sast (planned; not dispatched)"]
   02_native_build_post -->|required| 02_native_sast
-  02_ir_capture["02-ir-capture (planned; not dispatched)"]
-  02_native_build_post -->|required| 02_ir_capture
-  02_ir_link["02-ir-link (planned; not dispatched)"]
-  02_ir_capture -->|required| 02_ir_link
-  02_ir_facts["02-ir-facts (planned; not dispatched)"]
-  02_ir_link -->|required| 02_ir_facts
+  02_ir_capture_config["02-ir-capture: resolve job configuration"] --> 02_ir_capture_pre["02-ir-capture: pre-validation"]
+  02_ir_capture_pre --> 02_ir_capture["02-ir-capture: work or reuse"]
+  02_ir_capture --> 02_ir_capture_post["02-ir-capture: post-validation and publish"]
+  02_native_build_post -->|required| 02_ir_capture_config
+  02_ir_link_config["02-ir-link: resolve job configuration"] --> 02_ir_link_pre["02-ir-link: pre-validation"]
+  02_ir_link_pre --> 02_ir_link["02-ir-link: work or reuse"]
+  02_ir_link --> 02_ir_link_post["02-ir-link: post-validation and publish"]
+  02_ir_capture_post -->|required| 02_ir_link_config
+  02_ir_facts_config["02-ir-facts: resolve job configuration"] --> 02_ir_facts_pre["02-ir-facts: pre-validation"]
+  02_ir_facts_pre --> 02_ir_facts["02-ir-facts: work or reuse"]
+  02_ir_facts --> 02_ir_facts_post["02-ir-facts: post-validation and publish"]
+  02_ir_link_post -->|required| 02_ir_facts_config
   02_debug_symbol_index["02-debug-symbol-index (planned; not dispatched)"]
   02_native_build_post -->|required| 02_debug_symbol_index
   02_binary_triage["02-binary-triage (planned; not dispatched)"]

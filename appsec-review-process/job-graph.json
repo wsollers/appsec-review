@@ -1024,7 +1024,7 @@
       "lane": "02-evidence-pregather",
       "contract": "ir-capture",
       "template": "02-ir-capture",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-ir-capture",
       "dependencies": [
         {
@@ -1047,7 +1047,7 @@
       "lane": "02-evidence-pregather",
       "contract": "ir-link",
       "template": "02-ir-link",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-ir-link",
       "dependencies": [
         {
@@ -1070,7 +1070,7 @@
       "lane": "02-evidence-pregather",
       "contract": "ir-facts",
       "template": "02-ir-facts",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-ir-facts",
       "dependencies": [
         {

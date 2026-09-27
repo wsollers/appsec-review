@@ -1297,9 +1297,9 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-native-build`](#job-02-native-build) | `native-build` | implemented_not_qualified | `02-build-configure` |
 | `02-evidence-pregather` | [`02-source-sast`](#job-02-source-sast) | `source-sast` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-native-sast`](#job-02-native-sast) | `native-sast` | standalone_only | `02-native-build` |
-| `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `ir-capture` | standalone_only | `02-native-build` |
-| `02-evidence-pregather` | [`02-ir-link`](#job-02-ir-link) | `ir-link` | standalone_only | `02-ir-capture` |
-| `02-evidence-pregather` | [`02-ir-facts`](#job-02-ir-facts) | `ir-facts` | standalone_only | `02-ir-link` |
+| `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `ir-capture` | implemented_not_qualified | `02-native-build` |
+| `02-evidence-pregather` | [`02-ir-link`](#job-02-ir-link) | `ir-link` | implemented_not_qualified | `02-ir-capture` |
+| `02-evidence-pregather` | [`02-ir-facts`](#job-02-ir-facts) | `ir-facts` | implemented_not_qualified | `02-ir-link` |
 | `02-evidence-pregather` | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | `debug-symbol-index` | standalone_only | `02-native-build` |
 | `02-evidence-pregather` | [`02-binary-triage`](#job-02-binary-triage) | `binary-triage` | standalone_only | `02-native-build` |
 | `02-evidence-pregather` | [`02-binary-cfg`](#job-02-binary-cfg) | `binary-cfg` | standalone_only | `02-binary-triage`, `02-debug-symbol-index` |
@@ -1749,18 +1749,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `ir-capture` (claim class `ir_static_evidence`) |
-| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
-| Worker | `appsec-review-process/ir_capture.py:run` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `implemented_not_qualified`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/ir_evidence.py:run_job` |
+| Resource pool | `docker` |
+| Dagster | standalone: `ir_capture`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
 | Declared inputs (registry/job-templates/02-ir-capture.json) | accepted native build<br>clang compile database |
 | Produces | `runs/<run_id>/data/jobs/02-ir-capture/` |
 | Output files (registry/output-contracts/ir-capture.json) | ir-capture.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-ir-link`](#job-02-ir-link) |
-| Gaps | `shared_dagster_graph_not_integrated`, `toolchain_factory_binding_missing`, `no_live_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
+| Gaps | `live_dagster_qualification_missing` |
+| Next prerequisite | Qualify the registered Dagster lifecycle op against an accepted native build. |
 
 <a id="job-02-ir-link"></a>
 
@@ -1769,18 +1769,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `ir-link` (claim class `ir_static_evidence`) |
-| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
-| Worker | `appsec-review-process/ir_link.py:run` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `implemented_not_qualified`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/ir_evidence.py:run_job` |
+| Resource pool | `docker` |
+| Dagster | standalone: `ir_link`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
 | Consumes (graph) | [`02-ir-capture`](#job-02-ir-capture) (required, contract `ir-capture`) |
 | Declared inputs (registry/job-templates/02-ir-link.json) | accepted IR capture |
 | Produces | `runs/<run_id>/data/jobs/02-ir-link/` |
 | Output files (registry/output-contracts/ir-link.json) | ir-link.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-ir-facts`](#job-02-ir-facts) |
-| Gaps | `shared_dagster_graph_not_integrated`, `toolchain_factory_binding_missing`, `no_live_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
+| Gaps | `live_dagster_qualification_missing` |
+| Next prerequisite | Qualify the registered Dagster lifecycle op against accepted capture evidence. |
 
 <a id="job-02-ir-facts"></a>
 
@@ -1789,18 +1789,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `ir-facts` (claim class `ir_static_evidence`) |
-| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
-| Worker | `appsec-review-process/ir_facts.py:run` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `implemented_not_qualified`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/ir_evidence.py:run_job` |
+| Resource pool | `docker` |
+| Dagster | standalone: `ir_facts`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
 | Consumes (graph) | [`02-ir-link`](#job-02-ir-link) (required, contract `ir-link`) |
 | Declared inputs (registry/job-templates/02-ir-facts.json) | accepted linked LLVM module |
 | Produces | `runs/<run_id>/data/jobs/02-ir-facts/` |
 | Output files (registry/output-contracts/ir-facts.json) | ir-facts.json<br>b13-receipts.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory) |
-| Gaps | `shared_dagster_graph_not_integrated`, `toolchain_factory_binding_missing`, `no_live_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
+| Gaps | `live_dagster_qualification_missing` |
+| Next prerequisite | Qualify the registered Dagster lifecycle op against accepted linked IR. |
 
 <a id="job-02-debug-symbol-index"></a>
 

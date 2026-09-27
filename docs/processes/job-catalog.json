@@ -9046,13 +9046,15 @@
    "lane": "02-evidence-pregather",
    "name": "IR Capture",
    "contract": "ir-capture",
-   "implemented": false,
-   "readiness": "standalone_only",
-   "execution_mode": "deterministic_python",
-   "worker": "appsec-review-process/ir_capture.py:run",
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/ir_evidence.py:run_job",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "ir_capture"
+   ],
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "ir-evidence-producer",
@@ -9088,12 +9090,9 @@
    "outputs_source": "registry/output-contracts/ir-capture.json",
    "claim_class": "ir_static_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "toolchain_factory_binding_missing",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "live_dagster_qualification_missing"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Qualify the registered Dagster lifecycle op against an accepted native build.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -9106,13 +9105,15 @@
    "lane": "02-evidence-pregather",
    "name": "IR Link",
    "contract": "ir-link",
-   "implemented": false,
-   "readiness": "standalone_only",
-   "execution_mode": "deterministic_python",
-   "worker": "appsec-review-process/ir_link.py:run",
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/ir_evidence.py:run_job",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "ir_link"
+   ],
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "ir-evidence-producer",
@@ -9144,12 +9145,9 @@
    "outputs_source": "registry/output-contracts/ir-link.json",
    "claim_class": "ir_static_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "toolchain_factory_binding_missing",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "live_dagster_qualification_missing"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Qualify the registered Dagster lifecycle op against accepted capture evidence.",
    "consumes": [
     "job:02-ir-capture"
    ],
@@ -9162,13 +9160,15 @@
    "lane": "02-evidence-pregather",
    "name": "IR Facts",
    "contract": "ir-facts",
-   "implemented": false,
-   "readiness": "standalone_only",
-   "execution_mode": "deterministic_python",
-   "worker": "appsec-review-process/ir_facts.py:run",
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/ir_evidence.py:run_job",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "ir_facts"
+   ],
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "ir-evidence-producer",
@@ -9200,12 +9200,9 @@
    "outputs_source": "registry/output-contracts/ir-facts.json",
    "claim_class": "ir_static_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "toolchain_factory_binding_missing",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "live_dagster_qualification_missing"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Qualify the registered Dagster lifecycle op against accepted linked IR.",
    "consumes": [
     "job:02-ir-link"
    ],
