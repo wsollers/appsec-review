@@ -212,7 +212,7 @@ flowchart TD
   02_binary_hardening_config["02-binary-hardening: resolve job configuration"] --> 02_binary_hardening_pre["02-binary-hardening: pre-validation"]
   02_binary_hardening_pre --> 02_binary_hardening["02-binary-hardening: work or reuse"]
   02_binary_hardening --> 02_binary_hardening_post["02-binary-hardening: post-validation and publish"]
-  00_intake_post -->|required| 02_binary_hardening_config
+  02_native_build_post -->|required| 02_binary_hardening_config
   02_mobile_sast_config["02-mobile-sast: resolve job configuration"] --> 02_mobile_sast_pre["02-mobile-sast: pre-validation"]
   02_mobile_sast_pre --> 02_mobile_sast["02-mobile-sast: work or reuse"]
   02_mobile_sast --> 02_mobile_sast_post["02-mobile-sast: post-validation and publish"]

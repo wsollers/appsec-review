@@ -1470,13 +1470,13 @@
       "namespace": "02-binary-hardening",
       "dependencies": [
         {
-          "job": "00-intake",
+          "job": "02-native-build",
           "kind": "required",
-          "contract": "intake",
+          "contract": "native-build",
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Static hardening properties of binaries supplied in the source snapshot (ADR-0010 G7); built binaries stay with 02-binary-triage. No execution, debugger or symbol server; skipped only with a zero-input probe receipt.",
+      "planned_scope": "Static hardening properties of the immutable binary projection published by the accepted 02-native-build attempt. No target execution, debugger or symbol server; every scanned byte is bound to the native-build pointer, envelope, result and artifact hash.",
       "required_artifacts": [
         "manifest.json",
         "status.json",

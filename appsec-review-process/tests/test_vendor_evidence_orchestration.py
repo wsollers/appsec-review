@@ -74,6 +74,7 @@ class VendorEvidenceOrchestrationTests(unittest.TestCase):
                              "contract": "fixture", "gaps": ["gap-tool-a", "gap-tool-b"]}
                 with patch.object(worker, "build", return_value=documents) as build, \
                      patch.object(worker, "materialize_attempt", side_effect=self.materialize) as materialize, \
+                     patch.object(orchestration.binary_hardening_input, "validate", return_value={}), \
                      patch.object(orchestration, "publish_validated", return_value={"attempt_id": attempt.name}) as publish:
                     result = orchestration.execute(job_id=job, run_id=self.run_id, dagster_run_id="dagster-run-1",
                         input_path=str(request), output_root=str(base), attempt_root=str(attempt),
@@ -113,6 +114,19 @@ class VendorEvidenceOrchestrationTests(unittest.TestCase):
             orchestration.execute(job_id=job, run_id=self.run_id, dagster_run_id="dagster-run-1",
                 input_path=str(request), output_root=str(base), attempt_root=str(attempt), execution_root=str(execution))
         record.assert_called_once()
+
+    def test_binary_auto_route_uses_native_projection_and_canonical_attempt(self):
+        request = self.owner / "data/jobs/02-binary-hardening/requests/dagster-auto.json"
+        with patch.object(orchestration.binary_hardening_input, "stage_request", return_value=request), \
+             patch.object(orchestration, "execute", return_value={"attempt_id": "native-dagster-auto"}) as execute:
+            result = orchestration.execute_binary_from_native(
+                run_id=self.run_id, dagster_run_id="dagster-auto")
+        base = self.owner / "data/jobs/02-binary-hardening/whole"
+        self.assertEqual(result["attempt_id"], "native-dagster-auto")
+        execute.assert_called_once_with(job_id="02-binary-hardening", run_id=self.run_id,
+            dagster_run_id="dagster-auto", input_path=str(request), output_root=str(base),
+            attempt_root=str(base / "attempts/native-dagster-auto"),
+            execution_root=str(base / "executions/native-dagster-auto"))
 
 
 if __name__ == "__main__":

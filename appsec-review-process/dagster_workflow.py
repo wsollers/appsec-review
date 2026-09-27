@@ -632,6 +632,20 @@ def binary_hardening():
     binary_hardening_work(build_execution_config())
 
 
+@op(pool=OFFLINE_DOCKER_POOL)
+def binary_hardening_lifecycle_work(context, configured, _native_build):
+    result = vendor_evidence_jobs.execute_binary_from_native(
+        run_id=configured['engagement_run_id'], dagster_run_id=context.run_id)
+    base = data_path(configured['engagement_run_id'], 'jobs', '02-binary-hardening', 'whole')
+    attempt = base / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(base)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'attempt_id': result['attempt_id'],
+        'input_kind': 'accepted-native-build-binaries'})
+    return result
+
+
 @op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
 def mobile_sast_work(context, configured):
     return run_vendor_evidence_job(context, configured, '02-mobile-sast')
@@ -954,6 +968,7 @@ from job_graph import load_graph
 LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
+                                 '02-binary-hardening',
                                  '02-repository-partition-discovery','02-dev-project-discovery',
                                  '02-devops-project-discovery','02-sre-operations-topology',
                                  '02-build-index','02-build-classify','02-build-plan',
@@ -961,6 +976,7 @@ LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
 LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-native-build']=native_build_work
 LIFECYCLE_OPS['02-source-sast']=source_sast_work
+LIFECYCLE_OPS['02-binary-hardening']=binary_hardening_lifecycle_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work

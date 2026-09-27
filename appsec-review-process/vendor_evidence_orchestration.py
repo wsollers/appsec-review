@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import binary_hardening
+import binary_hardening_input
 import container_image_inventory
 from execution_state import Blocked, beneath, data_path, file_hash, identifier, read_json, run_path
 import iac_config_scan
@@ -102,9 +103,11 @@ def execute(*, job_id: str, run_id: str, dagster_run_id: str, input_path: str,
     # The validators independently recover the source boundary from the immutable run manifest.
     manifest_value = read_json(manifest)
     declared = manifest_value.get("target", {}).get("repo_path") if isinstance(manifest_value.get("target"), dict) else None
-    if job_id in {"02-mobile-sast", "02-binary-hardening"} and (
+    if job_id == "02-mobile-sast" and (
             not isinstance(declared, str) or source != Path(declared).absolute()):
         raise Blocked("vendor evidence orchestration: source root differs from the run manifest target")
+    if job_id == "02-binary-hardening":
+        binary_hardening_input.validate(run_id, source)
     if job_id == "02-container-image-inventory" and source != (owner / "inputs").absolute():
         raise Blocked("vendor evidence orchestration: container inventory source must be the run inputs root")
 
@@ -129,3 +132,15 @@ def execute(*, job_id: str, run_id: str, dagster_run_id: str, input_path: str,
         expected_run_id=run_id, expected_job_id=job_id,
         orchestration=OrchestrationFacts(dagster_run_id, generation, observed_at))
     return pointer
+
+
+def execute_binary_from_native(*, run_id: str, dagster_run_id: str) -> dict[str, Any]:
+    """Route the current accepted native-build binaries into a canonical hardening attempt."""
+    run_id, dagster_run_id = identifier(run_id), identifier(dagster_run_id)
+    request = binary_hardening_input.stage_request(run_id, dagster_run_id)
+    base = data_path(run_id, "jobs", "02-binary-hardening", "whole").absolute()
+    attempt_id = "native-" + dagster_run_id
+    return execute(job_id="02-binary-hardening", run_id=run_id,
+        dagster_run_id=dagster_run_id, input_path=str(request), output_root=str(base),
+        attempt_root=str(base / "attempts" / attempt_id),
+        execution_root=str(base / "executions" / attempt_id))
