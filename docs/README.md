@@ -25,6 +25,7 @@ reporting, and current readiness in one place.
 | `continuation-prompts/` | Session handoffs. Start from the newest dated one. | Continuing earlier work. |
 | `processes/` | How an engagement runs: starting one (`engagement-start.md`, draft under discussion); lifecycle and evidence discipline to follow. | Operating or changing the process. |
 | `report-examples/` | Retained PDF and self-contained HTML presentation examples generated from the synthetic report fixture. | Reviewing the report format; never use these files as live scan evidence. |
+| `generated-documents/` | Retained LaTeX, PDF, and KaTeX HTML forms of the operator and executive-design documents. | Reviewing or publishing project documentation; the `.tex` file is canonical. |
 | `TODO/` | Independent task chunks that finish this reorganization and fill the missing buckets. | Picking up docs work. |
 
 Not yet written (see `TODO/`): `review-lanes/`, `images-and-tools/`; `processes/` has its first draft.

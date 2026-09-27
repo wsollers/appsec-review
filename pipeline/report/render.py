@@ -225,7 +225,8 @@ def render(data_path, out, source_root=None, embed=False):
         docs[p.name] = p.read_text()
     for name in ("report", "workbench"):
         body = html_env.get_template(f"{name}.html.j2").render(
-            katex_css=katex_css, tex_source=tex_source, docs=docs, **data)
+            katex_css=katex_css, tex_source=tex_source, docs=docs,
+            viewer=False, page_title="AppSec Review LaTeX Workbench", **data)
         # <name>.html: standalone, open locally. <name>.fragment.html: for the Artifact publisher,
         # which supplies its own doctype/head/body skeleton.
         (out / f"{name}.html").write_text(head + body)

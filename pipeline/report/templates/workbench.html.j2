@@ -1,4 +1,4 @@
-<title>LaTeX Workbench</title>
+<title>{{ page_title }}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -111,6 +111,13 @@ textarea#src{flex:1;min-height:0;width:100%;resize:none;border:0;border-right:1p
 .paper .cover .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px 16px;margin-top:12px;font-family:var(--f-head);font-size:13.5px}
 .paper .cover .meta .eyebrow{display:block}
 .paper .diagram{border:1px dashed #9AA5B1;color:#5B6878;font:12.5px var(--f-head);text-align:center;padding:18px;margin:10px 0;background:#FAFBFC}
+{% if viewer %}
+body{display:block;min-height:100%;padding:24px 12px}
+header.bar,.source-pane,.preview-pane>.lab,#unk{display:none!important}
+main.panes{display:block;min-height:auto}
+.preview-pane,#view{display:block;overflow:visible;padding:0}
+.paper{max-width:900px}
+{% endif %}
 </style>
 <style>{{ katex_css|safe }}</style>
 
@@ -126,11 +133,11 @@ textarea#src{flex:1;min-height:0;width:100%;resize:none;border:0;border-right:1p
 </header>
 
 <main class="panes">
-  <section class="pane">
+  <section class="pane source-pane">
     <div class="lab"><span>Source</span><span id="count"></span></div>
     <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="LaTeX source"></textarea>
   </section>
-  <section class="pane">
+  <section class="pane preview-pane">
     <div class="lab"><span>Preview</span><span>KaTeX math · report macros · tables · lists</span></div>
     <div id="view"><div class="paper" id="out"></div></div>
     <div id="unk" hidden></div>
@@ -550,7 +557,7 @@ function renderLatex(src){
 var srcEl=document.getElementById("src"), out=document.getElementById("out"), unk=document.getElementById("unk"),
     msg=document.getElementById("msg"), tm=document.getElementById("time"), count=document.getElementById("count");
 var DOCS=JSON.parse(document.getElementById("docs").textContent), pick=document.getElementById("pick");
-var REPORT=DOCS["report.tex"];
+var REPORT=DOCS[Object.keys(DOCS)[0]], VIEWER={{ "true" if viewer else "false" }};
 var KEY="latex-workbench-draft";
 function save(){ try{ localStorage.setItem(KEY,srcEl.value); }catch(e){} }
 function load(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
@@ -579,7 +586,7 @@ document.getElementById("copy").addEventListener("click",function(){
 srcEl.addEventListener("dragover",function(e){ e.preventDefault(); });
 srcEl.addEventListener("drop",function(e){ var f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(!f) return; e.preventDefault();
   f.text().then(function(t){ srcEl.value=t; msg.textContent="Opened "+f.name; update(); save(); }); });
-function boot(){ var d=load(); srcEl.value=d!==null&&d!==""?d:REPORT; msg.textContent=d?"Restored your draft":"Loaded the generated report.tex"; update(); }
+function boot(){ var d=VIEWER?null:load(); srcEl.value=d!==null&&d!==""?d:REPORT; msg.textContent=d?"Restored your draft":"Loaded the generated LaTeX document"; update(); }
 if(window.katex) boot(); else window.addEventListener("load",boot);
 })();
 </script>

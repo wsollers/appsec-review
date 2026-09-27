@@ -23,6 +23,19 @@ cd pipeline/report/latex && latexmk -pdf design-doc.tex   # host
 The workbench page (`build/workbench.html`) previews all three: pick one from the list, edit, and it
 re-renders as you type. TikZ diagrams show as placeholders there; they render in the PDF.
 
+LaTeX is also the canonical source for retained operator and design publications. Produce an exact
+source copy and a read-only KaTeX HTML view, then compile the same source in the pinned container:
+
+```bash
+python3 pipeline/report/render_documents.py --out docs/generated-documents \
+  pipeline/report/latex/user-guide.tex pipeline/report/latex/design-doc.tex
+SKIP_BUILD=1 bash pipeline/report/latex/build-in-docker.sh user-guide.tex design-doc.tex
+```
+
+Copy the resulting PDFs from `pipeline/report/build/latex/` beside the retained TeX and HTML. The
+HTML viewer supports the house macros and uses the same browser-side KaTeX path as the report
+workbench; TikZ figures remain labelled placeholders in HTML and render fully in PDF.
+
 ## Report renderer
 
 Renders the engagement report from one data file into three outputs:
