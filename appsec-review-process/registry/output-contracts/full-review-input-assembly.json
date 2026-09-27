@@ -1,0 +1,14 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "full-review-input-assembly",
+  "display_name": "Accepted Full Review Analysis Launch Requests",
+  "required_files": ["full-review-input-assembly.json", "status.json"],
+  "required_status_fields": ["process", "status", "requests", "accepted_sources", "qualification"],
+  "result_schema": {"artifact": "full-review-input-assembly.json", "schema_file": "full-review-input-assembly.schema.json"},
+  "validation_rules": [
+    "every named producer is the newest accepted common-envelope attempt",
+    "all accepted producers and the plan match the immutable run artifact-manifest generation",
+    "each emitted request is the exact closed dialect consumed by its registered orchestration adapter",
+    "accepted artifact hashes and pointer hashes are retained in the assembly result"
+  ]
+}

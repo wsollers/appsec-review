@@ -1,0 +1,32 @@
+{
+  "schema": "appsec-review/qualification-evidence/1.0",
+  "qualification_id": "full-review-input-assembly-accepted-nominal-v1",
+  "qualified_at": "2026-09-27T12:00:00Z",
+  "scope": "accepted producer -> full review input assembly -> exact orchestration request -> bounded worker common envelope",
+  "fixture": {
+    "source": "one native C translation unit",
+    "accepted_producer": "13-fuzz-target-triage",
+    "source_generation": "artifact-manifest-sha256-bound",
+    "request_dialects": [
+      "appsec-review/bounded-transform-request/1.0",
+      "appsec-review/vendor-evidence-orchestration-request/1.0",
+      "appsec-review/dependency-orchestration-request/1.0"
+    ]
+  },
+  "assertions": [
+    "the assembler reverified the newest accepted producer envelope, complete attempt tree, artifact schema, artifact hash and pointer hash",
+    "the bounded request payload dereferenced an accepted producer value and retained its exact accepted upstream declaration",
+    "the vendor request resolved only a run-owned source root",
+    "the SBOM request derived its exact source-file hash map from the run-owned target tree",
+    "the emitted bounded request executed through bounded_transform_orchestration and produced a CURRENT common-envelope result",
+    "stale plan generation, mixed accepted generation, traversal and unknown resolver expressions failed closed"
+  ],
+  "verification": {
+    "command": "python -m unittest appsec-review-process/tests/test_full_review_input_assembly.py appsec-review-process/tests/test_bounded_transform_orchestration.py appsec-review-process/tests/test_dependency_orchestration.py appsec-review-process/tests/test_vendor_evidence_orchestration.py",
+    "tests_run": 15,
+    "failures": 0,
+    "errors": 0,
+    "status": "PASSED"
+  },
+  "claim_boundary": "This qualifies nominal request assembly and one end-to-end bounded transform. It does not claim live availability of every pinned scanner image or offline vulnerability snapshot."
+}

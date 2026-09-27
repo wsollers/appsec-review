@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "full-review-input-plan.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "source_generation", "generated_at", "accepted_sources", "launches"],
+  "properties": {
+    "schema": {"const": "appsec-review/full-review-input-plan/1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "source_generation": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generated_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "accepted_sources": {"type": "array"},
+    "launches": {"type": "array", "minItems": 1}
+  }
+}
