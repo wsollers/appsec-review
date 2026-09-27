@@ -41,6 +41,12 @@ class ComponentCharacterizationTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    @staticmethod
+    def canonical_schema_stub(value, name):
+        if name == "intel-manifest.schema.json":
+            return []
+        return validate_document(value, name)
+
     def test_schema_registry_composition_and_claim_ceiling_are_closed(self):
         self.assertEqual(validate_document(self.value, "component-purpose-map.schema.json"), [])
         store = SchemaStore()
@@ -140,37 +146,54 @@ class ComponentCharacterizationTests(unittest.TestCase):
 
     def test_provisional_intel_manifest_requires_complete_exact_hash_bound_lineage(self):
         attempt = self.owner / "assembly"
+        terminal = attempt / "terminal-instances.json"
+        terminal.parent.mkdir(parents=True)
+        state.atomic_json(terminal, {"schema": "fixture/terminal-instances/1"})
         artifact = attempt / "assembled/evidence.json"
         artifact.parent.mkdir(parents=True)
         state.atomic_json(artifact, {"schema": "fixture/evidence/1"})
         source = self.value["source_snapshot_sha256"]
         manifest = {
             "schema": "appsec-review/intel-manifest/1.0", "run_id": "fixture-run",
-            "source_snapshot_sha256": source, "assembly_status": "COMPLETE", "generation": 7,
-            "terminal_instances": ["02-evidence-index/whole/one"],
+            "source_snapshot_sha256": source, "assembly_status": "COMPLETE",
+            "generation": {"generation_sha256": "sha256:" + "4" * 64,
+                           "graph_sha256": "sha256:" + "5" * 64,
+                           "terminal_manifest_sha256": "sha256:" + "6" * 64},
+            "terminal_instances": {"path": "terminal-instances.json",
+                "sha256": "sha256:" + state.file_hash(terminal),
+                "manifest_sha256": "sha256:" + "6" * 64, "outcome": "COMPLETE", "counts": {}},
             "producers": [{
-                "job_id": "02-evidence-index", "expected_contract": "evidence-index",
+                "job_id": "02-evidence-index", "contract": "evidence-index",
                 "disposition": "accepted", "attempt_id": "evidence-1",
                 "input_fingerprint": "sha256:" + "a" * 64, "execution_status": "OK",
-                "envelope_sha256": "b" * 64, "source_snapshot_sha256": source,
+                "accepted_pointer_sha256": "sha256:" + "8" * 64,
+                "envelope_sha256": "sha256:" + "b" * 64, "source_snapshot_sha256": source,
                 "build_lineage_sha256": None,
-                "terminal_instance_ids": ["02-evidence-index/whole/one"],
-                "coverage_gaps": [], "skip_reason": None,
+                "terminal_instance_ids": ["02-evidence-index/whole/one"], "permissions": [],
+                "gaps": [], "skip_reason": None,
                 "artifacts": [{
                     "producer_job_id": "02-evidence-index", "producer_attempt_id": "evidence-1",
-                    "producer_path": "evidence.json", "assembly_path": "assembled/evidence.json",
-                    "sha256": state.file_hash(artifact), "media_type": "application/json",
+                    "producer_path": "evidence.json", "path": "assembled/evidence.json",
+                    "sha256": "sha256:" + state.file_hash(artifact), "media_type": "application/json",
                 }],
             }],
             "coverage_gaps": [], "manifest_sha256": "sha256:" + "0" * 64,
         }
         manifest["manifest_sha256"] = cc._manifest_self_sha256(manifest)
-        envelope_artifacts = {"assembled/evidence.json": state.file_hash(artifact)}
-        errors, readable = cc._intel_manifest_errors(
-            manifest, run_id="fixture-run", source_snapshot_sha256=source,
-            attempt=attempt, envelope_artifacts=envelope_artifacts)
+        envelope_artifacts = {"terminal-instances.json": state.file_hash(terminal),
+                              "assembled/evidence.json": state.file_hash(artifact)}
+        with patch.object(cc, "validate_document", side_effect=self.canonical_schema_stub):
+            errors, readable = cc._intel_manifest_errors(
+                manifest, run_id="fixture-run", source_snapshot_sha256=source,
+                attempt=attempt, envelope_artifacts=envelope_artifacts)
         self.assertEqual(errors, [])
         self.assertEqual(readable, envelope_artifacts)
+
+        with patch.object(cc, "validate_document", side_effect=FileNotFoundError("schema absent")):
+            errors, _ = cc._intel_manifest_errors(
+                manifest, run_id="fixture-run", source_snapshot_sha256=source,
+                attempt=attempt, envelope_artifacts=envelope_artifacts)
+        self.assertTrue(any("remains blocked on F02" in error for error in errors))
 
         for mutate, expected in (
                 (lambda value: value.__setitem__("assembly_status", "INCOMPLETE"), "not a COMPLETE"),
@@ -178,13 +201,14 @@ class ComponentCharacterizationTests(unittest.TestCase):
                  "source snapshot"),
                 (lambda value: value.__setitem__("manifest_sha256", "sha256:" + "9" * 64),
                  "self hash"),
-                (lambda value: value["producers"][0]["artifacts"][0].__setitem__("sha256", "9" * 64),
+                (lambda value: value["producers"][0]["artifacts"][0].__setitem__("sha256", "sha256:" + "9" * 64),
                  "hash-bound")):
             changed = deepcopy(manifest)
             mutate(changed)
-            errors, _ = cc._intel_manifest_errors(
-                changed, run_id="fixture-run", source_snapshot_sha256=source,
-                attempt=attempt, envelope_artifacts=envelope_artifacts)
+            with patch.object(cc, "validate_document", side_effect=self.canonical_schema_stub):
+                errors, _ = cc._intel_manifest_errors(
+                    changed, run_id="fixture-run", source_snapshot_sha256=source,
+                    attempt=attempt, envelope_artifacts=envelope_artifacts)
             self.assertTrue(any(expected in error for error in errors), errors)
 
 
@@ -216,8 +240,14 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
                 "job": cc.UPSTREAM_JOB, "attempt_id": "assembly-1",
                 "pointer_sha256": "e" * 64, "envelope_sha256": "d" * 64,
                 "manifest_sha256": "b" * 64, "manifest_self_sha256": "sha256:" + "c" * 64,
-                "input_fingerprint": "sha256:" + "f" * 64, "generation": 1,
-                "terminal_instances_sha256": "1" * 64, "producers_sha256": "2" * 64,
+                "input_fingerprint": "sha256:" + "f" * 64,
+                "generation_sha256": "sha256:" + "4" * 64,
+                "graph_sha256": "sha256:" + "5" * 64,
+                "terminal_manifest_sha256": "sha256:" + "6" * 64,
+                "terminal_instances_path": "terminal-instances.json",
+                "terminal_instances_sha256": "sha256:" + "1" * 64,
+                "terminal_instances_manifest_sha256": "sha256:" + "6" * 64,
+                "producers_sha256": "2" * 64,
                 "artifact_set_sha256": "3" * 64, "artifacts": [],
             },
             "code": cc._code_hashes(),
@@ -246,6 +276,8 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
         base = run / "data/jobs" / cc.UPSTREAM_JOB
         attempt = base / "attempts/assembly-1"
         attempt.mkdir(parents=True)
+        terminal = attempt / "terminal-instances.json"
+        state.atomic_json(terminal, {"schema": "fixture/terminal-instances/1"})
         assembled = attempt / "assembled/evidence-index.json"
         assembled.parent.mkdir()
         state.atomic_json(assembled, {"schema": "fixture/evidence-index/1", "entries": []})
@@ -253,20 +285,26 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
         manifest = {
             "schema": "appsec-review/intel-manifest/1.0", "run_id": self.run_id,
             "source_snapshot_sha256": source_snapshot, "assembly_status": "COMPLETE",
-            "generation": 1, "terminal_instances": ["02-evidence-index/whole/one"],
+            "generation": {"generation_sha256": "sha256:" + "4" * 64,
+                           "graph_sha256": "sha256:" + "5" * 64,
+                           "terminal_manifest_sha256": "sha256:" + "6" * 64},
+            "terminal_instances": {"path": "terminal-instances.json",
+                "sha256": "sha256:" + state.file_hash(terminal),
+                "manifest_sha256": "sha256:" + "6" * 64, "outcome": "COMPLETE", "counts": {}},
             "producers": [{
-                "job_id": "02-evidence-index", "expected_contract": "evidence-index",
+                "job_id": "02-evidence-index", "contract": "evidence-index",
                 "disposition": "accepted", "attempt_id": "evidence-1",
                 "input_fingerprint": "sha256:" + "a" * 64, "execution_status": "OK",
-                "envelope_sha256": "b" * 64, "source_snapshot_sha256": source_snapshot,
+                "accepted_pointer_sha256": "sha256:" + "8" * 64,
+                "envelope_sha256": "sha256:" + "b" * 64, "source_snapshot_sha256": source_snapshot,
                 "build_lineage_sha256": None,
-                "terminal_instance_ids": ["02-evidence-index/whole/one"],
-                "coverage_gaps": [], "skip_reason": None,
+                "terminal_instance_ids": ["02-evidence-index/whole/one"], "permissions": [],
+                "gaps": [], "skip_reason": None,
                 "artifacts": [{
                     "producer_job_id": "02-evidence-index", "producer_attempt_id": "evidence-1",
                     "producer_path": "evidence-index.json",
-                    "assembly_path": "assembled/evidence-index.json",
-                    "sha256": state.file_hash(assembled), "media_type": "application/json",
+                    "path": "assembled/evidence-index.json",
+                    "sha256": "sha256:" + state.file_hash(assembled), "media_type": "application/json",
                 }],
             }],
             "coverage_gaps": [], "manifest_sha256": "0" * 64,
@@ -283,7 +321,7 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
             acceptance_status="CURRENT", input_fingerprint=fingerprint,
             output_contract="pregather", started_at="2026-01-01T00:00:00Z",
             finished_at="2026-01-01T00:00:01Z", summary="fixture",
-            artifacts=artifact_records(attempt, [cc.UPSTREAM_MANIFEST, "status.json",
+            artifacts=artifact_records(attempt, [cc.UPSTREAM_MANIFEST, "status.json", "terminal-instances.json",
                                                   "assembled/evidence-index.json"]))
         state.atomic_json(attempt / "result.json", envelope)
         state.atomic_json(base / "accepted.json", {
@@ -292,7 +330,9 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
             "fingerprint": fingerprint, "envelope_path": "result.json",
             "envelope_sha256": state.file_hash(attempt / "result.json"), "hashes": {},
         })
-        inputs = cc.current_inputs(self.run_id)
+        with patch.object(cc, "validate_document",
+                          side_effect=ComponentCharacterizationTests.canonical_schema_stub):
+            inputs = cc.current_inputs(self.run_id)
         staged = Path(inputs["evidence_root"])
         self.assertTrue((staged / cc.UPSTREAM_MANIFEST).is_file())
         self.assertTrue((staged / "assembled/evidence-index.json").is_file())
@@ -330,7 +370,7 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
             accepted = cc.run(self.run_id, "dagster-a")
         attempt = cc.root(self.run_id) / "attempts" / accepted["attempt_id"]
         value = state.read_json(attempt / cc.RESULT)
-        value["evidence_manifest_lineage"]["generation"] = 2
+        value["evidence_manifest_lineage"]["generation_sha256"] = "sha256:" + "9" * 64
         state.atomic_json(attempt / cc.RESULT, value)
         with self.assertRaisesRegex(state.Blocked, "identity"):
             cc._validate_attempt(self.run_id, attempt, self.inputs)

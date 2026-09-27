@@ -21,7 +21,8 @@
       "required": [
         "producer_job_id", "producer_attempt_id", "artifact_path", "manifest_sha256",
         "manifest_self_sha256", "envelope_sha256", "accepted_pointer_sha256",
-        "input_fingerprint", "generation", "terminal_instances_sha256",
+        "input_fingerprint", "generation_sha256", "graph_sha256", "terminal_manifest_sha256",
+        "terminal_instances_path", "terminal_instances_sha256", "terminal_instances_manifest_sha256",
         "producers_sha256", "artifact_set_sha256"
       ],
       "additionalProperties": false,
@@ -34,8 +35,12 @@
         "envelope_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "accepted_pointer_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "generation": {"type": ["string", "integer"]},
+        "generation_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "graph_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "terminal_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "terminal_instances_path": {"const": "terminal-instances.json"},
         "terminal_instances_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "terminal_instances_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "producers_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "artifact_set_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }

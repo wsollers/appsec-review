@@ -12,8 +12,12 @@
     "envelope_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "accepted_pointer_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
     "input_fingerprint": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-    "generation": 1,
+    "generation_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "graph_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "terminal_manifest_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "terminal_instances_path": "terminal-instances.json",
     "terminal_instances_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "terminal_instances_manifest_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
     "producers_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     "artifact_set_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
   },

@@ -95,7 +95,7 @@ def _manifest_self_sha256(manifest: dict[str, Any]) -> str:
 
 def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256: str,
                            attempt: Path, envelope_artifacts: dict[str, str]) -> tuple[list[str], dict[str, str]]:
-    """Validate only the provisional F02/F03 boundary needed by this consumer.
+    """Validate the canonical F02 document, then enforce F03 consumer constraints.
 
     F03 treats producer payloads as opaque evidence.  It verifies the COMPLETE rendezvous,
     generation/source identity, ordered producer receipts, and every assembly-relative artifact
@@ -103,85 +103,51 @@ def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256
     """
     errors: list[str] = []
     readable: dict[str, str] = {}
-    top_keys = {"schema", "run_id", "source_snapshot_sha256", "assembly_status", "generation",
-                "terminal_instances", "producers", "coverage_gaps", "manifest_sha256"}
-    if not isinstance(manifest, dict) or set(manifest) != top_keys:
-        return ["intel manifest does not match the closed provisional F02 interface"], readable
-    if manifest.get("schema") != "appsec-review/intel-manifest/1.0":
-        errors.append("intel manifest schema is not appsec-review/intel-manifest/1.0")
+    try:
+        schema_errors = validate_document(manifest, "intel-manifest.schema.json")
+    except FileNotFoundError:
+        return ["canonical intel-manifest schema is unavailable; F03 remains blocked on F02"], readable
+    if schema_errors:
+        return [f"canonical intel-manifest schema failed: {error}" for error in schema_errors], readable
     if manifest.get("run_id") != run_id:
         errors.append("intel manifest run identity differs from the engagement")
     if manifest.get("source_snapshot_sha256") != source_snapshot_sha256:
         errors.append("intel manifest source snapshot differs from the staged target")
     if manifest.get("assembly_status") != "COMPLETE":
         errors.append("intel manifest is not a COMPLETE evidence assembly")
-    generation = manifest.get("generation")
-    if not ((isinstance(generation, int) and not isinstance(generation, bool) and generation >= 1) or
-            (isinstance(generation, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}", generation))):
-        errors.append("intel manifest generation is invalid")
     terminal_instances = manifest.get("terminal_instances")
-    if (not isinstance(terminal_instances, list) or
-            any(not isinstance(item, str) or not item for item in terminal_instances) or
-            terminal_instances != sorted(set(terminal_instances))):
-        errors.append("intel manifest terminal instance ids are not unique and ordered")
-        terminal_ids: set[str] = set()
+    if terminal_instances["outcome"] != "COMPLETE":
+        errors.append("intel manifest terminal instance outcome is not COMPLETE")
+    if manifest["generation"]["terminal_manifest_sha256"] != terminal_instances["manifest_sha256"]:
+        errors.append("intel manifest generation and terminal-instance lineage differ")
+    terminal_path = terminal_instances["path"]
+    terminal_file = _beneath(attempt, terminal_path)
+    terminal_expected = terminal_instances["sha256"]
+    if (terminal_file is None or not terminal_file.is_file() or terminal_file.is_symlink() or
+            "sha256:" + file_hash(terminal_file) != terminal_expected or
+            "sha256:" + envelope_artifacts.get(terminal_path, "") != terminal_expected):
+        errors.append("intel manifest terminal instances are not the hash-bound assembly artifact")
     else:
-        terminal_ids = set(terminal_instances)
-    gaps = manifest.get("coverage_gaps")
-    if (not isinstance(gaps, list) or any(not isinstance(item, str) or not item for item in gaps) or
-            gaps != sorted(set(gaps))):
-        errors.append("intel manifest coverage gaps are not unique and ordered")
+        readable[terminal_path] = envelope_artifacts[terminal_path]
     manifest_sha = manifest.get("manifest_sha256")
     if not isinstance(manifest_sha, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest_sha):
         errors.append("intel manifest self hash is malformed")
     elif manifest_sha != _manifest_self_sha256(manifest):
         errors.append("intel manifest self hash does not match its canonical record")
 
-    producer_keys = {"job_id", "expected_contract", "disposition", "attempt_id",
-                     "input_fingerprint", "execution_status", "envelope_sha256",
-                     "source_snapshot_sha256", "build_lineage_sha256", "terminal_instance_ids",
-                     "coverage_gaps", "skip_reason", "artifacts"}
-    artifact_keys = {"producer_job_id", "producer_attempt_id", "producer_path", "assembly_path",
-                     "sha256", "media_type"}
     producers = manifest.get("producers")
-    if not isinstance(producers, list):
-        return [*errors, "intel manifest producers is not an array"], readable
-    job_ids = [item.get("job_id") for item in producers if isinstance(item, dict)]
-    if len(job_ids) != len(producers) or job_ids != sorted(set(job_ids)):
-        errors.append("intel manifest producers are not unique and ordered by job id")
+    job_ids = [item["job_id"] for item in producers]
+    if len(job_ids) != len(set(job_ids)):
+        errors.append("intel manifest repeats a producer job id")
     seen_paths: set[str] = set()
     for index, producer in enumerate(producers):
         label = f"producer[{index}]"
-        if not isinstance(producer, dict) or set(producer) != producer_keys:
-            errors.append(f"{label} does not match the closed producer receipt")
-            continue
         job_id, attempt_id = producer["job_id"], producer["attempt_id"]
-        if not isinstance(job_id, str) or not job_id:
-            errors.append(f"{label} has an invalid job id")
-        if not isinstance(producer["expected_contract"], str) or not producer["expected_contract"]:
-            errors.append(f"{label} has no expected contract")
-        if not isinstance(attempt_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,119}", attempt_id):
-            errors.append(f"{label} has an invalid attempt id")
-        for field in ("input_fingerprint", "source_snapshot_sha256"):
-            if not isinstance(producer[field], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", producer[field]):
-                errors.append(f"{label} has an invalid {field}")
+        if producer["disposition"] == "missing":
+            errors.append(f"{label} is missing from a COMPLETE assembly")
+            continue
         if producer["source_snapshot_sha256"] != source_snapshot_sha256:
             errors.append(f"{label} has mixed source lineage")
-        if not isinstance(producer["envelope_sha256"], str) or not SHA256_RE.fullmatch(producer["envelope_sha256"]):
-            errors.append(f"{label} has an invalid envelope hash")
-        build_sha = producer["build_lineage_sha256"]
-        if build_sha is not None and (not isinstance(build_sha, str) or not SHA256_RE.fullmatch(build_sha)):
-            errors.append(f"{label} has an invalid build lineage hash")
-        instance_ids = producer["terminal_instance_ids"]
-        if (not isinstance(instance_ids, list) or
-                any(not isinstance(item, str) or item not in terminal_ids for item in instance_ids) or
-                instance_ids != sorted(set(instance_ids))):
-            errors.append(f"{label} has invalid terminal instance ids")
-        producer_gaps = producer["coverage_gaps"]
-        if (not isinstance(producer_gaps, list) or
-                any(not isinstance(item, str) or not item for item in producer_gaps) or
-                producer_gaps != sorted(set(producer_gaps))):
-            errors.append(f"{label} has unordered coverage gaps")
         disposition = producer["disposition"]
         if disposition == "accepted":
             if producer["execution_status"] not in {"OK", "OK_WITH_GAPS"} or producer["skip_reason"] is not None:
@@ -189,18 +155,12 @@ def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256
         elif disposition == "authorized-skip":
             if producer["execution_status"] != "SKIPPED" or not isinstance(producer["skip_reason"], str):
                 errors.append(f"{label} authorized skip has no evidenced skip reason")
-        else:
-            errors.append(f"{label} is missing or has an unsupported disposition")
+        elif disposition != "authorized-skip":
+            errors.append(f"{label} has an unsupported disposition")
         artifacts = producer["artifacts"]
-        if not isinstance(artifacts, list):
-            errors.append(f"{label} artifacts is not an array")
-            continue
         for artifact_index, artifact in enumerate(artifacts):
             artifact_label = f"{label}.artifacts[{artifact_index}]"
-            if not isinstance(artifact, dict) or set(artifact) != artifact_keys:
-                errors.append(f"{artifact_label} does not match the closed artifact identity")
-                continue
-            path, expected = artifact["assembly_path"], artifact["sha256"]
+            path, expected = artifact["path"], artifact["sha256"]
             if artifact["producer_job_id"] != job_id or artifact["producer_attempt_id"] != attempt_id:
                 errors.append(f"{artifact_label} producer identity mismatch")
             if not _pattern_ok(artifact["producer_path"]) or not _pattern_ok(path):
@@ -209,17 +169,13 @@ def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256
             if path in seen_paths:
                 errors.append(f"{artifact_label} duplicates an assembly path")
             seen_paths.add(path)
-            if not isinstance(expected, str) or not SHA256_RE.fullmatch(expected):
-                errors.append(f"{artifact_label} sha256 is invalid")
-                continue
-            if not isinstance(artifact["media_type"], str) or not artifact["media_type"]:
-                errors.append(f"{artifact_label} media type is empty")
             candidate = _beneath(attempt, path)
             if (candidate is None or not candidate.is_file() or candidate.is_symlink() or
-                    file_hash(candidate) != expected or envelope_artifacts.get(path) != expected):
+                    "sha256:" + file_hash(candidate) != expected or
+                    "sha256:" + envelope_artifacts.get(path, "") != expected):
                 errors.append(f"{artifact_label} is not the hash-bound accepted assembly artifact")
             else:
-                readable[path] = expected
+                readable[path] = envelope_artifacts[path]
     return errors, readable
 
 
@@ -274,8 +230,11 @@ def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, 
         "pointer_sha256": file_hash(pointer_path), "envelope_sha256": file_hash(envelope_path),
         "manifest_sha256": file_hash(manifest),
         "manifest_self_sha256": manifest_value["manifest_sha256"],
-        "input_fingerprint": pointer["fingerprint"], "generation": manifest_value["generation"],
-        "terminal_instances_sha256": digest(manifest_value["terminal_instances"]),
+        "input_fingerprint": pointer["fingerprint"],
+        **manifest_value["generation"],
+        "terminal_instances_path": manifest_value["terminal_instances"]["path"],
+        "terminal_instances_sha256": manifest_value["terminal_instances"]["sha256"],
+        "terminal_instances_manifest_sha256": manifest_value["terminal_instances"]["manifest_sha256"],
         "producers_sha256": digest(manifest_value["producers"]),
         "artifact_set_sha256": digest(sorted(readable.items())),
         "artifacts": sorted(readable.items()),
@@ -398,8 +357,13 @@ def _manifest_lineage(inputs: dict[str, Any]) -> dict[str, Any]:
         "manifest_self_sha256": evidence["manifest_self_sha256"],
         "envelope_sha256": "sha256:" + evidence["envelope_sha256"],
         "accepted_pointer_sha256": "sha256:" + evidence["pointer_sha256"],
-        "input_fingerprint": evidence["input_fingerprint"], "generation": evidence["generation"],
-        "terminal_instances_sha256": "sha256:" + evidence["terminal_instances_sha256"],
+        "input_fingerprint": evidence["input_fingerprint"],
+        "generation_sha256": evidence["generation_sha256"],
+        "graph_sha256": evidence["graph_sha256"],
+        "terminal_manifest_sha256": evidence["terminal_manifest_sha256"],
+        "terminal_instances_path": evidence["terminal_instances_path"],
+        "terminal_instances_sha256": evidence["terminal_instances_sha256"],
+        "terminal_instances_manifest_sha256": evidence["terminal_instances_manifest_sha256"],
         "producers_sha256": "sha256:" + evidence["producers_sha256"],
         "artifact_set_sha256": "sha256:" + evidence["artifact_set_sha256"],
     }
