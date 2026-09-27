@@ -1,0 +1,7 @@
+{
+  "schema":"appsec-review/output-contract/0.1","contract_id":"debug-symbol-index","display_name":"Debug Symbol Index",
+  "required_files":["debug-symbol-index.json","status.json"],
+  "required_status_fields":["process","status","records","static_only","qualification"],
+  "result_schema":{"artifact":"debug-symbol-index.json","schema_file":"debug-symbol-index.schema.json"},
+  "validation_rules":["bind exact accepted native-build result, envelope, source revision, binary and build identities","index symbols deterministically without executing target binaries","represent stripped, missing, partial, mismatched and duplicate symbols as explicit gaps","keep M02 image pinning unresolved until separately decided"]
+}

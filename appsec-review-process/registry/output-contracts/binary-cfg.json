@@ -1,0 +1,7 @@
+{
+  "schema":"appsec-review/output-contract/0.1","contract_id":"binary-cfg","display_name":"Static Binary CFG",
+  "required_files":["cfg-manifest.json","status.json"],
+  "required_status_fields":["process","status","records","static_only","qualification"],
+  "result_schema":{"artifact":"cfg-manifest.json","schema_file":"binary-cfg.schema.json"},
+  "validation_rules":["re-verify exact accepted triage and symbol-index results","derive function identities from binary hash and address","reject cross-binary edges and stale build lineage","never claim runtime reachability, findings or severity","keep missing symbols, unsupported architecture, partial CFG and M02 states explicit"]
+}

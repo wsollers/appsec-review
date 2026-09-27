@@ -4,6 +4,7 @@
   "display_name": "Binary Intelligence Ingest",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
+  "implemented": false,
   "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "binary-intelligence-extractor",
@@ -13,26 +14,19 @@
   },
   "inputs": {
     "required": [
-      "target binary artifact path or binary artifact inventory",
-      "audit-binary-analysis image",
-      "writable scratch output directory"
+      "accepted native-build binary lineage",
+      "accepted binary-triage result",
+      "accepted binary-cfg result",
+      "run-owned normalized lead evidence"
     ],
     "optional": [
-      "YARA rules",
-      "source component map",
-      "SBOM or package inventory",
-      "debug symbols or separate debug files",
-      "known-good or known-bad binary comparison corpus"
+      "source component map"
     ]
   },
   "outputs": {
-    "directory": "scratch/<project>-engagement/binary-intel",
+    "directory": "runs/<run_id>/data/jobs/02-binary-intelligence-ingest",
     "files": [
-      "binary-artifact-inventory.json",
-      "binary-intelligence-summary.md",
-      "tool-evidence-manifest.json",
-      "candidate-leads.json",
-      "verification-followups.json",
+      "binary-intelligence.json",
       "status.json"
     ]
   },
