@@ -1,0 +1,7 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1", "tooling_profile_id": "threat-model-static-evidence", "display_name": "Deterministic Static Threat Modeling", "mode": "static-only",
+  "required_inputs": ["current accepted F03 component map", "hash-bound F02 evidence artifact"], "optional_inputs": [],
+  "allowed_actions": ["derive deterministic DFD records", "enumerate candidate STRIDE hypotheses", "record assumptions, gaps, completeness and rescope triggers"],
+  "disallowed_actions": ["execute target code", "access network", "publish findings", "assign severity", "assert runtime state or verification"],
+  "claim_limits": {"allowed": ["modeled_architecture", "modeled_data_flow", "trust_boundary", "candidate_threat_hypothesis", "assumption", "coverage_gap", "rescope_trigger"], "forbidden": ["finding", "verified_security_finding", "severity", "runtime_state", "compliance_verdict", "remediation_status"]}
+}

@@ -1,0 +1,7 @@
+{
+  "schema": "appsec-review/domain/0.1", "domain_id": "threat-model-core", "display_name": "Static DFD And STRIDE Modeling",
+  "surfaces": ["components", "data flows", "trust boundaries", "STRIDE candidate hypotheses", "assumptions and gaps"],
+  "common_failure_modes": ["stale component lineage", "dangling DFD references", "uncited architecture", "unassessed trust-boundary crossing", "hypothesis promoted to finding"],
+  "preferred_standards": ["STRIDE"],
+  "required_evidence_hints": ["accepted component-purpose map", "dereferenced F02 evidence", "exact producer attempt and content hashes"]
+}

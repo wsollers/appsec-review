@@ -1,0 +1,14 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "03-threat-model-dfd-stride",
+  "display_name": "Deterministic DFD And STRIDE Core",
+  "process": "03-threat-model-dfd-stride",
+  "budget_default": "standard",
+  "model": {"model": "deterministic-python", "effort": "none"},
+  "composition": {"persona_id": "developer-engineer", "role_id": "threat-model-core", "domain_id": "threat-model-core", "tooling_profile_id": "threat-model-static-evidence", "output_contract_id": "threat-model-core"},
+  "inputs": {"required": ["current accepted F03 component map", "exact F02 evidence assembly and dereferenced artifact cited through F03"], "optional": []},
+  "outputs": {"directory": "outputs/03-threat-model-dfd-stride", "files": ["integrated-threat-model.json", "threat-model-summary.md", "permission.json", "lineage.json", "status.json"]},
+  "permissions": ["read-source", "read-run-data", "write-run-data"],
+  "prompt_sections": ["governing_rules", "persona", "role", "domain", "tooling_profile", "task", "output_contract"],
+  "task_prompt": "appsec-review-process/03-threat-model-dfd-stride/task-threat-model-core.md"
+}

@@ -152,6 +152,12 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "test_evidence",
         "allowed_assertions": {"source-coverage", "coverage-gap"},
     },
+    "threat-model-core": {
+        "claim_class_id": "threat_model_candidate",
+        "allowed_assertions": {"modeled-architecture", "modeled-data-flow", "trust-boundary",
+                               "candidate-threat-hypothesis", "assumption", "coverage-gap",
+                               "rescope-trigger"},
+    },
 }
 PROMOTION_FIELDS = {
     "finding": {
