@@ -9,8 +9,9 @@ import re
 from typing import Any, Iterable
 
 from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
-from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
+from publish_job_output import ACCEPTED_SCHEMA, coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
+from worker_result import validate_worker_result
 import threat_model_core
 
 JOB = "claim-ledger-routing"
@@ -33,8 +34,20 @@ AUTHORITY = {
     "09-independent-verification": frozenset({"narrowed", "verified", "refuted", "unresolved"}),
     JOB: frozenset({"superseded"}),
 }
-AUTHORITY_ROLES = {"07-red-team-adversarial": "red-team", "08-blue-team-refutation": "blue-team",
+AUTHORITY_ROLES = {"07-red-team-adversarial": "red-team-adversary", "08-blue-team-refutation": "blue-team-refuter",
                    "09-independent-verification": "independent-verifier", JOB: "claim-ledger-custodian"}
+DECISION_PRODUCERS = {
+    "07-red-team-adversarial": ("07-red-team-adversarial", "red-team-adversarial.json", "hypotheses",
+                                "reviewer", {"HYPOTHESIS": "under_review"}),
+    "08-blue-team-refutation": ("08-blue-team-refutation", "blue-team-refutation.json", "reviews",
+                                "blue_reviewer", {"SURVIVING": "narrowed", "REFUTED": "refuted",
+                                                   "UNRESOLVED": "unresolved"}),
+    "09-independent-verification": ("09-independent-verification", "independent-verification.json",
+                                    "verifications", "verifier", {"VERIFIED": "verified",
+                                    "REFUTED": "refuted", "UNRESOLVED": "unresolved",
+                                    "BLOCKED": "unresolved"}),
+}
+DECISION_PERMISSIONS = ["read-run-data", "write-run-data"]
 PROHIBITED_KEYS = frozenset({"finding", "findings", "severity", "cvss", "runtime_state",
     "observed_runtime", "compliance", "certification", "remediation_status"})
 PROHIBITED_TEXT = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
@@ -139,6 +152,19 @@ def _entry_hash(entry: dict[str, Any]) -> str:
     return _sha(copy)
 
 
+def _admission_claim_id(entry: dict[str, Any]) -> str:
+    return "claim-" + digest({"route_id": entry["route_id"],
+        "producer": entry["producer"]["job_id"], "attempt": entry["producer"]["attempt_id"],
+        "artifact": entry["producer"]["artifact_sha256"],
+        "source_generation": entry["source_generation"],
+        "component_generation": entry["component_generation"]})[:24]
+
+
+def _event_id(entry: dict[str, Any]) -> str:
+    return "event-" + digest({key: value for key, value in entry.items()
+        if key not in {"event_id", "entry_hash"}})[:24]
+
+
 def _reject_promotions(value: Any, path: str = "$") -> None:
     if isinstance(value, dict):
         for key, item in value.items():
@@ -152,14 +178,135 @@ def _reject_promotions(value: Any, path: str = "$") -> None:
         raise Blocked(f"{JOB}: prohibited promoted claim text at {path}")
 
 
+def _regular_owned(owner: Path, relative: str) -> Path:
+    """Resolve a plain relative file without following a symlink at any path segment."""
+    candidate = Path(relative)
+    if candidate.is_absolute() or not candidate.parts or any(part in {"", ".", ".."} for part in candidate.parts):
+        raise Blocked(f"{JOB}: decision artifact path is not canonical and relative")
+    cursor = owner
+    if owner.is_symlink() or not owner.is_dir():
+        raise Blocked(f"{JOB}: decision producer root is not a plain directory")
+    for index, part in enumerate(candidate.parts):
+        cursor /= part
+        if cursor.is_symlink():
+            raise Blocked(f"{JOB}: decision artifact traverses a symbolic link")
+        if index < len(candidate.parts) - 1 and not cursor.is_dir():
+            raise Blocked(f"{JOB}: decision artifact parent is not a directory")
+    if not cursor.is_file():
+        raise Blocked(f"{JOB}: decision artifact is missing")
+    try:
+        cursor.resolve(strict=True).relative_to(owner.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise Blocked(f"{JOB}: decision artifact escapes its canonical attempt") from exc
+    return cursor
+
+
+def load_decision(run_id: str, jobs_root: Path, request: dict[str, Any],
+                  source_generation: str, component_generation: str) -> dict[str, Any]:
+    """Resolve transition authority from one exact current downstream publication.
+
+    The request selects a claim and producer only.  Paths, hashes, actor identity, disposition,
+    permission receipt, and generations are all re-derived from the producer's accepted attempt.
+    """
+    allowed = {"claim_id", "producer_job_id", "reason", "citations", "dissent_ids",
+               "causal_claim_ids", "supersedes_claim_id", "confidence"}
+    if not isinstance(request, dict) or not set(request) <= allowed or not {
+            "claim_id", "producer_job_id", "reason"} <= set(request):
+        raise Blocked(f"{JOB}: decision request shape is not closed")
+    producer = request["producer_job_id"]
+    if producer not in DECISION_PRODUCERS:
+        raise Blocked(f"{JOB}: decision producer is not an accepted downstream authority")
+    contract, result_name, collection, actor_field, statuses = DECISION_PRODUCERS[producer]
+    base = Path(jobs_root) / producer
+    pointer_path = _regular_owned(base, "accepted.json")
+    latest_path = _regular_owned(base, "latest.json")
+    pointer, latest = read_json(pointer_path), read_json(latest_path)
+    pointer_keys = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint",
+                    "envelope_path", "envelope_sha256", "hashes", "accepted_at"}
+    if (set(pointer) != pointer_keys or pointer.get("schema") != ACCEPTED_SCHEMA or
+            pointer.get("status") not in {"OK", "OK_WITH_GAPS"} or pointer.get("run_id") != run_id or
+            pointer.get("job") != producer or pointer.get("envelope_path") != "result.json" or
+            latest.get("attempt_id") != pointer.get("attempt_id")):
+        raise Blocked(f"{JOB}: decision producer pointer is stale or malformed")
+    attempts = base / "attempts"
+    attempt = attempts / str(pointer["attempt_id"])
+    if attempts.is_symlink() or attempt.is_symlink() or not attempt.is_dir():
+        raise Blocked(f"{JOB}: decision attempt is not a canonical plain directory")
+    try:
+        attempt.resolve(strict=True).relative_to(attempts.resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise Blocked(f"{JOB}: decision attempt escapes its canonical producer root") from exc
+    from execution_state import tree_hashes
+    try:
+        current_hashes = tree_hashes(attempt)
+    except (OSError, ValueError) as exc:
+        raise Blocked(f"{JOB}: decision attempt tree is unsafe") from exc
+    if current_hashes != pointer["hashes"]:
+        raise Blocked(f"{JOB}: decision attempt tree changed after acceptance")
+    envelope_path = _regular_owned(attempt, "result.json")
+    envelope = read_json(envelope_path)
+    if (file_hash(envelope_path) != pointer["envelope_sha256"] or validate_worker_result(envelope) or
+            envelope.get("run_id") != run_id or envelope.get("job_id") != producer or
+            envelope.get("attempt_id") != pointer["attempt_id"] or
+            envelope.get("input_fingerprint") != pointer["fingerprint"] or
+            envelope.get("execution_status") != pointer["status"] or
+            envelope.get("acceptance_status") != "CURRENT" or envelope.get("output_contract") != contract):
+        raise Blocked(f"{JOB}: decision producer envelope is invalid")
+    artifact_records = {item.get("path"): item for item in envelope.get("artifacts", [])}
+    if len(artifact_records) != len(envelope.get("artifacts", [])):
+        raise Blocked(f"{JOB}: decision producer has duplicate artifact paths")
+    for required in (result_name, "permission.json"):
+        if required not in artifact_records:
+            raise Blocked(f"{JOB}: decision producer omitted {required}")
+        if file_hash(_regular_owned(attempt, required)) != artifact_records[required].get("sha256"):
+            raise Blocked(f"{JOB}: decision producer {required} hash is invalid")
+    result, permission = read_json(attempt / result_name), read_json(attempt / "permission.json")
+    if (result.get("run_id") != run_id or result.get("stage") != producer or
+            result.get("claim_boundary") != "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF"):
+        raise Blocked(f"{JOB}: decision result identity or claim boundary is invalid")
+    rows = [row for row in result.get(collection, []) if row.get("claim_id") == request["claim_id"]]
+    if len(rows) != 1 or rows[0].get("status") not in statuses:
+        raise Blocked(f"{JOB}: decision result has no unique authorized claim disposition")
+    row = rows[0]
+    if (row.get("source_generation") != source_generation or
+            row.get("component_generation") != component_generation):
+        raise Blocked(f"{JOB}: decision result has a stale or mixed generation")
+    actor = row.get(actor_field)
+    if not isinstance(actor, dict) or actor.get("job_id") != producer or actor.get("attempt_id") != attempt.name:
+        raise Blocked(f"{JOB}: decision actor is not the accepted producer attempt")
+    if (actor.get("source_generation") != source_generation or
+            actor.get("component_generation") != component_generation or
+            actor.get("role_id") != AUTHORITY_ROLES[producer]):
+        raise Blocked(f"{JOB}: decision actor authority or generation is invalid")
+    permission_keys = {"schema", "run_id", "job_id", "source_snapshot_sha256", "permissions"}
+    if (set(permission) != permission_keys or permission.get("schema") != "appsec-review/producer-permission-receipt/1.0" or
+            permission.get("run_id") != run_id or permission.get("job_id") != producer or
+            permission.get("source_snapshot_sha256") != source_generation or
+            permission.get("permissions") != DECISION_PERMISSIONS):
+        raise Blocked(f"{JOB}: decision permission receipt is invalid")
+    authority = {"contract_id": contract, "job_id": producer, "attempt_id": attempt.name,
+        "role_id": actor["role_id"],
+        "source_generation": source_generation, "component_generation": component_generation,
+        "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path),
+        "envelope_sha256": "sha256:" + file_hash(envelope_path),
+        "artifact_path": result_name, "artifact_sha256": "sha256:" + file_hash(attempt / result_name),
+        "permission_receipt_path": "permission.json",
+        "permission_receipt_sha256": "sha256:" + file_hash(attempt / "permission.json"),
+        "reason": request["reason"]}
+    return {"claim_id": request["claim_id"], "to_status": statuses[row["status"]],
+        "authority": authority, **{key: deepcopy(request[key]) for key in
+        ("citations", "dissent_ids", "causal_claim_ids", "supersedes_claim_id", "confidence") if key in request}}
+
+
 def validate_ledger(value: dict[str, Any]) -> list[str]:
     errors = list(validate_document(value, "claim-decision-ledger.schema.json"))
     if errors: return errors
-    previous, claims, events = None, {}, set()
+    previous, claims, admissions, events, routes = None, {}, {}, set(), {}
     for sequence, entry in enumerate(value["entries"]):
         if entry["sequence"] != sequence: errors.append("ledger sequence is not contiguous")
         if entry["event_id"] in events: errors.append("duplicate event id")
         events.add(entry["event_id"])
+        if entry["event_id"] != _event_id(entry): errors.append("event id differs from canonical content")
         citation_ids = [item["citation_id"] for item in entry["citations"]]
         obligation_ids = [item["obligation_id"] for item in entry["proof_obligations"]]
         if len(citation_ids) != len(set(citation_ids)): errors.append("duplicate/conflicting citation id")
@@ -172,14 +319,26 @@ def validate_ledger(value: dict[str, Any]) -> list[str]:
         if entry["event_type"] == "candidate_admitted":
             if prior is not None or entry["from_status"] is not None or entry["status"] != "candidate":
                 errors.append("duplicate/conflicting candidate admission")
+            if entry["claim_id"] != _admission_claim_id(entry):
+                errors.append("claim id differs from deterministic route and producer identity")
+            if entry["route_id"] in routes:
+                errors.append("duplicate/conflicting route id")
+            routes[entry["route_id"]] = entry["claim_id"]
+            admissions[entry["claim_id"]] = entry
         elif prior is None or entry["from_status"] != prior["status"] or entry["status"] not in TRANSITIONS[prior["status"]]:
             errors.append("unsupported claim status transition")
+        elif entry["route_id"] != admissions[entry["claim_id"]]["route_id"]:
+            errors.append("claim route identity changed after admission")
         claims[entry["claim_id"]] = entry
         previous = entry["entry_hash"]
     if value["head_hash"] != previous: errors.append("ledger head does not match the chain")
     expected_states = [{"claim_id": key, "latest_event_id": claims[key]["event_id"], "status": claims[key]["status"]}
                        for key in sorted(claims)]
     if value["claim_states"] != expected_states: errors.append("claim state projection differs from ledger")
+    claim_ids = set(claims)
+    for entry in value["entries"]:
+        missing = set(entry["causal_claim_ids"]) - claim_ids
+        if missing: errors.append("causal claim id does not resolve to an existing ledger claim")
     causal = {entry["claim_id"]: set(entry["causal_claim_ids"]) for entry in value["entries"]}
     def visit(node: str, trail: set[str]) -> bool:
         if node in trail: return True
@@ -189,7 +348,8 @@ def validate_ledger(value: dict[str, Any]) -> list[str]:
 
 
 def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, Any]],
-                 prior: dict[str, Any] | None = None, decisions: Iterable[dict[str, Any]] = ()) -> dict[str, Any]:
+                 prior: dict[str, Any] | None = None, decisions: Iterable[dict[str, Any]] = (),
+                 decision_jobs_root: Path | None = None) -> dict[str, Any]:
     candidates, decisions = list(candidates), list(decisions)
     generations = {(item["source"]["source_generation"], item["source"]["component_generation"])
                    for item in candidates}
@@ -199,6 +359,11 @@ def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, An
         generations.add((prior["source_generation"], prior["component_generation"]))
     if len(generations) != 1: raise Blocked(f"{JOB}: stale or mixed source/component generations")
     source_generation, component_generation = next(iter(generations))
+    if decisions:
+        if decision_jobs_root is None:
+            raise Blocked(f"{JOB}: transitions require exact accepted downstream decision producers")
+        decisions = [load_decision(run_id, decision_jobs_root, item, source_generation,
+                                   component_generation) for item in decisions]
     entries = deepcopy(prior["entries"] if prior else [])
     claims = {entry["claim_id"]: entry for entry in entries}
     route_ids = {entry["route_id"] for entry in entries if entry["event_type"] == "candidate_admitted"}
@@ -228,7 +393,7 @@ def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, An
                                         if route in candidate_claim_ids}),
             "supersedes_claim_id": None, "from_status": None, "decision_authority": None,
             "previous_entry_hash": previous, "entry_hash": ""}
-        entry["event_id"] = "event-" + digest({key: value for key, value in entry.items() if key not in {"event_id", "entry_hash"}})[:24]
+        entry["event_id"] = _event_id(entry)
         entry["entry_hash"] = _entry_hash(entry); entries.append(entry); claims[claim_id] = entry
         route_ids.add(candidate["route_id"]); previous = entry["entry_hash"]
     for decision in decisions:
@@ -260,7 +425,7 @@ def build_ledger(run_id: str, attempt_id: str, candidates: Iterable[dict[str, An
             raise Blocked(f"{JOB}: supersession must name another existing replacement claim")
         if status != "superseded" and replacement is not None:
             raise Blocked(f"{JOB}: supersession link is illegal for this status")
-        entry["event_id"] = "event-" + digest({key: value for key, value in entry.items() if key not in {"event_id", "entry_hash"}})[:24]
+        entry["event_id"] = _event_id(entry)
         entry["entry_hash"] = _entry_hash(entry); entries.append(entry); claims[claim_id] = entry; previous = entry["entry_hash"]
     states = [{"claim_id": key, "latest_event_id": claims[key]["event_id"], "status": claims[key]["status"]}
               for key in sorted(claims)]

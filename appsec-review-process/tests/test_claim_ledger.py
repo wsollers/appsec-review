@@ -16,6 +16,7 @@ import execution_state
 from schema_validate import SchemaStore, validate_document
 import threat_model_core
 import validate_job_output
+from publish_job_output import ACCEPTED_SCHEMA, artifact_records, terminal_envelope
 
 
 class ClaimLedgerTests(unittest.TestCase):
@@ -43,6 +44,58 @@ class ClaimLedgerTests(unittest.TestCase):
 
     def candidates(self):
         return ledger.threat_candidates(self.threat_source) + ledger.owasp_candidates(self.owasp_source)
+
+    def publish_decision(self, jobs: Path, producer: str, claim_id: str, status: str,
+                         source_generation: str, component_generation: str, attempt_id: str | None = None):
+        attempt_id = attempt_id or producer.split("-")[0] + "-1"
+        specifications = {
+            "07-red-team-adversarial": ("red-team-adversarial.json", "hypotheses", "reviewer",
+                                        "red-team-adversary"),
+            "08-blue-team-refutation": ("blue-team-refutation.json", "reviews", "blue_reviewer",
+                                       "blue-team-refuter"),
+            "09-independent-verification": ("independent-verification.json", "verifications", "verifier",
+                                            "independent-verifier"),
+        }
+        artifact, collection, actor_field, role = specifications[producer]
+        base = jobs / producer; attempt = base / "attempts" / attempt_id
+        attempt.mkdir(parents=True)
+        actor = {"job_id": producer, "attempt_id": attempt_id, "role_id": role,
+                 "source_generation": source_generation, "component_generation": component_generation}
+        result = {"schema": "fixture", "run_id": "run1", "stage": producer,
+                  "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
+                  collection: [{"claim_id": claim_id, "status": status,
+                                "source_generation": source_generation,
+                                "component_generation": component_generation, actor_field: actor}]}
+        permission = {"schema": "appsec-review/producer-permission-receipt/1.0", "run_id": "run1",
+                      "job_id": producer, "source_snapshot_sha256": source_generation,
+                      "permissions": ["read-run-data", "write-run-data"]}
+        execution_state.atomic_json(attempt / artifact, result)
+        execution_state.atomic_json(attempt / "permission.json", permission)
+        execution_state.atomic_json(attempt / "status.json", {"status": "OK"})
+        envelope = terminal_envelope(run_id="run1", job_id=producer, attempt_id=attempt_id,
+            worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+            input_fingerprint="sha256:" + "a" * 64, output_contract=producer,
+            started_at="2026-01-01T00:00:00Z", finished_at="2026-01-01T00:00:01Z",
+            summary="fixture", artifacts=artifact_records(attempt, [artifact, "permission.json", "status.json"]), gaps=[])
+        execution_state.atomic_json(attempt / "result.json", envelope)
+        execution_state.atomic_json(base / "latest.json", {"attempt_id": attempt_id})
+        pointer = {"schema": ACCEPTED_SCHEMA, "status": "OK", "run_id": "run1", "job": producer,
+                   "attempt_id": attempt_id, "fingerprint": "sha256:" + "a" * 64,
+                   "envelope_path": "result.json", "envelope_sha256": execution_state.file_hash(attempt / "result.json"),
+                   "hashes": execution_state.tree_hashes(attempt), "accepted_at": "2026-01-01T00:00:02Z"}
+        execution_state.atomic_json(base / "accepted.json", pointer)
+        return base, attempt
+
+    def reseal_decision(self, base: Path, attempt: Path, changed_artifact: str):
+        envelope = execution_state.read_json(attempt / "result.json")
+        for item in envelope["artifacts"]:
+            if item["path"] == changed_artifact:
+                item["sha256"] = execution_state.file_hash(attempt / changed_artifact)
+        execution_state.atomic_json(attempt / "result.json", envelope)
+        pointer = execution_state.read_json(base / "accepted.json")
+        pointer["envelope_sha256"] = execution_state.file_hash(attempt / "result.json")
+        pointer["hashes"] = execution_state.tree_hashes(attempt)
+        execution_state.atomic_json(base / "accepted.json", pointer)
 
     def test_deterministic_admission_preserves_lineage_and_emits_inert_routing(self):
         candidates = self.candidates()
@@ -82,54 +135,100 @@ class ClaimLedgerTests(unittest.TestCase):
         first, second = cyclic["entries"][0], cyclic["entries"][1]
         first["causal_claim_ids"] = [second["claim_id"]]; second["causal_claim_ids"] = [first["claim_id"]]
         self.assertTrue(any("cycle" in error for error in ledger.validate_ledger(cyclic)))
+        missing = deepcopy(value); missing["entries"][-1]["causal_claim_ids"] = ["claim-" + "f" * 24]
+        missing["entries"][-1]["event_id"] = ledger._event_id(missing["entries"][-1])
+        missing["entries"][-1]["entry_hash"] = ledger._entry_hash(missing["entries"][-1])
+        self.assertTrue(any("does not resolve" in error for error in ledger.validate_ledger(missing)))
+
+    def test_rehashed_route_claim_and_event_identity_forgeries_are_rejected(self):
+        value = ledger.build_ledger("run1", "attempt-1", self.candidates()[:1])
+        route = deepcopy(value); entry = route["entries"][0]; entry["route_id"] = "forged-route"
+        entry["event_id"] = ledger._event_id(entry); entry["entry_hash"] = ledger._entry_hash(entry)
+        route["head_hash"] = entry["entry_hash"]
+        self.assertTrue(any("claim id differs" in error for error in ledger.validate_ledger(route)))
+        event = deepcopy(value); event["entries"][0]["event_id"] = "event-" + "f" * 24
+        event["entries"][0]["entry_hash"] = ledger._entry_hash(event["entries"][0])
+        event["head_hash"] = event["entries"][0]["entry_hash"]
+        self.assertIn("event id differs from canonical content", ledger.validate_ledger(event))
+
+    def test_decision_loader_rejects_missing_traversal_symlink_and_resealed_forgery(self):
+        prior = ledger.build_ledger("run1", "attempt-1", self.candidates()[:1])
+        claim = prior["claim_states"][0]["claim_id"]
+        request = {"claim_id": claim, "producer_job_id": "09-independent-verification", "reason": "proof"}
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            base, attempt = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
+                prior["source_generation"], prior["component_generation"], "verify-1")
+            (attempt / "permission.json").unlink()
+            pointer = execution_state.read_json(base / "accepted.json")
+            pointer["hashes"] = execution_state.tree_hashes(attempt)
+            execution_state.atomic_json(base / "accepted.json", pointer)
+            with self.assertRaisesRegex(execution_state.Blocked, "missing|changed"):
+                ledger.build_ledger("run1", "next", [], prior, [request], jobs)
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            base, _ = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
+                prior["source_generation"], prior["component_generation"], "verify-1")
+            pointer = execution_state.read_json(base / "accepted.json"); pointer["attempt_id"] = "../escape"
+            execution_state.atomic_json(base / "accepted.json", pointer)
+            execution_state.atomic_json(base / "latest.json", {"attempt_id": "../escape"})
+            with self.assertRaisesRegex(execution_state.Blocked, "escapes|canonical"):
+                ledger.build_ledger("run1", "next", [], prior, [request], jobs)
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            base, attempt = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
+                prior["source_generation"], prior["component_generation"], "verify-1")
+            outside = Path(directory) / "outside.json"; outside.write_text("{}")
+            (attempt / "permission.json").unlink(); (attempt / "permission.json").symlink_to(outside)
+            with self.assertRaisesRegex(execution_state.Blocked, "unsafe|symbolic|changed"):
+                ledger.build_ledger("run1", "next", [], prior, [request], jobs)
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            base, attempt = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
+                prior["source_generation"], prior["component_generation"], "verify-1")
+            result = execution_state.read_json(attempt / "independent-verification.json")
+            result["verifications"][0]["verifier"]["attempt_id"] = "forged-resealed"
+            execution_state.atomic_json(attempt / "independent-verification.json", result)
+            self.reseal_decision(base, attempt, "independent-verification.json")
+            with self.assertRaisesRegex(execution_state.Blocked, "actor"):
+                ledger.build_ledger("run1", "next", [], prior, [request], jobs)
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            base, attempt = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
+                prior["source_generation"], prior["component_generation"], "verify-1")
+            permission = execution_state.read_json(attempt / "permission.json")
+            permission["permissions"] = ["read-run-data", "write-run-data", "target-execution"]
+            execution_state.atomic_json(attempt / "permission.json", permission)
+            self.reseal_decision(base, attempt, "permission.json")
+            with self.assertRaisesRegex(execution_state.Blocked, "permission"):
+                ledger.build_ledger("run1", "next", [], prior, [request], jobs)
 
     def test_authorized_decisions_append_and_illegal_or_self_verifying_decisions_fail(self):
         prior = ledger.build_ledger("run1", "attempt-1", self.candidates()[:1])
         claim = prior["claim_states"][0]["claim_id"]
-        red = {"claim_id": claim, "to_status": "under_review", "authority": {
-            "job_id": "07-red-team-adversarial", "attempt_id": "red-1", "role_id": "red-team",
-            "source_generation": prior["source_generation"], "component_generation": prior["component_generation"],
-            "artifact_path": "data/jobs/07-red-team-adversarial/attempts/red-1/result.json",
-            "artifact_sha256": "sha256:" + "c" * 64, "permission_receipt_path": "permission.json",
-            "permission_receipt_sha256": "sha256:" + "a" * 64, "reason": "Candidate selected for adversarial review."}}
-        reviewed = ledger.build_ledger("run1", "attempt-2", [], prior, [red])
-        self.assertEqual(reviewed["claim_states"][0]["status"], "under_review")
-        verify = {"claim_id": claim, "to_status": "verified", "authority": {
-            "job_id": "09-independent-verification", "attempt_id": "verify-1", "role_id": "independent-verifier",
-            "source_generation": prior["source_generation"], "component_generation": prior["component_generation"],
-            "artifact_path": "data/jobs/09-independent-verification/attempts/verify-1/result.json",
-            "artifact_sha256": "sha256:" + "d" * 64, "permission_receipt_path": "permission.json",
-            "permission_receipt_sha256": "sha256:" + "b" * 64, "reason": "Independent evidence satisfied obligations."}}
-        verified = ledger.build_ledger("run1", "attempt-3", [], reviewed, [verify])
-        self.assertEqual(verified["claim_states"][0]["status"], "verified")
-        for status in ("narrowed", "refuted", "unresolved"):
-            blue = deepcopy(verify); blue["to_status"] = status
-            blue["authority"].update(job_id="08-blue-team-refutation", attempt_id="blue-" + status,
-                                     role_id="blue-team")
-            decided = ledger.build_ledger("run1", "attempt-blue-" + status, [], reviewed, [blue])
-            self.assertEqual(decided["claim_states"][0]["status"], status)
-        illegal = deepcopy(red); illegal["to_status"] = "verified"
-        with self.assertRaisesRegex(execution_state.Blocked, "illegal decision transition|not authorized"):
-            ledger.build_ledger("run1", "attempt-x", [], prior, [illegal])
-        self_verify = deepcopy(verify); self_verify["authority"].update(
-            job_id=prior["entries"][0]["producer"]["job_id"], attempt_id=prior["entries"][0]["producer"]["attempt_id"])
-        with self.assertRaisesRegex(execution_state.Blocked, "not authorized|self-verify"):
-            ledger.build_ledger("run1", "attempt-x", [], reviewed, [self_verify])
-        stale = deepcopy(verify); stale["authority"]["component_generation"] = "component-stale"
-        with self.assertRaisesRegex(execution_state.Blocked, "stale or mixed"):
-            ledger.build_ledger("run1", "attempt-x", [], reviewed, [stale])
-        two = ledger.build_ledger("run1", "attempt-two", self.candidates()[:2])
-        old, replacement = [item["claim_id"] for item in two["claim_states"]]
-        supersede = {"claim_id": old, "to_status": "superseded", "supersedes_claim_id": replacement,
-            "causal_claim_ids": [replacement], "authority": {"job_id": ledger.JOB,
-                "attempt_id": "ledger-decision-1", "role_id": "claim-ledger-custodian",
-                "source_generation": two["source_generation"], "component_generation": two["component_generation"],
-                "artifact_path": "data/jobs/claim-ledger-routing/decisions/supersede.json",
-                "artifact_sha256": "sha256:" + "e" * 64, "permission_receipt_path": "permission.json",
-                "permission_receipt_sha256": "sha256:" + "f" * 64, "reason": "A narrower replacement exists."}}
-        superseded = ledger.build_ledger("run1", "attempt-super", [], two, [supersede])
-        self.assertEqual({item["claim_id"]: item["status"] for item in superseded["claim_states"]}[old], "superseded")
-        self.assertNotIn(old, {item["claim_id"] for item in ledger.work_routing(superseded)["routes"]})
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            self.publish_decision(jobs, "07-red-team-adversarial", claim, "HYPOTHESIS",
+                                  prior["source_generation"], prior["component_generation"], "red-1")
+            red = {"claim_id": claim, "producer_job_id": "07-red-team-adversarial",
+                   "reason": "Candidate selected for adversarial review."}
+            reviewed = ledger.build_ledger("run1", "attempt-2", [], prior, [red], jobs)
+            self.assertEqual(reviewed["claim_states"][0]["status"], "under_review")
+            self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
+                                  prior["source_generation"], prior["component_generation"], "verify-1")
+            verify = {"claim_id": claim, "producer_job_id": "09-independent-verification",
+                      "reason": "Independent evidence satisfied obligations."}
+            verified = ledger.build_ledger("run1", "attempt-3", [], reviewed, [verify], jobs)
+            self.assertEqual(verified["claim_states"][0]["status"], "verified")
+            for upstream, expected in (("SURVIVING", "narrowed"), ("REFUTED", "refuted"),
+                                       ("UNRESOLVED", "unresolved")):
+                self.publish_decision(jobs, "08-blue-team-refutation", claim, upstream,
+                                      prior["source_generation"], prior["component_generation"], "blue-" + expected)
+                blue = {"claim_id": claim, "producer_job_id": "08-blue-team-refutation", "reason": expected}
+                decided = ledger.build_ledger("run1", "attempt-blue-" + expected, [], reviewed, [blue], jobs)
+                self.assertEqual(decided["claim_states"][0]["status"], expected)
+            with self.assertRaisesRegex(execution_state.Blocked, "exact accepted"):
+                ledger.build_ledger("run1", "attempt-x", [], reviewed, [verify])
 
     def test_promotion_text_fields_and_owasp_promotion_flags_fail_closed(self):
         candidate = self.candidates()[0]; candidate["hypothesis"] = "Verified finding with severity: high"
