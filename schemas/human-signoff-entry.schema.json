@@ -1,0 +1,13 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"human-signoff-entry.schema.json",
+  "type":"object","additionalProperties":false,
+  "required":["sequence","signoff_id","reviewer_id","report_sha256","decision","signed_at","rationale","previous_entry_hash","entry_hash"],
+  "properties":{
+    "sequence":{"type":"integer","minimum":0},"signoff_id":{"type":"string","pattern":"^signoff-[0-9a-f]{24}$"},
+    "reviewer_id":{"type":"string","minLength":1},"report_sha256":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},
+    "decision":{"enum":["APPROVED","REJECTED"]},"signed_at":{"type":"string","minLength":1},
+    "rationale":{"type":"string","minLength":1},
+    "previous_entry_hash":{"type":["string","null"],"pattern":"^sha256:[0-9a-f]{64}$"},
+    "entry_hash":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"}
+  }
+}

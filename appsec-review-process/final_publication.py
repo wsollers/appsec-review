@@ -15,6 +15,7 @@ import tempfile
 from typing import Any
 
 from execution_state import Blocked, atomic_json, digest, file_hash, read_json
+from schema_validate import validate_document
 
 SIGNOFF_SCHEMA = "appsec-review/human-signoff-ledger/1.0"
 FINAL_SCHEMA = "appsec-review/final-publication/1.0"
@@ -51,6 +52,8 @@ def append_signoff(ledger: dict[str, Any] | None, *, run_id: str, reviewer_id: s
         "rationale": rationale, "previous_entry_hash": previous, "entry_hash": ""}
     entry["entry_hash"] = _sha({key: value for key, value in entry.items() if key != "entry_hash"})
     current["entries"].append(entry); current["head_hash"] = entry["entry_hash"]
+    errors = validate_document(current, "human-signoff-ledger.schema.json")
+    if errors: raise Blocked(f"final publication: generated signoff ledger is invalid ({errors[0]})")
     return current
 
 
@@ -58,6 +61,8 @@ def validate_signoff(ledger: dict[str, Any], *, run_id: str, report_sha256: str)
     # Reuse append validation without mutating the caller by walking the chain directly.
     if ledger.get("schema") != SIGNOFF_SCHEMA or ledger.get("run_id") != run_id:
         raise Blocked("final publication: signoff ledger identity is invalid")
+    errors = validate_document(ledger, "human-signoff-ledger.schema.json")
+    if errors: raise Blocked(f"final publication: signoff ledger schema is invalid ({errors[0]})")
     previous = None
     for sequence, entry in enumerate(ledger.get("entries", [])):
         if (entry.get("sequence") != sequence or entry.get("previous_entry_hash") != previous or
@@ -129,6 +134,8 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
             "signoff_head_sha256": signoff_ledger["head_hash"], "signoff_id": signoff["signoff_id"],
             "artifacts": [{"path": relative, "sha256": value} for relative, _source, value in verified],
             "final": True, "human_signoff": True}
+        errors = validate_document(manifest, "final-publication.schema.json")
+        if errors: raise Blocked(f"final publication: final manifest is invalid ({errors[0]})")
         atomic_json(staging / "final-publication.json", manifest)
         try: os.replace(staging, final_root)
         except OSError as exc: raise Blocked("final publication: atomic package publication failed") from exc

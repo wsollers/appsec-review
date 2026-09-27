@@ -1,0 +1,8 @@
+{
+  "schema":"appsec-review/output-contract/0.1","contract_id":"final-publication-package",
+  "display_name":"Human-approved immutable final publication package",
+  "required_files":["report.json","evidence-trace-index.json","human-signoff-ledger.json","final-publication.json"],
+  "required_status_fields":["status","final","human_signoff"],
+  "result_schema":{"artifact":"final-publication.json","schema_file":"final-publication.schema.json"},
+  "validation_rules":["copy only artifacts hash-bound by the exact draft publication manifest","latest append-only human signoff must approve the exact report hash","publish atomically and never replace an existing final package","reject changed missing linked or escaping draft artifacts"]
+}
