@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "ir-facts.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "source_revision", "source_snapshot_sha256", "link", "linked_module_sha256", "variant_sha256", "status", "debug_locations", "facts", "coverage_gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/ir-facts/1"}, "run_id": {"type": "string"}, "source_revision": {"type": "string"},
+    "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "link": {"$ref": "ir-upstream-lineage.schema.json"},
+    "linked_module_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "variant_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "status": {"enum": ["OK", "OK_WITH_GAPS"]},
+    "debug_locations": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["debug_location_id", "source_line", "source_column"], "properties": {
+        "debug_location_id": {"type": "string"}, "source_line": {"type": "integer"}, "source_column": {"type": "integer"}}}},
+    "facts": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["fact_id", "kind", "ir_line", "debug_location_id"],
+      "properties": {"fact_id": {"type": "string"}, "kind": {"enum": ["pointer-arithmetic", "memory-read", "memory-write", "memory-intrinsic"]},
+        "ir_line": {"type": "integer"}, "debug_location_id": {"type": ["string", "null"]}}}},
+    "coverage_gaps": {"type": "array", "items": {"type": "object"}}
+  }
+}

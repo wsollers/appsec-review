@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "ir-upstream-lineage.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["job_id", "attempt_id", "accepted_pointer_sha256", "envelope_sha256", "result_sha256", "input_fingerprint"],
+  "properties": {"job_id": {"type": "string"}, "attempt_id": {"type": "string"},
+    "accepted_pointer_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "envelope_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}
