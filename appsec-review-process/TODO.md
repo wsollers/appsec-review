@@ -1417,10 +1417,17 @@ static-test and operations-document ingestion now publish deterministic redacted
 README/zero/malformed/unsupported gaps with F02-compatible receipts. Shared Dagster/live wiring and
 the full D05-to-D08 topology link remain separate integration work.
 
-Current report-path construction is **S01 standards-source ingest** and **S02 threat-model core**,
-followed by the OWASP T11-T13 deterministic join/report core. S02 is in independent-retip after its
-first qualification found citation, receipt-validation and promotion-text defects; none is being
-waived as hardening.
+**S01 standards-source ingest**, **S02 threat-model core**, **F01 evidence-index enrichment**, and
+the **OWASP T11-T13 deterministic join/report core** are now independently unit-qualified and
+merged. S01/S02 are registered as standalone workers. F01 is integrated into the existing evidence
+index but its changed lifecycle needs live requalification and common-envelope migration before F02
+may consume it. OWASP T11-T13 remains a standalone core until T14 supplies its common publication,
+graph and Dagster bindings.
+
+Current parallel report-path construction is **L01 append-only candidate claim ledger** and the
+nominal **L05-L08 adversarial/refutation/independent-verification/scoring chain**. The next serialized
+step is `10-synthesis-report` producing an immutable `DRAFT_EVIDENCE_BACKED` package; final signoff,
+L09-L11 feedback loops and deferred recovery/load hardening are not prerequisites for that draft.
 
 First-report milestone: produce one immutable, evidence-backed draft report for the tracked fixture.
 It requires accepted native/source/IR/binary/test evidence, F01/F02 assembly, F03 component mapping,
