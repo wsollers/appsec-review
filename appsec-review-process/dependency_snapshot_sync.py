@@ -173,7 +173,7 @@ def _extract(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
         raise SyncBlocked("snapshot archive lacks required database content")
 
 
-def _activate_grype(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
+def _activate_grype(archive: Path, destination: Path, spec: dict[str, Any]) -> dict[str, Any]:
     """Activate a verified vendor archive with the pinned Grype image, entirely offline."""
     try:
         defaults = ce.host_defaults()
@@ -214,6 +214,11 @@ def _activate_grype(archive: Path, destination: Path, spec: dict[str, Any]) -> N
     present = {item["path"] for item in snapshots.inventory(destination)}
     if not set(spec["required_paths"]).issubset(present):
         raise SyncBlocked("activated Grype database lacks required cache content")
+    status_bytes = (json.dumps(status, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    return {"kind": "pinned-grype-db-import", "image_digest": image,
+            "argv": ["/opt/tool/bin/grype", "db", "import", "/input/db.tar.zst"],
+            "network_mode": "none", "status": status,
+            "status_sha256": "sha256:" + hashlib.sha256(status_bytes).hexdigest()}
 
 
 def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str, now: str,
@@ -245,9 +250,16 @@ def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str
             raise SyncBlocked("snapshot archive bytes differ from the pinned declaration")
         mirror = staging / "mirror"; mirror.mkdir()
         if spec["database_kind"] == "grype-db" and spec["archive"] == "tar.zst":
-            _activate_grype(archive, mirror, spec)
+            transformation = _activate_grype(archive, mirror, spec)
         else:
             _extract(archive, mirror, spec)
+            transformation = {"kind": "retained-vendor-archive" if spec["archive"] == "file" else "safe-extraction"}
+        provenance = {"schema": "appsec-review/dependency-snapshot-source-provenance/1.0",
+            "database_kind": spec["database_kind"], "url": spec["url"],
+            "archive_sha256": spec["sha256"], "archive_bytes": spec["bytes"],
+            "retrieved_at": now, "transformation": transformation}
+        (mirror / "source-provenance.json").write_text(
+            json.dumps(provenance, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
         metadata = staging / "metadata.json"; metadata.write_text(json.dumps(spec["metadata"], sort_keys=True) + "\n")
         # register() re-inventories the extracted bytes, stages a new immutable generation and
         # atomically replaces only the small current pointer after full validation.
