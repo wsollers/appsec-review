@@ -27,6 +27,8 @@ The live qualification reaches these accepted results:
 - T06 validator handoff: accepted (`OK` or `OK_WITH_GAPS`)
 - T10 dispatch/accounting: accepted; every expected static cell ran through the tracked validator
   composition and every candidate passed T07 with canonical component-scoped evidence
+- T14 deterministic join/publication: accepted (`OK` or `OK_WITH_GAPS`) as a bounded manifest and
+  multiple matrix pages
 
 The four components are all retained. No target is converted to technical not-applicable. Server
 targets are assigned under the approved ASVS L2 server scope; unresolved client/runtime
@@ -50,40 +52,35 @@ sets remain empty rather than being padded with locator-only intelligence. Stale
 component generations, unresolved component IDs, producer-pointer tampering, and artifact-hash
 tampering fail closed.
 
-## First remaining blocker
+The T14 publication-size gap is closed without raising the common 8 MiB artifact safety limit.
+The publisher retains a small `owasp-control-status-matrix-manifest.json` plus deterministic
+`owasp-control-status-matrix-pages/page-NNNN.json` artifacts capped at 7 MiB. The manifest binds the
+logical matrix hash, ordered-row hash, exact row count and denominators, and every page's ordinal,
+path, byte count, SHA-256, row count, and inclusive row range. Validation reconstructs the logical
+matrix in exact source order and rejects missing, additional, duplicated, reordered, substituted,
+oversized, or mixed pages before accepting the common envelope.
 
-The full four-component ASVS L2 run now derives the T11-T13 matrix successfully, but T14 cannot
-publish its common envelope because `owasp-control-status-matrix.json` is larger than the common
-per-artifact limit:
+## Remaining integration boundary
 
-```text
-worker result validation failed: declared result artifact exceeds 8388608 bytes
-```
-
-The failed T14 attempt is not accepted. This is a publication-shape/size blocker, not an assessment
-or evidence-lineage failure: every dispatched T10 cell completed, every candidate passed T07, and
-verified accounting retained the results before join/report publication was attempted.
+There is no remaining blocker in this standalone T03-through-T14 happy path. The integrator still
+owns registration in the shared lifecycle graph, Dagster definitions, launch surface, and parity
+manifest; those shared surfaces were intentionally excluded from this qualification branch. A real
+deployment must also supply its approved `PersonaInvoker`; this repository's retained live fixture
+is deterministic and model-free.
 
 ## Retained executable evidence
 
 `appsec-review-process/tests/test_owasp_chain_qualification.py` publishes the four-component map
 through the common worker-result helper, admits a separately scoped canonical server/config
 artifact, runs the real T03/routing/T04/T05/T06/T10/T07 path, and proves every dispatched result is
-valid before retaining the exact T14 size refusal. Mutation tests prove stale, mixed-generation,
-unresolved-scope, and envelope-binding changes are rejected.
+valid before retaining and revalidating an accepted, multi-page T14 result. Mutation tests prove
+stale, mixed-generation, unresolved-scope, envelope-binding, missing-page, duplicate-page,
+reordered-page, and substituted-page changes are rejected.
 
 Run from `appsec-review-process`:
 
 ```bash
 python -m unittest -v tests.test_owasp_chain_qualification
+python -m unittest -v tests.test_owasp_join_publisher
 python -m unittest -v tests.test_owasp_lane_in tests.test_owasp_component_routing
 ```
-
-## Required next closure
-
-Define a bounded publication shape for large OWASP matrices without raising the common artifact
-limit globally. The preferred closure is deterministic partitioning or paging with a small manifest
-that binds every part, exact row coverage/order, denominators, and hashes; validation must reject
-missing, duplicate, reordered, mixed-generation, or oversized parts. Then rerun this qualification
-through accepted T14 publication. Compacting the matrix is acceptable only if it preserves every
-selected target, status, citation, dissent, rescope, and accounting link.

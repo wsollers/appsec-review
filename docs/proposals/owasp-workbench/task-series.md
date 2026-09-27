@@ -502,7 +502,8 @@ is next: it must read only through `owasp_dispatch.load_verified_accounting`.
 
 Join without status upgrade into:
 
-- `owasp-control-status-matrix.json`;
+- `owasp-control-status-matrix-manifest.json` plus deterministically ordered, bounded
+  `owasp-control-status-matrix-pages/page-NNNN.json` artifacts;
 - `owasp-coverage-gaps.json`;
 - `owasp-dynamic-test-requests.json`;
 - `owasp-workbench-summary.md`.
@@ -510,6 +511,11 @@ Join without status upgrade into:
 The matrix must retain selection, applicability, assessment, proof obligations, evidence,
 counterevidence, validator/tool/batch/attempt/intercom provenance, gaps, test requests, dissent,
 crosswalk grouping, and rescope state.
+
+The manifest must bind the exact logical-matrix and ordered-row hashes, denominators, total rows,
+and each page's ordinal, path, byte size, hash, row count, and contiguous inclusive range. Missing,
+additional, duplicated, reordered, substituted, oversized, or mixed-generation pages fail closed;
+the shared per-artifact safety limit is not raised.
 
 The summary must report standards/profile approvals, scope/evidence cutoff/permissions, population
 and batches, applicability and overrides, exact statuses, gaps and contradictions, dynamic/manual

@@ -199,7 +199,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
                    result["attempt_id"] / "outputs" / "owasp-validator-handoff-set.json")
         return result, handoff
 
-    def test_canonical_evidence_reaches_t14_artifact_size_boundary(self):
+    def test_canonical_evidence_reaches_accepted_partitioned_t14(self):
         pointer = json.loads((self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json").read_text())
         self.assertEqual(pointer["schema"], "appsec-review/accepted-worker-result/1.0")
         self.assertIn("hashes", pointer)
@@ -263,12 +263,16 @@ class OwaspChainQualificationTests(unittest.TestCase):
         self.assertTrue(all(cell["valid_result"] and cell["not_assessed_reason"] is None
                             for cell in dispatched))
 
-        with self.assertRaisesRegex(execution_state.Blocked,
-                                    "declared result artifact exceeds 8388608 bytes"):
-            owasp_join_publisher.run(self.run_id, "dagster-owasp-chain-qualification", facts)
-        published = owasp_join_publisher.root(self.run_id) / "accepted.json"
-        self.assertNotIn(json.loads(published.read_text(encoding="utf-8"))["status"],
-                         {"OK", "OK_WITH_GAPS"})
+        t14 = owasp_join_publisher.run(self.run_id, "dagster-owasp-chain-qualification", facts)
+        attempt = owasp_join_publisher.validate(self.run_id, facts, t14)
+        manifest = json.loads((attempt / owasp_join_publisher.MATRIX_MANIFEST).read_text(encoding="utf-8"))
+        self.assertIn(t14["status"], {"OK", "OK_WITH_GAPS"})
+        self.assertGreater(len(manifest["pages"]), 1)
+        self.assertEqual(manifest["row_count"], model["counts"]["control_targets"])
+        self.assertEqual(manifest["matrix_header"]["denominators"]["assessed"],
+                         model["counts"]["applicable"])
+        self.assertTrue(all(row["byte_size"] <= owasp_join_publisher.PAGE_BYTE_LIMIT
+                            for row in manifest["pages"]))
 
     def test_t03_rejects_tampered_common_envelope_binding(self):
         pointer_path = self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json"

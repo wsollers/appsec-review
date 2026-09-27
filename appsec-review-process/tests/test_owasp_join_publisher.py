@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from owasp_dispatch_support import DispatchCase
@@ -15,7 +16,7 @@ from schema_validate import SchemaStore,validate_document
 
 
 class OwaspJoinPublisherTests(DispatchCase):
-    chapters=("V1",)
+    chapters=("V1","V2","V3")
 
     def publish(self):
         self.dispatch()
@@ -26,11 +27,26 @@ class OwaspJoinPublisherTests(DispatchCase):
         attempt=publisher.validate(self.run_id,self.facts(),pointer)
         envelope=execution_state.read_json(attempt/"result.json")
         self.assertEqual(envelope["output_contract"],publisher.CONTRACT)
+        expected=publisher._derive(self.run_id,self.facts())
         self.assertEqual({item["path"] for item in envelope["artifacts"]},
-            {*publisher.PUBLISHED,"permission.json","lineage.json","status.json"})
+            {*publisher.published_names(expected),"permission.json","lineage.json","status.json"})
         outputs=join.derive(join.load_verified_inputs(self.run_id,facts=self.facts()))
-        for name in publisher.PUBLISHED:
-            self.assertEqual(execution_state.read_json(attempt/name),outputs[name])
+        for name in publisher.published_names(expected):
+            self.assertEqual(execution_state.read_json(attempt/name),expected[name])
+        manifest=execution_state.read_json(attempt/publisher.MATRIX_MANIFEST)
+        self.assertEqual(manifest["row_count"],len(outputs[join.MATRIX]["rows"]))
+        self.assertEqual(manifest["matrix_header"]["denominators"],outputs[join.MATRIX]["denominators"])
+        self.assertEqual(manifest["logical_matrix_sha256"],execution_state.digest(outputs[join.MATRIX]))
+        cursor=0; reconstructed=[]
+        for index,record in enumerate(manifest["pages"]):
+            page=execution_state.read_json(attempt/record["path"])
+            self.assertEqual(record["page_index"],index)
+            self.assertEqual(record["first_row_index"],cursor)
+            self.assertEqual(record["last_row_index"],cursor+record["row_count"]-1)
+            self.assertEqual(record["sha256"],execution_state.file_hash(attempt/record["path"]))
+            self.assertLessEqual(record["byte_size"],publisher.PAGE_BYTE_LIMIT)
+            reconstructed.extend(page["rows"]); cursor+=record["row_count"]
+        self.assertEqual(reconstructed,outputs[join.MATRIX]["rows"])
         permission=execution_state.read_json(attempt/"permission.json")
         self.assertEqual(permission,{"schema":"appsec-review/producer-permission-receipt/1.0",
             "run_id":self.run_id,"job_id":publisher.JOB,
@@ -47,8 +63,10 @@ class OwaspJoinPublisherTests(DispatchCase):
 
     def test_attempt_artifact_tamper_and_stale_trusted_facts_fail_closed(self):
         pointer=self.publish(); attempt=publisher.root(self.run_id)/"attempts"/pointer["attempt_id"]
-        matrix=execution_state.read_json(attempt/join.MATRIX); matrix["denominators"]["selected"]+=1
-        execution_state.atomic_json(attempt/join.MATRIX,matrix)
+        manifest=execution_state.read_json(attempt/publisher.MATRIX_MANIFEST)
+        page_path=attempt/manifest["pages"][0]["path"]
+        page=execution_state.read_json(page_path); page["rows"][0]["status"]="not_satisfied"
+        execution_state.atomic_json(page_path,page)
         with self.assertRaisesRegex(execution_state.Blocked,"changed"):
             publisher.validate(self.run_id,self.facts(),pointer)
         with self.assertRaises(Exception):
@@ -67,7 +85,47 @@ class OwaspJoinPublisherTests(DispatchCase):
         contract=json.loads((Path(publisher.ROOT)/"registry/output-contracts/owasp-join-report.json").read_text())
         self.assertEqual(validate_document(contract,"output-contract.schema.json",SchemaStore()),[])
         self.assertEqual(contract["required_files"],
-            [join.MATRIX,join.GAPS,join.ROUTES,"permission.json","lineage.json","status.json"])
+            [publisher.MATRIX_MANIFEST,join.GAPS,join.ROUTES,"permission.json","lineage.json","status.json"])
+
+    def test_missing_reordered_duplicate_and_substituted_pages_fail_closed(self):
+        pointer=self.publish(); attempt=publisher.root(self.run_id)/"attempts"/pointer["attempt_id"]
+        inputs=execution_state.read_json(attempt/"inputs.json")
+        logical=join.derive(join.load_verified_inputs(self.run_id,facts=self.facts()))[join.MATRIX]
+        one_row_limit=max(len(publisher._json_bytes(publisher._page(logical,0,0,[row])))
+                          for row in logical["rows"])
+        with mock.patch.object(publisher,"PAGE_BYTE_LIMIT",one_row_limit):
+            expected=publisher._derive(self.run_id,self.facts())
+            for path in (attempt/publisher.PAGE_DIRECTORY).glob("*.json"): path.unlink()
+            for name,value in expected.items(): execution_state.atomic_json(attempt/name,value)
+            permission,lineage=publisher._receipts(inputs,expected,attempt)
+            execution_state.atomic_json(attempt/"permission.json",permission)
+            execution_state.atomic_json(attempt/"lineage.json",lineage)
+            publisher._validate_attempt(attempt,inputs,self.facts())
+            manifest=execution_state.read_json(attempt/publisher.MATRIX_MANIFEST)
+            self.assertGreater(len(manifest["pages"]),1)
+            first=attempt/manifest["pages"][0]["path"]
+            original=first.read_bytes()
+
+            first.unlink()
+            with self.assertRaisesRegex(execution_state.Blocked,"page set"):
+                publisher._validate_attempt(attempt,inputs,self.facts())
+            first.parent.mkdir(parents=True,exist_ok=True); first.write_bytes(original)
+
+            reordered=dict(manifest); reordered["pages"]=[*reversed(manifest["pages"])]
+            execution_state.atomic_json(attempt/publisher.MATRIX_MANIFEST,reordered)
+            with self.assertRaisesRegex(execution_state.Blocked,"differs"):
+                publisher._validate_attempt(attempt,inputs,self.facts())
+
+            duplicate=dict(manifest); duplicate["pages"]=[manifest["pages"][0],*manifest["pages"][:-1]]
+            execution_state.atomic_json(attempt/publisher.MATRIX_MANIFEST,duplicate)
+            with self.assertRaisesRegex(execution_state.Blocked,"differs"):
+                publisher._validate_attempt(attempt,inputs,self.facts())
+            execution_state.atomic_json(attempt/publisher.MATRIX_MANIFEST,manifest)
+
+            page=execution_state.read_json(first); page["rows"][0]["control_id"]="V1.0.0"
+            execution_state.atomic_json(first,page)
+            with self.assertRaisesRegex(execution_state.Blocked,"differs"):
+                publisher._validate_attempt(attempt,inputs,self.facts())
 
 
 if __name__=="__main__": unittest.main()
