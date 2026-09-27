@@ -849,6 +849,8 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
         if (accepted.get("attempt_id") != attempt_id or
                 _hash_file(attempt / "result.json").split(":", 1)[1] != accepted.get("envelope_sha256")):
             raise WorkerBlocked(f"{job}: accepted pointer changed")
+        if "hashes" not in accepted or not (root / "latest.json").is_file():
+            _publish_pointer(root, attempt, request["run_id"], job, attempt_id, envelope["execution_status"], fingerprint)
         return envelope
     # A later, independently verified orchestration attempt may supersede the current pointer.
     # The new immutable attempt is completely materialized and validated before the atomic pointer
@@ -880,12 +882,25 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
     except BaseException:
         if staging.exists(): shutil.rmtree(staging)
         raise
-    temporary = root / (".accepted." + attempt_id)
-    temporary.write_bytes(_canonical({"schema": "appsec-review/accepted-worker-result/1.0", "run_id": request["run_id"],
-        "job": job, "attempt_id": attempt_id, "status": status, "fingerprint": fingerprint,
-        "envelope_path": "result.json", "envelope_sha256": _hash_file(attempt / "result.json").split(":", 1)[1]}))
-    os.replace(temporary, pointer)
+    _publish_pointer(root, attempt, request["run_id"], job, attempt_id, status, fingerprint)
     return envelope
+
+
+def _publish_pointer(root: Path, attempt: Path, run_id: str, job: str, attempt_id: str,
+                     status: str, fingerprint: str) -> None:
+    """Write the full common accepted pointer (with tree hashes) and latest.json, so envelope
+    consumers such as 02-evidence-assembly bind this producer like any other worker."""
+    from execution_state import tree_hashes
+    latest = root / (".latest." + attempt_id)
+    latest.write_bytes(_canonical({"attempt_id": attempt_id,
+                                   "updated_at": datetime.now(timezone.utc).isoformat()}))
+    os.replace(latest, root / "latest.json")
+    temporary = root / (".accepted." + attempt_id)
+    temporary.write_bytes(_canonical({"schema": "appsec-review/accepted-worker-result/1.0", "run_id": run_id,
+        "job": job, "attempt_id": attempt_id, "status": status, "fingerprint": fingerprint,
+        "envelope_path": "result.json", "envelope_sha256": _hash_file(attempt / "result.json").split(":", 1)[1],
+        "hashes": tree_hashes(attempt), "accepted_at": datetime.now(timezone.utc).isoformat()}))
+    os.replace(temporary, root / "accepted.json")
 
 
 def main() -> int:
