@@ -336,7 +336,19 @@ def _execute(argv: list[str], cwd: Path, log_dir: Path, timeout: int, env: dict[
 
 
 def _environment() -> dict[str, str]:
-    keep = {"PATH", "HOME", "LANG", "LC_ALL", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"}
+    # Docker Desktop's Windows CLI discovers bundled CLI plugins (notably
+    # buildx) through the native user/system environment.  Dropping these
+    # variables makes an otherwise healthy Docker installation report that
+    # buildx is missing before the build starts.  Retain only the small set of
+    # platform variables required to launch the signed CLI/plugin binaries;
+    # build arguments and target-controlled variables remain excluded.
+    keep = {
+        "PATH", "HOME", "LANG", "LC_ALL", "DOCKER_HOST", "DOCKER_CONFIG",
+        "DOCKER_CONTEXT", "XDG_RUNTIME_DIR", "SystemRoot", "SYSTEMROOT",
+        "WINDIR", "USERPROFILE", "PATHEXT", "APPDATA", "LOCALAPPDATA",
+        "ProgramData", "PROGRAMDATA", "ProgramFiles", "PROGRAMFILES",
+        "ProgramFiles(x86)", "CommonProgramFiles",
+    }
     env = {k: v for k, v in os.environ.items() if k in keep}
     env["DOCKER_BUILDKIT"] = "1"
     return env
