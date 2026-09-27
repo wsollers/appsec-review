@@ -1328,8 +1328,8 @@ Status vocabulary: `READY` means independently executable now; `BLOCKED(<ids>)` 
 predecessors or decisions; `HUMAN_GATE` produces an ADR/options packet but may not choose policy;
 `INTEGRATION` combines already-qualified producers and should not invent missing worker behavior.
 
-Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, `02-evidence-index`, `02-build-index`, `02-build-classify` and `02-build-plan`.
-Every one of the 54 graph job IDs appears in this backlog; a later batch may harden an implemented
+Implemented baseline job nodes are `00-intake`, `02-ossf-scorecard`, `02-evidence-index`, `02-build-index`, `02-build-classify`, `02-build-plan`, `02-build-resolution`, `02-build-configure`, `02-native-build` and `02-source-sast`.
+Every one of the 55 graph job IDs appears in this backlog; a later batch may harden an implemented
 node without changing the honest current readiness flag. (42 until 2026-09-20; ADR-0010 task V02
 declared the nine vendor-prepass nodes named under M03, M04 and M05, all `implemented: false`;
 52 from 2026-09-25, when Phase 5g added `02-build-index`, and 53 the same day with `02-build-classify`;

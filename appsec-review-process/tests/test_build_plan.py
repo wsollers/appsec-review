@@ -115,6 +115,18 @@ class Check(Base):
         self.assertEqual(value['classification']['attempt_id'], self.classification_pointer['attempt_id'])
         self.assertTrue(all(len(c['content_hash']) == 64 for c in value['plans'][0]['evidence_citations']))
 
+    def test_exact_catalog_reference_is_canonicalized_but_unknown_tag_is_not(self):
+        catalog = read_json(bp.CATALOG_PATH)
+        value = self.finalized()
+        value['plans'][0]['image']['base'] = 'audit-buildenv-cpp:local'
+        self.assertIs(bp.canonicalize_catalog_base(value, catalog), value)
+        self.assertEqual(value['plans'][0]['image']['base'], 'audit-buildenv-cpp')
+        self.assertEqual(self.errors(value), [])
+
+        value['plans'][0]['image']['base'] = 'audit-buildenv-cpp:latest'
+        bp.canonicalize_catalog_base(value, catalog)
+        self.assertTrue(any('not a buildenv catalog image' in error for error in self.errors(value)))
+
     def test_every_build_set_unit_and_only_those(self):
         self.assertRejected(lambda v: v['plans'].clear(), 'build-set units without a plan: dir:.')
         def container(v):

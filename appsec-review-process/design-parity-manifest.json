@@ -987,7 +987,7 @@
         ]
       },
       "gaps": [],
-      "next_prerequisite": "Implement and live-qualify stage 14, 02-build-configure (E01), by replaying the accepted lock through B13."
+      "next_prerequisite": "Run fault-recovery qualification for stages 14-16 and integrate the remaining source-language tools."
     },
     {
       "id": "02-evidence-assembly",
@@ -2297,12 +2297,18 @@
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "none"
+          "unit",
+          "host_integration",
+          "linux_integration",
+          "live_dagster"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_build_replay.py",
+          "docs/processes/system-acceptance-test.md"
+        ]
       },
-      "gaps": ["happy_path_not_yet_live", "fault_recovery_not_qualified"],
-      "next_prerequisite": "Run SAT stage 14 happy path; retain fault-recovery qualification as follow-up."
+      "gaps": ["fault_recovery_not_qualified"],
+      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
     },
     {
       "id": "02-native-build",
@@ -2352,12 +2358,18 @@
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "none"
+          "unit",
+          "host_integration",
+          "linux_integration",
+          "live_dagster"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_build_replay.py",
+          "docs/processes/system-acceptance-test.md"
+        ]
       },
-      "gaps": ["happy_path_not_yet_live", "fault_recovery_not_qualified"],
-      "next_prerequisite": "Run SAT stage 15 happy path; retain fault-recovery qualification as follow-up."
+      "gaps": ["fault_recovery_not_qualified"],
+      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
     },
     {
       "id": "02-source-sast",
@@ -2415,16 +2427,21 @@
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "none"
+          "unit",
+          "host_integration",
+          "linux_integration",
+          "live_dagster"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_source_sast.py",
+          "docs/processes/system-acceptance-test.md"
+        ]
       },
       "gaps": [
-        "happy_path_not_yet_live",
         "go_java_php_tools_not_integrated",
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run the source-SAST SAT happy path, then add the remaining declared language tools and fault-recovery qualification."
+      "next_prerequisite": "Add the remaining declared language tools and run live fault-recovery qualification."
     },
     {
       "id": "02-native-sast",

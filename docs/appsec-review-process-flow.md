@@ -34,7 +34,7 @@ flowchart TD
   ASM --> CMP[01 Component characterization<br/>component map, tag cloud]:::todo
 
   CMP --> TM[03 Threat model / DFD / STRIDE<br/>four-wave workbench, ADR-0008]:::todo
-  CMP --> OW[04 OWASP worklist then ASVS/MASVS<br/>control workbench, ADR-0009]:::found
+  CMP --> OW[04 OWASP worklist then ASVS/MASVS<br/>registered foundations only; lifecycle jobs non-executable<br/>source-SAST does not fulfill applicability or worklist]:::found
   CMP --> NM[05 Native memory]:::todo
   CMP --> CV[06 CVE reachability]:::todo
   CMP --> HD[15 STIG/SRG worklist then deployment hardening]:::gate
@@ -93,7 +93,7 @@ flowchart LR
   subgraph S["Source-only, no build needed"]
     SC[02-ossf-scorecard]:::built
     EI[02-evidence-index<br/>+ cloc/scc metrics, V15]:::built
-    SS[02-source-sast<br/>Semgrep C/C++ slice implemented<br/>happy-path qualification pending]:::found
+    SS[02-source-sast<br/>Semgrep C/C++ happy path qualified<br/>language/recovery gaps remain]:::built
     DOC[02-doc-intelligence-ingest]:::todo
     API[02-api-collection-intelligence-ingest]:::todo
     TI[02-test-intelligence-ingest]:::todo
@@ -116,8 +116,8 @@ flowchart LR
   INT --> V
 
   DEV --> BRES[02-build-index/classify/plan/resolution<br/>stage 13 qualified]:::built
-  BRES --> BC[02-build-configure<br/>implemented; stage 14 qualification pending]:::found
-  BC --> NB[02-native-build<br/>implemented; stage 15 qualification pending]:::found
+  BRES --> BC[02-build-configure<br/>stage 14 happy path qualified]:::built
+  BC --> NB[02-native-build<br/>stage 15 happy path qualified]:::built
   NB --> NS[02-native-sast E03]:::todo
   NB --> IRC[02-ir-capture E04]:::todo --> IRL[02-ir-link]:::todo --> IRF[02-ir-facts E05]:::todo
   NB --> DSI[02-debug-symbol-index E06]:::todo

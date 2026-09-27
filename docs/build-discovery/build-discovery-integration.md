@@ -1,6 +1,6 @@
 # Build discovery and the full job graph
 
-The Dagster `full_review` job exposes 54 lifecycle and registry jobs as dependency-linked
+The Dagster `full_review` job exposes 55 lifecycle and registry jobs as dependency-linked
 ops, plus configuration and build discovery. `00-validation` is the shared validation contract,
 not a recursively scheduled review job. The graph comes from `appsec-review-process/job-graph.json`.
 Every unavailable worker raises `WORKER_NOT_IMPLEMENTED` and records `pre.json` under the
@@ -77,8 +77,8 @@ handoff when no schema-valid result has been supplied. Build discovery remains p
 node now uses its dedicated build-lock replay worker: it consumes accepted `02-build-resolution`,
 runs only the lock's configure argv through offline B13 and publishes the common envelope.
 `02-native-build` separately replays configure/build and publishes the clang compile database and
-binaries. Both are implemented but not yet live-qualified; use their standalone `build_configure`
-and `native_build` jobs for bounded happy-path qualification. A successful configure result never
+binaries. Both passed bounded live happy-path qualification in SAT `20260927T005731Z`; use their
+standalone `build_configure` and `native_build` jobs for replay. A successful configure result never
 claims a successful target build or completed security review.
 
 ## Submit build execution
@@ -163,7 +163,7 @@ plus this qualifier before trusting it the way `build_discovery` is trusted here
 ## Registered lifecycle jobs
 
 See the manifest-generated [lifecycle dependency flow](../design-parity/full-review-workflow.mmd). Build discovery
-is a supporting workflow op before partition discovery, distinct from the 54-node lifecycle view
+is a supporting workflow op before partition discovery, distinct from the 55-node lifecycle view
 and from full developer project discovery. The authoritative per-job readiness is the generated
 [design parity readiness view](../design-parity/design-parity-readiness.md); a test keeps this table naming every
 graph job.
@@ -178,6 +178,8 @@ graph job.
 | `02-sre-operations-topology` | Worker blocked | Present |
 | `02-build-index` | Deterministic indexer on the common envelope (2026-09-25); requires accepted intake, D01, D02, D03; SAT stage 10 PASS | Present |
 | `02-build-classify` | Persona classification of build units on the common envelope (2026-09-25); requires the accepted build index; not yet live-qualified | Present |
+| `02-build-plan` | Persona build planner on the common envelope; live happy path passed; fault/recovery qualification pending | Present |
+| `02-build-resolution` | Qualified image, offline trial-build and immutable build-lock worker | Present |
 | `02-evidence-assembly` | Worker blocked | Missing |
 | `01-component-characterization` | Worker blocked | Missing |
 | `03-threat-model-dfd-stride` | Worker blocked | Missing |
@@ -199,9 +201,9 @@ graph job.
 | `02-test-intelligence-ingest` | Worker blocked | Present |
 | `04-owasp-validation-worklist` | Worker blocked | Present |
 | `15-stig-srg-validation-worklist` | Worker blocked | Present |
-| `02-build-configure` | Dedicated offline B13 lock-replay worker; implemented, happy-path and fault/recovery qualification pending | Present |
-| `02-native-build` | Dedicated offline B13 configure/build replay; implemented, happy-path and fault/recovery qualification pending | Present |
-| `02-source-sast` | Pinned offline Semgrep C/C++ slice; implemented, happy-path and fault/recovery qualification pending; Go/Java/PHP gaps remain | Present |
+| `02-build-configure` | Dedicated offline B13 lock-replay worker; happy path qualified; fault/recovery qualification pending | Present |
+| `02-native-build` | Dedicated offline B13 configure/build replay; happy path qualified; fault/recovery qualification pending | Present |
+| `02-source-sast` | Pinned offline Semgrep C/C++ slice; happy path qualified; fault/recovery and Go/Java/PHP gaps remain | Present |
 | `02-native-sast` | Worker blocked | Missing |
 | `02-ir-capture` | Worker blocked | Missing |
 | `02-ir-link` | Worker blocked | Missing |

@@ -2846,7 +2846,7 @@
      }
     },
     {
-     "name": "S6b Build replay (implemented; happy-path qualification pending)",
+     "name": "S6b Build replay (happy path qualified; recovery qualification pending)",
      "entries": [
       {
        "ref": "job:02-build-configure",
@@ -2906,7 +2906,7 @@
      }
     },
     {
-     "name": "S7 Source SAST first slice (implemented; qualification pending)",
+     "name": "S7 Source SAST first slice (happy path qualified; coverage and recovery gaps remain)",
      "entries": [
       {
        "ref": "job:02-source-sast",
@@ -5506,7 +5506,7 @@
     "job:02-build-configure",
     "configured-build"
    ],
-   "notes": "Implemented, not yet qualified. Replays only the accepted lock's configure argv from a fresh scratch copy through offline B13, with the target read-only and caller-held result hashes. SAT stage 14 is built; live happy-path and fault/recovery evidence remain to be recorded."
+   "notes": "Implemented and happy-path qualified in SAT 20260927T005731Z. Replays only the accepted lock's configure argv from a fresh scratch copy through offline B13, with the target read-only and caller-held result hashes. Fault/recovery qualification remains."
   },
   {
    "id": "native-build",
@@ -5529,7 +5529,7 @@
     "job:02-native-build",
     "native-build"
    ],
-   "notes": "Implemented, not yet qualified. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries. SAT stage 15 is built; live happy-path and fault/recovery evidence remain to be recorded."
+   "notes": "Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries. Fault/recovery qualification remains."
   },
   {
    "id": "source-sast",
@@ -5550,7 +5550,7 @@
     "job:02-source-sast",
     "source-sast-leads"
    ],
-   "notes": "Implemented, not yet qualified. Runs pinned Semgrep offline through B13 with repository-owned hashed C/C++ rules and publishes normalized static-analysis leads, never findings or severity. Go, Java and PHP tool families plus live happy-path and fault/recovery qualification remain gaps."
+   "notes": "Implemented and C/C++ happy-path qualified in SAT 20260927T005731Z. Runs pinned Semgrep offline through B13 with repository-owned hashed rules and publishes normalized static-analysis leads, never findings or severity. This output is one required input to 02-evidence-assembly; it is not a component-purpose map, OWASP applicability decision, validation worklist or ASVS/MASVS assessment. Downstream order is 02-source-sast -> 02-evidence-assembly -> 01-component-characterization -> 04-owasp-validation-worklist, while 04-asvs-masvs additionally waits for 03-threat-model-dfd-stride and the worklist. Those downstream jobs are currently non-executable. Go, Java and PHP tool families plus fault/recovery qualification remain gaps."
   },
   {
    "id": "b13-harmless-container",
@@ -6450,7 +6450,7 @@
    "outputs_source": "registry/output-contracts/build-resolution.json",
    "claim_class": "build_resolution",
    "gaps": [],
-   "next_prerequisite": "Implement and live-qualify stage 14, 02-build-configure (E01), by replaying the accepted lock through B13.",
+   "next_prerequisite": "Run fault-recovery qualification for stages 14-16 and integrate the remaining source-language tools.",
    "consumes": [
     "job:02-build-plan"
    ],
@@ -8387,10 +8387,9 @@
    "outputs_source": "registry/output-contracts/configured-build.json",
    "claim_class": "build_replay",
    "gaps": [
-    "happy_path_not_yet_live",
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run SAT stage 14 happy path; retain fault-recovery qualification as follow-up.",
+   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
    "consumes": [
     "job:02-build-resolution"
    ],
@@ -8459,10 +8458,9 @@
    "outputs_source": "registry/output-contracts/native-build.json",
    "claim_class": "build_replay",
    "gaps": [
-    "happy_path_not_yet_live",
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run SAT stage 15 happy path; retain fault-recovery qualification as follow-up.",
+   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
    "consumes": [
     "job:02-build-configure"
    ],
@@ -8527,11 +8525,10 @@
    "outputs_source": "registry/output-contracts/source-sast.json",
    "claim_class": "source_static_evidence",
    "gaps": [
-    "happy_path_not_yet_live",
     "go_java_php_tools_not_integrated",
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run the source-SAST SAT happy path, then add the remaining declared language tools and fault-recovery qualification.",
+   "next_prerequisite": "Add the remaining declared language tools and run live fault-recovery qualification.",
    "consumes": [
     "job:00-intake"
    ],

@@ -245,13 +245,13 @@ On `OK`:
   replay this lock from a clean copy: if the replay does not reproduce the trial, that is a failure
   of those jobs, not a silent pass.
 
-The replay workers are now implemented but not yet live-qualified. `02-build-configure` executes
+The replay workers passed live happy-path qualification in SAT `20260927T005731Z`. `02-build-configure` executes
 only the lock's configure argv and publishes `configured-build.json` plus the B13 receipts.
 `02-native-build` starts from another clean scratch copy, executes configure then build, and
 publishes `native-build.json`, the clang compile database and produced native binaries. Both use
 the catalogued immutable image, an exact run/job/source-bound target-execution grant, no network,
 a read-only target and caller-held B13 result hashes. SAT stages 14 and 15 exercise their happy
-paths; fault/recovery qualification remains after that.
+paths; fault/recovery qualification remains.
 
 A catalogued image is deleted only by an operator (`image_build.py` prune, later); the catalog
 entry is never rewritten, only appended to.

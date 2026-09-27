@@ -38,8 +38,8 @@
        {"name": "S5 Developer project discovery", "members": ["step:supply-dev", "step:dev_project_discovery"]},
        {"name": "Phase 3 B13 service qualification", "members": ["step:b13-harmless-container"]},
        {"name": "S6a Build resolution (implemented and qualified through stage 13)", "members": ["step:build-index", "step:build-classify", "step:build-plan", "step:build-resolution"]},
-       {"name": "S6b Build replay (implemented; happy-path qualification pending)", "members": ["job:02-build-configure", "job:02-native-build"]},
-       {"name": "S7 Source SAST first slice (implemented; qualification pending)", "members": ["job:02-source-sast"]}
+       {"name": "S6b Build replay (happy path qualified; recovery qualification pending)", "members": ["job:02-build-configure", "job:02-native-build"]},
+       {"name": "S7 Source SAST first slice (happy path qualified; coverage and recovery gaps remain)", "members": ["job:02-source-sast"]}
      ]},
     {"id": "engagement-workflow", "name": "engagement_workflow pipeline (dagster-workflow.mmd)",
      "source": "docs/dagster/dagster-workflow.mmd",

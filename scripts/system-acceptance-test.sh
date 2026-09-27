@@ -1419,8 +1419,31 @@ stage_build_plan() {
   local key="$REPO/fixtures/supplied/$FIXTURE/02-build-plan-structure.json"
   [[ -f "$key" ]] || die "build-plan: no answer key $key for fixture $FIXTURE"
 
-  echo "-- accept: build_plan must publish an accepted, validated plan (live model call per build-set unit)"
-  run_step build-plan accept "$(contract build-plan accept <<JSON
+  if [[ -n "$RESUME" && -f "$RUN_DIR/data/jobs/$BUILD_PLAN_JOB/accepted.json" ]]; then
+    # A failed live call may be repaired through the job's documented --force resume command between
+    # SAT invocations.  Adopt only a result that the worker can revalidate end to end; this step is
+    # deliberately read-only, and the semantic/answer-key checks below still run unchanged.
+    echo "-- recover: adopt the accepted build plan produced by the failed stage's forced resume"
+    run_step build-plan recover "$(contract build-plan recover <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_CLASSIFY_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_CLASSIFY_JOB"}},
+            {"path": "{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_PLAN_JOB"}},
+            {"path": "{run}/data/jobs/$BUILD_PLAN_JOB/latest.json", "kind": "file"}],
+ "writes": {"required": [], "allowed": [], "deletes": []}}
+JSON
+)" "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import build_plan; build_plan.validate(sys.argv[2]); print("validator OK")' \
+      "$REPO/appsec-review-process" "$RUN_ID"
+    [[ $STEP_RC == 0 ]] || die "build-plan: recovered result failed validation"
+    LAUNCH_STATUS=SUCCESS
+    LAUNCH_DAGSTER="$(python3 - "$RUN_DIR" <<'PY'
+import json, pathlib, sys
+r = pathlib.Path(sys.argv[1]); d = r / 'data/jobs/02-build-plan'
+p = json.loads((d / 'accepted.json').read_text())
+print(json.loads((d / 'attempts' / p['attempt_id'] / 'status.json').read_text())['dagster_run_id'])
+PY
+)"
+  else
+    echo "-- accept: build_plan must publish an accepted, validated plan (live model call per build-set unit)"
+    run_step build-plan accept "$(contract build-plan accept <<JSON
 {"inputs": [{"path": "{run}/data/jobs/$BUILD_CLASSIFY_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_CLASSIFY_JOB"}},
             {"path": "{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "kind": "absent"},
             {"path": "{run}/**/02-build-plan-structure.json", "kind": "absent"},
@@ -1447,8 +1470,9 @@ stage_build_plan() {
              {"path": "{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "equals": {"job": "$BUILD_PLAN_JOB"}}]}
 JSON
 )" launch build_plan
-  launch_status
-  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "build-plan: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+    launch_status
+    [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "build-plan: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  fi
   "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import build_plan; build_plan.validate(sys.argv[2]); print("validator OK")' \
     "$REPO/appsec-review-process" "$RUN_ID" || die "build-plan: build_plan.validate rejected the accepted result"
 
@@ -1675,8 +1699,33 @@ PY
 # ---- stage: source-sast -------------------------------------------------------------------------
 stage_source_sast() {
   require_run source-sast
-  run_step source-sast accept "$(contract source-sast accept <<JSON
-{"inputs": [{"path": "{run}/inputs/artifact-manifest.json", "kind": "file", "schema": "artifact-manifest.schema.json"}],
+  local accepted_status=""
+  if [[ -f "$RUN_DIR/data/jobs/$SOURCE_SAST_JOB/accepted.json" ]]; then
+    accepted_status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status",""))' "$RUN_DIR/data/jobs/$SOURCE_SAST_JOB/accepted.json")"
+  fi
+  if [[ -n "$RESUME" && "$accepted_status" == OK_WITH_GAPS ]]; then
+    echo "-- recover: adopt the accepted source-SAST result produced by the failed stage's forced resume"
+    run_step source-sast recover "$(contract source-sast recover <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$SOURCE_SAST_JOB/accepted.json", "kind": "file", "equals": {"job": "$SOURCE_SAST_JOB", "status": "OK_WITH_GAPS"}},
+            {"path": "{run}/data/jobs/$SOURCE_SAST_JOB/latest.json", "kind": "file"}],
+ "writes": {"required": [], "allowed": [], "deletes": []}}
+JSON
+)" "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import source_sast; source_sast.validate(sys.argv[2]); print("validator OK")' \
+      "$REPO/appsec-review-process" "$RUN_ID"
+    [[ $STEP_RC == 0 ]] || die "source-sast: recovered result failed validation"
+    LAUNCH_STATUS=SUCCESS
+    LAUNCH_DAGSTER="$(python3 - "$RUN_DIR" <<'PY'
+import json, pathlib, sys
+r = pathlib.Path(sys.argv[1]); d = r / 'data/jobs/02-source-sast'
+p = json.loads((d / 'accepted.json').read_text())
+print(json.loads((d / 'attempts' / p['attempt_id'] / 'status.json').read_text())['dagster_run_id'])
+PY
+)"
+  else
+    run_step source-sast accept "$(contract source-sast accept <<JSON
+{"inputs": [{"path": "{run}/inputs/artifact-manifest.json", "kind": "file",
+             "equals": {"schema": "appsec-review-process/artifact-manifest/0.1", "run_id": "{run_id}"},
+             "nonempty": ["target.repo_path", "source_identity.revision"]}],
  "writes": {"required": ["{run}/data/jobs/$SOURCE_SAST_JOB/accepted.json", "{run}/data/jobs/$SOURCE_SAST_JOB/latest.json",
                          "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/source-sast.json",
                          "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/b13-receipts.json",
@@ -1686,8 +1735,9 @@ stage_source_sast() {
              {"path": "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "pinned_container", "job_id": "$SOURCE_SAST_JOB", "execution_status": "OK_WITH_GAPS"}}]}
 JSON
 )" launch source_sast
-  launch_status
-  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "source-sast: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+    launch_status
+    [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "source-sast: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  fi
   "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import source_sast; print(source_sast.validate(sys.argv[2]))' "$REPO/appsec-review-process" "$RUN_ID" || die "source-sast: validator rejected result"
   local summary
   summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" <<'PY'

@@ -318,7 +318,7 @@ The steps run so far on hello-autotools, in process-flow order. Source: `docs/pr
 | [build_resolution (Dagster job)](#step-build-resolution) | Dagster job | [`build-plan`](#a-build-plan)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`permission-grant`](#a-permission-grant)<br>[`buildenv-image`](#a-buildenv-image)<br>[`sut-checkout`](#a-sut-checkout) | [`build-attempts`](#a-build-attempts)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`build-lock`](#a-build-lock) |
 | **Group rollup** | | **Enters:** [`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`sut-checkout`](#a-sut-checkout)<br>[`llm-invoker`](#a-llm-invoker)<br>[`buildenv-catalog`](#a-buildenv-catalog)<br>[`permission-grant`](#a-permission-grant)<br>[`buildenv-image`](#a-buildenv-image) | **Leaves:** [`02-build-plan`](#a-job-02-build-plan)<br>[`build-attempts`](#a-build-attempts)<br>[`build-lock`](#a-build-lock) |
 
-### Fixture bring-up: S6b Build replay (implemented; happy-path qualification pending)
+### Fixture bring-up: S6b Build replay (happy path qualified; recovery qualification pending)
 
 | Step | Type | Consumes | Produces |
 |---|---|---|---|
@@ -326,7 +326,7 @@ The steps run so far on hello-autotools, in process-flow order. Source: `docs/pr
 | [Native Build](#job-02-native-build) | lifecycle job | [`02-build-configure`](#a-job-02-build-configure) | [`02-native-build`](#a-job-02-native-build) |
 | **Group rollup** | | **Enters:** [`02-build-resolution`](#a-job-02-build-resolution) | **Leaves:** [`02-native-build`](#a-job-02-native-build) |
 
-### Fixture bring-up: S7 Source SAST first slice (implemented; qualification pending)
+### Fixture bring-up: S7 Source SAST first slice (happy path qualified; coverage and recovery gaps remain)
 
 | Step | Type | Consumes | Produces |
 |---|---|---|---|
@@ -948,7 +948,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-build-configure`](#job-02-build-configure) |
 | Consumes | [`02-build-resolution`](#a-job-02-build-resolution)<br>[`build-lock`](#a-build-lock)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`permission-grant`](#a-permission-grant)<br>[`sut-checkout`](#a-sut-checkout) |
 | Produces | [`02-build-configure`](#a-job-02-build-configure)<br>[`configured-build`](#a-configured-build) |
-| Notes | Implemented, not yet qualified. Replays only the accepted lock's configure argv from a fresh scratch copy through offline B13, with the target read-only and caller-held result hashes. SAT stage 14 is built; live happy-path and fault/recovery evidence remain to be recorded. |
+| Notes | Implemented and happy-path qualified in SAT 20260927T005731Z. Replays only the accepted lock's configure argv from a fresh scratch copy through offline B13, with the target read-only and caller-held result hashes. Fault/recovery qualification remains. |
 
 <a id="step-native-build"></a>
 
@@ -961,7 +961,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-native-build`](#job-02-native-build) |
 | Consumes | [`02-build-configure`](#a-job-02-build-configure)<br>[`configured-build`](#a-configured-build)<br>[`build-lock`](#a-build-lock)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`permission-grant`](#a-permission-grant)<br>[`sut-checkout`](#a-sut-checkout) |
 | Produces | [`02-native-build`](#a-job-02-native-build)<br>[`native-build`](#a-native-build) |
-| Notes | Implemented, not yet qualified. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries. SAT stage 15 is built; live happy-path and fault/recovery evidence remain to be recorded. |
+| Notes | Implemented and happy-path qualified in SAT 20260927T005731Z. Replays the accepted configure and build argv through offline B13 and publishes the clang compile database plus produced native binaries. Fault/recovery qualification remains. |
 
 <a id="step-source-sast"></a>
 
@@ -974,7 +974,7 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-source-sast`](#job-02-source-sast) |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`sut-checkout`](#a-sut-checkout)<br>[`source-sast-rules`](#a-source-sast-rules)<br>[`semgrep-image`](#a-semgrep-image) |
 | Produces | [`02-source-sast`](#a-job-02-source-sast)<br>[`source-sast-leads`](#a-source-sast-leads) |
-| Notes | Implemented, not yet qualified. Runs pinned Semgrep offline through B13 with repository-owned hashed C/C++ rules and publishes normalized static-analysis leads, never findings or severity. Go, Java and PHP tool families plus live happy-path and fault/recovery qualification remain gaps. |
+| Notes | Implemented and C/C++ happy-path qualified in SAT 20260927T005731Z. Runs pinned Semgrep offline through B13 with repository-owned hashed rules and publishes normalized static-analysis leads, never findings or severity. This output is one required input to 02-evidence-assembly; it is not a component-purpose map, OWASP applicability decision, validation worklist or ASVS/MASVS assessment. Downstream order is 02-source-sast -> 02-evidence-assembly -> 01-component-characterization -> 04-owasp-validation-worklist, while 04-asvs-masvs additionally waits for 03-threat-model-dfd-stride and the worklist. Those downstream jobs are currently non-executable. Go, Java and PHP tool families plus fault/recovery qualification remain gaps. |
 
 <a id="step-b13-harmless-container"></a>
 
@@ -1375,7 +1375,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-build-resolution/` |
 | Output files (registry/output-contracts/build-resolution.json) | build-resolution.json<br>build-lock.json<br>b13-receipts.json<br>build-resolution-summary.md<br>status.json |
 | Consumed by | [`build-configure`](#step-build-configure)<br>[`02-build-configure`](#job-02-build-configure) |
-| Next prerequisite | Implement and live-qualify stage 14, 02-build-configure (E01), by replaying the accepted lock through B13. |
+| Next prerequisite | Run fault-recovery qualification for stages 14-16 and integrate the remaining source-language tools. |
 
 <a id="job-02-evidence-assembly"></a>
 
@@ -1506,8 +1506,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-build-configure/` |
 | Output files (registry/output-contracts/configured-build.json) | configured-build.json<br>b13-receipts.json<br>configured-build-summary.md<br>status.json |
 | Consumed by | [`native-build`](#step-native-build)<br>[`02-native-build`](#job-02-native-build) |
-| Gaps | `happy_path_not_yet_live`, `fault_recovery_not_qualified` |
-| Next prerequisite | Run SAT stage 14 happy path; retain fault-recovery qualification as follow-up. |
+| Gaps | `fault_recovery_not_qualified` |
+| Next prerequisite | Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking. |
 
 <a id="job-02-native-build"></a>
 
@@ -1526,8 +1526,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-native-build/` |
 | Output files (registry/output-contracts/native-build.json) | native-build.json<br>b13-receipts.json<br>native-build-summary.md<br>status.json |
 | Consumed by | [`02-native-sast`](#job-02-native-sast)<br>[`02-ir-capture`](#job-02-ir-capture)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index)<br>[`02-binary-triage`](#job-02-binary-triage)<br>[`02-test-execution`](#job-02-test-execution) |
-| Gaps | `happy_path_not_yet_live`, `fault_recovery_not_qualified` |
-| Next prerequisite | Run SAT stage 15 happy path; retain fault-recovery qualification as follow-up. |
+| Gaps | `fault_recovery_not_qualified` |
+| Next prerequisite | Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking. |
 
 <a id="job-02-source-sast"></a>
 
@@ -1546,8 +1546,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-source-sast/` |
 | Output files (registry/output-contracts/source-sast.json) | source-sast.json<br>b13-receipts.json<br>source-sast-summary.md<br>status.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `happy_path_not_yet_live`, `go_java_php_tools_not_integrated`, `fault_recovery_not_qualified` |
-| Next prerequisite | Run the source-SAST SAT happy path, then add the remaining declared language tools and fault-recovery qualification. |
+| Gaps | `go_java_php_tools_not_integrated`, `fault_recovery_not_qualified` |
+| Next prerequisite | Add the remaining declared language tools and run live fault-recovery qualification. |
 
 <a id="job-02-native-sast"></a>
 

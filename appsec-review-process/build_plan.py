@@ -157,6 +157,22 @@ def catalog_bases(catalog):
                    if entry.get('image')})
 
 
+def canonicalize_catalog_base(value, catalog):
+    """Canonicalize an exact catalog image reference to the logical id stored in a plan.
+
+    The prompt asks for the logical id, while the staged catalog necessarily contains the runnable
+    ``:local`` reference.  Treating that exact catalog value as an unambiguous spelling of the same
+    choice keeps the validator strict: arbitrary tags and images are still rejected by ``check``.
+    """
+    references = {str(entry.get('image')): str(entry.get('image')).split(':', 1)[0]
+                  for entry in catalog.get('images', []) if entry.get('image')}
+    for plan in value.get('plans', []):
+        image = plan.get('image')
+        if isinstance(image, dict) and image.get('base') in references:
+            image['base'] = references[image['base']]
+    return value
+
+
 def derived_dispositions(classification):
     return [{'unit_id': u['unit_id'], 'class': u['class'], 'disposition': DISPOSITIONS[u['class']]}
             for u in sorted(classification.get('units', []), key=lambda u: u['unit_id'])
@@ -470,6 +486,7 @@ def run(run_id, dagster_id, force=False, dispatch=None):
             finalize(value, classification=classification, index_ref=index_ref,
                      classification_ref=classification_ref, source_revision=record['source_revision'],
                      pinned=pinned)
+            canonicalize_catalog_base(value, catalog)
             errors = check(value, classification, index, catalog, index_ref=index_ref,
                            classification_ref=classification_ref, source_revision=record['source_revision'],
                            expected_units=[unit_id])

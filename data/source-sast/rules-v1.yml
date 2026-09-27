@@ -11,8 +11,15 @@ rules:
     message: non-literal format evidence lead
     severity: WARNING
     patterns:
-      - pattern: printf($FORMAT, ...)
+      - pattern-either:
+          - pattern: printf($FORMAT)
+          - pattern: printf($FORMAT, ...)
+          - pattern: std::printf($FORMAT)
+          - pattern: std::printf($FORMAT, ...)
+      - pattern-not: printf("...")
       - pattern-not: printf("...", ...)
+      - pattern-not: std::printf("...")
+      - pattern-not: std::printf("...", ...)
   - id: appsec.c.memcpy
     languages: [c, cpp]
     message: memory copy evidence lead

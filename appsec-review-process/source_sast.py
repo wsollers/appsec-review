@@ -253,6 +253,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         adapter_id = "semgrep-" + allocation["attempt_id"][:12]
         request = _request(run_id, adapter_id, inputs)
         trial = attempt / "tools" / TOOL_ID
+        trial.mkdir(parents=True)
         terminal = ce.run_container(runtime, run_id=run_id, job_id=JOB, attempt_id=adapter_id,
                                     attempt_root=trial, request=request)
         expected_sha = terminal["result_sha256"]
@@ -289,6 +290,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status="OK_WITH_GAPS",
             summary=f"Semgrep produced {len(result['leads'])} normalized static-analysis lead(s).",
             status_record=status, artifact_paths=[RESULT, RECEIPTS, SUMMARY, "status.json"],
+            gaps=result["coverage_gaps"],
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs),
         )
 

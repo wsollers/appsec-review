@@ -1,6 +1,6 @@
 # Mythos design-parity report
 
-Status: **PASS**
+Status: **FAIL**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
 Lifecycle jobs: **55**
@@ -10,9 +10,9 @@ Design capabilities: **16**
 
 | State | Jobs |
 |---|---:|
-| `implemented_and_qualified` | 3 |
-| `implemented_not_qualified` | 5 |
-| `missing_prerequisites` | 36 |
+| `implemented_and_qualified` | 4 |
+| `implemented_not_qualified` | 6 |
+| `missing_prerequisites` | 34 |
 | `registered_planned_not_executable` | 7 |
 | `supplied_artifact_gate` | 4 |
 
@@ -29,7 +29,7 @@ Design capabilities: **16**
 | `02-build-index` | true | `actual_worker` | `implemented_not_qualified` | `cpu` |
 | `02-build-classify` | true | `actual_worker` | `implemented_not_qualified` | `persona_llm` |
 | `02-build-plan` | true | `actual_worker` | `implemented_not_qualified` | `persona_llm` |
-| `02-build-resolution` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
+| `02-build-resolution` | true | `actual_worker` | `implemented_and_qualified` | `docker` |
 | `02-evidence-assembly` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `01-component-characterization` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `03-threat-model-dfd-stride` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -51,9 +51,9 @@ Design capabilities: **16**
 | `02-test-intelligence-ingest` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `04-owasp-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `15-stig-srg-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `02-build-configure` | false | `actual_worker` | `implemented_not_qualified` | `docker` |
-| `02-native-build` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-source-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-build-configure` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
+| `02-native-build` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
+| `02-source-sast` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
 | `02-native-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-ir-capture` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-ir-link` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -127,15 +127,9 @@ Design capabilities: **16**
 - 02-binary-triage: resource pool unassigned
 - 02-binary-triage: unassigned_resource_pool
 - 02-build-classify: fault_recovery_not_qualified
-- 02-build-configure: graph_implemented_flag_false
-- 02-build-configure: missing_dedicated_output_schema
-- 02-build-configure: missing_output_contract
-- 02-build-configure: missing_registry_composition
-- 02-build-configure: no qualification evidence
-- 02-build-configure: no_live_full_review_qualification
+- 02-build-configure: fault_recovery_not_qualified
 - 02-build-index: fault_recovery_not_qualified
 - 02-build-plan: fault_recovery_not_qualified
-- 02-build-resolution: live_stage13_not_qualified
 - 02-container-image-inventory: missing_registry_composition
 - 02-container-image-inventory: missing_validator
 - 02-container-image-inventory: missing_worker
@@ -230,15 +224,7 @@ Design capabilities: **16**
 - 02-mobile-sast: no_qualification
 - 02-mobile-sast: resource pool unassigned
 - 02-mobile-sast: unassigned_resource_pool
-- 02-native-build: missing_dedicated_output_schema
-- 02-native-build: missing_output_contract
-- 02-native-build: missing_registry_composition
-- 02-native-build: missing_validator
-- 02-native-build: missing_worker
-- 02-native-build: no qualification evidence
-- 02-native-build: no_qualification
-- 02-native-build: resource pool unassigned
-- 02-native-build: unassigned_resource_pool
+- 02-native-build: fault_recovery_not_qualified
 - 02-native-sast: missing_dedicated_output_schema
 - 02-native-sast: missing_output_contract
 - 02-native-sast: missing_registry_composition
@@ -280,15 +266,8 @@ Design capabilities: **16**
 - 02-secrets-inventory: no_qualification
 - 02-secrets-inventory: resource pool unassigned
 - 02-secrets-inventory: unassigned_resource_pool
-- 02-source-sast: missing_dedicated_output_schema
-- 02-source-sast: missing_output_contract
-- 02-source-sast: missing_registry_composition
-- 02-source-sast: missing_validator
-- 02-source-sast: missing_worker
-- 02-source-sast: no qualification evidence
-- 02-source-sast: no_qualification
-- 02-source-sast: resource pool unassigned
-- 02-source-sast: unassigned_resource_pool
+- 02-source-sast: fault_recovery_not_qualified
+- 02-source-sast: go_java_php_tools_not_integrated
 - 02-sre-operations-topology: no qualification evidence
 - 02-sre-operations-topology: not_automatic_analysis_dispatch
 - 02-sre-operations-topology: supplied_result_required
@@ -504,4 +483,4 @@ Design capabilities: **16**
 
 ## Validation errors
 
-- None.
+- stale generated readiness_table: docs/design-parity/design-parity-readiness.md

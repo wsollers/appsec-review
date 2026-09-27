@@ -91,12 +91,13 @@ image `image_build_a453dcd7c961`, six clang compile commands, and an externally 
 The follow-up qualification proved immutable reuse, tamper rejection, a newer non-zero container
 failure, recovery without fallback and recovered reuse.
 
-Stages 14-16 are implemented in the SAT but have not yet completed a live SAT. Passing their unit,
-contract and syntax checks is not qualification. Stage 14 must prove configure-only lock replay;
-stage 15 must prove build replay plus a non-empty clang compile database and produced binary; stage
-16 must prove the pinned Semgrep happy path and retain `OK_WITH_GAPS` for the Go, Java and PHP tool
-families not integrated by this first slice. Immutable reuse, tamper/newer-failure handling and
-recovery for these three stages remain a separate qualification gap even after the happy path runs.
+Stages 14-16 completed the live happy path in SAT `20260927T005731Z`, engagement
+`20260927T005737Z-ab3403`. Stage 14 replayed the two configure commands through offline B13; stage
+15 reproduced the six-entry clang compile database and published only the expected
+`hello-autotools` ELF; stage 16 ran pinned Semgrep and published four normalized leads from four
+repository rules with one explicit language-coverage gap. Immutable reuse,
+tamper/newer-failure handling and recovery for these three stages remain a separate qualification
+gap; source-SAST also retains the Go, Java and PHP tool-family gap.
 
 Phase 3 prerequisite status (2026-09-27): **complete.** B13's three result-verification entry points
 require the caller-retained `result_sha256`, including C02 handoff and cancellation; B16 generates
@@ -118,6 +119,20 @@ accepted intake, not the native build. The first implementation runs the B16-res
 `tool-semgrep` image through B13 with no network, a read-only target and repository-owned hashed
 C/C++ rules. Its normalized records are static-analysis leads, not findings or severity claims;
 raw messages and snippets remain in the immutable tool attempt.
+
+Stage 16 does **not** categorize components or fulfill the OWASP path. `02-source-sast` is one
+required producer for the still non-executable `02-evidence-assembly`; only an accepted assembly
+can feed the non-executable `01-component-characterization`, which must produce the component-purpose
+map. That map is required by the registered but non-executable `04-owasp-validation-worklist`.
+`04-asvs-masvs` is also non-executable and waits for the component map, the threat-model output and
+the accepted OWASP worklist. The dependency order is therefore:
+
+```text
+02-source-sast -> 02-evidence-assembly -> 01-component-characterization
+                                        -> 04-owasp-validation-worklist
+01-component-characterization + 03-threat-model-dfd-stride
+  + 04-owasp-validation-worklist -> 04-asvs-masvs
+```
 
 ### 1. `sut-checkout`
 
