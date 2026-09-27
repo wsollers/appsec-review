@@ -17,6 +17,7 @@ import dynamic_rescope
 import evidence_quorum
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json, run_path
 import pool_rendezvous
+import persona_tool_pool_lifecycle
 import remediation_retest
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from review_control_loops import completion_gate
@@ -88,41 +89,18 @@ def _code(job_id: str) -> dict[str, str]:
     return values
 
 
-def _dispatch_request(run_id: str, attempt: Path) -> tuple[dict[str, Any], Path]:
-    envelope = read_json(attempt / "result.json")
-    lineage = read_json(attempt / "lineage.json")
-    expected = envelope["input_fingerprint"]
-    if lineage.get("build_lineage_sha256") != expected:
-        raise Blocked("deterministic merge: dispatch request lineage is inconsistent")
-    owner = run_path(run_id)
-    candidates: list[tuple[Path, dict[str, Any]]] = []
-    for path in owner.rglob("*.json"):
-        if path.is_symlink() or not path.is_file() or "attempts" in path.parts:
-            continue
-        try:
-            value = read_json(path)
-        except Exception:
-            continue
-        if (isinstance(value, dict) and value.get("schema") == control_lane_orchestration.SCHEMA and
-                value.get("run_id") == run_id and value.get("job_id") == "persona-tool-pool-dispatch" and
-                _sha(value) == expected):
-            candidates.append((path, value))
-    if len(candidates) != 1:
-        raise Blocked("deterministic merge: exact retained dispatch verification request is unavailable")
-    return candidates[0][1], candidates[0][0]
-
-
 def _verified_dispatch(run_id: str) -> tuple[pool_rendezvous.VerifiedManifest, Path, dict[str, Any]]:
     dispatch, binding, attempt = _current(run_id, "persona-tool-pool-dispatch")
-    request, request_path = _dispatch_request(run_id, attempt)
-    value, owner, _source, generation = control_lane_orchestration._request(
-        run_id, "persona-tool-pool-dispatch", str(request_path))
-    payload = value["payload"]
-    if set(payload) != {"spec_path", "context", "runtime"}:
-        raise Blocked("deterministic merge: retained dispatch request is invalid")
-    context = control_lane_orchestration._pool_context(payload["context"], owner, generation)
-    spec = read_json(Path(payload["spec_path"]))
-    rendezvous_parent = Path(payload["runtime"]["rendezvous_parent"]).absolute()
+    record = read_json(attempt / "pool-context.json")
+    context = persona_tool_pool_lifecycle._load_retained_context(record)
+    spec_path = context.pool_parent / dispatch["pool_directory"] / "pool-specification.json"
+    spec = read_json(spec_path)
+    request = read_json(attempt / "deterministic-merge-request.json")
+    expected = persona_tool_pool_lifecycle._handoff(
+        persona_tool_pool_lifecycle._current_inputs(run_id), attempt, record)
+    if request != expected:
+        raise Blocked("deterministic merge: retained dispatch request changed")
+    rendezvous_parent = Path(record["rendezvous_parent"]).absolute()
     verified = pool_rendezvous.load_verified_manifest(
         context.pool_parent / dispatch["pool_directory"], expected_spec=spec, context=context,
         rendezvous_parent=rendezvous_parent)
@@ -203,6 +181,9 @@ def current_inputs(run_id: str, job_id: str) -> dict[str, Any]:
     report, report_binding, report_attempt = _current(run_id, "10-synthesis-report")
     audit, audit_binding, _ = _current(run_id, "completeness-audit")
     feedback, feedback_binding, _ = _current(run_id, "synthetic-hypothesis-resynthesis")
+    _quorum, quorum_binding, _ = _current(run_id, "evidence-qualified-quorum")
+    _rescope, rescope_binding, _ = _current(run_id, "dynamic-rescope")
+    _remediation, remediation_binding, _ = _current(run_id, "remediation-retest-feedback")
     publication = report_attempt / "publication-manifest.json"
     if publication.is_symlink() or not publication.is_file():
         raise Blocked("final publication preparation: draft publication manifest is absent")
@@ -217,6 +198,8 @@ def current_inputs(run_id: str, job_id: str) -> dict[str, Any]:
             feedback.get("run_id") != run_id or feedback.get("audit_sha256") != _sha(audit)):
         raise Blocked("final publication preparation: draft completion lineage is inconsistent")
     return {**base, "report": report_binding, "audit": audit_binding, "feedback": feedback_binding,
+            "quorum": quorum_binding, "rescope": rescope_binding,
+            "remediation_retest": remediation_binding,
             "report_sha256": report_binding["artifact_sha256"], "publication_manifest_sha256": HASH + file_hash(publication),
             "draft_attempt": str(report_attempt)}
 

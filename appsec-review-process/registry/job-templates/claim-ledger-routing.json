@@ -1,5 +1,5 @@
 {
-  "schema": "appsec-review/job-template/0.1", "job_template_id": "claim-ledger-routing", "display_name": "Append-Only Candidate Claim Ledger", "process": "claim-ledger-routing", "budget_default": "probe",
+  "schema": "appsec-review/job-template/0.1", "job_template_id": "claim-ledger-routing", "display_name": "Append-Only Candidate Claim Ledger", "process": "07-red-team-adversarial", "budget_default": "probe",
   "model": {"model": "deterministic-python", "effort": "none"},
   "composition": {"persona_id": "developer-engineer", "role_id": "claim-ledger-custodian", "domain_id": "claim-ledger-lifecycle", "tooling_profile_id": "hash-linked-claim-ledger", "output_contract_id": "claim-ledger-core"},
   "inputs": {"required": ["current accepted S02 and/or OWASP candidate-route artifacts"], "optional": ["accepted prior ledger", "authorized decision events"]},

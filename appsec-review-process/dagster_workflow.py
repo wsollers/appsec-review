@@ -48,6 +48,9 @@ import native_sast as native_sast_worker
 import operations_doc_ingest as operations_doc_worker
 import standards_source_ingest as standards_source_worker
 import standards_lifecycle
+import claim_ledger
+import persona_tool_pool_lifecycle
+import control_feature_lifecycle
 import test_coverage_ingest as test_coverage_worker
 import test_execution as test_execution_worker
 import test_intelligence_ingest as test_intelligence_worker
@@ -729,6 +732,64 @@ owasp_worklist_lifecycle_work = standards_lifecycle_op('04-owasp-validation-work
 owasp_join_lifecycle_work = standards_lifecycle_op('04-asvs-masvs', PERSONA_POOL)
 stig_worklist_lifecycle_work = standards_lifecycle_op('15-stig-srg-validation-worklist')
 deployment_lifecycle_work = standards_lifecycle_op('15-deployment-hardening')
+
+
+def claim_ledger_lifecycle_op():
+    @op(name='job_claim_ledger_routing',
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def claim_ledger_stage(context, configured, upstream):
+        result = claim_ledger.run(
+            configured['engagement_run_id'], context.run_id,
+            configured.get('force', False))
+        attempt = claim_ledger.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / claim_ledger.LEDGER)),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return claim_ledger_stage
+
+
+claim_ledger_lifecycle_work = claim_ledger_lifecycle_op()
+
+
+@op(name='job_persona_tool_pool_dispatch_lifecycle',
+    ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
+def persona_tool_pool_lifecycle_work(context, configured, upstream):
+    result = persona_tool_pool_lifecycle.run(
+        configured['engagement_run_id'], context.run_id,
+        configured.get('force', False))
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(data_path(
+            configured['engagement_run_id'], 'jobs', 'persona-tool-pool-dispatch', 'whole'))),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+def control_feature_lifecycle_op(graph_job_id, worker_job_id=None):
+    worker_job_id = worker_job_id or graph_job_id
+    @op(name='job_' + graph_job_id.replace('-', '_') + '_lifecycle',
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def control_stage(context, configured, upstream):
+        result = control_feature_lifecycle.run(
+            configured['engagement_run_id'], context.run_id, worker_job_id,
+            configured.get('force', False))
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(data_path(
+                configured['engagement_run_id'], 'jobs', worker_job_id))),
+            'attempt_id': result['attempt_id']})
+        return result
+    return control_stage
+
+
+deterministic_pool_merge_lifecycle_work = control_feature_lifecycle_op('deterministic-pool-merge')
+evidence_qualified_quorum_lifecycle_work = control_feature_lifecycle_op('evidence-qualified-quorum')
+dynamic_rescope_lifecycle_work = control_feature_lifecycle_op('dynamic-rescope')
+completeness_audit_lifecycle_work = control_feature_lifecycle_op('completeness-audit')
+synthetic_resynthesis_lifecycle_work = control_feature_lifecycle_op('synthetic-hypothesis-resynthesis')
+remediation_retest_feedback_lifecycle_work = control_feature_lifecycle_op('remediation-retest-feedback')
+final_publication_preparation_lifecycle_work = control_feature_lifecycle_op(
+    'final-publication-gate', 'final-publication-preparation')
 
 
 @op(name='job_02_evidence_assembly', ins={'configured': In(dict), 'upstream': In(list)},
@@ -1532,6 +1593,15 @@ LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
 LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work
 LIFECYCLE_OPS['15-stig-srg-validation-worklist']=stig_worklist_lifecycle_work
 LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
+LIFECYCLE_OPS['claim-ledger-routing']=claim_ledger_lifecycle_work
+LIFECYCLE_OPS['persona-tool-pool-dispatch']=persona_tool_pool_lifecycle_work
+LIFECYCLE_OPS['deterministic-pool-merge']=deterministic_pool_merge_lifecycle_work
+LIFECYCLE_OPS['evidence-qualified-quorum']=evidence_qualified_quorum_lifecycle_work
+LIFECYCLE_OPS['dynamic-rescope']=dynamic_rescope_lifecycle_work
+LIFECYCLE_OPS['completeness-audit']=completeness_audit_lifecycle_work
+LIFECYCLE_OPS['synthetic-hypothesis-resynthesis']=synthetic_resynthesis_lifecycle_work
+LIFECYCLE_OPS['remediation-retest-feedback']=remediation_retest_feedback_lifecycle_work
+LIFECYCLE_OPS['final-publication-gate']=final_publication_preparation_lifecycle_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
