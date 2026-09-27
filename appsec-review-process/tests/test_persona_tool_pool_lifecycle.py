@@ -67,6 +67,25 @@ def merged(inputs, *, producers=2):
 
 
 class GraphPoolLifecycleTests(unittest.TestCase):
+    def test_intake_control_generation_uses_staged_run_manifest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            run = Path(folder)
+            base = run / "data" / "jobs" / "00-intake" / "whole"
+            attempt = base / "attempts" / "intake-1"
+            (attempt / "outputs").mkdir(parents=True)
+            atomic_json(attempt / "outputs" / "intake.json", intake())
+            atomic_json(base / "accepted.json", {"retained": True})
+            atomic_json(run / "inputs" / "artifact-manifest.json", {"run_id": RUN_ID})
+            pointer = {"status":"OK", "run_id":RUN_ID, "attempt_id":"intake-1",
+                       "published_at":"2026-09-27T12:00:00Z"}
+            with mock.patch.object(lifecycle.phase1, "accepted", return_value=pointer), \
+                 mock.patch.object(lifecycle, "data_path",
+                     side_effect=lambda _run,*parts:run.joinpath("data", *parts)), \
+                 mock.patch.object(lifecycle, "run_path", return_value=run):
+                _value, _binding, _attempt, generation, _accepted_at = lifecycle._load_intake(RUN_ID)
+            self.assertEqual(generation, "sha256:" + lifecycle.file_hash(
+                run / "inputs" / "artifact-manifest.json"))
+
     def test_c01_plan_has_two_distinct_persona_producers(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder).resolve()

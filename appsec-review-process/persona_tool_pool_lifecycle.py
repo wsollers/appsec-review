@@ -22,7 +22,8 @@ import pool_rendezvous
 import pool_specification
 import resource_pools
 import review_cli
-from execution_state import Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash, read_json
+from execution_state import (Blocked, ROOT, atomic_bytes, atomic_json, data_path, digest, file_hash,
+                             read_json, run_path)
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
 
@@ -68,7 +69,9 @@ def _load_intake(run_id: str) -> tuple[dict, dict, Path, str, str]:
     artifact = attempt / "outputs" / "intake.json"
     intake = read_json(artifact)
     source = "sha256:" + intake["source_fingerprint"]
-    manifest = data_path(run_id, "inputs", "artifact-manifest.json")
+    # Staged run inputs live beside data/, not beneath it.  Bind the pool's control generation to
+    # the same manifest Phase 1 validated.
+    manifest = run_path(run_id) / "inputs" / "artifact-manifest.json"
     if manifest.is_symlink() or not manifest.is_file():
         raise Blocked("persona/tool pool: run artifact manifest is unavailable")
     control_generation = "sha256:" + file_hash(manifest)

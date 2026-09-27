@@ -19,6 +19,7 @@ from execution_state import (Blocked, ROOT, atomic_json, data_path, digest, file
                              identifier, run_path, tree_hashes)
 import pool_rendezvous
 import persona_tool_pool_lifecycle
+import phase1
 import remediation_retest
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from review_control_loops import completion_gate
@@ -72,6 +73,28 @@ def _accepted_base(run_id: str, job_id: str) -> Path:
 
 def _current(run_id: str, job_id: str) -> tuple[dict[str, Any], dict[str, Any], Path]:
     contract, artifact, schema = UPSTREAM[job_id]
+    if job_id == "00-intake":
+        # Phase 1 predates the common worker envelope and deliberately retains its stricter
+        # closed pointer/status/tree contract.  Validate it through its authoritative loader,
+        # then expose only a canonical downstream binding.
+        pointer = phase1.accepted(run_id, fresh=True)
+        if (not pointer or pointer.get("status") != "OK" or
+                pointer.get("run_id") != run_id or pointer.get("job_id") != job_id):
+            raise Blocked("00-intake: a fresh accepted intake is required")
+        base = phase1.job_root(run_id)
+        pointer_path = base / "accepted.json"
+        attempt = base / "attempts" / identifier(pointer["attempt_id"])
+        artifact_path = attempt / artifact
+        if artifact_path.is_symlink() or not artifact_path.is_file():
+            raise Blocked("00-intake: accepted intake artifact is unavailable")
+        value = read_json(artifact_path)
+        errors = validate_document(value, schema)
+        if errors:
+            raise Blocked("00-intake: accepted intake artifact schema is invalid")
+        binding = {"job_id":job_id, "attempt_id":pointer["attempt_id"],
+            "artifact_path":artifact, "artifact_sha256":HASH + file_hash(artifact_path),
+            "accepted_pointer_sha256":HASH + file_hash(pointer_path)}
+        return value, binding, attempt
     base = _accepted_base(run_id, job_id)
     pointer_path = base / "accepted.json"
     pointer = read_json(pointer_path) if pointer_path.is_file() else {}

@@ -195,6 +195,33 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
             with self.assertRaisesRegex(Blocked, "stale"):
                 life._current("run", "10-synthesis-report")
 
+    def test_phase1_intake_is_adapted_to_canonical_current_binding(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder) / "00-intake" / "whole"
+            attempt = base / "attempts" / "intake-1"
+            (attempt / "outputs").mkdir(parents=True)
+            value = {"schema":"appsec-review/intake/1", "source_fingerprint":"2" * 64,
+                "source_revision":"abc123", "business_goal":"Review target",
+                "platforms":["Linux"], "budget":"standard", "execution_environment":"local",
+                "permissions":[], "scope":{"include":["**"], "exclude":[],
+                    "excluded_paths":[], "unavailable":[], "all_paths":[],
+                    "primary_selection_excludes_other_scope":False},
+                "families":{}, "manifests":[], "native":{"applicable":False},
+                "selected_jobs":["00-intake"], "ready_to_collect":True,
+                "pregather_complete":False, "findings":[],
+                "limitations":["Intake alone is not a security review."]}
+            atomic_json(attempt / "outputs" / "intake.json", value)
+            atomic_json(base / "accepted.json", {"retained":True})
+            pointer = {"status":"OK", "run_id":"run", "job_id":"00-intake",
+                       "attempt_id":"intake-1"}
+            with mock.patch.object(life.phase1, "accepted", return_value=pointer), \
+                 mock.patch.object(life.phase1, "job_root", return_value=base):
+                loaded, binding, retained = life._current("run", "00-intake")
+            self.assertEqual(loaded, value)
+            self.assertEqual(binding["artifact_path"], "outputs/intake.json")
+            self.assertEqual(binding["job_id"], "00-intake")
+            self.assertEqual(retained, attempt)
+
     def test_evidence_supported_remediation_skip_is_a_current_control_input(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder); attempt = base / "attempts" / "skip-1"; attempt.mkdir(parents=True)

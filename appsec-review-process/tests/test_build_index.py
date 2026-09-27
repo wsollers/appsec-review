@@ -435,6 +435,26 @@ class WorkerFixture(unittest.TestCase):
         self.tmp.cleanup()
 
 
+class AutomaticUpstreamBinding(unittest.TestCase):
+    def test_named_automatic_discovery_artifact_is_bound(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            intake = base / 'intake'
+            (intake / 'outputs').mkdir(parents=True)
+            automatic = base / 'automatic'
+            automatic.mkdir()
+            named = discovery_gate.AUTOMATIC_JOBS['02-dev-project-discovery']['result']
+            atomic_json(automatic / named, {'projects': []})
+            pointer = {'status': 'OK', 'attempt_id': intake.name}
+            with patch.object(phase1, 'accepted', return_value=pointer), \
+                 patch.object(phase1, 'job_root', return_value=base), \
+                 patch.object(bi, 'UPSTREAM_JOBS', ('02-dev-project-discovery',)), \
+                 patch.object(discovery_gate, 'validate', return_value=automatic):
+                found = bi._upstream_attempts('run')
+            self.assertEqual(found['02-dev-project-discovery'][1], named)
+            self.assertEqual(found['02-dev-project-discovery'][2], automatic / named)
+
+
 class Worker(WorkerFixture):
     """The graph node's run/validate on the common envelope, over the fixture run."""
 
