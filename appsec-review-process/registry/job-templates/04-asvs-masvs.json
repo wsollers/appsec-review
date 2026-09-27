@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "04-asvs-masvs",
+  "display_name": "OWASP Control Accounting And Candidate Routing",
+  "process": "04-asvs-masvs",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-join-reporter",
+    "output_contract_id": "owasp-join-report"
+  },
+  "implemented": false,
+  "permissions": [
+    "read-run-data",
+    "write-run-data"
+  ],
+  "inputs": {
+    "required": [
+      "exact accepted OWASP dispatch accounting",
+      "hash-verified applicability and assessment artifacts"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/04-asvs-masvs/attempts/<attempt_id>",
+    "files": [
+      "owasp-control-status-matrix.json",
+      "owasp-coverage-gaps.json",
+      "owasp-candidate-promotion-routes.json",
+      "permission.json",
+      "lineage.json",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "source_lineage",
+    "task",
+    "output_contract"
+  ]
+}

@@ -1797,7 +1797,7 @@
       {
        "ref": "job:04-asvs-masvs",
        "id": "04-asvs-masvs",
-       "name": "04-asvs-masvs",
+       "name": "OWASP Control Accounting And Candidate Routing",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
@@ -1808,12 +1808,8 @@
         "job:04-asvs-masvs"
        ],
        "declared_inputs": [
-        "component-purpose map",
-        "DFD/trust boundaries if available",
-        "coverage ledger",
-        "evidence package",
-        "ASVS version",
-        "MASVS/MASTG version"
+        "exact accepted OWASP dispatch accounting",
+        "hash-verified applicability and assessment artifacts"
        ]
       },
       {
@@ -1964,12 +1960,8 @@
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
-       "component-purpose map",
-       "DFD/trust boundaries if available",
-       "coverage ledger",
-       "evidence package",
-       "ASVS version",
-       "MASVS/MASTG version",
+       "exact accepted OWASP dispatch accounting",
+       "hash-verified applicability and assessment artifacts",
        "appsec-review-process/standards/catalog/owasp-*",
        "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
        "scratch/<project>-engagement/standards-intel/component-tag-cloud.json",
@@ -1983,6 +1975,7 @@
        "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
        "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
        "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
+       "component-purpose map",
        "source imports/callers",
        "runtime/deployment evidence",
        "known dependency versions",
@@ -2012,7 +2005,7 @@
       {
        "ref": "job:07-red-team-adversarial",
        "id": "07-red-team-adversarial",
-       "name": "07-red-team-adversarial",
+       "name": "Red-team Adversarial Hypothesis Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
@@ -2027,19 +2020,14 @@
         "job:07-red-team-adversarial"
        ],
        "declared_inputs": [
-        "stated business goal",
-        "component-purpose map",
-        "component taxonomy / component cloud",
-        "known issue catalog",
-        "evidence package",
-        "current findings",
-        "known coverage gaps"
+        "exact accepted claim ledger",
+        "bounded reviewer decisions"
        ]
       },
       {
        "ref": "job:08-blue-team-refutation",
        "id": "08-blue-team-refutation",
-       "name": "08-blue-team-refutation",
+       "name": "Blue-team Refutation Core",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -2049,19 +2037,14 @@
         "job:08-blue-team-refutation"
        ],
        "declared_inputs": [
-        "red-team claim",
-        "red-team design lane: `L4` or `L5`",
-        "red-team mode: `general`, `known-list`, or `kill-chain`",
-        "cited source/evidence",
-        "component map",
-        "known issue catalog, when answering known-list red-team claims",
-        "relevant tool artifacts"
+        "exact accepted adversarial hypotheses",
+        "bounded independent refutation decisions"
        ]
       },
       {
        "ref": "job:09-independent-verification",
        "id": "09-independent-verification",
-       "name": "09-independent-verification",
+       "name": "Independent Verification Core",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -2071,10 +2054,8 @@
         "job:09-independent-verification"
        ],
        "declared_inputs": [
-        "specific claim to verify",
-        "cited source/evidence only",
-        "relevant artifacts",
-        "original finder output, if needed for IDs only"
+        "exact accepted blue-team dispositions",
+        "bounded independent verification decisions"
        ]
       },
       {
@@ -2099,7 +2080,7 @@
       {
        "ref": "job:12-scoring-prioritization",
        "id": "12-scoring-prioritization",
-       "name": "12-scoring-prioritization",
+       "name": "Verified Claim Scoring Core",
        "kind": "lifecycle",
        "consumes": [
         "job:09-independent-verification",
@@ -2110,10 +2091,8 @@
         "job:12-scoring-prioritization"
        ],
        "declared_inputs": [
-        "verified findings (from `09-independent-verification`)",
-        "the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)",
-        "EPSS/KEV data, where applicable",
-        "exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available)"
+        "exact accepted independent verification",
+        "bounded scoring factors"
        ]
       },
       {
@@ -2181,36 +2160,23 @@
        "job:12-scoring-prioritization"
       ],
       "declared_inputs": [
-       "stated business goal",
-       "component-purpose map",
-       "component taxonomy / component cloud",
-       "known issue catalog",
-       "evidence package",
-       "current findings",
-       "known coverage gaps",
-       "red-team claim",
-       "red-team design lane: `L4` or `L5`",
-       "red-team mode: `general`, `known-list`, or `kill-chain`",
-       "cited source/evidence",
-       "component map",
-       "known issue catalog, when answering known-list red-team claims",
-       "relevant tool artifacts",
-       "specific claim to verify",
-       "cited source/evidence only",
-       "relevant artifacts",
-       "original finder output, if needed for IDs only",
+       "exact accepted claim ledger",
+       "bounded reviewer decisions",
+       "exact accepted adversarial hypotheses",
+       "bounded independent refutation decisions",
+       "exact accepted blue-team dispositions",
+       "bounded independent verification decisions",
        "independently verified finding or error",
        "verifier output and testcase artifacts",
        "target source paths and exact tested environment",
        "compile database or build command used by verification",
        "coverage and retrieval artifacts needed to understand callers/impact",
-       "verified findings (from `09-independent-verification`)",
-       "the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)",
-       "EPSS/KEV data, where applicable",
-       "exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available)",
+       "exact accepted independent verification",
+       "bounded scoring factors",
        "verified findings",
        "unresolved risks",
        "coverage ledger",
+       "component map",
        "threat model",
        "ASVS/MASVS assessment",
        "red/blue/verifier outputs",
@@ -2377,12 +2343,8 @@
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
-     "component-purpose map",
-     "DFD/trust boundaries if available",
-     "coverage ledger",
-     "evidence package",
-     "ASVS version",
-     "MASVS/MASTG version",
+     "exact accepted OWASP dispatch accounting",
+     "hash-verified applicability and assessment artifacts",
      "appsec-review-process/standards/catalog/owasp-*",
      "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
      "scratch/<project>-engagement/standards-intel/component-tag-cloud.json",
@@ -2396,6 +2358,7 @@
      "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
      "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
      "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
+     "component-purpose map",
      "source imports/callers",
      "runtime/deployment evidence",
      "known dependency versions",
@@ -2416,33 +2379,23 @@
      "Dockerfile/image/platform inventory",
      "SBOM or package inventory",
      "curated STIG/SRG/NSA reference records",
-     "stated business goal",
-     "component taxonomy / component cloud",
-     "known issue catalog",
-     "current findings",
-     "known coverage gaps",
-     "red-team claim",
-     "red-team design lane: `L4` or `L5`",
-     "red-team mode: `general`, `known-list`, or `kill-chain`",
-     "cited source/evidence",
-     "component map",
-     "known issue catalog, when answering known-list red-team claims",
-     "relevant tool artifacts",
-     "specific claim to verify",
-     "cited source/evidence only",
-     "relevant artifacts",
-     "original finder output, if needed for IDs only",
+     "exact accepted claim ledger",
+     "bounded reviewer decisions",
+     "exact accepted adversarial hypotheses",
+     "bounded independent refutation decisions",
+     "exact accepted blue-team dispositions",
+     "bounded independent verification decisions",
      "independently verified finding or error",
      "verifier output and testcase artifacts",
      "target source paths and exact tested environment",
      "compile database or build command used by verification",
      "coverage and retrieval artifacts needed to understand callers/impact",
-     "verified findings (from `09-independent-verification`)",
-     "the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)",
-     "EPSS/KEV data, where applicable",
-     "exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available)",
+     "exact accepted independent verification",
+     "bounded scoring factors",
      "verified findings",
      "unresolved risks",
+     "coverage ledger",
+     "component map",
      "threat model",
      "ASVS/MASVS assessment",
      "red/blue/verifier outputs",
@@ -4106,7 +4059,7 @@
       {
        "ref": "job:04-asvs-masvs",
        "id": "04-asvs-masvs",
-       "name": "04-asvs-masvs",
+       "name": "OWASP Control Accounting And Candidate Routing",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
@@ -4117,12 +4070,8 @@
         "job:04-asvs-masvs"
        ],
        "declared_inputs": [
-        "component-purpose map",
-        "DFD/trust boundaries if available",
-        "coverage ledger",
-        "evidence package",
-        "ASVS version",
-        "MASVS/MASTG version"
+        "exact accepted OWASP dispatch accounting",
+        "hash-verified applicability and assessment artifacts"
        ]
       },
       {
@@ -4155,12 +4104,8 @@
        "job:04-owasp-validation-worklist"
       ],
       "declared_inputs": [
-       "component-purpose map",
-       "DFD/trust boundaries if available",
-       "coverage ledger",
-       "evidence package",
-       "ASVS version",
-       "MASVS/MASTG version",
+       "exact accepted OWASP dispatch accounting",
+       "hash-verified applicability and assessment artifacts",
        "appsec-review-process/standards/catalog/owasp-*",
        "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
        "scratch/<project>-engagement/standards-intel/component-tag-cloud.json"
@@ -4378,7 +4323,7 @@
       {
        "ref": "job:07-red-team-adversarial",
        "id": "07-red-team-adversarial",
-       "name": "07-red-team-adversarial",
+       "name": "Red-team Adversarial Hypothesis Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
@@ -4393,13 +4338,8 @@
         "job:07-red-team-adversarial"
        ],
        "declared_inputs": [
-        "stated business goal",
-        "component-purpose map",
-        "component taxonomy / component cloud",
-        "known issue catalog",
-        "evidence package",
-        "current findings",
-        "known coverage gaps"
+        "exact accepted claim ledger",
+        "bounded reviewer decisions"
        ]
       }
      ],
@@ -4418,13 +4358,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "stated business goal",
-       "component-purpose map",
-       "component taxonomy / component cloud",
-       "known issue catalog",
-       "evidence package",
-       "current findings",
-       "known coverage gaps"
+       "exact accepted claim ledger",
+       "bounded reviewer decisions"
       ]
      }
     },
@@ -4434,7 +4369,7 @@
       {
        "ref": "job:08-blue-team-refutation",
        "id": "08-blue-team-refutation",
-       "name": "08-blue-team-refutation",
+       "name": "Blue-team Refutation Core",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -4444,13 +4379,8 @@
         "job:08-blue-team-refutation"
        ],
        "declared_inputs": [
-        "red-team claim",
-        "red-team design lane: `L4` or `L5`",
-        "red-team mode: `general`, `known-list`, or `kill-chain`",
-        "cited source/evidence",
-        "component map",
-        "known issue catalog, when answering known-list red-team claims",
-        "relevant tool artifacts"
+        "exact accepted adversarial hypotheses",
+        "bounded independent refutation decisions"
        ]
       }
      ],
@@ -4464,13 +4394,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "red-team claim",
-       "red-team design lane: `L4` or `L5`",
-       "red-team mode: `general`, `known-list`, or `kill-chain`",
-       "cited source/evidence",
-       "component map",
-       "known issue catalog, when answering known-list red-team claims",
-       "relevant tool artifacts"
+       "exact accepted adversarial hypotheses",
+       "bounded independent refutation decisions"
       ]
      }
     },
@@ -4480,7 +4405,7 @@
       {
        "ref": "job:09-independent-verification",
        "id": "09-independent-verification",
-       "name": "09-independent-verification",
+       "name": "Independent Verification Core",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -4490,10 +4415,8 @@
         "job:09-independent-verification"
        ],
        "declared_inputs": [
-        "specific claim to verify",
-        "cited source/evidence only",
-        "relevant artifacts",
-        "original finder output, if needed for IDs only"
+        "exact accepted blue-team dispositions",
+        "bounded independent verification decisions"
        ]
       }
      ],
@@ -4507,10 +4430,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "specific claim to verify",
-       "cited source/evidence only",
-       "relevant artifacts",
-       "original finder output, if needed for IDs only"
+       "exact accepted blue-team dispositions",
+       "bounded independent verification decisions"
       ]
      }
     },
@@ -4560,7 +4481,7 @@
       {
        "ref": "job:12-scoring-prioritization",
        "id": "12-scoring-prioritization",
-       "name": "12-scoring-prioritization",
+       "name": "Verified Claim Scoring Core",
        "kind": "lifecycle",
        "consumes": [
         "job:09-independent-verification",
@@ -4571,10 +4492,8 @@
         "job:12-scoring-prioritization"
        ],
        "declared_inputs": [
-        "verified findings (from `09-independent-verification`)",
-        "the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)",
-        "EPSS/KEV data, where applicable",
-        "exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available)"
+        "exact accepted independent verification",
+        "bounded scoring factors"
        ]
       }
      ],
@@ -4589,10 +4508,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "verified findings (from `09-independent-verification`)",
-       "the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)",
-       "EPSS/KEV data, where applicable",
-       "exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available)"
+       "exact accepted independent verification",
+       "bounded scoring factors"
       ]
      }
     },
@@ -4787,12 +4704,8 @@
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
-     "component-purpose map",
-     "DFD/trust boundaries if available",
-     "coverage ledger",
-     "evidence package",
-     "ASVS version",
-     "MASVS/MASTG version",
+     "exact accepted OWASP dispatch accounting",
+     "hash-verified applicability and assessment artifacts",
      "appsec-review-process/standards/catalog/owasp-*",
      "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
      "scratch/<project>-engagement/standards-intel/component-tag-cloud.json",
@@ -4806,6 +4719,7 @@
      "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
      "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
      "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
+     "component-purpose map",
      "source imports/callers",
      "runtime/deployment evidence",
      "known dependency versions",
@@ -4826,33 +4740,23 @@
      "Dockerfile/image/platform inventory",
      "SBOM or package inventory",
      "curated STIG/SRG/NSA reference records",
-     "stated business goal",
-     "component taxonomy / component cloud",
-     "known issue catalog",
-     "current findings",
-     "known coverage gaps",
-     "red-team claim",
-     "red-team design lane: `L4` or `L5`",
-     "red-team mode: `general`, `known-list`, or `kill-chain`",
-     "cited source/evidence",
-     "component map",
-     "known issue catalog, when answering known-list red-team claims",
-     "relevant tool artifacts",
-     "specific claim to verify",
-     "cited source/evidence only",
-     "relevant artifacts",
-     "original finder output, if needed for IDs only",
+     "exact accepted claim ledger",
+     "bounded reviewer decisions",
+     "exact accepted adversarial hypotheses",
+     "bounded independent refutation decisions",
+     "exact accepted blue-team dispositions",
+     "bounded independent verification decisions",
      "independently verified finding or error",
      "verifier output and testcase artifacts",
      "target source paths and exact tested environment",
      "compile database or build command used by verification",
      "coverage and retrieval artifacts needed to understand callers/impact",
-     "verified findings (from `09-independent-verification`)",
-     "the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)",
-     "EPSS/KEV data, where applicable",
-     "exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available)",
+     "exact accepted independent verification",
+     "bounded scoring factors",
      "verified findings",
      "unresolved risks",
+     "coverage ledger",
+     "component map",
      "threat model",
      "ASVS/MASVS assessment",
      "red/blue/verifier outputs",
@@ -6915,16 +6819,22 @@
   {
    "id": "04-asvs-masvs",
    "lane": "04-asvs-masvs",
-   "name": "04-asvs-masvs",
-   "contract": "04-asvs-masvs",
+   "name": "OWASP Control Accounting And Candidate Routing",
+   "contract": "owasp-join-report",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/owasp_join_publisher.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-join-reporter",
+    "output_contract_id": "owasp-join-report"
+   },
    "depends_on": [
     {
      "job": "01-component-characterization",
@@ -6945,49 +6855,31 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "component-purpose map"
+     "input": "exact accepted OWASP dispatch accounting"
     },
     {
      "need": "required",
-     "input": "DFD/trust boundaries if available"
-    },
-    {
-     "need": "required",
-     "input": "coverage ledger"
-    },
-    {
-     "need": "required",
-     "input": "evidence package"
-    },
-    {
-     "need": "required",
-     "input": "ASVS version"
-    },
-    {
-     "need": "required",
-     "input": "MASVS/MASTG version"
+     "input": "hash-verified applicability and assessment artifacts"
     }
    ],
-   "inputs_source": "04-asvs-masvs/config.md",
+   "inputs_source": "registry/job-templates/04-asvs-masvs.json",
    "output_dir": "runs/<run_id>/data/jobs/04-asvs-masvs/",
    "output_files": [
-    "applicability matrix",
-    "component-to-control worklist",
-    "per-control assessment notes",
-    "not-applicable rationale with evidence"
+    "owasp-control-status-matrix.json",
+    "owasp-coverage-gaps.json",
+    "owasp-candidate-promotion-routes.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
    ],
-   "outputs_source": "04-asvs-masvs/config.md",
+   "outputs_source": "registry/output-contracts/owasp-join-report.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified T14 publisher to the shared Dagster lifecycle, assign its resource pool, and complete live qualification.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
@@ -7337,16 +7229,22 @@
   {
    "id": "07-red-team-adversarial",
    "lane": "07-red-team-adversarial",
-   "name": "07-red-team-adversarial",
+   "name": "Red-team Adversarial Hypothesis Core",
    "contract": "07-red-team-adversarial",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-assembler",
+    "domain_id": "verified-findings",
+    "tooling_profile_id": "hash-bound-evidence-assembly",
+    "output_contract_id": "07-red-team-adversarial"
+   },
    "depends_on": [
     {
      "job": "01-component-characterization",
@@ -7361,7 +7259,7 @@
     {
      "job": "04-asvs-masvs",
      "kind": "required",
-     "contract": "04-asvs-masvs"
+     "contract": "owasp-join-report"
     },
     {
      "job": "05-native-memory",
@@ -7387,59 +7285,29 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "stated business goal"
+     "input": "exact accepted claim ledger"
     },
     {
      "need": "required",
-     "input": "component-purpose map"
-    },
-    {
-     "need": "required",
-     "input": "component taxonomy / component cloud"
-    },
-    {
-     "need": "required",
-     "input": "known issue catalog"
-    },
-    {
-     "need": "required",
-     "input": "evidence package"
-    },
-    {
-     "need": "required",
-     "input": "current findings"
-    },
-    {
-     "need": "required",
-     "input": "known coverage gaps"
+     "input": "bounded reviewer decisions"
     }
    ],
-   "inputs_source": "07-red-team-adversarial/config.md",
+   "inputs_source": "registry/job-templates/07-red-team-adversarial.json",
    "output_dir": "runs/<run_id>/data/jobs/07-red-team-adversarial/",
    "output_files": [
-    "general adversarial scenarios from open-ended inference, tagged `L4` or `L5`",
-    "known-list adversarial scenarios from `known-issue-catalog.md`, tagged `L4` or `L5`",
-    "kill-chain scenarios (added 2026-09-18): each one must enumerate its individual steps (per step: component id, weakness/gap exploited, evidence), identify the taint source and sink explicitly for tainted-data chains, and state why the composed chain survives currently deployed mitigations end-to-end -- not just why each step looks plausible alone",
-    "strongest exploitability arguments",
-    "hostile-vendor placement hypotheses (`L5`)",
-    "component-mapped known-issue hypotheses",
-    "minimum checks required to defeat each scenario",
-    "known coverage gaps used as scenario input, and their source (see \"Known Coverage Gaps\" below)",
-    "design lane used: `L4`, `L5`, or `both` (with the note above)",
-    "red-team mode used: `general`, `known-list`, `kill-chain`, or `combined`"
+    "red-team-adversarial.json",
+    "permission.json",
+    "status.json"
    ],
-   "outputs_source": "07-red-team-adversarial/config.md",
+   "outputs_source": "registry/output-contracts/07-red-team-adversarial.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "common_lifecycle_publication_not_integrated",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
@@ -7456,16 +7324,22 @@
   {
    "id": "08-blue-team-refutation",
    "lane": "08-blue-team-refutation",
-   "name": "08-blue-team-refutation",
+   "name": "Blue-team Refutation Core",
    "contract": "08-blue-team-refutation",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-assembler",
+    "domain_id": "verified-findings",
+    "tooling_profile_id": "hash-bound-evidence-assembly",
+    "output_contract_id": "08-blue-team-refutation"
+   },
    "depends_on": [
     {
      "job": "07-red-team-adversarial",
@@ -7481,55 +7355,29 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "red-team claim"
+     "input": "exact accepted adversarial hypotheses"
     },
     {
      "need": "required",
-     "input": "red-team design lane: `L4` or `L5`"
-    },
-    {
-     "need": "required",
-     "input": "red-team mode: `general`, `known-list`, or `kill-chain`"
-    },
-    {
-     "need": "required",
-     "input": "cited source/evidence"
-    },
-    {
-     "need": "required",
-     "input": "component map"
-    },
-    {
-     "need": "required",
-     "input": "known issue catalog, when answering known-list red-team claims"
-    },
-    {
-     "need": "required",
-     "input": "relevant tool artifacts"
+     "input": "bounded independent refutation decisions"
     }
    ],
-   "inputs_source": "08-blue-team-refutation/config.md",
+   "inputs_source": "registry/job-templates/08-blue-team-refutation.json",
    "output_dir": "runs/<run_id>/data/jobs/08-blue-team-refutation/",
    "output_files": [
-    "design lane answered: `L4` or `L5` (carried through from the red-team claim)",
-    "refutation or partial refutation",
-    "defense and mitigation analysis",
-    "missing evidence",
-    "residual risk",
-    "recommended disposition"
+    "blue-team-refutation.json",
+    "permission.json",
+    "status.json"
    ],
-   "outputs_source": "08-blue-team-refutation/config.md",
+   "outputs_source": "registry/output-contracts/08-blue-team-refutation.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "common_lifecycle_publication_not_integrated",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
    "consumes": [
     "job:07-red-team-adversarial",
     "job:01-component-characterization"
@@ -7541,16 +7389,22 @@
   {
    "id": "09-independent-verification",
    "lane": "09-independent-verification",
-   "name": "09-independent-verification",
+   "name": "Independent Verification Core",
    "contract": "09-independent-verification",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-assembler",
+    "domain_id": "verified-findings",
+    "tooling_profile_id": "hash-bound-evidence-assembly",
+    "output_contract_id": "09-independent-verification"
+   },
    "depends_on": [
     {
      "job": "07-red-team-adversarial",
@@ -7566,41 +7420,29 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "specific claim to verify"
+     "input": "exact accepted blue-team dispositions"
     },
     {
      "need": "required",
-     "input": "cited source/evidence only"
-    },
-    {
-     "need": "required",
-     "input": "relevant artifacts"
-    },
-    {
-     "need": "required",
-     "input": "original finder output, if needed for IDs only"
+     "input": "bounded independent verification decisions"
     }
    ],
-   "inputs_source": "09-independent-verification/config.md",
+   "inputs_source": "registry/job-templates/09-independent-verification.json",
    "output_dir": "runs/<run_id>/data/jobs/09-independent-verification/",
    "output_files": [
-    "verified/refuted/unresolved verdict",
-    "evidence citations",
-    "confidence",
-    "missing evidence"
+    "independent-verification.json",
+    "permission.json",
+    "status.json"
    ],
-   "outputs_source": "09-independent-verification/config.md",
+   "outputs_source": "registry/output-contracts/09-independent-verification.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "common_lifecycle_publication_not_integrated",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
    "consumes": [
     "job:07-red-team-adversarial",
     "job:08-blue-team-refutation"
@@ -7683,16 +7525,22 @@
   {
    "id": "12-scoring-prioritization",
    "lane": "12-scoring-prioritization",
-   "name": "12-scoring-prioritization",
+   "name": "Verified Claim Scoring Core",
    "contract": "12-scoring-prioritization",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-assembler",
+    "domain_id": "verified-findings",
+    "tooling_profile_id": "hash-bound-evidence-assembly",
+    "output_contract_id": "12-scoring-prioritization"
+   },
    "depends_on": [
     {
      "job": "09-independent-verification",
@@ -7713,43 +7561,29 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "verified findings (from `09-independent-verification`)"
+     "input": "exact accepted independent verification"
     },
     {
      "need": "required",
-     "input": "the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)"
-    },
-    {
-     "need": "required",
-     "input": "EPSS/KEV data, where applicable"
-    },
-    {
-     "need": "required",
-     "input": "exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available)"
+     "input": "bounded scoring factors"
     }
    ],
-   "inputs_source": "12-scoring-prioritization/config.md",
+   "inputs_source": "registry/job-templates/12-scoring-prioritization.json",
    "output_dir": "runs/<run_id>/data/jobs/12-scoring-prioritization/",
    "output_files": [
-    "per-finding CVSS 4.0 vector, with each metric marked either \"derived\" (cite the verified-fact attribute it came from) or \"LLM-assigned\" (only for metrics with no direct verified-fact mapping)",
-    "per-finding confidence classification (carried from the verifying lane's disposition, not re-derived here)",
-    "per-finding trust classification",
-    "EPSS/KEV annotation where applicable, with a note when neither applies",
-    "a priority ranking of verified findings, with the ranking rationale stated (not just the score)",
-    "exact JSON/table shape `10-synthesis-report` consumes, so synthesis does not need to re-score"
+    "scoring-prioritization.json",
+    "permission.json",
+    "status.json"
    ],
-   "outputs_source": "12-scoring-prioritization/config.md",
+   "outputs_source": "registry/output-contracts/12-scoring-prioritization.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "common_lifecycle_publication_not_integrated",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
    "consumes": [
     "job:09-independent-verification",
     "job:15-deployment-hardening",
@@ -7786,7 +7620,7 @@
     {
      "job": "04-asvs-masvs",
      "kind": "required",
-     "contract": "04-asvs-masvs"
+     "contract": "owasp-join-report"
     },
     {
      "job": "07-red-team-adversarial",
@@ -10794,7 +10628,7 @@
    "id": "job:04-asvs-masvs",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/04-asvs-masvs/",
-   "about": "Accepted 04-asvs-masvs output of 04-asvs-masvs.",
+   "about": "Accepted owasp-join-report output of 04-asvs-masvs.",
    "produced_by": [
     "job:04-asvs-masvs"
    ],

@@ -412,8 +412,8 @@
     },
     "04-asvs-masvs": {
       "lane": "04-asvs-masvs",
-      "contract": "04-asvs-masvs",
-      "template": null,
+      "contract": "owasp-join-report",
+      "template": "04-asvs-masvs",
       "implemented": false,
       "namespace": "04-asvs-masvs",
       "dependencies": [
@@ -528,7 +528,7 @@
     "07-red-team-adversarial": {
       "lane": "07-red-team-adversarial",
       "contract": "07-red-team-adversarial",
-      "template": null,
+      "template": "07-red-team-adversarial",
       "implemented": false,
       "namespace": "07-red-team-adversarial",
       "dependencies": [
@@ -547,7 +547,7 @@
         {
           "job": "04-asvs-masvs",
           "kind": "required",
-          "contract": "04-asvs-masvs",
+          "contract": "owasp-join-report",
           "allowed_skip_reasons": []
         },
         {
@@ -579,7 +579,7 @@
     "08-blue-team-refutation": {
       "lane": "08-blue-team-refutation",
       "contract": "08-blue-team-refutation",
-      "template": null,
+      "template": "08-blue-team-refutation",
       "implemented": false,
       "namespace": "08-blue-team-refutation",
       "dependencies": [
@@ -600,7 +600,7 @@
     "09-independent-verification": {
       "lane": "09-independent-verification",
       "contract": "09-independent-verification",
-      "template": null,
+      "template": "09-independent-verification",
       "implemented": false,
       "namespace": "09-independent-verification",
       "dependencies": [
@@ -636,7 +636,7 @@
     "12-scoring-prioritization": {
       "lane": "12-scoring-prioritization",
       "contract": "12-scoring-prioritization",
-      "template": null,
+      "template": "12-scoring-prioritization",
       "implemented": false,
       "namespace": "12-scoring-prioritization",
       "dependencies": [
@@ -682,7 +682,7 @@
         {
           "job": "04-asvs-masvs",
           "kind": "required",
-          "contract": "04-asvs-masvs",
+          "contract": "owasp-join-report",
           "allowed_skip_reasons": []
         },
         {

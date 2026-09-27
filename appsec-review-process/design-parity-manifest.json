@@ -1224,19 +1224,29 @@
           "04-owasp-validation-worklist"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "04-asvs-masvs",
+        "persona": "owasp-validator",
+        "role": "standards-control-validator",
+        "domain": "owasp-application-controls",
+        "tooling_profile": "owasp-join-reporter",
+        "output_contract": "owasp-join-report"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/owasp_join_publisher.py:run",
+        "validator": "appsec-review-process/owasp_join_publisher.py:validate"
       },
       "output": {
-        "contract": "04-asvs-masvs",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "owasp-join-report",
+        "contract_file": "appsec-review-process/registry/output-contracts/owasp-join-report.json",
+        "schema_file": "schemas/owasp-control-status-matrix.schema.json",
+        "claim_class": "control_accounting_candidate_routes"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1249,23 +1259,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_owasp_join_report.py",
+          "appsec-review-process/tests/test_owasp_join_publisher.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified T14 publisher to the shared Dagster lifecycle, assign its resource pool, and complete live qualification."
     },
     {
       "id": "05-native-memory",
@@ -1511,19 +1520,29 @@
           "13-fuzz-target-triage"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "07-red-team-adversarial",
+        "persona": "evidence-custodian",
+        "role": "evidence-assembler",
+        "domain": "verified-findings",
+        "tooling_profile": "hash-bound-evidence-assembly",
+        "output_contract": "07-red-team-adversarial"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
+        "validator": "appsec-review-process/claim_lifecycle_core.py:_validate"
       },
       "output": {
         "contract": "07-red-team-adversarial",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/07-red-team-adversarial.json",
+        "schema_file": "schemas/07-red-team-adversarial.schema.json",
+        "claim_class": "adversarial_candidate_hypothesis"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1536,23 +1555,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_claim_lifecycle_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "common_lifecycle_publication_not_integrated",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
     },
     {
       "id": "08-blue-team-refutation",
@@ -1567,19 +1585,29 @@
           "01-component-characterization"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "08-blue-team-refutation",
+        "persona": "evidence-custodian",
+        "role": "evidence-assembler",
+        "domain": "verified-findings",
+        "tooling_profile": "hash-bound-evidence-assembly",
+        "output_contract": "08-blue-team-refutation"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
+        "validator": "appsec-review-process/claim_lifecycle_core.py:_validate"
       },
       "output": {
         "contract": "08-blue-team-refutation",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/08-blue-team-refutation.json",
+        "schema_file": "schemas/08-blue-team-refutation.schema.json",
+        "claim_class": "claim_refutation_disposition"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1592,23 +1620,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_claim_lifecycle_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "common_lifecycle_publication_not_integrated",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
     },
     {
       "id": "09-independent-verification",
@@ -1623,19 +1650,29 @@
           "08-blue-team-refutation"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "09-independent-verification",
+        "persona": "evidence-custodian",
+        "role": "evidence-assembler",
+        "domain": "verified-findings",
+        "tooling_profile": "hash-bound-evidence-assembly",
+        "output_contract": "09-independent-verification"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
+        "validator": "appsec-review-process/claim_lifecycle_core.py:_validate"
       },
       "output": {
         "contract": "09-independent-verification",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/09-independent-verification.json",
+        "schema_file": "schemas/09-independent-verification.schema.json",
+        "claim_class": "independent_claim_verification"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1648,23 +1685,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_claim_lifecycle_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "common_lifecycle_publication_not_integrated",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
     },
     {
       "id": "11-remediation-proposal",
@@ -1735,19 +1771,29 @@
           "03-threat-model-dfd-stride"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "12-scoring-prioritization",
+        "persona": "evidence-custodian",
+        "role": "evidence-assembler",
+        "domain": "verified-findings",
+        "tooling_profile": "hash-bound-evidence-assembly",
+        "output_contract": "12-scoring-prioritization"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
+        "validator": "appsec-review-process/claim_lifecycle_core.py:_validate"
       },
       "output": {
         "contract": "12-scoring-prioritization",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/12-scoring-prioritization.json",
+        "schema_file": "schemas/scoring-prioritization.schema.json",
+        "claim_class": "verified_claim_scoring"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1760,23 +1806,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_claim_lifecycle_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "common_lifecycle_publication_not_integrated",
+        "shared_dagster_graph_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
     },
     {
       "id": "10-synthesis-report",

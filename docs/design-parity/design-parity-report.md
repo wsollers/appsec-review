@@ -10,11 +10,11 @@ Design capabilities: **16**
 
 | State | Jobs |
 |---|---:|
-| `implemented_and_qualified` | 4 |
-| `implemented_not_qualified` | 6 |
-| `missing_prerequisites` | 32 |
-| `registered_planned_not_executable` | 7 |
-| `standalone_only` | 2 |
+| `implemented_and_qualified` | 3 |
+| `implemented_not_qualified` | 7 |
+| `missing_prerequisites` | 15 |
+| `registered_planned_not_executable` | 2 |
+| `standalone_only` | 24 |
 | `supplied_artifact_gate` | 4 |
 
 ## Lifecycle inventory
@@ -33,40 +33,40 @@ Design capabilities: **16**
 | `02-build-resolution` | true | `actual_worker` | `implemented_and_qualified` | `docker` |
 | `02-evidence-assembly` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `01-component-characterization` | false | `blocked_op` | `standalone_only` | `unassigned` |
-| `03-threat-model-dfd-stride` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `04-asvs-masvs` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `03-threat-model-dfd-stride` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `04-asvs-masvs` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `05-native-memory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `06-cve-reachability` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `13-fuzz-target-triage` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `15-deployment-hardening` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `07-red-team-adversarial` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `08-blue-team-refutation` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `09-independent-verification` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `07-red-team-adversarial` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `08-blue-team-refutation` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `09-independent-verification` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `11-remediation-proposal` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `12-scoring-prioritization` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `12-scoring-prioritization` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `10-synthesis-report` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-api-collection-intelligence-ingest` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `02-binary-intelligence-ingest` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `02-doc-intelligence-ingest` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `02-standards-source-ingest` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `02-test-intelligence-ingest` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
+| `02-api-collection-intelligence-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-binary-intelligence-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-doc-intelligence-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-standards-source-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-test-intelligence-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `04-owasp-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `15-stig-srg-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
 | `02-build-configure` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
 | `02-native-build` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
 | `02-source-sast` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
-| `02-native-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-ir-capture` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-ir-link` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-ir-facts` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-debug-symbol-index` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-binary-triage` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-binary-cfg` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-test-execution` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-test-result-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-test-coverage-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-operations-doc-ingest` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-evidence-index` | true | `actual_worker` | `implemented_and_qualified` | `memory` |
+| `02-native-sast` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-ir-capture` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-ir-link` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-ir-facts` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-debug-symbol-index` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-binary-triage` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-binary-cfg` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-test-execution` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-test-result-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-test-coverage-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-operations-doc-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `02-evidence-index` | true | `actual_worker` | `implemented_not_qualified` | `memory` |
 | `02-secrets-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-iac-config-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-container-image-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -84,21 +84,14 @@ Design capabilities: **16**
 - 01-component-characterization: no_live_qualification
 - 01-component-characterization: resource pool unassigned
 - 01-component-characterization: unassigned_resource_pool
-- 02-api-collection-intelligence-ingest: missing_dedicated_output_schema
-- 02-api-collection-intelligence-ingest: missing_validator
-- 02-api-collection-intelligence-ingest: missing_worker
-- 02-api-collection-intelligence-ingest: no qualification evidence
-- 02-api-collection-intelligence-ingest: no_qualification
+- 02-api-collection-intelligence-ingest: no_live_qualification
 - 02-api-collection-intelligence-ingest: resource pool unassigned
+- 02-api-collection-intelligence-ingest: shared_dagster_graph_not_integrated
 - 02-api-collection-intelligence-ingest: unassigned_resource_pool
-- 02-binary-cfg: missing_dedicated_output_schema
-- 02-binary-cfg: missing_output_contract
-- 02-binary-cfg: missing_registry_composition
-- 02-binary-cfg: missing_validator
-- 02-binary-cfg: missing_worker
-- 02-binary-cfg: no qualification evidence
-- 02-binary-cfg: no_qualification
+- 02-binary-cfg: m02_pinned_binary_tool_unavailable
+- 02-binary-cfg: no_live_qualification
 - 02-binary-cfg: resource pool unassigned
+- 02-binary-cfg: shared_dagster_graph_not_integrated
 - 02-binary-cfg: unassigned_resource_pool
 - 02-binary-hardening: missing_registry_composition
 - 02-binary-hardening: missing_validator
@@ -107,21 +100,15 @@ Design capabilities: **16**
 - 02-binary-hardening: no_qualification
 - 02-binary-hardening: resource pool unassigned
 - 02-binary-hardening: unassigned_resource_pool
-- 02-binary-intelligence-ingest: missing_dedicated_output_schema
-- 02-binary-intelligence-ingest: missing_validator
-- 02-binary-intelligence-ingest: missing_worker
-- 02-binary-intelligence-ingest: no qualification evidence
-- 02-binary-intelligence-ingest: no_qualification
+- 02-binary-intelligence-ingest: m02_pinned_binary_tool_unavailable
+- 02-binary-intelligence-ingest: no_live_qualification
 - 02-binary-intelligence-ingest: resource pool unassigned
+- 02-binary-intelligence-ingest: shared_dagster_graph_not_integrated
 - 02-binary-intelligence-ingest: unassigned_resource_pool
-- 02-binary-triage: missing_dedicated_output_schema
-- 02-binary-triage: missing_output_contract
-- 02-binary-triage: missing_registry_composition
-- 02-binary-triage: missing_validator
-- 02-binary-triage: missing_worker
-- 02-binary-triage: no qualification evidence
-- 02-binary-triage: no_qualification
+- 02-binary-triage: m02_pinned_binary_tool_unavailable
+- 02-binary-triage: no_live_qualification
 - 02-binary-triage: resource pool unassigned
+- 02-binary-triage: shared_dagster_graph_not_integrated
 - 02-binary-triage: unassigned_resource_pool
 - 02-build-classify: fault_recovery_not_qualified
 - 02-build-configure: fault_recovery_not_qualified
@@ -134,14 +121,10 @@ Design capabilities: **16**
 - 02-container-image-inventory: no_qualification
 - 02-container-image-inventory: resource pool unassigned
 - 02-container-image-inventory: unassigned_resource_pool
-- 02-debug-symbol-index: missing_dedicated_output_schema
-- 02-debug-symbol-index: missing_output_contract
-- 02-debug-symbol-index: missing_registry_composition
-- 02-debug-symbol-index: missing_validator
-- 02-debug-symbol-index: missing_worker
-- 02-debug-symbol-index: no qualification evidence
-- 02-debug-symbol-index: no_qualification
+- 02-debug-symbol-index: m02_pinned_binary_tool_unavailable
+- 02-debug-symbol-index: no_live_qualification
 - 02-debug-symbol-index: resource pool unassigned
+- 02-debug-symbol-index: shared_dagster_graph_not_integrated
 - 02-debug-symbol-index: unassigned_resource_pool
 - 02-dependency-lifecycle: missing_registry_composition
 - 02-dependency-lifecycle: missing_validator
@@ -156,19 +139,18 @@ Design capabilities: **16**
 - 02-devops-project-discovery: no qualification evidence
 - 02-devops-project-discovery: not_automatic_analysis_dispatch
 - 02-devops-project-discovery: supplied_result_required
-- 02-doc-intelligence-ingest: missing_dedicated_output_schema
-- 02-doc-intelligence-ingest: missing_validator
-- 02-doc-intelligence-ingest: missing_worker
-- 02-doc-intelligence-ingest: no qualification evidence
-- 02-doc-intelligence-ingest: no_qualification
+- 02-doc-intelligence-ingest: no_live_qualification
 - 02-doc-intelligence-ingest: resource pool unassigned
+- 02-doc-intelligence-ingest: shared_dagster_graph_not_integrated
 - 02-doc-intelligence-ingest: unassigned_resource_pool
 - 02-evidence-assembly: dagster_lifecycle_not_integrated
 - 02-evidence-assembly: no_live_qualification
 - 02-evidence-assembly: required_producers_and_c01_c02_runtime_binding_missing
 - 02-evidence-assembly: resource pool unassigned
 - 02-evidence-assembly: unassigned_resource_pool
-- 02-evidence-index: missing_dedicated_output_schema
+- 02-evidence-index: common_worker_envelope_migration_missing
+- 02-evidence-index: derived_producer_selection_not_orchestrated
+- 02-evidence-index: live_enrichment_requalification_missing
 - 02-iac-config-scan: missing_registry_composition
 - 02-iac-config-scan: missing_validator
 - 02-iac-config-scan: missing_worker
@@ -176,32 +158,20 @@ Design capabilities: **16**
 - 02-iac-config-scan: no_qualification
 - 02-iac-config-scan: resource pool unassigned
 - 02-iac-config-scan: unassigned_resource_pool
-- 02-ir-capture: missing_dedicated_output_schema
-- 02-ir-capture: missing_output_contract
-- 02-ir-capture: missing_registry_composition
-- 02-ir-capture: missing_validator
-- 02-ir-capture: missing_worker
-- 02-ir-capture: no qualification evidence
-- 02-ir-capture: no_qualification
+- 02-ir-capture: no_live_qualification
 - 02-ir-capture: resource pool unassigned
+- 02-ir-capture: shared_dagster_graph_not_integrated
+- 02-ir-capture: toolchain_factory_binding_missing
 - 02-ir-capture: unassigned_resource_pool
-- 02-ir-facts: missing_dedicated_output_schema
-- 02-ir-facts: missing_output_contract
-- 02-ir-facts: missing_registry_composition
-- 02-ir-facts: missing_validator
-- 02-ir-facts: missing_worker
-- 02-ir-facts: no qualification evidence
-- 02-ir-facts: no_qualification
+- 02-ir-facts: no_live_qualification
 - 02-ir-facts: resource pool unassigned
+- 02-ir-facts: shared_dagster_graph_not_integrated
+- 02-ir-facts: toolchain_factory_binding_missing
 - 02-ir-facts: unassigned_resource_pool
-- 02-ir-link: missing_dedicated_output_schema
-- 02-ir-link: missing_output_contract
-- 02-ir-link: missing_registry_composition
-- 02-ir-link: missing_validator
-- 02-ir-link: missing_worker
-- 02-ir-link: no qualification evidence
-- 02-ir-link: no_qualification
+- 02-ir-link: no_live_qualification
 - 02-ir-link: resource pool unassigned
+- 02-ir-link: shared_dagster_graph_not_integrated
+- 02-ir-link: toolchain_factory_binding_missing
 - 02-ir-link: unassigned_resource_pool
 - 02-license-scan: missing_registry_composition
 - 02-license-scan: missing_validator
@@ -218,23 +188,14 @@ Design capabilities: **16**
 - 02-mobile-sast: resource pool unassigned
 - 02-mobile-sast: unassigned_resource_pool
 - 02-native-build: fault_recovery_not_qualified
-- 02-native-sast: missing_dedicated_output_schema
-- 02-native-sast: missing_output_contract
-- 02-native-sast: missing_registry_composition
-- 02-native-sast: missing_validator
-- 02-native-sast: missing_worker
-- 02-native-sast: no qualification evidence
-- 02-native-sast: no_qualification
+- 02-native-sast: no_live_qualification
+- 02-native-sast: pinned_image_live_qualification_missing
 - 02-native-sast: resource pool unassigned
+- 02-native-sast: shared_dagster_graph_not_integrated
 - 02-native-sast: unassigned_resource_pool
-- 02-operations-doc-ingest: missing_dedicated_output_schema
-- 02-operations-doc-ingest: missing_output_contract
-- 02-operations-doc-ingest: missing_registry_composition
-- 02-operations-doc-ingest: missing_validator
-- 02-operations-doc-ingest: missing_worker
-- 02-operations-doc-ingest: no qualification evidence
-- 02-operations-doc-ingest: no_qualification
+- 02-operations-doc-ingest: no_live_qualification
 - 02-operations-doc-ingest: resource pool unassigned
+- 02-operations-doc-ingest: shared_dagster_graph_not_integrated
 - 02-operations-doc-ingest: unassigned_resource_pool
 - 02-repository-partition-discovery: not_automatic_analysis_dispatch
 - 02-repository-partition-discovery: supplied_result_required
@@ -264,64 +225,37 @@ Design capabilities: **16**
 - 02-sre-operations-topology: no qualification evidence
 - 02-sre-operations-topology: not_automatic_analysis_dispatch
 - 02-sre-operations-topology: supplied_result_required
-- 02-standards-source-ingest: missing_dedicated_output_schema
-- 02-standards-source-ingest: missing_validator
-- 02-standards-source-ingest: missing_worker
-- 02-standards-source-ingest: no qualification evidence
-- 02-standards-source-ingest: no_qualification
+- 02-standards-source-ingest: no_live_qualification
 - 02-standards-source-ingest: resource pool unassigned
+- 02-standards-source-ingest: shared_dagster_graph_not_integrated
 - 02-standards-source-ingest: unassigned_resource_pool
-- 02-test-coverage-ingest: missing_dedicated_output_schema
-- 02-test-coverage-ingest: missing_output_contract
-- 02-test-coverage-ingest: missing_registry_composition
-- 02-test-coverage-ingest: missing_validator
-- 02-test-coverage-ingest: missing_worker
-- 02-test-coverage-ingest: no qualification evidence
-- 02-test-coverage-ingest: no_qualification
+- 02-test-coverage-ingest: accepted_test_execution_lifecycle_not_integrated
+- 02-test-coverage-ingest: no_live_qualification
 - 02-test-coverage-ingest: resource pool unassigned
+- 02-test-coverage-ingest: shared_dagster_graph_not_integrated
 - 02-test-coverage-ingest: unassigned_resource_pool
-- 02-test-execution: missing_dedicated_output_schema
-- 02-test-execution: missing_output_contract
-- 02-test-execution: missing_registry_composition
-- 02-test-execution: missing_validator
-- 02-test-execution: missing_worker
-- 02-test-execution: no qualification evidence
-- 02-test-execution: no_qualification
+- 02-test-execution: no_live_qualification
+- 02-test-execution: operator_test_control_staging_not_integrated
 - 02-test-execution: resource pool unassigned
+- 02-test-execution: shared_dagster_graph_not_integrated
 - 02-test-execution: unassigned_resource_pool
-- 02-test-intelligence-ingest: missing_dedicated_output_schema
-- 02-test-intelligence-ingest: missing_validator
-- 02-test-intelligence-ingest: missing_worker
-- 02-test-intelligence-ingest: no qualification evidence
-- 02-test-intelligence-ingest: no_qualification
+- 02-test-intelligence-ingest: no_live_qualification
 - 02-test-intelligence-ingest: resource pool unassigned
+- 02-test-intelligence-ingest: shared_dagster_graph_not_integrated
 - 02-test-intelligence-ingest: unassigned_resource_pool
-- 02-test-result-ingest: missing_dedicated_output_schema
-- 02-test-result-ingest: missing_output_contract
-- 02-test-result-ingest: missing_registry_composition
-- 02-test-result-ingest: missing_validator
-- 02-test-result-ingest: missing_worker
-- 02-test-result-ingest: no qualification evidence
-- 02-test-result-ingest: no_qualification
+- 02-test-result-ingest: accepted_test_execution_lifecycle_not_integrated
+- 02-test-result-ingest: no_live_qualification
 - 02-test-result-ingest: resource pool unassigned
+- 02-test-result-ingest: shared_dagster_graph_not_integrated
 - 02-test-result-ingest: unassigned_resource_pool
-- 03-threat-model-dfd-stride: missing_dedicated_output_schema
-- 03-threat-model-dfd-stride: missing_output_contract
-- 03-threat-model-dfd-stride: missing_registry_composition
-- 03-threat-model-dfd-stride: missing_validator
-- 03-threat-model-dfd-stride: missing_worker
-- 03-threat-model-dfd-stride: no qualification evidence
-- 03-threat-model-dfd-stride: no_qualification
+- 03-threat-model-dfd-stride: claim_ledger_routing_not_integrated
+- 03-threat-model-dfd-stride: no_live_qualification
 - 03-threat-model-dfd-stride: resource pool unassigned
+- 03-threat-model-dfd-stride: shared_dagster_graph_not_integrated
 - 03-threat-model-dfd-stride: unassigned_resource_pool
-- 04-asvs-masvs: missing_dedicated_output_schema
-- 04-asvs-masvs: missing_output_contract
-- 04-asvs-masvs: missing_registry_composition
-- 04-asvs-masvs: missing_validator
-- 04-asvs-masvs: missing_worker
-- 04-asvs-masvs: no qualification evidence
-- 04-asvs-masvs: no_qualification
+- 04-asvs-masvs: no_live_qualification
 - 04-asvs-masvs: resource pool unassigned
+- 04-asvs-masvs: shared_dagster_graph_not_integrated
 - 04-asvs-masvs: unassigned_resource_pool
 - 04-owasp-validation-worklist: missing_dedicated_output_schema
 - 04-owasp-validation-worklist: missing_validator
@@ -348,32 +282,20 @@ Design capabilities: **16**
 - 06-cve-reachability: no_qualification
 - 06-cve-reachability: resource pool unassigned
 - 06-cve-reachability: unassigned_resource_pool
-- 07-red-team-adversarial: missing_dedicated_output_schema
-- 07-red-team-adversarial: missing_output_contract
-- 07-red-team-adversarial: missing_registry_composition
-- 07-red-team-adversarial: missing_validator
-- 07-red-team-adversarial: missing_worker
-- 07-red-team-adversarial: no qualification evidence
-- 07-red-team-adversarial: no_qualification
+- 07-red-team-adversarial: common_lifecycle_publication_not_integrated
+- 07-red-team-adversarial: no_live_qualification
 - 07-red-team-adversarial: resource pool unassigned
+- 07-red-team-adversarial: shared_dagster_graph_not_integrated
 - 07-red-team-adversarial: unassigned_resource_pool
-- 08-blue-team-refutation: missing_dedicated_output_schema
-- 08-blue-team-refutation: missing_output_contract
-- 08-blue-team-refutation: missing_registry_composition
-- 08-blue-team-refutation: missing_validator
-- 08-blue-team-refutation: missing_worker
-- 08-blue-team-refutation: no qualification evidence
-- 08-blue-team-refutation: no_qualification
+- 08-blue-team-refutation: common_lifecycle_publication_not_integrated
+- 08-blue-team-refutation: no_live_qualification
 - 08-blue-team-refutation: resource pool unassigned
+- 08-blue-team-refutation: shared_dagster_graph_not_integrated
 - 08-blue-team-refutation: unassigned_resource_pool
-- 09-independent-verification: missing_dedicated_output_schema
-- 09-independent-verification: missing_output_contract
-- 09-independent-verification: missing_registry_composition
-- 09-independent-verification: missing_validator
-- 09-independent-verification: missing_worker
-- 09-independent-verification: no qualification evidence
-- 09-independent-verification: no_qualification
+- 09-independent-verification: common_lifecycle_publication_not_integrated
+- 09-independent-verification: no_live_qualification
 - 09-independent-verification: resource pool unassigned
+- 09-independent-verification: shared_dagster_graph_not_integrated
 - 09-independent-verification: unassigned_resource_pool
 - 10-synthesis-report: missing_dedicated_output_schema
 - 10-synthesis-report: missing_output_contract
@@ -393,14 +315,10 @@ Design capabilities: **16**
 - 11-remediation-proposal: no_qualification
 - 11-remediation-proposal: resource pool unassigned
 - 11-remediation-proposal: unassigned_resource_pool
-- 12-scoring-prioritization: missing_dedicated_output_schema
-- 12-scoring-prioritization: missing_output_contract
-- 12-scoring-prioritization: missing_registry_composition
-- 12-scoring-prioritization: missing_validator
-- 12-scoring-prioritization: missing_worker
-- 12-scoring-prioritization: no qualification evidence
-- 12-scoring-prioritization: no_qualification
+- 12-scoring-prioritization: common_lifecycle_publication_not_integrated
+- 12-scoring-prioritization: no_live_qualification
 - 12-scoring-prioritization: resource pool unassigned
+- 12-scoring-prioritization: shared_dagster_graph_not_integrated
 - 12-scoring-prioritization: unassigned_resource_pool
 - 13-fuzz-target-triage: missing_dedicated_output_schema
 - 13-fuzz-target-triage: missing_output_contract
@@ -427,9 +345,11 @@ Design capabilities: **16**
 - 15-stig-srg-validation-worklist: no_qualification
 - 15-stig-srg-validation-worklist: resource pool unassigned
 - 15-stig-srg-validation-worklist: unassigned_resource_pool
-- claim-ledger-routing: append_only_claim_ledger_missing
-- claim-ledger-routing: candidate_routing_missing
+- claim-ledger-routing: downstream_decision_append_wiring_missing
+- claim-ledger-routing: no_live_qualification
+- claim-ledger-routing: owasp_common_lifecycle_wrapper_missing
 - claim-ledger-routing: resource pool unassigned
+- claim-ledger-routing: unassigned_resource_pool
 - common-worker-result-envelope: persona_pool_controller_adapters_not_implemented
 - common-worker-result-envelope: remaining_workers_not_yet_migrated
 - common-worker-result-envelope: resource pool unassigned
