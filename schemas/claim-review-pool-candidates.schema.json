@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claim-review-pool-candidates.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidates"],
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "subject_id", "assertion", "evidence_sha256", "claim_class"],
+        "properties": {
+          "candidate_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"},
+          "subject_id": {"type": "string", "minLength": 1},
+          "assertion": {"type": "string", "minLength": 2},
+          "evidence_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "claim_class": {"enum": ["candidate_only", "refutation", "verification_observation"]}
+        }
+      }
+    }
+  }
+}

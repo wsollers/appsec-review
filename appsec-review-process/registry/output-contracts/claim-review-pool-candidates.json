@@ -1,0 +1,10 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "claim-review-pool-candidates",
+  "display_name": "Stage-scoped Claim Reviewer Candidate Decisions",
+  "required_files": ["candidates.json"],
+  "required_status_fields": [],
+  "result_schema": {"artifact": "candidates.json", "schema_file": "claim-review-pool-candidates.schema.json"},
+  "claim_class": {"claim_class_id": "verification_observation", "allowed_assertions": ["candidate-only", "refutation", "verification-observation"], "forbidden_promotions": ["finding", "severity", "runtime-state"]},
+  "validation_rules": ["one decision per accepted upstream claim", "assertion is a closed JSON decision validated by the stage coordinator", "citations resolve only through the accepted upstream artifact"]
+}
