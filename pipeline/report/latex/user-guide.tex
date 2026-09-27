@@ -1,236 +1,183 @@
-% =============================================================
-% user-guide.tex - operator user guide template (appsec-review)
-% Build: latexmk -pdf user-guide.tex    (needs appsec-house.sty beside it)
-% Example content describes the appsec-review operator flow; replace it, keep the structure.
-% =============================================================
 \documentclass[10pt,a4paper]{article}
 \usepackage[margin=22mm,top=24mm,bottom=24mm]{geometry}
-\usepackage{appsec-house}   % add [final] for release builds
-
+\usepackage[final]{appsec-house}
 \title{Operator Guide}
-\docsubtitle{Running an appsec-review engagement from checkout to report}
+\docsubtitle{From authorized checkout to evidence-backed draft report}
 \doctype{User guide}
-\docversion{0.1}
-\docstatus{Draft}
+\docversion{0.3}
+\docstatus{Qualified nominal path}
 \date{2026-09-27}
 \docowner{W. Sollers}
-\docaudience{Engineers who run reviews; no prior knowledge of the pipeline internals}
+\docaudience{Engineers operating appsec-review}
 \docclass{Internal}
 
 \begin{document}
 \maketitle
-
 \begin{note}
-This guide covers the operator path only: starting the stack, running a review, and reading the
-result. How the pipeline is designed is in the \emph{appsec-review Design} document.
+This guide covers the implemented happy path to a hash-bound \mono{DRAFT\_EVIDENCE\_BACKED}
+package. It does not authorize a final assessment.
 \end{note}
-
 \tableofcontents
 
-% -------------------------------------------------------------
-\section{About this guide}
-\subsection{Who it is for}
-You run security reviews against a target repository and need a report you can hand to its owners.
-You are comfortable in a Linux shell and with Docker. You do not need to know Dagster or the job
-graph to follow this guide.
-
-\subsection{Conventions}
-\begin{tabularx}{\linewidth}{@{}p{0.3\linewidth}X@{}}
-\toprule
-\eyebrow{Looks like} & \eyebrow{Means}\\
-\midrule
-\mono{code-location.sh start} & A command, file or value you type exactly.\\
-\var{run-id} & A value you replace with your own.\\
-\kbd{Ctrl}+\kbd{C} & Keys you press.\\
-\menu{Runs} $\rightarrow$ \menu{Launch} & A path through the Dagster UI.\\
-\tbd{text} & A fill-in the guide's author still owes. Not in release builds.\\
-\bottomrule
-\end{tabularx}
-
-% -------------------------------------------------------------
-\section{How a review flows}
-A review runs as a fixed sequence of jobs. Deterministic jobs gather evidence with pinned tools and
-never make a vulnerability claim; review lanes reason over that evidence and must refute and verify
-before anything becomes a finding.
-
-\begin{center}
-\begin{tikzpicture}[
-  node distance=5mm and 4mm,
-  box/.style={draw=rule,fill=panel,minimum height=9mm,minimum width=21mm,align=center,font=\sffamily\scriptsize},
-  det/.style={box,fill=accentsoft},
-  arr/.style={-{Stealth[length=2mm]},draw=muted}]
-\node[det] (intake) {Intake};
-\node[det,right=of intake] (disc) {Discovery\\(D01--D04)};
-\node[det,right=of disc] (build) {Build\\resolution};
-\node[det,right=of build] (scan) {Scan jobs\\(pinned tools)};
-\node[box,below=8mm of scan] (lanes) {Review lanes\\07\,/\,08\,/\,09};
-\node[box,left=of lanes] (score) {Scoring\\(lane 12)};
-\node[box,left=of score] (report) {Report\\(PDF)};
-\draw[arr] (intake)--(disc); \draw[arr] (disc)--(build); \draw[arr] (build)--(scan);
-\draw[arr] (scan)--(lanes); \draw[arr] (lanes)--(score); \draw[arr] (score)--(report);
-\node[font=\sffamily\scriptsize,color=muted,anchor=west] at ($(report.west)+(0,-9mm)$)
-  {\tikz\fill[accentsoft] (0,0) rectangle (3mm,2mm);\ deterministic evidence \qquad
-   \tikz\fill[panel] (0,0) rectangle (3mm,2mm);\ review and reporting};
-\end{tikzpicture}
-\end{center}
+\section{Operating model}
+One engagement binds a target commit, permissions, source generation, build identity, tool pins and
+offline reference snapshots. Every job publishes an immutable attempt and a current accepted
+pointer. A successful process for one fixture is not evidence that the same check ran for another
+target.
 
 \begin{warning}
-A job that did not run is a \textbf{coverage gap}, never ``no issues''. The report lists every gap;
-do not remove them to make a result look cleaner.
+A job that did not run is a coverage gap, never ``no issues.'' Keep missing, stale, blocked and
+unresolved states in the report.
 \end{warning}
 
-% -------------------------------------------------------------
-\section{Quick start}
-Five steps take you from a fresh clone to a rendered report for the test fixture.
-\subsection{Before you begin}
-\begin{tabularx}{\linewidth}{@{}p{0.28\linewidth}X p{0.14\linewidth}@{}}
+\section{Prerequisites and configuration}
+\begin{tabularx}{\linewidth}{@{}p{0.27\linewidth}X@{}}
 \toprule
-\eyebrow{Requirement} & \eyebrow{Detail} & \eyebrow{Check}\\
+\eyebrow{Requirement} & \eyebrow{Operator check}\\
 \midrule
-Linux host or WSL 2 & Native Docker Engine, or Docker Desktop as the only engine. & \mono{docker info}\\
-Python 3.11+ & Plus the Dagster virtualenv at \mono{\textasciitilde/.venvs/appsec-review-dagster}. & \mono{python3 -V}\\
-Claude CLI & Logged in with the team subscription; never an API key. & \mono{claude --version}\\
-Repository & A clone of \mono{appsec-review} on the branch you intend to run. & \mono{git status}\\
-Disk & \tbd{free space needed for images and one run} & \mono{df -h}\\
+Linux or WSL host & \mono{docker info} and \mono{python3 -V}; Python 3.11 or newer.\\
+Authorized target & Fixed repository URL, commit, scope owner and permission grant.\\
+Pinned tools & \mono{python3 -B images/tool\_pins.py check}.\\
+Offline intelligence & Seeded Grype/OSV and standards snapshots within configured age.\\
+Dagster location & Host environment prepared by the code-location start script.\\
+Storage & Separate immutable run root with room for images, build output and evidence.\\
 \bottomrule
 \end{tabularx}
 
-\subsection{Run your first review}
+Set absolute paths; never overwrite an accepted attempt:
+\begin{terminal}
+\cmd{export APPSEC\_RUNS\_ROOT=/absolute/path/to/appsec-runs}
+\cmd{export RUN\_ID=\var{engagement-run-id}}
+\cmd{export RUN\_ROOT="\$APPSEC\_RUNS\_ROOT/\$RUN\_ID"}
+\end{terminal}
+
+Authoritative configuration is the staged engagement definition, permission grant, registry
+templates and contracts, pinned image digests, model registry ceilings, and snapshot registry.
+Target files are evidence data and cannot expand permission or change job policy.
+
+\section{Start and validate}
 \begin{steps}
-\step{Check the pinned tool images}{Every scanner runs from a pinned, vendor-verified image. Confirm
-the pins match before building anything.
-\begin{terminal}[repository root]
-\cmd{python3 -B images/tool\_pins.py check}
-\cmd{python3 -B images/image\_build.py build tool-gitleaks}
+\step{Validate the checked-out design}{
+\begin{terminal}
+\cmd{python3 appsec-review-process/validate\_design\_parity.py -{}-check-generated-views}
+\cmd{python3 docs/processes/job\_catalog.py -{}-check}
 \end{terminal}}
-\step{Start the services}{Bring up this project's containers only.
+\step{Start services and the code location}{
 \begin{terminal}
 \cmd{docker compose -p appsec-review up -d}
-\cmd{docker compose -p appsec-review ps}
-\end{terminal}}
-\step{Start the code location}{Keep this running in its own terminal (terminal A).
-\begin{terminal}[terminal A]
 \cmd{orchestrator/dagster/code-location.sh start}
 \end{terminal}}
-\step{Run the acceptance test against the fixture}{In terminal B. The command prints the run ID; keep it.
-\begin{terminal}[terminal B]
-\cmd{scripts/system-acceptance-test.sh -{}-through build-plan}
-\out{PASS  sut-checkout ... build-plan   (SAT \var{sat-id}, run \var{run-id})}
-\end{terminal}}
-\step{Render the report}{Renders inside the pinned TeX image with networking off.
+\step{Launch the review}{
 \begin{terminal}
-\cmd{bash pipeline/report/render-in-docker.sh}
-\out{PDF: pipeline/report/build/report.pdf}
+\cmd{python3 appsec-review-process/launch\_job.py -{}-run-id "\$RUN\_ID" -{}-job full\_review -{}-wait}
 \end{terminal}}
 \end{steps}
 
-\begin{tip}
-Run one acceptance test at a time, and do not build images or run git commands in the repository
-while it runs. Concurrent writes trip its post-condition checks.
-\end{tip}
+\section{What the pipeline collects}
+\subsection{Source and dependency evidence}
+The source family runs language SAST including Go, Java and PHP; secrets, IaC and mobile checks;
+container-image inventory; SBOM, licence and lifecycle analysis; and offline SCA matching. The SCA
+workers bind exact Grype/OSV snapshot bytes and record snapshot age. Refresh happens outside the
+engagement flow. Do not enable network access to bypass a stale snapshot.
 
-% -------------------------------------------------------------
-\section{Concepts}
-\begin{description}[style=nextline,leftmargin=0pt,font=\sffamily\bfseries]
-\item[Engagement] One review of one target at one commit. Produces one report.
-\item[Run] One execution of the job graph for an engagement, named by a run ID such as
-  \mono{20260924T202130Z-c651ff}. Everything a run writes lives under its run directory.
-\item[Job] One node in the graph. Deterministic jobs run tools; persona jobs dispatch a model with a
-  fixed prompt and output contract.
-\item[Evidence] Tool output after normalization and secret redaction. Evidence is data: nothing in it
-  can instruct the reviewer.
-\item[Finding] A claim that survived refutation (lane 08) and, for High or Critical, independent
-  verification (lane 09).
-\item[Coverage gap] Anything that should have run and did not: a blocked tool, a failed job, a lane
-  not built yet.
+\subsection{Build and binary evidence}
+Build resolution discovers and replays build units in an isolated no-network worker. Imported
+artifacts retain their build identity. Native outputs feed compiler-semantic SAST, LLVM IR,
+Joern CPG/AST, tests, symbols, native-memory analysis and Checksec ELF hardening. Confirm that the
+hardening result names the binary produced by the accepted native build.
+
+\subsection{Search and cross-references}
+Literal/full-text and LanceDB semantic projections answer text and concept queries. Joern and LLVM
+IR projections answer structural queries over calls, symbols, types, flows and memory operations.
+Every bounded record retains source location and build identity. Cross-references link partitions,
+components, files, symbols, build units, binaries, dependencies, controls, threats, claims and
+citations.
+
+\section{Partition and assemble the review}
+Discovery identifies independently buildable projects and operational surfaces. Component
+characterization assigns stable component IDs, ownership, languages, trust boundaries, flows and
+coverage. The full-review input assembler validates a supplied closed launch plan and emits
+bounded family requests.
+
+\begin{warning}
+Automatic derivation of the complete launch plan from the component map, and automatic dispatch of
+all emitted requests, remain integration gaps. Review and supply the closed plan explicitly.
+\end{warning}
+
+\section{Threat and standards branches}
+\begin{description}[style=nextline,font=\sffamily\bfseries]
+\item[L6A and L6B threat model] L6A creates the initial DFD and STRIDE hypotheses. L6B reconciles
+them with accepted evidence, retaining conflict and model coverage. Both are executable and qualified.
+\item[OWASP] T03--T14 routes ASVS/MASVS controls by component, performs bounded validation and
+publishes deterministic pages, a status matrix, gaps and candidate routes. Automatic derivation of
+trusted dispatch facts remains an operator gate.
+\item[STIG/SRG] Selects and tailors platform controls into a separate validation worklist.
+\item[Deployment hardening] Consumes the STIG/SRG worklist and deployment evidence. It reports
+static configuration and exposure; it does not certify compliance.
 \end{description}
 
-% -------------------------------------------------------------
-\section{Common tasks}
-\subsection{Resume an acceptance test}
+\section{Claim rendezvous}
+Candidate admission does not create findings. Red-team members propose attacks; blue-team members
+try to refute or narrow them; independent verification alone may verify a claim. Deterministic merge
+waits for every expected member, validates citations and ordering, and retains dissent. Evidence
+quorum applies independence and evidence thresholds. Scoring consumes independently verified claims
+only.
+
+Never shrink the expected-member manifest after dispatch. Timeout, cancellation and blocked members
+remain durable coverage gaps.
+
+\section{Generate and review the draft}
 \begin{terminal}
-\cmd{scripts/system-acceptance-test.sh -{}-resume \var{sat-id} -{}-through build-resolution}
+\cmd{python3 appsec-review-process/launch\_job.py -{}-run-id "\$RUN\_ID" -{}-job synthesis\_report -{}-wait}
 \end{terminal}
+
+The synthesis job publishes report JSON and Markdown, coverage appendix, trace index, publication
+manifest, LaTeX presentation input, HTML and render manifests. Verify hashes,
+citations, source/build identity, tool and control denominators, snapshot age, threat conflicts,
+unresolved items and both claim-ledger heads.
+
 \begin{danger}
-Resume after editing a module in a job's code-hash list, the invoker, or the SAT script. Those
-edits change the recorded fingerprints; start a fresh test instead.
+The expected status is \mono{DRAFT\_EVIDENCE\_BACKED}, \mono{final=false}, and
+\mono{human\_signoff=false}. Do not relabel it FINAL.
 \end{danger}
 
-\subsection{Read snippets from a local checkout}
-The report shows five lines of source either side of each flaw, with the flaw line on a light red
-background. Point the renderer at the target checkout to use its current lines:
-\begin{terminal}
-\cmd{SOURCE\_ROOT=../hello-autotools bash pipeline/report/render-in-docker.sh}
-\end{terminal}
-The result looks like this:
-\begin{codesnippet}{src/greet.cpp}{16}{20}
-\codeline{16}{std::string\ build\_greeting(const\ std::string\ \&name)\ \{}
-\codeline{17}{\ \ \ \ char\ buf[32];}
-\flawline{18}{\ \ \ \ std::strcpy(buf,\ ("Hello,\ "\ +\ name\ +\ "!").c\_str());}
-\codeline{19}{\ \ \ \ return\ std::string(buf);}
-\codeline{20}{\}}
-\end{codesnippet}
+\section{Current completion gates}
+The nominal workers and retained qualifications exist. Final publication still requires:
+\begin{enumerate}
+\item automatic launch-plan derivation and request dispatch from components;
+\item automatic derivation of OWASP trusted dispatch facts;
+\item one retained report produced from the complete real accepted upstream chain; and
+\item explicit human publication authorization.
+\end{enumerate}
 
-\subsection{Reload after pulling new job code}
-\begin{terminal}[terminal A]
-\cmd{orchestrator/dagster/code-location.sh reload}
-\end{terminal}
-
-% -------------------------------------------------------------
 \section{Troubleshooting}
-\begin{longtable}{@{}p{0.3\linewidth}p{0.3\linewidth}p{0.34\linewidth}@{}}
+\begin{longtable}{@{}p{0.30\linewidth}p{0.64\linewidth}@{}}
 \toprule
-\eyebrow{Symptom} & \eyebrow{Likely cause} & \eyebrow{Fix}\\
+\eyebrow{Symptom} & \eyebrow{Action}\\
 \midrule\endhead
-\texttt{-{}-resume} fails at a discovery stage & A gated module changed since the test started, so its fingerprint no longer matches. & Start a fresh acceptance test.\\
-Post-contract failure mid-test & Something else wrote into the repository during the test. & Stop other writers; rerun the stage.\\
-Tool image rejected as stale & Its folder changed, so its fingerprint changed. & \mono{image\_build.py build tool-\var{x}}, then rerun.\\
-Dagster shows old job code & The code location was not reloaded after a pull. & \mono{code-location.sh reload}.\\
-Docker Desktop hangs (WSL) & Wedged engine. & Stop the code location, \mono{wsl -{}-shutdown}, restart Docker Desktop, start again.\\
-\tbd{symptom} & \tbd{cause} & \tbd{fix}\\
+Offline DB missing or stale & Run the out-of-band snapshot sync; retain the age or error.\\
+ELF hardening absent & Confirm accepted native-build output and build identity reached Checksec.\\
+Joern/IR has no source citation & Reject it; require bounded records with location and build identity.\\
+OWASP join rejected & Check dispatch identity, denominators, page hashes and deterministic order.\\
+Rendezvous does not close & Inspect expected members and durable terminal states; preserve gaps.\\
+Synthesis is \mono{OK\_WITH\_GAPS} & Read and retain the limitations and coverage appendix.\\
+Old Dagster definitions & Run \mono{orchestrator/dagster/code-location.sh reload}.\\
 \bottomrule
 \end{longtable}
 
-% -------------------------------------------------------------
-\section{Reference}
-\subsection{Acceptance test options}
-\begin{tabularx}{\linewidth}{@{}p{0.3\linewidth}X@{}}
-\toprule
-\eyebrow{Option} & \eyebrow{Effect}\\
-\midrule
-\mono{-{}-list} & Print the stages in order and exit.\\
-\mono{-{}-through \var{stage}} & Run up to and including \var{stage}.\\
-\mono{-{}-resume \var{sat-id}} & Continue a previous test from its first unfinished stage.\\
-\mono{-{}-dispatch} & Use live model dispatch for discovery instead of supplied records. Only at creation.\\
-\bottomrule
-\end{tabularx}
-
-\subsection{Report renderer}
-\begin{tabularx}{\linewidth}{@{}p{0.3\linewidth}X@{}}
-\toprule
-\eyebrow{Setting} & \eyebrow{Effect}\\
-\midrule
-\mono{SOURCE\_ROOT} & Target checkout to read code snippets from.\\
-\mono{ENGINE} & \mono{pdf} (default), \mono{lualatex} or \mono{xelatex}.\\
-\mono{SKIP\_BUILD=1} & Reuse the existing \mono{audit-report:local} image.\\
-\mono{-{}-watch} & Host only: re-render the HTML preview and \mono{.tex} on every save.\\
-\bottomrule
-\end{tabularx}
-
 \appendix
-\section{Glossary}
-\begin{tabularx}{\linewidth}{@{}p{0.22\linewidth}X@{}}
+\section{Terms}
+\begin{tabularx}{\linewidth}{@{}p{0.23\linewidth}X@{}}
 \toprule
-SAT & System acceptance test: the fixture review run end to end, stage by stage.\\
-SARIF & Static Analysis Results Interchange Format, the common output format for scanners.\\
-CVSS 4.0 & Common Vulnerability Scoring System, the base score behind each finding's priority.\\
-Fixture & \mono{hello-autotools}, a small target with four seeded defects and one vulnerable dependency.\\
+Accepted attempt & Immutable job output whose envelope, artifacts, lineage and permission revalidate.\\
+CPG & Code property graph: a Joern structural representation of source.\\
+Coverage gap & Planned or applicable work without acceptable terminal evidence.\\
+Draft publication & Evidence-backed report package that has not received human final authorization.\\
 \bottomrule
 \end{tabularx}
 
 \section{Revision history}
 \begin{revisions}
-\revision{0.1}{2026-09-27}{W. Sollers}{First draft from the template.}
+\revision{0.3}{2026-09-27}{W. Sollers}{Updated for qualified analysis, standards and synthesis workers; retained current gates.}
 \end{revisions}
-
 \end{document}

@@ -1,8 +1,8 @@
 <title>{{ page_title }}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
+{% if not viewer %}<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">{% endif %}
 <style>
 :root{
   --bg:#E9EDF2; --chrome:#F7F8FA; --ink:#16202B; --muted:#5B6878; --rule:#CBD3DD; --accent:#2F5D8A;
@@ -145,7 +145,7 @@ main.panes{display:block;min-height:auto}
 </main>
 
 <script id="docs" type="application/json">{{ docs|jsonscript }}</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+{% if viewer %}<script>(0,eval)(atob("{{ katex_js }}"));</script>{% else %}<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>{% endif %}
 <script>
 /* A small LaTeX-to-HTML previewer. Not a TeX engine: it covers the report template's vocabulary
    (sections, tables, lists, tcolorbox, colors, \newcommand, code snippets) and hands math to KaTeX.

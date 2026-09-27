@@ -1,209 +1,200 @@
-% =============================================================
-% design-doc.tex - executive-focused design document template (appsec-review)
-% Build: latexmk -pdf design-doc.tex    (needs appsec-house.sty beside it)
-%
-% Shape: page 1 carries the whole message (bottom line, key numbers, what changes). Everything after
-% supports it and can be skipped by a busy reader. Technical depth goes in the appendix.
-% Example content describes appsec-review v3; figures marked \tbd{} are fill-ins, not estimates.
-% =============================================================
 \documentclass[10pt,a4paper]{article}
 \usepackage[margin=22mm,top=24mm,bottom=24mm]{geometry}
-\usepackage{appsec-house}   % add [final] for release builds
-
-\title{appsec-review v3}
-\docsubtitle{A repeatable, hands-off application security review process}
+\usepackage[final]{appsec-house}
+\title{appsec-review}
+\docsubtitle{Executive design and operations overview}
 \doctype{Design document}
-\docversion{0.2}
-\docstatus{Draft}
+\docversion{0.4}
+\docstatus{Qualified nominal path}
 \date{2026-09-27}
 \docowner{W. Sollers}
-\docaudience{Security leadership, engineering directors, vendor management}
+\docaudience{Security leadership, engineering leaders and review operators}
 \docclass{Internal}
 
 \begin{document}
 \maketitle
-
-% ================= page 1: the message =================
 \begin{bluf}
-Every security review should run the same way, whoever starts it and whatever the target. v3 turns
-the review into a pipeline: one command takes a repository from checkout to a scored report, with
-no one running tools by hand along the way. Each step uses pinned tools and fixed rules, every
-finding has to survive an attempt to disprove it, and anything the pipeline could not examine is
-listed in the report instead of being passed over. People review the finished report; they do not
-operate the review.
+appsec-review turns an authorized repository snapshot into traceable security evidence and an
+evidence-backed draft report. It now includes component-aware search, offline vulnerability
+matching, binary hardening, reconciled threat modeling, multi-language SAST, OWASP publication and
+synthesis publication. Four integration gates remain before the first final real-target report:
+automatic full-review plan/dispatch, automatic OWASP dispatch-fact derivation, one retained real
+accepted end-to-end run, and human final authorization.
 \end{bluf}
 
 \metrics[4]{%
-\metric{1}{Command to run}{Checkout to report, unattended}%
-\metric{4/4}{Seeded defects found}{Notepad++ 8.5.6; stock CodeQL found 0/4}%
-\metric{0}{False findings shipped}{EASTL baseline: 8 custom-pack hits, none real}%
-\metric{13}{Pinned tool images}{Same versions every run, no network at scan time}}
+\metric{66}{Lifecycle jobs}{Declared in the current graph}%
+\metric{2}{Search planes}{Text/semantic plus structural}%
+\metric{3}{Decision roles}{Red, blue, independent verifier}%
+\metric{4}{Open gates}{Automation, live chain and signoff}}
 
-\subsection*{What this means for the organization}
+\subsection*{What leadership should know}
 \begin{itemize}
-\item \textbf{Repeatable.} The same target at the same commit produces the same evidence and the same
-  report. Results hold up when a vendor disputes them.
-\item \textbf{Hands-off.} Build, scanning, analysis, refutation, verification and scoring run as one
-  flow. Reviewer time goes to judging the report, not running tools.
-\item \textbf{Honest about coverage.} A step that did not run is reported as a gap. The report can
-  only call a target clean when enough of the review actually happened.
-\item \textbf{Not tied to one person.} The process lives in the pipeline, so reviews do not stop when
-  a particular reviewer is unavailable.
+\item Results are evidence-first: every consequential claim must resolve to immutable accepted input.
+\item A missing check lowers coverage; it never becomes a clean result.
+\item Tools and reference data are pinned, and scanning is offline by default.
+\item The produced report is presently a qualified draft until a human authorizes final publication.
 \end{itemize}
 
 \newpage
 \tableofcontents
 
-% ================= 1 =================
-\section{Why change}
-\begin{tabularx}{\linewidth}{@{}p{0.3\linewidth}X@{}}
-\toprule
-\eyebrow{Today} & \eyebrow{Consequence}\\
-\midrule
-A reviewer runs tools by hand from a script collection & Each review depends on who ran it and how; results differ run to run.\\
-Scanner output copied into reports & False positives reach vendors and erode trust; real issues hide in the noise.\\
-Coverage not recorded & A report cannot say what was \emph{not} checked.\\
-Steps live in one person's habits & Reviews queue behind one reviewer and stop when they are away.\\
-\bottomrule
-\end{tabularx}
+\section{Purpose and operating boundary}
+The system reviews supplied source, build metadata, binaries, images, IaC, dependencies,
+configuration, documentation and static exports. Local compilation is allowed to recover compiler
+semantics. The baseline does not probe production, call live cloud APIs, run authenticated DAST or
+exercise network services. Build scripts are treated as hostile and run in a disposable,
+no-network, least-privilege worker. Only allowlisted, hashed artifacts cross back into the trusted
+evidence store.
 
-% ================= 2 =================
-\section{How the process runs}
-A review is a fixed sequence of jobs started by one command. Nothing in the sequence waits for a
-person. The evidence side gathers facts and never makes a claim; the review side never promotes a
-tool hit to a finding without trying to refute it and verifying what survives.
-
+\section{How a review moves through the system}
 \begin{center}
 \begin{tikzpicture}[
-  node distance=4mm and 5mm,
-  box/.style={draw=rule,fill=white,minimum height=8mm,text width=27mm,align=center,font=\sffamily\scriptsize},
-  lane/.style={draw=none,fill=#1,inner sep=6pt},
-  arr/.style={-{Stealth[length=2mm]},draw=muted,thick}]
-\node[box,fill=ink,text=white,draw=ink] (t) {One command\\target + commit};
-\node[box,right=10mm of t] (e1) {Build and compile\\(isolated, no network)};
-\node[box,right=of e1] (e2) {13 pinned scanners\\+ native analysis};
-\node[box,below=of e2] (e3) {Normalized, redacted\\evidence + coverage};
-\node[box,below=12mm of e3] (r1) {Red team:\\propose attacks};
-\node[box,left=of r1] (r2) {Blue team:\\try to refute};
-\node[box,left=of r2] (r3) {Independent\\verification};
-\node[box,below=of r3,fill=ink,text=white,draw=ink] (r4) {Scored report\\with gaps listed};
-\begin{scope}[on background layer]
-\node[lane=accentsoft,fit=(e1)(e2)(e3),label={[font=\sffamily\scriptsize\bfseries,color=accent]north:Evidence (deterministic, no judgment)}] {};
-\node[lane=panel,fit=(r1)(r2)(r3),label={[font=\sffamily\scriptsize\bfseries,color=muted]south east:Review (every claim challenged)}] {};
-\end{scope}
-\draw[arr] (t)--(e1); \draw[arr] (e1)--(e2); \draw[arr] (e2)--(e3);
-\draw[arr] (e3)--(r1); \draw[arr] (r1)--(r2); \draw[arr] (r2)--(r3); \draw[arr] (r3)--(r4);
-\node[font=\sffamily\scriptsize,color=muted,anchor=west,text width=40mm] at ($(r4.east)+(4mm,0)$)
-  {People start here:\\read, accept or challenge the report.};
+ node distance=5mm and 4mm,
+ box/.style={draw=rule,fill=panel,text width=25mm,minimum height=10mm,align=center,font=\sffamily\scriptsize},
+ arr/.style={-{Stealth[length=2mm]},draw=muted,thick}]
+\node[box,fill=ink,text=white,draw=ink] (i) {Intake, scope, permissions};
+\node[box,right=of i] (d) {Discovery and partitioning};
+\node[box,right=of d] (e) {Build, scan and evidence};
+\node[box,below=8mm of e] (c) {Components, search and threat model};
+\node[box,left=of c] (s) {OWASP, STIG and deployment};
+\node[box,left=of s] (r) {Red, blue and verification};
+\node[box,below=8mm of r,fill=ink,text=white,draw=ink] (p) {Scored draft report};
+\draw[arr] (i)--(d); \draw[arr] (d)--(e); \draw[arr] (e)--(c);
+\draw[arr] (c)--(s); \draw[arr] (s)--(r); \draw[arr] (r)--(p);
 \end{tikzpicture}
 \end{center}
 
-\subsection*{What makes it repeatable}
+Each job receives explicit, bounded input and emits an immutable attempt with status, coverage,
+permission and lineage. Accepted pointers select the current attempt. Downstream jobs dereference
+and revalidate hashes rather than trusting copied prose. The graph allows independent evidence
+families to run concurrently, then joins them at explicit rendezvous.
+
+\section{Project partitioning and component model}
+Repository discovery separates independently buildable projects, vendored areas, generated code,
+deployment surfaces and operational material. Component characterization converts accepted
+discovery and evidence into stable component IDs, ownership, languages, trust boundaries, data
+flows, build units and coverage. This component map is the shared scope key for threat modeling,
+standards worklists, analysis assignments and report rollups.
+
+The full-review input assembler revalidates a supplied closed launch plan and produces bounded
+requests for vendor, dependency and analysis families. Automatic derivation of the complete plan
+from the component map, and automatic dispatch of every request, are the first remaining integration
+gate.
+
+\section{Static evidence gathered and seeded}
+\begin{tabularx}{\linewidth}{@{}p{0.24\linewidth}X@{}}
+\toprule
+\eyebrow{Family} & \eyebrow{Representative retained evidence}\\
+\midrule
+Source & Language SAST including Go, Java and PHP; secrets; mobile; config and IaC findings.\\
+Build/native & Compile database, build units, LLVM IR, Joern CPG/AST, symbols, tests, memory leads and ELF hardening.\\
+Supply chain & Image inventory, SBOMs, licences, lifecycle/EOL signals, offline SCA matches and CVE reachability.\\
+Context & Project/operations discovery, documents, APIs, standards snapshots and threat-model inputs.\\
+\bottomrule
+\end{tabularx}
+
+Reference data is synchronized outside the engagement flow and then bound by digest and timestamp.
+This includes Grype/OSV vulnerability data and standards sources. The engagement allows a configured
+staleness range; absent or over-age data is reported as a gap. No live lookup is added to the main
+flow to make a result appear complete.
+
+\section{Search architecture and cross-references}
+Two search planes serve different questions. The full-text and LanceDB semantic projections find
+literal text, configuration, documentation and conceptually related evidence. Joern CPG/AST and
+LLVM IR projections answer structural questions about calls, symbols, types, control/data flows and
+memory operations. Exported records are bounded and preserve source locations and build identity.
+
+Cross-reference edges connect repository partitions, components, files, symbols, build units,
+binaries, dependencies, controls, threat hypotheses, claims, findings and report citations. This
+lets a reviewer move from a report statement back to the exact code or tool evidence, or from one
+component outward to all applicable checks and unresolved gaps.
+
+\section{Threat model and control work}
+L6A produces an initial DFD and STRIDE hypothesis set from the characterized components. L6B
+reconciles that model with accepted evidence, preserves conflicts and emits explicit model coverage.
+Both stages are executable and qualified. A target's report may cite only that target's accepted
+reconciliation.
+
+OWASP, STIG/SRG and deployment hardening remain distinct processes:
 \begin{enumerate}
-\item \textbf{Pinned everything.} Tool versions, container images and reference data are fixed per
-  run; nothing is looked up live while scanning.
-\item \textbf{Fixed contracts.} Every job has declared inputs, outputs and a pass/fail check. A job
-  that fails stops with a recorded reason and can be resumed from that point.
-\item \textbf{Evidence-first.} Every finding cites a file and line or a tool output, so anyone can
-  trace it back.
-\item \textbf{Target content is data.} Nothing in the code under review can steer the process.
+\item The OWASP T03--T14 chain routes ASVS/MASVS controls by component, validates bounded work and
+publishes deterministic pages, a status matrix, gaps and candidate routes. It is qualified; automatic
+derivation of trusted dispatch facts remains open.
+\item STIG/SRG tailoring selects platform-specific controls and publishes a validation worklist.
+\item Deployment hardening consumes the tailored worklist plus static deployment evidence. Its
+observations are not a compliance certification and do not substitute for control validation.
 \end{enumerate}
 
-\subsection*{Where people stay in the loop}
-\begin{tabularx}{\linewidth}{@{}p{0.3\linewidth}X@{}}
-\toprule
-\eyebrow{Point} & \eyebrow{Why a person}\\
-\midrule
-Choosing the target & Scope and authority to review belong to the business.\\
-Reading the report & Accepting risk is a business decision, not a pipeline output.\\
-Vendor disputes & The evidence trail supports the conversation; a person owns it.\\
-\bottomrule
-\end{tabularx}
+\section{Red, blue and verifier rendezvous}
+The orchestrator gives each persona or tool member an immutable handoff, permission receipt and
+bounded assignment. Every expected member must reach a durable terminal state. Deterministic merge
+validates identity, contracts, citations and order, while retaining dissent. Evidence-qualified
+quorum applies evidence and independence thresholds.
 
-% ================= 3 =================
-\section{Options considered}
-\begin{tabularx}{\linewidth}{@{}p{0.22\linewidth}XX@{}}
-\toprule
-\eyebrow{Option} & \eyebrow{For} & \eyebrow{Against}\\
-\midrule
-A. Keep the manual toolbox & Nothing new to build. & Not repeatable; depends on one reviewer; false positives reach vendors.\\
-B. Adopt a commercial SAST platform & Supported; dashboards. & Breadth scanning only: stock tooling missed all four seeded memory bugs. No refutation step; still needs a person to triage.\\
-\rowcolor{accentsoft}
-C. v3 pipeline \hfill\pill{accent}{RECOMMENDED} & Runs end to end without an operator; measured recall on native code; refutation built in; reports gaps. & We maintain it.\\
-\bottomrule
-\end{tabularx}
+Red team proposes attack hypotheses. Blue team attempts to refute, narrow or explain them.
+Independent verification alone can verify a claim. Scoring acts only on verified claims. Their
+communication occurs through typed, hash-bound artifacts and append-only claim decisions, not an
+uncontrolled shared chat. This preserves both the admission head and the later decision head.
 
-% ================= 4 =================
-\section{Where we are}
-\begin{longtable}{@{}p{0.3\linewidth}p{0.14\linewidth}p{0.48\linewidth}@{}}
+\section{Reporting and publication}
+The synthesis publication worker consumes exact accepted inputs and produces report JSON and
+Markdown, coverage appendix, evidence trace index, publication manifest, LaTeX presentation input,
+HTML and render manifests. The fixture-qualified result is correctly labeled
+\mono{DRAFT\_EVIDENCE\_BACKED}; it can be \mono{OK\_WITH\_GAPS} and still be an honest successful
+publication.
+
+The final gate must revalidate all inputs and presentation hashes, require completion accounting,
+and receive human authorization. It may not silently transform a fixture, sample or draft into a
+final assessment.
+
+\section{Current readiness}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.18\linewidth}p{0.40\linewidth}@{}}
 \toprule
-\eyebrow{Milestone} & \eyebrow{Status} & \eyebrow{Evidence}\\
+\eyebrow{Capability} & \eyebrow{Status} & \eyebrow{Meaning}\\
 \midrule\endhead
-Pinned tool images (13) & \rag{good} Done & Built and smoke-tested on both hosts.\\
-Orchestration runtime & \rag{good} Done & Qualified; runs the job graph unattended.\\
-Unattended run, intake to build resolution & \rag{good} Done & Acceptance stages 1--13 qualified on the test target.\\
-Scanners as pipeline jobs & \rag{warn} In progress & Secrets and config scans first; vulnerability matching waits on an offline database mirror.\\
-Review lanes run by the pipeline & \rag{warn} In progress & Run manually on EASTL; not yet driven end to end.\\
-Report generation & \rag{warn} Proposed & Template on branch \mono{report-template}; format decision open.\\
-First fully hands-off review & \rag{muted} Not started & Target: \tbd{engagement}, by \tbd{date}.\\
+Joern CPG/AST, LLVM IR and search & \rag{good} Qualified & Accepted producer to indexed, cited query path exists.\\
+Offline vulnerability matching & \rag{good} Qualified & Seeded snapshot, bounded age and no-network matching retained.\\
+Native binary hardening & \rag{good} Qualified & Real accepted ELF routed from build to Checksec.\\
+Threat reconciliation & \rag{good} Qualified & L6A plus executable L6B with conflict and coverage output.\\
+Go, Java and PHP SAST & \rag{good} Qualified & Pinned tools produced cited leads in a live qualification.\\
+OWASP T03--T14 publication & \rag{good} Qualified & Deterministic pagination, matrix, gaps and routes retained.\\
+Synthesis publication & \rag{good} Qualified draft & Hash-bound LaTeX/HTML draft path retained.\\
+Automatic full-review plan and dispatch & \rag{warn} Open & Assembler validates a supplied plan; derivation/dispatch is pending.\\
+Automatic OWASP dispatch facts & \rag{warn} Open & Trusted facts are still supplied at the integration boundary.\\
+Real accepted end-to-end report & \rag{warn} Open & Fixture qualifications do not replace one complete target run.\\
+Human final publication & \rag{warn} Open & Draft remains final=false and human\_signoff=false.\\
 \bottomrule
 \end{longtable}
 
-% ================= 5 =================
-\section{Risks}
-\begin{longtable}{@{}p{0.27\linewidth}ccp{0.05\linewidth}p{0.49\linewidth}@{}}
-\toprule
-\eyebrow{Risk} & \eyebrow{L} & \eyebrow{I} & & \eyebrow{Mitigation}\\
-\midrule\endhead
-Automated reasoning is wrong or overconfident & 2 & 3 & \heat{2}{3} & Blue-team refutation and independent verification before any High or Critical finding; evidence must resolve.\\
-Hostile code in the target attacks the build & 2 & 3 & \heat{2}{3} & Builds run with no network, read-only root, dropped capabilities, non-root user.\\
-A step fails silently and the report looks clean & 1 & 3 & \heat{1}{3} & Every step reports a status; missing coverage lowers assurance and blocks a clean rating.\\
-Vulnerability data goes stale offline & 2 & 2 & \heat{2}{2} & Mirrored snapshots with recorded dates; stale data is reported as a gap.\\
-New languages or build systems & 2 & 2 & \heat{2}{2} & Per-language build images; unsupported builds fall back to source-only analysis with capped confidence.\\
-\bottomrule
-\end{longtable}
-{\small\color{muted}L = likelihood, I = impact, each 1 (low) to 3 (high).}
+\section{How to operate and configure}
+Operators stage the engagement definition, permission grant, target snapshot and any supplied
+discovery records; validate graph parity and pins; start Dagster; launch \mono{full\_review}; monitor
+accepted attempts and coverage; then launch \mono{synthesis\_report}. Configuration changes belong
+in versioned registry templates, contracts, image pins or snapshot policy, not in target content or
+ad hoc report edits. The operator guide contains commands and stop conditions.
 
-% ================= 6 =================
-\section{How we will measure success}
-Each measure is read from run records, so it is checked by the pipeline rather than self-reported.
-
-\begin{tabularx}{\linewidth}{@{}p{0.34\linewidth}p{0.18\linewidth}X@{}}
+\section{Risk and next decisions}
+\begin{tabularx}{\linewidth}{@{}p{0.31\linewidth}X@{}}
 \toprule
-\eyebrow{Measure} & \eyebrow{Target} & \eyebrow{How measured}\\
+\eyebrow{Risk} & \eyebrow{Control and next action}\\
 \midrule
-Reviews completed with no manual step & 100\% & Run records show no operator action between start and report.\\
-Same result on re-run & 100\% & Re-run a finished review at the same commit; compare evidence and findings.\\
-Recall on seeded defects & \(\geq\) \tbd{90\%} & Held-out seeded targets, not used to tune rules.\\
-False findings in delivered reports & 0 & Vendor disputes upheld after delivery.\\
-Reports with every gap disclosed & 100\% & Automated check against the run's coverage record.\\
+Incomplete coverage looks clean & Coverage denominators and gaps are mandatory; qualify the real accepted end-to-end run.\\
+Reasoning overstates a scanner hit & Red/blue/verifier separation, cited evidence and verified-only scoring.\\
+Reference data becomes stale & Out-of-band sync, digest/time binding and explicit age policy.\\
+Automation dispatches wrong scope & Derive the closed launch plan from the accepted component map and retain reviewed dispatch receipts.\\
+Draft published as final & Human authorization and fail-closed final-publication validation.\\
 \bottomrule
 \end{tabularx}
 
 \appendix
-\section{Technical detail}
-\subsection{Scoring}
-Each finding's priority starts from its CVSS 4.0 base score and is scaled by how strong the
-evidence is, whether it survived verification, whether the code is reachable, and exploitation
-signals:
-\[ P_f = \min\!\big(10,\; S_f \cdot e_f \cdot v_f \cdot r_f \cdot t_f\big) \]
-The overall rating is the band of the highest non-refuted priority. A Low or clean rating is only
-issued when process assurance, the share of the review that actually ran, is at least 0.85;
-otherwise the rating is \emph{Indeterminate}.
-
-\subsection{Native code analysis tiers}
-\begin{tabularx}{\linewidth}{@{}p{0.1\linewidth}X@{}}
-\toprule
-A & Every translation unit compiles: full compiled analysis. Strongest claims allowed.\\
-B & Some units compile: compiled analysis where possible, source analysis elsewhere; coverage recorded per unit.\\
-C & Nothing compiles: source analysis only; memory-safety confidence capped.\\
-\bottomrule
-\end{tabularx}
+\section{Authority and retained artifacts}
+The machine-readable job graph, design-parity manifest, registry templates/contracts and accepted
+run artifacts are authoritative. The generated job catalog describes the complete topology. This
+document summarizes the interaction model for leadership; it does not grant completion credit.
 
 \section{Revision history}
 \begin{revisions}
-\revision{0.2}{2026-09-27}{W. Sollers}{Repositioned as a repeatable, hands-off process; removed cost and asks.}
-\revision{0.1}{2026-09-27}{W. Sollers}{First draft from the template.}
+\revision{0.4}{2026-09-27}{W. Sollers}{Updated for qualified analysis, OWASP and synthesis publication; recorded four remaining gates.}
 \end{revisions}
-
 \end{document}

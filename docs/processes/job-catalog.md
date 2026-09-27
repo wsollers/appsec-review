@@ -11,6 +11,14 @@ Regenerate after any process change: `python3 docs/processes/job_catalog.py`;
 
 Covers 5 process models, 66 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 66 lifecycle jobs and 135 artifacts.
 
+The catalog describes declared execution and artifact topology, not engagement completion. The current
+qualified surface includes Joern AST/CPG and LLVM IR search, offline vulnerability matching, ELF
+hardening, L6A/L6B threat modeling, Go/Java/PHP SAST, OWASP T03-T14 publication, full-review input
+assembly and synthesis publication. Remaining integration gates are automatic launch-plan derivation
+and request dispatch, automatic OWASP dispatch-fact derivation, a retained real accepted end-to-end
+report run, and human-authorized final publication. Per-job readiness and accepted run artifacts remain
+the authority for whether a check actually ran.
+
 How to read the rollups: **Enters** is what the model or group consumes but does not produce itself
 (its inputs); **Leaves** is what it produces that nothing inside consumes (its results); **Passes**
 is handed from one step to another inside it. Artifact names link to the glossary (Appendix C), which

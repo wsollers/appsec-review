@@ -21,6 +21,20 @@ Governing principle: specialize discovery → diversify verification → central
 
 Mythos is explicitly non-short-circuiting. A Critical finding or NO-GO decision changes the decision state immediately, but it does not terminate the authorized review. Every required lane must still reach a recorded terminal state, every finding must receive a terminal disposition, and every escalation must be accounted for before the report may be marked FINAL.
 
+### 1.1 Implementation snapshot (2026-09-27)
+
+The current 66-job lifecycle graph includes accepted Joern AST/CPG and LLVM IR search, offline
+Grype/OSV vulnerability matching, build-routed ELF hardening, executable L6A/L6B threat modeling,
+Go/Java/PHP SAST, full-review input assembly, the qualified OWASP T03-T14 chain, and synthesis
+publication to hash-bound LaTeX/HTML draft artifacts. OWASP, STIG/SRG, and deployment hardening are
+separate processes with separate contracts and evidence.
+
+Four integration gates remain: automatically derive and dispatch the complete full-review plan from
+component characterization; automatically derive trusted OWASP dispatch facts; retain one real
+accepted upstream chain through report generation; and require human authorization for final
+publication. The generated job catalog and design-parity readiness views supersede older dated
+readiness statements elsewhere in this historical design narrative.
+
 ## 2. Baseline operating boundary
 
 ### 2.1 Static/offline by design
@@ -127,7 +141,7 @@ Two things implement this table today, and neither is this document:
 - The **lane folders** under `appsec-review-process/` (`00`-`15`, each with `config.md`, `prompt.md`
   and usually `subprompts.md`) are the tracked LLM prompt harness. The mapping from a lane folder to
   the design lanes above is fixed and recorded here.
-- The **Dagster job graph** (`appsec-review-process/job-graph.json`, 51 jobs) and the design-parity
+- The **Dagster job graph** (`appsec-review-process/job-graph.json`, 66 jobs) and the design-parity
   manifest are the authoritative record of which of those lanes is a real, qualified worker. Read
   `docs/design-parity/design-parity-readiness.md` (generated) for build status; do not infer it from
   this section.
@@ -149,7 +163,8 @@ Two things implement this table today, and neither is this document:
 | `10-synthesis-report` | subset of L9 / L14 | Report assembly and cross-lane synthesis; scoring is lane 12's. |
 | `13-fuzz-target-triage` | supports L4/L5/L7 | Ranks candidate fuzz targets; runs no fuzzer. |
 | `15-deployment-hardening` | L15 | Reuses `audit-iac`/`audit-container` evidence. |
-| (none) | L6B, L10, L12, L13 | No harness lane. L12's design is §4.2. |
+| `03-threat-model-reconciliation` | L6B | Reconciles the accepted L6A model with accepted evidence, conflicts and coverage. |
+| (none) | L10, L12, L13 | No dedicated harness lane. L12's design is §4.2. |
 
 The dated narrative that used to sit here (what changed on which day) is in §24.
 

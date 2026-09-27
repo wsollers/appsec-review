@@ -9,6 +9,7 @@ potentially divergent document.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 from pathlib import Path
 import shutil
@@ -47,8 +48,12 @@ def render_document(source: Path, output_dir: Path) -> tuple[Path, Path]:
         shutil.copyfile(source, tex_output)
 
     css = (HERE / "templates" / "vendor" / "katex-0.16.11.css").read_text(encoding="utf-8")
+    katex_js = base64.b64encode(
+        (HERE / "templates" / "vendor" / "katex-0.16.11.min.js").read_bytes()
+    ).decode("ascii")
     body = _environment().get_template("workbench.html.j2").render(
         katex_css=css,
+        katex_js=katex_js,
         docs={tex_output.name: text},
         viewer=True,
         page_title=source.stem.replace("-", " ").title(),

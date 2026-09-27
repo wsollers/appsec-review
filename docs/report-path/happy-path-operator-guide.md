@@ -1,246 +1,141 @@
-# Evidence-backed draft report: nominal operator path
+# Operator guide: qualified happy path to a draft report
 
-This guide describes the shortest implemented path to an immutable
-`DRAFT_EVIDENCE_BACKED` package. It is a standalone, fixture-qualified path, not a live Dagster
-workflow. Never edit an accepted pointer, producer attempt, receipt, ledger, or synthesis input to
-make a stage pass. A missing adapter or accepted artifact is a blocking gap.
-
-The companion diagrams are [Mermaid](happy-path-flow.mmd) and
+This guide runs the implemented path to a hash-bound `DRAFT_EVIDENCE_BACKED` report. It does not
+authorize a final assessment. The companion diagrams are [Mermaid](happy-path-flow.mmd) and
 [BPMN 2.0](happy-path-flow.bpmn).
 
-The retained [sample PDF](../report-examples/appsec-review-sample.pdf) and
-[sample HTML](../report-examples/appsec-review-sample.html) demonstrate presentation only. Their
-synthetic fixture content is not an accepted scan result and must never be cited as live evidence.
+## 1. Prerequisites and configuration
 
-## Current readiness
+Required: Linux/WSL, Python 3.11+, Docker, the Dagster code-location environment, sufficient disk
+for pinned images and offline vulnerability snapshots, and an authorized target checkout. Validate
+the repository before starting:
 
-| Stage | Core | Shared lifecycle / live status |
-|---|---|---|
-| F03 component map | Implemented and unit-qualified | Standalone; accepted F02 evidence and persona configuration required; no shared Dagster binding or live qualification |
-| L6A initial DFD / STRIDE model | Executable core implemented and unit-qualified | Standalone; consumes exact accepted F03/F02 lineage; no shared Dagster binding or live qualification |
-| L6B threat-model reconciliation | Active implementation; not qualified | Must reconcile L6A with accepted evidence, preserve conflicts and publish `threat-model-reconciliation.json`; do not substitute L6A as a final model |
-| OWASP validation and ASVS/MASVS join | Worklist worker graph-enabled; join core implemented and unit-qualified | Separate OWASP process; requires accepted applicability/dispatch accounting; no complete shared binding or live qualification |
-| STIG/SRG validation worklist | Worker graph-enabled and unit-tested | Separate platform-tailoring process; full-review input assembly and live qualification remain gaps |
-| Deployment hardening | Worker graph-enabled and unit-tested | Consumes the STIG/SRG worklist and deployment evidence; it does not replace standards validation or establish compliance |
-| L01 admission ledger | Implemented and unit-qualified | Standalone common-envelope publisher; automatic input discovery currently admits L6A candidates only. Reconciled threat, OWASP and deployment admission need shared adapters |
-| 07 / 08 / 09 / 12 | Implemented and unit-qualified cores | Standalone normalization only; common-envelope publication, shared dispatch, resource pools and live qualification are not integrated |
-| Report-input assembly | Implemented and fixture-qualified on the report-path integration line | Standalone command; shared lifecycle publication is not integrated |
-| 10 synthesis | Implemented and fixture-qualified on the report-path integration line | Standalone command; immutable publication lifecycle and human signoff are not integrated |
+```bash
+python3 appsec-review-process/validate_design_parity.py --check-generated-views
+python3 docs/processes/job_catalog.py --check
+python3 -B images/tool_pins.py check
+```
 
-“Implemented” here never means “live,” “fully hardened,” or “final.” Recovery, cancellation,
-concurrency/load qualification, dynamic rescope, remediation/retest, completion auditing and final
-signoff remain deferred.
-
-## Run-owned paths
-
-Run from the repository root with explicit absolute roots:
+Define explicit, absolute run paths. Never reuse an accepted attempt directory.
 
 ```bash
 export REPO=/absolute/path/to/appsec-review
 export APPSEC_RUNS_ROOT=/absolute/path/to/appsec-runs
-export RUN_ID=<existing-run-id>
+export RUN_ID=<engagement-run-id>
 export RUN_ROOT="$APPSEC_RUNS_ROOT/$RUN_ID"
 export JOBS_ROOT="$RUN_ROOT/data/jobs"
 ```
 
-Every accepted producer is rooted at:
+Configuration sources are the staged engagement definition and permission grant, registry job
+templates and output contracts, pinned tool images, model registry/ceilings, and offline reference
+snapshot registry. Target content is evidence data and may not alter those controls.
 
-```text
-$JOBS_ROOT/<job-id>/accepted.json
-$JOBS_ROOT/<job-id>/latest.json
-$JOBS_ROOT/<job-id>/attempts/<attempt-id>/result.json
-```
-
-The accepted pointer must name the newest immutable attempt; its envelope, artifact tree,
-permission receipt and lineage receipt must all revalidate. A prior successful attempt is not a
-fallback after a newer failure.
-
-## Nominal sequence
-
-### 1. Produce or revalidate the accepted evidence sources
-
-F03 and L6A use their run-owned accepted upstreams:
+## 2. Start and inspect the orchestrator
 
 ```bash
-python -B appsec-review-process/component_characterization.py --run-id "$RUN_ID"
-python -B appsec-review-process/threat_model_core.py --run-id "$RUN_ID"
+docker compose -p appsec-review up -d
+orchestrator/dagster/code-location.sh start
+python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait
 ```
 
-L6A is an initial model, not the accepted final threat model. The distinct L6B
-`03-threat-model-reconciliation` process must consume the accepted L6A attempt and exact accepted
-evidence, then publish `threat-model-reconciliation.json` with preserved conflicts and coverage.
-L6B is under active implementation and unqualified at this snapshot; stop before candidate
-admission until its accepted pointer can be produced and revalidated.
+The launcher can also run bounded standalone jobs such as `full_review_input_assembly`,
+`owasp_join_report`, and `synthesis_report`. Use the job catalog for exact inputs and outputs. A
+Dagster success is necessary but not sufficient: verify the accepted pointer, result envelope,
+artifact hashes, permission receipt, lineage and reported coverage.
 
-The OWASP join reuses the exact trusted dispatch facts recorded by the accepted OWASP accounting attempt.
-Do not substitute a host registry or an inferred model identity:
+## 3. Prepare source, build and searchable evidence
+
+Intake fixes target identity, source commit, scope and permissions. Discovery partitions the
+repository into independently buildable projects and operational surfaces. The isolated build lane
+runs with no network and imports only allowlisted artifacts. Analysis then publishes:
+
+- source SAST, including Go, Java and PHP;
+- secrets, IaC, image, SBOM, offline SCA, licence and dependency-lifecycle evidence;
+- native SAST, LLVM IR, Joern AST/CPG, test and ELF hardening evidence;
+- literal/full-text and LanceDB semantic search projections; and
+- cross-references between components, files, symbols, build units, binaries and dependencies.
+
+For SCA, seed Grype/OSV snapshots through the maintenance sync outside the engagement flow. The
+engagement binds exact snapshot bytes and accepts only the configured age window. Do not enable
+network access to make a stale scan pass.
+
+## 4. Characterize components and assemble review requests
+
+`01-component-characterization` derives stable components, ownership, languages, trust boundaries,
+data flows and evidence coverage. `02-full-review-input-assembly` revalidates a supplied closed
+launch plan and emits bounded requests for analysis families.
+
+Current operator gate: automatic derivation of that complete launch plan and automatic dispatch of
+all emitted requests are not yet integrated. Supply the reviewed plan explicitly; do not invent or
+silently omit components.
+
+## 5. Run threat and standards branches
+
+Run these branches separately and retain separate accepted attempts:
+
+1. L6A produces the initial DFD and STRIDE candidates; L6B reconciles them with accepted evidence,
+   retaining conflicts and model coverage.
+2. OWASP T03-T14 routes controls by component, validates ASVS/MASVS work, and publishes deterministic
+   pages plus the control matrix, coverage gaps and candidate routes. Automatic derivation of trusted
+   OWASP dispatch facts is still an explicit operator gate.
+3. STIG/SRG produces a platform-tailored validation worklist.
+4. Deployment hardening consumes the STIG/SRG worklist and deployment evidence. It does not replace
+   either standards process and does not issue a compliance certificate.
+
+## 6. Run claim review rendezvous
+
+Candidate admission creates ledger entries, not findings. The red-team pool proposes adversarial
+hypotheses. The blue-team pool tries to refute or narrow each hypothesis. Independent verification
+alone may verify a claim. Deterministic merge waits for all expected terminal results, retains
+dissent, validates citations and ordering, and applies evidence/diversity quorum. Lane 12 scores only
+independently verified claims.
+
+If a member is missing, timed out, canceled or blocked, retain that state as a coverage gap. Never
+reduce the expected-member manifest after dispatch to force a rendezvous.
+
+## 7. Generate and review the report
+
+The lifecycle `synthesis_report` job consumes exact accepted inputs and publishes `report.json`,
+`report.md`, coverage appendix, trace index, publication manifest, LaTeX presentation input,
+HTML and render manifests. Its publication status must remain
+`DRAFT_EVIDENCE_BACKED`, with `final=false` and `human_signoff=false`, until the final gate is
+human-authorized.
 
 ```bash
-python -B appsec-review-process/owasp_join_publisher.py \
-  --run-id "$RUN_ID" \
-  --registry-dir "$OWASP_REGISTRY_DIR" \
-  --invoker-id "$OWASP_INVOKER_ID" \
-  --source-snapshot-sha256 "$SOURCE_SNAPSHOT_SHA256" \
-  --allowed-model-json "$ALLOWED_MODEL_JSON" \
-  --registry-ceiling-json "$REGISTRY_CEILING_JSON"
+python3 appsec-review-process/launch_job.py \
+  --run-id "$RUN_ID" --job synthesis_report --wait
 ```
 
-Repeat `--allowed-model-json` for each model in the accepted dispatch facts. The T14 envelope must
-contain all three substantive artifacts:
+Inspect all findings against cited evidence, all unresolved items, tool and control denominators,
+snapshot age, source/build identity, threat conflicts and the two claim-ledger heads. A clean-looking
+report with incomplete coverage is not a clean assessment.
 
-- `owasp-control-status-matrix.json`
-- `owasp-coverage-gaps.json`
-- `owasp-candidate-promotion-routes.json`
+## 8. Current stop conditions
 
-The matrix preserves `selected`, `applicable`, `assessed`, and `satisfied` as separate
-denominators. A failed control or candidate route is not a finding, severity, runtime fact, or
-compliance verdict.
+The nominal workers and retained fixture qualifications exist. Stop short of final publication if
+any of these remain true:
 
-Run the STIG/SRG validation worklist and deployment-hardening assessment through their separate
-workers and retain separate accepted attempts. Do not route STIG/SRG items through the OWASP join,
-and do not infer that a deployment-hardening observation satisfies or fails a STIG control without
-the accepted validation worklist and cited evidence.
+- the full-review plan or request dispatch was not automatically derived and explicitly reviewed;
+- OWASP dispatch facts were supplied but not automatically derived from trusted inputs;
+- the report was not produced by one retained real accepted upstream chain; or
+- a human has not authorized final publication.
 
-### 2. Admit candidates into L01
+Those are the current four known integration gates. They must appear in the draft limitations.
 
-```bash
-python -B appsec-review-process/claim_ledger.py --run-id "$RUN_ID"
-```
+For presentation review, compare the retained
+[happy-path demo PDF](../report-examples/appsec-review-happy-path-demo.pdf) and
+[HTML](../report-examples/appsec-review-happy-path-demo.html). The pair is marked DEMO and is not a
+production assessment. The report HTML currently references external fonts and KaTeX scripts; the
+operator and design-document HTML publications are self-contained, but this demo report HTML is not.
 
-For the complete report path, L01 inputs must contain the accepted L6B reconciliation, OWASP
-candidate routes, and applicable deployment-hardening candidates from one source/component
-generation. The current standalone command discovers L6A candidates automatically; that is not a
-substitute for L6B. Until the L6B, OWASP, and deployment admission adapters are integrated, stop
-here rather than editing `inputs.json` or the ledger.
+## 9. Troubleshooting
 
-The admission attempt publishes:
-
-- `claim-decision-ledger.json` — append-only, hash-linked candidate admissions;
-- `claim-ledger-work-routing.json` — inert work routing with execution unauthorized;
-- `permission.json`, `lineage.json`, `status.json`, and the common result envelope.
-
-Admission creates candidates only. It creates no finding, severity, runtime, compliance, or
-remediation claim.
-
-### 3. Run the bounded 07 / 08 / 09 decision cores
-
-Each stage consumes an exact accepted upstream pointer and a bounded decision document. Reviewers
-must be independent where the contract requires it. The core invocation pattern is:
-
-```bash
-python -B appsec-review-process/red_team_adversarial.py \
-  --run-id "$RUN_ID" --accepted "$L01_ACCEPTED" \
-  --decisions "$CONTROL_ROOT/red-decisions.json" --output "$RED_OUTPUT"
-
-python -B appsec-review-process/blue_team_refutation.py \
-  --run-id "$RUN_ID" --accepted "$RED_ACCEPTED" \
-  --decisions "$CONTROL_ROOT/blue-decisions.json" --output "$BLUE_OUTPUT"
-
-python -B appsec-review-process/independent_verification.py \
-  --run-id "$RUN_ID" --accepted "$BLUE_ACCEPTED" \
-  --decisions "$CONTROL_ROOT/verification-decisions.json" --output "$VERIFY_OUTPUT"
-```
-
-These commands normalize and validate stage results, but the shared common-envelope publisher that
-creates `RED_ACCEPTED`, `BLUE_ACCEPTED`, and the verification accepted pointer is not integrated.
-Run the next command only after that trusted publisher exists and revalidates the exact current
-attempt. Do not construct an accepted pointer by hand.
-
-### 4. Append accepted decisions to L01, then score
-
-L01 appends status decisions by dereferencing the exact accepted 07, 08, and 09 artifacts and their
-permission receipts. The caller may select only `claim_id` and `producer_job_id`; disposition,
-citations, dissent, confidence, causal links, hashes, generations and authority are derived from the
-accepted producer. There is no operator CLI for this append step yet, so the shared adapter is a
-hard gate.
-
-After the final appended ledger is accepted, run the scoring core against the exact accepted 09
-result:
-
-```bash
-python -B appsec-review-process/scoring_prioritization.py \
-  --run-id "$RUN_ID" --accepted "$VERIFY_ACCEPTED" \
-  --decisions "$CONTROL_ROOT/scoring-decisions.json" --output "$SCORING_OUTPUT"
-```
-
-Only independently verified claims can receive a score or severity. Refuted, unresolved, narrowed,
-or blocked claims remain visible and unscored.
-
-### 5. Assemble the prose-free synthesis input
-
-When `report_input_assembly.py` is present in the integrated revision, provide its exact current
-accepted pointers. The command below documents the currently implemented six-pointer interface;
-the complete interface still needs explicit reconciled-threat and deployment-hardening inputs:
-
-```bash
-python -B appsec-review-process/report_input_assembly.py \
-  --run-id "$RUN_ID" --jobs-root "$JOBS_ROOT" \
-  --component-accepted "$JOBS_ROOT/01-component-characterization/accepted.json" \
-  --threat-accepted "$JOBS_ROOT/03-threat-model-dfd-stride/accepted.json" \
-  --owasp-accepted "$JOBS_ROOT/04-owasp-join-report/accepted.json" \
-  --ledger-accepted "$JOBS_ROOT/claim-ledger-routing/accepted.json" \
-  --verification-accepted "$JOBS_ROOT/09-independent-verification/accepted.json" \
-  --scoring-accepted "$JOBS_ROOT/12-scoring-prioritization/accepted.json" \
-  --output "$RUN_ROOT/data/report-input/synthesis-input.json"
-```
-
-Because `--threat-accepted` currently names the L6A job, this interface cannot yet claim that the
-report consumed an L6B-reconciled model. Do not repoint it by hand. Extend and qualify the assembler
-contract, then add accepted `03-threat-model-reconciliation` and `15-deployment-hardening` pointers.
-
-The assembler independently revalidates pointers, newest-attempt identity, envelopes, receipts,
-artifact hashes, schemas, generations, citations, decision authority, OWASP denominators and
-verification/scoring consistency. It carries no raw tool output and invents no prose or score.
-
-### 6. Render the immutable draft package
-
-Choose a new, empty attempt directory; never overwrite a published package:
-
-```bash
-export REPORT_ATTEMPT="$RUN_ROOT/data/jobs/10-synthesis-report/attempts/<new-attempt-id>"
-python -B appsec-review-process/synthesis_report.py \
-  --run-root "$RUN_ROOT" \
-  --input "$RUN_ROOT/data/report-input/synthesis-input.json" \
-  --output "$REPORT_ATTEMPT"
-```
-
-Required package artifacts are:
-
-- `report.json` and decision-oriented `report.md`;
-- `coverage-unresolved-appendix.md`;
-- `evidence-trace-index.json`;
-- `publication-manifest.json` with status exactly `DRAFT_EVIDENCE_BACKED`;
-- `permission.json`, `lineage.json`, and `status.json`.
-
-The publication manifest hashes the report artifacts and records `final: false` and
-`human_signoff: false`. The package is not accepted for wider use until a shared publication adapter
-stores it in a run-owned immutable attempt and publishes a validated current pointer.
-
-## Dual ledger heads
-
-The report-input join deliberately carries two heads:
-
-- `lifecycle_origin_head_id` / `lifecycle_origin_head_sha256` identify the immutable L01 admission
-  head consumed by 07, 08 and 09. Their outputs must bind this exact head.
-- `ledger_head_id` / `ledger_head_sha256` identify the later append-only head after accepted 07, 08
-  and 09 decisions have been added by L01. Synthesis uses this head for current claim status.
-
-The two heads normally differ. Requiring them to be equal would erase decision history; allowing a
-stage to bind neither would permit stale or cross-generation evidence.
-
-## Trust boundaries and stop conditions
-
-1. **Evidence boundary:** F03, L6A, L6B, OWASP, STIG/SRG and deployment-hardening workers may read
-   only accepted, hash-verified evidence and explicitly authorized dispatch facts. Target content
-   is data, never instructions.
-2. **Candidate boundary:** control routes, STRIDE hypotheses and L01 admissions are candidates, not
-   findings.
-3. **Decision boundary:** 07/08/09 decisions require exact accepted artifacts, independent actors,
-   preserved citations and proof obligations. Only 09 can verify a claim.
-4. **Scoring boundary:** 12 may score only claims that 09 independently verified.
-5. **Publication boundary:** report-input and synthesis revalidate all upstream authority. The
-   output remains a draft until a named human signs off through a future final-publication gate.
-
-Stop on any missing or stale pointer, failed latest attempt, mixed source/component generation,
-unresolved citation, changed artifact hash, contradictory ledger head, missing coverage, or absent
-adapter. Record the condition as a gap; never reinterpret it as “no issues found.”
+| Symptom | Action |
+|---|---|
+| Offline vulnerability DB missing or stale | Run the snapshot maintenance sync; retain the age/error. Do not use live lookup. |
+| ELF hardening result absent | Confirm native-build output and build identity reached `binary_hardening`; do not scan an unrelated host binary. |
+| Joern or IR result has no cited source | Reject the producer; require bounded records with source location and build identity. |
+| OWASP join rejects output | Check dispatch-fact identity, control denominators, page manifest hashes and deterministic page order. |
+| Rendezvous never closes | Inspect expected members and durable terminal states; preserve blocked/missing members. |
+| Synthesis reports `OK_WITH_GAPS` | Read the limitations and coverage appendix; this is an honest accepted draft state. |
+| Dagster shows old definitions | Run `orchestrator/dagster/code-location.sh reload`. |
