@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 from datetime import timedelta
 from pathlib import Path
 import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -114,6 +116,29 @@ class SnapshotSyncTests(unittest.TestCase):
             syncer.sync_one(unsafe, self.grants(), run_id=self.run,
                 source_snapshot_sha256=self.source, now=self.now, registry_root=self.root / "registry",
                 opener=lambda *_args, **_kwargs: Response(self.archive))
+
+    def test_grype_zstd_archive_is_activated_before_registration(self):
+        spec = {**self.spec("grype-db"), "archive": "tar.zst",
+                "required_paths": ["grype/db/6/vulnerability.db", "grype/db/6/import.json"]}
+
+        def activate(_archive, destination, declared):
+            self.assertEqual(declared, spec)
+            cache = destination / "grype/db/6"; cache.mkdir(parents=True)
+            (cache / "vulnerability.db").write_bytes(b"db")
+            (cache / "import.json").write_bytes(b"{}\n")
+            return {"kind": "pinned-grype-db-import", "image_digest": "sha256:" + "a" * 64,
+                    "argv": ["grype", "db", "import"], "network_mode": "none",
+                    "status": {"valid": True}, "status_sha256": "sha256:" + "b" * 64}
+
+        with mock.patch.object(syncer, "_activate_grype", side_effect=activate) as called:
+            result = syncer.sync_one(spec, self.grants(), run_id=self.run,
+                source_snapshot_sha256=self.source, now=self.now, registry_root=self.root / "registry",
+                opener=lambda *_args, **_kwargs: Response(self.archive))
+        self.assertEqual(called.call_count, 1)
+        self.assertTrue(Path(result["data_root"], "grype/db/6/import.json").is_file())
+        provenance = json.loads(Path(result["data_root"], "source-provenance.json").read_text())
+        self.assertEqual(provenance["archive_sha256"], spec["sha256"])
+        self.assertEqual(provenance["transformation"]["network_mode"], "none")
 
     def test_nvd_warning_window_is_usable_and_hard_ceiling_still_fails(self):
         nvd = self.root / "nvd"; Publisher(nvd).sync(T0)

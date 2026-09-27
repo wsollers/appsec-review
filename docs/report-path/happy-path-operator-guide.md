@@ -65,6 +65,11 @@ permissioned maintenance operation. Test execution requires a separate explicit 
 after the accepted native-build unit and the target's real test command are known; do not invent a
 test command or result path during initial staging.
 
+The dependency snapshot publisher retains OSV ecosystem archives at the scanner's fixed cache
+path. For Grype v6 `tar.zst` releases it performs `grype db import` and `grype db status` with the
+pinned Grype image, network disabled, before immutable registration; a raw `vulnerability.db`
+archive is not a usable cache and must not be registered as though it were one.
+
 For the Hello Autotools workflow, if an earlier `full_review` attempt has retained the accepted
 single native-build unit but stopped at the explicit test gate, stage the closed `make check`
 authorization and resume the same run:
