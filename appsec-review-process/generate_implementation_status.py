@@ -33,6 +33,76 @@ def sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def retained_execution(run_root: pathlib.Path, job_id: str, downstream: list[str]) -> dict[str, Any]:
+    """Return only facts retained by one run; absence never becomes a clean result."""
+    base = run_root / "data" / "jobs" / job_id
+    pointer_path = base / "accepted.json"
+    empty = {"actual_run_attempt_id": None, "dagster_run_id": None,
+        "accepted_pointer": None, "result_envelope": None, "execution_status": None,
+        "applicability_decision": None, "skip_reason": None, "artifact_links": [],
+        "hashes": {}, "lineage": None, "coverage": None, "gaps": ["no-retained-run-result"],
+        "downstream_consumer": downstream, "appears_in_report": False}
+    if not pointer_path.is_file():
+        latest = base / "latest.json"
+        if latest.is_file():
+            try:
+                attempt_id = load(latest).get("attempt_id")
+                envelope_path = base / "attempts" / str(attempt_id) / "result.json"
+                if envelope_path.is_file():
+                    envelope = load(envelope_path)
+                    empty.update(actual_run_attempt_id=attempt_id,
+                        dagster_run_id=envelope.get("dagster_run_id"),
+                        result_envelope=str(envelope_path), execution_status=envelope.get("execution_status"),
+                        skip_reason=envelope.get("skip_reason"), gaps=envelope.get("gaps", []))
+            except (OSError, ValueError, AttributeError):
+                pass
+        return empty
+    try:
+        pointer = load(pointer_path)
+        attempt_id = pointer["attempt_id"]
+        attempt = base / "attempts" / attempt_id
+        envelope_path = attempt / pointer.get("envelope_path", "result.json")
+        envelope = load(envelope_path)
+        artifacts = [{"path": str(attempt / row["path"]), "sha256": row["sha256"]}
+                     for row in envelope.get("artifacts", []) if isinstance(row, dict) and row.get("path")]
+        applicability_path = attempt / "applicability.json"
+        applicability = load(applicability_path) if applicability_path.is_file() else None
+        lineage_path = attempt / "lineage.json"
+        coverage = None
+        status_path = attempt / "status.json"
+        if status_path.is_file():
+            status_record = load(status_path)
+            coverage = status_record.get("coverage", status_record.get("coverage_summary"))
+        report_trace = run_root / "data" / "jobs" / "10-synthesis-report" / "accepted.json"
+        appears = False
+        if report_trace.is_file():
+            report_pointer = load(report_trace)
+            trace_path = (run_root / "data" / "jobs" / "10-synthesis-report" / "attempts" /
+                          report_pointer["attempt_id"] / "evidence-trace-index.json")
+            if trace_path.is_file():
+                trace = load(trace_path)
+                appears = any(row.get("job_id") == job_id for row in trace.get("upstream", [])) or any(
+                    row.get("producer_job_id") == job_id for row in trace.get("citations", []))
+        return {"actual_run_attempt_id": attempt_id, "dagster_run_id": envelope.get("dagster_run_id"),
+            "accepted_pointer": str(pointer_path), "result_envelope": str(envelope_path),
+            "execution_status": envelope.get("execution_status"),
+            "applicability_decision": applicability, "skip_reason": envelope.get("skip_reason"),
+            "artifact_links": artifacts, "hashes": {"accepted_pointer_sha256": "sha256:" + sha256(pointer_path),
+                "result_envelope_sha256": "sha256:" + sha256(envelope_path)},
+            "lineage": ({"path": str(lineage_path), "sha256": "sha256:" + sha256(lineage_path)}
+                        if lineage_path.is_file() else None),
+            "coverage": coverage, "gaps": envelope.get("gaps", []),
+            "downstream_consumer": downstream, "appears_in_report": appears}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return {**empty, "gaps": ["retained-result-invalid:" + type(exc).__name__]}
+
+
+def execution_status(value: str | None) -> str:
+    return {"OK": "EXECUTED_OK", "OK_WITH_GAPS": "EXECUTED_WITH_GAPS",
+            "SKIPPED": "SKIPPED_NA", "BLOCKED": "BLOCKED", "FAILED": "FAILED"}.get(
+                value or "", "BLOCKED")
+
+
 def status_for(readiness: str, binding: str, worker: str | None) -> str:
     if readiness == "implemented_and_qualified":
         return "INTEGRATED_QUALIFIED"
@@ -70,6 +140,7 @@ def main() -> int:
     parser.add_argument("--phase", required=True, choices=("initial", "before-run", "after-run"))
     parser.add_argument("--output-dir", type=pathlib.Path, default=PROCESS)
     parser.add_argument("--validator-results", type=pathlib.Path)
+    parser.add_argument("--run-root", type=pathlib.Path)
     args = parser.parse_args()
 
     graph_path = PROCESS / "job-graph.json"
@@ -116,8 +187,7 @@ def main() -> int:
             common = "NOT_IMPLEMENTED"
         elif "common-envelope" in combined_gap or "common envelope" in combined_gap or "migration" in combined_gap:
             common = "PARTIAL_OR_UNQUALIFIED"
-        features.append(
-            {
+        feature = {
                 "feature_type": "lifecycle_job",
                 "feature_job_id": job_id,
                 "intended_design_behavior": intended(job, cat),
@@ -142,8 +212,23 @@ def main() -> int:
                 "current_honest_status": status_for(readiness, binding_kind, worker),
                 "manifest_readiness": readiness,
                 "exact_remaining_work": next_work,
+                "implemented": bool(graph_job.get("implemented") and worker and worker != "none"),
+                "integrated": bool(graph_job.get("implemented") and binding_kind not in {"none", "blocked_op"}),
+                "automatically_supplied": automatic_input_state(binding_kind, execution.get("mode", "none"), worker) == "LIFECYCLE_CONSTRUCTED",
+                "qualified": readiness == "implemented_and_qualified",
+                "still_blocked": binding_kind == "blocked_op",
+                "expected_to_execute_for_hello": True,
+                "expected_to_publish_skipped_na": None,
             }
-        )
+        if args.phase == "after-run":
+            if args.run_root is None:
+                parser.error("--run-root is required for --phase after-run")
+            retained = retained_execution(args.run_root.resolve(), job_id, sorted(downstream[job_id]))
+            feature["run_evidence"] = retained
+            feature["current_honest_status"] = execution_status(retained["execution_status"])
+            feature["exact_remaining_work"] = ("None recorded." if feature["current_honest_status"] == "EXECUTED_OK"
+                                                else "; ".join(retained["gaps"]) or "Inspect retained result.")
+        features.append(feature)
 
     for capability in parity.get("capabilities", []):
         readiness = capability.get("readiness", "missing_prerequisites")
@@ -169,6 +254,13 @@ def main() -> int:
                 "current_honest_status": status_for(readiness, "capability", capability.get("execution_mode")),
                 "manifest_readiness": readiness,
                 "exact_remaining_work": capability.get("next_prerequisite") or "; ".join(capability.get("gaps", [])) or "None recorded.",
+                "implemented": readiness != "missing_prerequisites",
+                "integrated": readiness in {"implemented_and_qualified", "implemented_not_qualified"},
+                "automatically_supplied": False,
+                "qualified": readiness == "implemented_and_qualified",
+                "still_blocked": readiness not in {"implemented_and_qualified", "implemented_not_qualified"},
+                "expected_to_execute_for_hello": True,
+                "expected_to_publish_skipped_na": None,
             }
         )
 
@@ -215,6 +307,19 @@ def main() -> int:
         lines.append(f"| `{item['feature_job_id']}` | {item['feature_type']} | {item['graph_implemented']} | {item['dagster_binding']['kind']} | {item['automatic_input_construction_status']} | {item['resource_pool']} | **{item['current_honest_status']}** | {remaining} |")
     lines.extend(["", "The JSON companion contains implementation files, upstream/downstream bindings, envelope, permissions, qualification and retained-evidence fields for every row.", ""])
     md_path.write_text("\n".join(lines), encoding="utf-8")
+    if args.phase == "after-run":
+        initial_path = args.output_dir / "implementation-status-initial.json"
+        before_path = args.output_dir / "implementation-status-before-run.json"
+        if initial_path.is_file() and before_path.is_file():
+            initial = {row["feature_job_id"]: row["current_honest_status"] for row in load(initial_path)["features"]}
+            before = {row["feature_job_id"]: row["current_honest_status"] for row in load(before_path)["features"]}
+            delta = ["# Implementation and execution status delta", "",
+                "| Feature | Initial | Before run | After run |", "|---|---|---|---|"]
+            for row in features:
+                feature_id = row["feature_job_id"]
+                delta.append(f"| `{feature_id}` | {initial.get(feature_id, 'NOT_IMPLEMENTED')} | {before.get(feature_id, 'NOT_IMPLEMENTED')} | {row['current_honest_status']} |")
+            delta.extend(["", "Every after-run state above is derived from retained run evidence; absence is BLOCKED, never success.", ""])
+            (args.output_dir / "implementation-status-delta.md").write_text("\n".join(delta), encoding="utf-8")
     print(json_path)
     print(md_path)
     return 0
