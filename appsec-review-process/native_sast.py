@@ -7,6 +7,7 @@ reuse/recovery hardening and qualification intentionally remain integration work
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path, PurePosixPath
 import re
 import threading
@@ -28,6 +29,9 @@ RESULT = "native-sast.json"
 RECEIPTS = "b13-receipts.json"
 SUMMARY = "native-sast-summary.md"
 SCHEMA = "appsec-review/native-sast/1"
+PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
+LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
+PERMISSIONS = ["read-run-data", "write-run-data", "execute-container-static-analysis"]
 IMAGE_ID = "audit-native"
 CONFIG = ROOT.parent / "data" / "native-sast" / "config-v1.json"
 TOOLS = ("clang-tidy", "cppcheck", "clang-static-analyzer")
@@ -48,6 +52,29 @@ def _utc_now() -> str:
 
 def _hash(path: Path) -> str:
     return "sha256:" + file_hash(path)
+
+
+def _source_tree_identity(target: Path) -> str:
+    """Hash the actual post-build checkout bytes, excluding mutable Git administration data."""
+    records: dict[str, dict[str, str]] = {}
+    for current, dirs, files in os.walk(target, topdown=True, followlinks=False):
+        dirs[:] = sorted(name for name in dirs if name != ".git")
+        for name in sorted(files):
+            path = Path(current, name)
+            relative = path.relative_to(target).as_posix()
+            if path.is_symlink():
+                records[relative] = {"kind": "symlink", "target": os.readlink(path)}
+            elif path.is_file():
+                records[relative] = {"kind": "file", "sha256": _hash(path)}
+            else:
+                raise Blocked(f"{JOB}: checkout contains a special file: {relative}")
+    return "sha256:" + digest(records)
+
+
+def _verify_source_tree(inputs: dict[str, Any]) -> None:
+    target = Path(inputs["target_path"])
+    if _source_tree_identity(target) != inputs.get("source_tree_sha256"):
+        raise Blocked(f"{JOB}: post-build checkout bytes changed")
 
 
 def _owned(root_path: Path, relative: str, label: str) -> Path:
@@ -159,13 +186,15 @@ def load_native_build(native_build_root: Path, *, run_id: str,
                           "adapted_path": f"adapted-inputs/{digest(unit['unit_id'])[:16]}/compile_commands.json",
                           "adapted_sha256": adapters.canonical_sha(adapted)},
                       "adapted": adapted, "unsupported": unsupported, "sources": sources})
+    checkout_sha256 = _source_tree_identity(target.resolve())
     return {"attempt": attempt, "pointer": pointer, "envelope": envelope, "result": result,
             "inputs": inputs, "target": target.resolve(), "units": units,
             "binding": {"job_id": UPSTREAM_JOB, "attempt_id": pointer["attempt_id"],
                 "fingerprint": pointer["fingerprint"], "pointer_sha256": _hash(pointer_path),
                 "envelope_sha256": "sha256:" + pointer["envelope_sha256"],
                 "result_sha256": _hash(result_path), "source_revision": result["source_revision"]},
-            "source_snapshot_sha256": source_snapshot}
+            "source_snapshot_sha256": source_snapshot,
+            "source_tree_sha256": checkout_sha256}
 
 
 def current_inputs(run_id: str, *, native_build_root: Path,
@@ -178,6 +207,7 @@ def current_inputs(run_id: str, *, native_build_root: Path,
     config = read_json(CONFIG)
     return {"run_id": run_id, "job": JOB,
         "source_snapshot_sha256": upstream["source_snapshot_sha256"],
+        "source_tree_sha256": upstream["source_tree_sha256"],
         "target_path": str(upstream["target"]), "native_build_root": str(Path(native_build_root).resolve()),
         "native_build": upstream["binding"],
         "units": [{key: value for key, value in unit.items() if key != "adapted"}
@@ -312,10 +342,13 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     if (inputs.get("code") != _code_hashes() or inputs.get("config") != read_json(CONFIG) or
             inputs.get("config_sha256") != _hash(CONFIG)):
         raise Blocked(f"{JOB}: implementation or analyzer configuration changed")
+    _verify_source_tree(inputs)
     upstream = load_native_build(Path(inputs["native_build_root"]), run_id=run_id,
                                  expected_fingerprint=inputs["native_build"]["fingerprint"])
     if upstream["binding"] != inputs["native_build"] or upstream["units"] != inputs["units"]:
         raise Blocked(f"{JOB}: native-build publication, compile database, or source bytes changed")
+    if upstream["source_tree_sha256"] != inputs["source_tree_sha256"]:
+        raise Blocked(f"{JOB}: post-build checkout bytes changed")
     for unit in inputs["units"]:
         adapted_path = _owned(attempt, unit["compile_database"]["adapted_path"],
                               f"{unit['unit_id']} adapted compile database")
@@ -328,6 +361,13 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     if (result["source_snapshot_sha256"] != inputs["source_snapshot_sha256"] or
             result["native_build"] != inputs["native_build"]):
         raise Blocked(f"{JOB}: result lineage differs from the accepted native build")
+    permission = {"schema": PERMISSION_SCHEMA, "run_id": run_id, "job_id": JOB,
+        "source_snapshot_sha256": inputs["source_snapshot_sha256"], "permissions": PERMISSIONS}
+    lineage = {"schema": LINEAGE_SCHEMA, "run_id": run_id, "job_id": JOB,
+        "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+        "build_lineage_sha256": "sha256:" + digest(inputs["native_build"])}
+    if read_json(attempt / "permission.json") != permission or read_json(attempt / "lineage.json") != lineage:
+        raise Blocked(f"{JOB}: evidence-assembly permission or lineage receipt changed")
     receipt = read_json(attempt / RECEIPTS)
     if not isinstance(receipt, list) or len(receipt) != 2 * len(inputs["units"]):
         raise Blocked(f"{JOB}: B13 receipt set is incomplete")
@@ -414,6 +454,12 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             "coverage_gaps": gaps}
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, receipts)
+        atomic_json(attempt / "permission.json", {"schema": PERMISSION_SCHEMA, "run_id": run_id,
+            "job_id": JOB, "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+            "permissions": PERMISSIONS})
+        atomic_json(attempt / "lineage.json", {"schema": LINEAGE_SCHEMA, "run_id": run_id,
+            "job_id": JOB, "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+            "build_lineage_sha256": "sha256:" + digest(inputs["native_build"])})
         (attempt / SUMMARY).write_text(
             "# Native SAST\n\n" +
             f"- Units: {len(normalized)}\n- Evidence leads: {sum(len(x['leads']) for x in normalized)}\n"
@@ -426,7 +472,7 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             "tools_run": list(TOOLS), "leads": sum(len(x["leads"]) for x in normalized),
             "network": "none", "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
-        artifacts = [RESULT, RECEIPTS, SUMMARY, "status.json"]
+        artifacts = [RESULT, RECEIPTS, SUMMARY, "status.json", "permission.json", "lineage.json"]
         artifacts.extend(unit["compile_database"]["adapted_path"] for unit in inputs["units"])
         for item in receipts:
             trial = attempt / item["trial_path"]

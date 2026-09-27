@@ -92,6 +92,10 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "source_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
     },
+    "native-sast": {
+        "claim_class_id": "native_static_evidence",
+        "allowed_assertions": {"static-analysis-lead", "source-citation", "coverage-gap"},
+    },
     "component-map": {
         "claim_class_id": "component_characterization",
         "allowed_assertions": {

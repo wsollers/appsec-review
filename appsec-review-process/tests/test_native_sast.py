@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT))
 
 import native_sast as worker  # noqa: E402
 import native_sast_adapters as adapters  # noqa: E402
-from execution_state import Blocked, atomic_json, file_hash, tree_hashes  # noqa: E402
+import evidence_assembly as assembly  # noqa: E402
+from execution_state import Blocked, atomic_json, digest, file_hash, tree_hashes  # noqa: E402
 from publish_job_output import ACCEPTED_SCHEMA  # noqa: E402
 from schema_validate import validate_document  # noqa: E402
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output  # noqa: E402
@@ -130,6 +131,19 @@ class NativeSastTests(unittest.TestCase):
         self.assertEqual(loaded["binding"]["attempt_id"], "native-attempt")
         self.assertEqual(loaded["units"][0]["unsupported"], ["README.md"])
         self.assertRegex(loaded["units"][0]["build_variant"]["variant_id"], r"^locked-[0-9a-f]{16}$")
+        self.assertRegex(loaded["source_tree_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+    def test_post_build_checkout_mutation_changes_bound_source_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, target, fingerprint = accepted_native_build(Path(folder))
+            first = worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+            (target / "post-build-note.txt").write_text("changed after build\n", encoding="utf-8")
+            with self.assertRaises(Blocked):
+                worker._verify_source_tree({"target_path": str(target),
+                                            "source_tree_sha256": first["source_tree_sha256"]})
+            second = worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        self.assertNotEqual(first["source_tree_sha256"], second["source_tree_sha256"])
+        self.assertEqual(first["units"], second["units"])
 
     def test_wrong_open_stale_or_mismatched_native_build_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -239,6 +253,11 @@ class NativeSastTests(unittest.TestCase):
         contract = json.loads((ROOT / "registry/output-contracts/native-sast.json").read_text())
         self.assertFalse(template["implemented"])
         self.assertEqual(template["composition"]["output_contract_id"], contract["contract_id"])
+        self.assertEqual(contract["claim_class"], {
+            "claim_class_id": "native_static_evidence",
+            "allowed_assertions": ["static-analysis-lead", "source-citation", "coverage-gap"],
+            "forbidden_promotions": ["finding", "severity", "runtime-state"],
+        })
         self.assertIn("implemented_not_qualified", (ROOT / "native_sast.py").read_text())
         with tempfile.TemporaryDirectory() as folder:
             attempt = Path(folder, "attempt"); attempt.mkdir()
@@ -273,6 +292,15 @@ class NativeSastTests(unittest.TestCase):
                 "tools_run": list(worker.TOOLS), "leads": 3, "network": "none",
                 "qualification": "implemented_not_qualified"}
             atomic_json(attempt / "status.json", status)
+            permissions = ["read-run-data", "write-run-data", "execute-container-static-analysis"]
+            atomic_json(attempt / "permission.json", {"schema": worker.PERMISSION_SCHEMA,
+                "run_id": "run-e03", "job_id": worker.JOB,
+                "source_snapshot_sha256": result["source_snapshot_sha256"],
+                "permissions": permissions})
+            atomic_json(attempt / "lineage.json", {"schema": worker.LINEAGE_SCHEMA,
+                "run_id": "run-e03", "job_id": worker.JOB,
+                "source_snapshot_sha256": result["source_snapshot_sha256"],
+                "build_lineage_sha256": "sha256:" + digest(result["native_build"])})
             fingerprint = "sha256:" + "f" * 64
             envelope = terminal_envelope(run_id="run-e03", job_id=worker.JOB,
                 attempt_id="attempt", worker_kind="pinned_container", execution_status="OK_WITH_GAPS",
@@ -280,11 +308,62 @@ class NativeSastTests(unittest.TestCase):
                 output_contract=worker.CONTRACT, started_at="2026-09-27T00:00:00Z",
                 finished_at="2026-09-27T00:00:01Z", summary="three analyzer leads",
                 artifacts=artifact_records(attempt, [worker.RESULT, worker.RECEIPTS,
-                    worker.SUMMARY, "status.json"]), gaps=result["coverage_gaps"])
+                    worker.SUMMARY, "status.json", "permission.json", "lineage.json"]),
+                gaps=result["coverage_gaps"])
             self.assertEqual(validate_document(result, "native-sast.schema.json"), [])
             self.assertEqual(validate_job_output(attempt, envelope, fingerprint,
                 expected_run_id="run-e03", expected_job_id=worker.JOB,
                 orchestration=NO_ORCHESTRATION_FACTS), [])
+            self.assertEqual(json.loads((attempt / "permission.json").read_text())["permissions"],
+                             worker.PERMISSIONS)
+
+    def test_claim_ceiling_rejects_finding_promotion(self):
+        contract_path = ROOT / "registry/output-contracts/native-sast.json"
+        contract = json.loads(contract_path.read_text())
+        self.assertNotIn("claim_types", contract)
+        from validate_job_output import _claim_class_errors
+        self.assertEqual(_claim_class_errors(contract, {"lead": "source citation"}), [])
+        errors = _claim_class_errors(contract, {"severity": "high"})
+        self.assertTrue(any("severity promotion" in error for error in errors))
+
+    def test_f02_accepts_exact_permission_and_lineage_receipts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            supply = Path(folder); producer = supply / "producers" / worker.JOB
+            attempt_id = "native-sast-attempt"; attempt = producer / "attempts" / attempt_id
+            attempt.mkdir(parents=True)
+            source = "sha256:" + "1" * 64
+            build = "sha256:" + "2" * 64
+            atomic_json(attempt / "permission.json", {"schema": assembly.PERMISSION_SCHEMA,
+                "run_id": "run-e03", "job_id": worker.JOB,
+                "source_snapshot_sha256": source, "permissions": worker.PERMISSIONS})
+            atomic_json(attempt / "lineage.json", {"schema": assembly.LINEAGE_SCHEMA,
+                "run_id": "run-e03", "job_id": worker.JOB,
+                "source_snapshot_sha256": source, "build_lineage_sha256": build})
+            atomic_json(attempt / "native-sast.json", {"evidence": "fixture"})
+            fingerprint = "sha256:" + "3" * 64
+            envelope = terminal_envelope(run_id="run-e03", job_id=worker.JOB,
+                attempt_id=attempt_id, worker_kind="pinned_container", execution_status="OK",
+                acceptance_status="CURRENT", input_fingerprint=fingerprint,
+                output_contract=worker.CONTRACT, started_at="2026-09-27T00:00:00Z",
+                finished_at="2026-09-27T00:00:01Z", summary="native SAST fixture",
+                artifacts=artifact_records(attempt, ["permission.json", "lineage.json", "native-sast.json"]))
+            atomic_json(attempt / "result.json", envelope)
+            pointer = {"schema": ACCEPTED_SCHEMA, "status": "OK", "run_id": "run-e03",
+                "job": worker.JOB, "attempt_id": attempt_id, "fingerprint": fingerprint,
+                "envelope_path": "result.json", "envelope_sha256": file_hash(attempt / "result.json"),
+                "hashes": tree_hashes(attempt), "accepted_at": "2026-09-27T00:00:02Z"}
+            atomic_json(producer / "accepted.json", pointer)
+            atomic_json(producer / "latest.json", {"attempt_id": attempt_id})
+            instance_id = "a" * 32
+            entry, copies = assembly._producer(supply, "run-e03", source,
+                {"job": worker.JOB, "contract": worker.CONTRACT, "allowed_skip_reasons": []},
+                {"source_snapshot_sha256": source, "build_lineage_sha256": build,
+                 "permissions": worker.PERMISSIONS, "terminal_instance_ids": [instance_id]},
+                {instance_id: {"instance_id": instance_id, "state": "succeeded",
+                               "group_id": "native-sast"}})
+        self.assertEqual(entry["disposition"], "accepted")
+        self.assertEqual(entry["build_lineage_sha256"], build)
+        self.assertEqual(len(copies), 3)
 
 
 if __name__ == "__main__":
