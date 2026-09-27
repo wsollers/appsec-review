@@ -58,6 +58,84 @@ class VendorToolBlocked(RuntimeError): pass
 class VendorToolFailed(RuntimeError): pass
 
 
+def _path(value: Any) -> str:
+    if not isinstance(value, str): raise VendorToolFailed("output-path-invalid")
+    value = value.replace("\\", "/").removeprefix("/inputs/").removeprefix("inputs/")
+    if value.startswith("/") or any(p in ("", ".", "..") for p in value.split("/")):
+        raise VendorToolFailed("output-path-invalid")
+    return value
+
+
+def _sarif(document: dict) -> list[dict[str, Any]]:
+    records = []
+    for run in document.get("runs", []):
+        for result in run.get("results", []):
+            locations = result.get("locations") or []
+            physical = locations[0].get("physicalLocation", {}) if locations else {}
+            artifact = physical.get("artifactLocation", {})
+            region = physical.get("region", {})
+            records.append({"rule_id": result.get("ruleId"), "path": _path(artifact.get("uri")),
+                            "line": region.get("startLine", 1)})
+    return records
+
+
+def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
+    """Reduce vendor JSON to bounded identifiers and locations; never retain messages/snippets."""
+    try: document = json.loads(data)
+    except (UnicodeDecodeError, ValueError) as exc: raise VendorToolFailed("expected-output-invalid") from exc
+    records: list[dict[str, Any]] = []
+    if tool_id == "gitleaks":
+        if not isinstance(document, list): raise VendorToolFailed("gitleaks-shape-invalid")
+        for item in document:
+            records.append({"rule_id": item.get("RuleID"), "path": _path(item.get("File")),
+                            "start_line": item.get("StartLine"), "end_line": item.get("EndLine")})
+    elif tool_id == "checkov":
+        failed = document.get("results", {}).get("failed_checks", [])
+        for item in failed:
+            span = item.get("file_line_range") or [None, None]
+            records.append({"rule_id": item.get("check_id"), "path": _path(item.get("file_path")),
+                            "start_line": span[0], "end_line": span[-1]})
+    elif tool_id == "trivy-config":
+        for result in document.get("Results", []):
+            path = _path(result.get("Target"))
+            for item in result.get("Misconfigurations") or []:
+                records.append({"rule_id": item.get("ID"), "path": path,
+                                "start_line": item.get("CauseMetadata", {}).get("StartLine", 1),
+                                "end_line": item.get("CauseMetadata", {}).get("EndLine", 1)})
+    elif tool_id == "tfsec":
+        for item in document.get("results", []):
+            loc = item.get("location", {})
+            records.append({"rule_id": item.get("rule_id"), "path": _path(loc.get("filename")),
+                            "start_line": loc.get("start_line"), "end_line": loc.get("end_line")})
+    elif tool_id == "kube-linter":
+        for item in document.get("Reports", document.get("reports", [])):
+            obj = item.get("Object", item.get("object", {})); check = item.get("Check", item.get("check", "kube-linter"))
+            records.append({"rule_id": check, "path": _path(obj.get("FilePath", obj.get("filePath"))),
+                            "start_line": 1, "end_line": 1})
+    elif tool_id == "hadolint":
+        if not isinstance(document, list): raise VendorToolFailed("hadolint-shape-invalid")
+        records = [{"rule_id": i.get("code"), "path": _path(i.get("file", "Dockerfile")),
+                    "start_line": i.get("line"), "end_line": i.get("line")} for i in document]
+    elif tool_id.startswith("mobsfscan-") or tool_id == "binskim":
+        records = _sarif(document)
+    elif tool_id in ("oci-archive-inventory", "image-package-and-config-inspection"):
+        # Container parsers retain only package coordinates; config values and vendor prose are discarded.
+        artifacts = document.get("artifacts", []) if tool_id == "oci-archive-inventory" else [
+            pkg for result in document.get("Results", []) for pkg in (result.get("Packages") or [])]
+        for item in artifacts:
+            records.append({"name": item.get("name", item.get("Name")),
+                            "version": item.get("version", item.get("Version")),
+                            "ecosystem": item.get("type", item.get("Type", "unknown"))})
+    else: raise VendorToolFailed("tool-parser-unavailable")
+    for item in records:
+        for key, value in item.items():
+            if key.endswith("line") and (not isinstance(value, int) or isinstance(value, bool) or value < 1):
+                raise VendorToolFailed("output-line-invalid")
+            if key == "rule_id" and (not isinstance(value, str) or not value):
+                raise VendorToolFailed("output-rule-invalid")
+    return records
+
+
 def _runtime(source_sha: str, clock: Callable[[], str]) -> ce.ContainerRuntime:
     defaults = ce.host_defaults()
     if defaults["docker_executable"] is None:
@@ -110,7 +188,5 @@ def execute(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: 
     output = attempt_root / "scratch" / SPECS[tool_id].output
     if not output.is_file() or output.is_symlink(): raise VendorToolFailed("expected-output-missing")
     data = output.read_bytes()
-    try: json.loads(data)
-    except (UnicodeDecodeError, ValueError) as exc: raise VendorToolFailed("expected-output-invalid") from exc
+    normalize(tool_id, data)
     return terminal, data
-

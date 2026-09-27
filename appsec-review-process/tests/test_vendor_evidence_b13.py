@@ -32,4 +32,11 @@ class B13Tests(unittest.TestCase):
     def test_missing_output_fails(self):
         with self.assertRaisesRegex(b.VendorToolFailed,'missing'): self.call(write=False)()
 
+    def test_bounded_parsers_drop_vendor_messages_and_reject_traversal(self):
+        raw=b'[{"RuleID":"generic-api-key","File":"/inputs/src/a.py","StartLine":2,"EndLine":2,"Secret":"never"}]'
+        self.assertEqual(b.normalize('gitleaks',raw),[{'rule_id':'generic-api-key','path':'src/a.py','start_line':2,'end_line':2}])
+        self.assertNotIn('never',repr(b.normalize('gitleaks',raw)))
+        with self.assertRaisesRegex(b.VendorToolFailed,'path'):
+            b.normalize('gitleaks',b'[{"RuleID":"x","File":"../escape","StartLine":1,"EndLine":1}]')
+
 if __name__=='__main__': unittest.main()
