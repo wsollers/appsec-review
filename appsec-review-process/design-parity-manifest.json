@@ -4334,22 +4334,24 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "implemented_not_qualified",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
-          "unit"
+          "unit",
+          "linux_integration"
         ],
         "references": [
           "appsec-review-process/tests/test_vendor_evidence_workers.py",
           "appsec-review-process/tests/test_vendor_evidence_b13.py",
           "appsec-review-process/tests/test_vendor_evidence_orchestration.py",
-          "appsec-review-process/tests/test_binary_hardening_input.py"
+          "appsec-review-process/tests/test_binary_hardening_input.py",
+          "appsec-review-process/tests/test_binary_hardening_live.py",
+          "validation/binary-hardening-live.json",
+          "docs/evidence/binary-hardening-live-qualification-20260927.md"
         ]
       },
-      "gaps": [
-        "no_live_docker_qualification"
-      ],
-      "next_prerequisite": "Complete live Docker qualification against the ELF published by 02-native-build."
+      "gaps": [],
+      "next_prerequisite": "Exercise this accepted path in the next complete retained full-review run."
     },
     {
       "id": "02-mobile-sast",

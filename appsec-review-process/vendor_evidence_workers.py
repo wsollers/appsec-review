@@ -377,7 +377,7 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
                                     "rule_hits": hits}
     elif job_id == "02-binary-hardening":
         records = []
-        mapped={"BA2001":"position_independent","BA2002":"control_flow_guard","BA2004":"high_entropy_aslr",
+        mapped={"BA2001":"position_independent","BA2002":"control_flow_guard","BA2004":"fortify_source",
                 "BA2005":"stack_protector","BA2010":"non_executable_data"}
         hits_by={p:[] for p in candidates["binskim"]}
         for hit in vendor_results.get("binskim",{}).get("records",[]):

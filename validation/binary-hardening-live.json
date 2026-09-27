@@ -1,0 +1,39 @@
+{
+  "binary_hardening": {
+    "attempt_id": "native-qualification",
+    "checks": {
+      "control_flow_guard": "not-applicable-for-format",
+      "fortify_source": "absent",
+      "high_entropy_aslr": "not-applicable-for-format",
+      "non_executable_data": "present",
+      "position_independent": "present",
+      "relro": "present",
+      "safe_seh": "not-applicable-for-format",
+      "stack_protector": "absent"
+    },
+    "envelope_sha256": "sha256:f1883a7bc936dfc584e225009ef359d2d4bcb77819ec0e0f47e736a620dc7320",
+    "execution_status": "OK",
+    "network_mode": "none",
+    "rule_hits": [
+      {
+        "check": "stack_protector",
+        "rule_id": "BA2005"
+      },
+      {
+        "check": "fortify_source",
+        "rule_id": "BA2004"
+      }
+    ],
+    "scanner_image_digest": "sha256:1ffb59546c1c570136f64ce205c2079ff968bc8cb35358b1357f8864051ce886",
+    "tool_name": "checksec",
+    "tool_version": "2.6.0"
+  },
+  "native_build": {
+    "attempt_id": "native-live",
+    "binary_bytes": 15960,
+    "binary_sha256": "sha256:94038e71d87e623adececa649b138ea86f49da8450f009354f593e5b0b392bdc",
+    "build_image_digest": "sha256:0a6b624b9d89a03675b5cce4d201ce9e63b366565483a10c3b9d354c6b7e4794"
+  },
+  "run_id": "binary-hardening-live",
+  "schema": "appsec-review/binary-hardening-qualification/1.0"
+}

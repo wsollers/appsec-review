@@ -307,6 +307,40 @@ def _source_root(attempt_root: Path, run_id: str) -> tuple[Path | None, list[str
     return root, []
 
 
+def _binary_hardening_input_root(attempt_root: Path, run_id: str,
+                                 source_snapshot_sha256: str) -> tuple[Path | None, list[str]]:
+    """Recover the immutable native-binary projection used by a hardening attempt.
+
+    Binary hardening intentionally scans the accepted ``02-native-build`` projection, not the
+    repository checkout named by the intake manifest.  The projection manifest binds that input
+    to the same run snapshot, and an unambiguous matching generation is required.
+    """
+    owner = _owning_run_root(attempt_root, run_id)
+    if owner is None:
+        return None, ["cannot locate the owning run manifest for binary input freshness"]
+    inputs = owner / "data" / "jobs" / "02-binary-hardening" / "inputs"
+    candidates: list[Path] = []
+    if inputs.is_dir() and not inputs.is_symlink():
+        for manifest_path in sorted(inputs.glob("*/binary-input.json")):
+            try:
+                manifest = read_json(manifest_path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            binary_root = manifest_path.parent / "binaries"
+            if (manifest.get("schema") == "appsec-review/binary-hardening-input/1" and
+                    manifest.get("run_id") == run_id and
+                    manifest.get("source_snapshot_sha256") == source_snapshot_sha256 and
+                    binary_root.is_dir() and not binary_root.is_symlink()):
+                candidates.append(binary_root)
+    if not candidates:
+        # Compatibility for pre-routing retained attempts and validator fixtures. New lifecycle
+        # attempts always have the projection and therefore take the stronger branch above.
+        return _source_root(attempt_root, run_id)
+    if len(candidates) != 1:
+        return None, [f"expected one immutable binary input projection, found {len(candidates)}"]
+    return candidates[0], []
+
+
 def _walk_citations(value: Any, path: str = "$") -> list[tuple[str, dict[str, Any]]]:
     found: list[tuple[str, dict[str, Any]]] = []
     if isinstance(value, dict):
@@ -983,7 +1017,11 @@ def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any]
               "expected_dagster_run_id": orchestration.dagster_run_id}
     source_root = None
     if contract_id in {"sbom-inventory", "license-inventory", "mobile-sast", "binary-hardening"}:
-        source_root, source_errors = _source_root(attempt_root, run_id)
+        if contract_id == "binary-hardening":
+            source_root, source_errors = _binary_hardening_input_root(
+                attempt_root, run_id, header["source_snapshot_sha256"])
+        else:
+            source_root, source_errors = _source_root(attempt_root, run_id)
         problems += source_errors
     upstream: dict[str, tuple[Path | None, dict[str, str] | None]] = {}
     wanted = {"sca-vulnerability-match": ("sbom-inventory",), "license-inventory": ("sbom-inventory",),
