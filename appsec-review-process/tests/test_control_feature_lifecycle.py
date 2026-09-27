@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import control_feature_lifecycle as life  # noqa: E402
+import pool_specification  # noqa: E402
 from execution_state import Blocked, atomic_json, file_hash, tree_hashes  # noqa: E402
 from schema_validate import validate_document  # noqa: E402
 from worker_result import artifact_records, terminal_envelope  # noqa: E402
@@ -22,6 +23,11 @@ NA_DISPOSITION = {"execution_status":"SKIPPED", "skip_reason":"not-applicable-no
 
 
 class ControlFeatureLifecycleTests(unittest.TestCase):
+    def test_merge_uses_the_canonical_pool_specification_filename(self):
+        self.assertEqual(pool_specification.SPEC_FILE, "specification.json")
+        self.assertNotIn('"pool-specification.json"',
+                         Path(life.__file__).read_text(encoding="utf-8"))
+
     def fake_coordinate(self, base, **kwargs):
         attempt = Path(base) / "attempts" / "new"
         attempt.mkdir(parents=True)

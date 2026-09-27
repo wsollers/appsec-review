@@ -18,6 +18,7 @@ import evidence_quorum
 from execution_state import (Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json,
                              identifier, run_path, tree_hashes)
 import pool_rendezvous
+import pool_specification
 import persona_tool_pool_lifecycle
 import phase1
 import remediation_retest
@@ -192,7 +193,7 @@ def _verified_dispatch(run_id: str) -> tuple[pool_rendezvous.VerifiedManifest, P
     dispatch, binding, attempt = _current(run_id, "persona-tool-pool-dispatch")
     record = read_json(attempt / "pool-context.json")
     context = persona_tool_pool_lifecycle._load_retained_context(record)
-    spec_path = context.pool_parent / dispatch["pool_directory"] / "pool-specification.json"
+    spec_path = context.pool_parent / dispatch["pool_directory"] / pool_specification.SPEC_FILE
     spec = read_json(spec_path)
     request = read_json(attempt / "deterministic-merge-request.json")
     expected = persona_tool_pool_lifecycle._handoff(
