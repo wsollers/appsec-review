@@ -24,6 +24,8 @@ CLAIM = "claim-" + "b" * 24
 class ReportInputAssemblyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        self.schema_patcher = patch.object(report, "validate_document", side_effect=self._validation)
+        self.schema_patcher.start()
         self.jobs = Path(self.temp.name) / "jobs"
         evidence = self.jobs / "evidence-source" / "attempts" / "evidence-1"
         evidence.mkdir(parents=True)
@@ -31,13 +33,47 @@ class ReportInputAssemblyTests(unittest.TestCase):
         self.evidence_hash = "sha256:" + file_hash(evidence / "evidence.json")
         self.documents = self._documents()
         self.pointers = {}
+        ledger = self.documents["ledger"]["claim-decision-ledger.json"]
+        origin = ledger["entries"][0]
+        for name in ("verification", "scoring"):
+            document = self.documents[name][report.SPECS[name][2]]
+            document["ledger_head_id"] = origin["event_id"]
+            document["ledger_head_sha256"] = origin["entry_hash"]
+        actors = {
+            "07-red-team-adversarial": ("red-team-adversarial.json", "hypotheses", "reviewer", "red-team-adversary", "red-1"),
+            "08-blue-team-refutation": ("blue-team-refutation.json", "reviews", "blue_reviewer", "blue-team-refuter", "blue-1"),
+            "09-independent-verification": ("independent-verification.json", "verifications", "verifier", "independent-verifier", "verification-1"),
+        }
+        stage_pointers = {}
+        for job, (artifact, collection, actor_key, role, attempt_id) in actors.items():
+            if job == "09-independent-verification":
+                document = self.documents["verification"][artifact]
+            else:
+                actor = {"job_id": job, "attempt_id": attempt_id, "role_id": role,
+                    "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT}
+                document = {"schema": "fixture", "run_id": RUN_ID, "stage": job,
+                    "ledger_head_id": origin["event_id"], "ledger_head_sha256": origin["entry_hash"],
+                    "upstream": {}, "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
+                    collection: [{"claim_id": CLAIM, actor_key: actor}]}
+            stage_pointers[job] = self._publish_job(job, job, attempt_id, {artifact: document})
+        ledger["entries"][1]["decision_authority"] = self._authority(
+            stage_pointers["07-red-team-adversarial"], "red-team-adversarial.json", "red-team-adversary")
+        ledger["entries"][2]["decision_authority"] = self._authority(
+            stage_pointers["08-blue-team-refutation"], "blue-team-refutation.json", "blue-team-refuter")
+        ledger["entries"][3]["decision_authority"] = self._authority(
+            stage_pointers["09-independent-verification"], "independent-verification.json", "independent-verifier")
+        ledger["head_hash"] = self._rehash_entries(ledger["entries"])
         for name, spec in report.SPECS.items():
+            if name == "verification":
+                self.pointers[name] = stage_pointers["09-independent-verification"]
+                continue
             artifacts = {spec[2]: self.documents[name][spec[2]]}
             if name == "owasp":
                 artifacts.update({item[0]: self.documents[name][item[0]] for item in spec[4]})
             self.pointers[name] = self._publish(name, artifacts)
 
     def tearDown(self):
+        self.schema_patcher.stop()
         self.temp.cleanup()
 
     def _citation(self):
@@ -87,13 +123,15 @@ class ReportInputAssemblyTests(unittest.TestCase):
                 "from_status": None, "decision_authority": None,
                 "sequence": 0, "event_id": "event-" + "1" * 24, "previous_entry_hash": None,
                 "entry_hash": ""}
+        self._rehash_entries([base])
         review = copy.deepcopy(base); review.update(event_type="status_decision", status="under_review",
             from_status="candidate", event_id="event-" + "2" * 24,
-            decision_authority={"job_id": "07-red-team-adversarial", "attempt_id": "red-1"})
-        verified = copy.deepcopy(review); verified.update(status="verified", from_status="under_review",
-            event_id="event-" + "3" * 24,
-            decision_authority={"job_id": "09-independent-verification", "attempt_id": "verify-1"})
-        entries = [base, review, verified]
+            decision_authority=None)
+        narrowed = copy.deepcopy(review); narrowed.update(status="narrowed", from_status="under_review",
+            event_id="event-" + "3" * 24, decision_authority=None)
+        verified = copy.deepcopy(narrowed); verified.update(status="verified", from_status="narrowed",
+            event_id="event-" + "4" * 24, decision_authority=None)
+        entries = [base, review, narrowed, verified]
         head = self._rehash_entries(entries)
         ledger = {"schema": "appsec-review/claim-decision-ledger/1.0", "run_id": RUN_ID,
                   "job_id": "claim-ledger-routing", "attempt_id": "ledger-1",
@@ -102,7 +140,9 @@ class ReportInputAssemblyTests(unittest.TestCase):
                   "claim_states": [{"claim_id": CLAIM, "latest_event_id": verified["event_id"], "status": "verified"}],
                   "claim_limits": {"candidate_only": True, "finding_created": False,
                   "severity_assigned": False, "runtime_claimed": False, "compliance_claimed": False}}
-        verifier = {"job_id": "09-independent-verification", "attempt_id": "verify-1"}
+        verifier = {"job_id": "09-independent-verification", "attempt_id": "verification-1",
+            "role_id": "independent-verifier", "source_generation": SOURCE,
+            "component_generation": COMPONENT_ATTEMPT}
         inherited = {"claim_id": CLAIM, "route_id": "route-1", "claim_class": "candidate_only",
             "hypothesis": "A bounded fixture hypothesis.", "confidence": "medium",
             "component_ids": ["component-1"], "source_generation": SOURCE,
@@ -112,8 +152,12 @@ class ReportInputAssemblyTests(unittest.TestCase):
                                    "status": "SATISFIED", "citations": [self._citation()]}],
             "dissent_ids": ["dissent-1"], "causal_claim_ids": [], "supersedes_claim_id": None}
         verification_record = {**inherited, "hypothesis_id": "hyp_" + "4" * 20,
-            "status": "VERIFIED", "red_reviewer": {"job_id": "07-red-team-adversarial", "attempt_id": "red-1"},
-            "blue_reviewer": {"job_id": "08-blue-team-refutation", "attempt_id": "blue-1"},
+            "status": "VERIFIED", "red_reviewer": {"job_id": "07-red-team-adversarial", "attempt_id": "red-1",
+                "role_id": "red-team-adversary", "source_generation": SOURCE,
+                "component_generation": COMPONENT_ATTEMPT},
+            "blue_reviewer": {"job_id": "08-blue-team-refutation", "attempt_id": "blue-1",
+                "role_id": "blue-team-refuter", "source_generation": SOURCE,
+                "component_generation": COMPONENT_ATTEMPT},
             "verifier": verifier, "verification_method": "Hash-bound fixture verification.",
             "verification_citations": [self._citation()]}
         upstream = {"job_id": "upstream", "attempt_id": "upstream-1",
@@ -144,12 +188,16 @@ class ReportInputAssemblyTests(unittest.TestCase):
     def _publish(self, name, documents):
         job, contract, _primary, _schema, _supporting = report.SPECS[name]
         attempt_id = COMPONENT_ATTEMPT if name == "component" else name + "-1"
+        return self._publish_job(job, contract, attempt_id, documents)
+
+    def _publish_job(self, job, contract, attempt_id, documents):
         base = self.jobs / job
         attempt = base / "attempts" / attempt_id
         attempt.mkdir(parents=True)
         for relative, document in documents.items(): atomic_json(attempt / relative, document)
         permission = {"schema": "appsec-review/producer-permission-receipt/1.0", "run_id": RUN_ID,
-            "job_id": job, "source_snapshot_sha256": SOURCE, "permissions": ["read-run-data"]}
+            "job_id": job, "source_snapshot_sha256": SOURCE,
+            "permissions": report.CANONICAL_PERMISSIONS[job]}
         lineage = {"schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": RUN_ID,
             "job_id": job, "source_snapshot_sha256": SOURCE, "build_lineage_sha256": "sha256:" + "e" * 64}
         atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
@@ -170,17 +218,30 @@ class ReportInputAssemblyTests(unittest.TestCase):
         atomic_json(base / "accepted.json", pointer)
         return base / "accepted.json"
 
+    def _authority(self, pointer_path, artifact, role):
+        pointer = json.loads(pointer_path.read_text())
+        attempt = pointer_path.parent / "attempts" / pointer["attempt_id"]
+        return {"contract_id": pointer["job"], "job_id": pointer["job"],
+            "attempt_id": pointer["attempt_id"], "role_id": role,
+            "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT,
+            "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path),
+            "envelope_sha256": "sha256:" + file_hash(attempt / "result.json"),
+            "artifact_path": artifact, "artifact_sha256": "sha256:" + file_hash(attempt / artifact),
+            "permission_receipt_path": "permission.json",
+            "permission_receipt_sha256": "sha256:" + file_hash(attempt / "permission.json"),
+            "reason": "Accepted exact fixture decision."}
+
     @staticmethod
     def _validation(document, schema):
         if schema.startswith("owasp-") or schema in {"claim-decision-ledger.schema.json",
+                "07-red-team-adversarial.schema.json", "08-blue-team-refutation.schema.json",
                 "09-independent-verification.schema.json", "scoring-prioritization.schema.json"}:
             return []
         return validate_schema(document, schema)
 
     def load(self):
-        with patch.object(report, "validate_document", side_effect=self._validation):
-            return {name: report.load_accepted(path, run_id=RUN_ID, name=name)
-                    for name, path in self.pointers.items()}
+        return {name: report.load_accepted(path, run_id=RUN_ID, name=name)
+                for name, path in self.pointers.items()}
 
     def test_nominal_manifest_is_deterministic_hash_bound_and_prose_free(self):
         loaded = self.load()
@@ -194,7 +255,32 @@ class ReportInputAssemblyTests(unittest.TestCase):
             "producer_attempt_id": "evidence-1", "artifact_path": "evidence.json",
             "artifact_sha256": self.evidence_hash}])
         self.assertNotIn("hypothesis", json.dumps(first))
+        self.assertNotEqual(first["ledger_head_sha256"], first["lifecycle_origin_head_sha256"])
+        self.assertEqual(first["lifecycle_origin_head_sha256"],
+                         self.documents["ledger"]["claim-decision-ledger.json"]["entries"][0]["entry_hash"])
         self.assertEqual(validate_schema(first, "synthesis-input.schema.json"), [])
+
+    def test_noncanonical_permission_and_tampered_decision_authority_reject(self):
+        loaded = self.load()
+        component = self.pointers["component"].parent
+        attempt = component / "attempts" / COMPONENT_ATTEMPT
+        permission = json.loads((attempt / "permission.json").read_text())
+        permission["permissions"] = ["target-execution"]
+        atomic_json(attempt / "permission.json", permission)
+        envelope = json.loads((attempt / "result.json").read_text())
+        next(item for item in envelope["artifacts"] if item["path"] == "permission.json")["sha256"] = file_hash(attempt / "permission.json")
+        atomic_json(attempt / "result.json", envelope)
+        pointer = json.loads(self.pointers["component"].read_text())
+        pointer["envelope_sha256"] = file_hash(attempt / "result.json")
+        pointer["hashes"] = tree_hashes(attempt)
+        atomic_json(self.pointers["component"], pointer)
+        with self.assertRaises(Blocked):
+            report.load_accepted(self.pointers["component"], run_id=RUN_ID, name="component")
+
+        ledger = loaded["ledger"]["documents"]["claim-decision-ledger.json"]
+        ledger["entries"][1]["decision_authority"]["accepted_pointer_sha256"] = "sha256:" + "0" * 64
+        ledger["head_hash"] = self._rehash_entries(ledger["entries"])
+        with self.assertRaises(Blocked): report.assemble(RUN_ID, loaded, self.jobs)
 
     def test_stale_pointer_missing_receipt_and_external_attempt_symlink_reject(self):
         component_base = self.pointers["component"].parent

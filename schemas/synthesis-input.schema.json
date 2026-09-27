@@ -10,6 +10,8 @@
     "component_generation",
     "ledger_head_id",
     "ledger_head_sha256",
+    "lifecycle_origin_head_id",
+    "lifecycle_origin_head_sha256",
     "inputs",
     "evidence_artifacts",
     "counts",
@@ -40,6 +42,14 @@
       "minLength": 1
     },
     "ledger_head_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "lifecycle_origin_head_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lifecycle_origin_head_sha256": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },

@@ -37,6 +37,26 @@ SPECS = {
                 "scoring-prioritization.json", "scoring-prioritization.schema.json", ()),
 }
 
+CANONICAL_PERMISSIONS = {
+    "01-component-characterization": ["read-source", "read-run-data", "write-run-data"],
+    "03-threat-model-dfd-stride": ["read-source", "read-run-data", "write-run-data"],
+    "04-owasp-join-report": ["read-run-data", "write-run-data"],
+    "claim-ledger-routing": ["read-run-data", "write-run-data"],
+    "07-red-team-adversarial": ["read-run-data", "write-run-data"],
+    "08-blue-team-refutation": ["read-run-data", "write-run-data"],
+    "09-independent-verification": ["read-run-data", "write-run-data"],
+    "12-scoring-prioritization": ["read-run-data", "write-run-data"],
+}
+
+DECISION_PRODUCERS = {
+    "07-red-team-adversarial": ("07-red-team-adversarial", "red-team-adversarial.json",
+        "07-red-team-adversarial.schema.json", "hypotheses", "reviewer", "red-team-adversary"),
+    "08-blue-team-refutation": ("08-blue-team-refutation", "blue-team-refutation.json",
+        "08-blue-team-refutation.schema.json", "reviews", "blue_reviewer", "blue-team-refuter"),
+    "09-independent-verification": ("09-independent-verification", "independent-verification.json",
+        "09-independent-verification.schema.json", "verifications", "verifier", "independent-verifier"),
+}
+
 
 def _sha(value: Any) -> str:
     return "sha256:" + digest(value)
@@ -91,7 +111,8 @@ def _receipt(value: Any, *, schema: str, run_id: str, job_id: str) -> None:
             not HASH.fullmatch(str(value.get("source_snapshot_sha256", "")))):
         raise Blocked(f"{JOB}: producer receipt identity is invalid")
     if schema.endswith("permission-receipt/1.0"):
-        if set(value) != required | {"permissions"} or not isinstance(value["permissions"], list) or not value["permissions"]:
+        if (set(value) != required | {"permissions"} or
+                value.get("permissions") != CANONICAL_PERMISSIONS.get(job_id)):
             raise Blocked(f"{JOB}: permission receipt shape is invalid")
     elif set(value) != required | {"build_lineage_sha256"} or not HASH.fullmatch(
             str(value.get("build_lineage_sha256", ""))):
@@ -233,6 +254,89 @@ def _validate_ledger(ledger: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return latest
 
 
+def _lifecycle_origin(ledger: dict[str, Any]) -> tuple[str, str]:
+    """Return the immutable L01 head consumed by lifecycle stages, before decisions append."""
+    first_decision = next((index for index, entry in enumerate(ledger["entries"])
+                           if entry["event_type"] == "status_decision"), None)
+    if first_decision is None or first_decision == 0:
+        raise Blocked(f"{JOB}: final ledger has no lifecycle decision chain")
+    if any(entry["event_type"] != "status_decision" for entry in ledger["entries"][first_decision:]):
+        raise Blocked(f"{JOB}: candidate admission appears after lifecycle decisions")
+    origin = ledger["entries"][first_decision - 1]
+    return origin["event_id"], origin["entry_hash"]
+
+
+def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, Any],
+                               source_generation: str, component_generation: str) -> None:
+    authority = entry.get("decision_authority")
+    expected_keys = {"contract_id", "job_id", "attempt_id", "role_id", "source_generation",
+        "component_generation", "accepted_pointer_sha256", "envelope_sha256", "artifact_path",
+        "artifact_sha256", "permission_receipt_path", "permission_receipt_sha256", "reason"}
+    if not isinstance(authority, dict) or set(authority) != expected_keys:
+        raise Blocked(f"{JOB}: lifecycle decision authority shape is invalid")
+    job_id = authority.get("job_id")
+    if job_id not in DECISION_PRODUCERS:
+        raise Blocked(f"{JOB}: lifecycle decision authority job is unsupported")
+    contract, artifact, schema, collection, actor_field, role = DECISION_PRODUCERS[job_id]
+    if (authority.get("contract_id") != contract or authority.get("artifact_path") != artifact or
+            authority.get("permission_receipt_path") != "permission.json" or
+            authority.get("role_id") != role or authority.get("source_generation") != source_generation or
+            authority.get("component_generation") != component_generation):
+        raise Blocked(f"{JOB}: lifecycle decision authority identity is invalid")
+    producer_root = _plain_directory(jobs_root, jobs_root / job_id)
+    pointer_path = _owned(producer_root, "accepted.json")
+    pointer = read_json(pointer_path)
+    pointer_keys = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint",
+                    "envelope_path", "envelope_sha256", "hashes", "accepted_at"}
+    if (not isinstance(pointer, dict) or set(pointer) != pointer_keys or
+            pointer.get("schema") != ACCEPTED_SCHEMA or pointer.get("status") not in {"OK", "OK_WITH_GAPS"} or
+            pointer.get("run_id") != run_id or pointer.get("job") != job_id or
+            pointer.get("attempt_id") != authority.get("attempt_id") or
+            pointer.get("envelope_path") != "result.json" or
+            "sha256:" + file_hash(pointer_path) != authority.get("accepted_pointer_sha256")):
+        raise Blocked(f"{JOB}: lifecycle decision accepted pointer is invalid")
+    latest = _owned(producer_root, "latest.json")
+    if read_json(latest).get("attempt_id") != pointer["attempt_id"]:
+        raise Blocked(f"{JOB}: lifecycle decision accepted pointer is stale")
+    attempts = _plain_directory(producer_root, producer_root / "attempts")
+    attempt = _plain_directory(attempts, attempts / pointer["attempt_id"])
+    if tree_hashes(attempt) != pointer["hashes"]:
+        raise Blocked(f"{JOB}: lifecycle decision immutable attempt changed")
+    envelope_path = _owned(attempt, "result.json")
+    envelope = read_json(envelope_path)
+    if (file_hash(envelope_path) != pointer["envelope_sha256"] or
+            "sha256:" + file_hash(envelope_path) != authority.get("envelope_sha256") or
+            validate_worker_result(envelope) or envelope.get("run_id") != run_id or
+            envelope.get("job_id") != job_id or envelope.get("attempt_id") != pointer["attempt_id"] or
+            envelope.get("input_fingerprint") != pointer["fingerprint"] or
+            envelope.get("execution_status") != pointer["status"] or
+            envelope.get("acceptance_status") != "CURRENT" or envelope.get("output_contract") != contract):
+        raise Blocked(f"{JOB}: lifecycle decision envelope is invalid")
+    artifacts = {item.get("path"): item for item in envelope.get("artifacts", [])}
+    if len(artifacts) != len(envelope.get("artifacts", [])) or artifact not in artifacts or "permission.json" not in artifacts:
+        raise Blocked(f"{JOB}: lifecycle decision artifacts are incomplete")
+    artifact_path, permission_path = _owned(attempt, artifact), _owned(attempt, "permission.json")
+    if (file_hash(artifact_path) != artifacts[artifact].get("sha256") or
+            "sha256:" + file_hash(artifact_path) != authority.get("artifact_sha256") or
+            file_hash(permission_path) != artifacts["permission.json"].get("sha256") or
+            "sha256:" + file_hash(permission_path) != authority.get("permission_receipt_sha256")):
+        raise Blocked(f"{JOB}: lifecycle decision authority hash binding is invalid")
+    _receipt(read_json(permission_path), schema="appsec-review/producer-permission-receipt/1.0",
+             run_id=run_id, job_id=job_id)
+    document = read_json(artifact_path)
+    try:
+        errors = validate_document(document, schema)
+    except (FileNotFoundError, ValueError) as exc:
+        raise Blocked(f"{JOB}: lifecycle decision schema is unavailable") from exc
+    rows = [row for row in document.get(collection, []) if row.get("claim_id") == entry.get("claim_id")]
+    actor = rows[0].get(actor_field) if len(rows) == 1 else None
+    if (errors or not isinstance(actor, dict) or actor.get("job_id") != job_id or
+            actor.get("attempt_id") != pointer["attempt_id"] or actor.get("role_id") != role or
+            actor.get("source_generation") != source_generation or
+            actor.get("component_generation") != component_generation):
+        raise Blocked(f"{JOB}: lifecycle decision artifact does not support its authority")
+
+
 def _records(document: dict[str, Any], key: str, stage: str, record_keys: set[str]) -> dict[str, dict[str, Any]]:
     top_keys = {"schema", "run_id", "stage", "ledger_head_id", "ledger_head_sha256",
                 "upstream", "claim_boundary", key}
@@ -292,6 +396,10 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
             raise Blocked(f"{JOB}: producer run identity is mixed")
     latest = _validate_ledger(ledger)
     source_generation, component_generation = ledger["source_generation"], ledger["component_generation"]
+    origin_head_id, origin_head_sha256 = _lifecycle_origin(ledger)
+    for entry in ledger["entries"]:
+        if entry["event_type"] == "status_decision":
+            _verify_decision_authority(Path(jobs_root), run_id, entry, source_generation, component_generation)
     if (component.get("source_snapshot_sha256") != source_generation or
             loaded["component"]["reference"]["attempt_id"] != component_generation or
             threat.get("source_snapshot") != source_generation or
@@ -332,10 +440,10 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
         "priority", "factors", "scoring_rationale"}
     verifications = _records(verification, "verifications", "09-independent-verification", verification_keys)
     priorities = _records(scoring, "priorities", "12-scoring-prioritization", scoring_keys)
-    if (verification.get("ledger_head_id") != ledger["entries"][-1]["event_id"] or
-            verification.get("ledger_head_sha256") != ledger["head_hash"] or
-            scoring.get("ledger_head_id") != ledger["entries"][-1]["event_id"] or
-            scoring.get("ledger_head_sha256") != ledger["head_hash"] or
+    if (verification.get("ledger_head_id") != origin_head_id or
+            verification.get("ledger_head_sha256") != origin_head_sha256 or
+            scoring.get("ledger_head_id") != origin_head_id or
+            scoring.get("ledger_head_sha256") != origin_head_sha256 or
             set(verifications) != set(priorities) or set(verifications) != set(latest)):
         raise Blocked(f"{JOB}: decision results do not bind the exact ledger head")
     citations = {}
@@ -410,6 +518,8 @@ def assemble(run_id: str, loaded: dict[str, dict[str, Any]], jobs_root: Path) ->
     result = {"schema": "appsec-review/synthesis-input/1.0", "run_id": run_id,
         "source_generation": source_generation, "component_generation": component_generation,
         "ledger_head_id": ledger["entries"][-1]["event_id"], "ledger_head_sha256": ledger["head_hash"],
+        "lifecycle_origin_head_id": origin_head_id,
+        "lifecycle_origin_head_sha256": origin_head_sha256,
         "inputs": inputs, "evidence_artifacts": evidence, "counts": counts, "coverage": coverage,
         "unresolved_claims": unresolved, "dissent_ids": dissent_ids,
         "owasp_denominators": matrix["denominators"], "integrity": {"inputs_sha256": _sha(inputs),
