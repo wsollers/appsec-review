@@ -125,7 +125,10 @@ def _build(run_root: Path, run_id: str, dagster_run_id: str, *, force: bool,
     snapshot = snapshots.pop()
     model, effort, usd = _model(run_id)
     composition, ceiling, template = _composition()
-    now = max(read_json(item[1]["root"] / "accepted.json")["accepted_at"] for item in sources)
+    # Producers record accepted_at as ISO-8601 with microseconds/offset; the permission model needs
+    # a whole-second UTC "Z" timestamp. Compare as datetimes, then normalise.
+    now = max(datetime.fromisoformat(read_json(item[1]["root"] / "accepted.json")["accepted_at"].replace("Z", "+00:00"))
+              for item in sources).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     context_root = run_root / "data" / "jobs" / evidence_assembly.JOB / "runtime-context"
     prompt_root = context_root / "prompt"
     prompt = prompt_root / PROMPT
