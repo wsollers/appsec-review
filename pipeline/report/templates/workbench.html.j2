@@ -33,6 +33,8 @@ header.bar h1{font-size:17px;margin:0 8px 0 0;font-weight:700;letter-spacing:.01
 .btn:hover{border-color:var(--accent)}
 .btn:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 label.btn input{display:none}
+select.btn{padding:4px 8px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .status{margin-left:auto;font-size:12.5px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .status .warn{color:var(--warn)}
 main.panes{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:0}
@@ -82,12 +84,41 @@ textarea#src{flex:1;min-height:0;width:100%;resize:none;border:0;border-right:1p
 .paper pre.code .l.flaw .n{color:#C8352B;font-weight:600}
 .paper blockquote{margin:.6em 0;padding-left:1em;border-left:3px solid #D5DBE3;color:#39434F}
 .paper a{color:#2F5D8A;text-decoration:none}
+.paper .tbd{background:#FBF0C9;color:#7A5E0C;font:600 .78em var(--f-head);padding:0 4px}
+.paper kbd{font:.8em var(--f-mono);border:1px solid #D5DBE3;background:#F1F4F8;border-radius:2px;padding:0 4px}
+.paper .rag{display:inline-block;width:.6em;height:.6em;border-radius:50%;margin-right:.3em;vertical-align:.05em}
+.paper .callout{border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 7%,#fff);padding:6px 12px;margin:8px 0;font-size:14px}
+.paper .callout .cl{font:700 10.5px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--c);margin-right:.5em}
+.paper .term{background:#F6F8FA;border:1px solid #D5DBE3;padding:4px 10px;margin:6px 0 10px;font:12.5px/1.6 var(--f-mono);overflow-x:auto}
+.paper .term .tt-title{color:#5B6878;font-size:11.5px}
+.paper .term .cmdl{display:block;white-space:pre}
+.paper .term .pr,.paper .term .out{color:#5B6878}
+.paper ol.steps{list-style:none;counter-reset:st;padding-left:2.2em}
+.paper ol.steps>li{counter-increment:st;position:relative;margin:.6em 0}
+.paper ol.steps>li::before{content:counter(st);position:absolute;left:-2.1em;top:.1em;width:1.45em;height:1.45em;border-radius:50%;background:#2F5D8A;color:#fff;font:700 11px/1.45em var(--f-head);text-align:center}
+.paper .steptitle{font:700 14.5px var(--f-head)}
+.paper .bluf{background:#DCE6F1;border-left:4px solid #2F5D8A;padding:8px 14px;margin:10px 0}
+.paper .decision{border:1px solid #16202B;margin:10px 0}
+.paper .decision .dt{background:#16202B;color:#fff;font:700 13px var(--f-head);padding:4px 10px}
+.paper .decision .db{padding:8px 12px}
+.paper .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:10px 0}
+.paper .metric{background:#F1F4F8;padding:8px 10px}
+.paper .metric .mv{font:700 24px/1.2 var(--f-head)}
+.paper .metric .mn{font-size:11.5px;color:#5B6878}
+.paper .cover{background:#F1F4F8;padding:18px 20px;margin-bottom:12px}
+.paper .cover .t{font:700 30px/1.15 var(--f-head)}
+.paper .cover .st{font:17px var(--f-head);color:#5B6878;margin-top:4px}
+.paper .cover .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px 16px;margin-top:12px;font-family:var(--f-head);font-size:13.5px}
+.paper .cover .meta .eyebrow{display:block}
+.paper .diagram{border:1px dashed #9AA5B1;color:#5B6878;font:12.5px var(--f-head);text-align:center;padding:18px;margin:10px 0;background:#FAFBFC}
 </style>
 <style>{{ katex_css|safe }}</style>
 
 <header class="bar">
   <h1>LaTeX Workbench</h1>
-  <button class="btn primary" type="button" id="reset">Load report.tex</button>
+  <label class="sr" for="pick">Sample document</label>
+  <select id="pick" class="btn">{% for name in docs %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select>
+  <button class="btn primary" type="button" id="reset">Load</button>
   <label class="btn" for="file">Open .tex file<input type="file" id="file" accept=".tex,.ltx,.sty,.txt,text/plain"></label>
   <button class="btn" type="button" id="copy">Copy source</button>
   <button class="btn" type="button" id="clear">Clear</button>
@@ -106,7 +137,7 @@ textarea#src{flex:1;min-height:0;width:100%;resize:none;border:0;border-right:1p
   </section>
 </main>
 
-<script id="report-tex" type="application/json">{{ tex_source|jsonscript }}</script>
+<script id="docs" type="application/json">{{ docs|jsonscript }}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
 <script>
 /* A small LaTeX-to-HTML previewer. Not a TeX engine: it covers the report template's vocabulary
@@ -116,7 +147,11 @@ textarea#src{flex:1;min-height:0;width:100%;resize:none;border:0;border-right:1p
 "use strict";
 var BASE_COLORS={black:"#000000",white:"#FFFFFF",red:"#FF0000",green:"#00A000",blue:"#0000FF",cyan:"#00FFFF",
   magenta:"#FF00FF",yellow:"#FFFF00",gray:"#808080",grey:"#808080",darkgray:"#404040",lightgray:"#BFBFBF",
-  orange:"#FF8000",purple:"#BF0040",brown:"#BF8040",teal:"#008080",olive:"#808000",violet:"#800080"};
+  orange:"#FF8000",purple:"#BF0040",brown:"#BF8040",teal:"#008080",olive:"#808000",violet:"#800080",
+  /* appsec-house.sty palette, so documents that only \usepackage it still get their colors */
+  ink:"#16202B",muted:"#5B6878",rule:"#D5DBE3",accent:"#2F5D8A",accentsoft:"#DCE6F1",panel:"#F1F4F8",codebg:"#F6F8FA",
+  flawbg:"#FDE2E1",flawrule:"#C8352B",sevCritical:"#A8201A",sevHigh:"#C8561B",sevMedium:"#B08A12",sevLow:"#3F7F48",
+  sevNone:"#6B7785",good:"#3F7F48",warn:"#B08A12",bad:"#A8201A",tbdbg:"#FBF0C9"};
 var SIZES={tiny:".62em",scriptsize:".72em",footnotesize:".83em",small:".92em",normalsize:"1em",
   large:"1.18em",Large:"1.4em",LARGE:"1.66em",huge:"2em",Huge:"2.4em"};
 var SYMBOLS={textperiodcentered:"·",textbackslash:"\\",textasciitilde:"~",textasciicircum:"^",textless:"<",
@@ -143,7 +178,7 @@ var ARG1={textbf:"font-weight:700",textit:"font-style:italic",emph:"font-style:i
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 
 function Ctx(){ this.colors=Object.assign({},BASE_COLORS); this.macros={}; this.envs={}; this.unknown={};
-  this.sec=[0,0,0]; this.appendix=false; this.title=null; this.author=null; this.date=null; this.katexMacros={}; }
+  this.sec=[0,0,0]; this.appendix=false; this.meta={}; this.title=null; this.author=null; this.date=null; this.katexMacros={}; }
 Ctx.prototype.miss=function(n){ this.unknown[n]=(this.unknown[n]||0)+1; };
 Ctx.prototype.color=function(spec){
   spec=(spec||"").trim(); if(!spec) return "inherit";
@@ -277,7 +312,11 @@ P.prototype.builtin=function(n,star){
     case "author": ctx.author=this.sub(this.rawGroup()); return "";
     case "date": ctx.date=this.sub(this.rawGroup()); return "";
     case "today": return new Date().toISOString().slice(0,10);
-    case "maketitle": return '<div class="titleblock"><div class="t">'+(ctx.title||"")+"</div>"+(ctx.author?"<div>"+ctx.author+"</div>":"")+(ctx.date?'<div class="eyebrow">'+ctx.date+"</div>":"")+"</div>";
+    case "maketitle": if(ctx.meta.doctype){ var M=ctx.meta;
+      return '<div class="cover"><div class="eyebrow">'+M.doctype+'</div><div class="t">'+(ctx.title||"")+"</div>"+(M.docsubtitle?'<div class="st">'+M.docsubtitle+"</div>":"")+
+        '<div class="meta"><div><span class="eyebrow">Version</span><b>'+(M.docversion||"")+'</b></div><div><span class="eyebrow">Status</span><b>'+(M.docstatus||"")+'</b></div><div><span class="eyebrow">Date</span>'+(ctx.date||"")+'</div><div><span class="eyebrow">Owner</span>'+(M.docowner||"")+"</div></div>"+
+        (M.docaudience?'<div style="margin-top:6px"><span class="eyebrow">Audience</span> '+M.docaudience+"</div>":"")+"</div>"; }
+      return '<div class="titleblock"><div class="t">'+(ctx.title||"")+"</div>"+(ctx.author?"<div>"+ctx.author+"</div>":"")+(ctx.date?'<div class="eyebrow">'+ctx.date+"</div>":"")+"</div>";
     case "texttt": case "mono": case "path": case "code": return '<span class="tt">'+this.sub(this.rawArg())+"</span>";
     case "textsf": return '<span class="sf">'+this.sub(this.rawArg())+"</span>";
     case "url": case "nolinkurl": a=this.rawGroup(); return '<a class="tt" href="'+esc(a)+'" target="_blank" rel="noopener">'+esc(a)+"</a>";
@@ -323,6 +362,27 @@ P.prototype.builtin=function(n,star){
     case "fancyhead": case "fancyfoot": case "lhead": case "rhead": case "chead": case "lfoot": case "rfoot": case "cfoot": this.rawOpt(); this.rawGroup(); return "";
     case "fancyhf": case "pagestyle": case "thispagestyle": case "pagenumbering": case "bibliography": case "setlist": case "hypersetup": case "geometry": case "linespread": case "input": case "include": case "usetikzlibrary": case "tcbuselibrary": this.rawOpt(); this.rawGroup(); return "";
     case "renewcommand\\": return "";
+    /* appsec-house.sty */
+    case "doctype": case "docversion": case "docstatus": case "docowner": case "docaudience": case "docclass": case "docsubtitle":
+      ctx.meta[n]=this.sub(this.rawGroup()); return "";
+    case "tbd": return '<span class="tbd">TBD: '+this.sub(this.rawGroup())+"</span>";
+    case "kbd": return '<kbd>'+this.sub(this.rawGroup())+"</kbd>";
+    case "menu": return '<span class="sf" style="font-weight:700">'+this.sub(this.rawGroup())+"</span>";
+    case "var": return '<span class="tt" style="font-style:italic">&lt;'+this.sub(this.rawGroup())+"&gt;</span>";
+    case "pill": a=this.rawGroup(); b=this.rawGroup(); return '<span class="chip" style="background:'+ctx.color(a)+'">'+this.sub(b)+"</span>";
+    case "rag": a=this.rawGroup(); return '<span class="rag" style="background:'+ctx.color(a)+'"></span>';
+    case "heat": { a=+this.rawGroup(); b=+this.rawGroup(); var h=a*b, c2=h>5?"bad":h>2?"warn":"good", t2=h>5?"H":h>2?"M":"L";
+      return '<span class="chip" style="background:'+ctx.color(c2)+'">'+t2+"</span>"; }
+    case "cmd": return '<span class="cmdl"><span class="pr">$</span> '+new P(this.rawGroup(),ctx,"codetext").run()+"</span>";
+    case "out": return '<span class="cmdl out">'+new P(this.rawGroup(),ctx,"codetext").run()+"</span>";
+    case "step": a=this.rawGroup(); b=this.rawGroup(); return '<li><div class="steptitle">'+this.sub(a)+"</div>"+this.sub(b)+"</li>";
+    case "metrics": this.rawOpt(); return '<div class="metrics">'+this.sub(this.rawGroup())+"</div>";
+    case "metric": a=this.rawGroup(); b=this.rawGroup(); var nt=this.rawGroup();
+      return '<div class="metric"><div class="eyebrow">'+this.sub(b)+'</div><div class="mv">'+this.sub(a)+'</div><div class="mn">'+this.sub(nt)+"</div></div>";
+    case "revision": { var cells=[this.rawGroup(),this.rawGroup(),this.rawGroup(),this.rawGroup()], self2=this;
+      return "<tr>"+cells.map(function(x){return "<td>"+self2.sub(x)+"</td>";}).join("")+"</tr>"; }
+    case "rowcolor": this.rawOpt(); this.rawGroup(); return "";
+    case "Needspace": case "needspace": this.rawGroup(); return "";
     /* report template macros */
     case "sev": a=this.rawGroup(); return '<span class="chip" style="background:'+ctx.color("sev"+a)+'">'+esc(a)+"</span>";
     case "st": a=this.rawGroup(); b=this.rawGroup(); return '<span class="sf" style="font-weight:700;font-size:.8em;color:'+ctx.color("st"+a)+'">'+this.sub(b)+"</span>";
@@ -349,7 +409,7 @@ P.prototype.defineMacro=function(){
   if(this.peek()==="{"){ nm=this.rawGroup().replace(/^\\/,"").trim(); } else { this.i++; nm=this.name(); }
   var n=this.rawOpt(), opt=this.rawOpt(), body=this.rawGroup();
   /* report builtins keep their HTML rendering even though the preamble defines them for TeX */
-  if(["sev","st","eyebrow","mono","codeline","flawline"].indexOf(nm)>=0) return;
+  if(["sev","st","eyebrow","mono","codeline","flawline","tbd","kbd","menu","var","pill","rag","heat","cmd","out","step","metric","metrics","revision"].indexOf(nm)>=0) return;
   this.ctx.macros[nm]={n:+(n||0),opt:opt,body:body||""};
   if(!/\\(color|textcolor|colorbox|sffamily|MakeUppercase|makebox|parbox|leavevmode)/.test(body||"")) this.ctx.katexMacros["\\"+nm]=body;
 };
@@ -424,7 +484,11 @@ P.prototype.environment=function(env){
     case "abstract": return '<div style="margin:0 2em"><div class="eyebrow">Abstract</div>'+this.sub(this.envBody(env))+"</div>";
     case "itemize": case "enumerate": case "description": {
       this.rawOpt(); body=this.envBody(env); var self=this;
-      var items=splitItems(body).map(function(it){ return "<li>"+self.sub(it)+"</li>"; }).join("");
+      var items=splitItems(body).map(function(it){
+        var m=/^\s*\[([^\]]*)\]/.exec(it), lab="";
+        if(m){ lab=self.sub(m[1]); it=it.slice(m[0].length); }
+        if(name==="description") return '<li style="margin:.5em 0"><div class="sf" style="font-weight:700">'+lab+"</div>"+self.sub(it)+"</li>";
+        return "<li>"+(lab?"<b>"+lab+"</b> ":"")+self.sub(it)+"</li>"; }).join("");
       var tag=name==="enumerate"?"ol":"ul"; return "<"+tag+(name==="description"?' style="list-style:none;padding-left:0"':"")+">"+items+"</"+tag+">"; }
     case "tabular": case "longtable": case "array": this.rawOpt(); a=this.rawGroup(); return this.table(a,this.envBody(env));
     case "tabularx": case "tabulary": this.rawGroup(); a=this.rawGroup(); return this.table(a,this.envBody(env));
@@ -443,6 +507,16 @@ P.prototype.environment=function(env){
     case "minipage": this.rawOpt(); this.rawGroup(); return '<div style="display:inline-block;vertical-align:top;max-width:100%">'+this.sub(this.envBody(env))+"</div>";
     case "figure": case "table": this.rawOpt(); return '<div style="margin:1em 0">'+this.sub(this.envBody(env))+"</div>";
     case "comment": this.envBody(env); return "";
+    case "note": case "tip": case "warning": case "danger": {
+      var lab={note:"Note",tip:"Tip",warning:"Caution",danger:"Do not"}[name], col={note:"accent",tip:"good",warning:"warn",danger:"bad"}[name];
+      return '<div class="callout" style="--c:'+ctx.color(col)+'"><span class="cl">'+lab+"</span> "+this.sub(this.envBody(env))+"</div>"; }
+    case "terminal": a=this.rawOpt(); body=this.envBody(env);
+      return '<div class="term">'+(a?'<div class="tt-title">'+this.sub(a)+"</div>":"")+new P(body,ctx,"code").run()+"</div>";
+    case "steps": return '<ol class="steps">'+this.sub(this.envBody(env))+"</ol>";
+    case "bluf": return '<div class="bluf"><div class="eyebrow" style="color:#2F5D8A">Bottom line</div>'+this.sub(this.envBody(env))+"</div>";
+    case "decision": a=this.rawGroup(); return '<div class="decision"><div class="dt">Decision requested: '+this.sub(a)+'</div><div class="db">'+this.sub(this.envBody(env))+"</div></div>";
+    case "revisions": return '<div class="tbl"><table class="book"><thead><tr><td><span class="eyebrow">Version</span></td><td><span class="eyebrow">Date</span></td><td><span class="eyebrow">Author</span></td><td><span class="eyebrow">Change</span></td></tr></thead><tbody>'+this.sub(this.envBody(env))+"</tbody></table></div>";
+    case "tikzpicture": this.rawOpt(); this.envBody(env); return '<div class="diagram">Diagram (TikZ) renders in the PDF</div>';
   }
   var def=ctx.envs[name];
   if(def&&def.tcb!==undefined){ var args=[]; var o=this.rawOpt(); for(var k=0;k<3&&/^\s*\{/.test(this.s.slice(this.i));k++) args.push(this.rawGroup());
@@ -475,7 +549,8 @@ function renderLatex(src){
 /* ---------- UI ---------- */
 var srcEl=document.getElementById("src"), out=document.getElementById("out"), unk=document.getElementById("unk"),
     msg=document.getElementById("msg"), tm=document.getElementById("time"), count=document.getElementById("count");
-var REPORT=JSON.parse(document.getElementById("report-tex").textContent);
+var DOCS=JSON.parse(document.getElementById("docs").textContent), pick=document.getElementById("pick");
+var REPORT=DOCS["report.tex"];
 var KEY="latex-workbench-draft";
 function save(){ try{ localStorage.setItem(KEY,srcEl.value); }catch(e){} }
 function load(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
@@ -493,7 +568,7 @@ function update(){
 function schedule(){ clearTimeout(timer); timer=setTimeout(function(){ update(); save(); },220); }
 srcEl.addEventListener("input",schedule);
 srcEl.addEventListener("keydown",function(e){ if(e.key==="Tab"){ e.preventDefault(); var s=srcEl.selectionStart; srcEl.setRangeText("  ",s,srcEl.selectionEnd,"end"); schedule(); } });
-document.getElementById("reset").addEventListener("click",function(){ srcEl.value=REPORT; msg.textContent="Loaded the generated report.tex"; update(); save(); });
+document.getElementById("reset").addEventListener("click",function(){ srcEl.value=DOCS[pick.value]; msg.textContent="Loaded "+pick.value; update(); save(); });
 document.getElementById("clear").addEventListener("click",function(){ srcEl.value=""; msg.textContent="Cleared"; update(); save(); srcEl.focus(); });
 document.getElementById("file").addEventListener("change",function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return;
   var rd=new FileReader(); rd.onload=function(){ srcEl.value=String(rd.result); msg.textContent="Opened "+f.name; update(); save(); }; rd.readAsText(f); e.target.value=""; });

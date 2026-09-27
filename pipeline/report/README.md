@@ -1,4 +1,29 @@
-# Report renderer (proposed template)
+# Report renderer and document templates (proposed)
+
+Three LaTeX documents share one house style (`latex/appsec-house.sty`): the engagement report,
+an operator user guide, and an executive design doc.
+
+## Document templates
+
+| File | For | Shape |
+|---|---|---|
+| `latex/user-guide.tex` | Operators | Conventions, flow diagram, prerequisites, numbered steps with terminal blocks, concepts, tasks, troubleshooting table, reference, glossary |
+| `latex/design-doc.tex` | Executives | Positions appsec-review as a repeatable, hands-off process. Page 1 carries the message: bottom line, KPI tiles, what changes. Then why change, how the process runs (diagram, where people stay in the loop), options with recommendation, status (RAG), risk heat, success measures; technical detail in the appendix. `decision` box available for docs that need an ask |
+| `latex/appsec-house.sty` | Both | Palette, type, cover from `\doctype`/`\docversion`/`\docstatus`/`\docowner`/`\docaudience`; callouts (`note`, `tip`, `warning`, `danger`), `terminal` + `\cmd`/`\out`, `steps` + `\step`, `bluf`, `decision`, `\metrics`/`\metric`, `\rag`, `\heat`, `\kbd`, `\tbd`, `codesnippet` + `\flawline`, `revisions` |
+
+`\tbd{...}` marks a fill-in (amber in drafts). `\usepackage[final]{appsec-house}` renders them plainly and
+drops the template banner. The example content describes appsec-review; figures marked TBD are
+fill-ins, not estimates.
+
+```bash
+bash pipeline/report/latex/build-in-docker.sh        # all templates -> build/latex/*.pdf
+cd pipeline/report/latex && latexmk -pdf design-doc.tex   # host
+```
+
+The workbench page (`build/workbench.html`) previews all three: pick one from the list, edit, and it
+re-renders as you type. TikZ diagrams show as placeholders there; they render in the PDF.
+
+## Report renderer
 
 Renders the engagement report from one data file into three outputs:
 
@@ -73,3 +98,4 @@ Weights and thresholds live in the data file's `scoring` block.
 - `templates/vendor/katex-0.16.11.css` - KaTeX CSS with fonts inlined, so rendering needs no network
 - `examples/hello-autotools.review.json` - sample data
 - `render-in-docker.sh` - runs the renderer in `images/audit-report` with the directory mounted read-only
+- `latex/` - house style, user guide and design doc templates, `build-in-docker.sh`

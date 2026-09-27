@@ -1,0 +1,209 @@
+% =============================================================
+% design-doc.tex - executive-focused design document template (appsec-review)
+% Build: latexmk -pdf design-doc.tex    (needs appsec-house.sty beside it)
+%
+% Shape: page 1 carries the whole message (bottom line, key numbers, what changes). Everything after
+% supports it and can be skipped by a busy reader. Technical depth goes in the appendix.
+% Example content describes appsec-review v3; figures marked \tbd{} are fill-ins, not estimates.
+% =============================================================
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=22mm,top=24mm,bottom=24mm]{geometry}
+\usepackage{appsec-house}   % add [final] for release builds
+
+\title{appsec-review v3}
+\docsubtitle{A repeatable, hands-off application security review process}
+\doctype{Design document}
+\docversion{0.2}
+\docstatus{Draft}
+\date{2026-09-27}
+\docowner{W. Sollers}
+\docaudience{Security leadership, engineering directors, vendor management}
+\docclass{Internal}
+
+\begin{document}
+\maketitle
+
+% ================= page 1: the message =================
+\begin{bluf}
+Every security review should run the same way, whoever starts it and whatever the target. v3 turns
+the review into a pipeline: one command takes a repository from checkout to a scored report, with
+no one running tools by hand along the way. Each step uses pinned tools and fixed rules, every
+finding has to survive an attempt to disprove it, and anything the pipeline could not examine is
+listed in the report instead of being passed over. People review the finished report; they do not
+operate the review.
+\end{bluf}
+
+\metrics[4]{%
+\metric{1}{Command to run}{Checkout to report, unattended}%
+\metric{4/4}{Seeded defects found}{Notepad++ 8.5.6; stock CodeQL found 0/4}%
+\metric{0}{False findings shipped}{EASTL baseline: 8 custom-pack hits, none real}%
+\metric{13}{Pinned tool images}{Same versions every run, no network at scan time}}
+
+\subsection*{What this means for the organization}
+\begin{itemize}
+\item \textbf{Repeatable.} The same target at the same commit produces the same evidence and the same
+  report. Results hold up when a vendor disputes them.
+\item \textbf{Hands-off.} Build, scanning, analysis, refutation, verification and scoring run as one
+  flow. Reviewer time goes to judging the report, not running tools.
+\item \textbf{Honest about coverage.} A step that did not run is reported as a gap. The report can
+  only call a target clean when enough of the review actually happened.
+\item \textbf{Not tied to one person.} The process lives in the pipeline, so reviews do not stop when
+  a particular reviewer is unavailable.
+\end{itemize}
+
+\newpage
+\tableofcontents
+
+% ================= 1 =================
+\section{Why change}
+\begin{tabularx}{\linewidth}{@{}p{0.3\linewidth}X@{}}
+\toprule
+\eyebrow{Today} & \eyebrow{Consequence}\\
+\midrule
+A reviewer runs tools by hand from a script collection & Each review depends on who ran it and how; results differ run to run.\\
+Scanner output copied into reports & False positives reach vendors and erode trust; real issues hide in the noise.\\
+Coverage not recorded & A report cannot say what was \emph{not} checked.\\
+Steps live in one person's habits & Reviews queue behind one reviewer and stop when they are away.\\
+\bottomrule
+\end{tabularx}
+
+% ================= 2 =================
+\section{How the process runs}
+A review is a fixed sequence of jobs started by one command. Nothing in the sequence waits for a
+person. The evidence side gathers facts and never makes a claim; the review side never promotes a
+tool hit to a finding without trying to refute it and verifying what survives.
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=4mm and 5mm,
+  box/.style={draw=rule,fill=white,minimum height=8mm,text width=27mm,align=center,font=\sffamily\scriptsize},
+  lane/.style={draw=none,fill=#1,inner sep=6pt},
+  arr/.style={-{Stealth[length=2mm]},draw=muted,thick}]
+\node[box,fill=ink,text=white,draw=ink] (t) {One command\\target + commit};
+\node[box,right=10mm of t] (e1) {Build and compile\\(isolated, no network)};
+\node[box,right=of e1] (e2) {13 pinned scanners\\+ native analysis};
+\node[box,below=of e2] (e3) {Normalized, redacted\\evidence + coverage};
+\node[box,below=12mm of e3] (r1) {Red team:\\propose attacks};
+\node[box,left=of r1] (r2) {Blue team:\\try to refute};
+\node[box,left=of r2] (r3) {Independent\\verification};
+\node[box,below=of r3,fill=ink,text=white,draw=ink] (r4) {Scored report\\with gaps listed};
+\begin{scope}[on background layer]
+\node[lane=accentsoft,fit=(e1)(e2)(e3),label={[font=\sffamily\scriptsize\bfseries,color=accent]north:Evidence (deterministic, no judgment)}] {};
+\node[lane=panel,fit=(r1)(r2)(r3),label={[font=\sffamily\scriptsize\bfseries,color=muted]south east:Review (every claim challenged)}] {};
+\end{scope}
+\draw[arr] (t)--(e1); \draw[arr] (e1)--(e2); \draw[arr] (e2)--(e3);
+\draw[arr] (e3)--(r1); \draw[arr] (r1)--(r2); \draw[arr] (r2)--(r3); \draw[arr] (r3)--(r4);
+\node[font=\sffamily\scriptsize,color=muted,anchor=west,text width=40mm] at ($(r4.east)+(4mm,0)$)
+  {People start here:\\read, accept or challenge the report.};
+\end{tikzpicture}
+\end{center}
+
+\subsection*{What makes it repeatable}
+\begin{enumerate}
+\item \textbf{Pinned everything.} Tool versions, container images and reference data are fixed per
+  run; nothing is looked up live while scanning.
+\item \textbf{Fixed contracts.} Every job has declared inputs, outputs and a pass/fail check. A job
+  that fails stops with a recorded reason and can be resumed from that point.
+\item \textbf{Evidence-first.} Every finding cites a file and line or a tool output, so anyone can
+  trace it back.
+\item \textbf{Target content is data.} Nothing in the code under review can steer the process.
+\end{enumerate}
+
+\subsection*{Where people stay in the loop}
+\begin{tabularx}{\linewidth}{@{}p{0.3\linewidth}X@{}}
+\toprule
+\eyebrow{Point} & \eyebrow{Why a person}\\
+\midrule
+Choosing the target & Scope and authority to review belong to the business.\\
+Reading the report & Accepting risk is a business decision, not a pipeline output.\\
+Vendor disputes & The evidence trail supports the conversation; a person owns it.\\
+\bottomrule
+\end{tabularx}
+
+% ================= 3 =================
+\section{Options considered}
+\begin{tabularx}{\linewidth}{@{}p{0.22\linewidth}XX@{}}
+\toprule
+\eyebrow{Option} & \eyebrow{For} & \eyebrow{Against}\\
+\midrule
+A. Keep the manual toolbox & Nothing new to build. & Not repeatable; depends on one reviewer; false positives reach vendors.\\
+B. Adopt a commercial SAST platform & Supported; dashboards. & Breadth scanning only: stock tooling missed all four seeded memory bugs. No refutation step; still needs a person to triage.\\
+\rowcolor{accentsoft}
+C. v3 pipeline \hfill\pill{accent}{RECOMMENDED} & Runs end to end without an operator; measured recall on native code; refutation built in; reports gaps. & We maintain it.\\
+\bottomrule
+\end{tabularx}
+
+% ================= 4 =================
+\section{Where we are}
+\begin{longtable}{@{}p{0.3\linewidth}p{0.14\linewidth}p{0.48\linewidth}@{}}
+\toprule
+\eyebrow{Milestone} & \eyebrow{Status} & \eyebrow{Evidence}\\
+\midrule\endhead
+Pinned tool images (13) & \rag{good} Done & Built and smoke-tested on both hosts.\\
+Orchestration runtime & \rag{good} Done & Qualified; runs the job graph unattended.\\
+Unattended run, intake to build resolution & \rag{good} Done & Acceptance stages 1--13 qualified on the test target.\\
+Scanners as pipeline jobs & \rag{warn} In progress & Secrets and config scans first; vulnerability matching waits on an offline database mirror.\\
+Review lanes run by the pipeline & \rag{warn} In progress & Run manually on EASTL; not yet driven end to end.\\
+Report generation & \rag{warn} Proposed & Template on branch \mono{report-template}; format decision open.\\
+First fully hands-off review & \rag{muted} Not started & Target: \tbd{engagement}, by \tbd{date}.\\
+\bottomrule
+\end{longtable}
+
+% ================= 5 =================
+\section{Risks}
+\begin{longtable}{@{}p{0.27\linewidth}ccp{0.05\linewidth}p{0.49\linewidth}@{}}
+\toprule
+\eyebrow{Risk} & \eyebrow{L} & \eyebrow{I} & & \eyebrow{Mitigation}\\
+\midrule\endhead
+Automated reasoning is wrong or overconfident & 2 & 3 & \heat{2}{3} & Blue-team refutation and independent verification before any High or Critical finding; evidence must resolve.\\
+Hostile code in the target attacks the build & 2 & 3 & \heat{2}{3} & Builds run with no network, read-only root, dropped capabilities, non-root user.\\
+A step fails silently and the report looks clean & 1 & 3 & \heat{1}{3} & Every step reports a status; missing coverage lowers assurance and blocks a clean rating.\\
+Vulnerability data goes stale offline & 2 & 2 & \heat{2}{2} & Mirrored snapshots with recorded dates; stale data is reported as a gap.\\
+New languages or build systems & 2 & 2 & \heat{2}{2} & Per-language build images; unsupported builds fall back to source-only analysis with capped confidence.\\
+\bottomrule
+\end{longtable}
+{\small\color{muted}L = likelihood, I = impact, each 1 (low) to 3 (high).}
+
+% ================= 6 =================
+\section{How we will measure success}
+Each measure is read from run records, so it is checked by the pipeline rather than self-reported.
+
+\begin{tabularx}{\linewidth}{@{}p{0.34\linewidth}p{0.18\linewidth}X@{}}
+\toprule
+\eyebrow{Measure} & \eyebrow{Target} & \eyebrow{How measured}\\
+\midrule
+Reviews completed with no manual step & 100\% & Run records show no operator action between start and report.\\
+Same result on re-run & 100\% & Re-run a finished review at the same commit; compare evidence and findings.\\
+Recall on seeded defects & \(\geq\) \tbd{90\%} & Held-out seeded targets, not used to tune rules.\\
+False findings in delivered reports & 0 & Vendor disputes upheld after delivery.\\
+Reports with every gap disclosed & 100\% & Automated check against the run's coverage record.\\
+\bottomrule
+\end{tabularx}
+
+\appendix
+\section{Technical detail}
+\subsection{Scoring}
+Each finding's priority starts from its CVSS 4.0 base score and is scaled by how strong the
+evidence is, whether it survived verification, whether the code is reachable, and exploitation
+signals:
+\[ P_f = \min\!\big(10,\; S_f \cdot e_f \cdot v_f \cdot r_f \cdot t_f\big) \]
+The overall rating is the band of the highest non-refuted priority. A Low or clean rating is only
+issued when process assurance, the share of the review that actually ran, is at least 0.85;
+otherwise the rating is \emph{Indeterminate}.
+
+\subsection{Native code analysis tiers}
+\begin{tabularx}{\linewidth}{@{}p{0.1\linewidth}X@{}}
+\toprule
+A & Every translation unit compiles: full compiled analysis. Strongest claims allowed.\\
+B & Some units compile: compiled analysis where possible, source analysis elsewhere; coverage recorded per unit.\\
+C & Nothing compiles: source analysis only; memory-safety confidence capped.\\
+\bottomrule
+\end{tabularx}
+
+\section{Revision history}
+\begin{revisions}
+\revision{0.2}{2026-09-27}{W. Sollers}{Repositioned as a repeatable, hands-off process; removed cost and asks.}
+\revision{0.1}{2026-09-27}{W. Sollers}{First draft from the template.}
+\end{revisions}
+
+\end{document}

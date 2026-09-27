@@ -1,0 +1,196 @@
+% =============================================================
+% appsec-house.sty - shared look for appsec-review documents
+%
+% Used by the user guide and the executive design doc; mirrors the report template's palette,
+% type and components so all three read as one set. pdflatex-safe (PSNFSS fonts), also builds
+% with lualatex/xelatex in images/audit-report.
+%
+% Options:  draft-marks   show \tbd{} fill-ins in amber (default on)
+%           final         hide the "example content" banner and render \tbd{} plainly
+% =============================================================
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{appsec-house}[2026/09/27 appsec-review document style]
+
+\newif\ifah@final \ah@finalfalse
+\DeclareOption{final}{\ah@finaltrue}
+\ProcessOptions\relax
+
+\RequirePackage{iftex}
+\ifPDFTeX
+  \RequirePackage[T1]{fontenc}
+  \RequirePackage[utf8]{inputenc}
+\fi
+\RequirePackage{charter}
+\RequirePackage{amsmath,amssymb}
+\RequirePackage[scaled=0.9]{helvet}
+\RequirePackage{courier}
+\RequirePackage{microtype}
+\RequirePackage[table]{xcolor}
+\RequirePackage{booktabs,longtable,tabularx,array,multirow}
+\RequirePackage{enumitem}
+\RequirePackage{titlesec}
+\RequirePackage{fancyhdr}
+\RequirePackage{graphicx}
+\RequirePackage{needspace}
+\RequirePackage[most]{tcolorbox}
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric,backgrounds}
+\RequirePackage[hidelinks]{hyperref}
+
+% ---------- palette (same tokens as the report) ----------
+\definecolor{ink}{HTML}{16202B}
+\definecolor{muted}{HTML}{5B6878}
+\definecolor{rule}{HTML}{D5DBE3}
+\definecolor{accent}{HTML}{2F5D8A}
+\definecolor{accentsoft}{HTML}{DCE6F1}
+\definecolor{panel}{HTML}{F1F4F8}
+\definecolor{codebg}{HTML}{F6F8FA}
+\definecolor{flawbg}{HTML}{FDE2E1}
+\definecolor{flawrule}{HTML}{C8352B}
+\definecolor{sevCritical}{HTML}{A8201A}
+\definecolor{sevHigh}{HTML}{C8561B}
+\definecolor{sevMedium}{HTML}{B08A12}
+\definecolor{sevLow}{HTML}{3F7F48}
+\definecolor{sevNone}{HTML}{6B7785}
+\definecolor{good}{HTML}{3F7F48}
+\definecolor{warn}{HTML}{B08A12}
+\definecolor{bad}{HTML}{A8201A}
+\definecolor{tbdbg}{HTML}{FBF0C9}
+\color{ink}
+
+% ---------- page ----------
+\setlength{\parindent}{0pt}\setlength{\parskip}{0.55em}
+\setlist{nosep,leftmargin=1.3em}
+\renewcommand{\arraystretch}{1.25}
+
+\titleformat{\section}{\sffamily\Large\bfseries\color{ink}}{\color{accent}\thesection}{0.6em}{}[\vspace{-0.3em}{\color{rule}\rule{\linewidth}{0.6pt}}]
+\titleformat{\subsection}{\sffamily\large\bfseries}{\color{accent}\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\sffamily\normalsize\bfseries}{\color{accent}\thesubsubsection}{0.6em}{}
+% keep headings with what follows (titlesec runs these before the heading)
+\newcommand{\sectionbreak}{\Needspace{10\baselineskip}}
+\newcommand{\subsectionbreak}{\Needspace{6\baselineskip}}
+\titlespacing*{\section}{0pt}{1.6em}{0.8em}
+\titlespacing*{\subsection}{0pt}{1.2em}{0.4em}
+
+% ---------- small pieces ----------
+\newcommand{\eyebrow}[1]{\leavevmode{\sffamily\scriptsize\bfseries\color{muted}\MakeUppercase{#1}}}
+\newcommand{\mono}[1]{{\ttfamily\small #1}}
+\newcommand{\sev}[1]{\colorbox{sev#1}{\sffamily\scriptsize\bfseries\color{white}\strut\,\MakeUppercase{#1}\,}}
+\newcommand{\pill}[2]{\colorbox{#1}{\sffamily\scriptsize\bfseries\color{white}\strut\,#2\,}}
+\newcommand{\kbd}[1]{\tikz[baseline=(k.base)]\node[draw=rule,fill=panel,rounded corners=1.5pt,inner sep=1.5pt,font=\ttfamily\footnotesize](k){#1};}
+\newcommand{\menu}[1]{{\sffamily\bfseries #1}}
+\newcommand{\var}[1]{{\ttfamily\itshape\small <#1>}}
+% a fill-in the author still owes: amber in drafts, plain in final
+\ifah@final
+  \newcommand{\tbd}[1]{#1}
+\else
+  \newcommand{\tbd}[1]{{\setlength{\fboxsep}{1pt}\colorbox{tbdbg}{\sffamily\footnotesize\color{warn!70!black}\strut TBD: #1}}}
+\fi
+
+% ---------- document metadata ----------
+\newcommand{\doctype}[1]{\def\@doctype{#1}}
+\newcommand{\docversion}[1]{\def\@docversion{#1}}
+\newcommand{\docstatus}[1]{\def\@docstatus{#1}}
+\newcommand{\docowner}[1]{\def\@docowner{#1}}
+\newcommand{\docaudience}[1]{\def\@docaudience{#1}}
+\newcommand{\docclass}[1]{\def\@docclass{#1}}
+\newcommand{\docsubtitle}[1]{\def\@docsubtitle{#1}}
+\doctype{Document}\docversion{0.1}\docstatus{Draft}\docowner{}\docaudience{}\docclass{Internal}\docsubtitle{}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhead[L]{\eyebrow{\@doctype\ \textperiodcentered\ \@title}}
+\fancyhead[R]{\eyebrow{\@docclass}}
+\fancyfoot[L]{\eyebrow{v\@docversion\ \textperiodcentered\ \@docstatus}}
+\fancyfoot[R]{\sffamily\scriptsize\thepage}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[R]{\sffamily\scriptsize\thepage}}
+
+% ---------- cover ----------
+\renewcommand{\maketitle}{%
+  \thispagestyle{plain}%
+  \begin{tcolorbox}[enhanced,colback=panel,colframe=panel,arc=0pt,boxrule=0pt,left=12pt,right=12pt,top=12pt,bottom=12pt]
+  \eyebrow{\@doctype}\\[3pt]
+  {\sffamily\fontsize{26}{30}\selectfont\bfseries \@title}\par
+  \ifx\@docsubtitle\@empty\else\vspace{4pt}{\sffamily\large\color{muted}\@docsubtitle}\par\fi
+  \vspace{10pt}
+  {\small
+  \begin{tabularx}{\linewidth}{@{}p{0.22\linewidth}p{0.22\linewidth}p{0.22\linewidth}X@{}}
+  \eyebrow{Version} & \eyebrow{Status} & \eyebrow{Date} & \eyebrow{Owner}\\
+  \sffamily\bfseries \@docversion & \sffamily\bfseries \@docstatus & \sffamily \@date & \sffamily \@docowner\\
+  \end{tabularx}}
+  \ifx\@docaudience\@empty\else\par\vspace{4pt}{\small\eyebrow{Audience}\ \ \@docaudience}\fi
+  \end{tcolorbox}
+  \ifah@final\else
+  {\small\color{warn!80!black}\textbf{Template.} Amber \emph{TBD} marks are fill-ins; compile with \texttt{\textbackslash usepackage[final]\{appsec-house\}} to hide this line.}\par
+  \fi
+  \vspace{6pt}}
+
+% ---------- callouts ----------
+\newtcolorbox{ah@callout}[3]{enhanced,breakable,colback=#1!7!white,colframe=#1,boxrule=0pt,arc=0pt,
+  borderline west={3pt}{0pt}{#1},left=10pt,right=8pt,top=5pt,bottom=5pt,before skip=6pt,after skip=8pt,
+  fontupper=\small,title={\sffamily\scriptsize\bfseries\MakeUppercase{#2}},coltitle=#1!80!black,
+  colbacktitle=#1!7!white,attach title to upper={\quad},#3}
+\newenvironment{note}{\begin{ah@callout}{accent}{Note}{}}{\end{ah@callout}}
+\newenvironment{tip}{\begin{ah@callout}{good}{Tip}{}}{\end{ah@callout}}
+\newenvironment{warning}{\begin{ah@callout}{warn}{Caution}{}}{\end{ah@callout}}
+\newenvironment{danger}{\begin{ah@callout}{bad}{Do not}{}}{\end{ah@callout}}
+
+% ---------- terminal / code ----------
+% \begin{terminal}[title] ... \end{terminal}   verbatim-free: escape specials, one command per \cmd{}
+\newtcolorbox{terminal}[1][]{enhanced,breakable,colback=codebg,colframe=rule,boxrule=0.4pt,arc=0pt,
+  left=6pt,right=6pt,top=3pt,bottom=3pt,fontupper=\ttfamily\footnotesize,before skip=4pt,after skip=8pt,
+  title={\ttfamily\footnotesize #1},coltitle=muted,colbacktitle=panel,toptitle=1pt,bottomtitle=1pt,
+  detach title,before upper={\ifx\relax#1\relax\else\tcbtitle\par\fi}}
+\newcommand{\cmd}[1]{\par\noindent{\color{muted}\$}\ #1}
+\newcommand{\out}[1]{\par\noindent{\color{muted}#1}}
+
+\newlength{\codenumw}\setlength{\codenumw}{2.4em}
+\newcommand{\codeline}[2]{\par\noindent\makebox[\codenumw][r]{\textcolor{muted}{#1}}\hspace{0.9em}%
+  \parbox[t]{\dimexpr\linewidth-\codenumw-0.9em\relax}{\raggedright\strut #2\strut}}
+\newcommand{\flawline}[2]{\par\noindent{\setlength{\fboxsep}{0pt}\colorbox{flawbg}{%
+  \makebox[\codenumw][r]{\textcolor{flawrule}{\bfseries #1}}\hspace{0.9em}%
+  \parbox[t]{\dimexpr\linewidth-\codenumw-0.9em\relax}{\raggedright\strut #2\strut}}}}
+\newtcolorbox{codesnippet}[3]{enhanced,breakable,colback=codebg,colframe=rule,boxrule=0.4pt,arc=0pt,
+  left=0pt,right=4pt,top=2pt,bottom=2pt,fontupper=\ttfamily\footnotesize,
+  title={\ttfamily\footnotesize #1\hfill lines #2--#3},coltitle=muted,colbacktitle=panel,
+  toptitle=1pt,bottomtitle=1pt,before skip=4pt,after skip=6pt}
+
+% ---------- procedures ----------
+% \begin{steps} \step{Title}{body} ... \end{steps}   numbered procedure with circled step numbers
+\DeclareRobustCommand{\ah@stepnum}[1]{\tikz[baseline=(n.base)]\node[circle,fill=accent,text=white,inner sep=1.2pt,
+  minimum size=1.3em,font=\sffamily\scriptsize\bfseries](n){#1};}
+\newlist{ah@steplist}{enumerate}{1}
+\setlist[ah@steplist]{label=\ah@stepnum{\arabic*},leftmargin=2.1em,labelsep=0.6em,itemsep=6pt,topsep=4pt}
+\newenvironment{steps}{\begin{ah@steplist}}{\end{ah@steplist}}
+\newcommand{\step}[2]{\item{\sffamily\bfseries #1}\par\vspace{1pt}#2}
+
+% ---------- executive pieces ----------
+% Bottom line up front: \begin{bluf} ... \end{bluf}
+\newtcolorbox{bluf}{enhanced,colback=accentsoft,colframe=accentsoft,boxrule=0pt,arc=0pt,
+  borderline west={4pt}{0pt}{accent},left=12pt,right=10pt,top=8pt,bottom=8pt,before skip=6pt,after skip=10pt,
+  title={\sffamily\scriptsize\bfseries BOTTOM LINE},coltitle=accent,colbacktitle=accentsoft,attach title to upper={\par\vspace{2pt}}}
+% A decision the reader must make: \begin{decision}{Title} ... \end{decision}
+\newtcolorbox{decision}[1]{enhanced,breakable,colback=white,colframe=ink,boxrule=0.8pt,arc=0pt,
+  left=10pt,right=10pt,top=6pt,bottom=6pt,before skip=6pt,after skip=10pt,
+  title={\sffamily\small\bfseries Decision requested: #1},colbacktitle=ink,coltitle=white}
+% KPI tiles: \metrics{ \metric{value}{label}{note} \metric{...}{...}{...} }
+\newcommand{\metric}[3]{%
+  \begin{tcolorbox}[enhanced,colback=panel,colframe=panel,arc=0pt,boxrule=0pt,left=8pt,right=6pt,top=6pt,bottom=6pt,
+    width=\ah@metricw,nobeforeafter,box align=top,equal height group=ah@metrics]
+  \eyebrow{#2}\par\vspace{2pt}{\sffamily\fontsize{20}{22}\selectfont\bfseries #1}\par\vspace{1pt}{\scriptsize\color{muted}#3}
+  \end{tcolorbox}\hspace{\ah@metricgap}}
+\newlength{\ah@metricw}\newlength{\ah@metricgap}\setlength{\ah@metricgap}{6pt}
+\newcommand{\metrics}[2][4]{\par\noindent\setlength{\ah@metricw}{\dimexpr(\linewidth-#1\ah@metricgap+\ah@metricgap)/#1\relax}%
+  #2\par\vspace{8pt}}
+% RAG status dot for tables
+\newcommand{\rag}[1]{\tikz[baseline=-0.6ex]\fill[#1] (0,0) circle (0.28em);}
+% risk heat cell: \heat{likelihood 1-3}{impact 1-3}
+\newcommand{\heat}[2]{\pgfmathtruncatemacro\ah@h{#1*#2}%
+  \ifnum\ah@h>5 \pill{bad}{H}\else\ifnum\ah@h>2 \pill{warn}{M}\else\pill{good}{L}\fi\fi}
+
+% ---------- revision history ----------
+\newenvironment{revisions}{\par\longtable{@{}p{0.12\linewidth}p{0.16\linewidth}p{0.18\linewidth}p{0.46\linewidth}@{}}
+  \toprule\eyebrow{Version}&\eyebrow{Date}&\eyebrow{Author}&\eyebrow{Change}\\\midrule\endhead}{\bottomrule\endlongtable\par}
+\newcommand{\revision}[4]{#1 & #2 & #3 & #4\\}
+
+\endinput

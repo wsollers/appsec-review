@@ -220,9 +220,12 @@ def render(data_path, out, source_root=None, embed=False):
         json.dumps(v).replace("</", "<\\/"))
     katex_css = (tdir / "vendor" / "katex-0.16.11.css").read_text()
     head = '<!doctype html>\n<html lang="en"><meta charset="utf-8">\n'
+    docs = {"report.tex": tex_source}
+    for p in sorted((HERE / "latex").glob("*.tex")):
+        docs[p.name] = p.read_text()
     for name in ("report", "workbench"):
         body = html_env.get_template(f"{name}.html.j2").render(
-            katex_css=katex_css, tex_source=tex_source, **data)
+            katex_css=katex_css, tex_source=tex_source, docs=docs, **data)
         # <name>.html: standalone, open locally. <name>.fragment.html: for the Artifact publisher,
         # which supplies its own doctype/head/body skeleton.
         (out / f"{name}.html").write_text(head + body)
