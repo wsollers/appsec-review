@@ -46,14 +46,20 @@ python3 -B appsec-review-process/stage_artifacts.py \
   --permission write-run-data \
   --permission read-offline-snapshots \
   --execution-environment dagster-read-only-linux
-python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
-python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/offline_evidence_control.py stage-control "$RUN_ID" \
   --snapshot-registry "$REPO/appsec-review-process/offline/dependency-snapshots" \
   --max-database-age-seconds 1209600 \
   --reference-table "$REPO/data/reference/dependency-lifecycle-reference.json" \
   --max-reference-age-days 30
+# Intake rewrites artifact-manifest.json on acceptance and the build grants bind to its hash, so run
+# intake before staging the build controls (otherwise 02-build-resolution blocks with STALE_GRANT).
+# This needs the stack and code location from section 2 (orchestrator/prepare-host.sh starts both).
+python3 -B appsec-review-process/launch_job.py --run-id "$RUN_ID" --job phase1_intake --wait
+python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
+python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 ```
+
+`orchestrator/stage-run.sh <target>` runs this whole sequence and prints the run id.
 
 The build control commands retain the engagement owner's run- and source-bound authorization for
 package resolution and no-network replay of the accepted configure/build lock. They do not grant

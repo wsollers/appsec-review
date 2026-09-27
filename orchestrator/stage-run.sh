@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create and stage a full_review run for one ADR-0013 target, following
-# docs/report-path/happy-path-operator-guide.md. Prints the run id on the last line.
+# docs/report-path/happy-path-operator-guide.md, with intake run before the build controls. Prints the run id on the last line.
 #
 #   orchestrator/stage-run.sh <target> [--goal "business goal"]
 #   orchestrator/stage-run.sh hello-autotools
@@ -38,13 +38,18 @@ python3 -B appsec-review-process/stage_artifacts.py \
   --permission write-run-data \
   --permission read-offline-snapshots \
   --execution-environment dagster-read-only-linux
-python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
-python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/offline_evidence_control.py stage-control "$RUN_ID" \
   --snapshot-registry "$REPO/appsec-review-process/offline/dependency-snapshots" \
   --max-database-age-seconds 1209600 \
   --reference-table "$REPO/data/reference/dependency-lifecycle-reference.json" \
   --max-reference-age-days 30
+# Intake rewrites artifact-manifest.json when it is accepted (source identity, accepted pointer), and
+# the build grants are bound to that manifest's hash. Run intake first, then stage the build controls,
+# or 02-build-resolution blocks with STALE_GRANT.
+echo "== intake (phase1_intake) before the build controls"
+python3 -B appsec-review-process/launch_job.py --run-id "$RUN_ID" --job phase1_intake --wait --timeout 1800 >/dev/null
+python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
+python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 echo "staged: launch with"
 echo "  python3 appsec-review-process/launch_job.py --run-id $RUN_ID --job full_review --wait"
 echo "$RUN_ID"
