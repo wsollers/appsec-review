@@ -17,6 +17,7 @@
     "optional": ["repository partition map", "symbol and semantic indexes", "build, source-SAST and operations evidence"]
   },
   "outputs": {"directory": "outputs/01-component-characterization", "files": ["component-purpose-map.json", "component-purpose-map.md", "status.json"]},
+  "permissions": ["read-source", "read-run-data", "write-run-data"],
   "prompt_sections": ["governing_rules", "persona", "role", "domain", "tooling_profile", "task", "output_contract"],
   "task_prompt": "appsec-review-process/01-component-characterization/task-component-characterization.md"
 }

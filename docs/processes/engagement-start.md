@@ -71,6 +71,12 @@ qualification remain explicit gaps. Most other `02-*` evidence nodes still have 
 exist as the tracked prompt harness (`appsec-review-process/<lane>/`) dispatched by hand-off files,
 not as graph workers.
 
+The nominal F02/F03 cores now exist and are independently unit-qualified. `02-evidence-assembly`
+can validate a trusted C01/C02 terminal generation and publish a canonical hash-bound
+`intel-manifest.json`; `01-component-characterization` consumes only the manifest-declared
+artifacts and emits the component-purpose map. They remain standalone: the required producer chain,
+trusted pool-context binding, Dagster lifecycle and live persona run are not yet integrated.
+
 ## 2. What the operator must supply (step 1)
 
 `stage_artifacts.py` is the intake contract. Everything else is derived.

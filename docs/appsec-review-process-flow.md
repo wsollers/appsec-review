@@ -133,7 +133,7 @@ flowchart LR
   SBOM -. NVD binding, V09 done .-> NVD[NVD snapshot under /data]:::found
 
   SEC & SBOM & CIM & SS & DOC & API & TI & OPD & STD & DVO & SRE & DEV & NS & IRF & BII & TR & TC & SC & EI --> ASM[[02-evidence-assembly<br/>wait-all join F02]]:::todo
-  ASM --> CMP[01 Component characterization F03<br/>longest pole]:::todo
+  ASM --> CMP[01 Component characterization F03<br/>standalone core unit-qualified<br/>execution still blocked on F02]:::gate
 ```
 
 Fan-out rules that the graph already enforces

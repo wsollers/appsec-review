@@ -166,7 +166,7 @@
     "02-evidence-assembly": {
       "lane": "02-evidence-pregather",
       "contract": "pregather",
-      "template": null,
+      "template": "02-evidence-assembly",
       "implemented": false,
       "namespace": "02-evidence-assembly",
       "dependencies": [
@@ -376,7 +376,7 @@
     "01-component-characterization": {
       "lane": "01-component-characterization",
       "contract": "component-map",
-      "template": null,
+      "template": "01-component-characterization",
       "implemented": false,
       "namespace": "01-component-characterization",
       "dependencies": [

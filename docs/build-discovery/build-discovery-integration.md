@@ -180,8 +180,8 @@ graph job.
 | `02-build-classify` | Persona classification of build units on the common envelope (2026-09-25); requires the accepted build index; not yet live-qualified | Present |
 | `02-build-plan` | Persona build planner on the common envelope; live happy path passed; fault/recovery qualification pending | Present |
 | `02-build-resolution` | Qualified image, offline trial-build and immutable build-lock worker | Present |
-| `02-evidence-assembly` | Worker blocked | Missing |
-| `01-component-characterization` | Worker blocked | Missing |
+| `02-evidence-assembly` | Standalone nominal core unit-qualified; trusted C01/C02 binding, required producers and Dagster lifecycle remain blocked | Present |
+| `01-component-characterization` | Standalone nominal core unit-qualified against canonical F02 manifest; live F02 evidence and Dagster/persona lifecycle remain blocked | Present |
 | `03-threat-model-dfd-stride` | Worker blocked | Missing |
 | `04-asvs-masvs` | Worker blocked | Missing |
 | `05-native-memory` | Worker blocked | Missing |

@@ -1168,7 +1168,7 @@
       {
        "ref": "job:02-evidence-assembly",
        "id": "02-evidence-assembly",
-       "name": "02-evidence-assembly",
+       "name": "Evidence Assembly",
        "kind": "lifecycle",
        "consumes": [
         "job:02-dev-project-discovery",
@@ -1200,7 +1200,11 @@
        "produces": [
         "job:02-evidence-assembly"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "assembly-supply.json",
+        "terminal-instances.json",
+        "all graph-required producer accepted pointers and envelopes"
+       ]
       },
       {
        "ref": "job:02-api-collection-intelligence-ingest",
@@ -1634,6 +1638,9 @@
        "accepted build-plan.json",
        "B16 base-image record",
        "explicit permission grants",
+       "assembly-supply.json",
+       "terminal-instances.json",
+       "all graph-required producer accepted pointers and envelopes",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -1706,7 +1713,7 @@
       {
        "ref": "job:01-component-characterization",
        "id": "01-component-characterization",
-       "name": "01-component-characterization",
+       "name": "Component Purpose And Review Routing",
        "kind": "lifecycle",
        "consumes": [
         "job:02-evidence-assembly"
@@ -1715,13 +1722,8 @@
         "job:01-component-characterization"
        ],
        "declared_inputs": [
-        "`ENGAGEMENT_LLM_INPUT.md`",
-        "`coverage-ledger.json`",
-        "symbol index",
-        "semantic index, if available",
-        "repo profile/static summary",
-        "target source tree",
-        "`taxonomy.md`"
+        "target repository path",
+        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
        ]
       },
       {
@@ -1909,13 +1911,8 @@
        "job:15-stig-srg-validation-worklist"
       ],
       "declared_inputs": [
-       "`ENGAGEMENT_LLM_INPUT.md`",
-       "`coverage-ledger.json`",
-       "symbol index",
-       "semantic index, if available",
-       "repo profile/static summary",
-       "target source tree",
-       "`taxonomy.md`",
+       "target repository path",
+       "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
        "component-purpose map",
        "evidence package",
        "deployment/IaC artifacts",
@@ -2292,6 +2289,9 @@
      "accepted build-plan.json",
      "B16 base-image record",
      "explicit permission grants",
+     "assembly-supply.json",
+     "terminal-instances.json",
+     "all graph-required producer accepted pointers and envelopes",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -2308,13 +2308,7 @@
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
      "accepted build discovery",
-     "`ENGAGEMENT_LLM_INPUT.md`",
-     "`coverage-ledger.json`",
-     "symbol index",
-     "semantic index, if available",
-     "repo profile/static summary",
-     "target source tree",
-     "`taxonomy.md`",
+     "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "component-purpose map",
      "evidence package",
      "deployment/IaC artifacts",
@@ -3371,7 +3365,7 @@
       {
        "ref": "job:02-evidence-assembly",
        "id": "02-evidence-assembly",
-       "name": "02-evidence-assembly",
+       "name": "Evidence Assembly",
        "kind": "lifecycle",
        "consumes": [
         "job:02-dev-project-discovery",
@@ -3403,7 +3397,11 @@
        "produces": [
         "job:02-evidence-assembly"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "assembly-supply.json",
+        "terminal-instances.json",
+        "all graph-required producer accepted pointers and envelopes"
+       ]
       },
       {
        "ref": "job:02-api-collection-intelligence-ingest",
@@ -3891,6 +3889,9 @@
        "accepted build-plan.json",
        "B16 base-image record",
        "explicit permission grants",
+       "assembly-supply.json",
+       "terminal-instances.json",
+       "all graph-required producer accepted pointers and envelopes",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -3920,7 +3921,7 @@
       {
        "ref": "job:01-component-characterization",
        "id": "01-component-characterization",
-       "name": "01-component-characterization",
+       "name": "Component Purpose And Review Routing",
        "kind": "lifecycle",
        "consumes": [
         "job:02-evidence-assembly"
@@ -3929,13 +3930,8 @@
         "job:01-component-characterization"
        ],
        "declared_inputs": [
-        "`ENGAGEMENT_LLM_INPUT.md`",
-        "`coverage-ledger.json`",
-        "symbol index",
-        "semantic index, if available",
-        "repo profile/static summary",
-        "target source tree",
-        "`taxonomy.md`"
+        "target repository path",
+        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
        ]
       }
      ],
@@ -3948,13 +3944,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "`ENGAGEMENT_LLM_INPUT.md`",
-       "`coverage-ledger.json`",
-       "symbol index",
-       "semantic index, if available",
-       "repo profile/static summary",
-       "target source tree",
-       "`taxonomy.md`"
+       "target repository path",
+       "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
       ]
      }
     },
@@ -4642,6 +4633,9 @@
      "accepted build-plan.json",
      "B16 base-image record",
      "explicit permission grants",
+     "assembly-supply.json",
+     "terminal-instances.json",
+     "all graph-required producer accepted pointers and envelopes",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -4662,13 +4656,7 @@
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
      "accepted build discovery",
-     "`ENGAGEMENT_LLM_INPUT.md`",
-     "`coverage-ledger.json`",
-     "symbol index",
-     "semantic index, if available",
-     "repo profile/static summary",
-     "target source tree",
-     "`taxonomy.md`",
+     "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "component-purpose map",
      "evidence package",
      "deployment/IaC artifacts",
@@ -6461,16 +6449,22 @@
   {
    "id": "02-evidence-assembly",
    "lane": "02-evidence-pregather",
-   "name": "02-evidence-assembly",
+   "name": "Evidence Assembly",
    "contract": "pregather",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "join_controller",
+   "worker": "appsec-review-process/evidence_assembly.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-assembler",
+    "domain_id": "evidence-assembly",
+    "tooling_profile_id": "hash-bound-evidence-assembly",
+    "output_contract_id": "pregather"
+   },
    "depends_on": [
     {
      "job": "02-dev-project-discovery",
@@ -6598,22 +6592,35 @@
      "contract": "mobile-sast"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "assembly-supply.json"
+    },
+    {
+     "need": "required",
+     "input": "terminal-instances.json"
+    },
+    {
+     "need": "required",
+     "input": "all graph-required producer accepted pointers and envelopes"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-evidence-assembly.json",
    "output_dir": "runs/<run_id>/data/jobs/02-evidence-assembly/",
-   "output_files": [],
-   "outputs_source": null,
+   "output_files": [
+    "intel-manifest.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/pregather.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "required_producers_and_c01_c02_runtime_binding_missing",
+    "dagster_lifecycle_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Implement the remaining required producers, bind the trusted C01/C02 pool context, then add the Dagster lifecycle and live qualification.",
    "consumes": [
     "job:02-dev-project-discovery",
     "job:02-devops-project-discovery",
@@ -6648,16 +6655,22 @@
   {
    "id": "01-component-characterization",
    "lane": "01-component-characterization",
-   "name": "01-component-characterization",
+   "name": "Component Purpose And Review Routing",
    "contract": "component-map",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "persona",
+   "worker": "appsec-review-process/component_characterization.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "component-characterizer",
+    "domain_id": "component-characterization",
+    "tooling_profile_id": "component-evidence-router",
+    "output_contract_id": "component-map"
+   },
    "depends_on": [
     {
      "job": "02-evidence-assembly",
@@ -6668,56 +6681,41 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "`ENGAGEMENT_LLM_INPUT.md`"
+     "input": "target repository path"
     },
     {
      "need": "required",
-     "input": "`coverage-ledger.json`"
+     "input": "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
     },
     {
-     "need": "required",
-     "input": "symbol index"
+     "need": "optional",
+     "input": "repository partition map"
     },
     {
-     "need": "required",
-     "input": "semantic index, if available"
+     "need": "optional",
+     "input": "symbol and semantic indexes"
     },
     {
-     "need": "required",
-     "input": "repo profile/static summary"
-    },
-    {
-     "need": "required",
-     "input": "target source tree"
-    },
-    {
-     "need": "required",
-     "input": "`taxonomy.md`"
+     "need": "optional",
+     "input": "build, source-SAST and operations evidence"
     }
    ],
-   "inputs_source": "01-component-characterization/config.md",
+   "inputs_source": "registry/job-templates/01-component-characterization.json",
    "output_dir": "runs/<run_id>/data/jobs/01-component-characterization/",
    "output_files": [
-    "`component-purpose-map.json`",
-    "`component-purpose-map.md`",
-    "explicit code-scope exclusions for test/sample, benchmarks, vendored dependencies, generated code, and documentation where applicable",
-    "functional/security components suitable for ASVS/MASVS/threat/native routing",
-    "component-cloud entries with coarse groups, aliases, search terms, and fine-grained locations",
-    "parallel review groups for independent lane execution",
-    "classification gaps and rescope triggers"
+    "component-purpose-map.json",
+    "component-purpose-map.md",
+    "status.json"
    ],
-   "outputs_source": "01-component-characterization/config.md",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/component-map.json",
+   "claim_class": "component_characterization",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "blocked_on_02-evidence-assembly",
+    "dagster_lifecycle_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Publish an accepted COMPLETE 02-evidence-assembly envelope, then add the Dagster lifecycle and live persona qualification.",
    "consumes": [
     "job:02-evidence-assembly"
    ],

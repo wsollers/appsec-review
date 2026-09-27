@@ -1026,19 +1026,29 @@
           "02-mobile-sast"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-evidence-assembly",
+        "persona": "evidence-custodian",
+        "role": "evidence-assembler",
+        "domain": "evidence-assembly",
+        "tooling_profile": "hash-bound-evidence-assembly",
+        "output_contract": "pregather"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "join_controller",
+        "worker": "appsec-review-process/evidence_assembly.py:run",
+        "validator": "appsec-review-process/evidence_assembly.py:validate"
       },
       "output": {
         "contract": "pregather",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/pregather.json",
+        "schema_file": "schemas/intel-manifest.schema.json",
+        "claim_class": "evidence_manifest"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1051,23 +1061,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_evidence_assembly.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "required_producers_and_c01_c02_runtime_binding_missing",
+        "dagster_lifecycle_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Implement the remaining required producers, bind the trusted C01/C02 pool context, then add the Dagster lifecycle and live qualification."
     },
     {
       "id": "01-component-characterization",
@@ -1081,19 +1090,30 @@
           "02-evidence-assembly"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "01-component-characterization",
+        "persona": "developer-engineer",
+        "role": "component-characterizer",
+        "domain": "component-characterization",
+        "tooling_profile": "component-evidence-router",
+        "output_contract": "component-map"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "persona",
+        "worker": "appsec-review-process/component_characterization.py:run",
+        "validator": "appsec-review-process/component_characterization.py:validate"
       },
       "output": {
         "contract": "component-map",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/component-map.json",
+        "schema_file": "schemas/component-purpose-map.schema.json",
+        "claim_class": "component_characterization"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1106,23 +1126,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_component_characterization.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "blocked_on_02-evidence-assembly",
+        "dagster_lifecycle_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Publish an accepted COMPLETE 02-evidence-assembly envelope, then add the Dagster lifecycle and live persona qualification."
     },
     {
       "id": "03-threat-model-dfd-stride",

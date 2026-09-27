@@ -1377,10 +1377,10 @@ the next dependency pair without spending the critical path on recovery qualific
 
 | Lane | Status | Exclusive scope | Exit condition |
 |---|---|---|---|
-| **F02-core** evidence assembly | CLAIMED | new `evidence_assembly.py`, dedicated schema/contract/registry records, fixtures and focused tests | Deterministically validate terminal producer envelopes and publish a hash-bound `intel-manifest.json`; missing producers remain explicit gaps/skips and the graph node remains non-executable until serial integration. |
-| **F03-core** component characterization | CLAIMED | `component_characterization.py`, dedicated component schema/registry/task files, fixtures and focused tests | Consume exact F02 manifest lineage and produce fixture-qualified component purpose, ownership, paths, relationships, citations, confidence, unknowns and tag cloud while remaining honestly `BLOCKED(F02)` until integration. |
-| **Q17** independent qualification | QUEUED, READ-ONLY | F02-core and F03-core candidate commits | Review and run focused/contract/parity/catalog checks without editing; distinguish nominal core completeness from graph/live readiness. |
-| **D17** master integration | ACTIVE | TODO/docs, shared graph/parity/runtime/Dagster/catalog surfaces | Review both cores, resolve their interface, integrate shared surfaces serially, then run the happy path and document only demonstrated readiness. |
+| **F02-core** evidence assembly | UNIT-QUALIFIED, STANDALONE | `evidence_assembly.py`, dedicated schema/contract/registry records, fixtures and focused tests | Core complete; trusted C01/C02 binding, required producers, Dagster lifecycle and live qualification remain. |
+| **F03-core** component characterization | UNIT-QUALIFIED, STANDALONE | `component_characterization.py`, dedicated component schema/registry/task files, fixtures and focused tests | Core complete against the canonical F02 manifest; accepted live F02 evidence, Dagster lifecycle and persona qualification remain. |
+| **Q17** independent qualification | DONE, READ-ONLY | F02-core and F03-core candidates plus combined tree | F02 118/118, F03 130/130 and combined nominal interface 224/224 passed; forged rendezvous/pointer proofs reject; exact F02-to-F03 77-artifact handoff passed. |
+| **D17** master integration | PARTIAL | TODO/docs, shared graph/parity/runtime/Dagster/catalog surfaces | Registry, contracts, graph templates, parity inventory and generated catalogs are integrated. Runtime/Dagster wiring waits for the missing producer chain and trusted C01/C02 context. |
 
 F02-core and F03-core may work in parallel because neither edits shared graph/runtime/catalog files.
 The agreed boundary is the hash-bound `intel-manifest.json` envelope: F02 produces it and F03 may

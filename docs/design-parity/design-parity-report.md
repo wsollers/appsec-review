@@ -1,6 +1,6 @@
 # Mythos design-parity report
 
-Status: **FAIL**
+Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
 Lifecycle jobs: **55**
@@ -12,8 +12,9 @@ Design capabilities: **16**
 |---|---:|
 | `implemented_and_qualified` | 4 |
 | `implemented_not_qualified` | 6 |
-| `missing_prerequisites` | 34 |
+| `missing_prerequisites` | 32 |
 | `registered_planned_not_executable` | 7 |
+| `standalone_only` | 2 |
 | `supplied_artifact_gate` | 4 |
 
 ## Lifecycle inventory
@@ -30,8 +31,8 @@ Design capabilities: **16**
 | `02-build-classify` | true | `actual_worker` | `implemented_not_qualified` | `persona_llm` |
 | `02-build-plan` | true | `actual_worker` | `implemented_not_qualified` | `persona_llm` |
 | `02-build-resolution` | true | `actual_worker` | `implemented_and_qualified` | `docker` |
-| `02-evidence-assembly` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `01-component-characterization` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-evidence-assembly` | false | `blocked_op` | `standalone_only` | `unassigned` |
+| `01-component-characterization` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `03-threat-model-dfd-stride` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `04-asvs-masvs` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `05-native-memory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
@@ -78,13 +79,9 @@ Design capabilities: **16**
 
 ## Explicit gaps
 
-- 01-component-characterization: missing_dedicated_output_schema
-- 01-component-characterization: missing_output_contract
-- 01-component-characterization: missing_registry_composition
-- 01-component-characterization: missing_validator
-- 01-component-characterization: missing_worker
-- 01-component-characterization: no qualification evidence
-- 01-component-characterization: no_qualification
+- 01-component-characterization: blocked_on_02-evidence-assembly
+- 01-component-characterization: dagster_lifecycle_not_integrated
+- 01-component-characterization: no_live_qualification
 - 01-component-characterization: resource pool unassigned
 - 01-component-characterization: unassigned_resource_pool
 - 02-api-collection-intelligence-ingest: missing_dedicated_output_schema
@@ -166,13 +163,9 @@ Design capabilities: **16**
 - 02-doc-intelligence-ingest: no_qualification
 - 02-doc-intelligence-ingest: resource pool unassigned
 - 02-doc-intelligence-ingest: unassigned_resource_pool
-- 02-evidence-assembly: missing_dedicated_output_schema
-- 02-evidence-assembly: missing_output_contract
-- 02-evidence-assembly: missing_registry_composition
-- 02-evidence-assembly: missing_validator
-- 02-evidence-assembly: missing_worker
-- 02-evidence-assembly: no qualification evidence
-- 02-evidence-assembly: no_qualification
+- 02-evidence-assembly: dagster_lifecycle_not_integrated
+- 02-evidence-assembly: no_live_qualification
+- 02-evidence-assembly: required_producers_and_c01_c02_runtime_binding_missing
 - 02-evidence-assembly: resource pool unassigned
 - 02-evidence-assembly: unassigned_resource_pool
 - 02-evidence-index: missing_dedicated_output_schema
@@ -483,4 +476,4 @@ Design capabilities: **16**
 
 ## Validation errors
 
-- stale generated readiness_table: docs/design-parity/design-parity-readiness.md
+- None.
