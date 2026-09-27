@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import source_sast as worker  # noqa: E402
+import container_execution as ce  # noqa: E402
 from schema_validate import validate_document  # noqa: E402
 
 
@@ -45,6 +46,24 @@ class SourceSastTests(unittest.TestCase):
                 self.assertEqual(request["target_mounts"],[{"host_path":str(target),"container_path":"/workspace"}])
                 self.assertEqual(request["argv"],spec["argv"])
                 self.assertEqual(validate_document(request,"pinned-container-request.schema.json"),[])
+
+    def test_live_language_tool_path_smoke_when_images_and_docker_exist(self):
+        registry=ce.load_image_registry(ce.IMAGES_DIR)
+        ready=worker.language_adapters.build_plan(["go","java","php"],registry)
+        ready=[item for item in ready if item["status"]=="READY"]
+        if not ready: self.skipTest("no pinned Go/Java/PHP B16 images are provisioned")
+        if ce.host_defaults()["docker_executable"] is None: self.skipTest("Docker is unavailable")
+        version_flags={"gosec":["-version"],"spotbugs":["-version"],"phpstan":["--version"],"psalm":["--version"],"phpcs":["--version"]}
+        with tempfile.TemporaryDirectory() as folder:
+            target=Path(folder,"target"); target.mkdir(); runtime=worker._runtime("sha256:"+"b"*64)
+            for plan in ready:
+                smoke={**plan,"argv":[plan["argv"][0],*version_flags[plan["tool_id"]]]}
+                attempt=Path(folder,plan["tool_id"]); attempt.mkdir()
+                request=worker._language_request("run",plan["tool_id"],{"target_path":str(target),"source_snapshot_sha256":"sha256:"+"b"*64},smoke)
+                terminal=ce.run_container(runtime,run_id="run",job_id=worker.JOB,attempt_id=plan["tool_id"],attempt_root=attempt,request=request)
+                self.assertEqual(terminal["execution_status"],"OK",plan["tool_id"])
+                self.assertEqual(ce.verify_container_result(attempt,run_id="run",job_id=worker.JOB,attempt_id=plan["tool_id"],
+                  request=request,images_dir=runtime.images_dir,expected_result_sha256=terminal["result_sha256"],**worker._host(runtime)),[])
 
     def test_normalization_discards_message_snippet_and_severity(self):
         with tempfile.TemporaryDirectory() as folder:
