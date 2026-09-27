@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threat-model-reconciliation-input.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "inputs"],
+  "properties": {
+    "schema": {"const": "appsec-review/threat-model-reconciliation-input/1.0"},
+    "inputs": {
+      "type": "array", "maxItems": 100,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["input_id", "origin", "target_record_id", "statement", "source_identity", "model_identity_sha256", "prompt_sha256"],
+        "properties": {
+          "input_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"},
+          "origin": {"enum": ["reviewer", "model"]},
+          "target_record_id": {"type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9-]{0,159}$"},
+          "statement": {"type": "string", "minLength": 1, "maxLength": 2000},
+          "source_identity": {"type": "string", "minLength": 1, "maxLength": 200},
+          "model_identity_sha256": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+          "prompt_sha256": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+        },
+        "allOf": [
+          {"if": {"properties": {"origin": {"const": "model"}}},
+           "then": {"properties": {"model_identity_sha256": {"type": "string"}, "prompt_sha256": {"type": "string"}}}},
+          {"if": {"properties": {"origin": {"const": "reviewer"}}},
+           "then": {"properties": {"model_identity_sha256": {"type": "null"}, "prompt_sha256": {"type": "null"}}}}
+        ]
+      }
+    }
+  }
+}

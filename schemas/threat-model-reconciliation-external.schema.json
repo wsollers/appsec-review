@@ -1,0 +1,8 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","$id":"threat-model-reconciliation-external.schema.json",
+  "type":"object","additionalProperties":false,"required":["input_id","origin","target_record_id","statement","source_identity","model_identity_sha256","prompt_sha256","disposition","claim_effect","citation_ids"],
+  "properties":{"input_id":{"type":"string"},"origin":{"enum":["reviewer","model"]},"target_record_id":{"type":["string","null"]},
+    "statement":{"type":"string"},"source_identity":{"type":"string"},"model_identity_sha256":{"type":["string","null"]},
+    "prompt_sha256":{"type":["string","null"]},"disposition":{"const":"unresolved"},"claim_effect":{"const":"none"},
+    "citation_ids":{"type":"array","minItems":1,"items":{"type":"string"}}}
+}

@@ -1,0 +1,29 @@
+{
+  "checks": [
+    "accepted L6A common envelope",
+    "reproducible L6A snapshot",
+    "accepted L6B common envelope",
+    "exact lineage receipts",
+    "reviewer/model inputs retained without claim effect"
+  ],
+  "input_kind": "canonical accepted component fixture (hello-autotools); Freeciv component acceptance remains separate",
+  "l6a": {
+    "attempt_id": "7deadef32b754bda847042ac95a495d9",
+    "candidate_hypotheses": 6,
+    "elements": 2,
+    "envelope_sha256": "sha256:a9f1e921441682e0459ea514a553c850e10bb24c61d0852167ef186745ab6485",
+    "flows": 1
+  },
+  "l6b": {
+    "attempt_id": "5d78bb6d79cb40d2af74320ef4502785",
+    "claim_effects": [
+      "none"
+    ],
+    "conflicts": 2,
+    "envelope_sha256": "sha256:35d5120be1e258ca5d7631039824a6374b84ebdd821ffcdd2d800fa729f17a63",
+    "external_inputs": 2,
+    "unresolved_assumptions": 1
+  },
+  "run_id": "threat-reconcile-fixture",
+  "schema": "appsec-review/threat-model-happy-path-qualification/1.0"
+}

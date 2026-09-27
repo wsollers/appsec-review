@@ -202,6 +202,13 @@ CLAIM_CLASS_POLICIES = {
                                "candidate-threat-hypothesis", "assumption", "coverage-gap",
                                "rescope-trigger"},
     },
+    "threat-model-reconciliation": {
+        "claim_class_id": "threat_model_reconciliation",
+        "allowed_assertions": {"model-generation-binding", "component-delta",
+                               "evidence-generation-delta", "unresolved-assumption",
+                               "unresolved-input", "reconciliation-conflict",
+                               "regeneration-action", "coverage-gap"},
+    },
     "claim-ledger-core": {
         "claim_class_id": "candidate_claim_ledger",
         "allowed_assertions": {"candidate-hypothesis", "candidate-status", "proof-obligation",
