@@ -242,6 +242,12 @@
           "allowed_skip_reasons": []
         },
         {
+          "job": "02-code-property-graph",
+          "kind": "required",
+          "contract": "code-property-graph",
+          "allowed_skip_reasons": []
+        },
+        {
           "job": "02-native-sast",
           "kind": "required",
           "contract": "native-sast",
@@ -993,6 +999,28 @@
       "required_artifacts": [
         "source-sast.json",
         "b13-receipts.json"
+      ]
+    },
+    "02-code-property-graph": {
+      "lane": "02-evidence-pregather",
+      "contract": "code-property-graph",
+      "template": "02-code-property-graph",
+      "implemented": true,
+      "namespace": "02-code-property-graph",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Pinned offline Joern produces bounded source-located AST/CPG records for structural calls, symbols, types, candidate flows and memory operations; every hit remains locator-only until source dereference.",
+      "required_artifacts": [
+        "code-property-graph.json",
+        "b13-receipt.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-native-sast": {

@@ -38,6 +38,7 @@ EXECUTOR_CAPS = {"engagement_workflow": "plan", "build_discovery": 3, "build_exe
                  "devops_project_discovery": 1, "sre_operations_topology": 1, "build_index": 1, "build_classify": 1, "build_plan": 1,
                  "build_resolution": 1, "build_configure": 1, "native_build": 1, "source_sast": 1,
                  "ir_capture": 1, "ir_link": 1, "ir_facts": 1,
+                 "code_property_graph": 1,
                  "owasp_component_routing": 1,
                  "native_memory_analysis": 1, "fuzz_target_triage": 1,
                  "owasp_validation_worklist": 1, "stig_srg_validation_worklist": 1,

@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 63,
+  "lifecycle_jobs": 64,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1180,6 +1180,7 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
+        "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
         "job:02-test-result-ingest",
@@ -1307,6 +1308,23 @@
         "staged target checkout",
         "B16 tool-semgrep record",
         "repository-owned hashed ruleset"
+       ]
+      },
+      {
+       "ref": "job:02-code-property-graph",
+       "id": "02-code-property-graph",
+       "name": "Joern Code Property Graph",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-code-property-graph"
+       ],
+       "declared_inputs": [
+        "accepted source snapshot",
+        "pinned audit-native image",
+        "hash-bound Joern exporter"
        ]
       },
       {
@@ -1671,6 +1689,7 @@
        "job:02-standards-source-ingest",
        "job:02-test-intelligence-ingest",
        "job:02-source-sast",
+       "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
        "job:02-ir-link",
@@ -1729,6 +1748,9 @@
        "test type or auto",
        "B16 tool-semgrep record",
        "repository-owned hashed ruleset",
+       "accepted source snapshot",
+       "pinned audit-native image",
+       "hash-bound Joern exporter",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
        "B16 audit-native record",
@@ -2448,6 +2470,7 @@
      "job:02-standards-source-ingest",
      "job:02-test-intelligence-ingest",
      "job:02-source-sast",
+     "job:02-code-property-graph",
      "job:02-native-sast",
      "job:02-ir-capture",
      "job:02-ir-link",
@@ -2532,6 +2555,9 @@
      "test type or auto",
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
+     "accepted source snapshot",
+     "pinned audit-native image",
+     "hash-bound Joern exporter",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
      "B16 audit-native record",
@@ -3612,6 +3638,7 @@
         "job:02-standards-source-ingest",
         "job:02-test-intelligence-ingest",
         "job:02-source-sast",
+        "job:02-code-property-graph",
         "job:02-native-sast",
         "job:02-ir-facts",
         "job:02-test-result-ingest",
@@ -3776,6 +3803,23 @@
         "staged target checkout",
         "B16 tool-semgrep record",
         "repository-owned hashed ruleset"
+       ]
+      },
+      {
+       "ref": "job:02-code-property-graph",
+       "id": "02-code-property-graph",
+       "name": "Joern Code Property Graph",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:02-code-property-graph"
+       ],
+       "declared_inputs": [
+        "accepted source snapshot",
+        "pinned audit-native image",
+        "hash-bound Joern exporter"
        ]
       },
       {
@@ -4154,6 +4198,7 @@
        "job:02-build-configure",
        "job:02-native-build",
        "job:02-source-sast",
+       "job:02-code-property-graph",
        "job:02-native-sast",
        "job:02-ir-capture",
        "job:02-ir-link",
@@ -4219,6 +4264,9 @@
        "accepted configured build",
        "B16 tool-semgrep record",
        "repository-owned hashed ruleset",
+       "accepted source snapshot",
+       "pinned audit-native image",
+       "hash-bound Joern exporter",
        "exact accepted 02-native-build publication",
        "caller-held native-build fingerprint",
        "B16 audit-native record",
@@ -4993,6 +5041,7 @@
      "job:02-build-configure",
      "job:02-native-build",
      "job:02-source-sast",
+     "job:02-code-property-graph",
      "job:02-native-sast",
      "job:02-ir-capture",
      "job:02-ir-link",
@@ -5081,6 +5130,9 @@
      "accepted configured build",
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
+     "accepted source snapshot",
+     "pinned audit-native image",
+     "hash-bound Joern exporter",
      "exact accepted 02-native-build publication",
      "caller-held native-build fingerprint",
      "B16 audit-native record",
@@ -7148,6 +7200,11 @@
      "contract": "source-sast"
     },
     {
+     "job": "02-code-property-graph",
+     "kind": "required",
+     "contract": "code-property-graph"
+    },
+    {
      "job": "02-native-sast",
      "kind": "required",
      "contract": "native-sast"
@@ -7267,6 +7324,7 @@
     "job:02-standards-source-ingest",
     "job:02-test-intelligence-ingest",
     "job:02-source-sast",
+    "job:02-code-property-graph",
     "job:02-native-sast",
     "job:02-ir-facts",
     "job:02-test-result-ingest",
@@ -8969,6 +9027,69 @@
    ],
    "produces": [
     "job:02-source-sast"
+   ]
+  },
+  {
+   "id": "02-code-property-graph",
+   "lane": "02-evidence-pregather",
+   "name": "Joern Code Property Graph",
+   "contract": "code-property-graph",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/joern_cpg.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "code_property_graph"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "code-property-graph"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted source snapshot"
+    },
+    {
+     "need": "required",
+     "input": "pinned audit-native image"
+    },
+    {
+     "need": "required",
+     "input": "hash-bound Joern exporter"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-code-property-graph.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-code-property-graph/",
+   "output_files": [
+    "code-property-graph.json",
+    "b13-receipt.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/code-property-graph.json",
+   "claim_class": "structural_source_evidence",
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Qualify the registered Dagster lifecycle op and full-review handoff.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:02-code-property-graph"
    ]
   },
   {
@@ -11702,6 +11823,7 @@
     "job:02-standards-source-ingest",
     "job:02-test-intelligence-ingest",
     "job:02-source-sast",
+    "job:02-code-property-graph",
     "job:02-operations-doc-ingest",
     "job:02-evidence-index",
     "job:02-secrets-inventory",
@@ -12185,6 +12307,18 @@
    "produced_by": [
     "step:source-sast",
     "job:02-source-sast"
+   ],
+   "consumed_by": [
+    "job:02-evidence-assembly"
+   ]
+  },
+  "job:02-code-property-graph": {
+   "id": "job:02-code-property-graph",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-code-property-graph/",
+   "about": "Accepted code-property-graph output of 02-code-property-graph.",
+   "produced_by": [
+    "job:02-code-property-graph"
    ],
    "consumed_by": [
     "job:02-evidence-assembly"

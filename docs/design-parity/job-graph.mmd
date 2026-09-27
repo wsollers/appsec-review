@@ -43,6 +43,7 @@ flowchart TD
   02_standards_source_ingest -->|required| 02_evidence_assembly
   02_test_intelligence_ingest -->|required| 02_evidence_assembly
   02_source_sast_post -->|required| 02_evidence_assembly
+  02_code_property_graph_post -->|required| 02_evidence_assembly
   02_native_sast -->|required| 02_evidence_assembly
   02_ir_facts_post -->|required| 02_evidence_assembly
   02_test_result_ingest -->|required| 02_evidence_assembly
@@ -152,6 +153,10 @@ flowchart TD
   02_source_sast_pre --> 02_source_sast["02-source-sast: work or reuse"]
   02_source_sast --> 02_source_sast_post["02-source-sast: post-validation and publish"]
   00_intake_post -->|required| 02_source_sast_config
+  02_code_property_graph_config["02-code-property-graph: resolve job configuration"] --> 02_code_property_graph_pre["02-code-property-graph: pre-validation"]
+  02_code_property_graph_pre --> 02_code_property_graph["02-code-property-graph: work or reuse"]
+  02_code_property_graph --> 02_code_property_graph_post["02-code-property-graph: post-validation and publish"]
+  00_intake_post -->|required| 02_code_property_graph_config
   02_native_sast["02-native-sast (planned; not dispatched)"]
   02_native_build_post -->|required| 02_native_sast
   02_ir_capture_config["02-ir-capture: resolve job configuration"] --> 02_ir_capture_pre["02-ir-capture: pre-validation"]

@@ -34,6 +34,7 @@ flowchart TD
   j_02_build_configure["02-build-configure<br/>implemented_not_qualified"]
   j_02_native_build["02-native-build<br/>implemented_not_qualified"]
   j_02_source_sast["02-source-sast<br/>implemented_not_qualified"]
+  j_02_code_property_graph["02-code-property-graph<br/>implemented_not_qualified"]
   j_02_native_sast["02-native-sast<br/>standalone_only"]
   j_02_ir_capture["02-ir-capture<br/>implemented_not_qualified"]
   j_02_ir_link["02-ir-link<br/>implemented_not_qualified"]
@@ -84,6 +85,7 @@ flowchart TD
   j_02_standards_source_ingest --> j_02_evidence_assembly
   j_02_test_intelligence_ingest --> j_02_evidence_assembly
   j_02_source_sast --> j_02_evidence_assembly
+  j_02_code_property_graph --> j_02_evidence_assembly
   j_02_native_sast --> j_02_evidence_assembly
   j_02_ir_facts --> j_02_evidence_assembly
   j_02_test_result_ingest --> j_02_evidence_assembly
@@ -152,6 +154,7 @@ flowchart TD
   j_02_build_resolution --> j_02_build_configure
   j_02_build_configure --> j_02_native_build
   j_00_intake --> j_02_source_sast
+  j_00_intake --> j_02_code_property_graph
   j_02_native_build --> j_02_native_sast
   j_02_native_build --> j_02_ir_capture
   j_02_ir_capture --> j_02_ir_link
