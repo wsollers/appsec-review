@@ -339,6 +339,43 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
         self.assertFalse((staged / "status.json").exists())
         self.assertFalse((staged / "raw-tool-output.log").exists())
 
+    def test_canonical_schema_bytes_bind_current_inputs_and_missing_schema_blocks(self):
+        schema_root = self.owner / "schemas"
+        schema_root.mkdir()
+        (schema_root / "component-purpose-map.schema.json").write_bytes(
+            (ROOT.parent / "schemas/component-purpose-map.schema.json").read_bytes())
+        for name in cc.INTEL_MANIFEST_SCHEMAS:
+            (schema_root / name).write_text('{"version":1}\n', encoding="utf-8")
+        evidence = deepcopy(self.inputs["evidence"])
+        with patch.object(cc, "SCHEMAS", schema_root), patch.object(
+                cc, "_target", return_value=(self.target, {
+                    "fingerprint": self.value["source_snapshot_sha256"].removeprefix("sha256:"),
+                    "revision": None})), patch.object(
+                cc, "_accepted_evidence", return_value=(self.evidence, evidence)), patch.object(
+                cc, "_stage_evidence", return_value=self.evidence):
+            first = cc.current_inputs(self.run_id)
+            (schema_root / cc.INTEL_MANIFEST_SCHEMAS[0]).write_text(
+                '{"version":2}\n', encoding="utf-8")
+            second = cc.current_inputs(self.run_id)
+        schema_key = "schemas/" + cc.INTEL_MANIFEST_SCHEMAS[0]
+        self.assertNotEqual(first["code"][schema_key], second["code"][schema_key])
+        self.assertNotEqual(state.digest(first), state.digest(second))
+
+        missing = deepcopy({
+            "schema": "appsec-review/intel-manifest/1.0", "run_id": self.run_id,
+            "source_snapshot_sha256": self.value["source_snapshot_sha256"],
+        })
+        with patch.object(cc, "validate_document", side_effect=FileNotFoundError("absent")):
+            errors, _ = cc._intel_manifest_errors(
+                missing, run_id=self.run_id,
+                source_snapshot_sha256=self.value["source_snapshot_sha256"],
+                attempt=self.evidence, envelope_artifacts={})
+        self.assertEqual(errors, [
+            "canonical intel-manifest schema is unavailable; F03 remains blocked on F02"])
+        (schema_root / cc.INTEL_MANIFEST_SCHEMAS[0]).unlink()
+        with patch.object(cc, "SCHEMAS", schema_root):
+            self.assertEqual(cc._code_hashes()[schema_key], cc.ABSENT_SCHEMA_SHA256)
+
     def test_common_lifecycle_publishes_and_reuses_valid_map(self):
         with patch.object(cc, "current_inputs", return_value=self.inputs), patch.object(
                 cc, "_dispatch_persona", side_effect=self.dispatch) as dispatched:

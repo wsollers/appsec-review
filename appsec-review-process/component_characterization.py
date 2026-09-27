@@ -47,6 +47,14 @@ PROHIBITED_KEYS = {
     "runtime_observation", "observed_runtime", "compliance_verdict", "remediation_status",
 }
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
+SCHEMAS = ROOT.parent / "schemas"
+INTEL_MANIFEST_SCHEMAS = (
+    "intel-manifest.schema.json",
+    "intel-manifest-producer.schema.json",
+    "intel-manifest-artifact.schema.json",
+    "intel-manifest-gap.schema.json",
+)
+ABSENT_SCHEMA_SHA256 = "ABSENT"
 CODE_FILES = (
     "component_characterization.py", "persona_dispatch.py", "persona_invocation.py",
     "persona_prompt_assembly.py", "claude_cli_invoker.py", "publish_job_output.py",
@@ -84,7 +92,11 @@ def _target(run_id: str) -> tuple[Path, dict[str, Any]]:
 def _code_hashes() -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
     values["schemas/component-purpose-map.schema.json"] = file_hash(
-        ROOT.parent / "schemas" / "component-purpose-map.schema.json")
+        SCHEMAS / "component-purpose-map.schema.json")
+    for name in INTEL_MANIFEST_SCHEMAS:
+        path = SCHEMAS / name
+        values[f"schemas/{name}"] = (
+            file_hash(path) if path.is_file() and not path.is_symlink() else ABSENT_SCHEMA_SHA256)
     return values
 
 
