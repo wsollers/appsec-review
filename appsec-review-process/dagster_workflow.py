@@ -16,6 +16,9 @@ import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
 import full_review_input_assembly as full_review_input_assembly_worker
+import evidence_assembly as evidence_assembly_worker
+import evidence_assembly_input
+import evidence_assembly_runtime
 import synthesis_report_worker
 import bounded_transform_orchestration as bounded_transforms
 import dependency_orchestration as dependency_jobs
@@ -673,6 +676,33 @@ red_team_lifecycle_work = claim_review_lifecycle_op('07-red-team-adversarial')
 blue_team_lifecycle_work = claim_review_lifecycle_op('08-blue-team-refutation')
 verification_lifecycle_work = claim_review_lifecycle_op('09-independent-verification')
 scoring_lifecycle_work = claim_review_lifecycle_op('12-scoring-prioritization')
+
+
+@op(name='job_02_evidence_assembly', ins={'configured': In(dict), 'upstream': In(list)},
+    pool=PERSONA_POOL)
+def evidence_assembly_lifecycle_work(context, configured, upstream):
+    run_id = configured['engagement_run_id']
+    prepared = evidence_assembly_runtime.prepare(
+        run_id, context.run_id, configured['force'])
+    run_root = run_path(run_id).absolute()
+    supply_root = (evidence_assembly_worker.root(run_id) / 'supplies' /
+                   prepared.expected_spec['attempt_id']).absolute()
+    arguments = prepared.assembly_arguments()
+    if not supply_root.exists():
+        evidence_assembly_input.stage_supply(
+            run_root, supply_root, run_id=run_id,
+            source_snapshot_sha256=prepared.source_snapshot_sha256, **arguments)
+    result = evidence_assembly_worker.run(
+        run_id, context.run_id, supply_root=supply_root,
+        source_snapshot_sha256=prepared.source_snapshot_sha256,
+        force=configured['force'], **arguments)
+    attempt = evidence_assembly_worker.root(run_id) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(attempt / evidence_assembly_worker.RESULT)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'supply': MetadataValue.path(str(supply_root)),
+        'attempt_id': result['attempt_id']})
+    return result
 
 
 @op(name='job_02_native_sast', ins={'configured': In(dict), 'upstream': In(list)},
@@ -1403,6 +1433,7 @@ LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                                  '02-build-index','02-build-classify','02-build-plan',
                                  '02-build-resolution','02-ossf-scorecard')}
 LIFECYCLE_OPS['02-build-configure']=build_configure_work
+LIFECYCLE_OPS['02-evidence-assembly']=evidence_assembly_lifecycle_work
 LIFECYCLE_OPS['02-native-build']=native_build_work
 LIFECYCLE_OPS['02-source-sast']=source_sast_work
 LIFECYCLE_OPS['01-component-characterization']=component_characterization_work
