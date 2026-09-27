@@ -37,7 +37,10 @@ class DagsterTests(unittest.TestCase):
         self.assertIn('repository_partition_discovery',{job.name for job in repository.get_all_jobs()})
         for job in ('native_memory_analysis','fuzz_target_triage','owasp_validation_worklist',
                     'stig_srg_validation_worklist','deployment_hardening','sbom_inventory',
-                    'sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability'):
+                    'sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability',
+                    'persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum',
+                    'dynamic_rescope','completeness_audit','synthetic_hypothesis_resynthesis',
+                    'remediation_retest_feedback','final_publication_gate'):
             self.assertIn(job,{item.name for item in repository.get_all_jobs()})
         self.assertIn('nvd_reference_sync',{job.name for job in repository.get_all_jobs()})
         self.assertIn('nvd_reference_schedule',{schedule.name for schedule in repository.schedule_defs})

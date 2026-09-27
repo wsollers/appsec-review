@@ -43,6 +43,10 @@ EXECUTOR_CAPS = {"engagement_workflow": "plan", "build_discovery": 3, "build_exe
                  "license_scan": 1, "dependency_lifecycle": 1, "cve_reachability": 1,
                  "secrets_inventory": 1, "iac_config_scan": 1, "container_image_inventory": 1,
                  "binary_hardening": 1, "mobile_sast": 1,
+                 "persona_tool_pool_dispatch": 1, "deterministic_pool_merge": 1,
+                 "evidence_qualified_quorum": 1, "dynamic_rescope": 1, "completeness_audit": 1,
+                 "synthetic_hypothesis_resynthesis": 1, "remediation_retest_feedback": 1,
+                 "final_publication_gate": 1,
                  "b13_harmless_container": 1, "full_review": 3}
 
 
@@ -353,7 +357,8 @@ class SourceTies(unittest.TestCase):
         self.assertEqual(factories, {
             "branch_op": {"op", "MetadataValue", "workflow", "data_path", "CPU_POOL"},
             "blocked_op": {"op", "In", "Failure", "MetadataValue", "data_path", "now", "atomic_json",
-                           "NOT_IMPLEMENTED"}})
+                           "NOT_IMPLEMENTED"},
+            "_control_op": {"op", "CONTROL_CONFIG", "CPU_POOL", "PERSONA_POOL", "run_control_job"}})
         # The global is the recorded unassigned state, not a copy of its literals.
         value = [node.value for node in tree.body if isinstance(node, ast.Assign)
                  and [getattr(target, "id", None) for target in node.targets] == ["NOT_IMPLEMENTED"]]

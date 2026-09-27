@@ -70,7 +70,15 @@
       "iac_config_scan",
       "container_image_inventory",
       "binary_hardening",
-      "mobile_sast"
+      "mobile_sast",
+      "persona_tool_pool_dispatch",
+      "deterministic_pool_merge",
+      "evidence_qualified_quorum",
+      "dynamic_rescope",
+      "completeness_audit",
+      "synthetic_hypothesis_resynthesis",
+      "remediation_retest_feedback",
+      "final_publication_gate"
     ],
     "standalone_relationships": [
       {
@@ -295,7 +303,15 @@
           "02-license-scan",
           "02-dependency-lifecycle",
           "02-binary-hardening",
-          "02-mobile-sast"
+          "02-mobile-sast",
+          "persona-tool-pool-dispatch",
+          "deterministic-pool-merge",
+          "evidence-qualified-quorum",
+          "dynamic-rescope",
+          "completeness-audit",
+          "synthetic-hypothesis-resynthesis",
+          "remediation-retest-feedback",
+          "final-publication-gate"
         ],
         "relationship": "lifecycle graph; blocked nodes remain explicit"
       },
@@ -335,24 +351,79 @@
         "relationship": "config-driven standalone static reachability transform; full-review input assembly remains blocked"
       },
       {
-        "job": "secrets_inventory", "lifecycle_jobs": ["02-secrets-inventory"],
+        "job": "secrets_inventory",
+        "lifecycle_jobs": [
+          "02-secrets-inventory"
+        ],
         "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
       },
       {
-        "job": "iac_config_scan", "lifecycle_jobs": ["02-iac-config-scan"],
+        "job": "iac_config_scan",
+        "lifecycle_jobs": [
+          "02-iac-config-scan"
+        ],
         "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
       },
       {
-        "job": "container_image_inventory", "lifecycle_jobs": ["02-container-image-inventory"],
+        "job": "container_image_inventory",
+        "lifecycle_jobs": [
+          "02-container-image-inventory"
+        ],
         "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
       },
       {
-        "job": "binary_hardening", "lifecycle_jobs": ["02-binary-hardening"],
+        "job": "binary_hardening",
+        "lifecycle_jobs": [
+          "02-binary-hardening"
+        ],
         "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
       },
       {
-        "job": "mobile_sast", "lifecycle_jobs": ["02-mobile-sast"],
+        "job": "mobile_sast",
+        "lifecycle_jobs": [
+          "02-mobile-sast"
+        ],
         "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
+      },
+      {
+        "job": "persona_tool_pool_dispatch",
+        "lifecycle_jobs": ["persona-tool-pool-dispatch"],
+        "relationship": "config-driven standalone C01 expansion and C02 rendezvous; full-review pool specification assembly remains blocked"
+      },
+      {
+        "job": "deterministic_pool_merge",
+        "lifecycle_jobs": ["deterministic-pool-merge"],
+        "relationship": "config-driven standalone deterministic merge of a verified C02 manifest; full-review input assembly remains blocked"
+      },
+      {
+        "job": "evidence_qualified_quorum",
+        "lifecycle_jobs": ["evidence-qualified-quorum"],
+        "relationship": "config-driven standalone quorum decision from an accepted merge reference; full-review input assembly remains blocked"
+      },
+      {
+        "job": "dynamic_rescope",
+        "lifecycle_jobs": ["dynamic-rescope"],
+        "relationship": "config-driven standalone bounded rescope transform; full-review input assembly remains blocked"
+      },
+      {
+        "job": "completeness_audit",
+        "lifecycle_jobs": ["completeness-audit"],
+        "relationship": "config-driven standalone completeness audit; full-review input assembly remains blocked"
+      },
+      {
+        "job": "synthetic_hypothesis_resynthesis",
+        "lifecycle_jobs": ["synthetic-hypothesis-resynthesis"],
+        "relationship": "config-driven standalone resynthesis transform; full-review input assembly remains blocked"
+      },
+      {
+        "job": "remediation_retest_feedback",
+        "lifecycle_jobs": ["remediation-retest-feedback"],
+        "relationship": "config-driven standalone remediation retest feedback transform; full-review input assembly remains blocked"
+      },
+      {
+        "job": "final_publication_gate",
+        "lifecycle_jobs": ["final-publication-gate"],
+        "relationship": "config-driven standalone final publication gate requiring exact accepted controls and human authorization; full-review input assembly remains blocked"
       }
     ],
     "launcher_jobs": [
@@ -390,7 +461,15 @@
       "iac_config_scan",
       "container_image_inventory",
       "binary_hardening",
-      "mobile_sast"
+      "mobile_sast",
+      "persona_tool_pool_dispatch",
+      "deterministic_pool_merge",
+      "evidence_qualified_quorum",
+      "dynamic_rescope",
+      "completeness_audit",
+      "synthetic_hypothesis_resynthesis",
+      "remediation_retest_feedback",
+      "final_publication_gate"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -426,7 +505,15 @@
       "iac_config_scan",
       "container_image_inventory",
       "binary_hardening",
-      "mobile_sast"
+      "mobile_sast",
+      "persona_tool_pool_dispatch",
+      "deterministic_pool_merge",
+      "evidence_qualified_quorum",
+      "dynamic_rescope",
+      "completeness_audit",
+      "synthetic_hypothesis_resynthesis",
+      "remediation_retest_feedback",
+      "final_publication_gate"
     ],
     "cancellation_sensor_jobs": [
       "engagement_workflow",
@@ -462,7 +549,15 @@
       "iac_config_scan",
       "container_image_inventory",
       "binary_hardening",
-      "mobile_sast"
+      "mobile_sast",
+      "persona_tool_pool_dispatch",
+      "deterministic_pool_merge",
+      "evidence_qualified_quorum",
+      "dynamic_rescope",
+      "completeness_audit",
+      "synthetic_hypothesis_resynthesis",
+      "remediation_retest_feedback",
+      "final_publication_gate"
     ],
     "queue": {
       "max_concurrent_runs": 2,
@@ -3666,7 +3761,14 @@
           "00-intake"
         ]
       },
-      "registry": {"template":"02-iac-config-scan","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"iac-config-evidence"},
+      "registry": {
+        "template": "02-iac-config-scan",
+        "persona": "evidence-custodian",
+        "role": "vendor-static-evidence-curator",
+        "domain": "vendor-static-evidence",
+        "tooling_profile": "pinned-vendor-static-evidence",
+        "output_contract": "iac-config-evidence"
+      },
       "execution": {
         "mode": "pinned_container",
         "worker": "appsec-review-process/iac_config_scan.py:build",
@@ -3678,16 +3780,24 @@
         "schema_file": "schemas/iac-config-evidence.schema.json",
         "claim_class": "declared_configuration_evidence"
       },
-      "permissions": ["read-source", "write-run-data"],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": ["iac_config_scan"],
+        "standalone_jobs": [
+          "iac_config_scan"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": ["iac_config_scan"],
+        "launcher_jobs": [
+          "iac_config_scan"
+        ],
         "sensor_jobs": [
-          "full_review", "iac_config_scan"
+          "full_review",
+          "iac_config_scan"
         ]
       },
       "resource_pool": "docker",
@@ -3696,7 +3806,11 @@
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
+        "references": [
+          "appsec-review-process/tests/test_vendor_evidence_workers.py",
+          "appsec-review-process/tests/test_vendor_evidence_b13.py",
+          "appsec-review-process/tests/test_vendor_evidence_orchestration.py"
+        ]
       },
       "gaps": [
         "full_review_input_assembler_not_implemented",
@@ -3718,7 +3832,14 @@
           "00-intake"
         ]
       },
-      "registry": {"template":"02-container-image-inventory","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"container-image-inventory"},
+      "registry": {
+        "template": "02-container-image-inventory",
+        "persona": "evidence-custodian",
+        "role": "vendor-static-evidence-curator",
+        "domain": "vendor-static-evidence",
+        "tooling_profile": "pinned-vendor-static-evidence",
+        "output_contract": "container-image-inventory"
+      },
       "execution": {
         "mode": "pinned_container",
         "worker": "appsec-review-process/container_image_inventory.py:build",
@@ -3730,16 +3851,24 @@
         "schema_file": "schemas/container-image-inventory.schema.json",
         "claim_class": "supplied_image_static_evidence"
       },
-      "permissions": ["read-source", "write-run-data"],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": ["container_image_inventory"],
+        "standalone_jobs": [
+          "container_image_inventory"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": ["container_image_inventory"],
+        "launcher_jobs": [
+          "container_image_inventory"
+        ],
         "sensor_jobs": [
-          "full_review", "container_image_inventory"
+          "full_review",
+          "container_image_inventory"
         ]
       },
       "resource_pool": "docker",
@@ -3748,7 +3877,11 @@
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
+        "references": [
+          "appsec-review-process/tests/test_vendor_evidence_workers.py",
+          "appsec-review-process/tests/test_vendor_evidence_b13.py",
+          "appsec-review-process/tests/test_vendor_evidence_orchestration.py"
+        ]
       },
       "gaps": [
         "full_review_input_assembler_not_implemented",
@@ -4062,7 +4195,14 @@
           "00-intake"
         ]
       },
-      "registry": {"template":"02-binary-hardening","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"binary-hardening"},
+      "registry": {
+        "template": "02-binary-hardening",
+        "persona": "evidence-custodian",
+        "role": "vendor-static-evidence-curator",
+        "domain": "vendor-static-evidence",
+        "tooling_profile": "pinned-vendor-static-evidence",
+        "output_contract": "binary-hardening"
+      },
       "execution": {
         "mode": "pinned_container",
         "worker": "appsec-review-process/binary_hardening.py:build",
@@ -4074,16 +4214,24 @@
         "schema_file": "schemas/binary-hardening.schema.json",
         "claim_class": "binary_hardening_property_evidence"
       },
-      "permissions": ["read-source", "write-run-data"],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": ["binary_hardening"],
+        "standalone_jobs": [
+          "binary_hardening"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": ["binary_hardening"],
+        "launcher_jobs": [
+          "binary_hardening"
+        ],
         "sensor_jobs": [
-          "full_review", "binary_hardening"
+          "full_review",
+          "binary_hardening"
         ]
       },
       "resource_pool": "docker",
@@ -4092,7 +4240,11 @@
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
+        "references": [
+          "appsec-review-process/tests/test_vendor_evidence_workers.py",
+          "appsec-review-process/tests/test_vendor_evidence_b13.py",
+          "appsec-review-process/tests/test_vendor_evidence_orchestration.py"
+        ]
       },
       "gaps": [
         "full_review_input_assembler_not_implemented",
@@ -4114,7 +4266,14 @@
           "00-intake"
         ]
       },
-      "registry": {"template":"02-mobile-sast","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"mobile-sast"},
+      "registry": {
+        "template": "02-mobile-sast",
+        "persona": "evidence-custodian",
+        "role": "vendor-static-evidence-curator",
+        "domain": "vendor-static-evidence",
+        "tooling_profile": "pinned-vendor-static-evidence",
+        "output_contract": "mobile-sast"
+      },
       "execution": {
         "mode": "pinned_container",
         "worker": "appsec-review-process/mobile_sast.py:build",
@@ -4126,16 +4285,24 @@
         "schema_file": "schemas/mobile-sast.schema.json",
         "claim_class": "mobile_static_lead"
       },
-      "permissions": ["read-source", "write-run-data"],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": ["mobile_sast"],
+        "standalone_jobs": [
+          "mobile_sast"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": ["mobile_sast"],
+        "launcher_jobs": [
+          "mobile_sast"
+        ],
         "sensor_jobs": [
-          "full_review", "mobile_sast"
+          "full_review",
+          "mobile_sast"
         ]
       },
       "resource_pool": "docker",
@@ -4144,13 +4311,549 @@
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
+        "references": [
+          "appsec-review-process/tests/test_vendor_evidence_workers.py",
+          "appsec-review-process/tests/test_vendor_evidence_b13.py",
+          "appsec-review-process/tests/test_vendor_evidence_orchestration.py"
+        ]
       },
       "gaps": [
         "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification"
       ],
       "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
+    },
+    {
+      "id": "persona-tool-pool-dispatch",
+      "design_refs": [
+        "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
+      ],
+      "graph": {
+        "node": "persona-tool-pool-dispatch",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "persona-tool-pool-dispatch",
+        "persona": "evidence-custodian",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "persona-tool-pool-dispatch"
+      },
+      "execution": {
+        "mode": "pool_coordinator",
+        "worker": "appsec-review-process/pool_launcher.py:launch",
+        "validator": "appsec-review-process/worker_result.py:validate_worker_result"
+      },
+      "output": {
+        "contract": "persona-tool-pool-dispatch",
+        "contract_file": "appsec-review-process/registry/output-contracts/persona-tool-pool-dispatch.json",
+        "schema_file": "schemas/persona-tool-pool-dispatch.schema.json",
+        "claim_class": "control_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "persona_tool_pool_dispatch"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "persona_tool_pool_dispatch"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "persona_tool_pool_dispatch"
+        ]
+      },
+      "resource_pool": "persona_llm",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_pool_launcher.py",
+          "appsec-review-process/tests/test_pool_rendezvous.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented",
+        "no_live_persona_pool_qualification"
+      ],
+      "next_prerequisite": "Build the full-review pool specification assembler and complete live persona qualification."
+    },
+    {
+      "id": "deterministic-pool-merge",
+      "design_refs": [
+        "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
+      ],
+      "graph": {
+        "node": "deterministic-pool-merge",
+        "implemented": true,
+        "dependencies": [
+          "persona-tool-pool-dispatch"
+        ]
+      },
+      "registry": {
+        "template": "deterministic-pool-merge",
+        "persona": "evidence-custodian",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "deterministic-pool-merge"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/deterministic_pool_merge.py:run_verified_attempt",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
+      },
+      "output": {
+        "contract": "deterministic-pool-merge",
+        "contract_file": "appsec-review-process/registry/output-contracts/deterministic-pool-merge.json",
+        "schema_file": "schemas/deterministic-pool-merge.schema.json",
+        "claim_class": "control_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "deterministic_pool_merge"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "deterministic_pool_merge"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "deterministic_pool_merge"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented"
+      ],
+      "next_prerequisite": "Bind the verified C02 pool from full-review orchestration."
+    },
+    {
+      "id": "evidence-qualified-quorum",
+      "design_refs": [
+        "docs/architecture/design-v3.md#52-evidence-qualified-quorum"
+      ],
+      "graph": {
+        "node": "evidence-qualified-quorum",
+        "implemented": true,
+        "dependencies": [
+          "deterministic-pool-merge"
+        ]
+      },
+      "registry": {
+        "template": "evidence-qualified-quorum",
+        "persona": "evidence-custodian",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "evidence-qualified-quorum"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/evidence_quorum.py:run_verified_attempt",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
+      },
+      "output": {
+        "contract": "evidence-qualified-quorum",
+        "contract_file": "appsec-review-process/registry/output-contracts/evidence-qualified-quorum.json",
+        "schema_file": "schemas/evidence-qualified-quorum.schema.json",
+        "claim_class": "control_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "evidence_qualified_quorum"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "evidence_qualified_quorum"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "evidence_qualified_quorum"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented"
+      ],
+      "next_prerequisite": "Bind the accepted deterministic merge reference in full review."
+    },
+    {
+      "id": "dynamic-rescope",
+      "design_refs": [
+        "docs/architecture/design-v3.md#232-l0a-classification-invalidation-and-dynamic-re-scoping"
+      ],
+      "graph": {
+        "node": "dynamic-rescope",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "dynamic-rescope",
+        "persona": "evidence-custodian",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "bounded-rescope-plan"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/dynamic_rescope.py:run_attempt",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
+      },
+      "output": {
+        "contract": "bounded-rescope-plan",
+        "contract_file": "appsec-review-process/registry/output-contracts/bounded-rescope-plan.json",
+        "schema_file": "schemas/bounded-rescope-plan.schema.json",
+        "claim_class": "control_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "dynamic_rescope"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "dynamic_rescope"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "dynamic_rescope"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented"
+      ],
+      "next_prerequisite": "Bind classification changes in full review."
+    },
+    {
+      "id": "completeness-audit",
+      "design_refs": [
+        "docs/architecture/design-v3.md#237-completion-validator-extensions"
+      ],
+      "graph": {
+        "node": "completeness-audit",
+        "implemented": true,
+        "dependencies": [
+          "10-synthesis-report"
+        ]
+      },
+      "registry": {
+        "template": "completeness-audit",
+        "persona": "evidence-custodian",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "completeness-audit"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/completeness_audit.py:run_attempt",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
+      },
+      "output": {
+        "contract": "completeness-audit",
+        "contract_file": "appsec-review-process/registry/output-contracts/completeness-audit.json",
+        "schema_file": "schemas/completeness-audit.schema.json",
+        "claim_class": "control_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "completeness_audit"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "completeness_audit"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "completeness_audit"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_separate_completeness_resynthesis.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented"
+      ],
+      "next_prerequisite": "Bind the draft report obligation inventory in full review."
+    },
+    {
+      "id": "synthetic-hypothesis-resynthesis",
+      "design_refs": [
+        "docs/architecture/design-v3.md#233-l14-synthetic-hypotheses"
+      ],
+      "graph": {
+        "node": "synthetic-hypothesis-resynthesis",
+        "implemented": true,
+        "dependencies": [
+          "completeness-audit"
+        ]
+      },
+      "registry": {
+        "template": "synthetic-hypothesis-resynthesis",
+        "persona": "evidence-custodian",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "synthetic-hypothesis-resynthesis"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/synthetic_hypothesis_resynthesis.py:run_attempt",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
+      },
+      "output": {
+        "contract": "synthetic-hypothesis-resynthesis",
+        "contract_file": "appsec-review-process/registry/output-contracts/synthetic-hypothesis-resynthesis.json",
+        "schema_file": "schemas/synthetic-hypothesis-resynthesis.schema.json",
+        "claim_class": "control_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "synthetic_hypothesis_resynthesis"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "synthetic_hypothesis_resynthesis"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "synthetic_hypothesis_resynthesis"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_separate_completeness_resynthesis.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented"
+      ],
+      "next_prerequisite": "Bind accepted completeness audit input in full review."
+    },
+    {
+      "id": "remediation-retest-feedback",
+      "design_refs": [
+        "docs/architecture/design-v3.md#235-l11-patch-validation-hardening"
+      ],
+      "graph": {
+        "node": "remediation-retest-feedback",
+        "implemented": true,
+        "dependencies": [
+          "09-independent-verification"
+        ]
+      },
+      "registry": {
+        "template": "remediation-retest-feedback",
+        "persona": "evidence-custodian",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "remediation-retest-feedback"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/remediation_retest.py:run_attempt",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
+      },
+      "output": {
+        "contract": "remediation-retest-feedback",
+        "contract_file": "appsec-review-process/registry/output-contracts/remediation-retest-feedback.json",
+        "schema_file": "schemas/remediation-retest-feedback.schema.json",
+        "claim_class": "control_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "remediation_retest_feedback"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "remediation_retest_feedback"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "remediation_retest_feedback"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented"
+      ],
+      "next_prerequisite": "Bind verified claims and retest evidence in full review."
+    },
+    {
+      "id": "final-publication-gate",
+      "design_refs": [
+        "docs/architecture/design-v3.md#20-finalization-gate"
+      ],
+      "graph": {
+        "node": "final-publication-gate",
+        "implemented": true,
+        "dependencies": [
+          "10-synthesis-report",
+          "completeness-audit",
+          "synthetic-hypothesis-resynthesis"
+        ]
+      },
+      "registry": {
+        "template": "final-publication-gate",
+        "persona": "report-artifact-publisher",
+        "role": "control-lifecycle-coordinator",
+        "domain": "review-control-lifecycle",
+        "tooling_profile": "verified-control-lifecycle",
+        "output_contract": "final-publication-package"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/final_publication.py:publish",
+        "validator": "appsec-review-process/schema_validate.py:validate_document"
+      },
+      "output": {
+        "contract": "final-publication-package",
+        "contract_file": "appsec-review-process/registry/output-contracts/final-publication-package.json",
+        "schema_file": "schemas/final-publication.schema.json",
+        "claim_class": "publication_gate_decision"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "final_publication_gate"
+        ],
+        "lifecycle_binding": {
+          "kind": "blocked_op",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+        },
+        "launcher_jobs": [
+          "final_publication_gate"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "final_publication_gate"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_final_publication.py"
+        ]
+      },
+      "gaps": [
+        "full_review_input_assembler_not_implemented"
+      ],
+      "next_prerequisite": "Bind exact accepted completion references and operator signoff in full review."
     }
   ],
   "capabilities": [
@@ -4183,8 +4886,7 @@
         ]
       },
       "gaps": [
-        "remaining_workers_not_yet_migrated",
-        "persona_pool_controller_adapters_not_implemented"
+        "remaining_workers_not_yet_migrated"
       ],
       "blocking_decisions": [],
       "next_prerequisite": "Add the next bounded contract-specific validation slice without broad worker migration."
@@ -4256,28 +4958,27 @@
         "docs/design-parity/design-parity-completion-plan.md#workstream-c-persona-and-tool-work-pools"
       ],
       "jobs": [
-        "07-red-team-adversarial",
-        "08-blue-team-refutation",
-        "09-independent-verification"
+        "persona-tool-pool-dispatch"
       ],
       "execution_mode": "pool_coordinator",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
       "qualification": {
         "levels": [
           "unit"
         ],
         "references": [
           "appsec-review-process/tests/test_pool_specification.py",
-          "appsec-review-process/tests/test_pool_specification_cross_slice.py"
+          "appsec-review-process/tests/test_pool_launcher.py",
+          "appsec-review-process/tests/test_pool_rendezvous.py"
         ]
       },
       "gaps": [
-        "pool_launcher_missing",
-        "no_lifecycle_job_consumes_pool_specification"
+        "full_review_input_assembler_not_implemented",
+        "no_live_persona_pool_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "C02: build the wait-all rendezvous and launcher on the C01 pool specification and expansion (docs/pools/pool-specification.md) before any fan-out."
+      "next_prerequisite": "Build the full-review pool specification assembler and complete live persona qualification."
     },
     {
       "id": "wait-all-rendezvous",
@@ -4285,13 +4986,11 @@
         "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
       ],
       "jobs": [
-        "07-red-team-adversarial",
-        "08-blue-team-refutation",
-        "09-independent-verification"
+        "persona-tool-pool-dispatch"
       ],
       "execution_mode": "pool_coordinator",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
       "qualification": {
         "levels": [
           "unit"
@@ -4303,12 +5002,11 @@
         ]
       },
       "gaps": [
-        "no_dagster_op_runs_the_rendezvous",
-        "chain_independence_not_implemented",
-        "in_process_caps_do_not_see_other_rendezvous"
+        "full_review_input_assembler_not_implemented",
+        "no_live_persona_pool_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "C03/T10: typed merges over load_verified_manifest, and a Dagster op (coordination_only, one run at a time) that runs the rendezvous (docs/rendezvous/pool-rendezvous.md)."
+      "next_prerequisite": "Bind full-review pool specifications and qualify the launcher live."
     },
     {
       "id": "deterministic-pool-merge",
@@ -4316,25 +5014,22 @@
         "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous"
       ],
       "jobs": [
-        "07-red-team-adversarial",
-        "08-blue-team-refutation",
-        "09-independent-verification"
+        "deterministic-pool-merge"
       ],
       "execution_mode": "join_controller",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
       },
       "gaps": [
-        "persona_merge_missing",
-        "tool_evidence_merge_missing"
+        "full_review_input_assembler_not_implemented"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Define typed deterministic merges after wait_all."
+      "next_prerequisite": "Bind the verified C02 pool from full-review orchestration."
     },
     {
       "id": "evidence-qualified-quorum",
@@ -4342,25 +5037,22 @@
         "docs/architecture/design-v3.md#52-evidence-qualified-quorum"
       ],
       "jobs": [
-        "07-red-team-adversarial",
-        "08-blue-team-refutation",
-        "09-independent-verification"
+        "evidence-qualified-quorum"
       ],
       "execution_mode": "join_controller",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
       },
       "gaps": [
-        "quorum_controller_missing",
-        "diversity_accounting_missing"
+        "full_review_input_assembler_not_implemented"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement claim/persona keyed quorum after pool merge."
+      "next_prerequisite": "Bind the accepted deterministic merge reference in full review."
     },
     {
       "id": "claim-ledger-routing",
@@ -4399,24 +5091,22 @@
         "docs/architecture/design-v3.md#235-l11-patch-validation-hardening"
       ],
       "jobs": [
-        "11-remediation-proposal",
-        "09-independent-verification"
+        "remediation-retest-feedback"
       ],
       "execution_mode": "join_controller",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
       },
       "gaps": [
-        "same_environment_retest_missing",
-        "fix_reverification_loop_missing"
+        "full_review_input_assembler_not_implemented"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement bounded remediation, retest, and independent reverification."
+      "next_prerequisite": "Bind verified claims and retest evidence in full review."
     },
     {
       "id": "dynamic-rescope",
@@ -4424,47 +5114,45 @@
         "docs/architecture/design-v3.md#232-l0a-classification-invalidation-and-dynamic-re-scoping"
       ],
       "jobs": [
-        "01-component-characterization"
+        "dynamic-rescope"
       ],
       "execution_mode": "join_controller",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
       },
       "gaps": [
-        "classification_dependency_index_missing",
-        "bounded_rescope_controller_missing"
+        "full_review_input_assembler_not_implemented"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement dependency invalidation with bounded generations."
+      "next_prerequisite": "Bind classification changes in full review."
     },
     {
-      "id": "completeness-feedback",
+      "id": "completeness-audit-control",
       "design_refs": [
         "docs/architecture/design-v3.md#237-completion-validator-extensions"
       ],
       "jobs": [
-        "10-synthesis-report"
+        "completeness-audit"
       ],
-      "execution_mode": "persona",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "execution_mode": "join_controller",
+      "readiness": "standalone_only",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_separate_completeness_resynthesis.py"]
       },
       "gaps": [
-        "completeness_auditor_missing",
-        "coverage_feedback_missing"
+        "full_review_input_assembler_not_implemented"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement completeness audit before synthesis."
+      "next_prerequisite": "Bind the draft report obligation inventory in full review."
     },
     {
       "id": "synthetic-hypothesis-resynthesis",
@@ -4472,24 +5160,22 @@
         "docs/architecture/design-v3.md#233-l14-synthetic-hypotheses"
       ],
       "jobs": [
-        "10-synthesis-report",
-        "09-independent-verification"
+        "synthetic-hypothesis-resynthesis"
       ],
       "execution_mode": "join_controller",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_separate_completeness_resynthesis.py"]
       },
       "gaps": [
-        "synthetic_hypothesis_routing_missing",
-        "resynthesis_loop_missing"
+        "full_review_input_assembler_not_implemented"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement bounded hypothesis assignment, verification, and resynthesis."
+      "next_prerequisite": "Bind accepted completeness audit input in full review."
     },
     {
       "id": "threat-model-standard",
@@ -4574,24 +5260,22 @@
         "docs/architecture/design-v3.md#20-finalization-gate"
       ],
       "jobs": [
-        "10-synthesis-report"
+        "final-publication-gate"
       ],
       "execution_mode": "join_controller",
-      "readiness": "missing_prerequisites",
-      "resource_pool": "unassigned",
+      "readiness": "standalone_only",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_final_publication.py"]
       },
       "gaps": [
-        "completion_validator_missing",
-        "human_final_signoff_ledger_missing",
-        "full_report_publication_missing"
+        "full_review_input_assembler_not_implemented"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement after claim ledger, completeness, and resynthesis loops."
+      "next_prerequisite": "Bind exact accepted completion references and operator signoff in full review."
     }
   ]
 }

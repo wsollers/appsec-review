@@ -55,6 +55,14 @@ flowchart TD
   j_02_dependency_lifecycle["02-dependency-lifecycle<br/>standalone_only"]
   j_02_binary_hardening["02-binary-hardening<br/>standalone_only"]
   j_02_mobile_sast["02-mobile-sast<br/>standalone_only"]
+  j_persona_tool_pool_dispatch["persona-tool-pool-dispatch<br/>standalone_only"]
+  j_deterministic_pool_merge["deterministic-pool-merge<br/>standalone_only"]
+  j_evidence_qualified_quorum["evidence-qualified-quorum<br/>standalone_only"]
+  j_dynamic_rescope["dynamic-rescope<br/>standalone_only"]
+  j_completeness_audit["completeness-audit<br/>standalone_only"]
+  j_synthetic_hypothesis_resynthesis["synthetic-hypothesis-resynthesis<br/>standalone_only"]
+  j_remediation_retest_feedback["remediation-retest-feedback<br/>standalone_only"]
+  j_final_publication_gate["final-publication-gate<br/>standalone_only"]
   j_00_intake --> j_02_ossf_scorecard
   j_00_intake --> j_02_repository_partition_discovery
   j_02_repository_partition_discovery --> j_02_dev_project_discovery
@@ -168,3 +176,13 @@ flowchart TD
   j_02_license_scan --> j_02_dependency_lifecycle
   j_00_intake --> j_02_binary_hardening
   j_00_intake --> j_02_mobile_sast
+  j_00_intake --> j_persona_tool_pool_dispatch
+  j_persona_tool_pool_dispatch --> j_deterministic_pool_merge
+  j_deterministic_pool_merge --> j_evidence_qualified_quorum
+  j_00_intake --> j_dynamic_rescope
+  j_10_synthesis_report --> j_completeness_audit
+  j_completeness_audit --> j_synthetic_hypothesis_resynthesis
+  j_09_independent_verification --> j_remediation_retest_feedback
+  j_10_synthesis_report --> j_final_publication_gate
+  j_completeness_audit --> j_final_publication_gate
+  j_synthetic_hypothesis_resynthesis --> j_final_publication_gate

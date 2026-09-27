@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 55,
+  "lifecycle_jobs": 63,
   "steps": 65,
   "artifacts": 68,
   "models": 5
@@ -1832,6 +1832,21 @@
        ]
       },
       {
+       "ref": "job:dynamic-rescope",
+       "id": "dynamic-rescope",
+       "name": "Dynamic Rescope",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:dynamic-rescope"
+       ],
+       "declared_inputs": [
+        "run-owned dependency and changed-node request"
+       ]
+      },
+      {
        "ref": "job:03-threat-model-dfd-stride",
        "id": "03-threat-model-dfd-stride",
        "name": "Deterministic DFD And STRIDE Core",
@@ -1976,6 +1991,7 @@
        "job:02-evidence-index",
        "legacy-pregather",
        "job:02-evidence-assembly",
+       "job:00-intake",
        "job:02-standards-source-ingest",
        "job:02-native-sast",
        "job:02-ir-facts",
@@ -1984,6 +2000,7 @@
       ],
       "leaves": [
        "lane-handoff",
+       "job:dynamic-rescope",
        "job:04-asvs-masvs",
        "job:13-fuzz-target-triage",
        "job:15-deployment-hardening"
@@ -1999,6 +2016,7 @@
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "run-owned dependency and changed-node request",
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
        "exact accepted OWASP dispatch accounting",
@@ -2044,6 +2062,38 @@
        ]
       },
       {
+       "ref": "job:persona-tool-pool-dispatch",
+       "id": "persona-tool-pool-dispatch",
+       "name": "Persona Tool Pool Dispatch",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:persona-tool-pool-dispatch"
+       ],
+       "declared_inputs": [
+        "run-owned pool specification",
+        "trusted pool context",
+        "explicit runtime limits"
+       ]
+      },
+      {
+       "ref": "job:deterministic-pool-merge",
+       "id": "deterministic-pool-merge",
+       "name": "Deterministic Pool Merge",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:persona-tool-pool-dispatch"
+       ],
+       "produces": [
+        "job:deterministic-pool-merge"
+       ],
+       "declared_inputs": [
+        "reverified C02 terminal manifest"
+       ]
+      },
+      {
        "ref": "job:08-blue-team-refutation",
        "id": "08-blue-team-refutation",
        "name": "Blue-team Refutation Core",
@@ -2078,6 +2128,21 @@
        ]
       },
       {
+       "ref": "job:evidence-qualified-quorum",
+       "id": "evidence-qualified-quorum",
+       "name": "Evidence Qualified Quorum",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:deterministic-pool-merge"
+       ],
+       "produces": [
+        "job:evidence-qualified-quorum"
+       ],
+       "declared_inputs": [
+        "current accepted deterministic merge reference"
+       ]
+      },
+      {
        "ref": "job:11-remediation-proposal",
        "id": "11-remediation-proposal",
        "name": "11-remediation-proposal",
@@ -2094,6 +2159,21 @@
         "target source paths and exact tested environment",
         "compile database or build command used by verification",
         "coverage and retrieval artifacts needed to understand callers/impact"
+       ]
+      },
+      {
+       "ref": "job:remediation-retest-feedback",
+       "id": "remediation-retest-feedback",
+       "name": "Remediation Retest Feedback",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:09-independent-verification"
+       ],
+       "produces": [
+        "job:remediation-retest-feedback"
+       ],
+       "declared_inputs": [
+        "verified claims and remediation proposals"
        ]
       },
       {
@@ -2144,6 +2224,56 @@
        ]
       },
       {
+       "ref": "job:completeness-audit",
+       "id": "completeness-audit",
+       "name": "Completeness Audit",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:10-synthesis-report"
+       ],
+       "produces": [
+        "job:completeness-audit"
+       ],
+       "declared_inputs": [
+        "evidence-bound obligation inventory"
+       ]
+      },
+      {
+       "ref": "job:synthetic-hypothesis-resynthesis",
+       "id": "synthetic-hypothesis-resynthesis",
+       "name": "Synthetic Hypothesis Resynthesis",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:completeness-audit"
+       ],
+       "produces": [
+        "job:synthetic-hypothesis-resynthesis"
+       ],
+       "declared_inputs": [
+        "completeness audit and registered routes"
+       ]
+      },
+      {
+       "ref": "job:final-publication-gate",
+       "id": "final-publication-gate",
+       "name": "Final Publication Gate",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:10-synthesis-report",
+        "job:completeness-audit",
+        "job:synthetic-hypothesis-resynthesis"
+       ],
+       "produces": [
+        "job:final-publication-gate"
+       ],
+       "declared_inputs": [
+        "draft publication",
+        "accepted completeness audit",
+        "accepted terminal resynthesis",
+        "authorized human signoff ledger"
+       ]
+      },
+      {
        "ref": "step:critical_findings_sarif",
        "id": "critical_findings_sarif",
        "name": "critical_findings_sarif (Dagster job)",
@@ -2166,30 +2296,44 @@
        "job:06-cve-reachability",
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
+       "job:00-intake",
        "critical-findings-md"
       ],
       "leaves": [
-       "job:10-synthesis-report"
+       "job:evidence-qualified-quorum",
+       "job:remediation-retest-feedback",
+       "job:final-publication-gate"
       ],
       "passes": [
        "job:07-red-team-adversarial",
+       "job:persona-tool-pool-dispatch",
+       "job:deterministic-pool-merge",
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
        "job:11-remediation-proposal",
-       "job:12-scoring-prioritization"
+       "job:12-scoring-prioritization",
+       "job:10-synthesis-report",
+       "job:completeness-audit",
+       "job:synthetic-hypothesis-resynthesis"
       ],
       "declared_inputs": [
        "exact accepted claim ledger",
        "bounded reviewer decisions",
+       "run-owned pool specification",
+       "trusted pool context",
+       "explicit runtime limits",
+       "reverified C02 terminal manifest",
        "exact accepted adversarial hypotheses",
        "bounded independent refutation decisions",
        "exact accepted blue-team dispositions",
        "bounded independent verification decisions",
+       "current accepted deterministic merge reference",
        "independently verified finding or error",
        "verifier output and testcase artifacts",
        "target source paths and exact tested environment",
        "compile database or build command used by verification",
        "coverage and retrieval artifacts needed to understand callers/impact",
+       "verified claims and remediation proposals",
        "exact accepted independent verification",
        "bounded scoring factors",
        "verified findings",
@@ -2199,7 +2343,13 @@
        "threat model",
        "ASVS/MASVS assessment",
        "red/blue/verifier outputs",
-       "scoring and priority ranking (from `12-scoring-prioritization`)"
+       "scoring and priority ranking (from `12-scoring-prioritization`)",
+       "evidence-bound obligation inventory",
+       "completeness audit and registered routes",
+       "draft publication",
+       "accepted completeness audit",
+       "accepted terminal resynthesis",
+       "authorized human signoff ledger"
       ]
      }
     }
@@ -2228,7 +2378,10 @@
      "build-lock",
      "build-execution",
      "lane-handoff",
-     "job:10-synthesis-report"
+     "job:dynamic-rescope",
+     "job:evidence-qualified-quorum",
+     "job:remediation-retest-feedback",
+     "job:final-publication-gate"
     ],
     "passes": [
      "sut-checkout",
@@ -2294,10 +2447,15 @@
      "job:15-deployment-hardening",
      "job:15-stig-srg-validation-worklist",
      "job:07-red-team-adversarial",
+     "job:persona-tool-pool-dispatch",
+     "job:deterministic-pool-merge",
      "job:08-blue-team-refutation",
      "job:09-independent-verification",
      "job:11-remediation-proposal",
-     "job:12-scoring-prioritization"
+     "job:12-scoring-prioritization",
+     "job:10-synthesis-report",
+     "job:completeness-audit",
+     "job:synthetic-hypothesis-resynthesis"
     ],
     "declared_inputs": [
      "target repository path",
@@ -2375,6 +2533,7 @@
      "explicit manifest-declared source root",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
      "exact accepted OWASP dispatch accounting",
@@ -2393,15 +2552,21 @@
      "accepted platform inventory",
      "exact accepted claim ledger",
      "bounded reviewer decisions",
+     "run-owned pool specification",
+     "trusted pool context",
+     "explicit runtime limits",
+     "reverified C02 terminal manifest",
      "exact accepted adversarial hypotheses",
      "bounded independent refutation decisions",
      "exact accepted blue-team dispositions",
      "bounded independent verification decisions",
+     "current accepted deterministic merge reference",
      "independently verified finding or error",
      "verifier output and testcase artifacts",
      "target source paths and exact tested environment",
      "compile database or build command used by verification",
      "coverage and retrieval artifacts needed to understand callers/impact",
+     "verified claims and remediation proposals",
      "exact accepted independent verification",
      "bounded scoring factors",
      "verified findings",
@@ -2411,7 +2576,13 @@
      "threat model",
      "ASVS/MASVS assessment",
      "red/blue/verifier outputs",
-     "scoring and priority ranking (from `12-scoring-prioritization`)"
+     "scoring and priority ranking (from `12-scoring-prioritization`)",
+     "evidence-bound obligation inventory",
+     "completeness audit and registered routes",
+     "draft publication",
+     "accepted completeness audit",
+     "accepted terminal resynthesis",
+     "authorized human signoff ledger"
     ]
    }
   },
@@ -4068,19 +4239,37 @@
         "target repository path",
         "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
        ]
+      },
+      {
+       "ref": "job:dynamic-rescope",
+       "id": "dynamic-rescope",
+       "name": "Dynamic Rescope",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:dynamic-rescope"
+       ],
+       "declared_inputs": [
+        "run-owned dependency and changed-node request"
+       ]
       }
      ],
      "rollup": {
       "enters": [
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:00-intake"
       ],
       "leaves": [
-       "job:01-component-characterization"
+       "job:01-component-characterization",
+       "job:dynamic-rescope"
       ],
       "passes": [],
       "declared_inputs": [
        "target repository path",
-       "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"
+       "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "run-owned dependency and changed-node request"
       ]
      }
     },
@@ -4372,6 +4561,38 @@
         "exact accepted claim ledger",
         "bounded reviewer decisions"
        ]
+      },
+      {
+       "ref": "job:persona-tool-pool-dispatch",
+       "id": "persona-tool-pool-dispatch",
+       "name": "Persona Tool Pool Dispatch",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:00-intake"
+       ],
+       "produces": [
+        "job:persona-tool-pool-dispatch"
+       ],
+       "declared_inputs": [
+        "run-owned pool specification",
+        "trusted pool context",
+        "explicit runtime limits"
+       ]
+      },
+      {
+       "ref": "job:deterministic-pool-merge",
+       "id": "deterministic-pool-merge",
+       "name": "Deterministic Pool Merge",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:persona-tool-pool-dispatch"
+       ],
+       "produces": [
+        "job:deterministic-pool-merge"
+       ],
+       "declared_inputs": [
+        "reverified C02 terminal manifest"
+       ]
       }
      ],
      "rollup": {
@@ -4382,15 +4603,23 @@
        "job:05-native-memory",
        "job:06-cve-reachability",
        "job:15-deployment-hardening",
-       "job:13-fuzz-target-triage"
+       "job:13-fuzz-target-triage",
+       "job:00-intake"
       ],
       "leaves": [
-       "job:07-red-team-adversarial"
+       "job:07-red-team-adversarial",
+       "job:deterministic-pool-merge"
       ],
-      "passes": [],
+      "passes": [
+       "job:persona-tool-pool-dispatch"
+      ],
       "declared_inputs": [
        "exact accepted claim ledger",
-       "bounded reviewer decisions"
+       "bounded reviewer decisions",
+       "run-owned pool specification",
+       "trusted pool context",
+       "explicit runtime limits",
+       "reverified C02 terminal manifest"
       ]
      }
     },
@@ -4449,20 +4678,38 @@
         "exact accepted blue-team dispositions",
         "bounded independent verification decisions"
        ]
+      },
+      {
+       "ref": "job:evidence-qualified-quorum",
+       "id": "evidence-qualified-quorum",
+       "name": "Evidence Qualified Quorum",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:deterministic-pool-merge"
+       ],
+       "produces": [
+        "job:evidence-qualified-quorum"
+       ],
+       "declared_inputs": [
+        "current accepted deterministic merge reference"
+       ]
       }
      ],
      "rollup": {
       "enters": [
        "job:07-red-team-adversarial",
-       "job:08-blue-team-refutation"
+       "job:08-blue-team-refutation",
+       "job:deterministic-pool-merge"
       ],
       "leaves": [
-       "job:09-independent-verification"
+       "job:09-independent-verification",
+       "job:evidence-qualified-quorum"
       ],
       "passes": [],
       "declared_inputs": [
        "exact accepted blue-team dispositions",
-       "bounded independent verification decisions"
+       "bounded independent verification decisions",
+       "current accepted deterministic merge reference"
       ]
      }
     },
@@ -4487,6 +4734,21 @@
         "compile database or build command used by verification",
         "coverage and retrieval artifacts needed to understand callers/impact"
        ]
+      },
+      {
+       "ref": "job:remediation-retest-feedback",
+       "id": "remediation-retest-feedback",
+       "name": "Remediation Retest Feedback",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:09-independent-verification"
+       ],
+       "produces": [
+        "job:remediation-retest-feedback"
+       ],
+       "declared_inputs": [
+        "verified claims and remediation proposals"
+       ]
       }
      ],
      "rollup": {
@@ -4494,7 +4756,8 @@
        "job:09-independent-verification"
       ],
       "leaves": [
-       "job:11-remediation-proposal"
+       "job:11-remediation-proposal",
+       "job:remediation-retest-feedback"
       ],
       "passes": [],
       "declared_inputs": [
@@ -4502,7 +4765,8 @@
        "verifier output and testcase artifacts",
        "target source paths and exact tested environment",
        "compile database or build command used by verification",
-       "coverage and retrieval artifacts needed to understand callers/impact"
+       "coverage and retrieval artifacts needed to understand callers/impact",
+       "verified claims and remediation proposals"
       ]
      }
     },
@@ -4575,6 +4839,56 @@
         "red/blue/verifier outputs",
         "scoring and priority ranking (from `12-scoring-prioritization`)"
        ]
+      },
+      {
+       "ref": "job:completeness-audit",
+       "id": "completeness-audit",
+       "name": "Completeness Audit",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:10-synthesis-report"
+       ],
+       "produces": [
+        "job:completeness-audit"
+       ],
+       "declared_inputs": [
+        "evidence-bound obligation inventory"
+       ]
+      },
+      {
+       "ref": "job:synthetic-hypothesis-resynthesis",
+       "id": "synthetic-hypothesis-resynthesis",
+       "name": "Synthetic Hypothesis Resynthesis",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:completeness-audit"
+       ],
+       "produces": [
+        "job:synthetic-hypothesis-resynthesis"
+       ],
+       "declared_inputs": [
+        "completeness audit and registered routes"
+       ]
+      },
+      {
+       "ref": "job:final-publication-gate",
+       "id": "final-publication-gate",
+       "name": "Final Publication Gate",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:10-synthesis-report",
+        "job:completeness-audit",
+        "job:synthetic-hypothesis-resynthesis"
+       ],
+       "produces": [
+        "job:final-publication-gate"
+       ],
+       "declared_inputs": [
+        "draft publication",
+        "accepted completeness audit",
+        "accepted terminal resynthesis",
+        "authorized human signoff ledger"
+       ]
       }
      ],
      "rollup": {
@@ -4589,9 +4903,13 @@
        "job:11-remediation-proposal"
       ],
       "leaves": [
-       "job:10-synthesis-report"
+       "job:final-publication-gate"
       ],
-      "passes": [],
+      "passes": [
+       "job:10-synthesis-report",
+       "job:completeness-audit",
+       "job:synthetic-hypothesis-resynthesis"
+      ],
       "declared_inputs": [
        "verified findings",
        "unresolved risks",
@@ -4600,7 +4918,13 @@
        "threat model",
        "ASVS/MASVS assessment",
        "red/blue/verifier outputs",
-       "scoring and priority ranking (from `12-scoring-prioritization`)"
+       "scoring and priority ranking (from `12-scoring-prioritization`)",
+       "evidence-bound obligation inventory",
+       "completeness audit and registered routes",
+       "draft publication",
+       "accepted completeness audit",
+       "accepted terminal resynthesis",
+       "authorized human signoff ledger"
       ]
      }
     }
@@ -4610,7 +4934,10 @@
      "artifact-manifest"
     ],
     "leaves": [
-     "job:10-synthesis-report"
+     "job:dynamic-rescope",
+     "job:evidence-qualified-quorum",
+     "job:remediation-retest-feedback",
+     "job:final-publication-gate"
     ],
     "passes": [
      "job:00-intake",
@@ -4663,10 +4990,15 @@
      "job:15-deployment-hardening",
      "job:15-stig-srg-validation-worklist",
      "job:07-red-team-adversarial",
+     "job:persona-tool-pool-dispatch",
+     "job:deterministic-pool-merge",
      "job:08-blue-team-refutation",
      "job:09-independent-verification",
      "job:11-remediation-proposal",
-     "job:12-scoring-prioritization"
+     "job:12-scoring-prioritization",
+     "job:10-synthesis-report",
+     "job:completeness-audit",
+     "job:synthetic-hypothesis-resynthesis"
     ],
     "declared_inputs": [
      "target path",
@@ -4748,6 +5080,7 @@
      "explicit table age ceiling",
      "explicit manifest-declared source root",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
      "exact accepted OWASP dispatch accounting",
@@ -4766,15 +5099,21 @@
      "accepted platform inventory",
      "exact accepted claim ledger",
      "bounded reviewer decisions",
+     "run-owned pool specification",
+     "trusted pool context",
+     "explicit runtime limits",
+     "reverified C02 terminal manifest",
      "exact accepted adversarial hypotheses",
      "bounded independent refutation decisions",
      "exact accepted blue-team dispositions",
      "bounded independent verification decisions",
+     "current accepted deterministic merge reference",
      "independently verified finding or error",
      "verifier output and testcase artifacts",
      "target source paths and exact tested environment",
      "compile database or build command used by verification",
      "coverage and retrieval artifacts needed to understand callers/impact",
+     "verified claims and remediation proposals",
      "exact accepted independent verification",
      "bounded scoring factors",
      "verified findings",
@@ -4784,7 +5123,13 @@
      "threat model",
      "ASVS/MASVS assessment",
      "red/blue/verifier outputs",
-     "scoring and priority ranking (from `12-scoring-prioritization`)"
+     "scoring and priority ranking (from `12-scoring-prioritization`)",
+     "evidence-bound obligation inventory",
+     "completeness audit and registered routes",
+     "draft publication",
+     "accepted completeness audit",
+     "accepted terminal resynthesis",
+     "authorized human signoff ledger"
     ]
    }
   }
@@ -9935,6 +10280,492 @@
    "produces": [
     "job:02-mobile-sast"
    ]
+  },
+  {
+   "id": "persona-tool-pool-dispatch",
+   "lane": "07-red-team-adversarial",
+   "name": "Persona Tool Pool Dispatch",
+   "contract": "persona-tool-pool-dispatch",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pool_coordinator",
+   "worker": "appsec-review-process/pool_launcher.py:launch",
+   "resource_pool": "persona_llm",
+   "dagster_jobs": [
+    "persona_tool_pool_dispatch"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "persona-tool-pool-dispatch"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "run-owned pool specification"
+    },
+    {
+     "need": "required",
+     "input": "trusted pool context"
+    },
+    {
+     "need": "required",
+     "input": "explicit runtime limits"
+    }
+   ],
+   "inputs_source": "registry/job-templates/persona-tool-pool-dispatch.json",
+   "output_dir": "runs/<run_id>/data/jobs/persona-tool-pool-dispatch/",
+   "output_files": [
+    "persona-tool-pool-dispatch.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/persona-tool-pool-dispatch.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented",
+    "no_live_persona_pool_qualification"
+   ],
+   "next_prerequisite": "Build the full-review pool specification assembler and complete live persona qualification.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:persona-tool-pool-dispatch"
+   ]
+  },
+  {
+   "id": "deterministic-pool-merge",
+   "lane": "07-red-team-adversarial",
+   "name": "Deterministic Pool Merge",
+   "contract": "deterministic-pool-merge",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/deterministic_pool_merge.py:run_verified_attempt",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "deterministic_pool_merge"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "deterministic-pool-merge"
+   },
+   "depends_on": [
+    {
+     "job": "persona-tool-pool-dispatch",
+     "kind": "required",
+     "contract": "persona-tool-pool-dispatch"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "reverified C02 terminal manifest"
+    }
+   ],
+   "inputs_source": "registry/job-templates/deterministic-pool-merge.json",
+   "output_dir": "runs/<run_id>/data/jobs/deterministic-pool-merge/",
+   "output_files": [
+    "deterministic-pool-merge.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/deterministic-pool-merge.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented"
+   ],
+   "next_prerequisite": "Bind the verified C02 pool from full-review orchestration.",
+   "consumes": [
+    "job:persona-tool-pool-dispatch"
+   ],
+   "produces": [
+    "job:deterministic-pool-merge"
+   ]
+  },
+  {
+   "id": "evidence-qualified-quorum",
+   "lane": "09-independent-verification",
+   "name": "Evidence Qualified Quorum",
+   "contract": "evidence-qualified-quorum",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/evidence_quorum.py:run_verified_attempt",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "evidence_qualified_quorum"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "evidence-qualified-quorum"
+   },
+   "depends_on": [
+    {
+     "job": "deterministic-pool-merge",
+     "kind": "required",
+     "contract": "deterministic-pool-merge"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "current accepted deterministic merge reference"
+    }
+   ],
+   "inputs_source": "registry/job-templates/evidence-qualified-quorum.json",
+   "output_dir": "runs/<run_id>/data/jobs/evidence-qualified-quorum/",
+   "output_files": [
+    "evidence-qualified-quorum.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/evidence-qualified-quorum.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented"
+   ],
+   "next_prerequisite": "Bind the accepted deterministic merge reference in full review.",
+   "consumes": [
+    "job:deterministic-pool-merge"
+   ],
+   "produces": [
+    "job:evidence-qualified-quorum"
+   ]
+  },
+  {
+   "id": "dynamic-rescope",
+   "lane": "01-component-characterization",
+   "name": "Dynamic Rescope",
+   "contract": "bounded-rescope-plan",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/dynamic_rescope.py:run_attempt",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "dynamic_rescope"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "bounded-rescope-plan"
+   },
+   "depends_on": [
+    {
+     "job": "00-intake",
+     "kind": "required",
+     "contract": "intake"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "run-owned dependency and changed-node request"
+    },
+    {
+     "need": "optional",
+     "input": "accepted predecessor reference"
+    }
+   ],
+   "inputs_source": "registry/job-templates/dynamic-rescope.json",
+   "output_dir": "runs/<run_id>/data/jobs/dynamic-rescope/",
+   "output_files": [
+    "bounded-rescope-plan.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/bounded-rescope-plan.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented"
+   ],
+   "next_prerequisite": "Bind classification changes in full review.",
+   "consumes": [
+    "job:00-intake"
+   ],
+   "produces": [
+    "job:dynamic-rescope"
+   ]
+  },
+  {
+   "id": "completeness-audit",
+   "lane": "10-synthesis-report",
+   "name": "Completeness Audit",
+   "contract": "completeness-audit",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/completeness_audit.py:run_attempt",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "completeness_audit"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "completeness-audit"
+   },
+   "depends_on": [
+    {
+     "job": "10-synthesis-report",
+     "kind": "required",
+     "contract": "10-synthesis-report"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "evidence-bound obligation inventory"
+    }
+   ],
+   "inputs_source": "registry/job-templates/completeness-audit.json",
+   "output_dir": "runs/<run_id>/data/jobs/completeness-audit/",
+   "output_files": [
+    "completeness-audit.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/completeness-audit.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented"
+   ],
+   "next_prerequisite": "Bind the draft report obligation inventory in full review.",
+   "consumes": [
+    "job:10-synthesis-report"
+   ],
+   "produces": [
+    "job:completeness-audit"
+   ]
+  },
+  {
+   "id": "synthetic-hypothesis-resynthesis",
+   "lane": "10-synthesis-report",
+   "name": "Synthetic Hypothesis Resynthesis",
+   "contract": "synthetic-hypothesis-resynthesis",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/synthetic_hypothesis_resynthesis.py:run_attempt",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "synthetic_hypothesis_resynthesis"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "synthetic-hypothesis-resynthesis"
+   },
+   "depends_on": [
+    {
+     "job": "completeness-audit",
+     "kind": "required",
+     "contract": "completeness-audit"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "completeness audit and registered routes"
+    },
+    {
+     "need": "optional",
+     "input": "accepted predecessor reference"
+    }
+   ],
+   "inputs_source": "registry/job-templates/synthetic-hypothesis-resynthesis.json",
+   "output_dir": "runs/<run_id>/data/jobs/synthetic-hypothesis-resynthesis/",
+   "output_files": [
+    "synthetic-hypothesis-resynthesis.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/synthetic-hypothesis-resynthesis.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented"
+   ],
+   "next_prerequisite": "Bind accepted completeness audit input in full review.",
+   "consumes": [
+    "job:completeness-audit"
+   ],
+   "produces": [
+    "job:synthetic-hypothesis-resynthesis"
+   ]
+  },
+  {
+   "id": "remediation-retest-feedback",
+   "lane": "11-remediation-proposal",
+   "name": "Remediation Retest Feedback",
+   "contract": "remediation-retest-feedback",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/remediation_retest.py:run_attempt",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "remediation_retest_feedback"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "remediation-retest-feedback"
+   },
+   "depends_on": [
+    {
+     "job": "09-independent-verification",
+     "kind": "required",
+     "contract": "09-independent-verification"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "verified claims and remediation proposals"
+    },
+    {
+     "need": "optional",
+     "input": "same-environment retests"
+    }
+   ],
+   "inputs_source": "registry/job-templates/remediation-retest-feedback.json",
+   "output_dir": "runs/<run_id>/data/jobs/remediation-retest-feedback/",
+   "output_files": [
+    "remediation-retest.json",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/remediation-retest-feedback.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented"
+   ],
+   "next_prerequisite": "Bind verified claims and retest evidence in full review.",
+   "consumes": [
+    "job:09-independent-verification"
+   ],
+   "produces": [
+    "job:remediation-retest-feedback"
+   ]
+  },
+  {
+   "id": "final-publication-gate",
+   "lane": "10-synthesis-report",
+   "name": "Final Publication Gate",
+   "contract": "final-publication-package",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/final_publication.py:publish",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "final_publication_gate"
+   ],
+   "lifecycle_binding": "blocked_op",
+   "composition": {
+    "persona_id": "report-artifact-publisher",
+    "role_id": "control-lifecycle-coordinator",
+    "domain_id": "review-control-lifecycle",
+    "tooling_profile_id": "verified-control-lifecycle",
+    "output_contract_id": "final-publication-package"
+   },
+   "depends_on": [
+    {
+     "job": "10-synthesis-report",
+     "kind": "required",
+     "contract": "10-synthesis-report"
+    },
+    {
+     "job": "completeness-audit",
+     "kind": "required",
+     "contract": "completeness-audit"
+    },
+    {
+     "job": "synthetic-hypothesis-resynthesis",
+     "kind": "required",
+     "contract": "synthetic-hypothesis-resynthesis"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "draft publication"
+    },
+    {
+     "need": "required",
+     "input": "accepted completeness audit"
+    },
+    {
+     "need": "required",
+     "input": "accepted terminal resynthesis"
+    },
+    {
+     "need": "required",
+     "input": "authorized human signoff ledger"
+    }
+   ],
+   "inputs_source": "registry/job-templates/final-publication-gate.json",
+   "output_dir": "runs/<run_id>/data/jobs/final-publication-gate/",
+   "output_files": [
+    "report.json",
+    "evidence-trace-index.json",
+    "critical-findings.sarif",
+    "human-signoff-ledger.json",
+    "final-publication.json"
+   ],
+   "outputs_source": "registry/output-contracts/final-publication-package.json",
+   "claim_class": null,
+   "gaps": [
+    "full_review_input_assembler_not_implemented"
+   ],
+   "next_prerequisite": "Bind exact accepted completion references and operator signoff in full review.",
+   "consumes": [
+    "job:10-synthesis-report",
+    "job:completeness-audit",
+    "job:synthetic-hypothesis-resynthesis"
+   ],
+   "produces": [
+    "job:final-publication-gate"
+   ]
   }
  ],
  "lanes": [
@@ -10820,7 +11651,9 @@
     "job:02-sbom-inventory",
     "job:02-license-scan",
     "job:02-binary-hardening",
-    "job:02-mobile-sast"
+    "job:02-mobile-sast",
+    "job:persona-tool-pool-dispatch",
+    "job:dynamic-rescope"
    ]
   },
   "job:02-ossf-scorecard": {
@@ -11120,7 +11953,8 @@
    "consumed_by": [
     "job:11-remediation-proposal",
     "job:12-scoring-prioritization",
-    "job:10-synthesis-report"
+    "job:10-synthesis-report",
+    "job:remediation-retest-feedback"
    ]
   },
   "job:11-remediation-proposal": {
@@ -11157,7 +11991,10 @@
     "step:full_review",
     "job:10-synthesis-report"
    ],
-   "consumed_by": []
+   "consumed_by": [
+    "job:completeness-audit",
+    "job:final-publication-gate"
+   ]
   },
   "job:02-api-collection-intelligence-ingest": {
    "id": "job:02-api-collection-intelligence-ingest",
@@ -11564,6 +12401,95 @@
    "consumed_by": [
     "job:02-evidence-assembly"
    ]
+  },
+  "job:persona-tool-pool-dispatch": {
+   "id": "job:persona-tool-pool-dispatch",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/persona-tool-pool-dispatch/",
+   "about": "Accepted persona-tool-pool-dispatch output of persona-tool-pool-dispatch.",
+   "produced_by": [
+    "job:persona-tool-pool-dispatch"
+   ],
+   "consumed_by": [
+    "job:deterministic-pool-merge"
+   ]
+  },
+  "job:deterministic-pool-merge": {
+   "id": "job:deterministic-pool-merge",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/deterministic-pool-merge/",
+   "about": "Accepted deterministic-pool-merge output of deterministic-pool-merge.",
+   "produced_by": [
+    "job:deterministic-pool-merge"
+   ],
+   "consumed_by": [
+    "job:evidence-qualified-quorum"
+   ]
+  },
+  "job:evidence-qualified-quorum": {
+   "id": "job:evidence-qualified-quorum",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/evidence-qualified-quorum/",
+   "about": "Accepted evidence-qualified-quorum output of evidence-qualified-quorum.",
+   "produced_by": [
+    "job:evidence-qualified-quorum"
+   ],
+   "consumed_by": []
+  },
+  "job:dynamic-rescope": {
+   "id": "job:dynamic-rescope",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/dynamic-rescope/",
+   "about": "Accepted bounded-rescope-plan output of dynamic-rescope.",
+   "produced_by": [
+    "job:dynamic-rescope"
+   ],
+   "consumed_by": []
+  },
+  "job:completeness-audit": {
+   "id": "job:completeness-audit",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/completeness-audit/",
+   "about": "Accepted completeness-audit output of completeness-audit.",
+   "produced_by": [
+    "job:completeness-audit"
+   ],
+   "consumed_by": [
+    "job:synthetic-hypothesis-resynthesis",
+    "job:final-publication-gate"
+   ]
+  },
+  "job:synthetic-hypothesis-resynthesis": {
+   "id": "job:synthetic-hypothesis-resynthesis",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/synthetic-hypothesis-resynthesis/",
+   "about": "Accepted synthetic-hypothesis-resynthesis output of synthetic-hypothesis-resynthesis.",
+   "produced_by": [
+    "job:synthetic-hypothesis-resynthesis"
+   ],
+   "consumed_by": [
+    "job:final-publication-gate"
+   ]
+  },
+  "job:remediation-retest-feedback": {
+   "id": "job:remediation-retest-feedback",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/remediation-retest-feedback/",
+   "about": "Accepted remediation-retest-feedback output of remediation-retest-feedback.",
+   "produced_by": [
+    "job:remediation-retest-feedback"
+   ],
+   "consumed_by": []
+  },
+  "job:final-publication-gate": {
+   "id": "job:final-publication-gate",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/final-publication-gate/",
+   "about": "Accepted final-publication-package output of final-publication-gate.",
+   "produced_by": [
+    "job:final-publication-gate"
+   ],
+   "consumed_by": []
   }
  },
  "problems": []

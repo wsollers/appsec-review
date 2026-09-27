@@ -9,7 +9,7 @@ output contracts, lane `config.md` files, and the hand-maintained `docs/processe
 Regenerate after any process change: `python3 docs/processes/job_catalog.py`;
 `--check` fails when this file is stale or a reference is broken.
 
-Covers 5 process models, 65 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 55 lifecycle jobs and 123 artifacts.
+Covers 5 process models, 65 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 63 lifecycle jobs and 131 artifacts.
 
 How to read the rollups: **Enters** is what the model or group consumes but does not produce itself
 (its inputs); **Leaves** is what it produces that nothing inside consumes (its results); **Passes**
@@ -108,8 +108,8 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | Rolled up for the model | Artifacts |
 |---|---|
 | Enters | [`sut-origin`](#a-sut-origin)<br>[`sut-pin`](#a-sut-pin)<br>[`docker-engine`](#a-docker-engine)<br>[`host-dirs`](#a-host-dirs)<br>[`job-definitions`](#a-job-definitions)<br>[`engagement-definition`](#a-engagement-definition)<br>[`permission-grant`](#a-permission-grant)<br>[`llm-invoker`](#a-llm-invoker)<br>[`buildenv-catalog`](#a-buildenv-catalog)<br>[`buildenv-image`](#a-buildenv-image)<br>[`critical-findings-md`](#a-critical-findings-md) |
-| Leaves | [`code-location-venv`](#a-code-location-venv)<br>[`prep-scope`](#a-prep-scope)<br>[`prep-native-plan`](#a-prep-native-plan)<br>[`prep-handoffs`](#a-prep-handoffs)<br>[`workflow-status`](#a-workflow-status)<br>[`build-attempts`](#a-build-attempts)<br>[`build-lock`](#a-build-lock)<br>[`build-execution`](#a-build-execution)<br>[`lane-handoff`](#a-lane-handoff)<br>[`10-synthesis-report`](#a-job-10-synthesis-report) |
-| Passes between steps | [`sut-checkout`](#a-sut-checkout)<br>[`dagster-services`](#a-dagster-services)<br>[`code-location`](#a-code-location)<br>[`compose-env`](#a-compose-env)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`run-dir`](#a-run-dir)<br>[`artifact-manifest`](#a-artifact-manifest)<br>[`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-build-index`](#a-job-02-build-index)<br>[`build-index`](#a-build-index)<br>[`02-build-classify`](#a-job-02-build-classify)<br>[`build-classification`](#a-build-classification)<br>[`02-build-plan`](#a-job-02-build-plan)<br>[`build-plan`](#a-build-plan)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`build-discovery`](#a-build-discovery)<br>[`02-build-configure`](#a-job-02-build-configure)<br>[`02-native-build`](#a-job-02-native-build)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-ossf-scorecard`](#a-job-02-ossf-scorecard)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`02-build-resolution`](#a-job-02-build-resolution)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-api-collection-intelligence-ingest`](#a-job-02-api-collection-intelligence-ingest)<br>[`02-binary-intelligence-ingest`](#a-job-02-binary-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#a-job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#a-job-02-test-intelligence-ingest)<br>[`02-source-sast`](#a-job-02-source-sast)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-capture`](#a-job-02-ir-capture)<br>[`02-ir-link`](#a-job-02-ir-link)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index)<br>[`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-binary-cfg`](#a-job-02-binary-cfg)<br>[`02-test-execution`](#a-job-02-test-execution)<br>[`02-test-result-ingest`](#a-job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest)<br>[`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest)<br>[`02-secrets-inventory`](#a-job-02-secrets-inventory)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-container-image-inventory`](#a-job-02-container-image-inventory)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-license-scan`](#a-job-02-license-scan)<br>[`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle)<br>[`02-binary-hardening`](#a-job-02-binary-hardening)<br>[`02-mobile-sast`](#a-job-02-mobile-sast)<br>[`02-evidence-index`](#a-job-02-evidence-index)<br>[`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist)<br>[`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`09-independent-verification`](#a-job-09-independent-verification)<br>[`11-remediation-proposal`](#a-job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#a-job-12-scoring-prioritization) |
+| Leaves | [`code-location-venv`](#a-code-location-venv)<br>[`prep-scope`](#a-prep-scope)<br>[`prep-native-plan`](#a-prep-native-plan)<br>[`prep-handoffs`](#a-prep-handoffs)<br>[`workflow-status`](#a-workflow-status)<br>[`build-attempts`](#a-build-attempts)<br>[`build-lock`](#a-build-lock)<br>[`build-execution`](#a-build-execution)<br>[`lane-handoff`](#a-lane-handoff)<br>[`dynamic-rescope`](#a-job-dynamic-rescope)<br>[`evidence-qualified-quorum`](#a-job-evidence-qualified-quorum)<br>[`remediation-retest-feedback`](#a-job-remediation-retest-feedback)<br>[`final-publication-gate`](#a-job-final-publication-gate) |
+| Passes between steps | [`sut-checkout`](#a-sut-checkout)<br>[`dagster-services`](#a-dagster-services)<br>[`code-location`](#a-code-location)<br>[`compose-env`](#a-compose-env)<br>[`loaded-job-list`](#a-loaded-job-list)<br>[`run-dir`](#a-run-dir)<br>[`artifact-manifest`](#a-artifact-manifest)<br>[`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-build-index`](#a-job-02-build-index)<br>[`build-index`](#a-build-index)<br>[`02-build-classify`](#a-job-02-build-classify)<br>[`build-classification`](#a-build-classification)<br>[`02-build-plan`](#a-job-02-build-plan)<br>[`build-plan`](#a-build-plan)<br>[`build-image-catalog`](#a-build-image-catalog)<br>[`build-discovery`](#a-build-discovery)<br>[`02-build-configure`](#a-job-02-build-configure)<br>[`02-native-build`](#a-job-02-native-build)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-ossf-scorecard`](#a-job-02-ossf-scorecard)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`02-build-resolution`](#a-job-02-build-resolution)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-api-collection-intelligence-ingest`](#a-job-02-api-collection-intelligence-ingest)<br>[`02-binary-intelligence-ingest`](#a-job-02-binary-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#a-job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#a-job-02-test-intelligence-ingest)<br>[`02-source-sast`](#a-job-02-source-sast)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-capture`](#a-job-02-ir-capture)<br>[`02-ir-link`](#a-job-02-ir-link)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index)<br>[`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-binary-cfg`](#a-job-02-binary-cfg)<br>[`02-test-execution`](#a-job-02-test-execution)<br>[`02-test-result-ingest`](#a-job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest)<br>[`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest)<br>[`02-secrets-inventory`](#a-job-02-secrets-inventory)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-container-image-inventory`](#a-job-02-container-image-inventory)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-license-scan`](#a-job-02-license-scan)<br>[`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle)<br>[`02-binary-hardening`](#a-job-02-binary-hardening)<br>[`02-mobile-sast`](#a-job-02-mobile-sast)<br>[`02-evidence-index`](#a-job-02-evidence-index)<br>[`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist)<br>[`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`persona-tool-pool-dispatch`](#a-job-persona-tool-pool-dispatch)<br>[`deterministic-pool-merge`](#a-job-deterministic-pool-merge)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`09-independent-verification`](#a-job-09-independent-verification)<br>[`11-remediation-proposal`](#a-job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#a-job-12-scoring-prioritization)<br>[`10-synthesis-report`](#a-job-10-synthesis-report)<br>[`completeness-audit`](#a-job-completeness-audit)<br>[`synthetic-hypothesis-resynthesis`](#a-job-synthetic-hypothesis-resynthesis) |
 
 ### Engagement flow: Preconditions
 
@@ -212,6 +212,7 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 |---|---|---|---|
 | [Dispatch LLM lanes](#step-lane-handoffs) | operator script | [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather) | [`lane-handoff`](#a-lane-handoff) |
 | [Component Purpose And Review Routing](#job-01-component-characterization) | lifecycle job | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
+| [Dynamic Rescope](#job-dynamic-rescope) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`dynamic-rescope`](#a-job-dynamic-rescope) |
 | [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
 | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
 | [OWASP Validation Worklist Core](#job-04-owasp-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
@@ -220,20 +221,27 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Fuzz Target Triage](#job-13-fuzz-target-triage) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
 | [Deployment Hardening](#job-15-deployment-hardening) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 | [STIG/SRG Validation Worklist Core](#job-15-stig-srg-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
-| **Group rollup** | | **Enters:** [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan) | **Leaves:** [`lane-handoff`](#a-lane-handoff)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening) |
+| **Group rollup** | | **Enters:** [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`00-intake`](#a-job-00-intake)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan) | **Leaves:** [`lane-handoff`](#a-lane-handoff)<br>[`dynamic-rescope`](#a-job-dynamic-rescope)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 
 ### Engagement flow: 7. Refutation, verification, scoring, synthesis, report
 
 | Step | Type | Consumes | Produces |
 |---|---|---|---|
 | [Red-team Adversarial Hypothesis Core](#job-07-red-team-adversarial) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial) |
+| [Persona Tool Pool Dispatch](#job-persona-tool-pool-dispatch) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`persona-tool-pool-dispatch`](#a-job-persona-tool-pool-dispatch) |
+| [Deterministic Pool Merge](#job-deterministic-pool-merge) | lifecycle job | [`persona-tool-pool-dispatch`](#a-job-persona-tool-pool-dispatch) | [`deterministic-pool-merge`](#a-job-deterministic-pool-merge) |
 | [Blue-team Refutation Core](#job-08-blue-team-refutation) | lifecycle job | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`01-component-characterization`](#a-job-01-component-characterization) | [`08-blue-team-refutation`](#a-job-08-blue-team-refutation) |
 | [Independent Verification Core](#job-09-independent-verification) | lifecycle job | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation) | [`09-independent-verification`](#a-job-09-independent-verification) |
+| [Evidence Qualified Quorum](#job-evidence-qualified-quorum) | lifecycle job | [`deterministic-pool-merge`](#a-job-deterministic-pool-merge) | [`evidence-qualified-quorum`](#a-job-evidence-qualified-quorum) |
 | [11-remediation-proposal](#job-11-remediation-proposal) | lifecycle job | [`09-independent-verification`](#a-job-09-independent-verification) | [`11-remediation-proposal`](#a-job-11-remediation-proposal) |
+| [Remediation Retest Feedback](#job-remediation-retest-feedback) | lifecycle job | [`09-independent-verification`](#a-job-09-independent-verification) | [`remediation-retest-feedback`](#a-job-remediation-retest-feedback) |
 | [Verified Claim Scoring Core](#job-12-scoring-prioritization) | lifecycle job | [`09-independent-verification`](#a-job-09-independent-verification)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) | [`12-scoring-prioritization`](#a-job-12-scoring-prioritization) |
 | [10-synthesis-report](#job-10-synthesis-report) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`09-independent-verification`](#a-job-09-independent-verification)<br>[`12-scoring-prioritization`](#a-job-12-scoring-prioritization)<br>[`11-remediation-proposal`](#a-job-11-remediation-proposal) | [`10-synthesis-report`](#a-job-10-synthesis-report) |
+| [Completeness Audit](#job-completeness-audit) | lifecycle job | [`10-synthesis-report`](#a-job-10-synthesis-report) | [`completeness-audit`](#a-job-completeness-audit) |
+| [Synthetic Hypothesis Resynthesis](#job-synthetic-hypothesis-resynthesis) | lifecycle job | [`completeness-audit`](#a-job-completeness-audit) | [`synthetic-hypothesis-resynthesis`](#a-job-synthetic-hypothesis-resynthesis) |
+| [Final Publication Gate](#job-final-publication-gate) | lifecycle job | [`10-synthesis-report`](#a-job-10-synthesis-report)<br>[`completeness-audit`](#a-job-completeness-audit)<br>[`synthetic-hypothesis-resynthesis`](#a-job-synthetic-hypothesis-resynthesis) | [`final-publication-gate`](#a-job-final-publication-gate) |
 | [critical_findings_sarif (Dagster job)](#step-critical-findings-sarif) | Dagster job | [`critical-findings-md`](#a-critical-findings-md) | [`10-synthesis-report`](#a-job-10-synthesis-report) |
-| **Group rollup** | | **Enters:** [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`critical-findings-md`](#a-critical-findings-md) | **Leaves:** [`10-synthesis-report`](#a-job-10-synthesis-report) |
+| **Group rollup** | | **Enters:** [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`00-intake`](#a-job-00-intake)<br>[`critical-findings-md`](#a-critical-findings-md) | **Leaves:** [`evidence-qualified-quorum`](#a-job-evidence-qualified-quorum)<br>[`remediation-retest-feedback`](#a-job-remediation-retest-feedback)<br>[`final-publication-gate`](#a-job-final-publication-gate) |
 
 <a id="model-fixture-bringup"></a>
 
@@ -378,8 +386,8 @@ All 54 lifecycle nodes, grouped by lane in process-manifest.json order. Source: 
 | Rolled up for the model | Artifacts |
 |---|---|
 | Enters | [`artifact-manifest`](#a-artifact-manifest) |
-| Leaves | [`10-synthesis-report`](#a-job-10-synthesis-report) |
-| Passes between steps | [`00-intake`](#a-job-00-intake)<br>[`02-ossf-scorecard`](#a-job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`02-build-index`](#a-job-02-build-index)<br>[`02-build-classify`](#a-job-02-build-classify)<br>[`02-build-plan`](#a-job-02-build-plan)<br>[`02-build-resolution`](#a-job-02-build-resolution)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-api-collection-intelligence-ingest`](#a-job-02-api-collection-intelligence-ingest)<br>[`02-binary-intelligence-ingest`](#a-job-02-binary-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#a-job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#a-job-02-test-intelligence-ingest)<br>[`02-build-configure`](#a-job-02-build-configure)<br>[`02-native-build`](#a-job-02-native-build)<br>[`02-source-sast`](#a-job-02-source-sast)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-capture`](#a-job-02-ir-capture)<br>[`02-ir-link`](#a-job-02-ir-link)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index)<br>[`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-binary-cfg`](#a-job-02-binary-cfg)<br>[`02-test-execution`](#a-job-02-test-execution)<br>[`02-test-result-ingest`](#a-job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest)<br>[`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest)<br>[`02-evidence-index`](#a-job-02-evidence-index)<br>[`02-secrets-inventory`](#a-job-02-secrets-inventory)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-container-image-inventory`](#a-job-02-container-image-inventory)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-license-scan`](#a-job-02-license-scan)<br>[`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle)<br>[`02-binary-hardening`](#a-job-02-binary-hardening)<br>[`02-mobile-sast`](#a-job-02-mobile-sast)<br>[`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist)<br>[`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`09-independent-verification`](#a-job-09-independent-verification)<br>[`11-remediation-proposal`](#a-job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#a-job-12-scoring-prioritization) |
+| Leaves | [`dynamic-rescope`](#a-job-dynamic-rescope)<br>[`evidence-qualified-quorum`](#a-job-evidence-qualified-quorum)<br>[`remediation-retest-feedback`](#a-job-remediation-retest-feedback)<br>[`final-publication-gate`](#a-job-final-publication-gate) |
+| Passes between steps | [`00-intake`](#a-job-00-intake)<br>[`02-ossf-scorecard`](#a-job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#a-job-02-devops-project-discovery)<br>[`02-sre-operations-topology`](#a-job-02-sre-operations-topology)<br>[`02-build-index`](#a-job-02-build-index)<br>[`02-build-classify`](#a-job-02-build-classify)<br>[`02-build-plan`](#a-job-02-build-plan)<br>[`02-build-resolution`](#a-job-02-build-resolution)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-api-collection-intelligence-ingest`](#a-job-02-api-collection-intelligence-ingest)<br>[`02-binary-intelligence-ingest`](#a-job-02-binary-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#a-job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#a-job-02-test-intelligence-ingest)<br>[`02-build-configure`](#a-job-02-build-configure)<br>[`02-native-build`](#a-job-02-native-build)<br>[`02-source-sast`](#a-job-02-source-sast)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-capture`](#a-job-02-ir-capture)<br>[`02-ir-link`](#a-job-02-ir-link)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index)<br>[`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-binary-cfg`](#a-job-02-binary-cfg)<br>[`02-test-execution`](#a-job-02-test-execution)<br>[`02-test-result-ingest`](#a-job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest)<br>[`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest)<br>[`02-evidence-index`](#a-job-02-evidence-index)<br>[`02-secrets-inventory`](#a-job-02-secrets-inventory)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-container-image-inventory`](#a-job-02-container-image-inventory)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-license-scan`](#a-job-02-license-scan)<br>[`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle)<br>[`02-binary-hardening`](#a-job-02-binary-hardening)<br>[`02-mobile-sast`](#a-job-02-mobile-sast)<br>[`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist)<br>[`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`persona-tool-pool-dispatch`](#a-job-persona-tool-pool-dispatch)<br>[`deterministic-pool-merge`](#a-job-deterministic-pool-merge)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`09-independent-verification`](#a-job-09-independent-verification)<br>[`11-remediation-proposal`](#a-job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#a-job-12-scoring-prioritization)<br>[`10-synthesis-report`](#a-job-10-synthesis-report)<br>[`completeness-audit`](#a-job-completeness-audit)<br>[`synthetic-hypothesis-resynthesis`](#a-job-synthetic-hypothesis-resynthesis) |
 
 Per lane (each job's full inputs and outputs are in Appendix B):
 
@@ -387,19 +395,19 @@ Per lane (each job's full inputs and outputs are in Appendix B):
 |---|---|---|---|
 | `00-intake-recovery` | [00-intake](#job-00-intake) | [`artifact-manifest`](#a-artifact-manifest) | [`00-intake`](#a-job-00-intake) |
 | `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[Native SAST](#job-02-native-sast)<br>[IR Capture](#job-02-ir-capture)<br>[IR Link](#job-02-ir-link)<br>[IR Facts](#job-02-ir-facts)<br>[Debug Symbol Index](#job-02-debug-symbol-index)<br>[Static Binary Triage](#job-02-binary-triage)<br>[Static Binary CFG](#job-02-binary-cfg)<br>[Test Execution](#job-02-test-execution)<br>[Test Result Ingest](#job-02-test-result-ingest)<br>[Test Coverage Ingest](#job-02-test-coverage-ingest)<br>[Operations Document Ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Secrets Inventory](#job-02-secrets-inventory)<br>[IaC Config Scan](#job-02-iac-config-scan)<br>[Container Image Inventory](#job-02-container-image-inventory)<br>[SBOM Inventory](#job-02-sbom-inventory)<br>[Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match)<br>[License Inventory](#job-02-license-scan)<br>[Dependency Lifecycle](#job-02-dependency-lifecycle)<br>[Binary Hardening](#job-02-binary-hardening)<br>[Mobile SAST](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
-| `01-component-characterization` | [Component Purpose And Review Routing](#job-01-component-characterization) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
+| `01-component-characterization` | [Component Purpose And Review Routing](#job-01-component-characterization)<br>[Dynamic Rescope](#job-dynamic-rescope) | [`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`00-intake`](#a-job-00-intake) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`dynamic-rescope`](#a-job-dynamic-rescope) |
 | `03-threat-model-dfd-stride` | [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
 | `04-asvs-masvs` | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs)<br>[OWASP Validation Worklist Core](#job-04-owasp-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
 | `05-native-memory` | [Native Memory Analysis](#job-05-native-memory) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts) | [`05-native-memory`](#a-job-05-native-memory) |
 | `06-cve-reachability` | [CVE Reachability Evidence](#job-06-cve-reachability) | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
 | `13-fuzz-target-triage` | [Fuzz Target Triage](#job-13-fuzz-target-triage) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
 | `15-deployment-hardening` | [Deployment Hardening](#job-15-deployment-hardening)<br>[STIG/SRG Validation Worklist Core](#job-15-stig-srg-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
-| `07-red-team-adversarial` | [Red-team Adversarial Hypothesis Core](#job-07-red-team-adversarial) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial) |
+| `07-red-team-adversarial` | [Red-team Adversarial Hypothesis Core](#job-07-red-team-adversarial)<br>[Persona Tool Pool Dispatch](#job-persona-tool-pool-dispatch)<br>[Deterministic Pool Merge](#job-deterministic-pool-merge) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`00-intake`](#a-job-00-intake) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`deterministic-pool-merge`](#a-job-deterministic-pool-merge) |
 | `08-blue-team-refutation` | [Blue-team Refutation Core](#job-08-blue-team-refutation) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`01-component-characterization`](#a-job-01-component-characterization) | [`08-blue-team-refutation`](#a-job-08-blue-team-refutation) |
-| `09-independent-verification` | [Independent Verification Core](#job-09-independent-verification) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation) | [`09-independent-verification`](#a-job-09-independent-verification) |
-| `11-remediation-proposal` | [11-remediation-proposal](#job-11-remediation-proposal) | [`09-independent-verification`](#a-job-09-independent-verification) | [`11-remediation-proposal`](#a-job-11-remediation-proposal) |
+| `09-independent-verification` | [Independent Verification Core](#job-09-independent-verification)<br>[Evidence Qualified Quorum](#job-evidence-qualified-quorum) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`deterministic-pool-merge`](#a-job-deterministic-pool-merge) | [`09-independent-verification`](#a-job-09-independent-verification)<br>[`evidence-qualified-quorum`](#a-job-evidence-qualified-quorum) |
+| `11-remediation-proposal` | [11-remediation-proposal](#job-11-remediation-proposal)<br>[Remediation Retest Feedback](#job-remediation-retest-feedback) | [`09-independent-verification`](#a-job-09-independent-verification) | [`11-remediation-proposal`](#a-job-11-remediation-proposal)<br>[`remediation-retest-feedback`](#a-job-remediation-retest-feedback) |
 | `12-scoring-prioritization` | [Verified Claim Scoring Core](#job-12-scoring-prioritization) | [`09-independent-verification`](#a-job-09-independent-verification)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) | [`12-scoring-prioritization`](#a-job-12-scoring-prioritization) |
-| `10-synthesis-report` | [10-synthesis-report](#job-10-synthesis-report) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`09-independent-verification`](#a-job-09-independent-verification)<br>[`12-scoring-prioritization`](#a-job-12-scoring-prioritization)<br>[`11-remediation-proposal`](#a-job-11-remediation-proposal) | [`10-synthesis-report`](#a-job-10-synthesis-report) |
+| `10-synthesis-report` | [10-synthesis-report](#job-10-synthesis-report)<br>[Completeness Audit](#job-completeness-audit)<br>[Synthetic Hypothesis Resynthesis](#job-synthetic-hypothesis-resynthesis)<br>[Final Publication Gate](#job-final-publication-gate) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation)<br>[`09-independent-verification`](#a-job-09-independent-verification)<br>[`12-scoring-prioritization`](#a-job-12-scoring-prioritization)<br>[`11-remediation-proposal`](#a-job-11-remediation-proposal) | [`final-publication-gate`](#a-job-final-publication-gate) |
 
 ## Appendix A: steps and standalone Dagster jobs
 
@@ -1291,6 +1299,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-binary-hardening`](#job-02-binary-hardening) | `binary-hardening` | standalone_only | `00-intake` |
 | `02-evidence-pregather` | [`02-mobile-sast`](#job-02-mobile-sast) | `mobile-sast` | standalone_only | `00-intake` |
 | `01-component-characterization` | [`01-component-characterization`](#job-01-component-characterization) | `component-map` | standalone_only | `02-evidence-assembly` |
+| `01-component-characterization` | [`dynamic-rescope`](#job-dynamic-rescope) | `bounded-rescope-plan` | standalone_only | `00-intake` |
 | `03-threat-model-dfd-stride` | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | `threat-model-core` | standalone_only | `01-component-characterization` |
 | `04-asvs-masvs` | [`04-asvs-masvs`](#job-04-asvs-masvs) | `owasp-join-report` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-owasp-validation-worklist` |
 | `04-asvs-masvs` | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | `owasp-validation-worklist` | standalone_only | `01-component-characterization`, `02-standards-source-ingest` |
@@ -1300,11 +1309,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `15-deployment-hardening` | [`15-deployment-hardening`](#job-15-deployment-hardening) | `deployment-hardening` | standalone_only | `01-component-characterization`, `02-iac-config-scan`, `15-stig-srg-validation-worklist` |
 | `15-deployment-hardening` | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) | `stig-srg-validation-worklist` | standalone_only | `01-component-characterization`, `02-standards-source-ingest` |
 | `07-red-team-adversarial` | [`07-red-team-adversarial`](#job-07-red-team-adversarial) | `07-red-team-adversarial` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-asvs-masvs`, `05-native-memory`, `06-cve-reachability`, `15-deployment-hardening`, `13-fuzz-target-triage` |
+| `07-red-team-adversarial` | [`persona-tool-pool-dispatch`](#job-persona-tool-pool-dispatch) | `persona-tool-pool-dispatch` | standalone_only | `00-intake` |
+| `07-red-team-adversarial` | [`deterministic-pool-merge`](#job-deterministic-pool-merge) | `deterministic-pool-merge` | standalone_only | `persona-tool-pool-dispatch` |
 | `08-blue-team-refutation` | [`08-blue-team-refutation`](#job-08-blue-team-refutation) | `08-blue-team-refutation` | standalone_only | `07-red-team-adversarial`, `01-component-characterization` |
 | `09-independent-verification` | [`09-independent-verification`](#job-09-independent-verification) | `09-independent-verification` | standalone_only | `07-red-team-adversarial`, `08-blue-team-refutation` |
+| `09-independent-verification` | [`evidence-qualified-quorum`](#job-evidence-qualified-quorum) | `evidence-qualified-quorum` | standalone_only | `deterministic-pool-merge` |
 | `11-remediation-proposal` | [`11-remediation-proposal`](#job-11-remediation-proposal) | `11-remediation-proposal` | missing_prerequisites | `09-independent-verification` |
+| `11-remediation-proposal` | [`remediation-retest-feedback`](#job-remediation-retest-feedback) | `remediation-retest-feedback` | standalone_only | `09-independent-verification` |
 | `12-scoring-prioritization` | [`12-scoring-prioritization`](#job-12-scoring-prioritization) | `12-scoring-prioritization` | standalone_only | `09-independent-verification`, `15-deployment-hardening`, `03-threat-model-dfd-stride` |
 | `10-synthesis-report` | [`10-synthesis-report`](#job-10-synthesis-report) | `10-synthesis-report` | missing_prerequisites | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-asvs-masvs`, `07-red-team-adversarial`, `08-blue-team-refutation`, `09-independent-verification`, `12-scoring-prioritization`, `11-remediation-proposal` (optional) |
+| `10-synthesis-report` | [`completeness-audit`](#job-completeness-audit) | `completeness-audit` | standalone_only | `10-synthesis-report` |
+| `10-synthesis-report` | [`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis) | `synthetic-hypothesis-resynthesis` | standalone_only | `completeness-audit` |
+| `10-synthesis-report` | [`final-publication-gate`](#job-final-publication-gate) | `final-publication-package` | standalone_only | `10-synthesis-report`, `completeness-audit`, `synthetic-hypothesis-resynthesis` |
 
 ### Lane `00-intake-recovery`
 
@@ -1324,7 +1340,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/00-intake.json) | target path<br>source identity<br>scope<br>permissions<br>hashed imports *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/00-intake/` |
 | Output files (registry/output-contracts/intake.json) | outputs/intake.json<br>outputs/build-discovery.md<br>status.json |
-| Consumed by | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
+| Consumed by | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast)<br>[`persona-tool-pool-dispatch`](#job-persona-tool-pool-dispatch)<br>[`dynamic-rescope`](#job-dynamic-rescope) |
 | Next prerequisite | Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/pools/resource-pools.md step 8). |
 
 ### Lane `02-evidence-pregather`
@@ -2129,6 +2145,26 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Gaps | `blocked_on_02-evidence-assembly`, `dagster_lifecycle_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Publish an accepted COMPLETE 02-evidence-assembly envelope, then add the Dagster lifecycle and live persona qualification. |
 
+<a id="job-dynamic-rescope"></a>
+
+#### `dynamic-rescope` -- Dynamic Rescope
+
+| | |
+|---|---|
+| Contract | `bounded-rescope-plan` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/dynamic_rescope.py:run_attempt` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `dynamic_rescope`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/dynamic-rescope.json) | run-owned dependency and changed-node request<br>accepted predecessor reference *(optional)* |
+| Produces | `runs/<run_id>/data/jobs/dynamic-rescope/` |
+| Output files (registry/output-contracts/bounded-rescope-plan.json) | bounded-rescope-plan.json<br>permission.json<br>lineage.json<br>status.json |
+| Consumed by | -- |
+| Gaps | `full_review_input_assembler_not_implemented` |
+| Next prerequisite | Bind classification changes in full review. |
+
 ### Lane `03-threat-model-dfd-stride`
 
 <a id="job-03-threat-model-dfd-stride"></a>
@@ -2323,6 +2359,46 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Gaps | `common_lifecycle_publication_not_integrated`, `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification. |
 
+<a id="job-persona-tool-pool-dispatch"></a>
+
+#### `persona-tool-pool-dispatch` -- Persona Tool Pool Dispatch
+
+| | |
+|---|---|
+| Contract | `persona-tool-pool-dispatch` |
+| Status | readiness `standalone_only`; execution `pool_coordinator`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/pool_launcher.py:launch` |
+| Resource pool | `persona_llm` |
+| Dagster | standalone: `persona_tool_pool_dispatch`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/persona-tool-pool-dispatch.json) | run-owned pool specification<br>trusted pool context<br>explicit runtime limits |
+| Produces | `runs/<run_id>/data/jobs/persona-tool-pool-dispatch/` |
+| Output files (registry/output-contracts/persona-tool-pool-dispatch.json) | persona-tool-pool-dispatch.json<br>permission.json<br>lineage.json<br>status.json |
+| Consumed by | [`deterministic-pool-merge`](#job-deterministic-pool-merge) |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_persona_pool_qualification` |
+| Next prerequisite | Build the full-review pool specification assembler and complete live persona qualification. |
+
+<a id="job-deterministic-pool-merge"></a>
+
+#### `deterministic-pool-merge` -- Deterministic Pool Merge
+
+| | |
+|---|---|
+| Contract | `deterministic-pool-merge` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/deterministic_pool_merge.py:run_verified_attempt` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `deterministic_pool_merge`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`persona-tool-pool-dispatch`](#job-persona-tool-pool-dispatch) (required, contract `persona-tool-pool-dispatch`) |
+| Declared inputs (registry/job-templates/deterministic-pool-merge.json) | reverified C02 terminal manifest |
+| Produces | `runs/<run_id>/data/jobs/deterministic-pool-merge/` |
+| Output files (registry/output-contracts/deterministic-pool-merge.json) | deterministic-pool-merge.json<br>permission.json<br>lineage.json<br>status.json |
+| Consumed by | [`evidence-qualified-quorum`](#job-evidence-qualified-quorum) |
+| Gaps | `full_review_input_assembler_not_implemented` |
+| Next prerequisite | Bind the verified C02 pool from full-review orchestration. |
+
 ### Lane `08-blue-team-refutation`
 
 <a id="job-08-blue-team-refutation"></a>
@@ -2363,9 +2439,29 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/09-independent-verification.json) | exact accepted blue-team dispositions<br>bounded independent verification decisions |
 | Produces | `runs/<run_id>/data/jobs/09-independent-verification/` |
 | Output files (registry/output-contracts/09-independent-verification.json) | independent-verification.json<br>permission.json<br>status.json |
-| Consumed by | [`11-remediation-proposal`](#job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
+| Consumed by | [`11-remediation-proposal`](#job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`remediation-retest-feedback`](#job-remediation-retest-feedback) |
 | Gaps | `common_lifecycle_publication_not_integrated`, `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification. |
+
+<a id="job-evidence-qualified-quorum"></a>
+
+#### `evidence-qualified-quorum` -- Evidence Qualified Quorum
+
+| | |
+|---|---|
+| Contract | `evidence-qualified-quorum` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/evidence_quorum.py:run_verified_attempt` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `evidence_qualified_quorum`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`deterministic-pool-merge`](#job-deterministic-pool-merge) (required, contract `deterministic-pool-merge`) |
+| Declared inputs (registry/job-templates/evidence-qualified-quorum.json) | current accepted deterministic merge reference |
+| Produces | `runs/<run_id>/data/jobs/evidence-qualified-quorum/` |
+| Output files (registry/output-contracts/evidence-qualified-quorum.json) | evidence-qualified-quorum.json<br>permission.json<br>lineage.json<br>status.json |
+| Consumed by | -- |
+| Gaps | `full_review_input_assembler_not_implemented` |
+| Next prerequisite | Bind the accepted deterministic merge reference in full review. |
 
 ### Lane `11-remediation-proposal`
 
@@ -2386,6 +2482,26 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumed by | [`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+
+<a id="job-remediation-retest-feedback"></a>
+
+#### `remediation-retest-feedback` -- Remediation Retest Feedback
+
+| | |
+|---|---|
+| Contract | `remediation-retest-feedback` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/remediation_retest.py:run_attempt` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `remediation_retest_feedback`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`) |
+| Declared inputs (registry/job-templates/remediation-retest-feedback.json) | verified claims and remediation proposals<br>same-environment retests *(optional)* |
+| Produces | `runs/<run_id>/data/jobs/remediation-retest-feedback/` |
+| Output files (registry/output-contracts/remediation-retest-feedback.json) | remediation-retest.json<br>permission.json<br>lineage.json<br>status.json |
+| Consumed by | -- |
+| Gaps | `full_review_input_assembler_not_implemented` |
+| Next prerequisite | Bind verified claims and retest evidence in full review. |
 
 ### Lane `12-scoring-prioritization`
 
@@ -2425,9 +2541,69 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (10-synthesis-report/config.md) | verified findings<br>unresolved risks<br>coverage ledger<br>component map<br>threat model<br>ASVS/MASVS assessment<br>red/blue/verifier outputs<br>scoring and priority ranking (from `12-scoring-prioritization`) |
 | Produces | `runs/<run_id>/data/jobs/10-synthesis-report/` |
 | Output files (10-synthesis-report/config.md) | final findings table<br>merged/deduplicated finding set<br>limitations<br>go/no-go recommendation<br>remediation plan<br>report draft |
-| Consumed by | -- |
+| Consumed by | [`completeness-audit`](#job-completeness-audit)<br>[`final-publication-gate`](#job-final-publication-gate) |
 | Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+
+<a id="job-completeness-audit"></a>
+
+#### `completeness-audit` -- Completeness Audit
+
+| | |
+|---|---|
+| Contract | `completeness-audit` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/completeness_audit.py:run_attempt` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `completeness_audit`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`10-synthesis-report`](#job-10-synthesis-report) (required, contract `10-synthesis-report`) |
+| Declared inputs (registry/job-templates/completeness-audit.json) | evidence-bound obligation inventory |
+| Produces | `runs/<run_id>/data/jobs/completeness-audit/` |
+| Output files (registry/output-contracts/completeness-audit.json) | completeness-audit.json<br>permission.json<br>lineage.json<br>status.json |
+| Consumed by | [`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis)<br>[`final-publication-gate`](#job-final-publication-gate) |
+| Gaps | `full_review_input_assembler_not_implemented` |
+| Next prerequisite | Bind the draft report obligation inventory in full review. |
+
+<a id="job-synthetic-hypothesis-resynthesis"></a>
+
+#### `synthetic-hypothesis-resynthesis` -- Synthetic Hypothesis Resynthesis
+
+| | |
+|---|---|
+| Contract | `synthetic-hypothesis-resynthesis` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/synthetic_hypothesis_resynthesis.py:run_attempt` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `synthetic_hypothesis_resynthesis`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`completeness-audit`](#job-completeness-audit) (required, contract `completeness-audit`) |
+| Declared inputs (registry/job-templates/synthetic-hypothesis-resynthesis.json) | completeness audit and registered routes<br>accepted predecessor reference *(optional)* |
+| Produces | `runs/<run_id>/data/jobs/synthetic-hypothesis-resynthesis/` |
+| Output files (registry/output-contracts/synthetic-hypothesis-resynthesis.json) | synthetic-hypothesis-resynthesis.json<br>permission.json<br>lineage.json<br>status.json |
+| Consumed by | [`final-publication-gate`](#job-final-publication-gate) |
+| Gaps | `full_review_input_assembler_not_implemented` |
+| Next prerequisite | Bind accepted completeness audit input in full review. |
+
+<a id="job-final-publication-gate"></a>
+
+#### `final-publication-gate` -- Final Publication Gate
+
+| | |
+|---|---|
+| Contract | `final-publication-package` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/final_publication.py:publish` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `final_publication_gate`; lifecycle binding: `blocked_op` |
+| Composition | persona `report-artifact-publisher`, role `control-lifecycle-coordinator`, tooling `verified-control-lifecycle` |
+| Consumes (graph) | [`10-synthesis-report`](#job-10-synthesis-report) (required, contract `10-synthesis-report`)<br>[`completeness-audit`](#job-completeness-audit) (required, contract `completeness-audit`)<br>[`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis) (required, contract `synthetic-hypothesis-resynthesis`) |
+| Declared inputs (registry/job-templates/final-publication-gate.json) | draft publication<br>accepted completeness audit<br>accepted terminal resynthesis<br>authorized human signoff ledger |
+| Produces | `runs/<run_id>/data/jobs/final-publication-gate/` |
+| Output files (registry/output-contracts/final-publication-package.json) | report.json<br>evidence-trace-index.json<br>critical-findings.sarif<br>human-signoff-ledger.json<br>final-publication.json |
+| Consumed by | -- |
+| Gaps | `full_review_input_assembler_not_implemented` |
+| Next prerequisite | Bind exact accepted completion references and operator signoff in full review. |
 
 ## Appendix C: artifact glossary
 
@@ -2504,7 +2680,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-b13-qualification-input"></a>`b13-qualification-input` | file | runs/<run_id>/inputs/b13-harmless-qualification.json | -- | [`b13-harmless-container`](#step-b13-harmless-container) |
 | <a id="a-b13-qualification-result"></a>`b13-qualification-result` | file | runs/<run_id>/data/jobs/b13-harmless-container/accepted.json and attempts/<attempt_id>/result.json | [`b13-harmless-container`](#step-b13-harmless-container) | -- |
 | <a id="a-lane-handoff"></a>`lane-handoff` | file | runs/<run_id>/ lane hand-off files (create_handoff.py) | [`lane-handoffs`](#step-lane-handoffs) | -- |
-| <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
+| <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast)<br>[`persona-tool-pool-dispatch`](#job-persona-tool-pool-dispatch)<br>[`dynamic-rescope`](#job-dynamic-rescope) |
 | <a id="a-job-02-ossf-scorecard"></a>`02-ossf-scorecard` | job output | runs/<run_id>/data/jobs/02-ossf-scorecard/ | [`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-repository-partition-discovery"></a>`02-repository-partition-discovery` | job output | runs/<run_id>/data/jobs/02-repository-partition-discovery/ | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`devops-analysis`](#step-devops-analysis)<br>[`sre_operations_topology`](#step-sre-operations-topology)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery)<br>[`02-build-index`](#job-02-build-index) |
 | <a id="a-job-02-dev-project-discovery"></a>`02-dev-project-discovery` | job output | runs/<run_id>/data/jobs/02-dev-project-discovery/ | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery) | [`build-index`](#step-build-index)<br>[`02-build-index`](#job-02-build-index)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
@@ -2524,10 +2700,10 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-15-deployment-hardening"></a>`15-deployment-hardening` | job output | runs/<run_id>/data/jobs/15-deployment-hardening/ | [`deployment-hardening`](#step-deployment-hardening)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) |
 | <a id="a-job-07-red-team-adversarial"></a>`07-red-team-adversarial` | job output | runs/<run_id>/data/jobs/07-red-team-adversarial/ | [`07-red-team-adversarial`](#job-07-red-team-adversarial) | [`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`09-independent-verification`](#job-09-independent-verification)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | <a id="a-job-08-blue-team-refutation"></a>`08-blue-team-refutation` | job output | runs/<run_id>/data/jobs/08-blue-team-refutation/ | [`08-blue-team-refutation`](#job-08-blue-team-refutation) | [`09-independent-verification`](#job-09-independent-verification)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
-| <a id="a-job-09-independent-verification"></a>`09-independent-verification` | job output | runs/<run_id>/data/jobs/09-independent-verification/ | [`09-independent-verification`](#job-09-independent-verification) | [`11-remediation-proposal`](#job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
+| <a id="a-job-09-independent-verification"></a>`09-independent-verification` | job output | runs/<run_id>/data/jobs/09-independent-verification/ | [`09-independent-verification`](#job-09-independent-verification) | [`11-remediation-proposal`](#job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`remediation-retest-feedback`](#job-remediation-retest-feedback) |
 | <a id="a-job-11-remediation-proposal"></a>`11-remediation-proposal` | job output | runs/<run_id>/data/jobs/11-remediation-proposal/ | [`11-remediation-proposal`](#job-11-remediation-proposal) | [`10-synthesis-report`](#job-10-synthesis-report) |
 | <a id="a-job-12-scoring-prioritization"></a>`12-scoring-prioritization` | job output | runs/<run_id>/data/jobs/12-scoring-prioritization/ | [`12-scoring-prioritization`](#job-12-scoring-prioritization) | [`10-synthesis-report`](#job-10-synthesis-report) |
-| <a id="a-job-10-synthesis-report"></a>`10-synthesis-report` | job output | runs/<run_id>/data/jobs/10-synthesis-report/ | [`critical_findings_sarif`](#step-critical-findings-sarif)<br>[`full_review`](#step-full-review)<br>[`10-synthesis-report`](#job-10-synthesis-report) | -- |
+| <a id="a-job-10-synthesis-report"></a>`10-synthesis-report` | job output | runs/<run_id>/data/jobs/10-synthesis-report/ | [`critical_findings_sarif`](#step-critical-findings-sarif)<br>[`full_review`](#step-full-review)<br>[`10-synthesis-report`](#job-10-synthesis-report) | [`completeness-audit`](#job-completeness-audit)<br>[`final-publication-gate`](#job-final-publication-gate) |
 | <a id="a-job-02-api-collection-intelligence-ingest"></a>`02-api-collection-intelligence-ingest` | job output | runs/<run_id>/data/jobs/02-api-collection-intelligence-ingest/ | [`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-binary-intelligence-ingest"></a>`02-binary-intelligence-ingest` | job output | runs/<run_id>/data/jobs/02-binary-intelligence-ingest/ | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-doc-intelligence-ingest"></a>`02-doc-intelligence-ingest` | job output | runs/<run_id>/data/jobs/02-doc-intelligence-ingest/ | [`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
@@ -2559,3 +2735,11 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-dependency-lifecycle"></a>`02-dependency-lifecycle` | job output | runs/<run_id>/data/jobs/02-dependency-lifecycle/ | [`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-binary-hardening"></a>`02-binary-hardening` | job output | runs/<run_id>/data/jobs/02-binary-hardening/ | [`02-binary-hardening`](#job-02-binary-hardening) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-mobile-sast"></a>`02-mobile-sast` | job output | runs/<run_id>/data/jobs/02-mobile-sast/ | [`02-mobile-sast`](#job-02-mobile-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-persona-tool-pool-dispatch"></a>`persona-tool-pool-dispatch` | job output | runs/<run_id>/data/jobs/persona-tool-pool-dispatch/ | [`persona-tool-pool-dispatch`](#job-persona-tool-pool-dispatch) | [`deterministic-pool-merge`](#job-deterministic-pool-merge) |
+| <a id="a-job-deterministic-pool-merge"></a>`deterministic-pool-merge` | job output | runs/<run_id>/data/jobs/deterministic-pool-merge/ | [`deterministic-pool-merge`](#job-deterministic-pool-merge) | [`evidence-qualified-quorum`](#job-evidence-qualified-quorum) |
+| <a id="a-job-evidence-qualified-quorum"></a>`evidence-qualified-quorum` | job output | runs/<run_id>/data/jobs/evidence-qualified-quorum/ | [`evidence-qualified-quorum`](#job-evidence-qualified-quorum) | -- |
+| <a id="a-job-dynamic-rescope"></a>`dynamic-rescope` | job output | runs/<run_id>/data/jobs/dynamic-rescope/ | [`dynamic-rescope`](#job-dynamic-rescope) | -- |
+| <a id="a-job-completeness-audit"></a>`completeness-audit` | job output | runs/<run_id>/data/jobs/completeness-audit/ | [`completeness-audit`](#job-completeness-audit) | [`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis)<br>[`final-publication-gate`](#job-final-publication-gate) |
+| <a id="a-job-synthetic-hypothesis-resynthesis"></a>`synthetic-hypothesis-resynthesis` | job output | runs/<run_id>/data/jobs/synthetic-hypothesis-resynthesis/ | [`synthetic-hypothesis-resynthesis`](#job-synthetic-hypothesis-resynthesis) | [`final-publication-gate`](#job-final-publication-gate) |
+| <a id="a-job-remediation-retest-feedback"></a>`remediation-retest-feedback` | job output | runs/<run_id>/data/jobs/remediation-retest-feedback/ | [`remediation-retest-feedback`](#job-remediation-retest-feedback) | -- |
+| <a id="a-job-final-publication-gate"></a>`final-publication-gate` | job output | runs/<run_id>/data/jobs/final-publication-gate/ | [`final-publication-gate`](#job-final-publication-gate) | -- |

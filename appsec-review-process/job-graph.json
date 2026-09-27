@@ -1511,6 +1511,195 @@
         "outputs/tool-results.json",
         "outputs/coverage.json"
       ]
+    },
+    "persona-tool-pool-dispatch": {
+      "lane": "07-red-team-adversarial",
+      "contract": "persona-tool-pool-dispatch",
+      "template": "persona-tool-pool-dispatch",
+      "implemented": true,
+      "namespace": "persona-tool-pool-dispatch",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Expand a registered pool specification through C01, launch and wait through C02, and publish only the reverified terminal population identity.",
+      "required_artifacts": [
+        "persona-tool-pool-dispatch.json",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
+    "deterministic-pool-merge": {
+      "lane": "07-red-team-adversarial",
+      "contract": "deterministic-pool-merge",
+      "template": "deterministic-pool-merge",
+      "implemented": true,
+      "namespace": "deterministic-pool-merge",
+      "dependencies": [
+        {
+          "job": "persona-tool-pool-dispatch",
+          "kind": "required",
+          "contract": "persona-tool-pool-dispatch",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Typed deterministic merge over the exact terminal population and adapter results reverified by C02; raw caller-authored merges are refused.",
+      "required_artifacts": [
+        "deterministic-pool-merge.json",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
+    "evidence-qualified-quorum": {
+      "lane": "09-independent-verification",
+      "contract": "evidence-qualified-quorum",
+      "template": "evidence-qualified-quorum",
+      "implemented": true,
+      "namespace": "evidence-qualified-quorum",
+      "dependencies": [
+        {
+          "job": "deterministic-pool-merge",
+          "kind": "required",
+          "contract": "deterministic-pool-merge",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Independent producer quorum over the current accepted deterministic merge reference only.",
+      "required_artifacts": [
+        "evidence-qualified-quorum.json",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
+    "dynamic-rescope": {
+      "lane": "01-component-characterization",
+      "contract": "bounded-rescope-plan",
+      "template": "dynamic-rescope",
+      "implemented": true,
+      "namespace": "dynamic-rescope",
+      "dependencies": [
+        {
+          "job": "00-intake",
+          "kind": "required",
+          "contract": "intake",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Bounded affected-only dependency rescope with monotonic accepted predecessor lineage.",
+      "required_artifacts": [
+        "bounded-rescope-plan.json",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
+    "completeness-audit": {
+      "lane": "10-synthesis-report",
+      "contract": "completeness-audit",
+      "template": "completeness-audit",
+      "implemented": true,
+      "namespace": "completeness-audit",
+      "dependencies": [
+        {
+          "job": "10-synthesis-report",
+          "kind": "required",
+          "contract": "10-synthesis-report",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Evidence-bound completeness audit kept distinct from subsequent synthetic-hypothesis feedback.",
+      "required_artifacts": [
+        "completeness-audit.json",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
+    "synthetic-hypothesis-resynthesis": {
+      "lane": "10-synthesis-report",
+      "contract": "synthetic-hypothesis-resynthesis",
+      "template": "synthetic-hypothesis-resynthesis",
+      "implemented": true,
+      "namespace": "synthetic-hypothesis-resynthesis",
+      "dependencies": [
+        {
+          "job": "completeness-audit",
+          "kind": "required",
+          "contract": "completeness-audit",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Bounded candidate-only synthetic-hypothesis routing and resynthesis with monotonic predecessor lineage.",
+      "required_artifacts": [
+        "synthetic-hypothesis-resynthesis.json",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
+    "remediation-retest-feedback": {
+      "lane": "11-remediation-proposal",
+      "contract": "remediation-retest-feedback",
+      "template": "remediation-retest-feedback",
+      "implemented": true,
+      "namespace": "remediation-retest-feedback",
+      "dependencies": [
+        {
+          "job": "09-independent-verification",
+          "kind": "required",
+          "contract": "09-independent-verification",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Remediation proposals and same-environment independently verified retest decisions without promotion of declined or stale results.",
+      "required_artifacts": [
+        "remediation-retest.json",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
+    "final-publication-gate": {
+      "lane": "10-synthesis-report",
+      "contract": "final-publication-package",
+      "template": "final-publication-gate",
+      "implemented": true,
+      "namespace": "final-publication-gate",
+      "dependencies": [
+        {
+          "job": "10-synthesis-report",
+          "kind": "required",
+          "contract": "10-synthesis-report",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "completeness-audit",
+          "kind": "required",
+          "contract": "completeness-audit",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "synthetic-hypothesis-resynthesis",
+          "kind": "required",
+          "contract": "synthetic-hypothesis-resynthesis",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "planned_scope": "Atomic immutable final publication only after exact accepted completion evidence and keyed human approval of the report hash.",
+      "required_artifacts": [
+        "report.json",
+        "evidence-trace-index.json",
+        "critical-findings.sarif",
+        "human-signoff-ledger.json",
+        "final-publication.json"
+      ]
     }
   }
 }

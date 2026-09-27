@@ -217,3 +217,37 @@ flowchart TD
   02_mobile_sast_pre --> 02_mobile_sast["02-mobile-sast: work or reuse"]
   02_mobile_sast --> 02_mobile_sast_post["02-mobile-sast: post-validation and publish"]
   00_intake_post -->|required| 02_mobile_sast_config
+  persona_tool_pool_dispatch_config["persona-tool-pool-dispatch: resolve job configuration"] --> persona_tool_pool_dispatch_pre["persona-tool-pool-dispatch: pre-validation"]
+  persona_tool_pool_dispatch_pre --> persona_tool_pool_dispatch["persona-tool-pool-dispatch: work or reuse"]
+  persona_tool_pool_dispatch --> persona_tool_pool_dispatch_post["persona-tool-pool-dispatch: post-validation and publish"]
+  00_intake_post -->|required| persona_tool_pool_dispatch_config
+  deterministic_pool_merge_config["deterministic-pool-merge: resolve job configuration"] --> deterministic_pool_merge_pre["deterministic-pool-merge: pre-validation"]
+  deterministic_pool_merge_pre --> deterministic_pool_merge["deterministic-pool-merge: work or reuse"]
+  deterministic_pool_merge --> deterministic_pool_merge_post["deterministic-pool-merge: post-validation and publish"]
+  persona_tool_pool_dispatch_post -->|required| deterministic_pool_merge_config
+  evidence_qualified_quorum_config["evidence-qualified-quorum: resolve job configuration"] --> evidence_qualified_quorum_pre["evidence-qualified-quorum: pre-validation"]
+  evidence_qualified_quorum_pre --> evidence_qualified_quorum["evidence-qualified-quorum: work or reuse"]
+  evidence_qualified_quorum --> evidence_qualified_quorum_post["evidence-qualified-quorum: post-validation and publish"]
+  deterministic_pool_merge_post -->|required| evidence_qualified_quorum_config
+  dynamic_rescope_config["dynamic-rescope: resolve job configuration"] --> dynamic_rescope_pre["dynamic-rescope: pre-validation"]
+  dynamic_rescope_pre --> dynamic_rescope["dynamic-rescope: work or reuse"]
+  dynamic_rescope --> dynamic_rescope_post["dynamic-rescope: post-validation and publish"]
+  00_intake_post -->|required| dynamic_rescope_config
+  completeness_audit_config["completeness-audit: resolve job configuration"] --> completeness_audit_pre["completeness-audit: pre-validation"]
+  completeness_audit_pre --> completeness_audit["completeness-audit: work or reuse"]
+  completeness_audit --> completeness_audit_post["completeness-audit: post-validation and publish"]
+  10_synthesis_report -->|required| completeness_audit_config
+  synthetic_hypothesis_resynthesis_config["synthetic-hypothesis-resynthesis: resolve job configuration"] --> synthetic_hypothesis_resynthesis_pre["synthetic-hypothesis-resynthesis: pre-validation"]
+  synthetic_hypothesis_resynthesis_pre --> synthetic_hypothesis_resynthesis["synthetic-hypothesis-resynthesis: work or reuse"]
+  synthetic_hypothesis_resynthesis --> synthetic_hypothesis_resynthesis_post["synthetic-hypothesis-resynthesis: post-validation and publish"]
+  completeness_audit_post -->|required| synthetic_hypothesis_resynthesis_config
+  remediation_retest_feedback_config["remediation-retest-feedback: resolve job configuration"] --> remediation_retest_feedback_pre["remediation-retest-feedback: pre-validation"]
+  remediation_retest_feedback_pre --> remediation_retest_feedback["remediation-retest-feedback: work or reuse"]
+  remediation_retest_feedback --> remediation_retest_feedback_post["remediation-retest-feedback: post-validation and publish"]
+  09_independent_verification -->|required| remediation_retest_feedback_config
+  final_publication_gate_config["final-publication-gate: resolve job configuration"] --> final_publication_gate_pre["final-publication-gate: pre-validation"]
+  final_publication_gate_pre --> final_publication_gate["final-publication-gate: work or reuse"]
+  final_publication_gate --> final_publication_gate_post["final-publication-gate: post-validation and publish"]
+  10_synthesis_report -->|required| final_publication_gate_config
+  completeness_audit_post -->|required| final_publication_gate_config
+  synthetic_hypothesis_resynthesis_post -->|required| final_publication_gate_config

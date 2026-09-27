@@ -14,6 +14,7 @@ import source_sast as source_sast_worker
 import bounded_transform_orchestration as bounded_transforms
 import dependency_orchestration as dependency_jobs
 import vendor_evidence_orchestration as vendor_evidence_jobs
+import control_lane_orchestration as control_lane_jobs
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
 import discovery_gate
@@ -621,6 +622,54 @@ def mobile_sast():
     mobile_sast_work(build_execution_config())
 
 
+CONTROL_CONFIG = {'input_path': str, 'output_root': str, 'attempt_root': str}
+FINAL_PUBLICATION_CONFIG = {'input_path': str, 'output_root': str}
+
+def run_control_job(context, configured, job_id, *, pool=False):
+    runner = control_lane_jobs.execute_pool if pool else control_lane_jobs.execute
+    result = runner(job_id=job_id, run_id=configured['engagement_run_id'], dagster_run_id=context.run_id,
+        input_path=context.op_config['input_path'], output_root=context.op_config['output_root'],
+        attempt_root=context.op_config['attempt_root'])
+    context.add_output_metadata({'output': MetadataValue.path(context.op_config['output_root']),
+                                 'attempt_id': result['attempt_id']})
+    return result
+
+def _control_op(name, job_id, *, pool=False):
+    @op(name=name, config_schema=CONTROL_CONFIG, pool=PERSONA_POOL if job_id=='persona-tool-pool-dispatch' else CPU_POOL)
+    def control(context, configured): return run_control_job(context, configured, job_id, pool=pool)
+    return control
+
+persona_tool_pool_dispatch_work=_control_op('persona_tool_pool_dispatch_work','persona-tool-pool-dispatch',pool=True)
+deterministic_pool_merge_work=_control_op('deterministic_pool_merge_work','deterministic-pool-merge',pool=True)
+evidence_qualified_quorum_work=_control_op('evidence_qualified_quorum_work','evidence-qualified-quorum')
+dynamic_rescope_work=_control_op('dynamic_rescope_work','dynamic-rescope')
+completeness_audit_work=_control_op('completeness_audit_work','completeness-audit')
+synthetic_hypothesis_resynthesis_work=_control_op('synthetic_hypothesis_resynthesis_work','synthetic-hypothesis-resynthesis')
+remediation_retest_feedback_work=_control_op('remediation_retest_feedback_work','remediation-retest-feedback')
+
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def persona_tool_pool_dispatch(): persona_tool_pool_dispatch_work(build_execution_config())
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def deterministic_pool_merge(): deterministic_pool_merge_work(build_execution_config())
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def evidence_qualified_quorum(): evidence_qualified_quorum_work(build_execution_config())
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def dynamic_rescope(): dynamic_rescope_work(build_execution_config())
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def completeness_audit(): completeness_audit_work(build_execution_config())
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def synthetic_hypothesis_resynthesis(): synthetic_hypothesis_resynthesis_work(build_execution_config())
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def remediation_retest_feedback(): remediation_retest_feedback_work(build_execution_config())
+
+@op(config_schema=FINAL_PUBLICATION_CONFIG, pool=CPU_POOL)
+def final_publication_gate_work(context, configured):
+    return control_lane_jobs.execute_final(run_id=configured['engagement_run_id'],dagster_run_id=context.run_id,
+        input_path=context.op_config['input_path'],output_root=context.op_config['output_root'])
+@job(resource_defs={'workflow_settings': workflow_settings},executor_def=multiprocess_executor.configured({'max_concurrent':1}),op_retry_policy=RetryPolicy(max_retries=0))
+def final_publication_gate(): final_publication_gate_work(build_execution_config())
+
+
 def run_repository_partition_discovery(context, configured):
     # Validated hand-off gate, not real analysis -- see discovery_gate.py's module docstring for
     # why this job cannot honestly be a deterministic worker. Accepts an out-of-band-supplied,
@@ -922,7 +971,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -932,7 +981,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

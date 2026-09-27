@@ -3,7 +3,7 @@
 Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
-Lifecycle jobs: **55**
+Lifecycle jobs: **63**
 Design capabilities: **16**
 
 ## Readiness summary
@@ -13,7 +13,7 @@ Design capabilities: **16**
 | `implemented_and_qualified` | 3 |
 | `implemented_not_qualified` | 7 |
 | `missing_prerequisites` | 2 |
-| `standalone_only` | 39 |
+| `standalone_only` | 47 |
 | `supplied_artifact_gate` | 4 |
 
 ## Lifecycle inventory
@@ -75,6 +75,14 @@ Design capabilities: **16**
 | `02-dependency-lifecycle` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `02-binary-hardening` | true | `blocked_op` | `standalone_only` | `docker` |
 | `02-mobile-sast` | true | `blocked_op` | `standalone_only` | `docker` |
+| `persona-tool-pool-dispatch` | true | `blocked_op` | `standalone_only` | `persona_llm` |
+| `deterministic-pool-merge` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `evidence-qualified-quorum` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `dynamic-rescope` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `completeness-audit` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `synthetic-hypothesis-resynthesis` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `remediation-retest-feedback` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `final-publication-gate` | true | `blocked_op` | `standalone_only` | `cpu` |
 
 ## Explicit gaps
 
@@ -270,49 +278,31 @@ Design capabilities: **16**
 - claim-ledger-routing: owasp_common_lifecycle_wrapper_missing
 - claim-ledger-routing: resource pool unassigned
 - claim-ledger-routing: unassigned_resource_pool
-- common-worker-result-envelope: persona_pool_controller_adapters_not_implemented
 - common-worker-result-envelope: remaining_workers_not_yet_migrated
 - common-worker-result-envelope: resource pool unassigned
-- completeness-feedback: completeness_auditor_missing
-- completeness-feedback: coverage_feedback_missing
-- completeness-feedback: resource pool unassigned
+- completeness-audit-control: full_review_input_assembler_not_implemented
+- completeness-audit: full_review_input_assembler_not_implemented
 - dedicated-resource-pools: lifecycle_jobs_without_workers_remain_unassigned
 - dedicated-resource-pools: live_worker_loss_injection_pending
 - dedicated-resource-pools: manifest_job_pool_not_cross_checked_against_op_pool
 - dedicated-resource-pools: no_load_evidence_limits_must_not_be_raised
 - dedicated-resource-pools: resource pool unassigned
-- deterministic-pool-merge: persona_merge_missing
-- deterministic-pool-merge: resource pool unassigned
-- deterministic-pool-merge: tool_evidence_merge_missing
+- deterministic-pool-merge: full_review_input_assembler_not_implemented
 - disa-nsa-hardening-model: platform_applicability_precedence_tailoring_and_reference_storage_undecided
 - disa-nsa-hardening-model: resource pool unassigned
-- dynamic-rescope: bounded_rescope_controller_missing
-- dynamic-rescope: classification_dependency_index_missing
-- dynamic-rescope: resource pool unassigned
-- evidence-qualified-quorum: diversity_accounting_missing
-- evidence-qualified-quorum: quorum_controller_missing
-- evidence-qualified-quorum: resource pool unassigned
-- final-publication-gate: completion_validator_missing
-- final-publication-gate: full_report_publication_missing
-- final-publication-gate: human_final_signoff_ledger_missing
-- final-publication-gate: resource pool unassigned
+- dynamic-rescope: full_review_input_assembler_not_implemented
+- evidence-qualified-quorum: full_review_input_assembler_not_implemented
+- final-publication-gate: full_review_input_assembler_not_implemented
 - owasp-checklist-model: owasp_versions_profiles_applicability_and_promotion_rules_undecided
 - owasp-checklist-model: resource pool unassigned
-- persona-tool-pool-dispatch: no_lifecycle_job_consumes_pool_specification
-- persona-tool-pool-dispatch: pool_launcher_missing
-- persona-tool-pool-dispatch: resource pool unassigned
-- remediation-retest-feedback: fix_reverification_loop_missing
-- remediation-retest-feedback: resource pool unassigned
-- remediation-retest-feedback: same_environment_retest_missing
-- synthetic-hypothesis-resynthesis: resource pool unassigned
-- synthetic-hypothesis-resynthesis: resynthesis_loop_missing
-- synthetic-hypothesis-resynthesis: synthetic_hypothesis_routing_missing
+- persona-tool-pool-dispatch: full_review_input_assembler_not_implemented
+- persona-tool-pool-dispatch: no_live_persona_pool_qualification
+- remediation-retest-feedback: full_review_input_assembler_not_implemented
+- synthetic-hypothesis-resynthesis: full_review_input_assembler_not_implemented
 - threat-model-standard: resource pool unassigned
 - threat-model-standard: threat_model_schema_and_scope_undecided
-- wait-all-rendezvous: chain_independence_not_implemented
-- wait-all-rendezvous: in_process_caps_do_not_see_other_rendezvous
-- wait-all-rendezvous: no_dagster_op_runs_the_rendezvous
-- wait-all-rendezvous: resource pool unassigned
+- wait-all-rendezvous: full_review_input_assembler_not_implemented
+- wait-all-rendezvous: no_live_persona_pool_qualification
 
 ## Validation errors
 
