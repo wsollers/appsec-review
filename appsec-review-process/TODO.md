@@ -30,7 +30,8 @@ within the 14-day ceiling (already registered on zarathustra 2026-09-27), the Da
 images the B13 registry needs (on zarathustra: `audit-report`, `tool-osv-scanner`,
 `tool-microsoft-sbom-tool`, `tool-sbomasm` were missing), B16 registry records, the code location
 (started in the background, log `orchestrator/dagster/.host/code-location.log`), the four target
-clones and a Claude CLI probe.
+clones and a Claude CLI probe. Machine layouts (zarathustra, hal5000 WSL and Windows) and the
+host-local state each one keeps: `docs/processes/host-layouts.md`.
 
 ## Running a target
 

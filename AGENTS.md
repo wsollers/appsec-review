@@ -21,6 +21,8 @@ in the TODO breakage log. There is no batch protocol, shared-surface lock or qua
 Before committing, run the tests for the modules you touched plus
 `python3 appsec-review-process/validate_design_parity.py --check-generated-views` and
 `python3 docs/processes/job_catalog.py --check` when you change the graph, registry or catalog sources.
+Machines and paths: [`docs/processes/host-layouts.md`](docs/processes/host-layouts.md); host setup:
+`orchestrator/prepare-host.sh`.
 
 ## Script migration
 

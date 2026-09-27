@@ -8,7 +8,8 @@
 #                                             (audit-buildenv-*), expected for appsec-multi-vuln
 #   orchestrator/prepare-host.sh --no-claude  skip the Claude CLI login probe
 #
-# Steps:
+# Steps (host layouts: docs/processes/host-layouts.md):
+#   0. host packages: python3.12 + venv, git, libfuzzy2, docker group (reported; install needs sudo)
 #   1. offline Grype/OSV snapshots resolve within the 14-day ceiling (sync is separate; see TODO.md)
 #   2. Dagster stack (compose project appsec-review) is up
 #   3. every image the B13 registry needs has a successful build on this host (builds the missing ones)
@@ -26,7 +27,7 @@ for arg in "$@"; do
         --check) CHECK=1 ;;
         --buildenvs) BUILDENVS=1 ;;
         --no-claude) CLAUDE=0 ;;
-        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -40,6 +41,16 @@ ok()   { printf '  \033[32mOK\033[0m    %s\n' "$*"; }
 todo() { printf '  \033[33mTODO\033[0m  %s\n' "$*"; }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "${*:2}"; FAILED+=("$1"); }
 step() { printf '\n== %s\n' "$*"; }
+
+# ---- 0. host packages -----------------------------------------------------------------------------
+step "0. host packages"
+command -v python3.12 >/dev/null && python3.12 -c 'import ensurepip' 2>/dev/null \
+    && ok "python3.12 with venv" || bad "python" "python3.12 or python3.12-venv missing: sudo apt install python3.12-venv"
+command -v git >/dev/null && ok "$(git --version)" || bad "git" "git missing: sudo apt install git"
+ldconfig -p 2>/dev/null | grep -q 'libfuzzy.so.2' && ok "libfuzzy2" \
+    || bad "libfuzzy" "libfuzzy.so.2 missing (evidence index needs it): sudo apt install libfuzzy2"
+id -nG | tr ' ' '\n' | grep -qx docker && ok "$(id -un) in docker group" \
+    || bad "docker-group" "$(id -un) not in the docker group: sudo usermod -aG docker $(id -un), then log in again"
 
 # ---- 1. offline vulnerability snapshots -----------------------------------------------------------
 step "1. offline Grype/OSV snapshots (ceiling ${MAX_AGE}s)"
