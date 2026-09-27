@@ -66,7 +66,7 @@ class ReviewControlLoopTests(unittest.TestCase):
     def test_completeness_feedback_routes_and_terminates(self):
         expected = [{"obligation_id": "o1"}, {"obligation_id": "o2"}]
         audit = controls.completeness_audit("run-1", expected, [{"obligation_id": "o1",
-            "evidence_sha256":"sha256:"+"1"*64}], [])
+            "evidence_sha256":"sha256:"+"1"*64}], [],subject_sha256="sha256:"+"2"*64)
         self.assertFalse(audit["complete"])
         routed = controls.synthetic_feedback("run-1", audit, {"o2": "02-source-sast"},
                                              iteration=1, max_iterations=2)
@@ -94,6 +94,11 @@ class ReviewControlLoopTests(unittest.TestCase):
         with self.assertRaisesRegex(Blocked,"independent"):
             controls.same_environment_retest("run-1",proposal,env,
                 {"proposal_id":"r1","environment":env,"result":"PASSED","executor_id":""},
+                {"producer_id":"verifier","decision":"VERIFIED"})
+        bad={**env,"build_sha256":"x"}
+        with self.assertRaisesRegex(Blocked,"hashes"):
+            controls.same_environment_retest("run-1",proposal,bad,
+                {"proposal_id":"r1","environment":bad,"result":"PASSED","executor_id":"executor"},
                 {"producer_id":"verifier","decision":"VERIFIED"})
 
     def test_final_gate_requires_complete_terminal_exact_human_signoff(self):

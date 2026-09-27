@@ -98,7 +98,7 @@ def append_signoff(ledger: dict[str, Any] | None, *, run_id: str, reviewer_id: s
 
 
 def validate_signoff(ledger: dict[str, Any], *, run_id: str, report_sha256: str,
-                     authorization_key: bytes, expected_anchor: str) -> dict[str, Any]:
+                     authorization_key: bytes, expected_anchor: str, expected_current_head: str) -> dict[str, Any]:
     # Reuse append validation without mutating the caller by walking the chain directly.
     if ledger.get("schema") != SIGNOFF_SCHEMA or ledger.get("run_id") != run_id:
         raise Blocked("final publication: signoff ledger identity is invalid")
@@ -106,6 +106,8 @@ def validate_signoff(ledger: dict[str, Any], *, run_id: str, report_sha256: str,
     if errors: raise Blocked(f"final publication: signoff ledger schema is invalid ({errors[0]})")
     if ledger.get("anchor_hash") != expected_anchor:
         raise Blocked("final publication: signoff ledger anchor is not trusted")
+    if ledger.get("head_hash") != expected_current_head:
+        raise Blocked("final publication: signoff ledger is not the externally trusted current head")
     previous = expected_anchor
     for sequence, entry in enumerate(ledger.get("entries", [])):
         if (entry.get("sequence") != sequence or entry.get("previous_entry_hash") != previous or
@@ -140,9 +142,11 @@ def _safe_artifact(root: Path, relative: str) -> Path:
     return cursor
 
 
-def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Path, *,
+def _publish_documents(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Path, *,
             authorization_key: bytes, expected_ledger_anchor: str,
-            completeness_audit: dict[str, Any], terminal_feedback: dict[str, Any]) -> dict[str, Any]:
+            expected_ledger_head: str,
+            completeness_audit: dict[str, Any], terminal_feedback: dict[str, Any],
+            completion_bindings: dict[str, Any]) -> dict[str, Any]:
     draft_attempt, final_root = Path(draft_attempt), Path(final_root)
     if final_root.exists():
         raise Blocked("final publication: immutable final package already exists")
@@ -159,8 +163,10 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
         raise Blocked("final publication: completion evidence schema is invalid")
     if (completeness_audit.get("run_id")!=publication.get("run_id") or
             terminal_feedback.get("run_id")!=publication.get("run_id") or
+            terminal_feedback.get("audit_sha256")!=_sha(completeness_audit) or
             completeness_audit.get("complete") is not True or
-            terminal_feedback.get("terminal_state") not in {"COMPLETE","UNRESOLVED_AND_REPORTED"}):
+            terminal_feedback.get("terminal_state")!="COMPLETE" or
+            terminal_feedback.get("unresolved_obligation_ids")!=[]):
         raise Blocked("final publication: completion validator did not reach a publishable terminal state")
     artifacts = publication.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts:
@@ -179,9 +185,12 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
     report_record = next((item for item in verified if item[0] == "report.json"), None)
     if report_record is None:
         raise Blocked("final publication: draft report.json is absent")
+    if completeness_audit.get("subject_sha256") != report_record[2]:
+        raise Blocked("final publication: completeness audit is not bound to the exact report")
     signoff = validate_signoff(signoff_ledger, run_id=publication["run_id"],
                                report_sha256=report_record[2], authorization_key=authorization_key,
-                               expected_anchor=expected_ledger_anchor)
+                               expected_anchor=expected_ledger_anchor,
+                               expected_current_head=expected_ledger_head)
     parent = final_root.parent; parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".final-publication-", dir=parent))
     try:
@@ -194,6 +203,11 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
         atomic_json(staging / "human-signoff-ledger.json", signoff_ledger)
         verified.append(("human-signoff-ledger.json", staging / "human-signoff-ledger.json",
                          "sha256:" + file_hash(staging / "human-signoff-ledger.json")))
+        for name,value in (("completion/completeness-audit.json",completeness_audit),
+                           ("completion/synthetic-hypothesis-resynthesis.json",terminal_feedback),
+                           ("completion/accepted-bindings.json",completion_bindings)):
+            atomic_json(staging/name,value)
+            verified.append((name,staging/name,"sha256:"+file_hash(staging/name)))
         if len({relative for relative, _source, _hash in verified}) != len(verified):
             raise Blocked("final publication: final artifact path collision")
         manifest = {"schema": FINAL_SCHEMA, "run_id": publication["run_id"],
@@ -225,6 +239,30 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
         if staging.exists(): shutil.rmtree(staging)
 
 
+def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Path, *,
+            run_root: Path, completeness_ref: dict[str, Any], feedback_ref: dict[str, Any],
+            authorization_key: bytes, expected_ledger_anchor: str,
+            expected_ledger_head: str) -> dict[str, Any]:
+    """Publish only from exact current accepted completeness and feedback attempts."""
+    publication=read_json(_safe_artifact(Path(draft_attempt),"publication-manifest.json"))
+    run_id=publication.get("run_id")
+    expected=((completeness_ref,"completeness-audit","completeness-audit","completeness-audit.json"),
+              (feedback_ref,"synthetic-hypothesis-resynthesis","synthetic-hypothesis-resynthesis",
+               "synthetic-hypothesis-resynthesis.json"))
+    for ref,job,contract,artifact in expected:
+        if (ref.get("job_id")!=job or ref.get("contract_id")!=contract or
+                Path(ref.get("artifact_path","")).name!=artifact):
+            raise Blocked("final publication: completion reference names the wrong producer")
+    # Import here avoids coupling SARIF conversion to lifecycle pointer loading.
+    import synthesis_report
+    audit,audit_binding=synthesis_report.load_reference(Path(run_root),run_id,completeness_ref)
+    feedback,feedback_binding=synthesis_report.load_reference(Path(run_root),run_id,feedback_ref)
+    return _publish_documents(draft_attempt,signoff_ledger,final_root,
+        authorization_key=authorization_key,expected_ledger_anchor=expected_ledger_anchor,
+        expected_ledger_head=expected_ledger_head,completeness_audit=audit,
+        terminal_feedback=feedback,completion_bindings={"audit":audit_binding,"feedback":feedback_binding})
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
@@ -233,11 +271,14 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--authorization-key", type=Path, required=True)
     parser.add_argument("--expected-ledger-anchor", required=True)
-    parser.add_argument("--completeness-audit", type=Path, required=True)
-    parser.add_argument("--terminal-feedback", type=Path, required=True)
+    parser.add_argument("--expected-ledger-head", required=True)
+    parser.add_argument("--run-root", type=Path, required=True)
+    parser.add_argument("--completeness-ref", type=Path, required=True)
+    parser.add_argument("--feedback-ref", type=Path, required=True)
     args = parser.parse_args()
     print(json.dumps(publish(args.draft_attempt, read_json(args.signoff_ledger), args.output,
         authorization_key=args.authorization_key.read_bytes(),
         expected_ledger_anchor=args.expected_ledger_anchor,
-        completeness_audit=read_json(args.completeness_audit),
-        terminal_feedback=read_json(args.terminal_feedback)), indent=2))
+        expected_ledger_head=args.expected_ledger_head,
+        run_root=args.run_root,completeness_ref=read_json(args.completeness_ref),
+        feedback_ref=read_json(args.feedback_ref)), indent=2))

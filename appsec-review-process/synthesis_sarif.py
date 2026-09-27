@@ -21,7 +21,7 @@ def _location(citation: dict[str, Any]) -> dict[str, Any]:
         raise Blocked("synthesis SARIF: citation artifact path is unsafe")
     path = PurePosixPath(raw_path)
     if ("\\" in raw_path or path.is_absolute() or
-            any(part in {"", ".", ".."} for part in path.parts) or ":" in path.parts[0]):
+            "%" in raw_path or any(part in {"", ".", ".."} for part in path.parts) or ":" in path.parts[0]):
         raise Blocked("synthesis SARIF: citation artifact path is unsafe")
     normalized = path.as_posix()
     if normalized != raw_path:

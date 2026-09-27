@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import sys, tempfile, unittest
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
-import completeness_feedback, deterministic_pool_merge, dynamic_rescope, evidence_quorum, remediation_retest
+import completeness_feedback, completeness_audit, deterministic_pool_merge, dynamic_rescope, evidence_quorum, remediation_retest
 from execution_state import atomic_json
 
 class ProcessTests(unittest.TestCase):
@@ -19,21 +19,27 @@ class ProcessTests(unittest.TestCase):
         value=self.invoke(dynamic_rescope,{"run_id":"r1","nodes":["a","b"],"edges":[{"upstream":"a","downstream":"b"}],"changed_nodes":["a"],"iteration":1,"max_iterations":2})
         self.assertEqual(value["affected_nodes"],["a","b"])
     def test_completeness_feedback_is_separate(self):
-        value=self.invoke(completeness_feedback,{"run_id":"r1","expected":[{"obligation_id":"o1"}],"observed":[],"declared_gaps":[],"routes":{"o1":"02-source-sast"},"iteration":1,"max_iterations":2})
+        value=self.invoke(completeness_feedback,{"run_id":"r1","subject_sha256":"sha256:"+"f"*64,"expected":[{"obligation_id":"o1"}],"observed":[],"declared_gaps":[],"routes":{"o1":"02-source-sast"},"iteration":1,"max_iterations":2})
         self.assertEqual(value["feedback"]["terminal_state"],"TARGETED_ANALYSIS_REQUIRED")
     def test_remediation_retest_is_separate(self):
         environment={"source_sha256":"sha256:"+"a"*64,"build_sha256":"sha256:"+"b"*64,"target_sha256":"sha256:"+"c"*64,"change_ref":"patch-1"}; value=self.invoke(remediation_retest,{"run_id":"r1","verified_claims":[{"claim_id":"c1","status":"VERIFIED"}],"proposals":[{"proposal_id":"p1","claim_id":"c1","state":"AUTHORIZED","author_id":"author","change_ref":"patch-1","rationale":"Bounded fix proposal.","target_components":["component-1"]}],"retests":[{"proposal_id":"p1","original_environment":environment,"retest":{"environment":environment,"result":"PASSED","executor_id":"executor"},"verifier":{"producer_id":"verifier","decision":"VERIFIED"}}]})
         self.assertEqual(value["retests"][0]["state"],"FIXED")
     def test_each_process_can_publish_a_common_immutable_attempt(self):
         cases=[
-          (deterministic_pool_merge,{"run_id":"r1","expected_workers":[],"worker_results":[]}),
           (dynamic_rescope,{"run_id":"r1","nodes":["a"],"edges":[],"changed_nodes":["a"],"iteration":1,"max_iterations":2}),
-          (completeness_feedback,{"run_id":"r1","expected":[],"observed":[],"declared_gaps":[],"routes":{},"iteration":1,"max_iterations":2}),
+          (completeness_audit,{"run_id":"r1","subject_sha256":"sha256:"+"f"*64,"expected":[],"observed":[],"declared_gaps":[]}),
           (remediation_retest,{"run_id":"r1","verified_claims":[],"proposals":[],"retests":[]})]
         with tempfile.TemporaryDirectory() as directory:
           for index,(module,value) in enumerate(cases):
             source=Path(directory)/f"input-{index}.json"; atomic_json(source,value); output=Path(directory)/f"attempt-{index}"
             module.run_attempt(source,output,attempt_id=f"a{index}",source_snapshot_sha256="sha256:"+"a"*64,started_at="2026-09-27T00:00:00Z",finished_at="2026-09-27T00:00:01Z")
             self.assertTrue((output/"result.json").is_file())
+    def test_raw_merge_and_quorum_attempt_publication_is_disabled(self):
+        from execution_state import Blocked
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory)/"input.json"; atomic_json(source,{"run_id":"r1","expected_workers":[],"worker_results":[]})
+            with self.assertRaises(Blocked): deterministic_pool_merge.run_attempt(source,Path(directory)/"merge",attempt_id="a1",source_snapshot_sha256="sha256:"+"a"*64,started_at="x",finished_at="y")
+            atomic_json(source,{"run_id":"r1","merge":{},"minimum_producers":1})
+            with self.assertRaises(Blocked): evidence_quorum.run_attempt(source,Path(directory)/"quorum",attempt_id="a2",source_snapshot_sha256="sha256:"+"a"*64,started_at="x",finished_at="y")
 
 if __name__=="__main__": unittest.main()

@@ -64,11 +64,17 @@ def run(source: Path, output: Path):
 
 def run_attempt(source: Path, output_root: Path, *, attempt_id: str, source_snapshot_sha256: str,
                 started_at: str, finished_at: str):
-    value=read_json(source); result=deterministic_merge(value["run_id"],value["expected_workers"],value["worker_results"])
-    return control_process_worker.publish(run_id=value["run_id"],job_id=JOB,attempt_id=attempt_id,
+    raise Blocked("deterministic merge: raw caller-authored attempts cannot be published")
+
+def run_verified_attempt(verified: pool_rendezvous.VerifiedManifest, *, pool_root: Path,
+        output_root: Path, run_id: str, attempt_id: str, source_snapshot_sha256: str,
+        started_at: str, finished_at: str):
+    result=merge_verified_manifest(verified,pool_root=pool_root,run_id=run_id)
+    binding={"run_id":run_id,"pool_manifest_sha256":verified.manifest["manifest_sha256"],
+             "pool_expansion_sha256":verified.plan.manifest["expansion_sha256"]}
+    return control_process_worker.publish(run_id=run_id,job_id=JOB,attempt_id=attempt_id,
         contract_id=CONTRACT,result_name=RESULT,result=result,output_root=output_root,
-        source_snapshot_sha256=source_snapshot_sha256,input_binding=value,started_at=started_at,finished_at=finished_at)
+        source_snapshot_sha256=source_snapshot_sha256,input_binding=binding,started_at=started_at,finished_at=finished_at)
 
 if __name__ == "__main__":
-    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument("--input",type=Path,required=True); parser.add_argument("--output",type=Path,required=True); args=parser.parse_args()
-    print(json.dumps(run(args.input,args.output),indent=2))
+    raise SystemExit("verified C02 pool context is required; raw merge CLI publication is disabled")

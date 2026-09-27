@@ -67,6 +67,12 @@ class SynthesisSarifTests(unittest.TestCase):
         trace["citations"][0]["artifact_path"]="../escape.c"
         with self.assertRaisesRegex(Blocked,"unsafe"):
             synthesis_sarif.build(report,trace,report_sha256="x",trace_sha256="y")
+        report, trace = self.values()
+        for citation in (report["verified_findings"][0]["citations"][0],
+                         report["verified_findings"][0]["verification_citations"][0],
+                         trace["citations"][0]): citation["artifact_path"]="%2e%2e/secret.txt"
+        with self.assertRaisesRegex(Blocked,"unsafe"):
+            synthesis_sarif.build(report,trace,report_sha256="x",trace_sha256="y")
 
 
 if __name__ == "__main__": unittest.main()

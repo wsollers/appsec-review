@@ -10,22 +10,62 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from execution_state import Blocked, atomic_json, file_hash
+from execution_state import Blocked, atomic_json, file_hash, tree_hashes
 import final_publication as final
+import control_process_worker
 from .test_synthesis_sarif import SynthesisSarifTests
 
 
 class FinalPublicationTests(unittest.TestCase):
     KEY = b"fixture-final-publication-key-32bytes-minimum"
     ANCHOR = "sha256:" + "9" * 64
-    AUDIT={"schema":"appsec-review/completeness-audit/1.0","run_id":"run-1","expected_count":0,
-        "observed_ids":[],"declared_gap_ids":[],"missing_ids":[],"false_gap_ids":[],"complete":True}
+    AUDIT={"schema":"appsec-review/completeness-audit/1.0","run_id":"run-1","subject_sha256":"",
+        "expected_count":0,
+        "observed_ids":[],"declared_gap_ids":[],"missing_ids":[],"false_gap_ids":[],
+        "observed_evidence":[],"gap_evidence":[],"complete":True}
     FEEDBACK={"schema":"appsec-review/synthetic-feedback/1.0","run_id":"run-1","iteration":1,
-        "max_iterations":1,"terminal_state":"COMPLETE","hypotheses":[],"unresolved_obligation_ids":[]}
+        "audit_sha256":final._sha(AUDIT),"max_iterations":1,"terminal_state":"COMPLETE",
+        "hypotheses":[],"unresolved_obligation_ids":[]}
+
+    def _accepted(self,run_root,job,contract,result_name,value,attempt_id):
+        base=run_root/"data"/"jobs"/job; attempt=base/"attempts"/attempt_id
+        control_process_worker.publish(run_id="run-1",job_id=job,attempt_id=attempt_id,
+            contract_id=contract,result_name=result_name,result=value,output_root=attempt,
+            source_snapshot_sha256="sha256:"+"a"*64,input_binding={"fixture":attempt_id},
+            started_at="2026-09-27T00:00:00Z",finished_at="2026-09-27T00:00:01Z")
+        envelope=json.loads((attempt/"result.json").read_text())
+        pointer={"schema":"appsec-review/accepted-worker-result/1.0","status":"OK","run_id":"run-1",
+            "job":job,"attempt_id":attempt_id,"fingerprint":envelope["input_fingerprint"],
+            "envelope_path":"result.json","envelope_sha256":file_hash(attempt/"result.json"),
+            "hashes":tree_hashes(attempt),"accepted_at":"2026-09-27T00:00:02Z"}
+        atomic_json(base/"accepted.json",pointer); atomic_json(base/"latest.json",{"attempt_id":attempt_id,"updated_at":"2026-09-27T00:00:02Z"})
+        return {"job_id":job,"attempt_id":attempt_id,"contract_id":contract,
+            "artifact_path":f"data/jobs/{job}/attempts/{attempt_id}/{result_name}",
+            "artifact_sha256":"sha256:"+file_hash(attempt/result_name),
+            "accepted_pointer_sha256":"sha256:"+file_hash(base/"accepted.json"),
+            "permission_receipt_sha256":"sha256:"+file_hash(attempt/"permission.json"),
+            "lineage_receipt_sha256":"sha256:"+file_hash(attempt/"lineage.json")}
+
+    def _completion(self,draft,audit=None,feedback=None,suffix="a1"):
+        defaults=audit is None and feedback is None
+        key=(str(draft),suffix)
+        cache=getattr(self,"_completion_cache",{})
+        if defaults and key in cache: return cache[key]
+        run_root=Path(draft).parent/("run-"+suffix); report_sha="sha256:"+file_hash(Path(draft)/"report.json")
+        audit=audit or {**self.AUDIT,"subject_sha256":report_sha}
+        feedback=feedback or {**self.FEEDBACK,"audit_sha256":final._sha(audit)}
+        audit_ref=self._accepted(run_root,"completeness-audit","completeness-audit","completeness-audit.json",audit,"audit-"+suffix)
+        feedback_ref=self._accepted(run_root,"synthetic-hypothesis-resynthesis","synthetic-hypothesis-resynthesis","synthetic-hypothesis-resynthesis.json",feedback,"feedback-"+suffix)
+        result=(run_root,audit_ref,feedback_ref)
+        if defaults:
+            cache[key]=result; self._completion_cache=cache
+        return result
 
     def publish(self,draft,ledger,output,**overrides):
+        run_root,audit_ref,feedback_ref=self._completion(draft,suffix=output.name)
         args={"authorization_key":self.KEY,"expected_ledger_anchor":self.ANCHOR,
-              "completeness_audit":self.AUDIT,"terminal_feedback":self.FEEDBACK}
+              "expected_ledger_head":ledger["head_hash"],
+              "run_root":run_root,"completeness_ref":audit_ref,"feedback_ref":feedback_ref}
         args.update(overrides); return final.publish(draft,ledger,output,**args)
     def fixture(self, root: Path):
         draft = root / "draft"; draft.mkdir()
@@ -84,7 +124,8 @@ class FinalPublicationTests(unittest.TestCase):
             with self.assertRaisesRegex(Blocked, "chain"):
                 final.validate_signoff(forged, run_id="run-1",
                     report_sha256="sha256:" + file_hash(draft / "report.json"),
-                    authorization_key=self.KEY, expected_anchor=self.ANCHOR)
+                    authorization_key=self.KEY, expected_anchor=self.ANCHOR,
+                    expected_current_head=forged["head_hash"])
 
     def test_forged_authorization_or_untrusted_anchor_blocks(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -97,6 +138,17 @@ class FinalPublicationTests(unittest.TestCase):
                 self.publish(draft,forged,root/"forged")
             with self.assertRaisesRegex(Blocked,"anchor"):
                 self.publish(draft,ledger,root/"wrong-anchor",expected_ledger_anchor="sha256:"+"8"*64)
+
+    def test_ledger_rollback_against_external_current_head_blocks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); draft,approved=self.fixture(root); report_sha="sha256:"+file_hash(draft/"report.json")
+            rejection=final.sign_authorization(run_id="run-1",reviewer_id="human-1",report_sha256=report_sha,
+                decision="REJECTED",issued_at="2026-09-27T01:01:00Z",authorization_id="auth-2",key=self.KEY)
+            current=final.append_signoff(approved,run_id="run-1",reviewer_id="human-1",report_sha256=report_sha,
+                decision="REJECTED",signed_at="2026-09-27T01:02:00Z",rationale="Rejected after review.",
+                authorization=rejection,authorization_key=self.KEY,expected_prior_head=approved["head_hash"])
+            with self.assertRaisesRegex(Blocked,"current head"):
+                self.publish(draft,approved,root/"rollback",expected_ledger_head=current["head_hash"])
 
     def test_draft_cannot_claim_publisher_owned_path(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -112,9 +164,14 @@ class FinalPublicationTests(unittest.TestCase):
     def test_incomplete_or_nonterminal_completion_evidence_blocks(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); draft,ledger=self.fixture(root)
-            audit={**self.AUDIT,"complete":False,"missing_ids":["o1"],"expected_count":1}
+            report_sha="sha256:"+file_hash(draft/"report.json")
+            audit={**self.AUDIT,"subject_sha256":report_sha,"complete":False,"missing_ids":["o1"],"expected_count":1}
+            feedback={**self.FEEDBACK,"audit_sha256":final._sha(audit),"terminal_state":"UNRESOLVED_AND_REPORTED","unresolved_obligation_ids":["o1"]}
+            run_root,audit_ref,feedback_ref=self._completion(draft,audit,feedback,"incomplete")
             with self.assertRaisesRegex(Blocked,"completion validator"):
-                self.publish(draft,ledger,root/"incomplete",completeness_audit=audit)
+                final.publish(draft,ledger,root/"incomplete",authorization_key=self.KEY,
+                    expected_ledger_anchor=self.ANCHOR,expected_ledger_head=ledger["head_hash"],
+                    run_root=run_root,completeness_ref=audit_ref,feedback_ref=feedback_ref)
 
 
 if __name__ == "__main__":

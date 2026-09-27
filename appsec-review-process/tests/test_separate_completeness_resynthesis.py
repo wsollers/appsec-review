@@ -8,7 +8,7 @@ class SeparateFeedbackTests(unittest.TestCase):
     def test_audit_then_resynthesis_are_distinct_attempts(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); audit_input=root/"audit-input.json"; audit_output=root/"audit.json"
-            atomic_json(audit_input,{"run_id":"r1","expected":[{"obligation_id":"o1"}],"observed":[],"declared_gaps":[]})
+            atomic_json(audit_input,{"run_id":"r1","subject_sha256":"sha256:"+"f"*64,"expected":[{"obligation_id":"o1"}],"observed":[],"declared_gaps":[]})
             audit=completeness_audit.run(audit_input,audit_output)
             feedback_input=root/"feedback-input.json"; feedback_output=root/"feedback.json"
             atomic_json(feedback_input,{"run_id":"r1","audit":audit,"routes":{"o1":"02-source-sast"},"iteration":1,"max_iterations":2})

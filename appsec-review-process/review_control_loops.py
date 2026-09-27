@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from copy import deepcopy
+import re
 from typing import Any, Iterable
 
 from execution_state import Blocked, digest
 
 SHA = "sha256:"
+SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _sha(value: Any) -> str:
@@ -169,7 +171,9 @@ def bounded_rescope(run_id: str, index: dict[str, Any], changed_nodes: list[str]
 
 
 def completeness_audit(run_id: str, expected: list[dict[str, str]], observed: list[dict[str, str]],
-                       declared_gaps: list[dict[str, str]]) -> dict[str, Any]:
+                       declared_gaps: list[dict[str, str]], *, subject_sha256: str) -> dict[str, Any]:
+    if not SHA_RE.fullmatch(subject_sha256):
+        raise Blocked("review controls: completeness subject binding is invalid")
     expected_by_id = _unique(expected, "obligation_id", "expected obligation")
     observed_by_id = _unique(observed, "obligation_id", "observed obligation")
     gaps_by_id = _unique(declared_gaps, "obligation_id", "declared gap")
@@ -177,17 +181,21 @@ def completeness_audit(run_id: str, expected: list[dict[str, str]], observed: li
     if unknown or set(observed_by_id) & set(gaps_by_id):
         raise Blocked("review controls: completeness evidence is contradictory or unknown")
     for row in observed_by_id.values():
-        if set(row) != {"obligation_id", "evidence_sha256"} or not row["evidence_sha256"].startswith(SHA):
+        if set(row) != {"obligation_id", "evidence_sha256"} or not SHA_RE.fullmatch(row["evidence_sha256"]):
             raise Blocked("review controls: observed obligation lacks evidence binding")
     for row in gaps_by_id.values():
-        if set(row) != {"obligation_id", "reason", "evidence_sha256"} or not row["evidence_sha256"].startswith(SHA):
+        if set(row) != {"obligation_id", "reason", "evidence_sha256"} or not SHA_RE.fullmatch(row["evidence_sha256"]):
             raise Blocked("review controls: declared gap lacks evidence binding")
     missing = sorted(set(expected_by_id) - set(observed_by_id) - set(gaps_by_id))
     false_gaps = sorted(key for key in gaps_by_id if gaps_by_id[key].get("reason") in {"", None})
     return {"schema": "appsec-review/completeness-audit/1.0", "run_id": run_id,
+            "subject_sha256": subject_sha256,
             "expected_count": len(expected_by_id), "observed_ids": sorted(observed_by_id),
             "declared_gap_ids": sorted(gaps_by_id), "missing_ids": missing,
-            "false_gap_ids": false_gaps, "complete": not missing and not false_gaps}
+            "false_gap_ids": false_gaps,
+            "observed_evidence": [observed_by_id[key] for key in sorted(observed_by_id)],
+            "gap_evidence": [gaps_by_id[key] for key in sorted(gaps_by_id)],
+            "complete": not missing and not false_gaps}
 
 
 def synthetic_feedback(run_id: str, audit: dict[str, Any], routes: dict[str, str], *, iteration: int,
@@ -215,6 +223,7 @@ def synthetic_feedback(run_id: str, audit: dict[str, Any], routes: dict[str, str
                    "obligation_id": item, "target_job_id": routes[item], "claim_class": "candidate_only"}
                   for item in missing] if terminal == "TARGETED_ANALYSIS_REQUIRED" else []
     return {"schema": "appsec-review/synthetic-feedback/1.0", "run_id": run_id,
+            "audit_sha256": _sha(audit),
             "iteration": iteration, "max_iterations": max_iterations, "terminal_state": terminal,
             "hypotheses": hypotheses, "unresolved_obligation_ids": missing}
 
@@ -250,6 +259,9 @@ def same_environment_retest(run_id: str, proposal: dict[str, Any], original_envi
             not isinstance(original_environment[key], str) or not original_environment[key]
             for key in required_environment):
         raise Blocked("review controls: original retest environment binding is incomplete")
+    if any(not SHA_RE.fullmatch(original_environment[key])
+           for key in ("source_sha256","build_sha256","target_sha256")):
+        raise Blocked("review controls: retest environment hashes are invalid")
     if original_environment["change_ref"] != proposal.get("change_ref"):
         raise Blocked("review controls: retest change differs from the authorized proposal")
     if retest.get("environment") != original_environment:
