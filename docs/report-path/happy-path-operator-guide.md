@@ -219,4 +219,3 @@ stage to bind neither would permit stale or cross-generation evidence.
 Stop on any missing or stale pointer, failed latest attempt, mixed source/component generation,
 unresolved citation, changed artifact hash, contradictory ledger head, missing coverage, or absent
 adapter. Record the condition as a gap; never reinterpret it as “no issues found.”
-
