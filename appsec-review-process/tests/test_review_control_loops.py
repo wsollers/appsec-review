@@ -40,6 +40,14 @@ class ReviewControlLoopTests(unittest.TestCase):
         self.assertEqual(merged["candidates"], [])
         self.assertEqual(merged["conflicts"][0]["candidate_id"], "c1")
 
+    def test_cross_run_worker_or_merge_replay_rejects(self):
+        expected,results=self.workers(); results[0]["run_id"]="other-run"
+        with self.assertRaisesRegex(Blocked,"bound to this run"):
+            controls.deterministic_merge("run-1",expected,results)
+        expected,results=self.workers(); merged=controls.deterministic_merge("run-1",expected,results)
+        with self.assertRaisesRegex(Blocked,"bound to this run"):
+            controls.evidence_qualified_quorum("other-run",merged,minimum_producers=1)
+
     def test_dependency_index_and_bounded_affected_only_rescope(self):
         index = controls.dependency_index("run-1", ["component", "threat", "owasp", "report"], [
             {"upstream": "component", "downstream": "threat"},
@@ -83,6 +91,10 @@ class ReviewControlLoopTests(unittest.TestCase):
             controls.same_environment_retest("run-1", proposal, env,
                 {"proposal_id":"r1","environment": {**env, "build_sha256": "sha256:" + "d" * 64}, "result": "PASSED",
                  "executor_id": "executor"}, {"producer_id": "verifier", "decision": "VERIFIED"})
+        with self.assertRaisesRegex(Blocked,"independent"):
+            controls.same_environment_retest("run-1",proposal,env,
+                {"proposal_id":"r1","environment":env,"result":"PASSED","executor_id":""},
+                {"producer_id":"verifier","decision":"VERIFIED"})
 
     def test_final_gate_requires_complete_terminal_exact_human_signoff(self):
         draft = {"status": "DRAFT_EVIDENCE_BACKED", "verified_findings": []}
