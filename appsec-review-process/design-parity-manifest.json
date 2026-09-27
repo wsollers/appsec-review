@@ -2936,19 +2936,29 @@
           "02-native-build"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-test-execution",
+        "persona": "qa-test-validator",
+        "role": "test-evidence-producer",
+        "domain": "qa-test-artifacts",
+        "tooling_profile": "bounded-test-evidence",
+        "output_contract": "test-execution"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/test_execution.py:run",
+        "validator": "appsec-review-process/test_execution.py:validate"
       },
       "output": {
         "contract": "test-execution",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/test-execution.json",
+        "schema_file": "schemas/test-execution.schema.json",
+        "claim_class": "test_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "target-execution",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -2961,23 +2971,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_test_evidence.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "operator_test_control_staging_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification."
     },
     {
       "id": "02-test-result-ingest",
@@ -2992,19 +3001,29 @@
           "02-test-execution"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-test-result-ingest",
+        "persona": "qa-test-validator",
+        "role": "test-evidence-producer",
+        "domain": "qa-test-artifacts",
+        "tooling_profile": "bounded-test-evidence",
+        "output_contract": "test-result-intelligence"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/test_result_ingest.py:run",
+        "validator": "appsec-review-process/test_result_ingest.py:validate"
       },
       "output": {
         "contract": "test-result-intelligence",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/test-result-intelligence.json",
+        "schema_file": "schemas/test-results.schema.json",
+        "claim_class": "test_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -3017,23 +3036,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_test_evidence.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "accepted_test_execution_lifecycle_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification."
     },
     {
       "id": "02-test-coverage-ingest",
@@ -3048,19 +3066,29 @@
           "02-test-execution"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-test-coverage-ingest",
+        "persona": "test-coverage-indexer",
+        "role": "test-evidence-producer",
+        "domain": "qa-test-artifacts",
+        "tooling_profile": "bounded-test-evidence",
+        "output_contract": "test-coverage-intelligence"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/test_coverage_ingest.py:run",
+        "validator": "appsec-review-process/test_coverage_ingest.py:validate"
       },
       "output": {
         "contract": "test-coverage-intelligence",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract_file": "appsec-review-process/registry/output-contracts/test-coverage-intelligence.json",
+        "schema_file": "schemas/test-coverage.schema.json",
+        "claim_class": "test_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -3073,23 +3101,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_test_evidence.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "accepted_test_execution_lifecycle_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification."
     },
     {
       "id": "02-operations-doc-ingest",

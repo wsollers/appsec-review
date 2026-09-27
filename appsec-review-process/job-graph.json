@@ -1070,7 +1070,7 @@
     "02-test-execution": {
       "lane": "02-evidence-pregather",
       "contract": "test-execution",
-      "template": null,
+      "template": "02-test-execution",
       "implemented": false,
       "namespace": "02-test-execution",
       "dependencies": [
@@ -1085,14 +1085,17 @@
       ],
       "planned_scope": "Explicit isolated test plan; capture test results and optional instrumentation, with time/resource limits.",
       "required_artifacts": [
-        "test-run-manifest.json",
-        "test-results.json"
+        "test-execution.json",
+        "b13-receipt.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-test-result-ingest": {
       "lane": "02-evidence-pregather",
       "contract": "test-result-intelligence",
-      "template": null,
+      "template": "02-test-result-ingest",
       "implemented": false,
       "namespace": "02-test-result-ingest",
       "dependencies": [
@@ -1107,14 +1110,16 @@
       ],
       "planned_scope": "Consume unit/integration/regression results by suite; distinguish missing, skipped, failed and passed.",
       "required_artifacts": [
-        "test-results-index.json",
-        "test-gaps.json"
+        "test-results.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-test-coverage-ingest": {
       "lane": "02-evidence-pregather",
       "contract": "test-coverage-intelligence",
-      "template": null,
+      "template": "02-test-coverage-ingest",
       "implemented": false,
       "namespace": "02-test-coverage-ingest",
       "dependencies": [
@@ -1129,8 +1134,10 @@
       ],
       "planned_scope": "Consume coverage only when instrumentation is identified; missing coverage is an explicit gap.",
       "required_artifacts": [
-        "test-coverage-index.json",
-        "coverage-gaps.json"
+        "test-coverage.json",
+        "status.json",
+        "permission.json",
+        "lineage.json"
       ]
     },
     "02-operations-doc-ingest": {
