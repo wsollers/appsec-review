@@ -48,12 +48,20 @@ python3 -B appsec-review-process/stage_artifacts.py \
   --execution-environment dagster-read-only-linux
 python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
+python3 -B appsec-review-process/offline_evidence_control.py stage-control "$RUN_ID" \
+  --snapshot-registry /home/wsollers/projects/appsec-review/appsec-review-process/offline/dependency-snapshots \
+  --max-database-age-seconds 86400 \
+  --reference-table "$REPO/data/reference/dependency-lifecycle-reference.json" \
+  --max-reference-age-days 30
 ```
 
-The two control commands retain the engagement owner's run- and source-bound authorization for
+The build control commands retain the engagement owner's run- and source-bound authorization for
 package resolution and no-network replay of the accepted configure/build lock. They do not grant
 arbitrary commands: the workers still enforce the closed command profiles, pinned images, target
-path, expiry, and exact permission decision. Test execution requires a separate explicit control
+path, expiry, and exact permission decision. The offline-evidence command performs no download: it
+fails closed unless both immutable database generations and the lifecycle table already resolve,
+rehash, and satisfy the explicit age ceilings. Snapshot synchronization remains a separate,
+permissioned maintenance operation. Test execution requires a separate explicit control
 after the accepted native-build unit and the target's real test command are known; do not invent a
 test command or result path during initial staging.
 

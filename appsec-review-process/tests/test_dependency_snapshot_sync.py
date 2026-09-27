@@ -99,6 +99,22 @@ class SnapshotSyncTests(unittest.TestCase):
         self.assertEqual(calls, [{"coordinator_id": "periodic"}])
         self.assertEqual(result["dependencies"][0]["database_kind"], "grype-db")
 
+    def test_file_snapshot_retains_the_exact_vendor_archive_at_a_fixed_cache_path(self):
+        spec = {**self.spec("osv"), "archive": "file",
+                "target_path": "osv-scanner/OSS-Fuzz/all.zip",
+                "required_paths": ["osv-scanner/OSS-Fuzz/all.zip"]}
+        result = syncer.sync_one(spec, self.grants(), run_id=self.run,
+            source_snapshot_sha256=self.source, now=self.now, registry_root=self.root / "registry",
+            opener=lambda *_args, **_kwargs: Response(self.archive))
+        retained = Path(result["data_root"], "osv-scanner", "OSS-Fuzz", "all.zip")
+        self.assertEqual(retained.read_bytes(), self.archive)
+
+        unsafe = {**spec, "target_path": "../all.zip", "required_paths": ["../all.zip"]}
+        with self.assertRaisesRegex(syncer.SyncBlocked, "unsafe path"):
+            syncer.sync_one(unsafe, self.grants(), run_id=self.run,
+                source_snapshot_sha256=self.source, now=self.now, registry_root=self.root / "registry",
+                opener=lambda *_args, **_kwargs: Response(self.archive))
+
     def test_nvd_warning_window_is_usable_and_hard_ceiling_still_fails(self):
         nvd = self.root / "nvd"; Publisher(nvd).sync(T0)
         result, warnings = sca_nvd_snapshot.resolve_snapshot_window(nvd, warn_age=timedelta(hours=1),
