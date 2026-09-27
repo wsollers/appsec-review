@@ -47,6 +47,10 @@ Task-scoped prompts:
 
 | Prompt | Task |
 |---|---|
+| [stage14-15-fault-recovery-hardening.md](stage14-15-fault-recovery-hardening.md) | H14: harden and independently qualify build-configure/native-build recovery without touching shared integration surfaces. |
+| [source-sast-hardening.md](source-sast-hardening.md) | H16: harden source-SAST recovery and close or precisely retain the Go/Java/PHP tool gaps. |
+| [hardening-test-qualification.md](hardening-test-qualification.md) | Q16: read-only independent verification of H14, H16 and the staged component-characterization core. |
+| [hardening-documentation-integration.md](hardening-documentation-integration.md) | D16: master-agent documentation, review and serialized integration instructions. |
 | [design-parity-worker-envelope.md](design-parity-worker-envelope.md) | Design parity Workstream B, batch 9 (common worker envelope); holds run ids `TODO.md` cites. |
 | [scripts-to-pipeline-migration.md](scripts-to-pipeline-migration.md) | Migrating review jobs out of `scripts/` (see the Script Migration Rule in `AGENTS.md`). |
 | [g02-owasp-workbench-decision.md](g02-owasp-workbench-decision.md) | G02 OWASP control workbench decision. |

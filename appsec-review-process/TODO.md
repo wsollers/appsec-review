@@ -1337,6 +1337,24 @@ both implemented, neither live-qualified yet; 54 on 2026-09-26 with `02-build-pl
 A closed decision batch is marked `DONE` with the accepted ADR that closed it; `DONE` is not a
 worker-readiness claim.
 
+### Active hardening coordination — 2026-09-27
+
+The master agent owns integration and the shared surfaces. Four lanes run with strict path
+ownership; coding agents must stop and report rather than edit another lane's files.
+
+| Lane | Status | Exclusive scope | Must not edit | Exit condition |
+|---|---|---|---|---|
+| **H14** build-replay fault/recovery | CLAIMED | `build_replay.py`, build-replay focused tests, a new dedicated qualifier under `appsec-review-process/` | job graph, parity manifest/views, Dagster definitions/workflow, launcher, docs, source-SAST files | Prove immutable reuse, tamper rejection, newest-failure blocking, explicit forced recovery and recovered reuse for both `02-build-configure` and `02-native-build`; report run/attempt/hash evidence. |
+| **H16** source-SAST hardening | CLAIMED | `source_sast.py`, source-SAST rules/tool adapters, source-SAST focused tests, a new dedicated qualifier | job graph, parity manifest/views, Dagster definitions/workflow, launcher, docs, build-replay files | Prove the same recovery invariants for `02-source-sast`; either integrate each declared Go/Java/PHP pinned tool with normalized lead semantics or leave a precise tool-by-tool blocked gap—never synthesize coverage. |
+| **Q16** independent qualification | ACTIVE, READ-ONLY | current `main`, H14/H16 commits when available, component-characterization commit `ef415950` | all tracked files | Produce an evidence-backed test matrix, independently rerun focused/contract/parity checks, identify regressions and distinguish missing host prerequisites from code failures. |
+| **D16** documentation/integration | MASTER AGENT | this backlog, continuation prompts, operator/status docs and generated catalogs after code review | worker implementation while coding lanes are active | Keep statuses honest, integrate only reviewed commits, regenerate views, record qualification evidence, and leave F03 blocked until F02 publishes an accepted evidence-assembly envelope. |
+
+H14 and H16 are independent because they own disjoint worker and test files. Neither may claim or
+edit a shared surface. If hardening reveals a required output-contract, common-runtime, Dagster or
+graph change, the agent records the exact change as an integration request; the master performs it
+serially after both coding lanes stop. The component-characterization core is complete on commit
+`ef415950` but remains staged, not executable: F03 is still `BLOCKED(F02)`.
+
 Cross-cutting capability ownership is explicit:
 
 | Manifest capability | Owning batches |
