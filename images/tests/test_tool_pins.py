@@ -39,6 +39,18 @@ class CommittedTools(unittest.TestCase):
             self.assertEqual(len(builds), 1)
             self.assertEqual(builds[0]["tag"], f"{folder.name}:local")
 
+    def test_hash_bound_text_inputs_are_checkout_stable(self):
+        attributes = (IMAGES / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn("tool-*/requirements.txt text eol=lf", attributes.splitlines())
+        self.assertIn("tool-*/keys/*.pub text eol=lf", attributes.splitlines())
+        paths = [folder / "requirements.txt" for folder in tp.tool_dirs()
+                 if (folder / "requirements.txt").is_file()]
+        paths.extend(IMAGES.glob("tool-*/keys/*.pub"))
+        self.assertTrue(paths)
+        for path in paths:
+            with self.subTest(path=path.relative_to(IMAGES).as_posix()):
+                self.assertNotIn(b"\r\n", path.read_bytes())
+
 
 class Checksums(unittest.TestCase):
     def test_entry_found_exactly(self):

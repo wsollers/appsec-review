@@ -93,7 +93,10 @@ class BuildReplayTests(unittest.TestCase):
             (target / "src").mkdir()
             source = target / "src" / "main.c"
             source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
-            (target / "main-link.c").symlink_to("src/main.c")
+            try:
+                (target / "main-link.c").symlink_to("src/main.c")
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable on this host: {exc}")
             (target / ".git").mkdir()
             (target / ".git" / "index").write_bytes(b"first")
             initial = worker.source_tree_sha256(target)
