@@ -3,7 +3,8 @@
 
 One request, one registry-pinned image, one argv array, one container, one terminal result.
 
-* The image is resolved from ``registry/container-images/`` to ``repository@sha256:digest``. The
+* The image is resolved from ``registry/container-images/`` to ``repository@sha256:digest`` for a
+  portable manifest/index or the raw ``sha256:digest`` for a verified host-local image id. The
   reference handed to docker is built from the registry record, never from the request.
 * The docker command line is a list built by :func:`build_docker_argv` and executed without a
   shell through ``deterministic_child.execute_child`` (process gate, process-tree teardown,
@@ -58,6 +59,8 @@ RESULT_SCHEMA = "pinned-container-result.schema.json"
 IMAGE_SCHEMA = "container-image.schema.json"
 
 IMAGES_DIR = ROOT / "registry" / "container-images"
+BUILD_IMAGES_DIR = Path(os.environ.get(
+    "APPSEC_BUILD_IMAGES_ROOT", ROOT / "data" / "build-images")) / "container-images"
 WORKER_KIND = "pinned_container"
 RESULT_FILE = "container-result.json"
 REQUEST_FILE = "request.json"
@@ -396,6 +399,12 @@ def load_image_registry(directory: Path, store: SchemaStore | None = None) -> di
     store = store or SchemaStore()
     records: dict[str, dict[str, Any]] = {}
     paths = sorted(directory.glob("*.json")) if directory.is_dir() else []
+    # B16 records remain the tracked/default registry. Stage 13 may add only its closed,
+    # fingerprint-named image_build_* records from the host-local catalog; arbitrary local ids
+    # cannot shadow a tracked record. A caller that explicitly supplies another directory gets
+    # exactly that directory, preserving the adapter's test/runtime isolation.
+    if directory.resolve() == IMAGES_DIR.resolve() and BUILD_IMAGES_DIR.is_dir():
+        paths += sorted(BUILD_IMAGES_DIR.glob("image_build_*.json"))
     if not paths:
         raise ContainerRequestError("container image registry is missing or empty")
     for path in paths:
@@ -408,6 +417,11 @@ def load_image_registry(directory: Path, store: SchemaStore | None = None) -> di
             raise ContainerRequestError(f"{path.name}: invalid container image record ({len(errors)} errors)")
         if record["image_id"] != path.stem:
             raise ContainerRequestError(f"{path.name}: image_id and file name must agree")
+        if path.parent.resolve() == BUILD_IMAGES_DIR.resolve() \
+                and not re.fullmatch(r"image_build_[0-9a-f]{12}", record["image_id"]):
+            raise ContainerRequestError(f"{path.name}: host-local image id is outside the build-image namespace")
+        if record["image_id"] in records:
+            raise ContainerRequestError(f"{path.name}: duplicate container image id")
         records[record["image_id"]] = record
     return records
 
@@ -441,8 +455,10 @@ def build_docker_argv(*, docker_executable: str, name: str, user: str, image_ref
         raise ContainerRequestError("container name is not run-owned")
     if not isinstance(user, str) or not _USER_RE.match(user):
         raise ContainerRequestError("container user must be a numeric uid:gid with neither uid 0 nor gid 0")
-    if not re.match(r"[a-z0-9][a-z0-9._:/-]{0,254}@sha256:[0-9a-f]{64}\Z", image_ref):
-        raise ContainerRequestError("image reference is not repository@sha256:digest")
+    if not (re.match(r"[a-z0-9][a-z0-9._:/-]{0,254}@sha256:[0-9a-f]{64}\Z", image_ref)
+            or _SHA_RE.match(image_ref)):
+        raise ContainerRequestError(
+            "image reference is neither repository@sha256:digest nor a host-local sha256 image id")
     command = [
         docker_executable, "run", "--name", name,
         "--label", "appsec-review.adapter=" + ADAPTER_ID,

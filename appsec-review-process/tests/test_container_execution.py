@@ -516,6 +516,12 @@ def golden_arguments(flavor: str) -> dict:
 
 
 class ParityTests(unittest.TestCase):
+    def test_docker_argv_accepts_the_b16_host_local_image_id_reference(self):
+        arguments = golden_arguments("posix")
+        arguments["image_ref"] = "sha256:" + "a" * 64
+        argv = ce.build_docker_argv(**arguments)
+        self.assertIn(arguments["image_ref"], argv)
+
     def test_posix_host_paths(self):
         for good in ("/srv/target", "/srv/review targets/repo (1)", "/a", "/mnt/c/Users/x", "/srv/a:b"):
             self.assertEqual(ce.translate_host_path(good, "posix"), good)

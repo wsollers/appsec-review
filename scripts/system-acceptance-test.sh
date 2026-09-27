@@ -56,7 +56,7 @@ STAGES=(
   "build-index|1|02-build-index: deterministic, cited index of candidate units and build signals; nothing executed; units equal the answer key"
   "build-classify|1|02-build-classify: live persona classifies every unit from the checkout + index; validated; classes equal the answer key"
   "build-plan|1|02-build-plan: live Haiku plan per build-set unit from the checkout, index and classification; clang fixed; validated; structure equals the answer key"
-  "build-resolution|0|02-build-resolution: image + trial configure/build via B13, <= build_resolution_attempts; image_build_<id> catalogued, lock written"
+  "build-resolution|1|02-build-resolution: image + trial configure/build via B13, <= build_resolution_attempts; image_build_<id> catalogued, lock written"
   "build-configure|0|02-build-configure (E01): replay the lock's configure in the catalogued image"
   "native-build|0|02-native-build (E02): compile database and build outputs"
   "evidence|0|Evidence collection (legacy pipeline + hashed import), every tool ran or is a recorded gap"
@@ -66,7 +66,7 @@ STAGES=(
   "sarif|0|critical_findings_sarif: accepted SARIF from verified findings"
   "report|0|10-synthesis-report: report generated"
 )
-SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index build_classify build_plan full_review"
+SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index build_classify build_plan build_resolution full_review"
 SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
 SAT_BUSINESS_GOAL="${SAT_BUSINESS_GOAL:-System acceptance test: full review cycle on the fixture}"
 SAT_PLATFORM="${SAT_PLATFORM:-Linux}"
@@ -79,6 +79,7 @@ SRE_JOB=02-sre-operations-topology
 BUILD_INDEX_JOB=02-build-index
 BUILD_CLASSIFY_JOB=02-build-classify
 BUILD_PLAN_JOB=02-build-plan
+BUILD_RESOLUTION_JOB=02-build-resolution
 
 die() { echo "SAT: $*" >&2; exit 1; }
 stage_ids() { for s in "${STAGES[@]}"; do echo "${s%%|*}"; done; }
@@ -1509,6 +1510,78 @@ for uid, system, tier, commands, packages in s["plans"]:
     for c in commands: print("    $ %s" % c)
 print("  dispositions: %s" % s["dispositions"])
 print("  differences from the reference (informational): %s" % (s["diffs"] or "none"))'
+}
+
+# ---- stage: build-resolution ---------------------------------------------------------------------
+# The accepted plan is provisioned under the explicit apt-mirror grant, then executed through B13
+# with the target read-only and network none.  The validator rechecks the caller-held B13 hashes,
+# immutable image catalog and a non-empty clang-only compile database.
+stage_build_resolution() {
+  require_run build-resolution
+
+  if [[ ! -f "$RUN_DIR/data/controls/build-resolution.json" ]]; then
+    echo "-- grant: stage the task-authorized, run/job/source-bound apt and target-execution grants"
+    run_step build-resolution grant "$(contract build-resolution grant <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_PLAN_JOB"}},
+            {"path": "{run}/data/controls/build-resolution.json", "kind": "absent"}],
+ "writes": {"required": ["{run}/data/controls/build-resolution.json"], "allowed": [], "deletes": []},
+ "outputs": [{"path": "{run}/data/controls/build-resolution.json", "schema": "build-resolution-input.schema.json", "equals": {"mode": "success", "build_image_reuse": "auto"}}]}
+JSON
+)" "$CL" run -B "$REPO/appsec-review-process/build_resolution.py" stage-control "$RUN_ID"
+    [[ $STEP_RC == 0 ]] || die "build-resolution: explicit grant staging failed"
+  else
+    echo "-- grant: using the already-staged, schema-valid stage-13 grants for this SAT run"
+    python3 "$CONTRACT_PY" pre --repo "$REPO" --contract "$(contract build-resolution grant-existing <<JSON
+{"inputs": [{"path": "{run}/data/controls/build-resolution.json", "kind": "file", "schema": "build-resolution-input.schema.json", "equals": {"mode": "success", "build_image_reuse": "auto"}}],
+ "writes": {"required": [], "allowed": [], "deletes": []}}
+JSON
+)" --vars "$(step_vars)" >/dev/null || die "build-resolution: staged grants are invalid"
+  fi
+
+  echo "-- accept: build_resolution must provision, trial via B13, judge clang-only and publish"
+  run_step build-resolution accept "$(contract build-resolution accept <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_PLAN_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_PLAN_JOB"}},
+            {"path": "{run}/data/controls/build-resolution.json", "kind": "file"}],
+ "writes": {"required": ["{run}/data/jobs/$BUILD_RESOLUTION_JOB/accepted.json", "{run}/data/jobs/$BUILD_RESOLUTION_JOB/latest.json",
+                         "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/build-resolution.json",
+                         "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/build-lock.json",
+                         "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/b13-receipts.json",
+                         "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/outputs/*/compile_commands.json",
+                         "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/result.json"],
+            "allowed": ["{run}/data/jobs/$BUILD_RESOLUTION_JOB/**", "appsec-review-process/data/build-images/**", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/build-resolution.json", "schema": "build-resolution.schema.json", "equals": {"status": "OK", "source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/build-lock.json", "schema": "buildenv-lock.schema.json", "equals": {"source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$BUILD_RESOLUTION_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "pinned_container", "job_id": "$BUILD_RESOLUTION_JOB"}}]}
+JSON
+)" launch build_resolution
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "build-resolution: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import build_resolution; print(build_resolution.validate(sys.argv[2]))' \
+    "$REPO/appsec-review-process" "$RUN_ID" || die "build-resolution: validator rejected the accepted result"
+
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" <<'PY'
+import json,pathlib,sys
+rdir=pathlib.Path(sys.argv[1]); dagster=sys.argv[2]; d=rdir/'data/jobs/02-build-resolution'
+p=json.loads((d/'accepted.json').read_text()); a=d/'attempts'/p['attempt_id']
+result=json.loads((a/'build-resolution.json').read_text()); lock=json.loads((a/'build-lock.json').read_text())
+status=json.loads((a/'status.json').read_text()); receipts=json.loads((a/'b13-receipts.json').read_text())
+bad=[]
+if status.get('dagster_run_id') != dagster: bad.append('Dagster id mismatch')
+if len(result['units']) != 1 or result['units'][0]['unit_id'] != 'dir:.': bad.append('fixture root was not the sole resolved unit')
+if len(lock['locks']) != 1 or lock['locks'][0]['compile_database']['method'] != 'bear': bad.append('lock is not the Bear lock')
+if not receipts or any(json.loads((a/r['trial_path']/'logs/container/request.json').read_text())['network']['mode'] != 'none' for r in receipts): bad.append('trial network is not none')
+if any(json.loads((a/r['trial_path']/'logs/container/request.json').read_text())['target_mounts'][0]['container_path'] != '/workspace' for r in receipts): bad.append('target was not the read-only B13 mount')
+if bad: sys.exit('; '.join(bad))
+u=result['units'][0]
+print(json.dumps({'dagster_run_id':dagster,'attempt_id':p['attempt_id'],'unit_id':u['unit_id'],
+ 'image_id':u['image_id'],'image_digest':u['image_digest'],'compile_commands':u['compile_commands'],
+ 'b13_result_sha256':receipts[0]['expected_result_sha256'],'permissions':status['permissions']}))
+PY
+)" || die "build-resolution: $summary"
+  checkout_unchanged build-resolution
+  record PASS build-resolution "$summary"
+  printf '%s' "$summary" | python3 -c 'import json,sys; s=json.load(sys.stdin); print("build-resolution: PASS  %s: %s, %d clang compile commands; image %s; B13 %s" % (s["dagster_run_id"][:8],s["unit_id"],s["compile_commands"],s["image_id"],s["b13_result_sha256"]))'
 }
 
 # ---- driver --------------------------------------------------------------------------------------

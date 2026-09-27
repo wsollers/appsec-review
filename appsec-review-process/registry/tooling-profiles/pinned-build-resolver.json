@@ -1,0 +1,12 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "pinned-build-resolver",
+  "display_name": "Pinned Build Resolver",
+  "mode": "authorized-active",
+  "required_inputs": ["accepted build plan", "staged target checkout", "B16 base-image record", "apt package-restore grant", "target-execution grant"],
+  "optional_inputs": [],
+  "allowed_actions": ["render a closed Dockerfile", "restore apt packages from archive.ubuntu.com", "build and inspect a local image", "run accepted argv through B13 with network none", "write run-owned immutable outputs and host-local image catalog records"],
+  "isolation": "Docker build network is authorized only for apt at archive.ubuntu.com; target trial is a pinned B13 container with a read-only target mount and one run-owned writable scratch mount.",
+  "disallowed_actions": ["build or run a target Dockerfile", "general network access", "shell command strings", "write the checkout", "run tests or built programs"],
+  "claim_limits": {"allowed": ["build_resolution", "compile_database", "buildenv_lock"], "forbidden": ["verified_security_finding", "runtime_deployment_claim", "test_result"]}
+}

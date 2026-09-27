@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "buildenv-lock.schema.json",
+  "title": "Resolved build environment lock set",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "source_revision", "plan", "locks"],
+  "properties": {
+    "schema": {"const": "appsec-review/buildenv-lock-set/1"},
+    "source_revision": {"type": "string"},
+    "plan": {"type": "object", "additionalProperties": false, "required": ["attempt_id", "sha256"],
+      "properties": {"attempt_id": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "locks": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["unit_id", "image", "dockerfile_sha256", "plan_sha256", "configure", "build", "compile_database", "successful_attempt", "permission_fingerprint_sha256"],
+      "properties": {
+        "unit_id": {"type": "string"}, "dockerfile_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "plan_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "image": {"type": "object", "additionalProperties": false, "required": ["image_id", "digest", "digest_kind"],
+          "properties": {"image_id": {"type": "string"}, "digest": {"type": "string"}, "digest_kind": {"const": "image-id"}}},
+        "configure": {"type": "array", "items": {"type": "object"}},
+        "build": {"type": "array", "items": {"type": "object"}},
+        "compile_database": {"type": "object", "additionalProperties": false, "required": ["method", "path", "entries", "compiler_allowlist"],
+          "properties": {"method": {"const": "bear"}, "path": {"const": "compile_commands.json"}, "entries": {"type": "integer", "minimum": 1}, "compiler_allowlist": {"type": "array", "minItems": 1, "items": {"type": "string"}}}},
+        "successful_attempt": {"type": "object"},
+        "permission_fingerprint_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }}
+  }
+}

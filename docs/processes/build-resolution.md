@@ -1,7 +1,11 @@
 # Build resolution: learning how to build an unknown target
 
-Status: **section 1 (`02-build-index`) BUILT 2026-09-25** (`build_index.py`; SAT stage 10 PASS, SAT `20260925T211247Z`); **`02-build-classify` BUILT 2026-09-25** (SAT stage 11 PASS with live upstreams, SAT `20260926T183609Z`); **section 3 (`02-build-plan`) BUILT and live-confirmed 2026-09-26** (fresh automatic-dispatch SAT `20260926T215329Z`, stage 12 PASS); sections 2, 4 and 5
-(`02-build-resolution`, catalog and lock) **DESIGN, not built** (2026-09-24). Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
+Status: **implemented and live-qualified through `02-build-resolution` (stage 13), 2026-09-27.**
+Fresh SAT `20260926T235610Z` / engagement `20260926T235619Z-cfd753` passed stages 1-13;
+Dagster run `b9bfe716-b25c-4a83-a289-81981a689431` accepted image
+`image_build_a453dcd7c961` and six clang compile commands. Bounded qualification proved immutable
+reuse, tamper rejection, a real newer container failure, recovery without fallback, and recovered
+reuse. Decision record: [ADR-0012](../decisions/ADR-0012-build-resolution.md).
 The fixed C/C++ base prerequisite, `audit-buildenv-cpp:local`, is **BUILT and smoke-verified
 2026-09-26** on `audit-native:local`: LLVM 21.1.0 at `/opt/llvm`, fixed `CC`/`CXX`, and
 autoconf/automake/libtool/make/Bear/pkg-config. Its successful build pointer and B16 record are
@@ -181,7 +185,7 @@ sorted package list, lists removed). The model chooses *what*; it cannot choose 
 repositories, scripts, downloads or `COPY` of target files). Images define tools only; the target
 is mounted at run time, never baked in (AGENTS.md).
 
-## 4. `02-build-resolution` (the loop)
+## 4. `02-build-resolution` (implemented and live-qualified)
 
 For attempt `n = 1 .. build_resolution_attempts` (default **3**, allowed 1-10):
 
@@ -189,14 +193,16 @@ For attempt `n = 1 .. build_resolution_attempts` (default **3**, allowed 1-10):
    model to revise.
 2. **Image:** render the Dockerfile; its spec fingerprint (base digest + sorted packages + renderer
    version) names the image `image_build_<first 12 hex>`. If that image already exists locally with
-   the recorded id it is reused, otherwise built with `images/image_build.py`. Network is allowed
+   the recorded id it is reused, otherwise built by the closed worker renderer with Docker
+   BuildKit. Network is allowed
    **only here**, only to the base distribution's package mirror, under a `package-restore`
    (`ecosystem: apt`) grant (ADR-0011: network only during provisioning, never in a B13 run).
    C/C++ specs extend the B16-resolved `audit-buildenv-cpp`, whose own build fingerprint binds the
    immutable local `audit-native` image id. The base fixes `CC=/opt/llvm/bin/clang` and
    `CXX=/opt/llvm/bin/clang++`; a plan cannot replace them.
-3. **Trial:** copy the checkout into the attempt's scratch (`autoreconf` and `configure` write into
-   the tree; the host checkout is never touched), then run each `configure` and `build` command
+3. **Trial:** B13 mounts the checkout read-only and the trusted runner copies it into the attempt's
+   sole writable `/scratch` tree (`autoreconf` and `configure` write there; the host checkout is
+   never touched), then runs each `configure` and `build` command
    through B13: pinned image, `--network none`, `--pull never`, resource limits, per-command
    timeout `build_command_timeout_seconds` (default 1800). Needs a `target-execution` grant; without
    it the job is `BLOCKED(MISSING_GRANT)` before any attempt.
@@ -228,12 +234,12 @@ On `OK`:
   every run, like the NVD feed; schema `appsec-review/build-image/1`): image id and tag
   (`appsec-build/image_build_<id>:local`), local image id (`digest_kind: image-id`), rendered
   Dockerfile and its sha256, base image and digest, package list, and `validated_builds`: one row
-  per successful trial (project, origin, source revision, build-input fingerprint, plan sha256, run
-  id, attempt id, date). One image can serve many projects that need the same tools.
+  per successful trial (source revision, plan sha256, run id, attempt id, date). The entry is
+  immutable and validated against `schemas/build-image.schema.json` on reuse and publication.
 - **Container-image record** for B13 in `data/build-images/container-images/image_build_<id>.json`
   (the B16 shape). B13 resolves tracked records in `registry/container-images/` and, for ids
   starting `image_build_` only, these host-local ones. This is a required B13 change.
-- **Build lock** `outputs/build-lock.json` in the run (the Phase 4 `buildenv-lock` shape): image id
+- **Build lock** `build-lock.json` in the immutable accepted attempt (the Phase 4 `buildenv-lock` shape): image id
   and local digest, Dockerfile sha256, ordered argv for configure / build, compile-database
   producer, attempt summary, source revision. `02-build-configure` (E01) and `02-native-build` (E02)
   replay this lock from a clean copy: if the replay does not reproduce the trial, that is a failure

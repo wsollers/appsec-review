@@ -32,9 +32,9 @@ flowchart TD
   S6i["S6a-1 02-build-index: candidate units + cited signals<br/>deterministic, nothing executed<br/>built 2026-09-25; SAT stage 10 PASS (live upstreams 2026-09-26)"]:::done
   S6c["S6a-2 02-build-classify: one class per unit (live Sonnet)<br/>built 2026-09-25; SAT stage 11 PASS 2026-09-26"]:::done
   S6p["S6a-3 02-build-plan: per-unit Haiku plan, clang fixed<br/>built 2026-09-26; SAT stage 12 PASS 2026-09-26"]:::done
-  S6a["S6a-4 02-build-resolution (image + trial build loop, image_build_id catalog)<br/>(build-resolution.md, build-unit-classification.md)<br/>designed; Phase 3 prerequisite complete"]:::next
+  S6a["S6a-4 02-build-resolution: image + offline B13 trial + lock<br/>SAT stage 13 and fault recovery PASS 2026-09-27"]:::done
   CPP["C++ buildenv prerequisite<br/>audit-native + LLVM 21.1.0 + autotools/Bear<br/>built and boundary-smoke PASS 2026-09-26"]:::done
-  S6["S6b 02-build-configure / 02-native-build<br/>replay the build lock; blocked: S6a and E01"]:::blocked
+  S6["S6b 02-build-configure / 02-native-build<br/>replay the accepted lock; next: E01 / SAT stage 14"]:::next
   B13["Phase 3: B13 verifier binding + B16 registry + live harmless Dagster job<br/>complete 2026-09-27"]:::done
   E01["E01/E02: replay the lock through B13"]:::todo
 
@@ -265,6 +265,18 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-27 -- **`02-build-resolution` implemented and live-qualified; SAT stages 1-13 PASS.**
+  Fresh SAT `20260926T235610Z`, engagement `20260926T235619Z-cfd753`, build-plan Dagster
+  `551e2fbc-732a-4b24-a3ac-ad0c91453a2b`, build-resolution Dagster
+  `b9bfe716-b25c-4a83-a289-81981a689431`. Accepted attempt
+  `5a6496d781dc47ac8f5f034462f65f91` reused immutable image
+  `image_build_a453dcd7c961` (`sha256:a3a82e…`), ran the read-only target through offline B13,
+  and published six clang compile commands plus caller-held receipt `sha256:d97f3c…`. Bounded
+  qualification `build-resolution-d6b412ec` proved reuse (`3e3d10cd…`), tamper rejection
+  (`9eccb422…`, BLOCKED attempt `ee680900…`), real newer failure (`5ea9bf2c…`, attempt
+  `da36180e…`), recovery without fallback (`f3b8605f…`, attempt `0b0ef634…`) and recovered reuse
+  (`0ad70d8e…`). Exact grants: apt HTTP to `archive.ubuntu.com:80` and target execution profile
+  `build-resolution-v1` at `.`. Next: E01 / `02-build-configure`, SAT stage 14.
 - 2026-09-27 -- **Phase 3 complete: B13 is in service through a bounded standalone Dagster job.**
   `b13_harmless_container` ran the tracked digest-only `fixture-harmless` image on the Docker pool,
   with no target mount, network, scanner, finding, or lifecycle claim. Qualification run

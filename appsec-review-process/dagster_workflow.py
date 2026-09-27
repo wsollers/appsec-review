@@ -7,6 +7,7 @@ import workflow
 import build_execution as build_execution_worker
 import build_classify as build_classify_worker
 import build_plan as build_plan_worker
+import build_resolution as build_resolution_worker
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
 import discovery_gate
@@ -546,6 +547,35 @@ def build_plan():
     build_plan_standalone_work(build_execution_config())
 
 
+def run_build_resolution(context, configured):
+    result = build_resolution_worker.run(configured['engagement_run_id'], context.run_id,
+                                         configured['force'])
+    path = build_resolution_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(path / build_resolution_worker.RESULT)),
+        'lock': MetadataValue.path(str(path / build_resolution_worker.LOCK_FILE)),
+        'envelope': MetadataValue.path(str(path / 'result.json')),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(pool=DOCKER_POOL)
+def build_resolution_standalone_work(context, configured):
+    return run_build_resolution(context, configured)
+
+
+@op(name='job_02_build_resolution', ins={'configured': In(dict), 'upstream': In(list)}, pool=DOCKER_POOL)
+def build_resolution_work(context, configured, upstream):
+    return run_build_resolution(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def build_resolution():
+    build_resolution_standalone_work(build_execution_config())
+
+
 @op(pool=resource_pools.derive_pool('pinned_container', (), memory_heavy=False))
 def b13_harmless_container_work(context, configured):
     """Phase 3 qualification only: fixed harmless image/argv, not a lifecycle scanner."""
@@ -577,7 +607,8 @@ LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure',
                                  '02-repository-partition-discovery','02-dev-project-discovery',
                                  '02-devops-project-discovery','02-sre-operations-topology',
-                                 '02-build-index','02-build-classify','02-build-plan','02-ossf-scorecard')}
+                                 '02-build-index','02-build-classify','02-build-plan',
+                                 '02-build-resolution','02-ossf-scorecard')}
 LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
@@ -586,6 +617,7 @@ LIFECYCLE_OPS['02-sre-operations-topology']=sre_operations_topology_work
 LIFECYCLE_OPS['02-build-index']=build_index_work
 LIFECYCLE_OPS['02-build-classify']=build_classify_work
 LIFECYCLE_OPS['02-build-plan']=build_plan_work
+LIFECYCLE_OPS['02-build-resolution']=build_resolution_work
 LIFECYCLE_OPS['02-ossf-scorecard']=ossf_scorecard_lifecycle_work
 
 
@@ -608,7 +640,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -618,7 +650,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

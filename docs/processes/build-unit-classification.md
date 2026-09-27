@@ -1,7 +1,10 @@
 # Build unit classification: what gets built, and how
 
-Status: **DESIGN, not built** (2026-09-25; decisions below, all settled). Extends [build resolution](build-resolution.md) /
-[ADR-0012](../decisions/ADR-0012-build-resolution.md), which assumes a single native project.
+Status: **implemented and live-qualified for the apt/C++ path through resolution** (2026-09-27).
+Fresh SAT `20260926T235610Z` classified `dir:.` as `compiled-native`, kept `file:Dockerfile` on its
+static-analysis disposition, and resolved the build with six clang compile commands. Other ecosystem
+renderers remain Phase 5f work. Extends [build resolution](build-resolution.md) /
+[ADR-0012](../decisions/ADR-0012-build-resolution.md).
 
 ## Why
 

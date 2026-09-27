@@ -62,7 +62,7 @@
     },
     "image_reference": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._:/-]{0,254}@sha256:[0-9a-f]{64}\\Z"
+      "pattern": "^(?:[a-z0-9][a-z0-9._:/-]{0,254}@)?sha256:[0-9a-f]{64}\\Z"
     },
     "image_record_sha256": {
       "type": "string",

@@ -72,6 +72,12 @@ CLAIM_CLASS_POLICIES = {
             "statically-inferred-build-plan", "coverage-gap",
         },
     },
+    "build-resolution": {
+        "claim_class_id": "build_resolution",
+        "allowed_assertions": {
+            "sandboxed-build-succeeded", "compile-database-produced", "coverage-gap",
+        },
+    },
 }
 PROMOTION_FIELDS = {
     "finding": {

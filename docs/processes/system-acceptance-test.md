@@ -69,7 +69,7 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 10 | `build-index` (deterministic: candidate units and cited build signals; units equal the answer key) | yes |
 | 11 | `build-classify` (live persona: one class per unit from the checkout and the index; classes equal the answer key) | yes |
 | 12 | `build-plan` (live Haiku plan per build-set unit from the checkout, index and classification; clang fixed; structure equals the fixture answer key) | yes |
-| 13 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | |
+| 13 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | yes |
 | 14 | `build-configure` (E01: replay the lock) | |
 | 15 | `native-build` (E02: compile database, binaries) | |
 | 16 | `evidence` (legacy pipeline + hashed import; every tool ran or is a recorded gap) | |
@@ -83,15 +83,20 @@ Stage 12 was live-confirmed on 2026-09-26 by the one fresh automatic-dispatch qu
 `20260926T215329Z` (engagement `20260926T215743Z-4190aa`, build-plan Dagster run
 `bdac97da-5156-49b8-8ca3-c2550b9d4513`). The accepted plan covered the sole build-set unit with
 the expected autotools configure/build structure and recorded the Dockerfile as static-analysis
-work, not a build input. The remaining readiness gap is fault-recovery qualification, not another
-happy-path SAT.
+work, not a build input.
+
+Stage 13 was live-confirmed on 2026-09-27 by fresh SAT `20260926T235610Z`, engagement
+`20260926T235619Z-cfd753`, Dagster `b9bfe716-b25c-4a83-a289-81981a689431`: one autotools unit,
+image `image_build_a453dcd7c961`, six clang compile commands, and an externally held B13 receipt.
+The follow-up qualification proved immutable reuse, tamper rejection, a newer non-zero container
+failure, recovery without fallback and recovered reuse. Stage 14 / E01 is now the first open stage.
 
 Phase 3 prerequisite status (2026-09-27): **complete.** B13's three result-verification entry points
 require the caller-retained `result_sha256`, including C02 handoff and cancellation; B16 generates
 and Docker-checks the 19 host-local step-4 image records at code-location startup; and the bounded
 `b13_harmless_container` Dagster qualification proves success, immutable reuse, real non-zero
 container failure, no fallback, recovery, and recovered-attempt reuse. This unblocks construction
-of stage 13; it does not make `build-resolution` itself built.
+of stage 13. Stage 13 is now built and qualified as recorded above.
 
 Stages 10 to 15 are how the system learns to build a target it has never seen and then builds it:
 [build-resolution.md](build-resolution.md) (ADR-0012). They come before evidence collection
@@ -345,6 +350,6 @@ never failures; the checkout unchanged.
 | No schema for the run manifest, run status, workflow and branch outputs, accepted pointers, or the job hand-off record | `schemas/` | Structural contracts in the SAT meanwhile |
 | The developer-discovery gate records no output hashes in its accepted record | `discovery_gate._legacy_run` | SAT compares output, supplied file and record |
 | SRE discovery required by intake (Dockerfile) but has no gate or Dagster job | job graph, `dagster_workflow.py` | Done 2026-09-24 (stage 8 devops, stage 9 sre topology both gated and passing live) |
-| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | Stage 6 (`02-repository-partition-discovery`, D01): closed, `--dispatch`. Stage 7 (`02-dev-project-discovery`, D02): closed, `--dispatch`, live PASS 2026-09-25 (first attempt; see flow-bringup.md log for the scope finding). Stage 8 (`02-devops-project-discovery`, D03): closed, `--dispatch`, live PASS 2026-09-25 (first attempt). Stage 9 (`02-sre-operations-topology`, D04): closed, `--dispatch`, live PASS 2026-09-25 (SAT `20260925T170552Z`, stages 1-9 all automatic). The build part: stage 10 (`build-index`, deterministic, no model) built 2026-09-25, PASS; stage 11 (`build-classify`, live persona) built 2026-09-25, live PASS 2026-09-26 (SAT `20260926T183609Z`, stages 1-11 with every model step live); stage 12 (`build-plan`, live Haiku per unit) built 2026-09-26; stage 13 (plan, resolution; build-resolution.md) still open |
-| The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Designed: build-resolution.md, ADR-0012 |
+| No LLM or agent produces the discovery records; they are supplied fixture records | persona dispatch not wired into the gates | D01-D04 automatic dispatch is built and live-confirmed; build stages 10-13 are built, with stage 13 live-qualified 2026-09-27. |
+| The system cannot discover how to build an unknown target (CMake-only collector, no model call, no build image) | `build_discovery.py`, Phase 4 | Closed by `02-build-index` → `02-build-classify` → `02-build-plan` → `02-build-resolution`; E01 replay remains. |
 | Dagster-launched steps may write under `data/orchestration/dagster/*`, which a sandbox run without Dagster cannot observe | contracts | Confirmed only on the host run |

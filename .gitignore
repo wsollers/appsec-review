@@ -41,6 +41,8 @@ images/audit-codeql/codeql-bundle-linux64.tar.zst
 # B16 host-local records are regenerated from image build state at code-location start.
 /appsec-review-process/registry/container-images/*.json
 !/appsec-review-process/registry/container-images/fixture-harmless.json
+# Stage-13 rendered images are host-local immutable state, never source artifacts.
+/appsec-review-process/data/build-images/
 
 .claude/worktrees/agent-a07ef96e3c1e186f6
 

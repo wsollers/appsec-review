@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 54,
+  "lifecycle_jobs": 55,
   "steps": 52,
   "artifacts": 55,
   "models": 5
@@ -901,14 +901,14 @@
       {
        "ref": "step:build-resolution",
        "id": "build-resolution",
-       "name": "02-build-resolution (designed)",
-       "kind": "planned",
+       "name": "build_resolution (Dagster job)",
+       "kind": "dagster-job",
        "consumes": [
         "build-plan",
         "build-image-catalog",
         "permission-grant",
         "buildenv-image",
-        "llm-invoker"
+        "sut-checkout"
        ],
        "produces": [
         "build-attempts",
@@ -1113,6 +1113,24 @@
         "accepted build-classification.json from 02-build-classify",
         "buildenv-catalog.json (the base images a plan may choose)",
         "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)"
+       ]
+      },
+      {
+       "ref": "job:02-build-resolution",
+       "id": "02-build-resolution",
+       "name": "Build Resolution",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-build-plan"
+       ],
+       "produces": [
+        "job:02-build-resolution"
+       ],
+       "declared_inputs": [
+        "accepted build-plan.json",
+        "staged target checkout",
+        "B16 base-image record",
+        "explicit permission grants"
        ]
       },
       {
@@ -1537,7 +1555,7 @@
       ],
       "leaves": [
        "legacy-pregather",
-       "job:02-build-plan",
+       "job:02-build-resolution",
        "job:02-evidence-assembly"
       ],
       "passes": [
@@ -1546,6 +1564,7 @@
        "job:02-sre-operations-topology",
        "job:02-build-index",
        "job:02-build-classify",
+       "job:02-build-plan",
        "job:02-api-collection-intelligence-ingest",
        "job:02-binary-intelligence-ingest",
        "job:02-doc-intelligence-ingest",
@@ -1589,6 +1608,9 @@
        "accepted build-classification.json from 02-build-classify",
        "buildenv-catalog.json (the base images a plan may choose)",
        "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
+       "accepted build-plan.json",
+       "B16 base-image record",
+       "explicit permission grants",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -2146,10 +2168,10 @@
      "prep-native-plan",
      "prep-handoffs",
      "workflow-status",
-     "job:02-build-plan",
      "build-attempts",
      "build-lock",
      "build-execution",
+     "job:02-build-resolution",
      "lane-handoff",
      "job:10-synthesis-report"
     ],
@@ -2168,6 +2190,7 @@
      "build-index",
      "job:02-build-classify",
      "build-classification",
+     "job:02-build-plan",
      "build-plan",
      "build-image-catalog",
      "build-discovery",
@@ -2237,6 +2260,9 @@
      "accepted build-classification.json from 02-build-classify",
      "buildenv-catalog.json (the base images a plan may choose)",
      "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
+     "accepted build-plan.json",
+     "B16 base-image record",
+     "explicit permission grants",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -2684,7 +2710,7 @@
      }
     },
     {
-     "name": "S6a Build resolution (index, classification and plan built; resolution designed)",
+     "name": "S6a Build resolution (implemented and qualified through stage 13)",
      "entries": [
       {
        "ref": "step:build-index",
@@ -2743,14 +2769,14 @@
       {
        "ref": "step:build-resolution",
        "id": "build-resolution",
-       "name": "02-build-resolution (designed)",
-       "kind": "planned",
+       "name": "build_resolution (Dagster job)",
+       "kind": "dagster-job",
        "consumes": [
         "build-plan",
         "build-image-catalog",
         "permission-grant",
         "buildenv-image",
-        "llm-invoker"
+        "sut-checkout"
        ],
        "produces": [
         "build-attempts",
@@ -2789,7 +2815,7 @@
      }
     },
     {
-     "name": "S6b Build configure (blocked)",
+     "name": "S6b Build configure (next: E01 / stage 14)",
      "entries": [
       {
        "ref": "job:02-build-configure",
@@ -3209,6 +3235,24 @@
         "accepted build-classification.json from 02-build-classify",
         "buildenv-catalog.json (the base images a plan may choose)",
         "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)"
+       ]
+      },
+      {
+       "ref": "job:02-build-resolution",
+       "id": "02-build-resolution",
+       "name": "Build Resolution",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:02-build-plan"
+       ],
+       "produces": [
+        "job:02-build-resolution"
+       ],
+       "declared_inputs": [
+        "accepted build-plan.json",
+        "staged target checkout",
+        "B16 base-image record",
+        "explicit permission grants"
        ]
       },
       {
@@ -3656,7 +3700,7 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:02-build-plan",
+       "job:02-build-resolution",
        "job:02-evidence-assembly"
       ],
       "passes": [
@@ -3667,6 +3711,7 @@
        "job:02-sre-operations-topology",
        "job:02-build-index",
        "job:02-build-classify",
+       "job:02-build-plan",
        "job:02-api-collection-intelligence-ingest",
        "job:02-binary-intelligence-ingest",
        "job:02-doc-intelligence-ingest",
@@ -3714,6 +3759,9 @@
        "accepted build-classification.json from 02-build-classify",
        "buildenv-catalog.json (the base images a plan may choose)",
        "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
+       "accepted build-plan.json",
+       "B16 base-image record",
+       "explicit permission grants",
        "collection path",
        "collection format",
        "target binary artifact path or binary artifact inventory",
@@ -4377,7 +4425,7 @@
      "artifact-manifest"
     ],
     "leaves": [
-     "job:02-build-plan",
+     "job:02-build-resolution",
      "job:10-synthesis-report"
     ],
     "passes": [
@@ -4389,6 +4437,7 @@
      "job:02-sre-operations-topology",
      "job:02-build-index",
      "job:02-build-classify",
+     "job:02-build-plan",
      "job:02-evidence-assembly",
      "job:02-api-collection-intelligence-ingest",
      "job:02-binary-intelligence-ingest",
@@ -4455,6 +4504,9 @@
      "accepted build-classification.json from 02-build-classify",
      "buildenv-catalog.json (the base images a plan may choose)",
      "plan-unit.json (the one build-set unit this call plans; written by the orchestrator)",
+     "accepted build-plan.json",
+     "B16 base-image record",
+     "explicit permission grants",
      "collection path",
      "collection format",
      "target binary artifact path or binary artifact inventory",
@@ -5272,23 +5324,26 @@
   },
   {
    "id": "build-resolution",
-   "name": "02-build-resolution (designed)",
-   "kind": "planned",
-   "runs": "launch_job.py --run-id <run_id> --job build_resolution --wait (not built)",
+   "name": "build_resolution (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job build_resolution --wait",
    "bpmn": [],
+   "lifecycle": [
+    "02-build-resolution"
+   ],
    "consumes": [
     "build-plan",
     "build-image-catalog",
     "permission-grant",
     "buildenv-image",
-    "llm-invoker"
+    "sut-checkout"
    ],
    "produces": [
     "build-attempts",
     "build-image-catalog",
     "build-lock"
    ],
-   "notes": "Per build-set unit, loop up to build_resolution_attempts (default 3): render Dockerfile from the plan, build image (restore during provisioning only), trial configure+build via B13 with no network; on failure the model revises. Each unit ends OK, FAILED(BUILD_UNRESOLVED) or BLOCKED; job status OK / OK_WITH_GAPS / UNRESOLVED / BLOCKED / SKIPPED from the unit outcomes. On success catalog image_build_<id> and write the unit's build-lock entry. Nothing built is run."
+   "notes": "Implemented and live-qualified 2026-09-27. Per build-set unit: render a closed Dockerfile, provision only from the granted apt mirror, trial accepted configure/build argv through offline B13 with a read-only target and sole writable /scratch, require a non-empty clang-only compile database, then publish an immutable image_build_<id> catalog entry and build lock. Caller-held B13 hashes, newest-failure blocking and explicit recovery are qualified. Nothing built is run."
   },
   {
    "id": "b13-harmless-container",
@@ -6131,6 +6186,72 @@
    ],
    "produces": [
     "job:02-build-plan"
+   ]
+  },
+  {
+   "id": "02-build-resolution",
+   "lane": "02-evidence-pregather",
+   "name": "Build Resolution",
+   "contract": "build-resolution",
+   "implemented": true,
+   "readiness": "implemented_and_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/build_resolution.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "build_resolution"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "build-resolver",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-build-resolver",
+    "output_contract_id": "build-resolution"
+   },
+   "depends_on": [
+    {
+     "job": "02-build-plan",
+     "kind": "required",
+     "contract": "build-plan"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted build-plan.json"
+    },
+    {
+     "need": "required",
+     "input": "staged target checkout"
+    },
+    {
+     "need": "required",
+     "input": "B16 base-image record"
+    },
+    {
+     "need": "required",
+     "input": "explicit permission grants"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-build-resolution.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-build-resolution/",
+   "output_files": [
+    "build-resolution.json",
+    "build-lock.json",
+    "b13-receipts.json",
+    "build-resolution-summary.md",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/build-resolution.json",
+   "claim_class": "build_resolution",
+   "gaps": [],
+   "next_prerequisite": "Implement and live-qualify stage 14, 02-build-configure (E01), by replaying the accepted lock through B13.",
+   "consumes": [
+    "job:02-build-plan"
+   ],
+   "produces": [
+    "job:02-build-resolution"
    ]
   },
   {
@@ -9200,6 +9321,7 @@
     "step:build-index",
     "step:build-classify",
     "step:build-plan",
+    "step:build-resolution",
     "step:legacy-pregather"
    ]
   },
@@ -9712,8 +9834,7 @@
    "produced_by": [],
    "consumed_by": [
     "step:build-classify",
-    "step:build-plan",
-    "step:build-resolution"
+    "step:build-plan"
    ]
   },
   "build-index": {
@@ -9756,8 +9877,8 @@
   "build-attempts": {
    "id": "build-attempts",
    "kind": "file",
-   "path": "runs/<run_id>/data/jobs/02-build-resolution/attempts/<n>/ (plan, Dockerfile, image id, exit codes, logs)",
-   "about": "Every resolution attempt, kept on success and failure (designed).",
+   "path": "runs/<run_id>/data/jobs/02-build-resolution/attempts/<attempt_id>/",
+   "about": "Immutable inputs, rendered Dockerfile, image build logs, B13 request/result/receipt, compile database, result and lock; every success and failure retained.",
    "produced_by": [
     "step:build-resolution"
    ],
@@ -9767,7 +9888,7 @@
    "id": "build-image-catalog",
    "kind": "file",
    "path": "data/build-images/catalog/image_build_<id>.json (+ container-images/ record for B13), outside every run",
-   "about": "Host-local catalog of images that built a project, with every validated build; reused by build_image_reuse=auto (designed).",
+   "about": "Immutable host-local schema-validated image catalog; reused only when its spec fingerprint and Docker image id still agree.",
    "produced_by": [
     "step:build-resolution"
    ],
@@ -9778,8 +9899,8 @@
   "build-lock": {
    "id": "build-lock",
    "kind": "file",
-   "path": "runs/<run_id>/data/jobs/02-build-resolution/.../outputs/build-lock.json",
-   "about": "Image id and digest, Dockerfile hash, ordered argv; replayed by E01/E02 (designed).",
+   "path": "runs/<run_id>/data/jobs/02-build-resolution/attempts/<attempt_id>/build-lock.json",
+   "about": "Accepted plan binding, immutable image id/digest, Dockerfile hash, configure/build argv, clang-only compile-database record and permission fingerprint; replayed by E01/E02.",
    "produced_by": [
     "step:build-resolution"
    ],
@@ -9984,6 +10105,18 @@
    "produced_by": [
     "step:build-plan",
     "job:02-build-plan"
+   ],
+   "consumed_by": [
+    "job:02-build-resolution"
+   ]
+  },
+  "job:02-build-resolution": {
+   "id": "job:02-build-resolution",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-build-resolution/",
+   "about": "Accepted build-resolution output of 02-build-resolution.",
+   "produced_by": [
+    "job:02-build-resolution"
    ],
    "consumed_by": []
   },

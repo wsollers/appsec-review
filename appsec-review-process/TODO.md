@@ -1076,7 +1076,7 @@ TODO:
   Verdaccio/Athens per ecosystem) as the single fixed host per ecosystem. Decide product, host and
   ownership before it is built; it replaces the public hosts in the grants and nothing else changes.
 
-### Phase 5g -- build lane per unit: decisions settled, ADR-0012 revision next -- IN PROGRESS
+### Phase 5g -- build lane per unit -- COMPLETE THROUGH RESOLUTION
 
 Branch `build-lane-per-unit` (from `main` = `b28dfde`, after PR #40 merged D01-D04). Design:
 `docs/processes/build-unit-classification.md`. Decided by William, 2026-09-25:
@@ -1131,8 +1131,15 @@ Work order (one piece at a time):
    proves reuse, tamper rejection and newer-failure blocking.
    **Image prerequisite complete 2026-09-26:** `audit-buildenv-cpp:local` now supplies the fixed
    LLVM 21.1.0 compiler environment and autotools/Bear toolchain required by Revision 3.
-5. [ ] `02-build-resolution` (per unit); SAT stage 13. Needs Phase 3 (B13 into service, B16 records,
-   and the required `expected_result_sha256`) first.
+5. [x] `02-build-resolution` (per unit), SAT stage 13. Implemented and live-qualified 2026-09-27:
+   fresh SAT `20260926T235610Z`, engagement `20260926T235619Z-cfd753`, Dagster
+   `b9bfe716-b25c-4a83-a289-81981a689431`, accepted attempt
+   `5a6496d781dc47ac8f5f034462f65f91`, image `image_build_a453dcd7c961`, six clang compile
+   commands. Qualification `build-resolution-d6b412ec` proved immutable reuse, tamper rejection,
+   a real newer failure (`da36180e453445a78a51290875acda46`), recovery without fallback
+   (`0b0ef634c3d94a8bbca5a478da66d8a8`), and recovered reuse. Exact grants were
+   `package-restore:apt@archive.ubuntu.com:80` and
+   `target-execution:build-resolution-v1@.`. Next blocker: E01 / SAT stage 14.
 
 ### Phase 6 -- build and compile database (E01, E02)
 

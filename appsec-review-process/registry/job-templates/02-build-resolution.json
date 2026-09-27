@@ -1,0 +1,23 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-build-resolution",
+  "display_name": "Build Resolution",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "build-resolver",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-build-resolver",
+    "output_contract_id": "build-resolution"
+  },
+  "inputs": {"required": ["accepted build-plan.json", "staged target checkout", "B16 base-image record", "explicit permission grants"], "optional": []},
+  "outputs": {"directory": "data/jobs/02-build-resolution/attempts/<attempt_id>", "files": ["build-resolution.json", "build-lock.json", "b13-receipts.json", "build-resolution-summary.md", "status.json"]},
+  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
+  "implemented": true,
+  "timeout_seconds": 7200,
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": false},
+  "applicability": "each accepted build-set unit; stage-13 fixture must resolve",
+  "permissions": ["read-source", "package-restore:apt@archive.ubuntu.com:80", "target-execution:build-resolution-v1@.", "write-run-data"],
+  "coordinator": "intake-coordinator"
+}

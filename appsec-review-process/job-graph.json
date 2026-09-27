@@ -148,6 +148,21 @@
         }
       ]
     },
+    "02-build-resolution": {
+      "lane": "02-evidence-pregather",
+      "contract": "build-resolution",
+      "template": "02-build-resolution",
+      "implemented": true,
+      "namespace": "02-build-resolution",
+      "dependencies": [
+        {
+          "job": "02-build-plan",
+          "kind": "required",
+          "contract": "build-plan",
+          "allowed_skip_reasons": []
+        }
+      ]
+    },
     "02-evidence-assembly": {
       "lane": "02-evidence-pregather",
       "contract": "pregather",

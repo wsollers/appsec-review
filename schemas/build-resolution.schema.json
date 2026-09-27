@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "build-resolution.schema.json",
+  "title": "Build resolution result",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "run_id", "source_revision", "plan", "status", "units", "coverage_gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/build-resolution/1"},
+    "run_id": {"type": "string"}, "source_revision": {"type": "string"},
+    "plan": {"type": "object", "additionalProperties": false, "required": ["attempt_id", "sha256"],
+      "properties": {"attempt_id": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "status": {"enum": ["OK", "OK_WITH_GAPS", "UNRESOLVED", "BLOCKED", "SKIPPED"]},
+    "units": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["unit_id", "status", "image_id", "image_digest", "attempt_id", "lock_sha256", "compile_commands", "commands"],
+      "properties": {
+        "unit_id": {"type": "string"}, "status": {"const": "OK"},
+        "image_id": {"type": "string", "pattern": "^image_build_[0-9a-f]{12}$"},
+        "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "attempt_id": {"type": "string"}, "lock_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "compile_commands": {"type": "integer", "minimum": 1},
+        "commands": {"type": "array", "items": {"type": "object"}}
+      }
+    }},
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}

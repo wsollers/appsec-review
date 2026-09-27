@@ -106,6 +106,7 @@
         "null"
       ],
       "enum": [
+        "apt",
         "npm",
         "pypi",
         "maven",

@@ -9,6 +9,7 @@ flowchart TD
   j_02_build_index["02-build-index<br/>implemented_not_qualified"]
   j_02_build_classify["02-build-classify<br/>implemented_not_qualified"]
   j_02_build_plan["02-build-plan<br/>implemented_not_qualified"]
+  j_02_build_resolution["02-build-resolution<br/>implemented_and_qualified"]
   j_02_evidence_assembly["02-evidence-assembly<br/>missing_prerequisites"]
   j_01_component_characterization["01-component-characterization<br/>missing_prerequisites"]
   j_03_threat_model_dfd_stride["03-threat-model-dfd-stride<br/>missing_prerequisites"]
@@ -65,6 +66,7 @@ flowchart TD
   j_02_devops_project_discovery --> j_02_build_index
   j_02_build_index --> j_02_build_classify
   j_02_build_classify --> j_02_build_plan
+  j_02_build_plan --> j_02_build_resolution
   j_02_dev_project_discovery --> j_02_evidence_assembly
   j_02_devops_project_discovery --> j_02_evidence_assembly
   j_02_sre_operations_topology --> j_02_evidence_assembly

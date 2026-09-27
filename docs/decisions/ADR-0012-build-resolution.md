@@ -1,6 +1,8 @@
 # ADR-0012: Build Resolution (index, LLM plan, bounded build loop, image catalog)
 
-Status: Proposed 2026-09-24 (design direction from William Sollers, 2026-09-24). Design:
+Status: **Accepted and implemented through `02-build-resolution`, 2026-09-27** (design direction
+from William Sollers, 2026-09-24). Fresh SAT `20260926T235610Z` and bounded fault-recovery
+qualification `build-resolution-d6b412ec` are the implementation evidence. Design:
 [docs/processes/build-resolution.md](../processes/build-resolution.md).
 **Revised 2026-09-25** for per-unit resolution and model classification: see
 [Revision 1](#revision-1-2026-09-25-per-unit-resolution-model-classification) at the end, and
@@ -219,3 +221,12 @@ Status: Proposed 2026-09-26 (decisions by William Sollers, 2026-09-26 and 2026-0
    `dispositions` for the units outside the build set. An empty build set makes no model call and
    publishes a plan with no plans and every unit's disposition (`OK`); `02-build-resolution` is then
    the job that is `SKIPPED` (`not-applicable-no-matching-inputs`).
+
+## Implementation note (2026-09-27)
+
+Stage 13 implements this decision with exact, run/job/source-bound grants for apt provisioning at
+`http://archive.ubuntu.com:80` and the `build-resolution-v1` target-execution profile. The rendered
+image contains tools only; B13 mounts the checkout read-only, permits only `/scratch` to be written,
+and runs the accepted configure/build argv with network disabled. The immutable build-image catalog,
+container-image record, build lock and caller-held B13 receipt are validated on read. E01/E02 lock
+replay remains the next phase; this implementation does not claim those jobs are complete.

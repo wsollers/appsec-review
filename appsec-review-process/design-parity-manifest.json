@@ -51,6 +51,7 @@
       "build_index",
       "build_classify",
       "build_plan",
+      "build_resolution",
       "b13_harmless_container"
     ],
     "standalone_relationships": [
@@ -154,6 +155,13 @@
         "relationship": "standalone and lifecycle-wired persona build plan, one Haiku call per build-set unit, compiler fixed (our clang); requires an accepted build classification"
       },
       {
+        "job": "build_resolution",
+        "lifecycle_jobs": [
+          "02-build-resolution"
+        ],
+        "relationship": "standalone and lifecycle-wired per-unit image provisioning and offline B13 trial; requires an accepted build plan and explicit apt/target-execution grants"
+      },
+      {
         "job": "b13_harmless_container",
         "lifecycle_jobs": [],
         "relationship": "Phase 3 standalone qualification of the B13 pinned-container adapter and common publication boundary; not a scanner or lifecycle node"
@@ -170,6 +178,7 @@
           "02-build-index",
           "02-build-classify",
           "02-build-plan",
+          "02-build-resolution",
           "02-evidence-assembly",
           "01-component-characterization",
           "03-threat-model-dfd-stride",
@@ -235,6 +244,7 @@
       "build_index",
       "build_classify",
       "build_plan",
+      "build_resolution",
       "b13_harmless_container"
     ],
     "failure_sensor_jobs": [
@@ -251,6 +261,7 @@
       "build_index",
       "build_classify",
       "build_plan",
+      "build_resolution",
       "b13_harmless_container",
       "full_review"
     ],
@@ -268,6 +279,7 @@
       "build_index",
       "build_classify",
       "build_plan",
+      "build_resolution",
       "b13_harmless_container",
       "full_review"
     ],
@@ -891,6 +903,66 @@
         "fault_recovery_not_qualified"
       ],
       "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
+    },
+    {
+      "id": "02-build-resolution",
+      "design_refs": [
+        "docs/decisions/ADR-0012-build-resolution.md#revision-3-2026-09-26-the-compiler-is-fixed-plans-carry-no-test-phase",
+        "docs/processes/build-resolution.md#4-02-build-resolution-the-loop"
+      ],
+      "graph": {
+        "node": "02-build-resolution",
+        "implemented": true,
+        "dependencies": ["02-build-plan"]
+      },
+      "registry": {
+        "template": "02-build-resolution",
+        "persona": "evidence-custodian",
+        "role": "build-resolver",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-build-resolver",
+        "output_contract": "build-resolution"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/build_resolution.py:run",
+        "validator": "appsec-review-process/build_resolution.py:validate"
+      },
+      "output": {
+        "contract": "build-resolution",
+        "contract_file": "appsec-review-process/registry/output-contracts/build-resolution.json",
+        "schema_file": "schemas/build-resolution.schema.json",
+        "claim_class": "build_resolution"
+      },
+      "permissions": [
+        "read-source",
+        "package-restore:apt@archive.ubuntu.com:80",
+        "target-execution:build-resolution-v1@.",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": ["build_resolution"],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:build_resolution_work"
+        },
+        "launcher_jobs": ["build_resolution"],
+        "sensor_jobs": ["full_review", "build_resolution"]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_and_qualified",
+      "qualification": {
+        "levels": ["unit", "host_integration", "linux_integration", "live_dagster", "fault_recovery"],
+        "references": [
+          "appsec-review-process/tests/test_build_resolution.py",
+          "appsec-review-process/tests/test_container_execution.py",
+          "appsec-review-process/qualify_build_resolution.py",
+          "docs/processes/system-acceptance-test.md",
+          "docs/processes/flow-bringup.md"
+        ]
+      },
+      "gaps": [],
+      "next_prerequisite": "Implement and live-qualify stage 14, 02-build-configure (E01), by replaying the accepted lock through B13."
     },
     {
       "id": "02-evidence-assembly",

@@ -37,8 +37,8 @@
        {"name": "S4 Partition discovery", "members": ["step:repository_partition_discovery", "step:supply-partition"]},
        {"name": "S5 Developer project discovery", "members": ["step:supply-dev", "step:dev_project_discovery"]},
        {"name": "Phase 3 B13 service qualification", "members": ["step:b13-harmless-container"]},
-       {"name": "S6a Build resolution (index, classification and plan built; resolution designed)", "members": ["step:build-index", "step:build-classify", "step:build-plan", "step:build-resolution"]},
-       {"name": "S6b Build configure (blocked)", "members": ["job:02-build-configure"]}
+       {"name": "S6a Build resolution (implemented and qualified through stage 13)", "members": ["step:build-index", "step:build-classify", "step:build-plan", "step:build-resolution"]},
+       {"name": "S6b Build configure (next: E01 / stage 14)", "members": ["job:02-build-configure"]}
      ]},
     {"id": "engagement-workflow", "name": "engagement_workflow pipeline (dagster-workflow.mmd)",
      "source": "docs/dagster/dagster-workflow.mmd",

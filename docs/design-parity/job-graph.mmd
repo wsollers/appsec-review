@@ -29,6 +29,10 @@ flowchart TD
   02_build_plan_pre --> 02_build_plan["02-build-plan: work or reuse"]
   02_build_plan --> 02_build_plan_post["02-build-plan: post-validation and publish"]
   02_build_classify_post -->|required| 02_build_plan_config
+  02_build_resolution_config["02-build-resolution: resolve job configuration"] --> 02_build_resolution_pre["02-build-resolution: pre-validation"]
+  02_build_resolution_pre --> 02_build_resolution["02-build-resolution: work or reuse"]
+  02_build_resolution --> 02_build_resolution_post["02-build-resolution: post-validation and publish"]
+  02_build_plan_post -->|required| 02_build_resolution_config
   02_evidence_assembly["02-evidence-assembly (planned; not dispatched)"]
   02_dev_project_discovery -->|required| 02_evidence_assembly
   02_devops_project_discovery -->|required| 02_evidence_assembly
