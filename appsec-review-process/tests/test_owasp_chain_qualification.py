@@ -20,10 +20,12 @@ import owasp_applicability  # noqa: E402
 import owasp_batching  # noqa: E402
 import owasp_component_routing as routing  # noqa: E402
 import owasp_dispatch  # noqa: E402
+import owasp_dispatch_support as dispatch_support  # noqa: E402
 import owasp_lane_in  # noqa: E402
 import owasp_validator_handoff  # noqa: E402
 import persona_invocation  # noqa: E402
 import persona_invocation_support as invocation_support  # noqa: E402
+import pool_rendezvous  # noqa: E402
 import test_owasp_component_routing as routing_fixture  # noqa: E402
 
 sha, write_json = routing_fixture.sha, routing_fixture.write_json
@@ -169,7 +171,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
                    result["attempt_id"] / "outputs" / "owasp-validator-handoff-set.json")
         return result, handoff
 
-    def test_common_component_envelope_reaches_t06_then_tracked_dispatch_refuses(self):
+    def test_common_component_envelope_reaches_t10_and_exposes_evidence_gap(self):
         pointer = json.loads((self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json").read_text())
         self.assertEqual(pointer["schema"], "appsec-review/accepted-worker-result/1.0")
         self.assertIn("hashes", pointer)
@@ -214,11 +216,25 @@ class OwaspChainQualificationTests(unittest.TestCase):
             invoker_id=persona_invocation.FixtureInvoker.invoker_id,
             source_snapshot_sha256=invocation_support.SNAPSHOT, registry_ceiling=None,
         )
-        with self.assertRaises(owasp_dispatch.DispatchBlocked) as caught:
-            owasp_dispatch.load_plan(self.run_id, request, facts)
-        self.assertEqual(caught.exception.code, "registry_refused")
-        self.assertEqual(str(caught.exception),
-                         "the registered composition cannot run a validator cell inside the handoff's claim boundary")
+        dispatch_request = self.run / "inputs" / "owasp-dispatch-request.json"
+        write_json(dispatch_request, request)
+        invoker = dispatch_support.ValidatorInvoker()
+        runtime = owasp_dispatch.DispatchRuntime(
+            facts=facts, invoker=invoker,
+            clock=lambda: dispatch_support.NOW, cancel=pool_rendezvous.PoolCancel(),
+            stop_grace_seconds=2, max_parallel=pool_rendezvous.MAX_PARALLEL,
+            wait_limit_seconds=dispatch_support.HANG_SECONDS, drain_seconds=5,
+        )
+        t10 = owasp_dispatch.dispatch(self.run_id, dispatch_request, runtime=runtime, force=False)
+        accounting = owasp_dispatch.load_verified_accounting(self.run_id, facts=facts)
+        self.assertEqual(t10["status"], "OK_WITH_GAPS")
+        self.assertTrue(accounting["cells"])
+        dispatched = [cell for cell in accounting["cells"] if cell["disposition"] == "dispatched"]
+        self.assertEqual(len(invoker.packages), len(dispatched))
+        self.assertTrue(all(cell["state"] == "succeeded" for cell in dispatched))
+        self.assertTrue(all(not cell["valid_result"] and
+                            cell["not_assessed_reason"] == "validation_refused"
+                            for cell in dispatched))
 
     def test_t03_rejects_tampered_common_envelope_binding(self):
         pointer_path = self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json"
@@ -233,6 +249,25 @@ class OwaspChainQualificationTests(unittest.TestCase):
                 self.run_id, self.request_path,
                 clock=lambda: datetime(2026, 9, 27, tzinfo=timezone.utc),
             )
+
+    def test_validator_authority_is_separate_from_worklist_builder(self):
+        registry = PROCESS / "registry"
+        worklist_template = json.loads((registry / "job-templates/04-owasp-validation-worklist.json").read_text())
+        validator_template = json.loads((registry / "job-templates/04-owasp-validator-cell.json").read_text())
+        self.assertEqual(worklist_template["composition"]["tooling_profile_id"], "owasp-worklist-builder")
+        self.assertEqual(validator_template["composition"]["tooling_profile_id"], "owasp-control-validator")
+
+        worklist = json.loads((registry / "tooling-profiles/owasp-worklist-builder.json").read_text())
+        validator = json.loads((registry / "tooling-profiles/owasp-control-validator.json").read_text())
+        role = json.loads((registry / "roles/standards-control-validator.json").read_text())
+        self.assertNotIn("control_verdict", persona_invocation.claim_ceiling(role, worklist)["allowed"])
+        ceiling = persona_invocation.claim_ceiling(role, validator)
+        self.assertEqual(set(ceiling["allowed"]), {
+            "candidate_followup", "control_verdict", "coverage_gap", "dynamic_test_request",
+        })
+        self.assertTrue({"verified_finding", "verified_security_finding", "final_severity",
+                         "observed_runtime_state", "compliance_verdict", "remediation_status"}
+                        <= set(ceiling["prohibited"]))
 
 
 if __name__ == "__main__":

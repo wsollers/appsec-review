@@ -2,7 +2,7 @@
   "schema": "appsec-review/owasp-dispatch-config/1.0",
   "config_id": "owasp-dispatch-default",
   "version": "1.0.0",
-  "job_template_id": "04-owasp-validation-worklist",
+  "job_template_id": "04-owasp-validator-cell",
   "persona_id": "owasp-validator",
   "required_claim_class": "control_verdict",
   "cell_claim_classes": [

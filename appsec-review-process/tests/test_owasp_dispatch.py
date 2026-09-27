@@ -909,14 +909,13 @@ class HostileTextTests(DispatchCase):
 class TrackedRegistryTests(DispatchCase):
     chapters = ("V1",)
 
-    def test_the_tracked_composition_may_not_issue_control_verdicts_so_nothing_is_dispatched(self):
+    def test_the_tracked_validator_composition_issues_bounded_control_verdicts(self):
         invoker = Routed()
-        with self.assertRaises(od.DispatchBlocked) as caught:
-            od.dispatch(self.run_id, self.request_path, force=False,
-                        runtime=self.runtime(invoker, facts=self.facts(registry_dir=pi.REGISTRY_DIR)))
-        self.assertEqual(caught.exception.code, "registry_refused")
-        self.assertEqual(invoker.invoked, [])
-        self.assertFalse((self.job_root / "accepted.json").exists())
+        pointer = od.dispatch(self.run_id, self.request_path, force=False,
+                              runtime=self.runtime(invoker, facts=self.facts(registry_dir=pi.REGISTRY_DIR)))
+        self.assertEqual(invoker.invoked, [1])
+        self.assertEqual(pointer["status"], "OK")
+        self.assertEqual(set(dispositions(self.accounting(pointer))), {"deferred_to_validated_results"})
 
     def test_a_handoff_prohibition_without_an_enforced_registry_class_is_refused(self):
         config = json.loads((od.CONFIG_ROOT / "default-v1.json").read_text(encoding="utf-8"))

@@ -1,0 +1,38 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "04-owasp-validator-cell",
+  "display_name": "OWASP Control Validator Cell",
+  "process": "04-asvs-masvs",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "owasp-validator",
+    "role_id": "standards-control-validator",
+    "domain_id": "owasp-application-controls",
+    "tooling_profile_id": "owasp-control-validator",
+    "output_contract_id": "owasp-control-assessment-candidate"
+  },
+  "inputs": {
+    "required": [
+      "exact T06 validator handoff",
+      "exact accepted T06 publication",
+      "pinned evidence named by the handoff"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "run-owned persona cell output",
+    "files": [
+      "control-assessment-result.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "validator_handoff",
+    "evidence",
+    "output_contract"
+  ]
+}

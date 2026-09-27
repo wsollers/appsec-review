@@ -489,11 +489,11 @@ python -B appsec-review-process/owasp_dispatch.py --run-id <run_id> --invoker-id
   --source-snapshot-sha256 sha256:<digest> --registry-dir <registry>
 ```
 
-With the tracked registry nothing can be dispatched yet: the only composition that names the
-`owasp-validator` persona, `04-owasp-validation-worklist`, uses the `owasp-worklist-builder` tooling
-profile, whose claim limits forbid `control_verdict`, and T10 refuses a composition that may not issue
-it. Registering a validator composition is T14. T10 is not registered in Dagster, the lifecycle
-graph, the registry or the parity manifest; it creates no control-satisfaction upgrade, finding,
+The tracked registry now has a separate `04-owasp-validator-cell` composition. It reuses the bounded
+validator persona, role, and domain but uses `owasp-control-validator`, whose closed claim ceiling
+allows only control verdicts, coverage gaps, inert dynamic-test requests, and candidate followups.
+The worklist builder remains unable to issue a verdict. T10 is not registered in Dagster or the
+lifecycle graph or parity manifest; it creates no control-satisfaction upgrade, finding,
 severity, exploitability, compliance, certification, remediation or runtime claim, joins nothing,
 resolves no challenge and authorizes no dynamic or manual work. T11 deterministic join and reporting
 is next: it must read only through `owasp_dispatch.load_verified_accounting`.

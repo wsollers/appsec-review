@@ -42,7 +42,6 @@ NOW = b14.NOW
 MODEL = b14.MODEL
 SNAPSHOT = b14.SNAPSHOT
 HANG_SECONDS = 60
-VALIDATOR_PROFILE = "owasp-worklist-builder"
 STATIC = {"primary_evidence_mode": "static_source", "authorization_boundary": "static_offline",
           "tooling_profile_id": "read-only-source", "validator_role": "owasp-validator"}
 DYNAMIC = {"primary_evidence_mode": "dynamic_runtime", "authorization_boundary": "dynamic_request_only",
@@ -50,16 +49,8 @@ DYNAMIC = {"primary_evidence_mode": "dynamic_runtime", "authorization_boundary":
 
 
 def validator_registry(target: Path) -> Path:
-    """The tracked registry with ONE departure: the tooling profile of the only composition that
-    names the ``owasp-validator`` persona allows ``control_verdict``. The tracked profile forbids it
-    (it is the worklist builder's), so the tracked registry cannot run a validator cell at all;
-    ``test_owasp_dispatch`` proves that too. Registering a validator composition is T14."""
-    b14.copy_registry(target)
-    path = target / "tooling-profiles" / (VALIDATOR_PROFILE + ".json")
-    profile = json.loads(path.read_text(encoding="utf-8"))
-    profile["claim_limits"]["control_verdict"] = "allowed"
-    path.write_text(json.dumps(profile, indent=2) + "\n", encoding="utf-8")
-    return target
+    """A writable byte-for-byte copy of the tracked validator registry."""
+    return b14.copy_registry(target)
 
 
 # ---- the honest validator invoker and its departures ----------------------------------------------

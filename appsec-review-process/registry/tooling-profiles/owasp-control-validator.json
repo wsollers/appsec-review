@@ -1,0 +1,45 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "owasp-control-validator",
+  "display_name": "Bounded OWASP Control Validator",
+  "mode": "static-only",
+  "required_inputs": [
+    "exact hash-bound validator handoff",
+    "exact accepted handoff publication",
+    "pinned static evidence named by the handoff"
+  ],
+  "optional_inputs": [],
+  "allowed_actions": [
+    "read the assigned control fragments and their pinned static evidence",
+    "assess only the proof obligations assigned by the handoff",
+    "cite exact pinned evidence for every supported control verdict",
+    "emit cannot verify and coverage gaps when evidence is insufficient",
+    "draft inert dynamic test requests without executing them",
+    "emit candidate followup routes without promoting a finding"
+  ],
+  "isolation": "Persona cell receives only bounded pinned bytes; no network, target execution, target mutation, credentials, dynamic execution or manual observation.",
+  "disallowed_actions": [
+    "change applicability or worklist assignments",
+    "execute dynamic or manual tests",
+    "claim exploitability or observed runtime state",
+    "promote a control result to a finding, severity, remediation state, compliance score or certification"
+  ],
+  "claim_limits": {
+    "allowed": [
+      "control_verdict",
+      "coverage_gap",
+      "dynamic_test_request",
+      "candidate_followup"
+    ],
+    "forbidden": [
+      "compliance_score",
+      "compliance_verdict",
+      "exploitability_verdict",
+      "final_severity",
+      "observed_runtime_state",
+      "remediation_status",
+      "verified_finding",
+      "verified_security_finding"
+    ]
+  }
+}
