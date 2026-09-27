@@ -4,5 +4,5 @@
   "required_files":["report.json","evidence-trace-index.json","critical-findings.sarif","human-signoff-ledger.json","final-publication.json"],
   "required_status_fields":["status","final","human_signoff"],
   "result_schema":{"artifact":"final-publication.json","schema_file":"final-publication.schema.json"},
-  "validation_rules":["copy only artifacts hash-bound by the exact draft publication manifest","derive SARIF only from independently verified synthesis findings and bind the exact report and trace hashes","latest append-only human signoff must approve the exact report hash","publish atomically and never replace an existing final package","reject changed missing linked or escaping draft artifacts"]
+  "validation_rules":["copy only artifacts hash-bound by the exact draft publication manifest","derive SARIF only from exact report citations matching the independently verified trace","latest append-only human signoff must carry a keyed authorization for the exact report hash and chain to the externally trusted ledger anchor","require a complete evidence-bound completeness audit and terminal bounded feedback record","reserve publisher-owned paths and reverify the closed final tree before atomic publication","publish atomically and never replace an existing final package","reject changed missing linked or escaping draft artifacts"]
 }
