@@ -12,6 +12,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 IMAGES = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(IMAGES))
@@ -148,6 +149,15 @@ class DeclaredSet(unittest.TestCase):
         self.assertIn(start, script)
         self.assertLess(script.index(generate), script.index(start))
 
+    def test_cli_can_generate_only_osv_without_loading_unrelated_build_state(self):
+        with tempfile.TemporaryDirectory() as temporary, \
+                mock.patch.object(rr, "collect_records", return_value={"tool-osv-scanner": {}}) as collect, \
+                mock.patch.object(rr, "write_records") as write:
+            self.assertEqual(rr.main(["generate", "--image-id", "tool-osv-scanner",
+                                      "--output-dir", temporary]), 0)
+        self.assertEqual(collect.call_args.kwargs["image_ids"], ("tool-osv-scanner",))
+        write.assert_called_once()
+
 
 @unittest.skipUnless(os.environ.get("APPSEC_LIVE_DOCKER_TESTS") == "1",
                      "set APPSEC_LIVE_DOCKER_TESTS=1 for the host-image drift test")
@@ -158,7 +168,7 @@ class LiveDocker(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
             records = rr.collect_records()
-            self.assertEqual(len(records), 19)
+            self.assertEqual(len(records), 20)
             rr.write_records(records, output)
             rr.check_records(rr.collect_records(), output)
 

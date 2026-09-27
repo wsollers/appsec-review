@@ -127,8 +127,8 @@ class AdapterTests(unittest.TestCase):
         syft, _ = self.execute("syft", ScriptedDocker(), (json.dumps(syft_raw) + "\n").encode())
         common = {"run_id": "run-dependency", "source_snapshot_sha256": self.source,
                   "generated_at": support.NOW, "output_root": str(self.root / "worker-output")}
-        sbom_request = self.write_json("sbom-request.json", {**common, **{k: syft[k] for k in
-            ("tool_output", "tool_receipt", "expected_tool")}, "source_files": {"package-lock.json": source_sha}})
+        sbom_request = self.write_json("sbom-request.json", {**common, "b13_attempt": syft["b13_attempt"],
+            "source_files": {"package-lock.json": source_sha}})
         sbom = workers.run("sbom", sbom_request)
         sbom_path = self.root / "worker-output/02-sbom-inventory/attempts" / sbom["attempt_id"] / "outputs/sbom-manifest.json"
         sbom_doc = json.loads(sbom_path.read_text()); component = sbom_doc["components"][0]
@@ -146,8 +146,7 @@ class AdapterTests(unittest.TestCase):
             "snapshot_id": kind + "-20260927", "sha256": "sha256:" + ("d" if kind == "grype-db" else "e") * 64,
             "data_timestamp": "2026-09-20T11:00:00Z"} for kind in ("grype-db", "osv")]
         sca_request = self.write_json("sca-request.json", {**common, "sbom": sbom_binding,
-            **{k: grype[k] for k in ("tool_output", "tool_receipt", "expected_tool")},
-            **{"osv_" + k: osv[k] for k in ("tool_output", "tool_receipt", "expected_tool")},
+            "b13_attempt": grype["b13_attempt"], "osv_b13_attempt": osv["b13_attempt"],
             "databases": databases, "max_database_age_seconds": 700000})
         sca = workers.run("sca", sca_request)
         sca_path = self.root / "worker-output/02-sca-vulnerability-match/attempts" / sca["attempt_id"] / "outputs/sca-vulnerability-match.json"
@@ -157,7 +156,7 @@ class AdapterTests(unittest.TestCase):
             "license_expression_spdx": "MIT", "start_line": 1, "end_line": 1}]}]}
         scan, _ = self.execute("scancode", ScriptedDocker(), (json.dumps(scan_raw) + "\n").encode())
         license_request = self.write_json("license-request.json", {**common, "sbom": sbom_binding,
-            **{k: scan[k] for k in ("tool_output", "tool_receipt", "expected_tool")},
+            "b13_attempt": scan["b13_attempt"],
             "source_files": {"LICENSE": source_sha}})
         license_result = workers.run("license", license_request)
         license_path = self.root / "worker-output/02-license-scan/attempts" / license_result["attempt_id"] / "outputs/license-inventory.json"
@@ -230,6 +229,21 @@ class AdapterTests(unittest.TestCase):
             source_snapshot_sha256=self.source, attempt_root=scan_attempt, target=self.target,
             supplied_runtime=live_runtime)
         self.assertTrue(Path(scan["tool_output"]).is_file())
+
+    def test_live_osv_registry_record_resolves_to_the_pinned_local_image(self):
+        registry_dir = Path(os.environ.get("APPSEC_TEST_B16_REGISTRY", str(ce.IMAGES_DIR)))
+        try:
+            registry = ce.load_image_registry(registry_dir); defaults = ce.host_defaults()
+        except ce.ContainerRequestError:
+            self.skipTest("host B16 registry is unavailable")
+        if "tool-osv-scanner" not in registry or defaults["docker_executable"] is None:
+            self.skipTest("OSV Scanner B16 record or Docker is unavailable")
+        record = registry["tool-osv-scanner"]
+        self.assertEqual(record["image_id"], adapters.SPECS["osv"]["image"])
+        import subprocess
+        completed = subprocess.run([str(defaults["docker_executable"]), "image", "inspect",
+                                    ce.image_reference(record)], capture_output=True, check=False)
+        self.assertEqual(completed.returncode, 0, "B16 OSV record must resolve to its pinned local image")
 
 
 if __name__ == "__main__":

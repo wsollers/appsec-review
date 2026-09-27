@@ -7,6 +7,7 @@ built or pulled here.  A missing image, stale build pointer, Dockerfile change, 
 drift fails closed before any registry file is replaced.
 
     python3 -B images/registry_records.py generate
+    python3 -B images/registry_records.py generate --image-id tool-osv-scanner
     python3 -B images/registry_records.py check
     python3 -B images/registry_records.py list
 """
@@ -210,12 +211,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--images-root", type=Path, default=HERE)
     parser.add_argument("--state-root", type=Path)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--image-id", action="append", choices=STEP4_IMAGE_IDS,
+                        help="generate/check only this declared image; repeat for a bounded subset")
     args = parser.parse_args(argv)
     if args.command == "list":
         print("\n".join(STEP4_IMAGE_IDS))
         return 0
     try:
-        records = collect_records(images_root=args.images_root, state_root=args.state_root)
+        selected = tuple(dict.fromkeys(args.image_id)) if args.image_id else STEP4_IMAGE_IDS
+        records = collect_records(images_root=args.images_root, state_root=args.state_root,
+                                  image_ids=selected)
         if args.command == "generate":
             write_records(records, args.output_dir)
             print(f"generated {len(records)} host-local container image records in {args.output_dir}")

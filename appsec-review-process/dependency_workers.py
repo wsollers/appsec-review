@@ -22,6 +22,7 @@ from schema_validate import validate_document
 from worker_result import artifact_records, terminal_envelope, validate_worker_result
 import evidence_redaction
 import container_execution as ce
+import dependency_b13_adapters as dependency_adapters
 from sbom_family_contracts import (
     canonical_advisory_id, databases_digest, declaration_kind, lifecycle_row_for,
     required_gap_reason, spdx_expression_shape_ok, version_scheme_for,
@@ -116,31 +117,86 @@ def _base(request: dict[str, Any], job: str) -> dict[str, Any]:
             "source_snapshot_sha256": request["source_snapshot_sha256"]}
 
 
-def _tool(request: dict[str, Any], job: str, prefix: str = "") -> tuple[dict[str, Any], dict[str, Any], Path]:
-    output = _path(request.get(prefix + "tool_output"), prefix + "tool_output")
-    receipt_path = _path(request.get(prefix + "tool_receipt"), prefix + "tool_receipt")
-    receipt = _json(receipt_path)
-    required = {"schema", "run_id", "job_id", "attempt_id", "tool_id", "image_id",
-                "image_digest", "result_sha256", "source_snapshot_sha256", "completed_at",
-                "boundary_sha256", "network_mode", "target_read_only", "scratch_writable"}
-    if set(receipt) != required or receipt.get("schema") != PINNED_RECEIPT_SCHEMA:
-        raise WorkerBlocked(f"{job}: pinned tool receipt is not closed v1.0 evidence")
-    expected = request.get(prefix + "expected_tool")
-    if not isinstance(expected, dict) or set(expected) != {"tool_id", "image_id", "image_digest", "boundary_sha256"}:
-        raise WorkerBlocked(f"{job}: expected_tool is required")
-    if (receipt["run_id"] != request["run_id"] or receipt["job_id"] != job or
-            receipt["source_snapshot_sha256"] != request["source_snapshot_sha256"] or
-            any(receipt[key] != expected[key] for key in expected)):
-        raise WorkerBlocked(f"{job}: pinned tool receipt identity differs from the requested execution")
-    if receipt["network_mode"] != "none" or receipt["target_read_only"] is not True or receipt["scratch_writable"] is not True:
-        raise WorkerBlocked(f"{job}: pinned tool receipt does not prove the offline read-only B13 boundary")
-    if receipt["boundary_sha256"] != ce.boundary_sha256():
-        raise WorkerBlocked(f"{job}: pinned tool receipt names a different execution boundary")
-    if not SHA.fullmatch(str(receipt["image_digest"])) or not SHA.fullmatch(str(receipt["result_sha256"])):
-        raise WorkerBlocked(f"{job}: pinned tool receipt hashes are invalid")
-    if _hash_file(output) != receipt["result_sha256"]:
-        raise WorkerBlocked(f"{job}: pinned tool output hash differs from its external receipt")
-    _timestamp(receipt["completed_at"], "tool completed_at")
+def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tuple[dict[str, Any], dict[str, Any], Path]:
+    """Consume a verified immutable B13 attempt, never a caller-authored receipt bundle."""
+    spec = dependency_adapters.SPECS.get(kind)
+    if spec is None or spec["job"] != job:
+        raise WorkerBlocked(f"{job}: dependency adapter kind is not valid for this worker")
+    binding = request.get(prefix + "b13_attempt")
+    fields = {"attempt_root", "expected_result_sha256", "expected_output_sha256", "request", "images_dir", "host_flavor",
+              "docker_host", "docker_executable", "container_user"}
+    if not isinstance(binding, dict) or set(binding) != fields:
+        raise WorkerBlocked(f"{job}: exact immutable B13 attempt binding is required")
+    attempt_root = Path(binding["attempt_root"]); images_dir = Path(binding["images_dir"])
+    docker_executable = Path(binding["docker_executable"])
+    if (not attempt_root.is_absolute() or not attempt_root.is_dir() or attempt_root.is_symlink() or
+            not images_dir.is_absolute() or not images_dir.is_dir() or images_dir.is_symlink() or
+            not docker_executable.is_absolute() or not SHA.fullmatch(str(binding["expected_result_sha256"])) or
+            not SHA.fullmatch(str(binding["expected_output_sha256"]))):
+        raise WorkerBlocked(f"{job}: immutable B13 attempt binding is invalid")
+    expected_request = binding["request"]
+    if not isinstance(expected_request, dict):
+        raise WorkerBlocked(f"{job}: canonical B13 request is required")
+    attempt_id = expected_request.get("attempt_id")
+    static = {"schema": ce.REQUEST_ID, "run_id": request["run_id"], "job_id": job,
+              "argv": spec["argv"], "scratch_path": "scratch", "log_path": "logs/container",
+              "network": {"mode": "none", "destinations": []}, "limits": dependency_adapters.LIMITS}
+    if any(expected_request.get(key) != value for key, value in static.items()):
+        raise WorkerBlocked(f"{job}: B13 request differs from the fixed dependency adapter")
+    if not isinstance(attempt_id, str) or not IDENT.fullmatch(attempt_id):
+        raise WorkerBlocked(f"{job}: B13 attempt identity is invalid")
+    environment = [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"},
+                   {"name": "NO_COLOR", "value": "1"}]
+    if kind == "grype": environment.append({"name": "XDG_CACHE_HOME", "value": "/inputs/grype-db"})
+    if kind == "osv": environment.append({"name": "XDG_CACHE_HOME", "value": "/inputs/osv-db"})
+    if expected_request.get("environment") != environment:
+        raise WorkerBlocked(f"{job}: B13 environment differs from the fixed dependency adapter")
+    container_paths = (["/workspace"] if kind in {"syft", "scancode"} else
+                       ["/inputs/sbom", "/inputs/" + ("grype-db" if kind == "grype" else "osv-db")])
+    mounts = expected_request.get("target_mounts")
+    if (not isinstance(mounts, list) or len(mounts) != len(container_paths) or
+            any(not isinstance(item, dict) or set(item) != {"host_path", "container_path"}
+                for item in mounts) or [item["container_path"] for item in mounts] != container_paths):
+        raise WorkerBlocked(f"{job}: B13 mounts differ from the fixed dependency adapter")
+    permission = expected_request.get("permission")
+    evaluated_at = permission.get("decision", {}).get("evaluated_at") if isinstance(permission, dict) else None
+    try:
+        canonical_permission = dependency_adapters._permission(
+            request["run_id"], job, request["source_snapshot_sha256"], evaluated_at)
+    except (TypeError, ValueError, RuntimeError):
+        raise WorkerBlocked(f"{job}: B13 permission decision is invalid") from None
+    if permission != canonical_permission:
+        raise WorkerBlocked(f"{job}: B13 permission decision is not the exact offline decision")
+    try:
+        image = ce.load_image_registry(images_dir)[spec["image"]]
+    except (ce.ContainerRequestError, KeyError):
+        raise WorkerBlocked(f"{job}: exact pinned B16 image record is unavailable") from None
+    if expected_request.get("image") != {"image_id": image["image_id"], "digest": image["digest"]}:
+        raise WorkerBlocked(f"{job}: B13 request does not name the exact pinned B16 image")
+    try:
+        verified = ce.load_verified_result(
+            attempt_root, run_id=request["run_id"], job_id=job, attempt_id=attempt_id,
+            request=expected_request, images_dir=images_dir, host_flavor=binding["host_flavor"],
+            docker_host=binding["docker_host"], docker_executable=docker_executable,
+            container_user=binding["container_user"], expected_result_sha256=binding["expected_result_sha256"])
+    except (ce.ContainerRequestError, TypeError, ValueError):
+        raise WorkerBlocked(f"{job}: immutable B13 attempt failed independent re-verification") from None
+    if verified["execution_status"] != "OK":
+        raise WorkerBlocked(f"{job}: immutable B13 attempt did not complete successfully")
+    output = attempt_root / "scratch" / spec["output"]
+    if not output.is_file() or output.is_symlink():
+        raise WorkerBlocked(f"{job}: verified B13 attempt lacks its fixed tool output")
+    if _hash_file(output) != binding["expected_output_sha256"]:
+        raise WorkerBlocked(f"{job}: fixed tool output differs from the externally retained hash")
+    receipt = _json(attempt_root / "pinned-tool-evidence.json")
+    expected_receipt = {"schema": PINNED_RECEIPT_SCHEMA, "run_id": request["run_id"], "job_id": job,
+        "attempt_id": attempt_id, "tool_id": spec["tool"], "image_id": image["image_id"],
+        "image_digest": image["digest"], "result_sha256": _hash_file(output),
+        "source_snapshot_sha256": request["source_snapshot_sha256"], "completed_at": verified["finished_at"],
+        "boundary_sha256": ce.boundary_sha256(), "network_mode": "none",
+        "target_read_only": True, "scratch_writable": True}
+    if receipt != expected_receipt:
+        raise WorkerBlocked(f"{job}: pinned tool receipt was not derived from the verified B13 attempt")
     return _json(output), receipt, output
 
 
@@ -244,7 +300,7 @@ def _component_id(value: dict[str, Any]) -> str:
 
 def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
     job = JOBS["sbom"][0]; base = _base(request, job)
-    tool, receipt, output = _tool(request, job)
+    tool, receipt, output = _tool(request, job, "syft")
     rows = _sbom_rows(tool, request, job)
     components = []
     for raw in rows:
@@ -351,10 +407,10 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
     sbom, binding, _ = _upstream(request, "sbom", JOBS["sbom"][0], JOBS["sbom"][2])
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
-    tool, receipt, output = _tool(request, job)
-    if not all(key in request for key in ("osv_tool_output", "osv_tool_receipt", "osv_expected_tool")):
+    tool, receipt, output = _tool(request, job, "grype")
+    if "osv_b13_attempt" not in request:
         raise WorkerBlocked(f"{job}: verified offline OSV execution evidence is required")
-    supplemental = _tool(request, job, "osv_")
+    supplemental = _tool(request, job, "osv", "osv_")
     max_age = request.get("max_database_age_seconds")
     if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 0:
         raise WorkerBlocked(f"{job}: explicit non-negative database age ceiling is required")
@@ -442,7 +498,7 @@ def build_license(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, b
     sbom, binding, _ = _upstream(request, "sbom", JOBS["sbom"][0], JOBS["sbom"][2])
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
-    tool, receipt, output = _tool(request, job); component_ids = {row["component_id"] for row in sbom["components"]}
+    tool, receipt, output = _tool(request, job, "scancode"); component_ids = {row["component_id"] for row in sbom["components"]}
     raw_records = tool.get("records")
     if not isinstance(raw_records, list) and isinstance(tool.get("files"), list):
         source_files = _source_files(request, job); raw_records = []

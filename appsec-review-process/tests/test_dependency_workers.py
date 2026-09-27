@@ -5,12 +5,18 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dependency_workers as workers
+import dependency_b13_adapters as adapters
+import container_execution as ce
+import container_execution_support as support
+from test_container_execution import ScriptedDocker
 from schema_validate import validate_document
 
 
@@ -30,6 +36,14 @@ class DependencyWorkersTest(unittest.TestCase):
         self.source = "sha256:" + "1" * 64
         self.run_id = "run-dependency-fixture"
         self.when = "2026-09-27T12:00:00Z"
+        self.target = self.root / "target"; self.target.mkdir(); (self.target / "package.json").write_text("{}\n")
+        self.sbom_input = self.root / "sbom-input"; self.sbom_input.mkdir(); (self.sbom_input / "sbom.cdx.json").write_text("{}\n")
+        self.database = self.root / "database"; self.database.mkdir(); (self.database / "db").write_text("fixture\n")
+        self.images = self.root / "images"; self.images.mkdir(); self.tool_counter = 0
+        base = support.fixture_record()
+        for spec in adapters.SPECS.values():
+            record = {**base, "image_id": spec["image"], "repository": "docker.io/library/" + spec["image"]}
+            (self.images / (spec["image"] + ".json")).write_text(json.dumps(record))
 
     def tearDown(self):
         self.temp.cleanup()
@@ -41,19 +55,33 @@ class DependencyWorkersTest(unittest.TestCase):
         return path
 
     def tool(self, job, name, value):
-        output = self.write(name + ".json", value)
-        expected = {"tool_id": name, "image_id": "tool-" + name,
-                    "image_digest": "sha256:" + hashlib.sha256(("image:" + name).encode()).hexdigest(),
-                    "boundary_sha256": workers.ce.boundary_sha256()}
-        receipt = self.write(name + "-receipt.json", {
-            "schema": workers.PINNED_RECEIPT_SCHEMA, "run_id": self.run_id, "job_id": job,
-            "attempt_id": name + "-b13-attempt", **expected, "result_sha256": workers._hash_file(output),
-            "source_snapshot_sha256": self.source, "completed_at": self.when,
-            "network_mode": "none", "target_read_only": True, "scratch_writable": True,
-        })
-        return output, receipt, expected
+        kinds = {"syft": "syft", "syft-directory": "syft", "grype": "grype",
+                 "osv-scanner": "osv", "scancode": "scancode", "scancode-toolkit": "scancode"}
+        kind = kinds[name]; self.tool_counter += 1
+        attempt = self.root / f"b13-{kind}-{self.tool_counter}"; attempt.mkdir()
+        scripted = ScriptedDocker(); original = scripted.child
+        def child(spec, **kwargs):
+            result = original(spec, **kwargs); scratch = Path(spec.owner_root) / "scratch"; scratch.mkdir(exist_ok=True)
+            (scratch / adapters.SPECS[kind]["output"]).write_bytes(payload(value)); return result
+        scripted.child = child; first, second = scripted.patches()
+        defaults = ce.host_defaults()
+        runtime = ce.ContainerRuntime(docker_executable=defaults["docker_executable"] or Path(sys.executable).resolve(),
+            docker_host=None, images_dir=self.images, host_flavor=defaults["host_flavor"],
+            container_user=defaults["container_user"] if ce._USER_RE.match(defaults["container_user"]) else "10001:10001",
+            source_snapshot_sha256=self.source, registry_ceiling=[], clock=lambda: self.when,
+            cancel=threading.Event())
+        kwargs = {"target": self.target} if kind in {"syft", "scancode"} else {
+            "sbom_root": self.sbom_input, "database_root": self.database}
+        with first, second:
+            result = adapters.execute(kind, run_id=self.run_id, adapter_attempt_id=f"{kind}-{self.tool_counter}",
+                source_snapshot_sha256=self.source, attempt_root=attempt, supplied_runtime=runtime, **kwargs)
+        return Path(result["tool_output"]), Path(result["tool_receipt"]), result["b13_attempt"]
 
     def request(self, **extra):
+        if isinstance(extra.get("expected_tool"), dict) and "attempt_root" in extra["expected_tool"]:
+            extra["b13_attempt"] = extra.pop("expected_tool"); extra.pop("tool_output", None); extra.pop("tool_receipt", None)
+        if isinstance(extra.get("osv_expected_tool"), dict) and "attempt_root" in extra["osv_expected_tool"]:
+            extra["osv_b13_attempt"] = extra.pop("osv_expected_tool"); extra.pop("osv_tool_output", None); extra.pop("osv_tool_receipt", None)
         return {"run_id": self.run_id, "source_snapshot_sha256": self.source,
                 "generated_at": self.when, "output_root": str(self.out), **extra}
 
@@ -142,13 +170,30 @@ class DependencyWorkersTest(unittest.TestCase):
         with self.assertRaisesRegex(workers.WorkerBlocked, "artifact changed"):
             workers.run("reachability", request_path)
 
-    def test_absent_tool_receipt_blocks_without_attempt(self):
+    def test_receipt_only_bundle_cannot_substitute_for_a_b13_attempt(self):
         output = self.write("syft.json", {"components": []})
         request = self.request(tool_output=str(output), tool_receipt=str(self.root / "missing.json"),
                                expected_tool={"tool_id": "syft", "image_id": "tool-syft", "image_digest": "sha256:" + "3" * 64,
                                               "boundary_sha256": "sha256:" + "4" * 64})
-        with self.assertRaisesRegex(workers.WorkerBlocked, "regular file"):
+        with self.assertRaisesRegex(workers.WorkerBlocked, "immutable B13 attempt binding"):
             self.run_request("sbom", "missing", request)
+        self.assertFalse((self.out / "02-sbom-inventory").exists())
+
+    def test_mutated_receipt_from_real_attempt_is_rejected(self):
+        _output, receipt, binding = self.tool("02-sbom-inventory", "syft", {"components": []})
+        forged = json.loads(receipt.read_text()); forged["tool_id"] = "caller-selected-tool"
+        receipt.write_bytes(payload(forged))
+        with self.assertRaisesRegex(workers.WorkerBlocked, "not derived from the verified B13 attempt"):
+            self.run_request("sbom", "forged-receipt", self.request(b13_attempt=binding))
+        self.assertFalse((self.out / "02-sbom-inventory").exists())
+
+    def test_cross_matched_output_and_receipt_mutation_is_rejected_by_b13(self):
+        output, receipt, binding = self.tool("02-sbom-inventory", "syft", {"components": []})
+        output.write_bytes(payload({"components": [{"name": "fabricated"}]}))
+        forged = json.loads(receipt.read_text()); forged["result_sha256"] = workers._hash_file(output)
+        receipt.write_bytes(payload(forged))
+        with self.assertRaisesRegex(workers.WorkerBlocked, "externally retained hash"):
+            self.run_request("sbom", "cross-matched-forgery", self.request(b13_attempt=binding))
         self.assertFalse((self.out / "02-sbom-inventory").exists())
 
     def test_stale_database_blocks(self):

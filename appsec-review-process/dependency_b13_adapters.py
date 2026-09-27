@@ -151,9 +151,14 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
         "target_read_only": True, "scratch_writable": True}
     receipt_path = attempt_root / "pinned-tool-evidence.json"
     atomic_bytes(receipt_path, (json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n").encode())
+    binding = {"attempt_root": str(attempt_root), "expected_result_sha256": expected_result_sha256,
+        "expected_output_sha256": receipt["result_sha256"],
+        "request": req, "images_dir": str(rt.images_dir), "host_flavor": rt.host_flavor,
+        "docker_host": rt.docker_host, "docker_executable": str(rt.docker_executable),
+        "container_user": rt.container_user}
     return {"tool_output": str(output), "tool_receipt": str(receipt_path),
             "expected_tool": {key: receipt[key] for key in ("tool_id", "image_id", "image_digest", "boundary_sha256")},
-            "expected_result_sha256": expected_result_sha256, "request": req}
+            "expected_result_sha256": expected_result_sha256, "request": req, "b13_attempt": binding}
 
 
 def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: int,
