@@ -37,7 +37,7 @@ EXPECTED = {
     "scoring":("12-scoring-prioritization","12-scoring-prioritization","scoring-prioritization.json")}
 SCHEMAS = {"component": "component-purpose-map.schema.json", "threat": "integrated-threat-model.schema.json",
     "owasp": "owasp-control-status-matrix.schema.json", "ledger": "claim-decision-ledger.schema.json",
-    "verification": "independent-verification.schema.json", "scoring": "scoring-prioritization.schema.json"}
+    "verification": "09-independent-verification.schema.json", "scoring": "scoring-prioritization.schema.json"}
 PROHIBITED_TEXT = tuple(re.compile(value, re.I) for value in (
     r"(?<!not a )\bfinal(?:ized)?\s+report\b", r"\bhuman\s+sign[- ]?off\s+(?:recorded|complete|approved)\b", r"\bcompliance\s+(?:certified|verdict)\b",
     r"\b(?:is|has been)\s+(?:fixed|remediated)\b", r"\bobserved\s+runtime\b"))
@@ -140,6 +140,12 @@ def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
     manifest = read_json(manifest_path)
     errors = validate_document(manifest, "synthesis-input.schema.json")
     if errors: raise Blocked(f"{JOB}: input manifest is invalid ({errors[0]})")
+    integrity = manifest["integrity"]
+    if (integrity["inputs_sha256"] != _sha(manifest["inputs"]) or
+            integrity["evidence_artifacts_sha256"] != _sha(manifest["evidence_artifacts"]) or
+            integrity["manifest_sha256"] != _sha({**manifest, "integrity": {
+                **integrity, "manifest_sha256": ""}})):
+        raise Blocked(f"{JOB}: input manifest integrity binding is invalid")
     loaded, bindings = {}, {}
     for name in INPUT_NAMES:
         ref=manifest["inputs"][name]; expected_job,expected_contract,expected_artifact=EXPECTED[name]
@@ -153,23 +159,34 @@ def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
             if errors: raise Blocked(f"{JOB}: {name} artifact fails its authoritative schema ({errors[0]})")
         loaded[name], bindings[name] = value, binding
     owref = manifest["inputs"]["owasp"]
-    if {item["kind"] for item in owref["supporting_artifacts"]} != {"owasp_gaps", "owasp_routes"}:
+    support_kinds = {"owasp-coverage-gaps-report.schema.json": "owasp_gaps",
+                     "owasp-candidate-promotion-routes.schema.json": "owasp_routes"}
+    if {item["schema"] for item in owref["supporting_artifacts"]} != set(support_kinds):
         raise Blocked(f"{JOB}: OWASP supporting artifacts must be exactly gaps and routes")
     expected_support={"owasp_gaps":"owasp-coverage-gaps.json",
                       "owasp_routes":"owasp-candidate-promotion-routes.json"}
     for supporting in owref["supporting_artifacts"]:
-        if PurePosixPath(supporting["artifact_path"]).name!=expected_support[supporting["kind"]]:
+        kind = support_kinds[supporting["schema"]]
+        if PurePosixPath(supporting["artifact_path"]).name!=expected_support[kind]:
             raise Blocked(f"{JOB}: OWASP supporting artifact path is not canonical")
         ref = {**{key: owref[key] for key in owref if key != "supporting_artifacts"},
                "artifact_path":supporting["artifact_path"],"artifact_sha256":supporting["artifact_sha256"]}
         value, binding = load_reference(run_root, manifest["run_id"], ref)
-        loaded[supporting["kind"]], bindings[supporting["kind"]] = value, binding
+        loaded[kind], bindings[kind] = value, binding
     evidence = []
     for ref in manifest["evidence_artifacts"]:
-        _value, binding = load_reference(run_root, manifest["run_id"], ref)
-        evidence.append(binding)
+        normalized = {"job_id": ref["producer_job_id"], "attempt_id": ref["producer_attempt_id"],
+                      "artifact_path": ref["artifact_path"], "artifact_sha256": ref["artifact_sha256"]}
+        attempt = Path(run_root) / "data" / "jobs" / normalized["job_id"] / "attempts" / normalized["attempt_id"]
+        if attempt.is_symlink() or not attempt.is_dir():
+            raise Blocked(f"{JOB}: cited evidence attempt is unsafe")
+        path = _owned(attempt, _attempt_relative(normalized))
+        if "sha256:" + file_hash(path) != normalized["artifact_sha256"]:
+            raise Blocked(f"{JOB}: cited evidence artifact changed after assembly")
+        evidence.append(normalized)
     return {**manifest, "input_manifest_sha256":"sha256:"+file_hash(manifest_path),
-            "documents": loaded, "bindings": bindings, "evidence_bindings": evidence}
+            "documents": loaded, "bindings": bindings, "evidence_bindings": evidence,
+            "limitations": []}
 
 
 def _latest_ledger(ledger: dict[str, Any]) -> dict[str, dict[str, Any]]:
