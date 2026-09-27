@@ -504,10 +504,10 @@ class PublishedMetricsTests(LifecycleCase):
         envelope = terminal_envelope(
             run_id='fixture', job_id=store.JOB, attempt_id=pointer['attempt_id'],
             worker_kind='deterministic_python', execution_status='OK', acceptance_status='CURRENT',
-            input_fingerprint='sha256:' + pointer['fingerprint'], output_contract='evidence-index',
+            input_fingerprint=pointer['fingerprint'] if pointer['fingerprint'].startswith('sha256:') else 'sha256:' + pointer['fingerprint'], output_contract='evidence-index',
             started_at='2026-09-20T10:00:00Z', finished_at='2026-09-20T10:01:00Z', summary='indexed',
             artifacts=artifact_records(attempt, CONTRACT['required_files']))
-        self.assertEqual(validate_job_output(attempt, envelope, 'sha256:' + pointer['fingerprint'],
+        self.assertEqual(validate_job_output(attempt, envelope, pointer['fingerprint'] if pointer['fingerprint'].startswith('sha256:') else 'sha256:' + pointer['fingerprint'],
                                              expected_run_id='fixture', expected_job_id=store.JOB,
                                              orchestration=NO_ORCHESTRATION_FACTS), [])
 

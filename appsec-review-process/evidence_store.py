@@ -535,7 +535,7 @@ def validate(run_id, pointer=None, fresh=True):
         raise Blocked('index artifact integrity mismatch')
     if read_json(attempt / 'status.json')['status'] != 'OK':
         raise Blocked('index attempt is not successful')
-    if fresh and digest(inputs(run_id)) != pointer['fingerprint']:
+    if fresh and pointer['fingerprint'] not in (digest(plan := inputs(run_id)), 'sha256:' + digest(plan)):
         raise Blocked('index is stale; rerun evidence_index')
     if (attempt / enrichment.RESULT).is_file():
         check_enrichment(run_id, attempt, read_json(attempt / 'inputs.json'))
@@ -602,8 +602,29 @@ def run(run_id, dagster_id, force=False):
                                                         'chunks': manifest['chunks']})
             atomic_bytes(attempt / 'validation/post/stdout.log', b'Fresh producers and nonempty integrity-checked corpus validated.\n')
             atomic_json(attempt / 'status.json', {**status, 'status': 'OK', 'ended_at': now()})
-            pointer = {'status': 'OK', 'attempt_id': attempt_id, 'fingerprint': digest(plan),
-                       'hashes': tree_hashes(attempt), 'run_id': run_id}
+            # Common worker-result envelope and accepted pointer, so envelope consumers
+            # (02-evidence-assembly) can bind this producer like any migrated worker.
+            fingerprint = 'sha256:' + digest(plan)
+            published = {'manifest.json': 'application/json', 'permission.json': 'application/json',
+                         'lineage.json': 'application/json', 'index.sqlite': 'application/vnd.sqlite3',
+                         enrichment.RESULT: 'application/json'}
+            hashes = tree_hashes(attempt)
+            envelope = {'schema': 'appsec-review/worker-result-envelope/1.0', 'run_id': run_id,
+                        'job_id': '02-evidence-index', 'attempt_id': attempt_id,
+                        'worker_kind': 'deterministic_python', 'execution_status': 'OK',
+                        'acceptance_status': 'CURRENT', 'input_fingerprint': fingerprint,
+                        'output_contract': 'evidence-index', 'started_at': status['time'], 'finished_at': now(),
+                        'summary': f"Indexed {manifest['files']} files into {manifest['chunks']} searchable chunks.",
+                        'artifacts': [{'path': path, 'sha256': hashes[path], 'media_type': media}
+                                      for path, media in sorted(published.items()) if path in hashes],
+                        'gaps': [], 'skip_reason': None, 'cause': None,
+                        'retry': {'allowed': False, 'resume_command': None}, 'superseded_by_attempt_id': None}
+            atomic_json(attempt / 'result.json', envelope)
+            pointer = {'schema': 'appsec-review/accepted-worker-result/1.0', 'status': 'OK',
+                       'run_id': run_id, 'job': '02-evidence-index', 'attempt_id': attempt_id,
+                       'fingerprint': fingerprint, 'envelope_path': 'result.json',
+                       'envelope_sha256': file_hash(attempt / 'result.json'),
+                       'hashes': tree_hashes(attempt), 'accepted_at': now()}
             with Lock(data_path(run_id, 'publication.lock')):
                 if inputs(run_id) != plan:
                     raise Blocked('producer changed before publication')
