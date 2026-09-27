@@ -35,7 +35,7 @@ STATE_KEYS = {"attempt_id", "fingerprint", "finished_at", "image_digest", "image
 TOOL_IMAGE_IDS = (
     "tool-checkov", "tool-gitleaks", "tool-gosec", "tool-grype", "tool-hadolint",
     "tool-mobsfscan", "tool-phpcs", "tool-phpstan", "tool-psalm", "tool-semgrep",
-    "tool-spotbugs", "tool-syft", "tool-trivy",
+    "tool-spotbugs", "tool-syft", "tool-trivy", "tool-osv-scanner",
 )
 STEP4_IMAGE_IDS = (
     "audit-binary-analysis", "audit-buildenv-cpp", "audit-container", "audit-iac",

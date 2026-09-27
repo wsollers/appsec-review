@@ -57,6 +57,10 @@ class DependencyWorkersTest(unittest.TestCase):
         return {"run_id": self.run_id, "source_snapshot_sha256": self.source,
                 "generated_at": self.when, "output_root": str(self.out), **extra}
 
+    def osv(self):
+        output, receipt, expected = self.tool("02-sca-vulnerability-match", "osv-scanner", {"results": []})
+        return {"osv_tool_output": str(output), "osv_tool_receipt": str(receipt), "osv_expected_tool": expected}
+
     def run_request(self, kind, name, request):
         path = self.write(name + "-request.json", request)
         return workers.run(kind, path)
@@ -89,7 +93,7 @@ class DependencyWorkersTest(unittest.TestCase):
         }]})
         sca = self.run_request("sca", "sca", self.request(sbom=self.binding(sbom, "outputs/sbom-manifest.json"),
             tool_output=str(sca_tool), tool_receipt=str(sca_receipt), expected_tool=sca_expected,
-            databases=databases, max_database_age_seconds=7200))
+            databases=databases, max_database_age_seconds=7200, **self.osv()))
         license_tool, license_receipt, license_expected = self.tool("02-license-scan", "scancode-toolkit", {"records": [{
             "assertion": "license-text-detected", "component_ref": json.loads(self.result_path(sbom, "outputs/sbom-manifest.json").read_text())["components"][0]["component_id"],
             "license_expression": "MIT", "expression_state": "spdx-expression",
@@ -154,7 +158,8 @@ class DependencyWorkersTest(unittest.TestCase):
         databases = [{"database_kind": kind, "vendor_build": "b", "schema_version": "1", "snapshot_id": "s",
             "sha256": "sha256:" + "4" * 64, "data_timestamp": "2026-09-01T00:00:00Z"} for kind in ("grype-db", "osv")]
         request = self.request(sbom=self.binding(sbom, "outputs/sbom-manifest.json"), tool_output=str(tool),
-            tool_receipt=str(receipt), expected_tool=expected, databases=databases, max_database_age_seconds=60)
+            tool_receipt=str(receipt), expected_tool=expected, databases=databases, max_database_age_seconds=60,
+            **self.osv())
         with self.assertRaisesRegex(workers.WorkerBlocked, "stale"):
             self.run_request("sca", "stale", request)
 
@@ -196,7 +201,8 @@ class DependencyWorkersTest(unittest.TestCase):
             "snapshot_id": kind + "-20260927", "sha256": "sha256:" + hashlib.sha256(kind.encode()).hexdigest(),
             "data_timestamp": "2026-09-27T11:00:00Z"} for kind in ("grype-db", "osv")]
         request = self.request(sbom=self.binding(sbom, "outputs/sbom-manifest.json"), tool_output=str(tool),
-            tool_receipt=str(receipt), expected_tool=expected, databases=databases, max_database_age_seconds=7200)
+            tool_receipt=str(receipt), expected_tool=expected, databases=databases, max_database_age_seconds=7200,
+            **self.osv())
         with self.assertRaisesRegex(workers.WorkerBlocked, "basis"):
             self.run_request("sca", "bad-basis", request)
 

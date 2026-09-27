@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dependency-database-snapshot.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp", "files"],
+  "properties": {
+    "schema": {"const": "appsec-review/dependency-database-snapshot/1.0"},
+    "database_kind": {"enum": ["grype-db", "osv"]},
+    "vendor_build": {"type": "string"}, "schema_version": {"type": "string"}, "snapshot_id": {"type": "string"},
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
+    "data_timestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\\Z"},
+    "files": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"], "properties": {"path": {"type": "string"},
+      "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"}, "bytes": {"type": "integer"}}}}
+  }
+}

@@ -18,17 +18,18 @@ from typing import Any
 import container_execution as ce
 from execution_state import atomic_bytes
 import permission_capabilities as pc
+import dependency_snapshot_registry as snapshots
 
 PINNED_RECEIPT_SCHEMA = "appsec-review/pinned-tool-evidence/1.0"
 SPECS = {
     "syft": {"job": "02-sbom-inventory", "image": "tool-syft", "tool": "syft-directory",
              "output": "sbom.cdx.json", "argv": ["/opt/tool/bin/syft", "scan", "dir:/workspace",
-                 "--select-catalogers", "+file-metadata-cataloger", "-o", "cyclonedx-json=/scratch/sbom.cdx.json"]},
+                 "--select-catalogers", "+file-metadata-cataloger", "-o", "cyclonedx-json@1.5=/scratch/sbom.cdx.json"]},
     "grype": {"job": "02-sca-vulnerability-match", "image": "tool-grype", "tool": "grype",
               "output": "grype.json", "argv": ["/opt/tool/bin/grype", "sbom:/inputs/sbom/sbom.cdx.json",
                   "--output", "json", "--file", "/scratch/grype.json"]},
     "osv": {"job": "02-sca-vulnerability-match", "image": "tool-osv-scanner", "tool": "osv-scanner",
-            "output": "osv.json", "argv": ["/opt/tool/bin/osv-scanner", "scan", "--offline", "--format", "json",
+            "output": "osv.json", "argv": ["/opt/tool/bin/osv-scanner", "scan", "--experimental-offline-vulnerabilities", "--format", "json",
                 "--output", "/scratch/osv.json", "--sbom", "/inputs/sbom/sbom.cdx.json"]},
     "scancode": {"job": "02-license-scan", "image": "scancode-toolkit", "tool": "scancode-toolkit",
                  # The separately built image declares WORKDIR /scancode-toolkit and ENTRYPOINT
@@ -153,6 +154,30 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
     return {"tool_output": str(output), "tool_receipt": str(receipt_path),
             "expected_tool": {key: receipt[key] for key in ("tool_id", "image_id", "image_digest", "boundary_sha256")},
             "expected_result_sha256": expected_result_sha256, "request": req}
+
+
+def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: int,
+                       run_id: str, adapter_attempt_id: str, source_snapshot_sha256: str,
+                       attempt_root: Path, sbom_root: Path,
+                       supplied_runtime: ce.ContainerRuntime | None = None) -> dict[str, Any]:
+    if kind not in {"grype", "osv"}: raise AdapterBlocked("registered snapshots apply only to Grype and OSV")
+    rt = supplied_runtime or runtime(source_snapshot_sha256)
+    database_kind = "grype-db" if kind == "grype" else "osv"
+    try:
+        identity = snapshots.resolve(database_kind, snapshot_registry, max_age_seconds=max_age_seconds,
+                                     now=datetime.fromisoformat(rt.clock().replace("Z", "+00:00")))
+    except snapshots.SnapshotBlocked as exc:
+        raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot absent") from exc
+    except snapshots.SnapshotStale as exc:
+        raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot stale") from exc
+    except snapshots.SnapshotInvalid as exc:
+        raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot invalid") from exc
+    result = execute(kind, run_id=run_id, adapter_attempt_id=adapter_attempt_id,
+        source_snapshot_sha256=source_snapshot_sha256, attempt_root=attempt_root,
+        sbom_root=sbom_root, database_root=Path(identity["data_root"]), supplied_runtime=rt)
+    result["database"] = {key: identity[key] for key in
+        ("database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp")}
+    return result
 
 
 def main() -> int:

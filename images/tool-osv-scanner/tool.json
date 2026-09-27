@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "tool-osv-scanner",
+  "tool": "osv-scanner",
+  "version": "1.9.2",
+  "purpose": "Offline OSV advisory matching against a supplied immutable local database snapshot.",
+  "feeds": [
+    "02-sca-vulnerability-match"
+  ],
+  "executable": "/opt/tool/bin/osv-scanner",
+  "version_argv": [
+    "/opt/tool/bin/osv-scanner",
+    "--version"
+  ],
+  "version_expect": "{version}",
+  "assets": [
+    {
+      "name": "osv-scanner",
+      "url": "https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_linux_amd64",
+      "dest": "downloads/osv-scanner",
+      "verify": {
+        "kind": "vendor-checksums",
+        "checksums_url": "https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_SHA256SUMS",
+        "entry": "osv-scanner_linux_amd64"
+      }
+    }
+  ],
+  "smoke": [
+    {
+      "name": "version",
+      "argv": [
+        "/opt/tool/bin/osv-scanner",
+        "--version"
+      ],
+      "exit_codes": [
+        0
+      ],
+      "workspace": "none",
+      "stdout_contains": "1.9.2"
+    }
+  ],
+  "notes": "The scanner never updates or queries OSV during a review. A separately permissioned sync creates the mounted offline snapshot registration."
+}

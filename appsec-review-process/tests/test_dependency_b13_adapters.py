@@ -18,6 +18,7 @@ import container_execution as ce
 import container_execution_support as support
 import dependency_b13_adapters as adapters
 import dependency_workers as workers
+import dependency_snapshot_registry as snapshots
 from test_container_execution import ScriptedDocker
 
 
@@ -161,6 +162,43 @@ class AdapterTests(unittest.TestCase):
         license_result = workers.run("license", license_request)
         license_path = self.root / "worker-output/02-license-scan/attempts" / license_result["attempt_id"] / "outputs/license-inventory.json"
         self.assertEqual(json.loads(license_path.read_text())["records"][0]["license_expression"], "MIT")
+
+    def test_registered_grype_and_osv_snapshots_drive_positive_b13_paths(self):
+        registry = self.root / "snapshot-registry"
+        for kind, database_kind, document in (("grype", "grype-db", {"matches": []}),
+                                               ("osv", "osv", {"results": []})):
+            supplied = self.root / (database_kind + "-supplied"); supplied.mkdir(); (supplied / "database.bin").write_bytes(b"fixture")
+            metadata = self.write_json(database_kind + "-metadata.json", {"database_kind": database_kind,
+                "vendor_build": "vendor-1", "schema_version": "1.0", "snapshot_id": database_kind + "-fixture",
+                "data_timestamp": "2026-09-20T11:00:00Z"})
+            snapshots.register(database_kind, supplied, metadata, registry)
+            attempt = self.root / ("registered-" + kind); attempt.mkdir(); scripted = ScriptedDocker()
+            original = scripted.child
+            def child(spec, **kwargs):
+                result = original(spec, **kwargs); scratch = Path(spec.owner_root) / "scratch"; scratch.mkdir(exist_ok=True)
+                (scratch / adapters.SPECS[kind]["output"]).write_text(json.dumps(document) + "\n"); return result
+            scripted.child = child; first, second = scripted.patches()
+            with first, second:
+                result = adapters.execute_registered(kind, snapshot_registry=registry, max_age_seconds=700000,
+                    run_id="run-dependency", adapter_attempt_id=kind + "-registered", source_snapshot_sha256=self.source,
+                    attempt_root=attempt, sbom_root=self.sbom, supplied_runtime=self.runtime())
+            self.assertEqual(result["database"]["database_kind"], database_kind)
+
+    def test_registered_snapshot_absent_and_stale_remain_distinct_blockers(self):
+        registry = self.root / "snapshot-registry"
+        attempt = self.root / "registered-absent"; attempt.mkdir()
+        with self.assertRaisesRegex(adapters.AdapterBlocked, "snapshot absent"):
+            adapters.execute_registered("grype", snapshot_registry=registry, max_age_seconds=60,
+                run_id="run-dependency", adapter_attempt_id="absent", source_snapshot_sha256=self.source,
+                attempt_root=attempt, sbom_root=self.sbom, supplied_runtime=self.runtime())
+        supplied = self.root / "old-supplied"; supplied.mkdir(); (supplied / "database.bin").write_bytes(b"fixture")
+        metadata = self.write_json("old.json", {"database_kind": "grype-db", "vendor_build": "vendor-1",
+            "schema_version": "1.0", "snapshot_id": "old", "data_timestamp": "2026-01-01T00:00:00Z"})
+        snapshots.register("grype-db", supplied, metadata, registry)
+        with self.assertRaisesRegex(adapters.AdapterBlocked, "snapshot stale"):
+            adapters.execute_registered("grype", snapshot_registry=registry, max_age_seconds=60,
+                run_id="run-dependency", adapter_attempt_id="stale", source_snapshot_sha256=self.source,
+                attempt_root=attempt, sbom_root=self.sbom, supplied_runtime=self.runtime())
 
     def test_live_syft_and_scancode_smoke_when_registry_and_images_are_present(self):
         registry_dir = Path(os.environ.get("APPSEC_TEST_B16_REGISTRY", str(ce.IMAGES_DIR)))

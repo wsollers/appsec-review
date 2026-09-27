@@ -270,7 +270,7 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
     components.sort(key=lambda row: row["component_id"])
     if len({row["component_id"] for row in components}) != len(components):
         raise WorkerBlocked(f"{job}: component identities collide")
-    cdx = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
+    cdx = {"bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
            "components": [{"bom-ref": row["component_id"], "name": row["name"],
                            **({"version": row["version"]} if row["version"] else {}),
                            **({"purl": row["purl"]} if row["purl"] else {})} for row in components]}
@@ -278,7 +278,7 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
     result = {"schema": "appsec-review/sbom-inventory/1.0", **base, "attempt_id": attempt_id,
               "redactor": REDACTOR, "generated_at": request["generated_at"],
               "sbom_document": {"path": "outputs/sbom.cdx.json", "sha256": _hash_bytes(cdx_bytes),
-                                "bytes": len(cdx_bytes), "bom_format": "CycloneDX", "spec_version": "1.6"},
+                                "bytes": len(cdx_bytes), "bom_format": "CycloneDX", "spec_version": "1.5"},
               "components": components}
     errors = validate_document(result, "sbom-inventory.schema.json")
     if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors)")
@@ -352,8 +352,9 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
     tool, receipt, output = _tool(request, job)
-    supplemental = (_tool(request, job, "osv_")
-                    if any(key.startswith("osv_tool_") for key in request) else None)
+    if not all(key in request for key in ("osv_tool_output", "osv_tool_receipt", "osv_expected_tool")):
+        raise WorkerBlocked(f"{job}: verified offline OSV execution evidence is required")
+    supplemental = _tool(request, job, "osv_")
     max_age = request.get("max_database_age_seconds")
     if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 0:
         raise WorkerBlocked(f"{job}: explicit non-negative database age ceiling is required")
@@ -377,8 +378,7 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
             evaluated.append({"component_ref": component["component_id"], "outcome": "no-advisory-matched",
                               "version_scheme": version_scheme_for(component), "evaluated_by": evaluated_by})
     raw_matches = _sca_rows(tool, by_id, "grype", job)
-    if supplemental is not None:
-        raw_matches.extend(_sca_rows(supplemental[0], by_id, "osv", job))
+    raw_matches.extend(_sca_rows(supplemental[0], by_id, "osv", job))
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for raw in raw_matches:
         if not isinstance(raw, dict) or raw.get("component_ref") not in by_id:

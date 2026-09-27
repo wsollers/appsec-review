@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "tool-osv-scanner",
+      "tag": "tool-osv-scanner:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {
+        "TOOL_VERSION": "1.9.2"
+      },
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/google/osv-scanner/releases/download/v1.9.2/osv-scanner_linux_amd64",
+          "dest": "downloads/osv-scanner",
+          "sha256": "d6af4b67fa5de658598bd2d445efb99e90d1734b3146962418719c4350ecb74b",
+          "bytes": 32116888
+        }
+      ],
+      "timeout_seconds": 1800
+    }
+  ]
+}
