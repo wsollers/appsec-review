@@ -125,6 +125,9 @@ def _request(run_id: str, template_id: str, prompt_name: str, intake_path: Path,
 
 
 def _current_inputs(run_id: str) -> dict[str, Any]:
+    # Pin the run's model identities first, as every other persona worker does; this job can be
+    # scheduled before discovery has created model-versions.json.
+    model_versions.resolve_run_model_versions(run_id)
     intake, binding, intake_attempt, source, accepted_at = _load_intake(run_id)
     intake_path = intake_attempt / "outputs" / "intake.json"
     requests, prompts = [], {}

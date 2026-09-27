@@ -35,12 +35,15 @@ host-local state each one keeps: `docs/processes/host-layouts.md`.
 
 ## Running a target
 
-Follow `docs/report-path/happy-path-operator-guide.md` with `--project <name>`,
-`--target fixtures/targets/<name>` and `--max-database-age-seconds 1209600`, then:
+`orchestrator/stage-run.sh <target>` creates and stages the run (the steps in
+`docs/report-path/happy-path-operator-guide.md`, with `--max-database-age-seconds 1209600`) and prints
+the run id; then:
 
 ```bash
 python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait
 ```
+
+`python3 orchestrator/run-status.py <run-id> [--failed]` lists every job's latest status and cause.
 
 When a run stops: read the failing op's status/result in `runs/$RUN_ID/data/jobs/<job>/`, fix the
 cause, `code-location.sh reload`, and re-launch the same run (accepted upstream attempts are reused).
@@ -59,9 +62,30 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 - **doom3-bfg.** Upstream builds on Windows only. Expect build-resolution/native-build gaps on Linux;
   source SAST, secrets, search and the persona review lanes should still run from source.
 
+## Follow-ups (after hello-autotools reaches a report)
+
+- [ ] **Source SAST Semgrep rules.** `data/source-sast/rules-v1.yml` has only 4 C/C++ rules
+      (strcpy, non-literal printf, memcpy, system), so `02-source-sast` always reports the gap
+      "Repository-owned C/C++ Semgrep rules do not cover every source-analysis family". Decided
+      (William, 2026-09-27): vendor the 16 C rules from `opengrep/opengrep-rules` at
+      `f1d2b562b414783763fd02a6ed2736eaed622efa` (LGPL-2.1 + Commons Clause; keep LICENSE and a
+      NOTICE naming the commit) under `data/source-sast/`, add a second `--config`, map their rule ids
+      in `source_sast.RULE_CATEGORIES`, and extend the closed category enum in
+      `schemas/source-sast.schema.json`. Keep our 4 rules. Then narrow the gap text to what is still
+      uncovered.
+- [ ] **Semgrep/opengrep code signals for partitioning.** The design intended rule-based signals to
+      inform partition discovery; nothing does that today (partition discovery is a single persona
+      call over the intake file list and file contents). Add a deterministic job before
+      `02-repository-partition-discovery` that runs structural rules (entry points and argv parsing,
+      socket listen/accept and HTTP routes, file/DB/IPC access, exec/system, crypto,
+      deserialization) and publishes per-file/per-directory tags with citations; feed them to
+      partition discovery and `01-component-characterization` as an upstream.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `02-repository-partition-discovery` | Result rejected: claim-class text check read the model's disclaimer "not asserted as a verified finding" as a finding promotion (negation lookbehind only matched "not a "/"no ") | `validate_job_output`: a promotion phrase counts only without a negation (not/no/never/without/nor) in the 40 characters before it |
+| 2026-09-27 | hello-autotools | `20260927T192621Z-helloautotoo` | `persona-tool-pool-dispatch` | BLOCKED: no pinned `model-versions.json`; the job ran before discovery pinned model identities | `persona_tool_pool_lifecycle._current_inputs` calls `resolve_run_model_versions(run_id)` first, like every other persona worker |

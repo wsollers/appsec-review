@@ -443,10 +443,23 @@ def _claim_promotion_errors(value: Any, forbidden: set[str], path: str = "$") ->
             errors.extend(_claim_promotion_errors(item, forbidden, f"{path}[{index}]"))
     elif isinstance(value, str):
         for category in forbidden:
-            if any(pattern.search(value) for pattern in PROMOTION_TEXT[category]):
+            if any(_asserted(pattern, value) for pattern in PROMOTION_TEXT[category]):
                 errors.append(
                     f"{path}: {category} promotion is forbidden by the declared claim class")
     return errors
+
+
+PROMOTION_NEGATION = re.compile(r"(?i)\b(?:not|no|never|without|nor)\b")
+
+
+def _asserted(pattern: re.Pattern[str], value: str) -> bool:
+    """True when a promotion phrase appears without a negation shortly before it.
+
+    Persona text routinely disclaims ("not asserted as a verified finding"); only an unnegated
+    phrase is a promotion. The window is the 40 characters before the match.
+    """
+    return any(not PROMOTION_NEGATION.search(value[max(0, match.start() - 40):match.start()])
+               for match in pattern.finditer(value))
 
 
 def _claim_class_errors(contract: dict[str, Any], value: Any) -> list[str]:
