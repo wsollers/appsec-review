@@ -1395,10 +1395,10 @@ file-disjoint implementation lanes; recovery hardening remains deferred.
 
 | Lane | Status | Exclusive scope | Nominal exit condition |
 |---|---|---|---|
-| **E03-core** native SAST | CLAIMED | new native-SAST worker, dedicated schemas/contracts/registry records, fixtures and tests | Consume exact accepted native-build/compile-database lineage; publish pinned clang-tidy/cppcheck/CSA evidence leads and explicit coverage gaps without finding promotion. |
-| **E04/E05-core** IR capture/link/facts | CLAIMED | new IR capture, link and facts workers plus dedicated schemas/contracts/registry records, fixtures and tests | Preserve source/compiler/variant lineage through bitcode capture, deterministic link and pointer/memory facts; uncovered units remain explicit and no vulnerability verdict is emitted. |
-| **Q18** independent qualification | QUEUED, READ-ONLY | both candidate commits and their combined tree | Verify nominal producer contracts, lineage, determinism, fail-closed malformed/stale inputs and compatibility with F02; keep live/Dagster readiness separate. |
-| **D18** master integration | ACTIVE | prompts, TODO, shared graph/parity/Dagster/catalog surfaces | Review and integrate qualified cores serially; do not mark lifecycle jobs executable until real bindings and happy-path evidence exist. |
+| **E03-core** native SAST | UNIT-QUALIFIED, STANDALONE | native-SAST worker, dedicated schemas/contracts/registry records, fixtures and tests | Merged; exact accepted native-build/compile-database/source-tree lineage and F02 receipts qualified. Live pinned-image and lifecycle wiring remain. |
+| **E04/E05-core** IR capture/link/facts | UNIT-QUALIFIED, STANDALONE | IR capture, link and facts workers plus dedicated schemas/contracts/registry records, fixtures and tests | Merged; source/compiler/variant/debug lineage and F02 compatibility qualified. Shared toolchain-factory binding and live wiring remain. |
+| **Q18** independent qualification | DONE, READ-ONLY | E03-E05 candidates and combined trees | E03 and E04/E05 nominal cores passed independent lineage, determinism, malformed/stale-input and F02 compatibility gates. |
+| **D18** master integration | PARTIAL | prompts, TODO, shared graph/parity/Dagster/catalog surfaces | Cores and standalone parity records are merged; lifecycle execution remains deliberately blocked until real tool/binding prerequisites exist. |
 
 ### Active report-path continuation — 2026-09-27
 
@@ -1407,15 +1407,20 @@ qualifies E03-E05, two new implementation lanes close the remaining compiled-evi
 
 | Lane | Status | Exclusive scope | Nominal exit condition |
 |---|---|---|---|
-| **E06-E08-core** binary/debug intelligence | CLAIMED | debug-symbol index, binary triage, CFG and binary-intelligence workers plus dedicated schemas/contracts/registry/tests | Bind accepted binary/build/source identities through deterministic symbol, static triage and CFG evidence; unsupported/stripped/M02 gaps remain explicit and no binary executes. |
-| **E09-E10-core** test evidence | CLAIMED | test execution, result-ingest and coverage-ingest workers plus dedicated schemas/contracts/registry/tests | Execute only an authorized bounded test plan, then bind normalized outcomes and source coverage to the exact execution/binary/source generation. |
-| **Q18** independent qualification | ACTIVE, READ-ONLY | E03-E05 candidates, then E06-E10 candidates | Approve nominal cores and F02 compatibility separately from shared/live readiness. |
-| **D18** master/report path | ACTIVE | shared integration and the remaining D05-D08/S01/F01/F02/F03/threat/OWASP/synthesis sequence | Integrate serially and keep advancing the shortest honest path to a generated report. |
+| **E06-E08-core** binary/debug intelligence | UNIT-QUALIFIED, STANDALONE | debug-symbol index, binary triage, CFG and binary-intelligence workers plus dedicated schemas/contracts/registry/tests | Merged; exact binary/build/source joins, deterministic gap aggregation and all F02 receipts passed. M02 pinned tooling and live wiring remain explicit gaps. |
+| **E09-E10-core** test evidence | UNIT-QUALIFIED, STANDALONE | test execution, result-ingest and coverage-ingest workers plus dedicated schemas/contracts/registry/tests | Merged; bounded authorization, fresh source/native lineage, JUnit/LCOV normalization and all F02 receipts passed. Operator staging and live wiring remain. |
+| **Q18-Q21** independent qualification | DONE, READ-ONLY | E03-E10 and D05-D08 candidates/retips | All merged nominal producer cores passed independent focused/common/F02 gates; live qualification is tracked separately. |
+| **D18** master/report path | ACTIVE | shared integration and the remaining S01/F01/F02/F03/threat/OWASP/synthesis sequence | Standalone parity and trusted claim policies are integrated; continue the shortest honest path to a generated report. |
 
-The next independent producer lane is **D05-D08-core** (CLAIMED): document, API-collection, static
-test-intelligence and operations-document ingestion. It owns only new dedicated workers,
-schemas/contracts/registry records, fixtures and focused tests. The fixture's zero-input/README-only
-paths must publish explicit skips/gaps and F02-compatible receipts, never fabricated intelligence.
+**D05-D08-core is UNIT-QUALIFIED, STANDALONE and merged:** document, bounded OpenAPI/Bruno,
+static-test and operations-document ingestion now publish deterministic redacted records or explicit
+README/zero/malformed/unsupported gaps with F02-compatible receipts. Shared Dagster/live wiring and
+the full D05-to-D08 topology link remain separate integration work.
+
+Current report-path construction is **S01 standards-source ingest** and **S02 threat-model core**,
+followed by the OWASP T11-T13 deterministic join/report core. S02 is in independent-retip after its
+first qualification found citation, receipt-validation and promotion-text defects; none is being
+waived as hardening.
 
 First-report milestone: produce one immutable, evidence-backed draft report for the tracked fixture.
 It requires accepted native/source/IR/binary/test evidence, F01/F02 assembly, F03 component mapping,
