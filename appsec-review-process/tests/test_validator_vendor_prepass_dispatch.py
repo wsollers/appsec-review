@@ -916,7 +916,12 @@ class ExistingContractRegressionTests(unittest.TestCase):
     }
 
     def test_their_trusted_policies_are_unchanged_and_they_are_not_vendor_prepass_contracts(self):
-        self.assertEqual(set(validator.CLAIM_CLASS_POLICIES), set(self.LEGACY) | set(NINE))
+        self.assertTrue((set(self.LEGACY) | set(NINE) | {"cve-reachability"})
+                        <= set(validator.CLAIM_CLASS_POLICIES))
+        self.assertEqual(validator.CLAIM_CLASS_POLICIES["cve-reachability"], {
+            "claim_class_id": "cve_reachability_evidence_lead",
+            "allowed_assertions": {"cve-reachability-evidence-lead"},
+        })
         for contract_id, (claim_class_id, assertions) in self.LEGACY.items():
             self.assertEqual(validator.CLAIM_CLASS_POLICIES[contract_id],
                              {"claim_class_id": claim_class_id, "allowed_assertions": assertions})

@@ -479,17 +479,24 @@
     },
     "06-cve-reachability": {
       "lane": "06-cve-reachability",
-      "contract": "06-cve-reachability",
-      "template": null,
-      "implemented": false,
+      "contract": "cve-reachability",
+      "template": "06-cve-reachability",
+      "implemented": true,
       "namespace": "06-cve-reachability",
       "dependencies": [
         {
-          "job": "01-component-characterization",
+          "job": "02-sca-vulnerability-match",
           "kind": "required",
-          "contract": "component-map",
+          "contract": "sca-vulnerability-match",
           "allowed_skip_reasons": []
         }
+      ],
+      "planned_scope": "Deterministic static reachability classification over the exact accepted SCA matches and explicit hash-bound run-owned evidence. Version matches alone never establish reachability and outputs remain evidence leads.",
+      "required_artifacts": [
+        "result.json",
+        "inputs.json",
+        "outputs/cve-reachability.json",
+        "outputs/reachability-evidence-identity.json"
       ]
     },
     "13-fuzz-target-triage": {
@@ -520,7 +527,7 @@
         {
           "job": "06-cve-reachability",
           "kind": "required",
-          "contract": "06-cve-reachability",
+          "contract": "cve-reachability",
           "allowed_skip_reasons": []
         }
       ],
@@ -604,7 +611,7 @@
         {
           "job": "06-cve-reachability",
           "kind": "required",
-          "contract": "06-cve-reachability",
+          "contract": "cve-reachability",
           "allowed_skip_reasons": []
         },
         {
@@ -1354,8 +1361,8 @@
     "02-sbom-inventory": {
       "lane": "02-evidence-pregather",
       "contract": "sbom-inventory",
-      "template": null,
-      "implemented": false,
+      "template": "02-sbom-inventory",
+      "implemented": true,
       "namespace": "02-sbom-inventory",
       "dependencies": [
         {
@@ -1365,22 +1372,20 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "CycloneDX dependency inventory from checked-in manifests and lockfiles (ADR-0010 G4). Offline, no package restore; unresolved ecosystems are explicit gaps.",
+      "planned_scope": "Offline CycloneDX inventory through the pinned Syft B13 adapter from an explicit run-owned source snapshot; unresolved or inferred vendored components remain gaps.",
       "required_artifacts": [
-        "manifest.json",
-        "status.json",
+        "result.json",
+        "inputs.json",
         "outputs/sbom.cdx.json",
         "outputs/sbom-manifest.json",
-        "outputs/redaction-receipt.json",
-        "outputs/tool-results.json",
-        "outputs/coverage.json"
+        "outputs/pinned-tool-evidence.json"
       ]
     },
     "02-sca-vulnerability-match": {
       "lane": "02-evidence-pregather",
       "contract": "sca-vulnerability-match",
-      "template": null,
-      "implemented": false,
+      "template": "02-sca-vulnerability-match",
+      "implemented": true,
       "namespace": "02-sca-vulnerability-match",
       "dependencies": [
         {
@@ -1390,24 +1395,22 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Known-vulnerability matches for the accepted SBOM using Grype over the mirrored vendor database plus the OSV snapshot (ADR-0010 M1-M5). Offline; a match is a lead, not reachability.",
+      "planned_scope": "Offline Grype and OSV version matching against the accepted SBOM and explicitly configured, hash-verified, age-bounded supplied snapshots. Snapshot synchronization is outside the analysis DAG; matches are leads, never reachability.",
       "required_artifacts": [
-        "manifest.json",
-        "status.json",
+        "result.json",
+        "inputs.json",
         "outputs/sca-vulnerability-match.json",
         "outputs/vulnerability-database-identities.json",
         "outputs/sca-coverage-gaps.json",
         "outputs/coverage-gap-summary.json",
-        "outputs/redaction-receipt.json",
-        "outputs/tool-results.json",
-        "outputs/coverage.json"
+        "outputs/pinned-tool-evidence.json"
       ]
     },
     "02-license-scan": {
       "lane": "02-evidence-pregather",
       "contract": "license-inventory",
-      "template": null,
-      "implemented": false,
+      "template": "02-license-scan",
+      "implemented": true,
       "namespace": "02-license-scan",
       "dependencies": [
         {
@@ -1423,21 +1426,19 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "License and copyright detection whose component references resolve into the accepted SBOM (ADR-0010, PR 23 decision). Offline; inferred vendored components are never promoted to declared ones.",
+      "planned_scope": "Offline ScanCode license evidence through B13, with component references resolved into the exact accepted SBOM and source citations bound to the run snapshot.",
       "required_artifacts": [
-        "manifest.json",
-        "status.json",
+        "result.json",
+        "inputs.json",
         "outputs/license-inventory.json",
-        "outputs/redaction-receipt.json",
-        "outputs/tool-results.json",
-        "outputs/coverage.json"
+        "outputs/pinned-tool-evidence.json"
       ]
     },
     "02-dependency-lifecycle": {
       "lane": "02-evidence-pregather",
       "contract": "dependency-lifecycle",
-      "template": null,
-      "implemented": false,
+      "template": "02-dependency-lifecycle",
+      "implemented": true,
       "namespace": "02-dependency-lifecycle",
       "dependencies": [
         {
@@ -1453,15 +1454,12 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Deterministic end-of-life and lifecycle transform over the accepted SBOM and license inventory against an identified reference table (ADR-0010). Absence from the table is unknown, never supported.",
+      "planned_scope": "Deterministic transform over the accepted SBOM and license inventory using an explicit hash-bound, age-bounded run-owned reference table; missing coverage remains unknown.",
       "required_artifacts": [
-        "manifest.json",
-        "status.json",
+        "result.json",
+        "inputs.json",
         "outputs/dependency-lifecycle.json",
-        "outputs/reference-table-identity.json",
-        "outputs/redaction-receipt.json",
-        "outputs/tool-results.json",
-        "outputs/coverage.json"
+        "outputs/reference-table-identity.json"
       ]
     },
     "02-binary-hardening": {

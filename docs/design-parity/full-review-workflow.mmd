@@ -15,7 +15,7 @@ flowchart TD
   j_03_threat_model_dfd_stride["03-threat-model-dfd-stride<br/>standalone_only"]
   j_04_asvs_masvs["04-asvs-masvs<br/>standalone_only"]
   j_05_native_memory["05-native-memory<br/>standalone_only"]
-  j_06_cve_reachability["06-cve-reachability<br/>missing_prerequisites"]
+  j_06_cve_reachability["06-cve-reachability<br/>standalone_only"]
   j_13_fuzz_target_triage["13-fuzz-target-triage<br/>standalone_only"]
   j_15_deployment_hardening["15-deployment-hardening<br/>standalone_only"]
   j_07_red_team_adversarial["07-red-team-adversarial<br/>standalone_only"]
@@ -49,10 +49,10 @@ flowchart TD
   j_02_secrets_inventory["02-secrets-inventory<br/>missing_prerequisites"]
   j_02_iac_config_scan["02-iac-config-scan<br/>missing_prerequisites"]
   j_02_container_image_inventory["02-container-image-inventory<br/>missing_prerequisites"]
-  j_02_sbom_inventory["02-sbom-inventory<br/>missing_prerequisites"]
-  j_02_sca_vulnerability_match["02-sca-vulnerability-match<br/>missing_prerequisites"]
-  j_02_license_scan["02-license-scan<br/>missing_prerequisites"]
-  j_02_dependency_lifecycle["02-dependency-lifecycle<br/>missing_prerequisites"]
+  j_02_sbom_inventory["02-sbom-inventory<br/>standalone_only"]
+  j_02_sca_vulnerability_match["02-sca-vulnerability-match<br/>standalone_only"]
+  j_02_license_scan["02-license-scan<br/>standalone_only"]
+  j_02_dependency_lifecycle["02-dependency-lifecycle<br/>standalone_only"]
   j_02_binary_hardening["02-binary-hardening<br/>missing_prerequisites"]
   j_02_mobile_sast["02-mobile-sast<br/>missing_prerequisites"]
   j_00_intake --> j_02_ossf_scorecard
@@ -100,7 +100,7 @@ flowchart TD
   j_01_component_characterization --> j_05_native_memory
   j_02_native_sast --> j_05_native_memory
   j_02_ir_facts --> j_05_native_memory
-  j_01_component_characterization --> j_06_cve_reachability
+  j_02_sca_vulnerability_match --> j_06_cve_reachability
   j_01_component_characterization --> j_13_fuzz_target_triage
   j_03_threat_model_dfd_stride --> j_13_fuzz_target_triage
   j_05_native_memory --> j_13_fuzz_target_triage

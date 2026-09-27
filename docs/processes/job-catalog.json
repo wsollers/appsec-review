@@ -3,8 +3,8 @@
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
   "lifecycle_jobs": 55,
-  "steps": 60,
-  "artifacts": 60,
+  "steps": 65,
+  "artifacts": 68,
   "models": 5
  },
  "models": [
@@ -1528,7 +1528,7 @@
       {
        "ref": "job:02-sbom-inventory",
        "id": "02-sbom-inventory",
-       "name": "SBOM Component Inventory (Manifests And Lockfiles Only)",
+       "name": "SBOM Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -1536,12 +1536,16 @@
        "produces": [
         "job:02-sbom-inventory"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit staged target path",
+        "B16 Syft image record"
+       ]
       },
       {
        "ref": "job:02-sca-vulnerability-match",
        "id": "02-sca-vulnerability-match",
-       "name": "Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)",
+       "name": "Offline SCA Vulnerability Match",
        "kind": "lifecycle",
        "consumes": [
         "job:02-sbom-inventory"
@@ -1549,12 +1553,17 @@
        "produces": [
         "job:02-sca-vulnerability-match"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted SBOM",
+        "B16 Grype and OSV images",
+        "supplied current offline Grype and OSV snapshot registry",
+        "explicit database age ceiling"
+       ]
       },
       {
        "ref": "job:02-license-scan",
        "id": "02-license-scan",
-       "name": "Licence Detection Inventory",
+       "name": "License Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake",
@@ -1563,12 +1572,16 @@
        "produces": [
         "job:02-license-scan"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted SBOM",
+        "explicit staged target path",
+        "B16 ScanCode image record"
+       ]
       },
       {
        "ref": "job:02-dependency-lifecycle",
        "id": "02-dependency-lifecycle",
-       "name": "Dependency Lifecycle Against An Offline Reference Table",
+       "name": "Dependency Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:02-sbom-inventory",
@@ -1577,7 +1590,12 @@
        "produces": [
         "job:02-dependency-lifecycle"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted SBOM",
+        "accepted license inventory",
+        "identified run-owned lifecycle reference table",
+        "explicit table age ceiling"
+       ]
       },
       {
        "ref": "job:02-binary-hardening",
@@ -1707,7 +1725,18 @@
        "trusted bounded test plan",
        "target-execution grant",
        "accepted test execution",
-       "exact accepted intake source inventory"
+       "exact accepted intake source inventory",
+       "fresh run artifact manifest",
+       "explicit staged target path",
+       "B16 Syft image record",
+       "accepted SBOM",
+       "B16 Grype and OSV images",
+       "supplied current offline Grype and OSV snapshot registry",
+       "explicit database age ceiling",
+       "B16 ScanCode image record",
+       "accepted license inventory",
+       "identified run-owned lifecycle reference table",
+       "explicit table age ceiling"
       ]
      }
     },
@@ -1850,22 +1879,17 @@
       {
        "ref": "job:06-cve-reachability",
        "id": "06-cve-reachability",
-       "name": "06-cve-reachability",
+       "name": "CVE Reachability Evidence",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:02-sca-vulnerability-match"
        ],
        "produces": [
         "job:06-cve-reachability"
        ],
        "declared_inputs": [
-        "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
-        "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
-        "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
-        "component-purpose map",
-        "source imports/callers",
-        "runtime/deployment evidence",
-        "known dependency versions"
+        "accepted SCA match evidence",
+        "hash-bound run-owned static reachability evidence"
        ]
       },
       {
@@ -1931,6 +1955,7 @@
        "job:02-standards-source-ingest",
        "job:02-native-sast",
        "job:02-ir-facts",
+       "job:02-sca-vulnerability-match",
        "job:02-iac-config-scan"
       ],
       "leaves": [
@@ -1958,13 +1983,8 @@
        "accepted applicability evidence",
        "accepted native SAST/IR evidence",
        "hash-bound citations",
-       "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
-       "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
-       "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
-       "component-purpose map",
-       "source imports/callers",
-       "runtime/deployment evidence",
-       "known dependency versions",
+       "accepted SCA match evidence",
+       "hash-bound run-owned static reachability evidence",
        "accepted component/native evidence",
        "candidate entrypoints",
        "accepted deployment configuration evidence",
@@ -2314,6 +2334,17 @@
      "trusted bounded test plan",
      "accepted test execution",
      "exact accepted intake source inventory",
+     "fresh run artifact manifest",
+     "explicit staged target path",
+     "B16 Syft image record",
+     "accepted SBOM",
+     "B16 Grype and OSV images",
+     "supplied current offline Grype and OSV snapshot registry",
+     "explicit database age ceiling",
+     "B16 ScanCode image record",
+     "accepted license inventory",
+     "identified run-owned lifecycle reference table",
+     "explicit table age ceiling",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "current accepted F03 component map",
@@ -2324,13 +2355,8 @@
      "accepted applicability evidence",
      "accepted native SAST/IR evidence",
      "hash-bound citations",
-     "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
-     "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
-     "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
-     "component-purpose map",
-     "source imports/callers",
-     "runtime/deployment evidence",
-     "known dependency versions",
+     "accepted SCA match evidence",
+     "hash-bound run-owned static reachability evidence",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -3755,7 +3781,7 @@
       {
        "ref": "job:02-sbom-inventory",
        "id": "02-sbom-inventory",
-       "name": "SBOM Component Inventory (Manifests And Lockfiles Only)",
+       "name": "SBOM Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -3763,12 +3789,16 @@
        "produces": [
         "job:02-sbom-inventory"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit staged target path",
+        "B16 Syft image record"
+       ]
       },
       {
        "ref": "job:02-sca-vulnerability-match",
        "id": "02-sca-vulnerability-match",
-       "name": "Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)",
+       "name": "Offline SCA Vulnerability Match",
        "kind": "lifecycle",
        "consumes": [
         "job:02-sbom-inventory"
@@ -3776,12 +3806,17 @@
        "produces": [
         "job:02-sca-vulnerability-match"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted SBOM",
+        "B16 Grype and OSV images",
+        "supplied current offline Grype and OSV snapshot registry",
+        "explicit database age ceiling"
+       ]
       },
       {
        "ref": "job:02-license-scan",
        "id": "02-license-scan",
-       "name": "Licence Detection Inventory",
+       "name": "License Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake",
@@ -3790,12 +3825,16 @@
        "produces": [
         "job:02-license-scan"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted SBOM",
+        "explicit staged target path",
+        "B16 ScanCode image record"
+       ]
       },
       {
        "ref": "job:02-dependency-lifecycle",
        "id": "02-dependency-lifecycle",
-       "name": "Dependency Lifecycle Against An Offline Reference Table",
+       "name": "Dependency Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:02-sbom-inventory",
@@ -3804,7 +3843,12 @@
        "produces": [
         "job:02-dependency-lifecycle"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted SBOM",
+        "accepted license inventory",
+        "identified run-owned lifecycle reference table",
+        "explicit table age ceiling"
+       ]
       },
       {
        "ref": "job:02-binary-hardening",
@@ -3939,7 +3983,18 @@
        "trusted bounded test plan",
        "accepted test execution",
        "exact accepted intake source inventory",
-       "accepted build discovery"
+       "accepted build discovery",
+       "fresh run artifact manifest",
+       "explicit staged target path",
+       "B16 Syft image record",
+       "accepted SBOM",
+       "B16 Grype and OSV images",
+       "supplied current offline Grype and OSV snapshot registry",
+       "explicit database age ceiling",
+       "B16 ScanCode image record",
+       "accepted license inventory",
+       "identified run-owned lifecycle reference table",
+       "explicit table age ceiling"
       ]
      }
     },
@@ -4114,41 +4169,31 @@
       {
        "ref": "job:06-cve-reachability",
        "id": "06-cve-reachability",
-       "name": "06-cve-reachability",
+       "name": "CVE Reachability Evidence",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:02-sca-vulnerability-match"
        ],
        "produces": [
         "job:06-cve-reachability"
        ],
        "declared_inputs": [
-        "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
-        "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
-        "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
-        "component-purpose map",
-        "source imports/callers",
-        "runtime/deployment evidence",
-        "known dependency versions"
+        "accepted SCA match evidence",
+        "hash-bound run-owned static reachability evidence"
        ]
       }
      ],
      "rollup": {
       "enters": [
-       "job:01-component-characterization"
+       "job:02-sca-vulnerability-match"
       ],
       "leaves": [
        "job:06-cve-reachability"
       ],
       "passes": [],
       "declared_inputs": [
-       "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
-       "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
-       "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
-       "component-purpose map",
-       "source imports/callers",
-       "runtime/deployment evidence",
-       "known dependency versions"
+       "accepted SCA match evidence",
+       "hash-bound run-owned static reachability evidence"
       ]
      }
     },
@@ -4635,6 +4680,17 @@
      "accepted test execution",
      "exact accepted intake source inventory",
      "accepted build discovery",
+     "fresh run artifact manifest",
+     "explicit staged target path",
+     "B16 Syft image record",
+     "accepted SBOM",
+     "B16 Grype and OSV images",
+     "supplied current offline Grype and OSV snapshot registry",
+     "explicit database age ceiling",
+     "B16 ScanCode image record",
+     "accepted license inventory",
+     "identified run-owned lifecycle reference table",
+     "explicit table age ceiling",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -4644,13 +4700,8 @@
      "accepted applicability evidence",
      "accepted native SAST/IR evidence",
      "hash-bound citations",
-     "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
-     "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
-     "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
-     "component-purpose map",
-     "source imports/callers",
-     "runtime/deployment evidence",
-     "known dependency versions",
+     "accepted SCA match evidence",
+     "hash-bound run-owned static reachability evidence",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
@@ -5577,6 +5628,102 @@
     "job:15-deployment-hardening"
    ],
    "notes": "Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps."
+  },
+  {
+   "id": "sbom-inventory",
+   "name": "sbom_inventory (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job sbom_inventory --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "02-sbom-inventory"
+   ],
+   "consumes": [
+    "job:00-intake",
+    "sut-checkout",
+    "syft-image"
+   ],
+   "produces": [
+    "job:02-sbom-inventory"
+   ],
+   "notes": "Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Full-review input assembly and live Docker qualification remain gaps."
+  },
+  {
+   "id": "sca-vulnerability-match",
+   "name": "sca_vulnerability_match (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job sca_vulnerability_match --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "02-sca-vulnerability-match"
+   ],
+   "consumes": [
+    "job:02-sbom-inventory",
+    "grype-image",
+    "osv-image",
+    "supplied-offline-grype-snapshot",
+    "supplied-offline-osv-snapshot"
+   ],
+   "produces": [
+    "job:02-sca-vulnerability-match"
+   ],
+   "notes": "Standalone config-driven Grype+OSV matching. The supplied offline snapshot registry is re-hashed and age-checked; absent or stale snapshots fail closed. Snapshot synchronization is outside the analysis DAG and matches remain evidence leads."
+  },
+  {
+   "id": "license-scan",
+   "name": "license_scan (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job license_scan --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "02-license-scan"
+   ],
+   "consumes": [
+    "job:02-sbom-inventory",
+    "sut-checkout",
+    "scancode-image"
+   ],
+   "produces": [
+    "job:02-license-scan"
+   ],
+   "notes": "Standalone config-driven ScanCode/B13 license inventory bound to the accepted SBOM. Full-review input assembly and live Docker qualification remain gaps."
+  },
+  {
+   "id": "dependency-lifecycle",
+   "name": "dependency_lifecycle (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job dependency_lifecycle --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "02-dependency-lifecycle"
+   ],
+   "consumes": [
+    "job:02-sbom-inventory",
+    "job:02-license-scan",
+    "run-owned-lifecycle-reference-table"
+   ],
+   "produces": [
+    "job:02-dependency-lifecycle"
+   ],
+   "notes": "Standalone deterministic offline transform with explicit reference-table hash and age ceiling; missing coverage is unknown, never supported. Full-review input assembly remains a gap."
+  },
+  {
+   "id": "cve-reachability",
+   "name": "cve_reachability (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job cve_reachability --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "06-cve-reachability"
+   ],
+   "consumes": [
+    "job:02-sca-vulnerability-match",
+    "run-owned-static-reachability-evidence"
+   ],
+   "produces": [
+    "job:06-cve-reachability"
+   ],
+   "notes": "Standalone deterministic static reachability transform. A version match alone never establishes reachability and all outputs remain evidence leads. Full-review input assembly remains a gap."
   },
   {
    "id": "b13-harmless-container",
@@ -6970,77 +7117,58 @@
   {
    "id": "06-cve-reachability",
    "lane": "06-cve-reachability",
-   "name": "06-cve-reachability",
-   "contract": "06-cve-reachability",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "name": "CVE Reachability Evidence",
+   "contract": "cve-reachability",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/dependency_workers.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "cve_reachability"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "cve-reachability"
+   },
    "depends_on": [
     {
-     "job": "01-component-characterization",
+     "job": "02-sca-vulnerability-match",
      "kind": "required",
-     "contract": "component-map"
+     "contract": "sca-vulnerability-match"
     }
    ],
    "declared_inputs": [
     {
      "need": "required",
-     "input": "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)"
+     "input": "accepted SCA match evidence"
     },
     {
      "need": "required",
-     "input": "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)"
-    },
-    {
-     "need": "required",
-     "input": "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict"
-    },
-    {
-     "need": "required",
-     "input": "component-purpose map"
-    },
-    {
-     "need": "required",
-     "input": "source imports/callers"
-    },
-    {
-     "need": "required",
-     "input": "runtime/deployment evidence"
-    },
-    {
-     "need": "required",
-     "input": "known dependency versions"
+     "input": "hash-bound run-owned static reachability evidence"
     }
    ],
-   "inputs_source": "06-cve-reachability/config.md",
+   "inputs_source": "registry/job-templates/06-cve-reachability.json",
    "output_dir": "runs/<run_id>/data/jobs/06-cve-reachability/",
    "output_files": [
-    "reachable/unreachable/unused classification (CVE reachability, as before)",
-    "dependency inventory: every component the SBOM lists, with resolved version where possible",
-    "license inventory: per-component license(s), flagging anything with no declared license, a copyleft license inconsistent with the stated business goal, or a license mismatch between the SBOM's own field and scancode.json",
-    "EOL/abandonware disposition per component: `known_eol`, `known_supported_but_old`, or `unknown` (per `static-evidence/sbom/dependency-lifecycle.json`) — cite the reference table entry when status is not `unknown`; never assert a component is current just because it's `unknown`",
-    "evidence citations",
-    "upgrade/remediation backlog"
+    "result.json",
+    "inputs.json",
+    "outputs/cve-reachability.json",
+    "outputs/reachability-evidence-identity.json"
    ],
-   "outputs_source": "06-cve-reachability/config.md",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/cve-reachability.json",
+   "claim_class": "cve_reachability_evidence_lead",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Build the full-review input assembler and complete live static-evidence qualification.",
    "consumes": [
-    "job:01-component-characterization"
+    "job:02-sca-vulnerability-match"
    ],
    "produces": [
     "job:06-cve-reachability"
@@ -7086,7 +7214,7 @@
     {
      "job": "06-cve-reachability",
      "kind": "required",
-     "contract": "06-cve-reachability"
+     "contract": "cve-reachability"
     }
    ],
    "declared_inputs": [
@@ -7239,7 +7367,7 @@
     {
      "job": "06-cve-reachability",
      "kind": "required",
-     "contract": "06-cve-reachability"
+     "contract": "cve-reachability"
     },
     {
      "job": "15-deployment-hardening",
@@ -9274,16 +9402,24 @@
   {
    "id": "02-sbom-inventory",
    "lane": "02-evidence-pregather",
-   "name": "SBOM Component Inventory (Manifests And Lockfiles Only)",
+   "name": "SBOM Inventory",
    "contract": "sbom-inventory",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/dependency_workers.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "sbom_inventory"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "sbom-inventory"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -9291,8 +9427,21 @@
      "contract": "intake"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "explicit staged target path"
+    },
+    {
+     "need": "required",
+     "input": "B16 Syft image record"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-sbom-inventory.json",
    "output_dir": "runs/<run_id>/data/jobs/02-sbom-inventory/",
    "output_files": [
     "manifest.json",
@@ -9306,13 +9455,11 @@
    "outputs_source": "registry/output-contracts/sbom-inventory.json",
    "claim_class": "dependency_inventory_evidence",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification",
+    "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9323,16 +9470,24 @@
   {
    "id": "02-sca-vulnerability-match",
    "lane": "02-evidence-pregather",
-   "name": "Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)",
+   "name": "Offline SCA Vulnerability Match",
    "contract": "sca-vulnerability-match",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/dependency_workers.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "sca_vulnerability_match"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "sca-vulnerability-match"
+   },
    "depends_on": [
     {
      "job": "02-sbom-inventory",
@@ -9340,8 +9495,25 @@
      "contract": "sbom-inventory"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted SBOM"
+    },
+    {
+     "need": "required",
+     "input": "B16 Grype and OSV images"
+    },
+    {
+     "need": "required",
+     "input": "supplied current offline Grype and OSV snapshot registry"
+    },
+    {
+     "need": "required",
+     "input": "explicit database age ceiling"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-sca-vulnerability-match.json",
    "output_dir": "runs/<run_id>/data/jobs/02-sca-vulnerability-match/",
    "output_files": [
     "manifest.json",
@@ -9357,13 +9529,11 @@
    "outputs_source": "registry/output-contracts/sca-vulnerability-match.json",
    "claim_class": "known_vulnerability_match_lead",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification",
+    "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the V16 Grype DB mirror publisher, the V17 OSV snapshot publisher (both behind B11), the V18 consumer bindings and the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify both supplied offline snapshot consumers live.",
    "consumes": [
     "job:02-sbom-inventory"
    ],
@@ -9374,16 +9544,24 @@
   {
    "id": "02-license-scan",
    "lane": "02-evidence-pregather",
-   "name": "Licence Detection Inventory",
+   "name": "License Inventory",
    "contract": "license-inventory",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/dependency_workers.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "license_scan"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "license-inventory"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -9396,8 +9574,21 @@
      "contract": "sbom-inventory"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted SBOM"
+    },
+    {
+     "need": "required",
+     "input": "explicit staged target path"
+    },
+    {
+     "need": "required",
+     "input": "B16 ScanCode image record"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-license-scan.json",
    "output_dir": "runs/<run_id>/data/jobs/02-license-scan/",
    "output_files": [
     "manifest.json",
@@ -9410,13 +9601,11 @@
    "outputs_source": "registry/output-contracts/license-inventory.json",
    "claim_class": "license_detection_evidence",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification",
+    "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification.",
    "consumes": [
     "job:00-intake",
     "job:02-sbom-inventory"
@@ -9428,16 +9617,24 @@
   {
    "id": "02-dependency-lifecycle",
    "lane": "02-evidence-pregather",
-   "name": "Dependency Lifecycle Against An Offline Reference Table",
+   "name": "Dependency Lifecycle",
    "contract": "dependency-lifecycle",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/dependency_workers.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "dependency_lifecycle"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "dependency-lifecycle"
+   },
    "depends_on": [
     {
      "job": "02-sbom-inventory",
@@ -9450,8 +9647,25 @@
      "contract": "license-inventory"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted SBOM"
+    },
+    {
+     "need": "required",
+     "input": "accepted license inventory"
+    },
+    {
+     "need": "required",
+     "input": "identified run-owned lifecycle reference table"
+    },
+    {
+     "need": "required",
+     "input": "explicit table age ceiling"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-dependency-lifecycle.json",
    "output_dir": "runs/<run_id>/data/jobs/02-dependency-lifecycle/",
    "output_files": [
     "manifest.json",
@@ -9465,13 +9679,11 @@
    "outputs_source": "registry/output-contracts/dependency-lifecycle.json",
    "claim_class": "dependency_lifecycle_evidence",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_qualification",
+    "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs a published, identified lifecycle reference table (no reference-table publisher exists) and its upstream SBOM and license workers; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify a supplied current reference table live.",
    "consumes": [
     "job:02-sbom-inventory",
     "job:02-license-scan"
@@ -9656,6 +9868,8 @@
     "step:build-configure",
     "step:native-build",
     "step:source-sast",
+    "step:sbom-inventory",
+    "step:license-scan",
     "step:legacy-pregather"
    ]
   },
@@ -10299,6 +10513,86 @@
    ],
    "consumed_by": []
   },
+  "syft-image": {
+   "id": "syft-image",
+   "kind": "record",
+   "path": "appsec-review-process/registry/container-images/tool-syft.json",
+   "about": "B16-resolved immutable image record used by the fixed offline Syft B13 adapter.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:sbom-inventory"
+   ]
+  },
+  "grype-image": {
+   "id": "grype-image",
+   "kind": "record",
+   "path": "appsec-review-process/registry/container-images/tool-grype.json",
+   "about": "B16-resolved immutable image record used by the fixed offline Grype B13 adapter.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:sca-vulnerability-match"
+   ]
+  },
+  "osv-image": {
+   "id": "osv-image",
+   "kind": "record",
+   "path": "appsec-review-process/registry/container-images/tool-osv-scanner.json",
+   "about": "B16-resolved immutable image record used by the fixed offline OSV Scanner B13 adapter.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:sca-vulnerability-match"
+   ]
+  },
+  "scancode-image": {
+   "id": "scancode-image",
+   "kind": "record",
+   "path": "appsec-review-process/registry/container-images/scancode-toolkit.json",
+   "about": "B16-resolved immutable image record used by the fixed offline ScanCode B13 adapter.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:license-scan"
+   ]
+  },
+  "supplied-offline-grype-snapshot": {
+   "id": "supplied-offline-grype-snapshot",
+   "kind": "record",
+   "path": "operator-supplied dependency snapshot registry: snapshots/grype-db/<snapshot_id>/",
+   "about": "Immutable content-addressed Grype database snapshot resolved and fully re-hashed under an explicit age ceiling; synchronization occurs outside engagement analysis.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:sca-vulnerability-match"
+   ]
+  },
+  "supplied-offline-osv-snapshot": {
+   "id": "supplied-offline-osv-snapshot",
+   "kind": "record",
+   "path": "operator-supplied dependency snapshot registry: snapshots/osv/<snapshot_id>/",
+   "about": "Immutable content-addressed OSV database snapshot resolved and fully re-hashed under an explicit age ceiling; synchronization occurs outside engagement analysis.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:sca-vulnerability-match"
+   ]
+  },
+  "run-owned-lifecycle-reference-table": {
+   "id": "run-owned-lifecycle-reference-table",
+   "kind": "file",
+   "path": "runs/<run_id>/inputs/<dependency-lifecycle-reference>.json",
+   "about": "Explicit hash-bound and age-bounded lifecycle reference table; missing rows mean unknown, never supported.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:dependency-lifecycle"
+   ]
+  },
+  "run-owned-static-reachability-evidence": {
+   "id": "run-owned-static-reachability-evidence",
+   "kind": "file",
+   "path": "runs/<run_id>/inputs/<reachability-evidence>.json",
+   "about": "Explicit hash-bound static build/import/call/config/scope/vendor/generator evidence used to classify exact accepted SCA matches.",
+   "produced_by": [],
+   "consumed_by": [
+    "step:cve-reachability"
+   ]
+  },
   "fixture-harmless-image": {
    "id": "fixture-harmless-image",
    "kind": "record",
@@ -10359,6 +10653,7 @@
     "step:op-workflow_publish",
     "step:build-index",
     "step:source-sast",
+    "step:sbom-inventory",
     "step:build_discovery",
     "step:build_execution",
     "step:evidence_index",
@@ -10545,7 +10840,6 @@
     "job:03-threat-model-dfd-stride",
     "job:04-asvs-masvs",
     "job:05-native-memory",
-    "job:06-cve-reachability",
     "job:13-fuzz-target-triage",
     "job:15-deployment-hardening",
     "job:07-red-team-adversarial",
@@ -10604,8 +10898,9 @@
    "id": "job:06-cve-reachability",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/06-cve-reachability/",
-   "about": "Accepted 06-cve-reachability output of 06-cve-reachability.",
+   "about": "Accepted cve-reachability output of 06-cve-reachability.",
    "produced_by": [
+    "step:cve-reachability",
     "job:06-cve-reachability"
    ],
    "consumed_by": [
@@ -11044,9 +11339,13 @@
    "path": "runs/<run_id>/data/jobs/02-sbom-inventory/",
    "about": "Accepted sbom-inventory output of 02-sbom-inventory.",
    "produced_by": [
+    "step:sbom-inventory",
     "job:02-sbom-inventory"
    ],
    "consumed_by": [
+    "step:sca-vulnerability-match",
+    "step:license-scan",
+    "step:dependency-lifecycle",
     "job:02-evidence-assembly",
     "job:02-sca-vulnerability-match",
     "job:02-license-scan",
@@ -11059,10 +11358,13 @@
    "path": "runs/<run_id>/data/jobs/02-sca-vulnerability-match/",
    "about": "Accepted sca-vulnerability-match output of 02-sca-vulnerability-match.",
    "produced_by": [
+    "step:sca-vulnerability-match",
     "job:02-sca-vulnerability-match"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "step:cve-reachability",
+    "job:02-evidence-assembly",
+    "job:06-cve-reachability"
    ]
   },
   "job:02-license-scan": {
@@ -11071,9 +11373,11 @@
    "path": "runs/<run_id>/data/jobs/02-license-scan/",
    "about": "Accepted license-inventory output of 02-license-scan.",
    "produced_by": [
+    "step:license-scan",
     "job:02-license-scan"
    ],
    "consumed_by": [
+    "step:dependency-lifecycle",
     "job:02-evidence-assembly",
     "job:02-dependency-lifecycle"
    ]
@@ -11084,6 +11388,7 @@
    "path": "runs/<run_id>/data/jobs/02-dependency-lifecycle/",
    "about": "Accepted dependency-lifecycle output of 02-dependency-lifecycle.",
    "produced_by": [
+    "step:dependency-lifecycle",
     "job:02-dependency-lifecycle"
    ],
    "consumed_by": [

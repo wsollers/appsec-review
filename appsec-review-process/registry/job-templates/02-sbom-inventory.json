@@ -1,0 +1,64 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-sbom-inventory",
+  "display_name": "SBOM Inventory",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "sbom-inventory"
+  },
+  "inputs": {
+    "required": [
+      "fresh run artifact manifest",
+      "explicit staged target path",
+      "B16 Syft image record"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-sbom-inventory/attempts/<attempt_id>",
+    "files": [
+      "manifest.json",
+      "status.json",
+      "result.json",
+      "inputs.json",
+      "outputs/sbom.cdx.json",
+      "outputs/sbom-manifest.json",
+      "outputs/redaction-receipt.json",
+      "outputs/tool-results.json",
+      "outputs/coverage.json",
+      "outputs/pinned-tool-evidence.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "execution": {
+    "worker": "dependency_workers.py",
+    "arguments": [
+      "sbom",
+      "--request",
+      "{request}"
+    ]
+  },
+  "permissions": [
+    "read-source",
+    "write-run-data"
+  ],
+  "applicability": "accepted run-owned source snapshot",
+  "timeout_seconds": 900,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator"
+}

@@ -1,6 +1,6 @@
 # Mythos design-parity report
 
-Status: **PASS**
+Status: **FAIL**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
 Lifecycle jobs: **55**
@@ -12,8 +12,8 @@ Design capabilities: **16**
 |---|---:|
 | `implemented_and_qualified` | 3 |
 | `implemented_not_qualified` | 7 |
-| `missing_prerequisites` | 12 |
-| `standalone_only` | 29 |
+| `missing_prerequisites` | 7 |
+| `standalone_only` | 34 |
 | `supplied_artifact_gate` | 4 |
 
 ## Lifecycle inventory
@@ -35,7 +35,7 @@ Design capabilities: **16**
 | `03-threat-model-dfd-stride` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `04-asvs-masvs` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `05-native-memory` | true | `blocked_op` | `standalone_only` | `cpu` |
-| `06-cve-reachability` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `06-cve-reachability` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `13-fuzz-target-triage` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `15-deployment-hardening` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `07-red-team-adversarial` | false | `blocked_op` | `standalone_only` | `unassigned` |
@@ -69,10 +69,10 @@ Design capabilities: **16**
 | `02-secrets-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-iac-config-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-container-image-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-sbom-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-sca-vulnerability-match` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-license-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-dependency-lifecycle` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-sbom-inventory` | true | `blocked_op` | `standalone_only` | `docker` |
+| `02-sca-vulnerability-match` | true | `blocked_op` | `standalone_only` | `docker` |
+| `02-license-scan` | true | `blocked_op` | `standalone_only` | `docker` |
+| `02-dependency-lifecycle` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `02-binary-hardening` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 | `02-mobile-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
 
@@ -125,13 +125,9 @@ Design capabilities: **16**
 - 02-debug-symbol-index: resource pool unassigned
 - 02-debug-symbol-index: shared_dagster_graph_not_integrated
 - 02-debug-symbol-index: unassigned_resource_pool
-- 02-dependency-lifecycle: missing_registry_composition
-- 02-dependency-lifecycle: missing_validator
-- 02-dependency-lifecycle: missing_worker
-- 02-dependency-lifecycle: no qualification evidence
-- 02-dependency-lifecycle: no_qualification
-- 02-dependency-lifecycle: resource pool unassigned
-- 02-dependency-lifecycle: unassigned_resource_pool
+- 02-dependency-lifecycle: full_review_input_assembler_not_implemented
+- 02-dependency-lifecycle: legacy_vendor_prepass_attempt_packaging_not_published
+- 02-dependency-lifecycle: no_live_qualification
 - 02-dev-project-discovery: no qualification evidence
 - 02-dev-project-discovery: not_automatic_analysis_dispatch
 - 02-dev-project-discovery: supplied_result_required
@@ -172,13 +168,9 @@ Design capabilities: **16**
 - 02-ir-link: shared_dagster_graph_not_integrated
 - 02-ir-link: toolchain_factory_binding_missing
 - 02-ir-link: unassigned_resource_pool
-- 02-license-scan: missing_registry_composition
-- 02-license-scan: missing_validator
-- 02-license-scan: missing_worker
-- 02-license-scan: no qualification evidence
-- 02-license-scan: no_qualification
-- 02-license-scan: resource pool unassigned
-- 02-license-scan: unassigned_resource_pool
+- 02-license-scan: full_review_input_assembler_not_implemented
+- 02-license-scan: legacy_vendor_prepass_attempt_packaging_not_published
+- 02-license-scan: no_live_docker_qualification
 - 02-mobile-sast: missing_registry_composition
 - 02-mobile-sast: missing_validator
 - 02-mobile-sast: missing_worker
@@ -198,20 +190,12 @@ Design capabilities: **16**
 - 02-operations-doc-ingest: unassigned_resource_pool
 - 02-repository-partition-discovery: not_automatic_analysis_dispatch
 - 02-repository-partition-discovery: supplied_result_required
-- 02-sbom-inventory: missing_registry_composition
-- 02-sbom-inventory: missing_validator
-- 02-sbom-inventory: missing_worker
-- 02-sbom-inventory: no qualification evidence
-- 02-sbom-inventory: no_qualification
-- 02-sbom-inventory: resource pool unassigned
-- 02-sbom-inventory: unassigned_resource_pool
-- 02-sca-vulnerability-match: missing_registry_composition
-- 02-sca-vulnerability-match: missing_validator
-- 02-sca-vulnerability-match: missing_worker
-- 02-sca-vulnerability-match: no qualification evidence
-- 02-sca-vulnerability-match: no_qualification
-- 02-sca-vulnerability-match: resource pool unassigned
-- 02-sca-vulnerability-match: unassigned_resource_pool
+- 02-sbom-inventory: full_review_input_assembler_not_implemented
+- 02-sbom-inventory: legacy_vendor_prepass_attempt_packaging_not_published
+- 02-sbom-inventory: no_live_docker_qualification
+- 02-sca-vulnerability-match: full_review_input_assembler_not_implemented
+- 02-sca-vulnerability-match: legacy_vendor_prepass_attempt_packaging_not_published
+- 02-sca-vulnerability-match: no_live_docker_qualification
 - 02-secrets-inventory: missing_registry_composition
 - 02-secrets-inventory: missing_validator
 - 02-secrets-inventory: missing_worker
@@ -260,15 +244,8 @@ Design capabilities: **16**
 - 04-owasp-validation-worklist: no_live_qualification
 - 05-native-memory: full_review_input_assembler_not_implemented
 - 05-native-memory: no_live_qualification
-- 06-cve-reachability: missing_dedicated_output_schema
-- 06-cve-reachability: missing_output_contract
-- 06-cve-reachability: missing_registry_composition
-- 06-cve-reachability: missing_validator
-- 06-cve-reachability: missing_worker
-- 06-cve-reachability: no qualification evidence
-- 06-cve-reachability: no_qualification
-- 06-cve-reachability: resource pool unassigned
-- 06-cve-reachability: unassigned_resource_pool
+- 06-cve-reachability: full_review_input_assembler_not_implemented
+- 06-cve-reachability: no_live_qualification
 - 07-red-team-adversarial: common_lifecycle_publication_not_integrated
 - 07-red-team-adversarial: no_live_qualification
 - 07-red-team-adversarial: resource pool unassigned
@@ -364,4 +341,4 @@ Design capabilities: **16**
 
 ## Validation errors
 
-- None.
+- stale generated readiness_table: docs/design-parity/design-parity-readiness.md

@@ -118,6 +118,10 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "static_configuration_evidence",
         "allowed_assertions": {"declared-static-state", "applicability", "runtime-gap"},
     },
+    "cve-reachability": {
+        "claim_class_id": "cve_reachability_evidence_lead",
+        "allowed_assertions": {"cve-reachability-evidence-lead"},
+    },
     "native-sast": {
         "claim_class_id": "native_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "source-citation", "coverage-gap"},

@@ -1,0 +1,64 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-license-scan",
+  "display_name": "License Inventory",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "license-inventory"
+  },
+  "inputs": {
+    "required": [
+      "accepted SBOM",
+      "explicit staged target path",
+      "B16 ScanCode image record"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-license-scan/attempts/<attempt_id>",
+    "files": [
+      "manifest.json",
+      "status.json",
+      "result.json",
+      "inputs.json",
+      "outputs/license-inventory.json",
+      "outputs/redaction-receipt.json",
+      "outputs/tool-results.json",
+      "outputs/coverage.json",
+      "outputs/pinned-tool-evidence.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "execution": {
+    "worker": "dependency_workers.py",
+    "arguments": [
+      "license",
+      "--request",
+      "{request}"
+    ]
+  },
+  "permissions": [
+    "read-source",
+    "read-run-data",
+    "write-run-data"
+  ],
+  "applicability": "accepted SBOM and source snapshot",
+  "timeout_seconds": 1800,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator"
+}

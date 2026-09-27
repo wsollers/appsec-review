@@ -1,0 +1,64 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-dependency-lifecycle",
+  "display_name": "Dependency Lifecycle",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "supply-chain-evidence-curator",
+    "role_id": "dependency-evidence-curator",
+    "domain_id": "dependency-static-analysis",
+    "tooling_profile_id": "pinned-dependency-analysis",
+    "output_contract_id": "dependency-lifecycle"
+  },
+  "inputs": {
+    "required": [
+      "accepted SBOM",
+      "accepted license inventory",
+      "identified run-owned lifecycle reference table",
+      "explicit table age ceiling"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-dependency-lifecycle/attempts/<attempt_id>",
+    "files": [
+      "manifest.json",
+      "status.json",
+      "result.json",
+      "inputs.json",
+      "outputs/dependency-lifecycle.json",
+      "outputs/reference-table-identity.json",
+      "outputs/redaction-receipt.json",
+      "outputs/tool-results.json",
+      "outputs/coverage.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "execution": {
+    "worker": "dependency_workers.py",
+    "arguments": [
+      "lifecycle",
+      "--request",
+      "{request}"
+    ]
+  },
+  "permissions": [
+    "read-run-data",
+    "write-run-data"
+  ],
+  "applicability": "accepted dependency and license evidence plus a supplied current reference table",
+  "timeout_seconds": 300,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator"
+}

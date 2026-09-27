@@ -60,7 +60,12 @@
       "owasp_validation_worklist",
       "stig_srg_validation_worklist",
       "deployment_hardening",
-      "b13_harmless_container"
+      "b13_harmless_container",
+      "sbom_inventory",
+      "sca_vulnerability_match",
+      "license_scan",
+      "dependency_lifecycle",
+      "cve_reachability"
     ],
     "standalone_relationships": [
       {
@@ -169,42 +174,58 @@
       },
       {
         "job": "build_configure",
-        "lifecycle_jobs": ["02-build-configure"],
+        "lifecycle_jobs": [
+          "02-build-configure"
+        ],
         "relationship": "standalone and lifecycle-wired happy-path replay of the accepted lock's configure argv through B13"
       },
       {
         "job": "native_build",
-        "lifecycle_jobs": ["02-native-build"],
+        "lifecycle_jobs": [
+          "02-native-build"
+        ],
         "relationship": "standalone and lifecycle-wired happy-path replay of configure/build with Bear through B13"
       },
       {
         "job": "source_sast",
-        "lifecycle_jobs": ["02-source-sast"],
+        "lifecycle_jobs": [
+          "02-source-sast"
+        ],
         "relationship": "standalone and lifecycle-wired offline multi-language source SAST through B13; unavailable tools remain explicit gaps"
       },
       {
         "job": "native_memory_analysis",
-        "lifecycle_jobs": ["05-native-memory"],
+        "lifecycle_jobs": [
+          "05-native-memory"
+        ],
         "relationship": "config-driven standalone bounded transform; full-review input assembly remains blocked"
       },
       {
         "job": "fuzz_target_triage",
-        "lifecycle_jobs": ["13-fuzz-target-triage"],
+        "lifecycle_jobs": [
+          "13-fuzz-target-triage"
+        ],
         "relationship": "config-driven standalone bounded transform; full-review input assembly remains blocked"
       },
       {
         "job": "owasp_validation_worklist",
-        "lifecycle_jobs": ["04-owasp-validation-worklist"],
+        "lifecycle_jobs": [
+          "04-owasp-validation-worklist"
+        ],
         "relationship": "config-driven OWASP-only standalone worklist transform; full-review input assembly remains blocked"
       },
       {
         "job": "stig_srg_validation_worklist",
-        "lifecycle_jobs": ["15-stig-srg-validation-worklist"],
+        "lifecycle_jobs": [
+          "15-stig-srg-validation-worklist"
+        ],
         "relationship": "config-driven STIG/SRG-only standalone worklist transform; full-review input assembly remains blocked"
       },
       {
         "job": "deployment_hardening",
-        "lifecycle_jobs": ["15-deployment-hardening"],
+        "lifecycle_jobs": [
+          "15-deployment-hardening"
+        ],
         "relationship": "config-driven deployment-hardening standalone transform; full-review input assembly remains blocked"
       },
       {
@@ -272,6 +293,41 @@
           "02-mobile-sast"
         ],
         "relationship": "lifecycle graph; blocked nodes remain explicit"
+      },
+      {
+        "job": "sbom_inventory",
+        "lifecycle_jobs": [
+          "02-sbom-inventory"
+        ],
+        "relationship": "config-driven standalone Syft/B13 inventory; full-review input assembly remains blocked"
+      },
+      {
+        "job": "sca_vulnerability_match",
+        "lifecycle_jobs": [
+          "02-sca-vulnerability-match"
+        ],
+        "relationship": "config-driven standalone Grype+OSV analysis using supplied offline snapshots; synchronization is outside the analysis DAG and full-review input assembly remains blocked"
+      },
+      {
+        "job": "license_scan",
+        "lifecycle_jobs": [
+          "02-license-scan"
+        ],
+        "relationship": "config-driven standalone ScanCode/B13 inventory; full-review input assembly remains blocked"
+      },
+      {
+        "job": "dependency_lifecycle",
+        "lifecycle_jobs": [
+          "02-dependency-lifecycle"
+        ],
+        "relationship": "config-driven standalone offline reference-table transform; full-review input assembly remains blocked"
+      },
+      {
+        "job": "cve_reachability",
+        "lifecycle_jobs": [
+          "06-cve-reachability"
+        ],
+        "relationship": "config-driven standalone static reachability transform; full-review input assembly remains blocked"
       }
     ],
     "launcher_jobs": [
@@ -299,7 +355,12 @@
       "owasp_validation_worklist",
       "stig_srg_validation_worklist",
       "deployment_hardening",
-      "b13_harmless_container"
+      "b13_harmless_container",
+      "sbom_inventory",
+      "sca_vulnerability_match",
+      "license_scan",
+      "dependency_lifecycle",
+      "cve_reachability"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -325,7 +386,12 @@
       "stig_srg_validation_worklist",
       "deployment_hardening",
       "b13_harmless_container",
-      "full_review"
+      "full_review",
+      "sbom_inventory",
+      "sca_vulnerability_match",
+      "license_scan",
+      "dependency_lifecycle",
+      "cve_reachability"
     ],
     "cancellation_sensor_jobs": [
       "engagement_workflow",
@@ -351,7 +417,12 @@
       "stig_srg_validation_worklist",
       "deployment_hardening",
       "b13_harmless_container",
-      "full_review"
+      "full_review",
+      "sbom_inventory",
+      "sca_vulnerability_match",
+      "license_scan",
+      "dependency_lifecycle",
+      "cve_reachability"
     ],
     "queue": {
       "max_concurrent_runs": 2,
@@ -983,7 +1054,9 @@
       "graph": {
         "node": "02-build-resolution",
         "implemented": true,
-        "dependencies": ["02-build-plan"]
+        "dependencies": [
+          "02-build-plan"
+        ]
       },
       "registry": {
         "template": "02-build-resolution",
@@ -1011,18 +1084,31 @@
         "write-run-data"
       ],
       "dagster": {
-        "standalone_jobs": ["build_resolution"],
+        "standalone_jobs": [
+          "build_resolution"
+        ],
         "lifecycle_binding": {
           "kind": "actual_worker",
           "entrypoint": "appsec-review-process/dagster_workflow.py:build_resolution_work"
         },
-        "launcher_jobs": ["build_resolution"],
-        "sensor_jobs": ["full_review", "build_resolution"]
+        "launcher_jobs": [
+          "build_resolution"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "build_resolution"
+        ]
       },
       "resource_pool": "docker",
       "readiness": "implemented_and_qualified",
       "qualification": {
-        "levels": ["unit", "host_integration", "linux_integration", "live_dagster", "fault_recovery"],
+        "levels": [
+          "unit",
+          "host_integration",
+          "linux_integration",
+          "live_dagster",
+          "fault_recovery"
+        ],
         "references": [
           "appsec-review-process/tests/test_build_resolution.py",
           "appsec-review-process/tests/test_container_execution.py",
@@ -1398,53 +1484,67 @@
       ],
       "graph": {
         "node": "06-cve-reachability",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
-          "01-component-characterization"
+          "02-sca-vulnerability-match"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "06-cve-reachability",
+        "persona": "supply-chain-evidence-curator",
+        "role": "dependency-evidence-curator",
+        "domain": "dependency-static-analysis",
+        "tooling_profile": "pinned-dependency-analysis",
+        "output_contract": "cve-reachability"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/dependency_workers.py:run",
+        "validator": "appsec-review-process/worker_result.py:validate_worker_result"
       },
       "output": {
-        "contract": "06-cve-reachability",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "cve-reachability",
+        "contract_file": "appsec-review-process/registry/output-contracts/cve-reachability.json",
+        "schema_file": "schemas/cve-reachability.schema.json",
+        "claim_class": "cve_reachability_evidence_lead"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "cve_reachability"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "cve_reachability"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "cve_reachability"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_dependency_workers.py",
+          "appsec-review-process/tests/test_dependency_b13_adapters.py",
+          "appsec-review-process/tests/test_dependency_orchestration.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Build the full-review input assembler and complete live static-evidence qualification."
     },
     {
       "id": "13-fuzz-target-triage",
@@ -2506,7 +2606,9 @@
           "docs/processes/system-acceptance-test.md"
         ]
       },
-      "gaps": ["fault_recovery_not_qualified"],
+      "gaps": [
+        "fault_recovery_not_qualified"
+      ],
       "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
     },
     {
@@ -2541,16 +2643,25 @@
         "schema_file": "schemas/native-build.schema.json",
         "claim_class": "build_replay"
       },
-      "permissions": ["read-source", "target-execution:native-build-v1@.", "write-run-data"],
+      "permissions": [
+        "read-source",
+        "target-execution:native-build-v1@.",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": ["native_build"],
+        "standalone_jobs": [
+          "native_build"
+        ],
         "lifecycle_binding": {
           "kind": "actual_worker",
           "entrypoint": "appsec-review-process/dagster_workflow.py:native_build_work"
         },
-        "launcher_jobs": ["native_build"],
+        "launcher_jobs": [
+          "native_build"
+        ],
         "sensor_jobs": [
-          "full_review", "native_build"
+          "full_review",
+          "native_build"
         ]
       },
       "resource_pool": "docker",
@@ -2567,7 +2678,9 @@
           "docs/processes/system-acceptance-test.md"
         ]
       },
-      "gaps": ["fault_recovery_not_qualified"],
+      "gaps": [
+        "fault_recovery_not_qualified"
+      ],
       "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
     },
     {
@@ -3602,16 +3715,23 @@
       ],
       "graph": {
         "node": "02-sbom-inventory",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-sbom-inventory",
+        "persona": "supply-chain-evidence-curator",
+        "role": "dependency-evidence-curator",
+        "domain": "dependency-static-analysis",
+        "tooling_profile": "pinned-dependency-analysis",
+        "output_contract": "sbom-inventory"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/dependency_workers.py:run",
+        "validator": "appsec-review-process/worker_result.py:validate_worker_result"
       },
       "output": {
         "contract": "sbom-inventory",
@@ -3619,34 +3739,44 @@
         "schema_file": "schemas/sbom-inventory.schema.json",
         "claim_class": "dependency_inventory_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "sbom_inventory"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "sbom_inventory"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "sbom_inventory"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_dependency_workers.py",
+          "appsec-review-process/tests/test_dependency_b13_adapters.py",
+          "appsec-review-process/tests/test_dependency_orchestration.py"
+        ]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification",
+        "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification."
     },
     {
       "id": "02-sca-vulnerability-match",
@@ -3657,16 +3787,23 @@
       ],
       "graph": {
         "node": "02-sca-vulnerability-match",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-sbom-inventory"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-sca-vulnerability-match",
+        "persona": "supply-chain-evidence-curator",
+        "role": "dependency-evidence-curator",
+        "domain": "dependency-static-analysis",
+        "tooling_profile": "pinned-dependency-analysis",
+        "output_contract": "sca-vulnerability-match"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/dependency_workers.py:run",
+        "validator": "appsec-review-process/worker_result.py:validate_worker_result"
       },
       "output": {
         "contract": "sca-vulnerability-match",
@@ -3674,34 +3811,45 @@
         "schema_file": "schemas/sca-vulnerability-match.schema.json",
         "claim_class": "known_vulnerability_match_lead"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "read-offline-snapshots",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "sca_vulnerability_match"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "sca_vulnerability_match"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "sca_vulnerability_match"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_dependency_workers.py",
+          "appsec-review-process/tests/test_dependency_b13_adapters.py",
+          "appsec-review-process/tests/test_dependency_orchestration.py"
+        ]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification",
+        "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the V16 Grype DB mirror publisher, the V17 OSV snapshot publisher (both behind B11), the V18 consumer bindings and the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify both supplied offline snapshot consumers live."
     },
     {
       "id": "02-license-scan",
@@ -3712,17 +3860,24 @@
       ],
       "graph": {
         "node": "02-license-scan",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake",
           "02-sbom-inventory"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-license-scan",
+        "persona": "supply-chain-evidence-curator",
+        "role": "dependency-evidence-curator",
+        "domain": "dependency-static-analysis",
+        "tooling_profile": "pinned-dependency-analysis",
+        "output_contract": "license-inventory"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/dependency_workers.py:run",
+        "validator": "appsec-review-process/worker_result.py:validate_worker_result"
       },
       "output": {
         "contract": "license-inventory",
@@ -3730,34 +3885,45 @@
         "schema_file": "schemas/license-inventory.schema.json",
         "claim_class": "license_detection_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "license_scan"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "license_scan"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "license_scan"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_dependency_workers.py",
+          "appsec-review-process/tests/test_dependency_b13_adapters.py",
+          "appsec-review-process/tests/test_dependency_orchestration.py"
+        ]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification",
+        "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification."
     },
     {
       "id": "02-dependency-lifecycle",
@@ -3768,17 +3934,24 @@
       ],
       "graph": {
         "node": "02-dependency-lifecycle",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-sbom-inventory",
           "02-license-scan"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-dependency-lifecycle",
+        "persona": "supply-chain-evidence-curator",
+        "role": "dependency-evidence-curator",
+        "domain": "dependency-static-analysis",
+        "tooling_profile": "pinned-dependency-analysis",
+        "output_contract": "dependency-lifecycle"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/dependency_workers.py:run",
+        "validator": "appsec-review-process/worker_result.py:validate_worker_result"
       },
       "output": {
         "contract": "dependency-lifecycle",
@@ -3786,34 +3959,44 @@
         "schema_file": "schemas/dependency-lifecycle.schema.json",
         "claim_class": "dependency_lifecycle_evidence"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "dependency_lifecycle"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "dependency_lifecycle"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "dependency_lifecycle"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "cpu",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_dependency_workers.py",
+          "appsec-review-process/tests/test_dependency_b13_adapters.py",
+          "appsec-review-process/tests/test_dependency_orchestration.py"
+        ]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_qualification",
+        "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V11 (M05): needs a published, identified lifecycle reference table (no reference-table publisher exists) and its upstream SBOM and license workers; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify a supplied current reference table live."
     },
     {
       "id": "02-binary-hardening",

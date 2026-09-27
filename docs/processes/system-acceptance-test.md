@@ -120,6 +120,15 @@ accepted intake, not the native build. The first implementation runs the B16-res
 C/C++ rules. Its normalized records are static-analysis leads, not findings or severity claims;
 raw messages and snippets remain in the immutable tool attempt.
 
+The dependency/CVE workers are also available as independently launchable, config-driven jobs:
+`sbom_inventory`, `sca_vulnerability_match`, `license_scan`, `dependency_lifecycle`, and
+`cve_reachability`. Each launch names a closed run-owned request, the canonical jobs output root,
+and an explicit run-owned orchestration-attempt root. Scanner jobs call their fixed B13 adapters;
+SCA additionally requires a supplied offline snapshot registry and an explicit age ceiling for
+both Grype and OSV snapshots. Missing, stale, future, or mutated snapshots fail closed. Database
+synchronization remains an out-of-band operation and is never part of the analysis DAG. These jobs
+are not yet wired into `full_review` because no accepted-input assembler exists for them.
+
 Stage 16 does **not** categorize components or fulfill the OWASP path. `02-source-sast` is one
 required producer for the still non-executable `02-evidence-assembly`; only an accepted assembly
 can feed the non-executable `01-component-characterization`, which must produce the component-purpose

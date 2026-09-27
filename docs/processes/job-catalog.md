@@ -9,7 +9,7 @@ output contracts, lane `config.md` files, and the hand-maintained `docs/processe
 Regenerate after any process change: `python3 docs/processes/job_catalog.py`;
 `--check` fails when this file is stale or a reference is broken.
 
-Covers 5 process models, 60 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 55 lifecycle jobs and 115 artifacts.
+Covers 5 process models, 65 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 55 lifecycle jobs and 123 artifacts.
 
 How to read the rollups: **Enters** is what the model or group consumes but does not produce itself
 (its inputs); **Leaves** is what it produces that nothing inside consumes (its results); **Passes**
@@ -191,10 +191,10 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-secrets-inventory`](#a-job-02-secrets-inventory) |
 | [Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-iac-config-scan`](#a-job-02-iac-config-scan) |
 | [Supplied Container Image Archive Inventory](#job-02-container-image-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-container-image-inventory`](#a-job-02-container-image-inventory) |
-| [SBOM Component Inventory (Manifests And Lockfiles Only)](#job-02-sbom-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
-| [Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)](#job-02-sca-vulnerability-match) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) |
-| [Licence Detection Inventory](#job-02-license-scan) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-license-scan`](#a-job-02-license-scan) |
-| [Dependency Lifecycle Against An Offline Reference Table](#job-02-dependency-lifecycle) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-license-scan`](#a-job-02-license-scan) | [`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle) |
+| [SBOM Inventory](#job-02-sbom-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
+| [Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) |
+| [License Inventory](#job-02-license-scan) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-license-scan`](#a-job-02-license-scan) |
+| [Dependency Lifecycle](#job-02-dependency-lifecycle) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-license-scan`](#a-job-02-license-scan) | [`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle) |
 | [Supplied Binary Hardening Properties](#job-02-binary-hardening) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-binary-hardening`](#a-job-02-binary-hardening) |
 | [Mobile SAST Static Leads](#job-02-mobile-sast) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-mobile-sast`](#a-job-02-mobile-sast) |
 | **Group rollup** | | **Enters:** [`sut-checkout`](#a-sut-checkout)<br>[`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-evidence-index`](#a-job-02-evidence-index)<br>[`02-native-build`](#a-job-02-native-build) | **Leaves:** [`legacy-pregather`](#a-legacy-pregather)<br>[`02-build-resolution`](#a-job-02-build-resolution)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly) |
@@ -216,11 +216,11 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
 | [OWASP Validation Worklist Core](#job-04-owasp-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
 | [Native Memory Analysis](#job-05-native-memory) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts) | [`05-native-memory`](#a-job-05-native-memory) |
-| [06-cve-reachability](#job-06-cve-reachability) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
+| [CVE Reachability Evidence](#job-06-cve-reachability) | lifecycle job | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
 | [Fuzz Target Triage](#job-13-fuzz-target-triage) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
 | [Deployment Hardening](#job-15-deployment-hardening) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 | [STIG/SRG Validation Worklist Core](#job-15-stig-srg-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
-| **Group rollup** | | **Enters:** [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan) | **Leaves:** [`lane-handoff`](#a-lane-handoff)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening) |
+| **Group rollup** | | **Enters:** [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan) | **Leaves:** [`lane-handoff`](#a-lane-handoff)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 
 ### Engagement flow: 7. Refutation, verification, scoring, synthesis, report
 
@@ -386,12 +386,12 @@ Per lane (each job's full inputs and outputs are in Appendix B):
 | Lane | Jobs | Enters | Leaves |
 |---|---|---|---|
 | `00-intake-recovery` | [00-intake](#job-00-intake) | [`artifact-manifest`](#a-artifact-manifest) | [`00-intake`](#a-job-00-intake) |
-| `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[Native SAST](#job-02-native-sast)<br>[IR Capture](#job-02-ir-capture)<br>[IR Link](#job-02-ir-link)<br>[IR Facts](#job-02-ir-facts)<br>[Debug Symbol Index](#job-02-debug-symbol-index)<br>[Static Binary Triage](#job-02-binary-triage)<br>[Static Binary CFG](#job-02-binary-cfg)<br>[Test Execution](#job-02-test-execution)<br>[Test Result Ingest](#job-02-test-result-ingest)<br>[Test Coverage Ingest](#job-02-test-coverage-ingest)<br>[Operations Document Ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory)<br>[Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan)<br>[Supplied Container Image Archive Inventory](#job-02-container-image-inventory)<br>[SBOM Component Inventory (Manifests And Lockfiles Only)](#job-02-sbom-inventory)<br>[Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)](#job-02-sca-vulnerability-match)<br>[Licence Detection Inventory](#job-02-license-scan)<br>[Dependency Lifecycle Against An Offline Reference Table](#job-02-dependency-lifecycle)<br>[Supplied Binary Hardening Properties](#job-02-binary-hardening)<br>[Mobile SAST Static Leads](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
+| `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[Native SAST](#job-02-native-sast)<br>[IR Capture](#job-02-ir-capture)<br>[IR Link](#job-02-ir-link)<br>[IR Facts](#job-02-ir-facts)<br>[Debug Symbol Index](#job-02-debug-symbol-index)<br>[Static Binary Triage](#job-02-binary-triage)<br>[Static Binary CFG](#job-02-binary-cfg)<br>[Test Execution](#job-02-test-execution)<br>[Test Result Ingest](#job-02-test-result-ingest)<br>[Test Coverage Ingest](#job-02-test-coverage-ingest)<br>[Operations Document Ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory)<br>[Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan)<br>[Supplied Container Image Archive Inventory](#job-02-container-image-inventory)<br>[SBOM Inventory](#job-02-sbom-inventory)<br>[Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match)<br>[License Inventory](#job-02-license-scan)<br>[Dependency Lifecycle](#job-02-dependency-lifecycle)<br>[Supplied Binary Hardening Properties](#job-02-binary-hardening)<br>[Mobile SAST Static Leads](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
 | `01-component-characterization` | [Component Purpose And Review Routing](#job-01-component-characterization) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
 | `03-threat-model-dfd-stride` | [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
 | `04-asvs-masvs` | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs)<br>[OWASP Validation Worklist Core](#job-04-owasp-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
 | `05-native-memory` | [Native Memory Analysis](#job-05-native-memory) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts) | [`05-native-memory`](#a-job-05-native-memory) |
-| `06-cve-reachability` | [06-cve-reachability](#job-06-cve-reachability) | [`01-component-characterization`](#a-job-01-component-characterization) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
+| `06-cve-reachability` | [CVE Reachability Evidence](#job-06-cve-reachability) | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
 | `13-fuzz-target-triage` | [Fuzz Target Triage](#job-13-fuzz-target-triage) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
 | `15-deployment-hardening` | [Deployment Hardening](#job-15-deployment-hardening)<br>[STIG/SRG Validation Worklist Core](#job-15-stig-srg-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 | `07-red-team-adversarial` | [Red-team Adversarial Hypothesis Core](#job-07-red-team-adversarial) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial) |
@@ -1041,6 +1041,71 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Produces | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 | Notes | Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps. |
 
+<a id="step-sbom-inventory"></a>
+
+### sbom_inventory (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job sbom_inventory --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait` |
+| Lifecycle job(s) | [`02-sbom-inventory`](#job-02-sbom-inventory) |
+| Consumes | [`00-intake`](#a-job-00-intake)<br>[`sut-checkout`](#a-sut-checkout)<br>[`syft-image`](#a-syft-image) |
+| Produces | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
+| Notes | Standalone config-driven Syft/B13 inventory with network none and an exact source-generation binding. Full-review input assembly and live Docker qualification remain gaps. |
+
+<a id="step-sca-vulnerability-match"></a>
+
+### sca_vulnerability_match (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job sca_vulnerability_match --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait` |
+| Lifecycle job(s) | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) |
+| Consumes | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`grype-image`](#a-grype-image)<br>[`osv-image`](#a-osv-image)<br>[`supplied-offline-grype-snapshot`](#a-supplied-offline-grype-snapshot)<br>[`supplied-offline-osv-snapshot`](#a-supplied-offline-osv-snapshot) |
+| Produces | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) |
+| Notes | Standalone config-driven Grype+OSV matching. The supplied offline snapshot registry is re-hashed and age-checked; absent or stale snapshots fail closed. Snapshot synchronization is outside the analysis DAG and matches remain evidence leads. |
+
+<a id="step-license-scan"></a>
+
+### license_scan (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job license_scan --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait` |
+| Lifecycle job(s) | [`02-license-scan`](#job-02-license-scan) |
+| Consumes | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`sut-checkout`](#a-sut-checkout)<br>[`scancode-image`](#a-scancode-image) |
+| Produces | [`02-license-scan`](#a-job-02-license-scan) |
+| Notes | Standalone config-driven ScanCode/B13 license inventory bound to the accepted SBOM. Full-review input assembly and live Docker qualification remain gaps. |
+
+<a id="step-dependency-lifecycle"></a>
+
+### dependency_lifecycle (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job dependency_lifecycle --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait` |
+| Lifecycle job(s) | [`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
+| Consumes | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-license-scan`](#a-job-02-license-scan)<br>[`run-owned-lifecycle-reference-table`](#a-run-owned-lifecycle-reference-table) |
+| Produces | [`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle) |
+| Notes | Standalone deterministic offline transform with explicit reference-table hash and age ceiling; missing coverage is unknown, never supported. Full-review input assembly remains a gap. |
+
+<a id="step-cve-reachability"></a>
+
+### cve_reachability (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job cve_reachability --input-path <run-owned-request> --output-root <canonical-jobs-root> --attempt-root <run-owned-orchestration-attempt> --wait` |
+| Lifecycle job(s) | [`06-cve-reachability`](#job-06-cve-reachability) |
+| Consumes | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match)<br>[`run-owned-static-reachability-evidence`](#a-run-owned-static-reachability-evidence) |
+| Produces | [`06-cve-reachability`](#a-job-06-cve-reachability) |
+| Notes | Standalone deterministic static reachability transform. A version match alone never establishes reachability and all outputs remain evidence leads. Full-review input assembly remains a gap. |
+
 <a id="step-b13-harmless-container"></a>
 
 ### b13_harmless_container (Dagster qualification job)
@@ -1219,10 +1284,10 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-secrets-inventory`](#job-02-secrets-inventory) | `secrets-inventory` | missing_prerequisites | `00-intake` |
 | `02-evidence-pregather` | [`02-iac-config-scan`](#job-02-iac-config-scan) | `iac-config-evidence` | missing_prerequisites | `00-intake` |
 | `02-evidence-pregather` | [`02-container-image-inventory`](#job-02-container-image-inventory) | `container-image-inventory` | missing_prerequisites | `00-intake` |
-| `02-evidence-pregather` | [`02-sbom-inventory`](#job-02-sbom-inventory) | `sbom-inventory` | missing_prerequisites | `00-intake` |
-| `02-evidence-pregather` | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | `sca-vulnerability-match` | missing_prerequisites | `02-sbom-inventory` |
-| `02-evidence-pregather` | [`02-license-scan`](#job-02-license-scan) | `license-inventory` | missing_prerequisites | `00-intake`, `02-sbom-inventory` |
-| `02-evidence-pregather` | [`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | `dependency-lifecycle` | missing_prerequisites | `02-sbom-inventory`, `02-license-scan` |
+| `02-evidence-pregather` | [`02-sbom-inventory`](#job-02-sbom-inventory) | `sbom-inventory` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | `sca-vulnerability-match` | standalone_only | `02-sbom-inventory` |
+| `02-evidence-pregather` | [`02-license-scan`](#job-02-license-scan) | `license-inventory` | standalone_only | `00-intake`, `02-sbom-inventory` |
+| `02-evidence-pregather` | [`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | `dependency-lifecycle` | standalone_only | `02-sbom-inventory`, `02-license-scan` |
 | `02-evidence-pregather` | [`02-binary-hardening`](#job-02-binary-hardening) | `binary-hardening` | missing_prerequisites | `00-intake` |
 | `02-evidence-pregather` | [`02-mobile-sast`](#job-02-mobile-sast) | `mobile-sast` | missing_prerequisites | `00-intake` |
 | `01-component-characterization` | [`01-component-characterization`](#job-01-component-characterization) | `component-map` | standalone_only | `02-evidence-assembly` |
@@ -1230,7 +1295,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `04-asvs-masvs` | [`04-asvs-masvs`](#job-04-asvs-masvs) | `owasp-join-report` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-owasp-validation-worklist` |
 | `04-asvs-masvs` | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | `owasp-validation-worklist` | standalone_only | `01-component-characterization`, `02-standards-source-ingest` |
 | `05-native-memory` | [`05-native-memory`](#job-05-native-memory) | `native-memory-analysis` | standalone_only | `01-component-characterization`, `02-native-sast`, `02-ir-facts` |
-| `06-cve-reachability` | [`06-cve-reachability`](#job-06-cve-reachability) | `06-cve-reachability` | missing_prerequisites | `01-component-characterization` |
+| `06-cve-reachability` | [`06-cve-reachability`](#job-06-cve-reachability) | `cve-reachability` | standalone_only | `02-sca-vulnerability-match` |
 | `13-fuzz-target-triage` | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage) | `fuzz-target-triage` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `05-native-memory`, `06-cve-reachability` |
 | `15-deployment-hardening` | [`15-deployment-hardening`](#job-15-deployment-hardening) | `deployment-hardening` | standalone_only | `01-component-characterization`, `02-iac-config-scan`, `15-stig-srg-validation-worklist` |
 | `15-deployment-hardening` | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) | `stig-srg-validation-worklist` | standalone_only | `01-component-characterization`, `02-standards-source-ingest` |
@@ -1259,7 +1324,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/00-intake.json) | target path<br>source identity<br>scope<br>permissions<br>hashed imports *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/00-intake/` |
 | Output files (registry/output-contracts/intake.json) | outputs/intake.json<br>outputs/build-discovery.md<br>status.json |
-| Consumed by | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
+| Consumed by | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
 | Next prerequisite | Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/pools/resource-pools.md step 8). |
 
 ### Lane `02-evidence-pregather`
@@ -1915,71 +1980,83 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-02-sbom-inventory"></a>
 
-#### `02-sbom-inventory` -- SBOM Component Inventory (Manifests And Lockfiles Only)
+#### `02-sbom-inventory` -- SBOM Inventory
 
 | | |
 |---|---|
 | Contract | `sbom-inventory` (claim class `dependency_inventory_evidence`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/dependency_workers.py:run` |
+| Resource pool | `docker` |
+| Dagster | standalone: `sbom_inventory`; lifecycle binding: `blocked_op` |
+| Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/02-sbom-inventory.json) | fresh run artifact manifest<br>explicit staged target path<br>B16 Syft image record |
 | Produces | `runs/<run_id>/data/jobs/02-sbom-inventory/` |
 | Output files (registry/output-contracts/sbom-inventory.json) | manifest.json<br>status.json<br>outputs/sbom.cdx.json<br>outputs/sbom-manifest.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Consumed by | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`license-scan`](#step-license-scan)<br>[`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
+| Next prerequisite | Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification. |
 
 <a id="job-02-sca-vulnerability-match"></a>
 
-#### `02-sca-vulnerability-match` -- Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)
+#### `02-sca-vulnerability-match` -- Offline SCA Vulnerability Match
 
 | | |
 |---|---|
 | Contract | `sca-vulnerability-match` (claim class `known_vulnerability_match_lead`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/dependency_workers.py:run` |
+| Resource pool | `docker` |
+| Dagster | standalone: `sca_vulnerability_match`; lifecycle binding: `blocked_op` |
+| Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`) |
+| Declared inputs (registry/job-templates/02-sca-vulnerability-match.json) | accepted SBOM<br>B16 Grype and OSV images<br>supplied current offline Grype and OSV snapshot registry<br>explicit database age ceiling |
 | Produces | `runs/<run_id>/data/jobs/02-sca-vulnerability-match/` |
 | Output files (registry/output-contracts/sca-vulnerability-match.json) | manifest.json<br>status.json<br>outputs/sca-vulnerability-match.json<br>outputs/vulnerability-database-identities.json<br>outputs/sca-coverage-gaps.json<br>outputs/coverage-gap-summary.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V11 (M05): needs the V16 Grype DB mirror publisher, the V17 OSV snapshot publisher (both behind B11), the V18 consumer bindings and the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Consumed by | [`cve-reachability`](#step-cve-reachability)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-cve-reachability`](#job-06-cve-reachability) |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
+| Next prerequisite | Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify both supplied offline snapshot consumers live. |
 
 <a id="job-02-license-scan"></a>
 
-#### `02-license-scan` -- Licence Detection Inventory
+#### `02-license-scan` -- License Inventory
 
 | | |
 |---|---|
 | Contract | `license-inventory` (claim class `license_detection_evidence`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/dependency_workers.py:run` |
+| Resource pool | `docker` |
+| Dagster | standalone: `license_scan`; lifecycle binding: `blocked_op` |
+| Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`) |
+| Declared inputs (registry/job-templates/02-license-scan.json) | accepted SBOM<br>explicit staged target path<br>B16 ScanCode image record |
 | Produces | `runs/<run_id>/data/jobs/02-license-scan/` |
 | Output files (registry/output-contracts/license-inventory.json) | manifest.json<br>status.json<br>outputs/license-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V11 (M05): needs the B13 pinned-container adapter; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Consumed by | [`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
+| Next prerequisite | Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification. |
 
 <a id="job-02-dependency-lifecycle"></a>
 
-#### `02-dependency-lifecycle` -- Dependency Lifecycle Against An Offline Reference Table
+#### `02-dependency-lifecycle` -- Dependency Lifecycle
 
 | | |
 |---|---|
 | Contract | `dependency-lifecycle` (claim class `dependency_lifecycle_evidence`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/dependency_workers.py:run` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `dependency_lifecycle`; lifecycle binding: `blocked_op` |
+| Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
 | Consumes (graph) | [`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`)<br>[`02-license-scan`](#job-02-license-scan) (required, contract `license-inventory`) |
+| Declared inputs (registry/job-templates/02-dependency-lifecycle.json) | accepted SBOM<br>accepted license inventory<br>identified run-owned lifecycle reference table<br>explicit table age ceiling |
 | Produces | `runs/<run_id>/data/jobs/02-dependency-lifecycle/` |
 | Output files (registry/output-contracts/dependency-lifecycle.json) | manifest.json<br>status.json<br>outputs/dependency-lifecycle.json<br>outputs/reference-table-identity.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V11 (M05): needs a published, identified lifecycle reference table (no reference-table publisher exists) and its upstream SBOM and license workers; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
+| Next prerequisite | Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify a supplied current reference table live. |
 
 <a id="job-02-binary-hardening"></a>
 
@@ -2033,7 +2110,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/01-component-characterization.json) | target repository path<br>accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts<br>repository partition map *(optional)*<br>symbol and semantic indexes *(optional)*<br>build, source-SAST and operations evidence *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/01-component-characterization/` |
 | Output files (registry/output-contracts/component-map.json) | component-purpose-map.json<br>component-purpose-map.md<br>status.json |
-| Consumed by | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`deployment-hardening`](#step-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
+| Consumed by | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`deployment-hardening`](#step-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | Gaps | `blocked_on_02-evidence-assembly`, `dagster_lifecycle_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Publish an accepted COMPLETE 02-evidence-assembly envelope, then add the Dagster lifecycle and live persona qualification. |
 
@@ -2127,21 +2204,23 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-06-cve-reachability"></a>
 
-#### `06-cve-reachability` -- 06-cve-reachability
+#### `06-cve-reachability` -- CVE Reachability Evidence
 
 | | |
 |---|---|
-| Contract | `06-cve-reachability` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (06-cve-reachability/config.md) | SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)<br>dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)<br>license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict<br>component-purpose map<br>source imports/callers<br>runtime/deployment evidence<br>known dependency versions |
+| Contract | `cve-reachability` (claim class `cve_reachability_evidence_lead`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/dependency_workers.py:run` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `cve_reachability`; lifecycle binding: `blocked_op` |
+| Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
+| Consumes (graph) | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`) |
+| Declared inputs (registry/job-templates/06-cve-reachability.json) | accepted SCA match evidence<br>hash-bound run-owned static reachability evidence |
 | Produces | `runs/<run_id>/data/jobs/06-cve-reachability/` |
-| Output files (06-cve-reachability/config.md) | reachable/unreachable/unused classification (CVE reachability, as before)<br>dependency inventory: every component the SBOM lists, with resolved version where possible<br>license inventory: per-component license(s), flagging anything with no declared license, a copyleft license inconsistent with the stated business goal, or a license mismatch between the SBOM's own field and scancode.json<br>EOL/abandonware disposition per component: `known_eol`, `known_supported_but_old`, or `unknown` (per `static-evidence/sbom/dependency-lifecycle.json`) — cite the reference table entry when status is not `unknown`; never assert a component is current just because it's `unknown`<br>evidence citations<br>upgrade/remediation backlog |
+| Output files (registry/output-contracts/cve-reachability.json) | result.json<br>inputs.json<br>outputs/cve-reachability.json<br>outputs/reachability-evidence-identity.json |
 | Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_qualification` |
+| Next prerequisite | Build the full-review input assembler and complete live static-evidence qualification. |
 
 ### Lane `13-fuzz-target-triage`
 
@@ -2157,7 +2236,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `cpu` |
 | Dagster | standalone: `fuzz_target_triage`; lifecycle binding: `blocked_op` |
 | Composition | persona `reverse-engineer`, role `native-sast-curator`, tooling `pinned-native-sast` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `cve-reachability`) |
 | Declared inputs (registry/job-templates/13-fuzz-target-triage.json) | accepted component/native evidence<br>candidate entrypoints |
 | Produces | `runs/<run_id>/data/jobs/13-fuzz-target-triage/` |
 | Output files (registry/output-contracts/fuzz-target-triage.json) | fuzz-target-triage.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
@@ -2221,7 +2300,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `deployment-hardening`)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) (required, contract `fuzz-target-triage`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `cve-reachability`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `deployment-hardening`)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) (required, contract `fuzz-target-triage`) |
 | Declared inputs (registry/job-templates/07-red-team-adversarial.json) | exact accepted claim ledger<br>bounded reviewer decisions |
 | Produces | `runs/<run_id>/data/jobs/07-red-team-adversarial/` |
 | Output files (registry/output-contracts/07-red-team-adversarial.json) | red-team-adversarial.json<br>permission.json<br>status.json |
@@ -2345,7 +2424,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-dispatch-mode"></a>`dispatch-mode` | file | runs/<run_id>/data/dispatch-mode.json | [`set-dispatch-mode`](#step-set-dispatch-mode) | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`sre_operations_topology`](#step-sre-operations-topology) |
 | <a id="a-sut-origin"></a>`sut-origin` | record | remote Git origin of the system under test | -- | [`populate-targets`](#step-populate-targets) |
 | <a id="a-sut-pin"></a>`sut-pin` | record | fixtures/populate-targets.sh (origin URL + commit) | -- | [`populate-targets`](#step-populate-targets) |
-| <a id="a-sut-checkout"></a>`sut-checkout` | file | fixtures/targets/<project>/ (host path) | [`populate-targets`](#step-populate-targets) | [`stage-artifacts`](#step-stage-artifacts)<br>[`partition-analysis`](#step-partition-analysis)<br>[`supply-partition`](#step-supply-partition)<br>[`dev-analysis`](#step-dev-analysis)<br>[`supply-dev`](#step-supply-dev)<br>[`devops-analysis`](#step-devops-analysis)<br>[`supply-devops`](#step-supply-devops)<br>[`sre-analysis`](#step-sre-analysis)<br>[`supply-sre`](#step-supply-sre)<br>[`build-index`](#step-build-index)<br>[`build-classify`](#step-build-classify)<br>[`build-plan`](#step-build-plan)<br>[`build-resolution`](#step-build-resolution)<br>[`build-configure`](#step-build-configure)<br>[`native-build`](#step-native-build)<br>[`source-sast`](#step-source-sast)<br>[`legacy-pregather`](#step-legacy-pregather) |
+| <a id="a-sut-checkout"></a>`sut-checkout` | file | fixtures/targets/<project>/ (host path) | [`populate-targets`](#step-populate-targets) | [`stage-artifacts`](#step-stage-artifacts)<br>[`partition-analysis`](#step-partition-analysis)<br>[`supply-partition`](#step-supply-partition)<br>[`dev-analysis`](#step-dev-analysis)<br>[`supply-dev`](#step-supply-dev)<br>[`devops-analysis`](#step-devops-analysis)<br>[`supply-devops`](#step-supply-devops)<br>[`sre-analysis`](#step-sre-analysis)<br>[`supply-sre`](#step-supply-sre)<br>[`build-index`](#step-build-index)<br>[`build-classify`](#step-build-classify)<br>[`build-plan`](#step-build-plan)<br>[`build-resolution`](#step-build-resolution)<br>[`build-configure`](#step-build-configure)<br>[`native-build`](#step-native-build)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`license-scan`](#step-license-scan)<br>[`legacy-pregather`](#step-legacy-pregather) |
 | <a id="a-compose-env"></a>`compose-env` | file | orchestrator/dagster/.env | [`compose-setup`](#step-compose-setup)<br>[`code-location-start`](#step-code-location-start) | [`compose-up`](#step-compose-up)<br>[`code-location-start`](#step-code-location-start) |
 | <a id="a-host-dirs"></a>`host-dirs` | file | orchestrator/dagster/.host/ | [`compose-setup`](#step-compose-setup) | [`compose-up`](#step-compose-up) |
 | <a id="a-docker-engine"></a>`docker-engine` | state | Docker Desktop engine (the only engine; no native docker.service in the distro) | [`docker-check`](#step-docker-check)<br>[`docker-recover`](#step-docker-recover) | [`compose-up`](#step-compose-up)<br>[`b13-harmless-container`](#step-b13-harmless-container) |
@@ -2398,11 +2477,19 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-source-sast-rules"></a>`source-sast-rules` | file | data/source-sast/rules-v1.yml | -- | [`source-sast`](#step-source-sast) |
 | <a id="a-semgrep-image"></a>`semgrep-image` | record | appsec-review-process/registry/container-images/tool-semgrep.json | -- | [`source-sast`](#step-source-sast) |
 | <a id="a-source-sast-leads"></a>`source-sast-leads` | file | runs/<run_id>/data/jobs/02-source-sast/attempts/<attempt_id>/source-sast.json, source-sast-summary.md, b13-receipts.json | [`source-sast`](#step-source-sast) | -- |
+| <a id="a-syft-image"></a>`syft-image` | record | appsec-review-process/registry/container-images/tool-syft.json | -- | [`sbom-inventory`](#step-sbom-inventory) |
+| <a id="a-grype-image"></a>`grype-image` | record | appsec-review-process/registry/container-images/tool-grype.json | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
+| <a id="a-osv-image"></a>`osv-image` | record | appsec-review-process/registry/container-images/tool-osv-scanner.json | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
+| <a id="a-scancode-image"></a>`scancode-image` | record | appsec-review-process/registry/container-images/scancode-toolkit.json | -- | [`license-scan`](#step-license-scan) |
+| <a id="a-supplied-offline-grype-snapshot"></a>`supplied-offline-grype-snapshot` | record | operator-supplied dependency snapshot registry: snapshots/grype-db/<snapshot_id>/ | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
+| <a id="a-supplied-offline-osv-snapshot"></a>`supplied-offline-osv-snapshot` | record | operator-supplied dependency snapshot registry: snapshots/osv/<snapshot_id>/ | -- | [`sca-vulnerability-match`](#step-sca-vulnerability-match) |
+| <a id="a-run-owned-lifecycle-reference-table"></a>`run-owned-lifecycle-reference-table` | file | runs/<run_id>/inputs/<dependency-lifecycle-reference>.json | -- | [`dependency-lifecycle`](#step-dependency-lifecycle) |
+| <a id="a-run-owned-static-reachability-evidence"></a>`run-owned-static-reachability-evidence` | file | runs/<run_id>/inputs/<reachability-evidence>.json | -- | [`cve-reachability`](#step-cve-reachability) |
 | <a id="a-fixture-harmless-image"></a>`fixture-harmless-image` | record | appsec-review-process/registry/container-images/fixture-harmless.json | -- | [`b13-harmless-container`](#step-b13-harmless-container) |
 | <a id="a-b13-qualification-input"></a>`b13-qualification-input` | file | runs/<run_id>/inputs/b13-harmless-qualification.json | -- | [`b13-harmless-container`](#step-b13-harmless-container) |
 | <a id="a-b13-qualification-result"></a>`b13-qualification-result` | file | runs/<run_id>/data/jobs/b13-harmless-container/accepted.json and attempts/<attempt_id>/result.json | [`b13-harmless-container`](#step-b13-harmless-container) | -- |
 | <a id="a-lane-handoff"></a>`lane-handoff` | file | runs/<run_id>/ lane hand-off files (create_handoff.py) | [`lane-handoffs`](#step-lane-handoffs) | -- |
-| <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
+| <a id="a-job-00-intake"></a>`00-intake` | job output | runs/<run_id>/data/jobs/00-intake/ | [`phase1_intake`](#step-phase1-intake)<br>[`engagement_workflow`](#step-engagement-workflow)<br>[`op-workflow_intake`](#step-op-workflow-intake)<br>[`00-intake`](#job-00-intake) | [`set-dispatch-mode`](#step-set-dispatch-mode)<br>[`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`op-scope_check`](#step-op-scope-check)<br>[`op-native_plan_check`](#step-op-native-plan-check)<br>[`op-discovery_handoffs`](#step-op-discovery-handoffs)<br>[`op-workflow_publish`](#step-op-workflow-publish)<br>[`build-index`](#step-build-index)<br>[`source-sast`](#step-source-sast)<br>[`sbom-inventory`](#step-sbom-inventory)<br>[`build_discovery`](#step-build-discovery)<br>[`build_execution`](#step-build-execution)<br>[`evidence_index`](#step-evidence-index)<br>[`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery)<br>[`02-build-index`](#job-02-build-index)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest)<br>[`02-source-sast`](#job-02-source-sast)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest)<br>[`02-evidence-index`](#job-02-evidence-index)<br>[`02-secrets-inventory`](#job-02-secrets-inventory)<br>[`02-iac-config-scan`](#job-02-iac-config-scan)<br>[`02-container-image-inventory`](#job-02-container-image-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-binary-hardening`](#job-02-binary-hardening)<br>[`02-mobile-sast`](#job-02-mobile-sast) |
 | <a id="a-job-02-ossf-scorecard"></a>`02-ossf-scorecard` | job output | runs/<run_id>/data/jobs/02-ossf-scorecard/ | [`ossf_scorecard`](#step-ossf-scorecard)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-repository-partition-discovery"></a>`02-repository-partition-discovery` | job output | runs/<run_id>/data/jobs/02-repository-partition-discovery/ | [`repository_partition_discovery`](#step-repository-partition-discovery)<br>[`02-repository-partition-discovery`](#job-02-repository-partition-discovery) | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`dev-analysis`](#step-dev-analysis)<br>[`devops_project_discovery`](#step-devops-project-discovery)<br>[`devops-analysis`](#step-devops-analysis)<br>[`sre_operations_topology`](#step-sre-operations-topology)<br>[`build-index`](#step-build-index)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery)<br>[`02-build-index`](#job-02-build-index) |
 | <a id="a-job-02-dev-project-discovery"></a>`02-dev-project-discovery` | job output | runs/<run_id>/data/jobs/02-dev-project-discovery/ | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery) | [`build-index`](#step-build-index)<br>[`02-build-index`](#job-02-build-index)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
@@ -2413,11 +2500,11 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-build-plan"></a>`02-build-plan` | job output | runs/<run_id>/data/jobs/02-build-plan/ | [`build-plan`](#step-build-plan)<br>[`02-build-plan`](#job-02-build-plan) | [`02-build-resolution`](#job-02-build-resolution) |
 | <a id="a-job-02-build-resolution"></a>`02-build-resolution` | job output | runs/<run_id>/data/jobs/02-build-resolution/ | [`02-build-resolution`](#job-02-build-resolution) | [`build-configure`](#step-build-configure)<br>[`02-build-configure`](#job-02-build-configure) |
 | <a id="a-job-02-evidence-assembly"></a>`02-evidence-assembly` | job output | runs/<run_id>/data/jobs/02-evidence-assembly/ | [`02-evidence-assembly`](#job-02-evidence-assembly) | [`01-component-characterization`](#job-01-component-characterization) |
-| <a id="a-job-01-component-characterization"></a>`01-component-characterization` | job output | runs/<run_id>/data/jobs/01-component-characterization/ | [`01-component-characterization`](#job-01-component-characterization) | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`deployment-hardening`](#step-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
+| <a id="a-job-01-component-characterization"></a>`01-component-characterization` | job output | runs/<run_id>/data/jobs/01-component-characterization/ | [`01-component-characterization`](#job-01-component-characterization) | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`deployment-hardening`](#step-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | <a id="a-job-03-threat-model-dfd-stride"></a>`03-threat-model-dfd-stride` | job output | runs/<run_id>/data/jobs/03-threat-model-dfd-stride/ | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | <a id="a-job-04-asvs-masvs"></a>`04-asvs-masvs` | job output | runs/<run_id>/data/jobs/04-asvs-masvs/ | [`04-asvs-masvs`](#job-04-asvs-masvs) | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | <a id="a-job-05-native-memory"></a>`05-native-memory` | job output | runs/<run_id>/data/jobs/05-native-memory/ | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`05-native-memory`](#job-05-native-memory) | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
-| <a id="a-job-06-cve-reachability"></a>`06-cve-reachability` | job output | runs/<run_id>/data/jobs/06-cve-reachability/ | [`06-cve-reachability`](#job-06-cve-reachability) | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
+| <a id="a-job-06-cve-reachability"></a>`06-cve-reachability` | job output | runs/<run_id>/data/jobs/06-cve-reachability/ | [`cve-reachability`](#step-cve-reachability)<br>[`06-cve-reachability`](#job-06-cve-reachability) | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | <a id="a-job-13-fuzz-target-triage"></a>`13-fuzz-target-triage` | job output | runs/<run_id>/data/jobs/13-fuzz-target-triage/ | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) | [`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | <a id="a-job-15-deployment-hardening"></a>`15-deployment-hardening` | job output | runs/<run_id>/data/jobs/15-deployment-hardening/ | [`deployment-hardening`](#step-deployment-hardening)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) |
 | <a id="a-job-07-red-team-adversarial"></a>`07-red-team-adversarial` | job output | runs/<run_id>/data/jobs/07-red-team-adversarial/ | [`07-red-team-adversarial`](#job-07-red-team-adversarial) | [`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`09-independent-verification`](#job-09-independent-verification)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
@@ -2451,9 +2538,9 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-secrets-inventory"></a>`02-secrets-inventory` | job output | runs/<run_id>/data/jobs/02-secrets-inventory/ | [`02-secrets-inventory`](#job-02-secrets-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-iac-config-scan"></a>`02-iac-config-scan` | job output | runs/<run_id>/data/jobs/02-iac-config-scan/ | [`02-iac-config-scan`](#job-02-iac-config-scan) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
 | <a id="a-job-02-container-image-inventory"></a>`02-container-image-inventory` | job output | runs/<run_id>/data/jobs/02-container-image-inventory/ | [`02-container-image-inventory`](#job-02-container-image-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-sbom-inventory"></a>`02-sbom-inventory` | job output | runs/<run_id>/data/jobs/02-sbom-inventory/ | [`02-sbom-inventory`](#job-02-sbom-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
-| <a id="a-job-02-sca-vulnerability-match"></a>`02-sca-vulnerability-match` | job output | runs/<run_id>/data/jobs/02-sca-vulnerability-match/ | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-license-scan"></a>`02-license-scan` | job output | runs/<run_id>/data/jobs/02-license-scan/ | [`02-license-scan`](#job-02-license-scan) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
-| <a id="a-job-02-dependency-lifecycle"></a>`02-dependency-lifecycle` | job output | runs/<run_id>/data/jobs/02-dependency-lifecycle/ | [`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-sbom-inventory"></a>`02-sbom-inventory` | job output | runs/<run_id>/data/jobs/02-sbom-inventory/ | [`sbom-inventory`](#step-sbom-inventory)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`license-scan`](#step-license-scan)<br>[`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
+| <a id="a-job-02-sca-vulnerability-match"></a>`02-sca-vulnerability-match` | job output | runs/<run_id>/data/jobs/02-sca-vulnerability-match/ | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | [`cve-reachability`](#step-cve-reachability)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-cve-reachability`](#job-06-cve-reachability) |
+| <a id="a-job-02-license-scan"></a>`02-license-scan` | job output | runs/<run_id>/data/jobs/02-license-scan/ | [`license-scan`](#step-license-scan)<br>[`02-license-scan`](#job-02-license-scan) | [`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
+| <a id="a-job-02-dependency-lifecycle"></a>`02-dependency-lifecycle` | job output | runs/<run_id>/data/jobs/02-dependency-lifecycle/ | [`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-binary-hardening"></a>`02-binary-hardening` | job output | runs/<run_id>/data/jobs/02-binary-hardening/ | [`02-binary-hardening`](#job-02-binary-hardening) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-mobile-sast"></a>`02-mobile-sast` | job output | runs/<run_id>/data/jobs/02-mobile-sast/ | [`02-mobile-sast`](#job-02-mobile-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly) |

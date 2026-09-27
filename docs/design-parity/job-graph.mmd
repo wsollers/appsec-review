@@ -53,10 +53,10 @@ flowchart TD
   02_secrets_inventory -->|required| 02_evidence_assembly
   02_iac_config_scan -->|required| 02_evidence_assembly
   02_container_image_inventory -->|required| 02_evidence_assembly
-  02_sbom_inventory -->|required| 02_evidence_assembly
-  02_sca_vulnerability_match -->|required| 02_evidence_assembly
-  02_license_scan -->|required| 02_evidence_assembly
-  02_dependency_lifecycle -->|required| 02_evidence_assembly
+  02_sbom_inventory_post -->|required| 02_evidence_assembly
+  02_sca_vulnerability_match_post -->|required| 02_evidence_assembly
+  02_license_scan_post -->|required| 02_evidence_assembly
+  02_dependency_lifecycle_post -->|required| 02_evidence_assembly
   02_binary_hardening -->|required| 02_evidence_assembly
   02_mobile_sast -->|required| 02_evidence_assembly
   01_component_characterization["01-component-characterization (planned; not dispatched)"]
@@ -73,15 +73,17 @@ flowchart TD
   01_component_characterization -->|required| 05_native_memory_config
   02_native_sast -->|required| 05_native_memory_config
   02_ir_facts -->|required| 05_native_memory_config
-  06_cve_reachability["06-cve-reachability (planned; not dispatched)"]
-  01_component_characterization -->|required| 06_cve_reachability
+  06_cve_reachability_config["06-cve-reachability: resolve job configuration"] --> 06_cve_reachability_pre["06-cve-reachability: pre-validation"]
+  06_cve_reachability_pre --> 06_cve_reachability["06-cve-reachability: work or reuse"]
+  06_cve_reachability --> 06_cve_reachability_post["06-cve-reachability: post-validation and publish"]
+  02_sca_vulnerability_match_post -->|required| 06_cve_reachability_config
   13_fuzz_target_triage_config["13-fuzz-target-triage: resolve job configuration"] --> 13_fuzz_target_triage_pre["13-fuzz-target-triage: pre-validation"]
   13_fuzz_target_triage_pre --> 13_fuzz_target_triage["13-fuzz-target-triage: work or reuse"]
   13_fuzz_target_triage --> 13_fuzz_target_triage_post["13-fuzz-target-triage: post-validation and publish"]
   01_component_characterization -->|required| 13_fuzz_target_triage_config
   03_threat_model_dfd_stride -->|required| 13_fuzz_target_triage_config
   05_native_memory_post -->|required| 13_fuzz_target_triage_config
-  06_cve_reachability -->|required| 13_fuzz_target_triage_config
+  06_cve_reachability_post -->|required| 13_fuzz_target_triage_config
   15_deployment_hardening_config["15-deployment-hardening: resolve job configuration"] --> 15_deployment_hardening_pre["15-deployment-hardening: pre-validation"]
   15_deployment_hardening_pre --> 15_deployment_hardening["15-deployment-hardening: work or reuse"]
   15_deployment_hardening --> 15_deployment_hardening_post["15-deployment-hardening: post-validation and publish"]
@@ -93,7 +95,7 @@ flowchart TD
   03_threat_model_dfd_stride -->|required| 07_red_team_adversarial
   04_asvs_masvs -->|required| 07_red_team_adversarial
   05_native_memory_post -->|required| 07_red_team_adversarial
-  06_cve_reachability -->|required| 07_red_team_adversarial
+  06_cve_reachability_post -->|required| 07_red_team_adversarial
   15_deployment_hardening_post -->|required| 07_red_team_adversarial
   13_fuzz_target_triage_post -->|required| 07_red_team_adversarial
   08_blue_team_refutation["08-blue-team-refutation (planned; not dispatched)"]
@@ -183,16 +185,24 @@ flowchart TD
   00_intake_post -->|required| 02_iac_config_scan
   02_container_image_inventory["02-container-image-inventory (planned; not dispatched)"]
   00_intake_post -->|required| 02_container_image_inventory
-  02_sbom_inventory["02-sbom-inventory (planned; not dispatched)"]
-  00_intake_post -->|required| 02_sbom_inventory
-  02_sca_vulnerability_match["02-sca-vulnerability-match (planned; not dispatched)"]
-  02_sbom_inventory -->|required| 02_sca_vulnerability_match
-  02_license_scan["02-license-scan (planned; not dispatched)"]
-  00_intake_post -->|required| 02_license_scan
-  02_sbom_inventory -->|required| 02_license_scan
-  02_dependency_lifecycle["02-dependency-lifecycle (planned; not dispatched)"]
-  02_sbom_inventory -->|required| 02_dependency_lifecycle
-  02_license_scan -->|required| 02_dependency_lifecycle
+  02_sbom_inventory_config["02-sbom-inventory: resolve job configuration"] --> 02_sbom_inventory_pre["02-sbom-inventory: pre-validation"]
+  02_sbom_inventory_pre --> 02_sbom_inventory["02-sbom-inventory: work or reuse"]
+  02_sbom_inventory --> 02_sbom_inventory_post["02-sbom-inventory: post-validation and publish"]
+  00_intake_post -->|required| 02_sbom_inventory_config
+  02_sca_vulnerability_match_config["02-sca-vulnerability-match: resolve job configuration"] --> 02_sca_vulnerability_match_pre["02-sca-vulnerability-match: pre-validation"]
+  02_sca_vulnerability_match_pre --> 02_sca_vulnerability_match["02-sca-vulnerability-match: work or reuse"]
+  02_sca_vulnerability_match --> 02_sca_vulnerability_match_post["02-sca-vulnerability-match: post-validation and publish"]
+  02_sbom_inventory_post -->|required| 02_sca_vulnerability_match_config
+  02_license_scan_config["02-license-scan: resolve job configuration"] --> 02_license_scan_pre["02-license-scan: pre-validation"]
+  02_license_scan_pre --> 02_license_scan["02-license-scan: work or reuse"]
+  02_license_scan --> 02_license_scan_post["02-license-scan: post-validation and publish"]
+  00_intake_post -->|required| 02_license_scan_config
+  02_sbom_inventory_post -->|required| 02_license_scan_config
+  02_dependency_lifecycle_config["02-dependency-lifecycle: resolve job configuration"] --> 02_dependency_lifecycle_pre["02-dependency-lifecycle: pre-validation"]
+  02_dependency_lifecycle_pre --> 02_dependency_lifecycle["02-dependency-lifecycle: work or reuse"]
+  02_dependency_lifecycle --> 02_dependency_lifecycle_post["02-dependency-lifecycle: post-validation and publish"]
+  02_sbom_inventory_post -->|required| 02_dependency_lifecycle_config
+  02_license_scan_post -->|required| 02_dependency_lifecycle_config
   02_binary_hardening["02-binary-hardening (planned; not dispatched)"]
   00_intake_post -->|required| 02_binary_hardening
   02_mobile_sast["02-mobile-sast (planned; not dispatched)"]
