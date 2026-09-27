@@ -38,15 +38,16 @@ AUTHORITY_ROLES = {"07-red-team-adversarial": "red-team-adversary", "08-blue-tea
                    "09-independent-verification": "independent-verifier", JOB: "claim-ledger-custodian"}
 DECISION_PRODUCERS = {
     "07-red-team-adversarial": ("07-red-team-adversarial", "red-team-adversarial.json", "hypotheses",
-                                "reviewer", {"HYPOTHESIS": "under_review"}),
+                                "reviewer", "review_citations", {"HYPOTHESIS": "under_review"}),
     "08-blue-team-refutation": ("08-blue-team-refutation", "blue-team-refutation.json", "reviews",
-                                "blue_reviewer", {"SURVIVING": "narrowed", "REFUTED": "refuted",
+                                "blue_reviewer", "refutation_citations", {"SURVIVING": "narrowed", "REFUTED": "refuted",
                                                    "UNRESOLVED": "unresolved"}),
     "09-independent-verification": ("09-independent-verification", "independent-verification.json",
-                                    "verifications", "verifier", {"VERIFIED": "verified",
+                                    "verifications", "verifier", "verification_citations", {"VERIFIED": "verified",
                                     "REFUTED": "refuted", "UNRESOLVED": "unresolved",
                                     "BLOCKED": "unresolved"}),
 }
+DECISION_SCHEMAS = {job: job + ".schema.json" for job in DECISION_PRODUCERS}
 DECISION_PERMISSIONS = ["read-run-data", "write-run-data"]
 PROHIBITED_KEYS = frozenset({"finding", "findings", "severity", "cvss", "runtime_state",
     "observed_runtime", "compliance", "certification", "remediation_status"})
@@ -208,15 +209,12 @@ def load_decision(run_id: str, jobs_root: Path, request: dict[str, Any],
     The request selects a claim and producer only.  Paths, hashes, actor identity, disposition,
     permission receipt, and generations are all re-derived from the producer's accepted attempt.
     """
-    allowed = {"claim_id", "producer_job_id", "reason", "citations", "dissent_ids",
-               "causal_claim_ids", "supersedes_claim_id", "confidence"}
-    if not isinstance(request, dict) or not set(request) <= allowed or not {
-            "claim_id", "producer_job_id", "reason"} <= set(request):
+    if not isinstance(request, dict) or set(request) != {"claim_id", "producer_job_id"}:
         raise Blocked(f"{JOB}: decision request shape is not closed")
     producer = request["producer_job_id"]
     if producer not in DECISION_PRODUCERS:
         raise Blocked(f"{JOB}: decision producer is not an accepted downstream authority")
-    contract, result_name, collection, actor_field, statuses = DECISION_PRODUCERS[producer]
+    contract, result_name, collection, actor_field, citation_field, statuses = DECISION_PRODUCERS[producer]
     base = Path(jobs_root) / producer
     pointer_path = _regular_owned(base, "accepted.json")
     latest_path = _regular_owned(base, "latest.json")
@@ -261,6 +259,13 @@ def load_decision(run_id: str, jobs_root: Path, request: dict[str, Any],
         if file_hash(_regular_owned(attempt, required)) != artifact_records[required].get("sha256"):
             raise Blocked(f"{JOB}: decision producer {required} hash is invalid")
     result, permission = read_json(attempt / result_name), read_json(attempt / "permission.json")
+    try:
+        schema_errors = validate_document(result, DECISION_SCHEMAS[producer])
+    except (FileNotFoundError, ValueError) as exc:
+        raise Blocked(f"{JOB}: authoritative decision result schema is unavailable") from exc
+    if schema_errors:
+        raise Blocked(f"{JOB}: accepted decision result fails its closed contract schema ({schema_errors[0]})")
+    _reject_promotions(result)
     if (result.get("run_id") != run_id or result.get("stage") != producer or
             result.get("claim_boundary") != "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF"):
         raise Blocked(f"{JOB}: decision result identity or claim boundary is invalid")
@@ -292,10 +297,12 @@ def load_decision(run_id: str, jobs_root: Path, request: dict[str, Any],
         "artifact_path": result_name, "artifact_sha256": "sha256:" + file_hash(attempt / result_name),
         "permission_receipt_path": "permission.json",
         "permission_receipt_sha256": "sha256:" + file_hash(attempt / "permission.json"),
-        "reason": request["reason"]}
+        "reason": f"Accepted {producer} disposition {row['status']} from its exact current result."}
     return {"claim_id": request["claim_id"], "to_status": statuses[row["status"]],
-        "authority": authority, **{key: deepcopy(request[key]) for key in
-        ("citations", "dissent_ids", "causal_claim_ids", "supersedes_claim_id", "confidence") if key in request}}
+        "authority": authority, "citations": deepcopy(row[citation_field]),
+        "dissent_ids": deepcopy(row["dissent_ids"]),
+        "causal_claim_ids": deepcopy(row["causal_claim_ids"]),
+        "supersedes_claim_id": row["supersedes_claim_id"], "confidence": row["confidence"]}
 
 
 def validate_ledger(value: dict[str, Any]) -> list[str]:

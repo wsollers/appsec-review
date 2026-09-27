@@ -61,11 +61,16 @@ class ClaimLedgerTests(unittest.TestCase):
         attempt.mkdir(parents=True)
         actor = {"job_id": producer, "attempt_id": attempt_id, "role_id": role,
                  "source_generation": source_generation, "component_generation": component_generation}
+        citation_field = {"07-red-team-adversarial": "review_citations",
+                          "08-blue-team-refutation": "refutation_citations",
+                          "09-independent-verification": "verification_citations"}[producer]
         result = {"schema": "fixture", "run_id": "run1", "stage": producer,
                   "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
                   collection: [{"claim_id": claim_id, "status": status,
                                 "source_generation": source_generation,
-                                "component_generation": component_generation, actor_field: actor}]}
+                                "component_generation": component_generation, actor_field: actor,
+                                citation_field: [], "dissent_ids": [], "causal_claim_ids": [],
+                                "supersedes_claim_id": None, "confidence": "medium"}]}
         permission = {"schema": "appsec-review/producer-permission-receipt/1.0", "run_id": "run1",
                       "job_id": producer, "source_snapshot_sha256": source_generation,
                       "permissions": ["read-run-data", "write-run-data"]}
@@ -85,6 +90,13 @@ class ClaimLedgerTests(unittest.TestCase):
                    "hashes": execution_state.tree_hashes(attempt), "accepted_at": "2026-01-01T00:00:02Z"}
         execution_state.atomic_json(base / "accepted.json", pointer)
         return base, attempt
+
+    def decision_schema_gate(self, value, schema):
+        if schema in ledger.DECISION_SCHEMAS.values():
+            allowed = {"schema", "run_id", "stage", "claim_boundary", "hypotheses", "reviews", "verifications"}
+            unknown = set(value) - allowed
+            return ["unknown field: " + sorted(unknown)[0]] if unknown else []
+        return validate_document(value, schema)
 
     def reseal_decision(self, base: Path, attempt: Path, changed_artifact: str):
         envelope = execution_state.read_json(attempt / "result.json")
@@ -154,7 +166,11 @@ class ClaimLedgerTests(unittest.TestCase):
     def test_decision_loader_rejects_missing_traversal_symlink_and_resealed_forgery(self):
         prior = ledger.build_ledger("run1", "attempt-1", self.candidates()[:1])
         claim = prior["claim_states"][0]["claim_id"]
-        request = {"claim_id": claim, "producer_job_id": "09-independent-verification", "reason": "proof"}
+        request = {"claim_id": claim, "producer_job_id": "09-independent-verification"}
+        attacker = {**request, "citations": [{"citation_id": "nonexistent"}],
+                    "reason": "attacker supplied authority"}
+        with self.assertRaisesRegex(execution_state.Blocked, "shape is not closed"):
+            ledger.build_ledger("run1", "next", [], prior, [attacker], Path("/not-used"))
         with tempfile.TemporaryDirectory() as directory:
             jobs = Path(directory) / "jobs"
             base, attempt = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
@@ -191,7 +207,8 @@ class ClaimLedgerTests(unittest.TestCase):
             execution_state.atomic_json(attempt / "independent-verification.json", result)
             self.reseal_decision(base, attempt, "independent-verification.json")
             with self.assertRaisesRegex(execution_state.Blocked, "actor"):
-                ledger.build_ledger("run1", "next", [], prior, [request], jobs)
+                with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
+                    ledger.build_ledger("run1", "next", [], prior, [request], jobs)
         with tempfile.TemporaryDirectory() as directory:
             jobs = Path(directory) / "jobs"
             base, attempt = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
@@ -201,7 +218,19 @@ class ClaimLedgerTests(unittest.TestCase):
             execution_state.atomic_json(attempt / "permission.json", permission)
             self.reseal_decision(base, attempt, "permission.json")
             with self.assertRaisesRegex(execution_state.Blocked, "permission"):
-                ledger.build_ledger("run1", "next", [], prior, [request], jobs)
+                with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
+                    ledger.build_ledger("run1", "next", [], prior, [request], jobs)
+        with tempfile.TemporaryDirectory() as directory:
+            jobs = Path(directory) / "jobs"
+            base, attempt = self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
+                prior["source_generation"], prior["component_generation"], "verify-1")
+            result = execution_state.read_json(attempt / "independent-verification.json")
+            result["severity"] = "CRITICAL"
+            execution_state.atomic_json(attempt / "independent-verification.json", result)
+            self.reseal_decision(base, attempt, "independent-verification.json")
+            with self.assertRaisesRegex(execution_state.Blocked, "closed contract schema"):
+                with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
+                    ledger.build_ledger("run1", "next", [], prior, [request], jobs)
 
     def test_authorized_decisions_append_and_illegal_or_self_verifying_decisions_fail(self):
         prior = ledger.build_ledger("run1", "attempt-1", self.candidates()[:1])
@@ -210,22 +239,23 @@ class ClaimLedgerTests(unittest.TestCase):
             jobs = Path(directory) / "jobs"
             self.publish_decision(jobs, "07-red-team-adversarial", claim, "HYPOTHESIS",
                                   prior["source_generation"], prior["component_generation"], "red-1")
-            red = {"claim_id": claim, "producer_job_id": "07-red-team-adversarial",
-                   "reason": "Candidate selected for adversarial review."}
-            reviewed = ledger.build_ledger("run1", "attempt-2", [], prior, [red], jobs)
+            red = {"claim_id": claim, "producer_job_id": "07-red-team-adversarial"}
+            with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
+                reviewed = ledger.build_ledger("run1", "attempt-2", [], prior, [red], jobs)
             self.assertEqual(reviewed["claim_states"][0]["status"], "under_review")
             self.publish_decision(jobs, "09-independent-verification", claim, "VERIFIED",
                                   prior["source_generation"], prior["component_generation"], "verify-1")
-            verify = {"claim_id": claim, "producer_job_id": "09-independent-verification",
-                      "reason": "Independent evidence satisfied obligations."}
-            verified = ledger.build_ledger("run1", "attempt-3", [], reviewed, [verify], jobs)
+            verify = {"claim_id": claim, "producer_job_id": "09-independent-verification"}
+            with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
+                verified = ledger.build_ledger("run1", "attempt-3", [], reviewed, [verify], jobs)
             self.assertEqual(verified["claim_states"][0]["status"], "verified")
             for upstream, expected in (("SURVIVING", "narrowed"), ("REFUTED", "refuted"),
                                        ("UNRESOLVED", "unresolved")):
                 self.publish_decision(jobs, "08-blue-team-refutation", claim, upstream,
                                       prior["source_generation"], prior["component_generation"], "blue-" + expected)
-                blue = {"claim_id": claim, "producer_job_id": "08-blue-team-refutation", "reason": expected}
-                decided = ledger.build_ledger("run1", "attempt-blue-" + expected, [], reviewed, [blue], jobs)
+                blue = {"claim_id": claim, "producer_job_id": "08-blue-team-refutation"}
+                with mock.patch.object(ledger, "validate_document", side_effect=self.decision_schema_gate):
+                    decided = ledger.build_ledger("run1", "attempt-blue-" + expected, [], reviewed, [blue], jobs)
                 self.assertEqual(decided["claim_states"][0]["status"], expected)
             with self.assertRaisesRegex(execution_state.Blocked, "exact accepted"):
                 ledger.build_ledger("run1", "attempt-x", [], reviewed, [verify])
