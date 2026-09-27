@@ -3,5 +3,6 @@
   "required_files":["cfg-manifest.json","status.json","permission.json","lineage.json"],
   "required_status_fields":["process","status","records","static_only","qualification"],
   "result_schema":{"artifact":"cfg-manifest.json","schema_file":"binary-cfg.schema.json"},
+  "claim_class":{"claim_class_id":"binary_cfg_static_evidence","allowed_assertions":["cfg-record","coverage-gap"],"forbidden_promotions":["finding","severity","runtime-state"]},
   "validation_rules":["re-verify exact accepted triage and symbol-index results","derive function identities from binary hash and address","reject cross-binary edges and stale build lineage","never claim runtime reachability, findings or severity","keep missing symbols, unsupported architecture, partial CFG and M02 states explicit"]
 }

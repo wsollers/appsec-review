@@ -108,6 +108,14 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "ir_static_evidence",
         "allowed_assertions": {"debug-location", "pointer-memory-fact", "coverage-gap"},
     },
+    "debug-symbol-index": {"claim_class_id": "debug_symbol_static_evidence",
+        "allowed_assertions": {"symbol-record", "coverage-gap"}},
+    "binary-triage": {"claim_class_id": "binary_inventory_static_evidence",
+        "allowed_assertions": {"binary-property", "coverage-gap"}},
+    "binary-cfg": {"claim_class_id": "binary_cfg_static_evidence",
+        "allowed_assertions": {"cfg-record", "coverage-gap"}},
+    "binary-intelligence": {"claim_class_id": "binary_lead_evidence",
+        "allowed_assertions": {"binary-intelligence-lead", "source-citation", "coverage-gap"}},
     "component-map": {
         "claim_class_id": "component_characterization",
         "allowed_assertions": {

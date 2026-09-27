@@ -9,6 +9,7 @@
     "records", "static_only", "qualification"
   ],
   "result_schema": {"artifact": "binary-intelligence.json", "schema_file": "binary-intelligence.schema.json"},
+  "claim_class": {"claim_class_id":"binary_lead_evidence","allowed_assertions":["binary-intelligence-lead","source-citation","coverage-gap"],"forbidden_promotions":["finding","severity","runtime-state"]},
   "validation_rules": [
     "re-verify exact accepted triage and CFG results and preserve native build identity",
     "every normalized lead cites accepted upstream result hashes and the same binary identity",

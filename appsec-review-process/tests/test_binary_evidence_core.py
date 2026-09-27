@@ -14,8 +14,12 @@ FIXTURE = ROOT / "tests/fixtures/binary-evidence/raw-records.json"
 sys.path.insert(0, str(ROOT))
 
 import binary_evidence_core as core  # noqa: E402
-from execution_state import Blocked, atomic_json, digest  # noqa: E402
+import evidence_assembly as assembly  # noqa: E402
+from execution_state import Blocked, atomic_json, digest, file_hash, tree_hashes  # noqa: E402
+from publish_job_output import ACCEPTED_SCHEMA  # noqa: E402
 from schema_validate import validate_document  # noqa: E402
+from validate_job_output import _claim_class_errors  # noqa: E402
+from worker_result import artifact_records, terminal_envelope  # noqa: E402
 
 H = "sha256:" + "1" * 64
 H2 = "sha256:" + "2" * 64
@@ -27,18 +31,19 @@ NATIVE = {"job_id": "02-native-build", "attempt_id": "native-a", "result_sha256"
           "fingerprint": "sha256:" + "6" * 64, "pointer_sha256": "sha256:" + "7" * 64,
           "envelope_sha256": H3, "source_revision": "a" * 40,
           "source_snapshot_sha256": "sha256:" + "4" * 64, "binaries": [BINARY]}
+NATIVE["source_tree_sha256"] = "sha256:" + "8" * 64
 
 
 def raw(job: str, record: dict) -> dict:
     return {"schema": core.RAW_SCHEMA, "job_id": job,
             "native_build": {key: NATIVE[key] for key in NATIVE if key != "binaries"},
-            "image": {"image_id": "audit-binary-analysis", "image_digest": None,
-                      "status": "M02_UNRESOLVED"},
+            "image": {"image_id": "audit-binary-analysis", "image_digest": "sha256:" + "9" * 64,
+                      "status": "PINNED"},
             "config": {"static_only": True, "adapter_id": "fixture-normalizer",
                        "adapter_version": "1"},
             "records": [{"binary_id": BINARY["binary_id"], "binary_sha256": H,
                          "build_identity_sha256": H2, **record}],
-            "gaps": [core.M02_GAP]}
+            "gaps": []}
 
 
 def inputs(job: str, value: dict, upstream=None) -> dict:
@@ -65,12 +70,15 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
                 "result_sha256": H3, "envelope_sha256": H2, "result": triage},
         }
         cfg_raw = raw("02-binary-cfg", self.fixture["cfg"])
+        symbols = {item["name"]: item["symbol_id"] for item in debug["records"][0]["symbols"]}
+        for function in cfg_raw["records"][0]["functions"]:
+            function["symbol_id"] = symbols[function["name"]]
         cfg_inputs = inputs("02-binary-cfg", cfg_raw, upstream)
         cfg = core.normalize("02-binary-cfg", cfg_inputs, "a-cfg")
         intel_record = copy.deepcopy(self.fixture["intelligence"])
         intel_record["citations"] = [
             {"job_id": "02-binary-triage", "result_sha256": H3,
-             "binary_id": BINARY["binary_id"], "record_identity": "format:ELF"},
+             "binary_id": BINARY["binary_id"], "record_identity": triage["records"][0]["triage_id"]},
             {"job_id": "02-binary-cfg", "result_sha256": H2,
              "binary_id": BINARY["binary_id"], "record_identity": cfg["records"][0]["functions"][0]["function_id"]},
         ]
@@ -89,7 +97,6 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
                               (intel, "binary-intelligence.schema.json")):
             self.assertEqual(validate_document(value, schema), [])
             self.assertEqual(value["tool"]["raw_evidence_sha256"], "sha256:" + "5" * 64)
-            self.assertIn(core.M02_GAP, value["coverage_gaps"])
         self.assertEqual([x["name"] for x in debug["records"][0]["symbols"]], ["main", "helper"])
         self.assertEqual(triage["records"][0]["imports"], ["libc.so.6", "puts"])
         self.assertRegex(cfg["records"][0]["functions"][0]["function_id"], r"^fn_[0-9a-f]{16}$")
@@ -117,8 +124,8 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
                  mock.patch.object(core, "_code_hashes", return_value={}):
                 with self.assertRaises(Blocked): core.current_inputs("run-binary", "02-binary-triage")
         claimed = copy.deepcopy(value)
-        claimed["image"] = {"image_id": "audit-binary-analysis", "image_digest": H,
-                            "status": "PINNED"}
+        claimed["image"] = {"image_id": "audit-binary-analysis", "image_digest": None,
+                            "status": "M02_UNRESOLVED"}
         with self.assertRaises(Blocked): core._validate_raw(claimed, "02-binary-triage")
 
     def test_cfg_rejects_mixed_accepted_generations(self):
@@ -133,9 +140,13 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
             "02-binary-triage": {"attempt_id": "a-triage", "contract_id": "binary-triage",
                 "result_sha256": H3, "envelope_sha256": H2, "result": triage},
         }
+        symbols = {item["name"]: item["symbol_id"] for item in debug["records"][0]["symbols"]}
+        cfg_raw = raw("02-binary-cfg", self.fixture["cfg"])
+        for function in cfg_raw["records"][0]["functions"]:
+            function["symbol_id"] = symbols[function["name"]]
         with self.assertRaisesRegex(Blocked, "mixed native-build generation"):
             core.normalize("02-binary-cfg",
-                inputs("02-binary-cfg", raw("02-binary-cfg", self.fixture["cfg"]), upstream), "a-cfg")
+                inputs("02-binary-cfg", cfg_raw, upstream), "a-cfg")
 
     def test_stripped_packed_unknown_and_partial_are_explicit_gaps(self):
         debug_record = copy.deepcopy(self.fixture["debug"]); debug_record["symbol_status"] = "PARTIAL"
@@ -162,6 +173,68 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
                                                          "schema_file": schema_name})
             self.assertTrue({"permission.json", "lineage.json"}.issubset(contract["required_files"]))
             self.assertNotIn("claim_types", contract)
+
+    def test_m02_blocks_publication_and_records_common_blocked_envelope(self):
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(core, "root", return_value=Path(folder)):
+            with self.assertRaisesRegex(Blocked, "M02"):
+                core.run("run-binary", "dag", "02-binary-triage")
+            attempts = list((Path(folder) / "attempts").iterdir())
+            self.assertEqual(len(attempts), 1)
+            envelope = json.loads((attempts[0] / "result.json").read_text())
+            self.assertEqual(envelope["execution_status"], "BLOCKED")
+            self.assertEqual(envelope["worker_kind"], "deterministic_python")
+
+    def test_claim_ceiling_and_schema_closure_matrix(self):
+        for _job, (contract_id, _result, schema) in core.SPECS.items():
+            contract = json.loads((ROOT / f"registry/output-contracts/{contract_id}.json").read_text())
+            self.assertEqual(_claim_class_errors(contract, {"lead": "static evidence"}), [])
+            for forbidden in ("finding", "severity", "runtime_state"):
+                self.assertTrue(_claim_class_errors(contract, {forbidden: "high"}))
+        value = raw("02-debug-symbol-index", self.fixture["debug"])
+        result = core.normalize("02-debug-symbol-index", inputs("02-debug-symbol-index", value), "a")
+        result["authority"]["extra"] = True
+        self.assertTrue(validate_document(result, "debug-symbol-index.schema.json"))
+
+    def test_duplicate_binary_ids_and_unresolved_citations_are_rejected(self):
+        value = raw("02-debug-symbol-index", self.fixture["debug"])
+        inp = inputs("02-debug-symbol-index", value)
+        inp["native_build"]["binaries"].append(copy.deepcopy(BINARY))
+        with self.assertRaisesRegex(Blocked, "repeats a binary identity"):
+            core.normalize("02-debug-symbol-index", inp, "a")
+
+    def test_f02_consumes_all_four_canonical_receipts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            supply = Path(folder); source = "sha256:" + "a" * 64; build = "sha256:" + "b" * 64
+            for index, (job, (contract, result_name, _schema)) in enumerate(core.SPECS.items()):
+                producer = supply / "producers" / job; attempt_id = f"attempt-{index}"
+                attempt = producer / "attempts" / attempt_id; attempt.mkdir(parents=True)
+                atomic_json(attempt / "permission.json", {"schema": assembly.PERMISSION_SCHEMA,
+                    "run_id": "run", "job_id": job, "source_snapshot_sha256": source,
+                    "permissions": core._permissions(job)})
+                atomic_json(attempt / "lineage.json", {"schema": assembly.LINEAGE_SCHEMA,
+                    "run_id": "run", "job_id": job, "source_snapshot_sha256": source,
+                    "build_lineage_sha256": build})
+                atomic_json(attempt / result_name, {"fixture": True})
+                fingerprint = "sha256:" + str(index + 1) * 64
+                envelope = terminal_envelope(run_id="run", job_id=job, attempt_id=attempt_id,
+                    worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+                    input_fingerprint=fingerprint, output_contract=contract,
+                    started_at="2026-09-27T00:00:00Z", finished_at="2026-09-27T00:00:01Z",
+                    summary="fixture", artifacts=artifact_records(attempt,
+                        ["permission.json", "lineage.json", result_name]))
+                atomic_json(attempt / "result.json", envelope)
+                pointer = {"schema": ACCEPTED_SCHEMA, "status": "OK", "run_id": "run", "job": job,
+                    "attempt_id": attempt_id, "fingerprint": fingerprint, "envelope_path": "result.json",
+                    "envelope_sha256": file_hash(attempt / "result.json"), "hashes": tree_hashes(attempt),
+                    "accepted_at": "2026-09-27T00:00:02Z"}
+                atomic_json(producer / "accepted.json", pointer); atomic_json(producer / "latest.json", {"attempt_id": attempt_id})
+                iid = f"{index + 1:032x}"
+                entry, _ = assembly._producer(supply, "run", source,
+                    {"job": job, "contract": contract, "allowed_skip_reasons": []},
+                    {"source_snapshot_sha256": source, "build_lineage_sha256": build,
+                     "permissions": core._permissions(job), "terminal_instance_ids": [iid]},
+                    {iid: {"instance_id": iid, "state": "succeeded", "group_id": job[3:][:40]}})
+                self.assertEqual(entry["disposition"], "accepted")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"binary-evidence-image.schema.json","type":"object","additionalProperties":false,"required":["image_id","image_digest","status"],"properties":{"image_id":{"const":"audit-binary-analysis"},"image_digest":{"type":"string","pattern":"^sha256:[0-9a-f]{64}$"},"status":{"const":"PINNED"}}}

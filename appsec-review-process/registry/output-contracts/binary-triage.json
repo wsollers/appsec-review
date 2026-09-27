@@ -3,5 +3,6 @@
   "required_files":["binary-triage-manifest.json","status.json","permission.json","lineage.json"],
   "required_status_fields":["process","status","records","static_only","qualification"],
   "result_schema":{"artifact":"binary-triage-manifest.json","schema_file":"binary-triage.schema.json"},
+  "claim_class":{"claim_class_id":"binary_inventory_static_evidence","allowed_assertions":["binary-property","coverage-gap"],"forbidden_promotions":["finding","severity","runtime-state"]},
   "validation_rules":["bind exact accepted native-build and binary/build identities","publish deterministic format, architecture and hardening inventory only","bind config and raw evidence hashes","never execute target binaries or promote inventory to a finding","keep packed, stripped, unknown, unsupported and M02 states explicit"]
 }

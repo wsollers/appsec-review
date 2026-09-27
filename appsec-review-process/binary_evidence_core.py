@@ -11,6 +11,7 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import build_replay
 import native_build
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
@@ -62,6 +63,11 @@ def _native(run_id: str) -> tuple[Path, dict[str, Any]]:
     pointer = read_json(native_build.root(run_id) / "accepted.json")
     result = read_json(attempt / native_build.RESULT)
     inputs = read_json(attempt / "inputs.json")
+    attested_tree = inputs.get("source_tree_sha256")
+    target = Path(inputs.get("target_path", ""))
+    if (not isinstance(attested_tree, str) or not attested_tree.startswith("sha256:") or
+            not target.is_absolute() or build_replay.source_tree_sha256(target) != attested_tree):
+        raise Blocked("binary evidence: E02 source_tree_sha256 is absent or differs from current source")
     envelope = read_json(attempt / "result.json")
     envelope_hashes = {item["path"]: "sha256:" + item["sha256"] for item in envelope["artifacts"]}
     binaries = []
@@ -92,7 +98,8 @@ def _native(run_id: str) -> tuple[Path, dict[str, Any]]:
         "result_sha256": "sha256:" + file_hash(attempt / native_build.RESULT),
         "envelope_sha256": "sha256:" + pointer["envelope_sha256"],
         "source_revision": result["source_revision"],
-        "source_snapshot_sha256": inputs["source_snapshot_sha256"], "binaries": binaries,
+        "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+        "source_tree_sha256": attested_tree, "binaries": binaries,
     }
     return attempt, binding
 
@@ -124,17 +131,23 @@ def _code_hashes(job: str) -> dict[str, str]:
              f"registry/output-contracts/{contract}.json", f"registry/job-templates/{job}.json"]
     values = {name: file_hash(ROOT / name) for name in files}
     values["schemas/" + schema] = file_hash(ROOT.parent / "schemas" / schema)
+    for name in ("binary-evidence-native.schema.json", "binary-evidence-authority.schema.json",
+                 "binary-evidence-image.schema.json", "binary-evidence-tool.schema.json",
+                 "binary-evidence-upstream.schema.json"):
+        values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     return values
 
 
 def current_inputs(run_id: str, job: str) -> dict[str, Any]:
+    raise Blocked(f"{job}: M02 pinned binary image and authenticated static adapter remain unresolved")
+    # The normalization core below is intentionally unreachable from publication until M02 lands.
     path = control_path(run_id, job)
     if not path.is_file() or path.is_symlink():
         raise Blocked(f"{job}: missing run-owned static evidence input")
     raw = read_json(path)
     _validate_raw(raw, job)
     _attempt, native = _native(run_id)
-    if raw["native_build"] != {k: native[k] for k in ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "result_sha256", "envelope_sha256", "source_revision", "source_snapshot_sha256")}:
+    if raw["native_build"] != {k: native[k] for k in ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "result_sha256", "envelope_sha256", "source_revision", "source_snapshot_sha256", "source_tree_sha256")}:
         raise Blocked(f"{job}: raw evidence names a stale or cross-run native build")
     return {
         "run_id": run_id, "job_id": job, "native_build": native,
@@ -150,25 +163,27 @@ def _validate_raw(raw: Any, job: str) -> None:
         raise Blocked(f"{job}: raw evidence has a non-closed top-level shape")
     if raw["schema"] != RAW_SCHEMA or raw["job_id"] != job:
         raise Blocked(f"{job}: raw evidence schema or job identity is wrong")
-    native_keys = {"job_id", "attempt_id", "fingerprint", "pointer_sha256", "result_sha256", "envelope_sha256", "source_revision", "source_snapshot_sha256"}
+    native_keys = {"job_id", "attempt_id", "fingerprint", "pointer_sha256", "result_sha256", "envelope_sha256", "source_revision", "source_snapshot_sha256", "source_tree_sha256"}
     if not isinstance(raw["native_build"], dict) or set(raw["native_build"]) != native_keys:
         raise Blocked(f"{job}: raw native-build binding is not closed")
     image = raw["image"]
     if not isinstance(image, dict) or set(image) != {"image_id", "image_digest", "status"}:
         raise Blocked(f"{job}: image identity is not closed")
-    if image["status"] != "M02_UNRESOLVED" or image["image_digest"] is not None:
-        raise Blocked(f"{job}: nominal lane may not claim an M02 image identity")
+    if (image["status"] != "PINNED" or not isinstance(image["image_digest"], str) or
+            not image["image_digest"].startswith("sha256:")):
+        raise Blocked(f"{job}: future normalization requires an M02-pinned image identity")
     config = raw["config"]
     if not isinstance(config, dict) or set(config) != {"static_only", "adapter_id", "adapter_version"} or config["static_only"] is not True:
         raise Blocked(f"{job}: static-only configuration is required")
     if not isinstance(raw["records"], list) or not isinstance(raw["gaps"], list):
         raise Blocked(f"{job}: records and gaps must be arrays")
-    if M02_GAP not in raw["gaps"]:
-        raise Blocked(f"{job}: unresolved M02 prerequisite must remain explicit")
 
 
 def _binary_map(inputs: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {item["binary_id"]: item for item in inputs["native_build"]["binaries"]}
+    values = {item["binary_id"]: item for item in inputs["native_build"]["binaries"]}
+    if len(values) != len(inputs["native_build"]["binaries"]):
+        raise Blocked("binary evidence: accepted native build repeats a binary identity")
+    return values
 
 
 def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
@@ -176,7 +191,7 @@ def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, An
     binaries = _binary_map(inputs)
     native_projection = {key: inputs["native_build"][key] for key in
         ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "result_sha256",
-         "envelope_sha256", "source_revision", "source_snapshot_sha256")}
+         "envelope_sha256", "source_revision", "source_snapshot_sha256", "source_tree_sha256")}
     for name, upstream in inputs["upstream"].items():
         if upstream["result"].get("native_build") != native_projection:
             raise Blocked(f"{job}: accepted {name} result belongs to a mixed native-build generation")
@@ -199,9 +214,10 @@ def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, An
     }[job]
     return {
         "schema": schema, "run_id": inputs["run_id"], "job_id": job,
-        "attempt_id": attempt_id, "status": "OK_WITH_GAPS",
+        "attempt_id": attempt_id, "status": "OK_WITH_GAPS" if raw["gaps"] else "OK",
         "native_build": native_projection,
-        "upstream": upstream, "image": raw["image"],
+        "upstream": upstream, "authority": {"analysis_authority": "M02_PINNED_ADAPTER",
+            "source_tree_sha256": inputs["native_build"]["source_tree_sha256"]}, "image": raw["image"],
         "tool": {"adapter_id": raw["config"]["adapter_id"],
                  "adapter_version": raw["config"]["adapter_version"],
                  "config_sha256": inputs["config_sha256"],
@@ -231,7 +247,9 @@ def _normalize_record(job: str, item: dict[str, Any], binary: dict[str, Any], in
             _closed(symbol, {"address", "size", "name", "kind", "source_path", "line"}, job)
             source = symbol["source_path"]
             if source is not None: _safe_rel(source, f"{job} symbol source")
-            symbols.append(dict(symbol))
+            symbols.append({**symbol, "symbol_id": "sym_" + digest({"binary": binary["sha256"],
+                "address": symbol["address"], "name": symbol["name"],
+                "source_path": symbol["source_path"], "line": symbol["line"]})[:16]})
         symbols.sort(key=lambda x: (x["address"], x["name"], x["source_path"] or "", x["line"] or 0))
         duplicate = len({(x["address"], x["name"]) for x in symbols}) != len(symbols)
         automatic = [] if item["symbol_status"] == "PRESENT" else ["symbol-status:" + item["symbol_status"].lower()]
@@ -250,18 +268,24 @@ def _normalize_record(job: str, item: dict[str, Any], binary: dict[str, Any], in
         if item["architecture"] not in {"x86", "x86_64", "arm", "aarch64"}: gaps.append("unsupported-architecture")
         if item["packed"] != "NO": gaps.append("packed-state:" + item["packed"].lower())
         if item["stripped"] != "NO": gaps.append("stripped-state:" + item["stripped"].lower())
-        return {**_base(item, binary), "format": item["format"], "architecture": item["architecture"],
+        triage_id = "triage_" + digest({"binary": binary["sha256"], "format": item["format"],
+            "architecture": item["architecture"], "hardening": hardening})[:16]
+        return {**_base(item, binary), "triage_id": triage_id, "format": item["format"], "architecture": item["architecture"],
                 "hardening": hardening, "sections": sorted(set(item["sections"])),
                 "imports": sorted(set(item["imports"])), "packed": item["packed"],
                 "stripped": item["stripped"], "gaps": sorted(set(gaps))}
     if job == "02-binary-cfg":
         _closed(item, base | {"architecture", "functions", "edges", "gaps"}, job)
-        upstream_bins = {r["binary_id"] for dep in inputs["upstream"].values() for r in dep["result"]["records"]}
-        if binary["binary_id"] not in upstream_bins:
-            raise Blocked(f"{job}: CFG binary absent from accepted triage/symbol lineage")
+        debug_records = [r for r in inputs["upstream"]["02-debug-symbol-index"]["result"]["records"] if r["binary_id"] == binary["binary_id"]]
+        triage_records = [r for r in inputs["upstream"]["02-binary-triage"]["result"]["records"] if r["binary_id"] == binary["binary_id"]]
+        if len(debug_records) != 1 or len(triage_records) != 1 or triage_records[0]["architecture"] != item["architecture"]:
+            raise Blocked(f"{job}: CFG does not exactly join one matching symbol/triage binary and architecture")
+        symbol_ids = {s["symbol_id"] for s in debug_records[0]["symbols"]}
         functions = []
         for fn in item["functions"]:
             _closed(fn, {"address", "name", "block_count", "symbol_id"}, job)
+            if fn["symbol_id"] is not None and fn["symbol_id"] not in symbol_ids:
+                raise Blocked(f"{job}: CFG function cites an absent symbol identity")
             functions.append({**fn, "function_id": "fn_" + digest({"binary": binary["sha256"], "address": fn["address"]})[:16]})
         functions.sort(key=lambda x: (x["address"], x["name"]))
         ids = {x["function_id"] for x in functions}
@@ -271,7 +295,9 @@ def _normalize_record(job: str, item: dict[str, Any], binary: dict[str, Any], in
             caller = "fn_" + digest({"binary": binary["sha256"], "address": edge["caller_address"]})[:16]
             callee = "fn_" + digest({"binary": binary["sha256"], "address": edge["callee_address"]})[:16]
             if caller not in ids or callee not in ids: raise Blocked(f"{job}: edge crosses the declared CFG")
-            edges.append({"caller_function_id": caller, "callee_function_id": callee, "call_site": edge["call_site"]})
+            edges.append({"edge_id": "edge_" + digest({"binary": binary["sha256"], "caller": caller,
+                "callee": callee, "site": edge["call_site"]})[:16],
+                "caller_function_id": caller, "callee_function_id": callee, "call_site": edge["call_site"]})
         edges.sort(key=lambda x: (x["caller_function_id"], x["call_site"], x["callee_function_id"]))
         gaps = list(item["gaps"])
         if item["architecture"] not in {"x86", "x86_64", "arm", "aarch64"}: gaps.append("unsupported-architecture")
@@ -283,9 +309,20 @@ def _normalize_record(job: str, item: dict[str, Any], binary: dict[str, Any], in
         raise Blocked(f"{job}: lead type is outside the closed evidence taxonomy")
     citations = []
     allowed = {(name, value["result_sha256"]) for name, value in inputs["upstream"].items()}
+    identities = {}
+    for name, value in inputs["upstream"].items():
+        found = set()
+        for record in value["result"]["records"]:
+            if record["binary_id"] != binary["binary_id"]: continue
+            if "triage_id" in record: found.add(record["triage_id"])
+            found.update(fn["function_id"] for fn in record.get("functions", []))
+            found.update(edge["edge_id"] for edge in record.get("edges", []))
+        identities[name] = found
     for citation in item["citations"]:
         _closed(citation, {"job_id", "result_sha256", "binary_id", "record_identity"}, job)
-        if (citation["job_id"], citation["result_sha256"]) not in allowed or citation["binary_id"] != binary["binary_id"]:
+        if ((citation["job_id"], citation["result_sha256"]) not in allowed or
+                citation["binary_id"] != binary["binary_id"] or
+                citation["record_identity"] not in identities.get(citation["job_id"], set())):
             raise Blocked(f"{job}: citation is stale or crosses binary identity")
         citations.append(dict(citation))
     citations.sort(key=lambda x: (x["job_id"], x["record_identity"]))
@@ -338,13 +375,13 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
-            dagster_run_id=dagster_id, worker_kind="deterministic", output_contract=contract,
+            dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status="OK_WITH_GAPS", summary=f"Published {len(result['records'])} static evidence record(s).",
             status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json"], gaps=result["coverage_gaps"],
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
-        worker_kind="deterministic", output_contract=contract,
+        worker_kind="deterministic_python", output_contract=contract,
         resume_command=f"python -B appsec-review-process/{job[3:].replace('-', '_')}.py {run_id}",
         derive_inputs=lambda: current_inputs(run_id, job),
         fingerprint_inputs=lambda value: _hash(value), execute_attempt=execute,
