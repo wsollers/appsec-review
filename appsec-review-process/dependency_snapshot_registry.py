@@ -121,10 +121,15 @@ def register(kind: str, source: Path, metadata_path: Path, registry_root: Path) 
     return {**manifest, "data_root": str(destination / "data")}
 
 
-def resolve(kind: str, registry_root: Path, *, max_age_seconds: int, now: datetime) -> dict[str, Any]:
+def resolve(kind: str, registry_root: Path, *, max_age_seconds: int, now: datetime,
+            warn_age_seconds: int | None = None) -> dict[str, Any]:
     if kind not in KINDS: raise SnapshotInvalid("unknown database kind")
     if isinstance(max_age_seconds, bool) or not isinstance(max_age_seconds, int) or max_age_seconds < 0:
         raise SnapshotInvalid("an explicit non-negative age ceiling is required")
+    if (warn_age_seconds is not None and (isinstance(warn_age_seconds, bool) or
+            not isinstance(warn_age_seconds, int) or warn_age_seconds < 0 or
+            warn_age_seconds > max_age_seconds)):
+        raise SnapshotInvalid("warning age must be non-negative and no greater than the age ceiling")
     pointer_path = Path(registry_root).resolve() / "current" / (kind + ".json")
     if not pointer_path.is_file() or pointer_path.is_symlink(): raise SnapshotBlocked(f"{kind} snapshot is absent")
     try: pointer = json.loads(pointer_path.read_text())
@@ -145,8 +150,11 @@ def resolve(kind: str, registry_root: Path, *, max_age_seconds: int, now: dateti
     age = int((current - _time(manifest["data_timestamp"], "data_timestamp")).total_seconds())
     if age < 0: raise SnapshotInvalid(f"{kind} snapshot timestamp is in the future")
     if age > max_age_seconds: raise SnapshotStale(f"{kind} snapshot is stale")
+    warning = warn_age_seconds is not None and age > warn_age_seconds
     return {**{key: manifest[key] for key in ("database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp")},
-            "data_root": str(data), "age_seconds": age, "max_age_seconds": max_age_seconds}
+            "data_root": str(data), "age_seconds": age, "warn_age_seconds": warn_age_seconds,
+            "max_age_seconds": max_age_seconds, "freshness": "warning" if warning else "fresh",
+            "warnings": ([f"{kind} snapshot is within the allowed range but exceeds its warning age"] if warning else [])}
 
 
 def main() -> int:
@@ -156,11 +164,13 @@ def main() -> int:
     add.add_argument("--registry-root", type=Path, required=True)
     get = sub.add_parser("resolve"); get.add_argument("--kind", choices=sorted(KINDS), required=True)
     get.add_argument("--registry-root", type=Path, required=True); get.add_argument("--max-age-seconds", type=int, required=True)
+    get.add_argument("--warn-age-seconds", type=int)
     get.add_argument("--now", required=True)
     args = parser.parse_args()
     try:
         value = (register(args.kind, args.source, args.metadata, args.registry_root) if args.command == "register" else
-                 resolve(args.kind, args.registry_root, max_age_seconds=args.max_age_seconds, now=_time(args.now, "now")))
+                 resolve(args.kind, args.registry_root, max_age_seconds=args.max_age_seconds,
+                         warn_age_seconds=args.warn_age_seconds, now=_time(args.now, "now")))
         print(json.dumps(value, sort_keys=True)); return 0
     except SnapshotBlocked as exc: print(json.dumps({"status": "BLOCKED", "cause": str(exc)})); return 2
     except SnapshotStale as exc: print(json.dumps({"status": "FAILED", "cause": str(exc)})); return 3

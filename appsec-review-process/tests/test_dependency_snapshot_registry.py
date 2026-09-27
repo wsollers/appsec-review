@@ -47,6 +47,16 @@ class SnapshotRegistryTests(unittest.TestCase):
             snapshots.resolve("osv", self.registry, max_age_seconds=60,
                               now=datetime(2026, 9, 27, 12, tzinfo=timezone.utc))
 
+    def test_warning_window_remains_usable_until_hard_staleness_ceiling(self):
+        snapshots.register("grype-db", self.source, self.metadata(), self.registry)
+        resolved = snapshots.resolve("grype-db", self.registry, warn_age_seconds=1800,
+            max_age_seconds=7200, now=datetime(2026, 9, 27, 12, tzinfo=timezone.utc))
+        self.assertEqual(resolved["freshness"], "warning")
+        self.assertEqual(len(resolved["warnings"]), 1)
+        with self.assertRaisesRegex(snapshots.SnapshotInvalid, "warning age"):
+            snapshots.resolve("grype-db", self.registry, warn_age_seconds=7201,
+                max_age_seconds=7200, now=datetime(2026, 9, 27, 12, tzinfo=timezone.utc))
+
     def test_links_and_empty_supplies_fail_closed(self):
         empty = self.root / "empty"; empty.mkdir()
         with self.assertRaises(snapshots.SnapshotBlocked): snapshots.inventory(empty)

@@ -162,6 +162,7 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
 
 
 def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: int,
+                       warn_age_seconds: int | None = None,
                        run_id: str, adapter_attempt_id: str, source_snapshot_sha256: str,
                        attempt_root: Path, sbom_root: Path,
                        supplied_runtime: ce.ContainerRuntime | None = None) -> dict[str, Any]:
@@ -170,6 +171,7 @@ def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: i
     database_kind = "grype-db" if kind == "grype" else "osv"
     try:
         identity = snapshots.resolve(database_kind, snapshot_registry, max_age_seconds=max_age_seconds,
+                                     warn_age_seconds=warn_age_seconds,
                                      now=datetime.fromisoformat(rt.clock().replace("Z", "+00:00")))
     except snapshots.SnapshotBlocked as exc:
         raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot absent") from exc
@@ -182,6 +184,8 @@ def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: i
         sbom_root=sbom_root, database_root=Path(identity["data_root"]), supplied_runtime=rt)
     result["database"] = {key: identity[key] for key in
         ("database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp")}
+    result["database_freshness"] = {key: identity[key] for key in
+        ("age_seconds", "warn_age_seconds", "max_age_seconds", "freshness", "warnings")}
     return result
 
 

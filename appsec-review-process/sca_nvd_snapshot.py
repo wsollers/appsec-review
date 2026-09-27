@@ -607,3 +607,25 @@ def resolve_snapshot(data_root, *, max_age, now):
     return Resolution(OK, "VERIFIED_WITHIN_LIMIT",
                       f"snapshot {identity['snapshot_id']} verified offline; data is {identity['age_seconds']} seconds old, "
                       f"within the {identity['max_age_seconds']} second limit this job set", identity, component, (), reads)
+
+
+def resolve_snapshot_window(data_root, *, warn_age, max_age, now):
+    """Resolve NVD with a warning threshold below the hard age ceiling.
+
+    The returned snapshot remains usable between ``warn_age`` and ``max_age`` and carries a
+    warning alongside the ordinary immutable Resolution. Beyond ``max_age`` the existing
+    ``SNAPSHOT_TOO_OLD`` failure is preserved; absent snapshots remain BLOCKED.
+    """
+    if not isinstance(warn_age, timedelta):
+        raise TypeError("warn_age must be a datetime.timedelta; it has no default")
+    if warn_age <= timedelta(0):
+        raise ValueError("warn_age must be greater than zero")
+    if max_age is NO_AGE_LIMIT or not isinstance(max_age, timedelta):
+        raise TypeError("max_age must be a datetime.timedelta for a bounded staleness window")
+    if warn_age > max_age:
+        raise ValueError("warn_age must be no greater than max_age")
+    result = resolve_snapshot(data_root, max_age=max_age, now=now)
+    warnings = ()
+    if result.usable and result.identity["age_seconds"] > int(warn_age.total_seconds()):
+        warnings = ("NVD snapshot is within the allowed range but exceeds its warning age",)
+    return result, warnings

@@ -179,9 +179,11 @@ class AdapterTests(unittest.TestCase):
             scripted.child = child; first, second = scripted.patches()
             with first, second:
                 result = adapters.execute_registered(kind, snapshot_registry=registry, max_age_seconds=700000,
+                    warn_age_seconds=1,
                     run_id="run-dependency", adapter_attempt_id=kind + "-registered", source_snapshot_sha256=self.source,
                     attempt_root=attempt, sbom_root=self.sbom, supplied_runtime=self.runtime())
             self.assertEqual(result["database"]["database_kind"], database_kind)
+            self.assertEqual(result["database_freshness"]["freshness"], "warning")
 
     def test_registered_snapshot_absent_and_stale_remain_distinct_blockers(self):
         registry = self.root / "snapshot-registry"
