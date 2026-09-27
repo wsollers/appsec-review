@@ -54,7 +54,8 @@ def _source(raw:Any,target:Path)->tuple[str,Path]:
 
 def _lead(tool:str,rule:Any,path:Any,line:Any,target:Path)->dict[str,Any]:
  if not isinstance(rule,str) or not rule or not isinstance(line,int) or isinstance(line,bool) or line<1: raise ValueError("language SAST rule or line is invalid")
- relative,source=_source(path,target); lines=source.read_bytes().count(b"\n")+1
+ relative,source=_source(path,target); data=source.read_bytes()
+ lines=data.count(b"\n")+(1 if data and not data.endswith(b"\n") else 0)
  if line>lines: raise ValueError("language SAST line is beyond source")
  base={"tool_id":tool,"rule_id":rule[:256],"path":relative,"start_line":line,"end_line":line,"source_sha256":"sha256:"+hashlib.sha256(source.read_bytes()).hexdigest(),"category":"language-security-static-analysis"}
  return {"lead_id":"lead_"+hashlib.sha256(json.dumps(base,sort_keys=True).encode()).hexdigest()[:16],**base}
