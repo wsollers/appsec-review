@@ -69,6 +69,18 @@ class Checksums(unittest.TestCase):
         with self.assertRaises(tp.PinError):
             tp.single_hash("not a hash\n")
 
+    def test_spdx_file_hash(self):
+        document = json.dumps({"files": [{
+            "fileName": "./bin/tool",
+            "checksums": [{"algorithm": "SHA1", "checksumValue": "1" * 40},
+                          {"algorithm": "SHA256", "checksumValue": "E" * 64}],
+        }]})
+        self.assertEqual(tp.spdx_sha256(document, "./bin/tool"), "e" * 64)
+        with self.assertRaises(tp.PinError):
+            tp.spdx_sha256(document, "./bin/other")
+        with self.assertRaises(tp.PinError):
+            tp.spdx_sha256("not json", "./bin/tool")
+
 
 class VerifyAsset(unittest.TestCase):
     def setUp(self):

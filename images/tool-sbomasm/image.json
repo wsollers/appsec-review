@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "tool-sbomasm",
+      "tag": "tool-sbomasm:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {
+        "TOOL_VERSION": "2.1.1"
+      },
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/interlynk-io/sbomasm/releases/download/v2.1.1/sbomasm_2.1.1_Linux_x86_64.tar.gz",
+          "dest": "downloads/sbomasm.tar.gz",
+          "sha256": "643595183bb2f79fc123bee2fa7525f0e6585cb3806c38df1a8e758d66631a31",
+          "bytes": 11281108
+        }
+      ],
+      "timeout_seconds": 1800
+    }
+  ]
+}

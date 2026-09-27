@@ -1,0 +1,25 @@
+{
+  "schema": "appsec-review/image-build/1",
+  "builds": [
+    {
+      "image_id": "tool-microsoft-sbom-tool",
+      "tag": "tool-microsoft-sbom-tool:local",
+      "dockerfile": "Dockerfile",
+      "context": ".",
+      "build_args": {
+        "TOOL_VERSION": "4.1.5"
+      },
+      "requires_images": [],
+      "prebuild": [
+        {
+          "kind": "download",
+          "url": "https://github.com/microsoft/sbom-tool/releases/download/v4.1.5/sbom-tool-linux-x64",
+          "dest": "downloads/sbom-tool",
+          "sha256": "bf5d4f99bc98c119d549d08fc02ae92598a7a42772f17317c01031a92632e05b",
+          "bytes": 79221238
+        }
+      ],
+      "timeout_seconds": 1800
+    }
+  ]
+}
