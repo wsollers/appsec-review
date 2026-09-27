@@ -9334,7 +9334,9 @@
     "source-sast.json",
     "b13-receipts.json",
     "source-sast-summary.md",
-    "status.json"
+    "status.json",
+    "permission.json",
+    "lineage.json"
    ],
    "outputs_source": "registry/output-contracts/source-sast.json",
    "claim_class": "source_static_evidence",

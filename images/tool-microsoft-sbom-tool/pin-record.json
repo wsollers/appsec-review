@@ -1,0 +1,21 @@
+{
+  "schema": "appsec-review/tool-pin-record/1",
+  "image_id": "tool-microsoft-sbom-tool",
+  "tool": "microsoft-sbom-tool",
+  "version": "4.1.5",
+  "pinned_at": "2026-09-27T16:36:00Z",
+  "assets": [
+    {
+      "name": "sbom-tool",
+      "url": "https://github.com/microsoft/sbom-tool/releases/download/v4.1.5/sbom-tool-linux-x64",
+      "sha256": "bf5d4f99bc98c119d549d08fc02ae92598a7a42772f17317c01031a92632e05b",
+      "bytes": 79221238,
+      "verification": {
+        "kind": "vendor-spdx",
+        "manifest_url": "https://github.com/microsoft/sbom-tool/releases/download/v4.1.5/linux-x64-manifest.spdx.json",
+        "manifest_sha256": "e1671f50e6804a0d5e72b8a97b872866da1b7e532c9c485f88575e82cb2cc21f",
+        "entry": "./GitHub/sbom-tool-linux-x64"
+      }
+    }
+  ]
+}

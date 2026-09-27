@@ -145,6 +145,15 @@ class SourceSastTests(unittest.TestCase):
         self.assertIn("qualification", contract["required_status_fields"])
         self.assertIn("implemented_not_qualified", (ROOT / "source_sast.py").read_text())
 
+    def test_producer_receipts_use_canonical_permissions_and_bind_inputs(self):
+        inputs = {"run_id": "run-1", "source_snapshot_sha256": "sha256:" + "b" * 64,
+                  "accepted": {"attempt": "one"}}
+        permission, lineage = worker._producer_receipts(inputs)
+        template = json.loads((ROOT / "registry/job-templates/02-source-sast.json").read_text())
+        self.assertEqual(permission["permissions"], template["permissions"])
+        self.assertEqual(permission["source_snapshot_sha256"], inputs["source_snapshot_sha256"])
+        self.assertEqual(lineage["build_lineage_sha256"], "sha256:" + worker.digest(inputs))
+
 
 if __name__ == "__main__":
     unittest.main()

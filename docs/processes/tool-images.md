@@ -1,6 +1,7 @@
 # Per-tool images
 
-Status: **built 2026-09-26** (13 images, each built and smoke-tested inside the B13 boundary). Decided by
+Status: **16 registered images** (the original 13 were built 2026-09-26; OSV Scanner, Microsoft
+SBOM Tool and sbomasm were added afterward and independently built/smoke-tested inside the B13 boundary). Decided by
 William, 2026-09-26: **one Docker image per tool**, so a tool is updated by itself; tools are bundled only
 when one needs another package to run (gosec needs the Go toolchain, mobsfscan imports semgrep, Find
 Security Bugs is a SpotBugs plugin). Each image is built from our own Dockerfile on a digest-pinned base,
@@ -19,18 +20,22 @@ scan jobs themselves (deterministic Python, no persona, configuration passed in)
 | `tool-gosec` | gosec 2.29.0 | 02-source-sast | sigstore-key-checksums, vendor-sha256-file | Go 1.27.1 toolchain |
 | `tool-grype` | grype 0.119.0 | 02-sca-vulnerability-match | sigstore-cert-checksums | - |
 | `tool-hadolint` | hadolint 2.15.1 | 02-iac-config-scan | vendor-checksums | - |
+| `tool-microsoft-sbom-tool` | Microsoft SBOM Tool 4.1.5 | 02-sbom-inventory | vendor-spdx | - |
 | `tool-mobsfscan` | mobsfscan 1.0.1 | 02-mobile-sast | pip lock, 77 wheels (PyPI sha256) | semgrep (Python library mobsfscan imports) |
+| `tool-osv-scanner` | OSV Scanner 1.9.2 | 02-sca-vulnerability-match | vendor-checksums | - |
 | `tool-phpcs` | phpcs 4.0.4 | 02-source-sast | pgp | - |
 | `tool-phpstan` | phpstan 2.2.16 | 02-source-sast | pgp | - |
 | `tool-psalm` | psalm 6.18.1 | 02-source-sast | pgp | - |
+| `tool-sbomasm` | sbomasm 2.1.1 | 02-sbom-inventory | vendor-checksums | - |
 | `tool-semgrep` | semgrep 1.178.0 | 02-source-sast | pip lock, 66 wheels (PyPI sha256) | - |
 | `tool-spotbugs` | spotbugs 4.10.4 | 02-source-sast | pgp | Find Security Bugs 1.14.0; Temurin 21 JRE (base) |
 | `tool-syft` | syft 1.52.0 | 02-sbom-inventory | sigstore-cert-checksums | - |
 | `tool-trivy` | trivy 0.74.0 | 02-iac-config-scan | sigstore-checksums | - |
 
-Bases (Docker Official Images, pinned by index digest): `ubuntu:24.04` for the static binaries,
+Bases (pinned by index digest): Docker Official Image `ubuntu:24.04` for the static binaries,
 `python:3.12-slim-bookworm` for the pip tools, `php:8.4-cli-bookworm` for the PHP tools,
-`eclipse-temurin:21-jre-noble` for SpotBugs.
+`eclipse-temurin:21-jre-noble` for SpotBugs, and `mcr.microsoft.com/dotnet/runtime-deps:8.0-noble`
+for Microsoft's self-contained SBOM binary. Every base reference is pinned by digest.
 
 ## Layout of one tool folder
 
@@ -62,11 +67,12 @@ signature writes nothing.
 
 | Kind | Used by | What is checked |
 |---|---|---|
-| `vendor-checksums` | gitleaks, hadolint | sha256 listed in the release's own checksums file |
+| `vendor-checksums` | gitleaks, hadolint, sbomasm | sha256 listed in the release's own checksums file |
 | `sigstore-checksums` | trivy | vendor checksums, and the checksums file verified with `cosign verify-blob --bundle` against the release workflow's identity and GitHub's OIDC issuer |
 | `sigstore-cert-checksums` | syft, grype | the same, with the detached `.sig` and `.pem` Anchore publishes |
 | `sigstore-key-checksums` | gosec | the same, with gosec's cosign public key (committed, pinned by sha256) |
 | `vendor-sha256-file` | Go toolchain | the `.sha256` Google publishes next to the archive |
+| `vendor-spdx` | Microsoft SBOM Tool | the exact asset's sha256 in Microsoft's accompanying SPDX release manifest |
 | `pgp` | spotbugs, Find Security Bugs, phpstan, psalm, phpcs | detached `.asc` by the pinned key fingerprint (key committed in `keys/`) |
 | pip lock | semgrep, checkov, mobsfscan | `uv pip compile --generate-hashes` for Python 3.12 / glibc 2.36; `pip download --require-hashes` fetches the exact wheels; each wheel's sha256 is matched to PyPI's JSON and declared as a checksummed download |
 
@@ -101,7 +107,7 @@ commit the folder. Nothing else changes.
 
 ## Host-local B13 registry (B16)
 
-Docker image ids differ between hosts, so the 13 tool records and six shared step-4 image records
+Docker image ids differ between hosts, so the 16 tool records and seven shared step-4 image records
 are not committed. `orchestrator/dagster/code-location.sh start` runs:
 
 ```bash
@@ -109,13 +115,13 @@ python3 -B images/registry_records.py generate
 ```
 
 The generator writes ignored `appsec-review-process/registry/container-images/<image_id>.json`
-records only after all 19 successful build pointers still match the current image inputs and
+records only after all 23 successful build pointers still match the current image inputs and
 `docker image inspect`. It never builds, pulls, or repairs an image. `check` is read-only and fails
 on a missing record, changed Dockerfile/build fingerprint, changed attempt identity, or Docker image
 id drift. Local records use `digest_kind: image-id`; B13 runs the `sha256:...` image id directly.
 The tracked `fixture-harmless` registry record remains a portable image-index record.
 
-`audit-buildenv-cpp` is one of the six shared records. Its 2026-09-26 rebuild extends
+`audit-buildenv-cpp` is one of the seven shared records. Its 2026-09-26 rebuild extends
 `audit-native:local`, fixes the ADR-0012 Revision 3 compiler paths, and adds the autotools/Bear
 prerequisites. The generated record is deliberately still ignored: source control carries the
 Dockerfile, declaration, contract tests and documentation, while B16 binds the current host image
@@ -131,6 +137,17 @@ id, Dockerfile hash, build fingerprint and attempt id at startup.
 - **syft finds no component in hello-autotools**: the vendored cJSON has no manifest. Phase 7 expects one
   component, so `02-sbom-inventory` needs a vendored-code source (ScanCode, or the build index's
   not-units/members) beside syft.
+- **Microsoft SBOM Tool is not a general SBOM editor.** It generates and validates SPDX 2.2/3.0,
+  redacts SPDX 2.2 file data, and performs config-driven aggregation. Network license enrichment and
+  Docker-daemon scanning are not enabled in the offline B13 profile. A transformation worker and
+  immutable output contract remain separate full-protocol work.
+- **sbomasm is the semantic mutation tool.** Its offline `assemble`, `edit`, and `rm` operations
+  cover SPDX/CycloneDX composition and metadata changes. ClearlyDefined enrichment,
+  Dependency-Track integration, and SecureSBOM signing/verification remain disabled because they
+  require network access or an external service. A live v2.1.1 probe found that component removal
+  removed the component object but left its `dependsOn` reference dangling; do not accept component
+  removal without a post-transform referential-integrity check. New-root assembly also emits the
+  current timestamp and a random serial number, so its raw output is not byte-deterministic.
 - **psalm** refuses a root that has `composer.json` but no `vendor/`; run it with `--root` at the config
   folder and `projectFiles` pointing at `/workspace`.
 - **SpotBugs reads bytecode**, so its job depends on a build, not on the source alone.

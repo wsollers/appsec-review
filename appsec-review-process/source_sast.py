@@ -32,6 +32,8 @@ CONTRACT = "source-sast"
 RESULT = "source-sast.json"
 RECEIPTS = "b13-receipts.json"
 SUMMARY = "source-sast-summary.md"
+PERMISSION = "permission.json"
+LINEAGE = "lineage.json"
 IMAGE_ID = "tool-semgrep"
 TOOL_ID = "semgrep-repository-rules-v1"
 RULES = ROOT.parent / "data" / "source-sast" / "rules-v1.yml"
@@ -48,7 +50,26 @@ CODE_FILES = (
     "source_sast.py", "container_execution.py", "permission_capabilities.py",
     "publish_job_output.py", "validate_job_output.py", "source_sast_language_adapters.py",
     "registry/output-contracts/source-sast.json",
+    "registry/job-templates/02-source-sast.json",
 )
+TEMPLATE = ROOT / "registry" / "job-templates" / f"{JOB}.json"
+
+
+def _producer_receipts(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    template = read_json(TEMPLATE)
+    permissions = template.get("permissions")
+    if (template.get("job_template_id") != JOB or not isinstance(permissions, list) or
+            not permissions or len(permissions) != len(set(permissions)) or
+            not all(isinstance(item, str) and item for item in permissions)):
+        raise Blocked(f"{JOB}: canonical template permissions are invalid")
+    common = {"run_id": inputs["run_id"], "job_id": JOB,
+              "source_snapshot_sha256": inputs["source_snapshot_sha256"]}
+    return (
+        {"schema": "appsec-review/producer-permission-receipt/1.0", **common,
+         "permissions": permissions},
+        {"schema": "appsec-review/producer-lineage-receipt/1.0", **common,
+         "build_lineage_sha256": "sha256:" + digest(inputs)},
+    )
 
 
 def root(run_id: str) -> Path:
@@ -288,6 +309,9 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     expected["coverage_gaps"] = ["Repository-owned C/C++ Semgrep rules do not cover every source-analysis family."] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
     if result != expected:
         raise Blocked(f"{JOB}: normalized result no longer matches immutable Semgrep evidence")
+    permission, lineage = _producer_receipts(inputs)
+    if read_json(attempt / PERMISSION) != permission or read_json(attempt / LINEAGE) != lineage:
+        raise Blocked(f"{JOB}: canonical producer receipts changed")
 
 
 def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
@@ -364,12 +388,16 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                   "tools_run": len(result["tools"]), "leads": len(result["leads"]), "network": "none",
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
+        permission, lineage = _producer_receipts(inputs)
+        atomic_json(attempt / PERMISSION, permission)
+        atomic_json(attempt / LINEAGE, lineage)
         return record_terminal_current(
             base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
             worker_kind="pinned_container", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status="OK_WITH_GAPS",
             summary=f"Semgrep produced {len(result['leads'])} normalized static-analysis lead(s).",
-            status_record=status, artifact_paths=[RESULT, RECEIPTS, SUMMARY, "status.json"],
+            status_record=status,
+            artifact_paths=[RESULT, RECEIPTS, SUMMARY, "status.json", PERMISSION, LINEAGE],
             gaps=result["coverage_gaps"],
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs),
         )
