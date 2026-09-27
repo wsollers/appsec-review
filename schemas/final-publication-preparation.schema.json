@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "final-publication-preparation.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "status", "draft_report_sha256",
+    "draft_publication_manifest_sha256", "completion_gate", "draft_attempt", "required_action"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/final-publication-preparation/1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"const": "PENDING_HUMAN_APPROVAL"},
+    "draft_report_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "draft_publication_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "completion_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "run_id", "draft_report_sha256", "eligible", "publication_status", "blockers", "human_signoff"],
+      "properties": {
+        "schema": {"const": "appsec-review/final-publication-gate/1.0"},
+        "run_id": {"type": "string"},
+        "draft_report_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "eligible": {"const": false},
+        "publication_status": {"const": "BLOCKED"},
+        "blockers": {"const": ["human_signoff_missing"]},
+        "human_signoff": {"type": "null"}
+      }
+    },
+    "draft_attempt": {"type": "string", "minLength": 1},
+    "required_action": {"type": "string", "minLength": 1}
+  }
+}

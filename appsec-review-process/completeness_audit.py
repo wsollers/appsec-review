@@ -7,6 +7,10 @@ import control_process_worker
 
 JOB="completeness-audit"; RESULT="completeness-audit.json"; CONTRACT="completeness-audit"
 
+def run_lifecycle(run_id: str, dagster_run_id: str, force: bool = False):
+    from control_feature_lifecycle import run as lifecycle_run
+    return lifecycle_run(run_id, dagster_run_id, JOB, force)
+
 def run(source:Path,output:Path):
     value=read_json(source); result=completeness_audit(value["run_id"],value["expected"],value["observed"],value["declared_gaps"],subject_sha256=value["subject_sha256"]); atomic_json(output,result); return result
 

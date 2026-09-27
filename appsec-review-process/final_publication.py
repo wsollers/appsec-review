@@ -25,6 +25,11 @@ FINAL_SCHEMA = "appsec-review/final-publication/1.0"
 PUBLISHER_OWNED = frozenset({
     "critical-findings.sarif", "human-signoff-ledger.json", "final-publication.json"})
 
+def prepare(run_id: str, dagster_run_id: str, force: bool = False):
+    """Retain the exact draft's honest pending-approval state; never create human authority."""
+    from control_feature_lifecycle import run as lifecycle_run
+    return lifecycle_run(run_id, dagster_run_id, "final-publication-preparation", force)
+
 
 def _sha(value: Any) -> str:
     return "sha256:" + digest(value)
