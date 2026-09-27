@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import unittest
 from unittest import mock
 
@@ -22,6 +23,18 @@ class ImageBuildEnvironmentTests(unittest.TestCase):
         self.assertEqual(child["PROGRAMFILES"], host["PROGRAMFILES"])
         self.assertEqual(child["APPDATA"], host["APPDATA"])
         self.assertNotIn("SECRET_TOKEN", child)
+
+    def test_build_command_disables_unstable_manifest_provenance(self):
+        build = {"docker_context": None, "no_cache": False,
+                 "build_args": {"Z": "last", "A": "first"},
+                 "tag": "audit-test:local"}
+        command = image_build._build_command(
+            Path("docker"), build, Path("context"), Path("context/Dockerfile"))
+
+        self.assertIn("--provenance=false", command)
+        self.assertEqual(command[-4:], [str(Path("context/Dockerfile")), "-t",
+                                        "audit-test:local", str(Path("context"))])
+        self.assertLess(command.index("A=first"), command.index("Z=last"))
 
 
 if __name__ == "__main__":
