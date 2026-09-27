@@ -78,6 +78,24 @@ def _source_snapshot(run_id: str) -> str:
     return "sha256:" + file_hash(path)
 
 
+def source_tree_sha256(target: Path) -> str:
+    """Bind the exact checkout bytes replayed by E02, excluding Git administration data."""
+    target = target.resolve()
+    records: dict[str, dict[str, str]] = {}
+    for current, dirs, files in os.walk(target, topdown=True, followlinks=False):
+        dirs[:] = sorted(name for name in dirs if name != ".git")
+        for name in sorted(files):
+            path = Path(current, name)
+            relative = path.relative_to(target).as_posix()
+            if path.is_symlink():
+                records[relative] = {"kind": "symlink", "target": os.readlink(path)}
+            elif path.is_file():
+                records[relative] = {"kind": "file", "sha256": "sha256:" + file_hash(path)}
+            else:
+                raise Blocked(f"build replay: checkout contains a special file: {relative}")
+    return "sha256:" + digest(records)
+
+
 def _cap(job: str) -> dict[str, Any]:
     params = {name: None for name in pc.PARAMETER_NAMES}
     params.update(command_profile_id=spec(job)["profile"], target_path=".")
@@ -88,6 +106,7 @@ def _cap(job: str) -> dict[str, Any]:
 def stage_control(run_id: str, *, authority: str = "Task-authorized engagement owner") -> Path:
     issued = datetime.now(timezone.utc).replace(microsecond=0)
     source = _source_snapshot(run_id)
+    target = _target(run_id)
     grants = []
     requirements = {}
     for job in SPECS:
@@ -196,7 +215,8 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
             raise Blocked(f"{job}: lock/image digest mismatch for {image_id}")
         records[image_id] = {"value": record, "sha256": "sha256:" + file_hash(record_path)}
     return {"run_id": run_id, "job": job, "source_snapshot_sha256": source,
-        "source_revision": lock_set["source_revision"], "target_path": str(_target(run_id)),
+        "source_tree_sha256": source_tree_sha256(target),
+        "source_revision": lock_set["source_revision"], "target_path": str(target),
         "control": {"path": f"data/controls/{CONTROL_FILE}", "sha256": file_hash(cpath),
                     "value": control}, "upstream": upstream, "lock_set": lock_set,
         "image_records": records,

@@ -87,6 +87,25 @@ class BuildReplayTests(unittest.TestCase):
         self.assertEqual(path.relative_to(state.run_path("run-1")).as_posix(),
                          "data/controls/build-replay.json")
 
+    def test_source_tree_sha256_binds_bytes_and_symlink_targets_but_not_git(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder)
+            (target / "src").mkdir()
+            source = target / "src" / "main.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            (target / "main-link.c").symlink_to("src/main.c")
+            (target / ".git").mkdir()
+            (target / ".git" / "index").write_bytes(b"first")
+            initial = worker.source_tree_sha256(target)
+            (target / ".git" / "index").write_bytes(b"second")
+            self.assertEqual(worker.source_tree_sha256(target), initial)
+            source.write_text("int main(void) { return 1; }\n", encoding="utf-8")
+            self.assertNotEqual(worker.source_tree_sha256(target), initial)
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            (target / "main-link.c").unlink()
+            (target / "main-link.c").symlink_to("src/other.c")
+            self.assertNotEqual(worker.source_tree_sha256(target), initial)
+
 
 if __name__ == "__main__":
     unittest.main()
