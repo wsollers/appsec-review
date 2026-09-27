@@ -15,6 +15,7 @@
     "required": [
       "fresh run artifact manifest",
       "explicit staged target path",
+      "accepted 02-build-index generation",
       "B16 Syft image record"
     ],
     "optional": []
@@ -28,6 +29,7 @@
       "inputs.json",
       "outputs/sbom.cdx.json",
       "outputs/sbom-manifest.json",
+      "outputs/build-index-vendored-members.json",
       "outputs/redaction-receipt.json",
       "outputs/tool-results.json",
       "outputs/coverage.json",

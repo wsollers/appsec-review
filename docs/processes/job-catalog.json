@@ -1238,8 +1238,7 @@
        "declared_inputs": [
         "accepted native-build binary lineage",
         "accepted binary-triage result",
-        "accepted binary-cfg result",
-        "run-owned normalized lead evidence"
+        "accepted binary-cfg result"
        ]
       },
       {
@@ -1561,7 +1560,8 @@
        "name": "SBOM Inventory",
        "kind": "lifecycle",
        "consumes": [
-        "job:00-intake"
+        "job:00-intake",
+        "job:02-build-index"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -1569,6 +1569,7 @@
        "declared_inputs": [
         "fresh run artifact manifest",
         "explicit staged target path",
+        "accepted 02-build-index generation",
         "B16 Syft image record"
        ]
       },
@@ -1737,7 +1738,6 @@
        "accepted native-build binary lineage",
        "accepted binary-triage result",
        "accepted binary-cfg result",
-       "run-owned normalized lead evidence",
        "document source path",
        "source type",
        "redaction policy",
@@ -1771,6 +1771,7 @@
        "B16 scanner image records",
        "explicit run inputs root",
        "explicit staged target path",
+       "accepted 02-build-index generation",
        "B16 Syft image record",
        "accepted SBOM",
        "B16 Grype and OSV images",
@@ -2604,7 +2605,6 @@
      "accepted native-build binary lineage",
      "accepted binary-triage result",
      "accepted binary-cfg result",
-     "run-owned normalized lead evidence",
      "document source path",
      "source type",
      "redaction policy",
@@ -2637,6 +2637,7 @@
      "B16 scanner image records",
      "explicit run inputs root",
      "explicit staged target path",
+     "accepted 02-build-index generation",
      "B16 Syft image record",
      "accepted SBOM",
      "B16 Grype and OSV images",
@@ -3755,8 +3756,7 @@
        "declared_inputs": [
         "accepted native-build binary lineage",
         "accepted binary-triage result",
-        "accepted binary-cfg result",
-        "run-owned normalized lead evidence"
+        "accepted binary-cfg result"
        ]
       },
       {
@@ -4131,7 +4131,8 @@
        "name": "SBOM Inventory",
        "kind": "lifecycle",
        "consumes": [
-        "job:00-intake"
+        "job:00-intake",
+        "job:02-build-index"
        ],
        "produces": [
         "job:02-sbom-inventory"
@@ -4139,6 +4140,7 @@
        "declared_inputs": [
         "fresh run artifact manifest",
         "explicit staged target path",
+        "accepted 02-build-index generation",
         "B16 Syft image record"
        ]
       },
@@ -4308,7 +4310,6 @@
        "accepted native-build binary lineage",
        "accepted binary-triage result",
        "accepted binary-cfg result",
-       "run-owned normalized lead evidence",
        "document source path",
        "source type",
        "redaction policy",
@@ -4346,6 +4347,7 @@
        "B16 scanner image records",
        "explicit run inputs root",
        "explicit staged target path",
+       "accepted 02-build-index generation",
        "B16 Syft image record",
        "accepted SBOM",
        "B16 Grype and OSV images",
@@ -5242,7 +5244,6 @@
      "accepted native-build binary lineage",
      "accepted binary-triage result",
      "accepted binary-cfg result",
-     "run-owned normalized lead evidence",
      "document source path",
      "source type",
      "redaction policy",
@@ -5280,6 +5281,7 @@
      "B16 scanner image records",
      "explicit run inputs root",
      "explicit staged target path",
+     "accepted 02-build-index generation",
      "B16 Syft image record",
      "accepted SBOM",
      "B16 Grype and OSV images",
@@ -8764,12 +8766,12 @@
      "input": "accepted binary-cfg result"
     },
     {
-     "need": "required",
-     "input": "run-owned normalized lead evidence"
+     "need": "optional",
+     "input": "source component map"
     },
     {
      "need": "optional",
-     "input": "source component map"
+     "input": "deterministically derived normalized binary leads"
     }
    ],
    "inputs_source": "registry/job-templates/02-binary-intelligence-ingest.json",
@@ -10347,6 +10349,11 @@
      "job": "00-intake",
      "kind": "required",
      "contract": "intake"
+    },
+    {
+     "job": "02-build-index",
+     "kind": "required",
+     "contract": "build-index"
     }
    ],
    "declared_inputs": [
@@ -10360,6 +10367,10 @@
     },
     {
      "need": "required",
+     "input": "accepted 02-build-index generation"
+    },
+    {
+     "need": "required",
      "input": "B16 Syft image record"
     }
    ],
@@ -10370,6 +10381,7 @@
     "status.json",
     "outputs/sbom.cdx.json",
     "outputs/sbom-manifest.json",
+    "outputs/build-index-vendored-members.json",
     "outputs/redaction-receipt.json",
     "outputs/tool-results.json",
     "outputs/coverage.json"
@@ -10382,7 +10394,8 @@
    ],
    "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
-    "job:00-intake"
+    "job:00-intake",
+    "job:02-build-index"
    ],
    "produces": [
     "job:02-sbom-inventory"
@@ -12236,7 +12249,8 @@
    ],
    "consumed_by": [
     "step:build-classify",
-    "job:02-build-classify"
+    "job:02-build-classify",
+    "job:02-sbom-inventory"
    ]
   },
   "job:02-build-classify": {

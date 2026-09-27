@@ -281,6 +281,22 @@ def sbom_components(variant: str) -> list:
 
 def sbom_spec(variant: str) -> Spec:
     header, components = header_for(SBOM), sbom_components(variant)
+    enrichment = {
+        "schema": "appsec-review/build-index-sbom-enrichment/1.0",
+        "run_id": header["run_id"],
+        "job_id": header["job_id"],
+        "attempt_id": header["attempt_id"],
+        "producer_id": "build-index-vendored-member",
+        "build_index_binding": {
+            "job_id": "02-build-index",
+            "attempt_id": "build-index-node-attempt-0001",
+            "path": "outputs/build-index.json",
+            "sha256": label_sha("accepted-build-index"),
+        },
+        "members": [],
+        "coverage_gaps": [],
+    }
+    enrichment_bytes = dump(enrichment)
     cdx = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
            "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
            "components": [{"type": "library", "bom-ref": item["component_id"], "name": item["name"],
@@ -290,8 +306,12 @@ def sbom_spec(variant: str) -> Spec:
                 "generated_at": "2026-09-20T12:01:00Z",
                 "sbom_document": {"path": contracts.SBOM_CDX_FILE, "sha256": "", "bytes": 0, "bom_format": "CycloneDX",
                                   "spec_version": "1.6"},
+                "enrichment_document": {"path": contracts.SBOM_ENRICHMENT_FILE,
+                                        "sha256": sha(enrichment_bytes),
+                                        "producer_id": "build-index-vendored-member"},
                 "components": components}
     documents = {contracts.SBOM_CDX_FILE: cdx, contracts.SBOM_MANIFEST_FILE: manifest,
+                 contracts.SBOM_ENRICHMENT_FILE: enrichment,
                  **build_aggregate(header, TOOLS[SBOM], EXECUTORS[SBOM], len(components), [], 6, [])}
     return Spec(SBOM, documents).reseal()
 
@@ -1336,7 +1356,8 @@ class FieldBindingTests(unittest.TestCase):
         def cdx_spec(d): d["specVersion"] = "1.5"
 
         self.check(SBOM, [
-            (manifest, run_id, ["header-mismatch"]), (manifest, job_id, [schema]), (manifest, attempt_id, ["header-mismatch"]),
+            (manifest, run_id, ["header-mismatch", "enrichment-identity"]), (manifest, job_id, [schema]),
+            (manifest, attempt_id, ["header-mismatch", "enrichment-identity"]),
             (manifest, snapshot, ["header-mismatch"]), (manifest, redactor_version, ["redactor-mismatch"]),
             (manifest, redactor_ruleset, ["redactor-mismatch"]), (manifest, document_sha, ["sbom-document-mismatch"]),
             (manifest, document_bytes, ["sbom-document-mismatch"]), (manifest, spec_version, ["sbom-document-invalid"]),

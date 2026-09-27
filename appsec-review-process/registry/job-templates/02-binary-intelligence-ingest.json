@@ -5,6 +5,10 @@
   "process": "02-evidence-pregather",
   "budget_default": "standard",
   "implemented": true,
+  "timeout_seconds": 1800,
+  "execution": {"worker":"binary_intelligence_ingest.py","arguments":["{run_id}"]},
+  "retry": {"max_attempts":1,"transient_reasons":[],"side_effect_free":true},
+  "applicability": "accepted binary-triage and binary-cfg publications; SKIPPED only when the accepted build contains zero binaries",
   "permissions": ["read-run-data", "write-run-data"],
   "composition": {
     "persona_id": "reverse-engineer",
@@ -43,5 +47,6 @@
     "buildenv_catalog",
     "task",
     "output_contract"
-  ]
+  ],
+  "coordinator": "intake-coordinator"
 }

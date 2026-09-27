@@ -30,6 +30,14 @@ class DependencyOrchestrationTests(unittest.TestCase):
         manifest.write_text("{}\n")
         self.generation = "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest()
         self.jobs = self.owner / "data" / "jobs"
+        build_root = self.jobs / "02-build-index"
+        build_output = build_root / "attempts" / "build-one" / "build-index.json"
+        build_output.parent.mkdir(parents=True)
+        build_output.write_text("{}\n")
+        build_pointer = build_root / "accepted.json"; build_pointer.write_text("{}\n")
+        self.build_index = {"attempt_id": "build-one", "path": str(build_output),
+            "sha256": "sha256:" + hashlib.sha256(build_output.read_bytes()).hexdigest(),
+            "accepted_path": str(build_pointer)}
         self.source_binding = {key: "fixture" for key in orchestration.automatic_inputs.SOURCE_BINDING_KEYS}
         self.source_patch = patch.object(orchestration.automatic_inputs, "source_projection",
             return_value=(self.owner / "inputs" / "target", self.source_binding, {}))
@@ -55,7 +63,7 @@ class DependencyOrchestrationTests(unittest.TestCase):
             output_root=str(self.jobs), attempt_root=str(self.jobs / job / "orchestration-attempts" / suffix))
 
     def test_sbom_calls_public_b13_then_worker_seam(self):
-        request = self.request("02-sbom-inventory", {"source_files": {}},
+        request = self.request("02-sbom-inventory", {"source_files": {}, "build_index": self.build_index},
                                {"target_path": str(self.owner / "inputs" / "target")})
         binding = {"verified": True}
         with patch.object(orchestration.b13, "execute", return_value={"b13_attempt": binding}) as execute, \
@@ -110,7 +118,7 @@ class DependencyOrchestrationTests(unittest.TestCase):
             orchestration.execute(job_id="02-sbom-inventory", run_id=self.run_id,
                 input_path=str(outside), output_root=str(self.jobs),
                 attempt_root=str(self.jobs / "02-sbom-inventory" / "orchestration-attempts" / "x"))
-        request = self.request("02-sbom-inventory", {"source_files": {}},
+        request = self.request("02-sbom-inventory", {"source_files": {}, "build_index": self.build_index},
                                {"target_path": str(self.owner / "inputs" / "target")})
         with self.assertRaisesRegex(execution_state.Blocked, "canonical jobs root"):
             orchestration.execute(job_id="02-sbom-inventory", run_id=self.run_id,

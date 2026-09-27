@@ -28,7 +28,7 @@ _REQUEST_KEYS = {"schema", "run_id", "job_id", "source_generation", "generated_a
                  "source_binding", "payload", "tool"}
 _LEGACY_REQUEST_KEYS = {"schema", "run_id", "job_id", "source_generation", "generated_at", "payload", "tool"}
 _PAYLOAD_KEYS = {
-    "sbom": {"source_files"},
+    "sbom": {"source_files", "build_index"},
     "sca": {"sbom"},
     "license": {"sbom", "source_files"},
     "lifecycle": {"sbom", "license", "reference_table", "reference_table_sha256", "max_reference_age_days"},
@@ -69,7 +69,7 @@ def _offline_registry(value: Any) -> Path:
 
 
 def _binding_paths(payload: dict[str, Any], owner: Path, kind: str) -> None:
-    for key in ("sbom", "license", "sca"):
+    for key in ("build_index", "sbom", "license", "sca"):
         if key not in payload:
             continue
         binding = payload[key]

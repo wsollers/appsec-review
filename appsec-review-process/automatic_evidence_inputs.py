@@ -42,6 +42,7 @@ DEPENDENCY_JOBS = {
 }
 ALL_JOBS = VENDOR_JOBS | DEPENDENCY_JOBS
 RESULTS = {
+    "02-build-index": "build-index.json",
     "02-sbom-inventory": "outputs/sbom-manifest.json",
     "02-sca-vulnerability-match": "outputs/sca-vulnerability-match.json",
     "02-license-scan": "outputs/license-inventory.json",
@@ -375,7 +376,9 @@ def prepare(run_id: str, job_id: str, dagster_run_id: str, *, generated_at: str 
     else:
         payload: dict[str, Any]; tool: dict[str, Any]
         if job_id == "02-sbom-inventory":
-            payload, tool = {"source_files": source_files}, {"target_path": str(source)}
+            build_index, _ = _accepted_binding(run_id, "02-build-index")
+            payload = {"source_files": source_files, "build_index": build_index}
+            tool = {"target_path": str(source)}
         elif job_id == "02-sca-vulnerability-match":
             control = _control(run_id); sbom, sbom_root = _accepted_binding(run_id, "02-sbom-inventory")
             registry = Path(control["offline_snapshots"]["registry_path"])

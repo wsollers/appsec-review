@@ -202,7 +202,7 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Secrets Inventory](#job-02-secrets-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-secrets-inventory`](#a-job-02-secrets-inventory) |
 | [IaC Config Scan](#job-02-iac-config-scan) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-iac-config-scan`](#a-job-02-iac-config-scan) |
 | [Container Image Inventory](#job-02-container-image-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-container-image-inventory`](#a-job-02-container-image-inventory) |
-| [SBOM Inventory](#job-02-sbom-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
+| [SBOM Inventory](#job-02-sbom-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-build-index`](#a-job-02-build-index) | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
 | [Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) |
 | [License Inventory](#job-02-license-scan) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-license-scan`](#a-job-02-license-scan) |
 | [Dependency Lifecycle](#job-02-dependency-lifecycle) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-license-scan`](#a-job-02-license-scan) | [`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle) |
@@ -1326,7 +1326,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-secrets-inventory`](#job-02-secrets-inventory) | `secrets-inventory` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-iac-config-scan`](#job-02-iac-config-scan) | `iac-config-evidence` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-container-image-inventory`](#job-02-container-image-inventory) | `container-image-inventory` | implemented_not_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-sbom-inventory`](#job-02-sbom-inventory) | `sbom-inventory` | implemented_not_qualified | `00-intake` |
+| `02-evidence-pregather` | [`02-sbom-inventory`](#job-02-sbom-inventory) | `sbom-inventory` | implemented_not_qualified | `00-intake`, `02-build-index` |
 | `02-evidence-pregather` | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | `sca-vulnerability-match` | implemented_not_qualified | `02-sbom-inventory` |
 | `02-evidence-pregather` | [`02-license-scan`](#job-02-license-scan) | `license-inventory` | implemented_not_qualified | `00-intake`, `02-sbom-inventory` |
 | `02-evidence-pregather` | [`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | `dependency-lifecycle` | implemented_not_qualified | `02-sbom-inventory`, `02-license-scan` |
@@ -1493,7 +1493,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/02-build-index.json) | fresh accepted intake<br>accepted repository partition map<br>accepted developer project discovery (cross-check context)<br>accepted devops project discovery (cross-check context)<br>staged target checkout |
 | Produces | `runs/<run_id>/data/jobs/02-build-index/` |
 | Output files (registry/output-contracts/build-index.json) | build-index.json<br>build-index.md<br>status.json |
-| Consumed by | [`build-classify`](#step-build-classify)<br>[`02-build-classify`](#job-02-build-classify) |
+| Consumed by | [`build-classify`](#step-build-classify)<br>[`02-build-classify`](#job-02-build-classify)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
@@ -1609,7 +1609,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Dagster | standalone: --; lifecycle binding: `actual_worker` |
 | Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-binary-cfg`](#job-02-binary-cfg) (required, contract `binary-cfg`) |
-| Declared inputs (registry/job-templates/02-binary-intelligence-ingest.json) | accepted native-build binary lineage<br>accepted binary-triage result<br>accepted binary-cfg result<br>run-owned normalized lead evidence<br>source component map *(optional)* |
+| Declared inputs (registry/job-templates/02-binary-intelligence-ingest.json) | accepted native-build binary lineage<br>accepted binary-triage result<br>accepted binary-cfg result<br>source component map *(optional)*<br>deterministically derived normalized binary leads *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-binary-intelligence-ingest/` |
 | Output files (registry/output-contracts/binary-intelligence.json) | binary-intelligence.json<br>status.json<br>permission.json<br>lineage.json<br>applicability-receipt.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
@@ -2068,10 +2068,10 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `docker` |
 | Dagster | standalone: `sbom_inventory`; lifecycle binding: `actual_worker` |
 | Composition | persona `supply-chain-evidence-curator`, role `dependency-evidence-curator`, tooling `pinned-dependency-analysis` |
-| Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-sbom-inventory.json) | fresh run artifact manifest<br>explicit staged target path<br>B16 Syft image record |
+| Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`)<br>[`02-build-index`](#job-02-build-index) (required, contract `build-index`) |
+| Declared inputs (registry/job-templates/02-sbom-inventory.json) | fresh run artifact manifest<br>explicit staged target path<br>accepted 02-build-index generation<br>B16 Syft image record |
 | Produces | `runs/<run_id>/data/jobs/02-sbom-inventory/` |
-| Output files (registry/output-contracts/sbom-inventory.json) | manifest.json<br>status.json<br>outputs/sbom.cdx.json<br>outputs/sbom-manifest.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (registry/output-contracts/sbom-inventory.json) | manifest.json<br>status.json<br>outputs/sbom.cdx.json<br>outputs/sbom-manifest.json<br>outputs/build-index-vendored-members.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`sca-vulnerability-match`](#step-sca-vulnerability-match)<br>[`license-scan`](#step-license-scan)<br>[`dependency-lifecycle`](#step-dependency-lifecycle)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
 | Gaps | `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
@@ -2794,7 +2794,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-dev-project-discovery"></a>`02-dev-project-discovery` | job output | runs/<run_id>/data/jobs/02-dev-project-discovery/ | [`dev_project_discovery`](#step-dev-project-discovery)<br>[`02-dev-project-discovery`](#job-02-dev-project-discovery) | [`build-index`](#step-build-index)<br>[`02-build-index`](#job-02-build-index)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-devops-project-discovery"></a>`02-devops-project-discovery` | job output | runs/<run_id>/data/jobs/02-devops-project-discovery/ | [`devops_project_discovery`](#step-devops-project-discovery)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) | [`sre_operations_topology`](#step-sre-operations-topology)<br>[`sre-analysis`](#step-sre-analysis)<br>[`build-index`](#step-build-index)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology)<br>[`02-build-index`](#job-02-build-index)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-sre-operations-topology"></a>`02-sre-operations-topology` | job output | runs/<run_id>/data/jobs/02-sre-operations-topology/ | [`sre_operations_topology`](#step-sre-operations-topology)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-build-index"></a>`02-build-index` | job output | runs/<run_id>/data/jobs/02-build-index/ | [`build-index`](#step-build-index)<br>[`02-build-index`](#job-02-build-index) | [`build-classify`](#step-build-classify)<br>[`02-build-classify`](#job-02-build-classify) |
+| <a id="a-job-02-build-index"></a>`02-build-index` | job output | runs/<run_id>/data/jobs/02-build-index/ | [`build-index`](#step-build-index)<br>[`02-build-index`](#job-02-build-index) | [`build-classify`](#step-build-classify)<br>[`02-build-classify`](#job-02-build-classify)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) |
 | <a id="a-job-02-build-classify"></a>`02-build-classify` | job output | runs/<run_id>/data/jobs/02-build-classify/ | [`build-classify`](#step-build-classify)<br>[`02-build-classify`](#job-02-build-classify) | [`build-plan`](#step-build-plan)<br>[`02-build-plan`](#job-02-build-plan) |
 | <a id="a-job-02-build-plan"></a>`02-build-plan` | job output | runs/<run_id>/data/jobs/02-build-plan/ | [`build-plan`](#step-build-plan)<br>[`02-build-plan`](#job-02-build-plan) | [`02-build-resolution`](#job-02-build-resolution) |
 | <a id="a-job-02-build-resolution"></a>`02-build-resolution` | job output | runs/<run_id>/data/jobs/02-build-resolution/ | [`02-build-resolution`](#job-02-build-resolution) | [`build-configure`](#step-build-configure)<br>[`02-build-configure`](#job-02-build-configure) |

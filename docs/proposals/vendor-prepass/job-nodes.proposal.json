@@ -358,6 +358,7 @@
         "status.json",
         "outputs/sbom.cdx.json",
         "outputs/sbom-manifest.json",
+        "outputs/build-index-vendored-members.json",
         "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
         "outputs/coverage.json"

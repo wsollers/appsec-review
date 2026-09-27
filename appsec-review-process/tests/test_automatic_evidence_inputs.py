@@ -44,6 +44,7 @@ class AutomaticEvidenceInputsTests(unittest.TestCase):
         state.atomic_json(self.pointer_path, self.pointer)
         self.accepted_patch = patch.object(automatic.phase1, "accepted", return_value=self.pointer)
         self.accepted_patch.start()
+        self.publish("02-build-index", automatic.RESULTS["02-build-index"])
         self.reference = Path(self.temp.name) / "lifecycle.json"
         state.atomic_json(self.reference, {"schema": "appsec-review/dependency-lifecycle-reference-table/1.0",
             "table_id": "fixture", "version": "1", "as_of": "2026-09-27",
@@ -140,6 +141,7 @@ class AutomaticEvidenceInputsTests(unittest.TestCase):
         sbom_request = state.read_json(Path(sbom["input_path"]))
         self.assertEqual(sbom_request["payload"]["source_files"]["README.md"],
                          "sha256:" + state.file_hash(self.target / "README.md"))
+        self.assertEqual(sbom_request["payload"]["build_index"]["attempt_id"], "build-index-one")
         self.publish("02-sbom-inventory", automatic.RESULTS["02-sbom-inventory"])
         license_config = automatic.prepare(self.run_id, "02-license-scan", "dagster-license",
                                            generated_at="2026-09-27T12:00:00Z")
@@ -211,6 +213,15 @@ class AutomaticEvidenceInputsTests(unittest.TestCase):
         state.atomic_json(request, changed)
         with self.assertRaisesRegex(state.Blocked, "existing request has different inputs"):
             automatic.prepare(self.run_id, "02-secrets-inventory", "dagster-fixed",
+                              generated_at="2026-09-27T12:00:00Z")
+
+    def test_sbom_rejects_stale_build_index_lineage(self):
+        accepted = self.run / "data/jobs/02-build-index/accepted.json"
+        value = state.read_json(accepted)
+        value["attempt_id"] = "stale-build-index"
+        state.atomic_json(accepted, value)
+        with self.assertRaisesRegex(state.Blocked, "accepted 02-build-index"):
+            automatic.prepare(self.run_id, "02-sbom-inventory", "dagster-stale-build-index",
                               generated_at="2026-09-27T12:00:00Z")
 
 

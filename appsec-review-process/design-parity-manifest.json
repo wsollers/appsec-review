@@ -4373,7 +4373,8 @@
         "node": "02-sbom-inventory",
         "implemented": true,
         "dependencies": [
-          "00-intake"
+          "00-intake",
+          "02-build-index"
         ]
       },
       "registry": {
@@ -4425,7 +4426,8 @@
         "references": [
           "appsec-review-process/tests/test_dependency_workers.py",
           "appsec-review-process/tests/test_dependency_b13_adapters.py",
-          "appsec-review-process/tests/test_dependency_orchestration.py"
+          "appsec-review-process/tests/test_dependency_orchestration.py",
+          "appsec-review-process/tests/test_automatic_evidence_inputs.py"
         ]
       },
       "gaps": [
