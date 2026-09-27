@@ -21,6 +21,7 @@ from execution_state import (
     file_hash, identifier, now, read_json, run_path,
 )
 import reference_snapshots
+from publish_job_output import common_pointer, validate_published
 from schema_validate import validate_document
 
 
@@ -79,6 +80,31 @@ def _accepted_producer(data_root: Path, entry: dict[str, Any], artifact: Path) -
             "attempts" in pointer_parts):
         raise ValueError(f"{entry['input_id']}: accepted pointer does not belong to the producer job")
     pointer = read_json(pointer_path)
+    if common_pointer(pointer):
+        # Common publications bind the complete attempt tree and a validated immutable result
+        # envelope.  Do not reinterpret a malformed common pointer as the legacy format.
+        fingerprint = pointer.get("fingerprint")
+        if not isinstance(fingerprint, str):
+            raise Blocked(f"{entry['input_id']}: common accepted pointer lacks its fingerprint")
+        base = pointer_path.parent
+        try:
+            attempt, envelope = validate_published(
+                base, pointer, fingerprint,
+                expected_run_id=data_root.parent.name, expected_job_id=job_id,
+            )
+        except (Blocked, ValueError, OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise Blocked(f"{entry['input_id']}: common accepted publication is invalid") from exc
+        if pointer.get("attempt_id") != attempt_id or envelope.get("attempt_id") != attempt_id:
+            raise Blocked(f"{entry['input_id']}: accepted pointer attempt mismatch")
+        try:
+            relative = artifact.relative_to(attempt).as_posix()
+        except ValueError:
+            raise ValueError(f"{entry['input_id']}: artifact does not belong to its producer attempt") from None
+        published = [row for row in envelope.get("artifacts", [])
+                     if row.get("path") == relative and row.get("sha256") == entry["artifact"]["sha256"]]
+        if len(published) != 1:
+            raise Blocked(f"{entry['input_id']}: common envelope does not publish the requested artifact/hash")
+        return
     if pointer.get("status") not in {"OK", "OK_WITH_GAPS"}:
         raise Blocked(f"{entry['input_id']}: producer is not accepted")
     if pointer.get("attempt_id") != attempt_id:

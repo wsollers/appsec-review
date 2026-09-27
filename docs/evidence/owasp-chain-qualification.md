@@ -2,49 +2,68 @@
 
 Date: 2026-09-27
 
-Scope: exercise the production contracts from accepted `01-component-characterization` into T03
-(`04-owasp-intel-lane-in`), then component routing, T04, and onward through T14 only as far as the
-tracked workers permit. The fixture is a Freeciv-like source tree partitioned into server, client,
-protocol, and ruleset-loader components. No legacy pointer was synthesized and no test-only
-validator registry was substituted.
+Scope: exercise the production contracts from accepted `01-component-characterization` through
+T03 (`04-owasp-intel-lane-in`), component routing, T04 applicability, T05 batching, T06 handoff,
+and onward only as far as the tracked workers permit. The fixture is a Freeciv-like source tree
+partitioned into server, client, protocol, and ruleset-loader components. No legacy pointer was
+synthesized and no test-only validator registry was substituted.
 
 ## Result
 
-The first real blocker is the producer/consumer publication contract at T03. The accepted
-component-characterization producer publishes the common
-`appsec-review/accepted-worker-result/1.0` pointer. That pointer binds the immutable attempt with
-`hashes`, `envelope_path`, and `envelope_sha256`. T03's accepted-output admission still requires a
-legacy top-level `artifacts` map and refuses the valid common pointer with:
+The T03 compatibility gap is closed. T03 now recognizes the common
+`appsec-review/accepted-worker-result/1.0` pointer and passes it through the common publication
+verifier. Admission additionally requires the requested artifact path and SHA-256 to occur exactly
+once in the verified immutable envelope. The verified pointer fingerprint, run, job, attempt,
+latest-attempt state, complete attempt-tree hashes, envelope hash, artifact path, and artifact hash
+are therefore all bound before admission. A malformed common pointer is never reinterpreted as a
+legacy pointer.
+
+The live qualification reaches these accepted results:
+
+- T03 lane-in: `OK`
+- component routing: `OK_WITH_GAPS`
+- T04 applicability: `OK_WITH_GAPS`
+- T05 batching: accepted (`OK` or `OK_WITH_GAPS`)
+- T06 validator handoff: accepted (`OK` or `OK_WITH_GAPS`)
+
+The four components are all retained. No target is converted to technical not-applicable. Server
+targets are assigned under the approved ASVS L2 server scope; unresolved client/runtime
+classification remains `cannot_determine` and rescope-visible.
+
+## First remaining blocker
+
+T10 verifies the real T06 publication and then refuses the untouched tracked persona composition
+with code `registry_refused`:
 
 ```text
-component-map: accepted pointer does not publish an artifact map
+the registered composition cannot run a validator cell inside the handoff's claim boundary
 ```
 
-This refusal occurs during T03 input validation, before T03 allocates an attempt. Therefore there
-is no accepted T03 publication for component routing to consume and no truthful integrated result
-for T04-T14 in this chain. The downstream unit qualifications remain useful, but they do not close
-this live producer-to-consumer boundary because their T03 fixture uses the legacy pointer shape.
+The only tracked composition naming `owasp-validator` uses the OWASP worklist-builder tooling
+profile, whose claim ceiling does not permit the `control_verdict` claim class required by the T10
+dispatch configuration. The test-only registry mutation used by T10 unit tests was intentionally
+not used here. Consequently no validator cells were launched and T07/T11-T14 were not claimed as
+integrated live results. T08/T09 are optional message/request processes rather than a bypass for
+this dispatch boundary.
 
 ## Retained executable evidence
 
 `appsec-review-process/tests/test_owasp_chain_qualification.py` publishes the four-component map
-through the common worker-result helper, submits it to the real T03 worker with the pinned ASVS
-5.0.0 L2 snapshot, asserts the exact fail-closed reason, and asserts that neither a T03 attempt nor
-a component-routing publication was created.
+through the common worker-result helper, runs the real T03/routing/T04/T05/T06 workers, and asserts
+the exact T10 fail-closed code and message. A mutation test changes the envelope binding while
+updating the request's pointer hash and proves T03 still rejects the common publication.
 
 Run from `appsec-review-process`:
 
 ```bash
 python -m unittest -v tests.test_owasp_chain_qualification
+python -m unittest -v tests.test_owasp_lane_in tests.test_owasp_component_routing
 ```
 
-## Required closure
+## Required next closure
 
-T03 must validate accepted run output through the common pointer/envelope verifier, then bind the
-requested artifact to the envelope's artifact records and hashes. Compatibility must preserve the
-exact producer attempt, pointer hash, envelope hash, artifact hash, run identity, job identity, and
-newest-accepted status. It must not accept an unverified legacy pointer as a fallback. Once that is
-implemented, rerun this qualification and continue to the next boundary; based on existing T10
-tests, the tracked validator composition's `control_verdict` claim ceiling is expected to be the
-next integration question, but it was not reached by this live chain and is not claimed here as the
-current blocker.
+Register a production OWASP validator composition whose role and tooling profile permit the
+required bounded `control_verdict` claim while preserving every prohibition in the T06 handoff.
+Then rerun this qualification with a real integrator-supplied `PersonaInvoker`, allow T10 to submit
+the resulting candidates through T07, and continue into T11 join and T14 publication. This is a
+registry/persona integration task, not permission to weaken T10's claim-ceiling check.

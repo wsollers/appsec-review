@@ -1,13 +1,8 @@
-"""Live compatibility qualification for T03 -> component routing -> T04 ... T14.
-
-The chain currently stops at T03. The component producer uses the common accepted-worker-result
-envelope, while T03 still requires the legacy top-level ``artifacts`` map. This test retains the
-exact boundary and guards against describing the downstream chain as integrated before that
-producer/consumer contract is reconciled.
-"""
+"""Live compatibility qualification for T03 -> component routing -> T04 ... T14."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from copy import deepcopy
 import json
 from pathlib import Path
 import sys
@@ -21,8 +16,14 @@ sys.path.insert(0, str(PROCESS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import execution_state  # noqa: E402
+import owasp_applicability  # noqa: E402
+import owasp_batching  # noqa: E402
 import owasp_component_routing as routing  # noqa: E402
+import owasp_dispatch  # noqa: E402
 import owasp_lane_in  # noqa: E402
+import owasp_validator_handoff  # noqa: E402
+import persona_invocation  # noqa: E402
+import persona_invocation_support as invocation_support  # noqa: E402
 import test_owasp_component_routing as routing_fixture  # noqa: E402
 
 sha, write_json = routing_fixture.sha, routing_fixture.write_json
@@ -92,24 +93,146 @@ class OwaspChainQualificationTests(unittest.TestCase):
             "completeness_gaps": [],
         })
 
-    def test_chain_stops_at_t03_common_envelope_compatibility_boundary(self):
+    def _through_t04(self):
+        t03 = owasp_lane_in.admit(
+            self.run_id, self.request_path,
+            clock=lambda: datetime(2026, 9, 27, tzinfo=timezone.utc),
+        )
+        assembled = routing.run(self.run_id)
+        applicability_request = routing.request_path(self.run_id, assembled)
+        t04 = owasp_applicability.build(self.run_id, applicability_request)
+        return t03, assembled, t04, applicability_request
+
+    def _build_t05(self, t04: dict, applicability_request: Path) -> dict:
+        t04_root = self.data / "jobs" / owasp_applicability.JOB_ID / "whole"
+        model_path = (t04_root / "attempts" / t04["attempt_id"] / "outputs" /
+                      "owasp-applicability-model.json")
+        projected = json.loads(applicability_request.read_text(encoding="utf-8"))["components"]
+        source = {row["component_id"]: row for row in self.component_map["functional_components"]}
+        contexts = [{
+            "component_id": row["component_id"],
+            "component_group_id": source[row["component_id"]]["parallel_review_group"],
+            "trust_role": source[row["component_id"]]["component_type"],
+            "evidence_root_input_ids": row["input_ids"],
+        } for row in sorted(projected, key=lambda value: value["component_id"])]
+        config = json.loads((PROCESS / "config/owasp-batching/default-v1.json").read_text())
+        request_path = self.run / "inputs" / "owasp-batch-request.json"
+        write_json(request_path, {
+            "schema": "appsec-review/owasp-batch-request/1.0", "run_id": self.run_id,
+            "applicability": {
+                "attempt_id": t04["attempt_id"],
+                "accepted_pointer_path": f"jobs/{owasp_applicability.JOB_ID}/whole/accepted.json",
+                "accepted_pointer_sha256": sha(t04_root / "accepted.json"),
+                "model_path": model_path.relative_to(self.data).as_posix(),
+                "model_sha256": sha(model_path),
+            },
+            "batch_config": {"path": "appsec-review-process/config/owasp-batching/default-v1.json",
+                             "config_digest": execution_state.digest(config)},
+            "component_contexts": contexts,
+            "routing_rules": [{
+                "route_id": "static-offline-all",
+                "selector": {"standard_family": "owasp_asvs", "obligation_ids": [],
+                             "control_ids": [], "domain_ids": [], "all_controls": True,
+                             "component_ids": [], "all_components": True},
+                "primary_evidence_mode": "static_source", "authorization_boundary": "static_offline",
+                "tooling_profile_id": "read-only-source", "validator_role": "owasp-validator",
+                "linked_test_ids": [],
+            }],
+        })
+        return owasp_batching.build(self.run_id, request_path)
+
+    def _build_t06(self, t05: dict) -> tuple[dict, Path]:
+        base = self.data / "jobs" / owasp_batching.JOB_ID / "whole"
+        attempt = base / "attempts" / t05["attempt_id"]
+        batching = {"attempt_id": t05["attempt_id"],
+                    "accepted_pointer_path": f"jobs/{owasp_batching.JOB_ID}/whole/accepted.json",
+                    "accepted_pointer_sha256": sha(base / "accepted.json")}
+        for key, name in {"worklist": "owasp-validation-worklist.json",
+                          "batch_manifest": "owasp-batch-manifest.json",
+                          "summary": "batch-summary.md"}.items():
+            path = attempt / "outputs" / name
+            batching[key + "_path"] = path.relative_to(self.data).as_posix()
+            batching[key + "_sha256"] = sha(path)
+        config = json.loads((PROCESS / "config/owasp-validator-handoff/default-v1.json").read_text())
+        request_path = self.run / "inputs" / "owasp-validator-handoff-request.json"
+        write_json(request_path, {
+            "schema": "appsec-review/owasp-validator-handoff-request/1.0", "run_id": self.run_id,
+            "batching": batching,
+            "handoff_config": {
+                "path": "appsec-review-process/config/owasp-validator-handoff/default-v1.json",
+                "config_digest": execution_state.digest(config),
+            },
+            "budget": "standard", "operation": "build", "batch_id": None,
+        })
+        result = owasp_validator_handoff.build(self.run_id, request_path)
+        handoff = (self.data / "jobs" / owasp_validator_handoff.JOB_ID / "whole" / "attempts" /
+                   result["attempt_id"] / "outputs" / "owasp-validator-handoff-set.json")
+        return result, handoff
+
+    def test_common_component_envelope_reaches_t06_then_tracked_dispatch_refuses(self):
         pointer = json.loads((self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json").read_text())
         self.assertEqual(pointer["schema"], "appsec-review/accepted-worker-result/1.0")
         self.assertIn("hashes", pointer)
         self.assertIn("envelope_path", pointer)
         self.assertNotIn("artifacts", pointer)
 
-        with self.assertRaisesRegex(
-                execution_state.Blocked,
-                "component-map: accepted pointer does not publish an artifact map"):
+        t03, assembled, t04, request_path = self._through_t04()
+        model_path = (self.data / "jobs" / owasp_applicability.JOB_ID / "whole" / "attempts" /
+                      t04["attempt_id"] / "outputs" / "owasp-applicability-model.json")
+        model = json.loads(model_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(t03["status"], "OK")
+        self.assertEqual(assembled["status"], "OK_WITH_GAPS")
+        self.assertEqual(t04["status"], "OK_WITH_GAPS")
+        self.assertEqual(model["counts"]["components"], 4)
+        self.assertEqual(model["counts"]["not_applicable"], 0)
+        self.assertGreater(model["counts"]["applicable"], 0)
+        self.assertGreater(model["counts"]["cannot_determine"], 0)
+
+        t05 = self._build_t05(t04, request_path)
+        t06, handoff_path = self._build_t06(t05)
+        handoff_set = json.loads(handoff_path.read_text(encoding="utf-8"))
+        self.assertIn(t05["status"], {"OK", "OK_WITH_GAPS"})
+        self.assertIn(t06["status"], {"OK", "OK_WITH_GAPS"})
+        self.assertGreater(len(handoff_set["handoffs"]), 0)
+
+        t06_root = self.data / "jobs" / owasp_validator_handoff.JOB_ID / "whole"
+        config = json.loads((PROCESS / "config/owasp-dispatch/default-v1.json").read_text())
+        request = {
+            "schema": owasp_dispatch.REQUEST_ID, "run_id": self.run_id,
+            "handoffs": {"attempt_id": t06["attempt_id"],
+                         "accepted_pointer_path": f"jobs/{owasp_validator_handoff.JOB_ID}/whole/accepted.json",
+                         "accepted_pointer_sha256": sha(t06_root / "accepted.json"),
+                         "handoff_set_path": handoff_path.relative_to(self.data).as_posix(),
+                         "handoff_set_sha256": sha(handoff_path)},
+            "dispatch_config": {"path": "appsec-review-process/config/owasp-dispatch/default-v1.json",
+                                "config_digest": execution_state.digest(config)},
+            "model": deepcopy(invocation_support.MODEL),
+        }
+        facts = owasp_dispatch.DispatchFacts(
+            registry_dir=PROCESS / "registry", allowed_models=(invocation_support.MODEL,),
+            invoker_id=persona_invocation.FixtureInvoker.invoker_id,
+            source_snapshot_sha256=invocation_support.SNAPSHOT, registry_ceiling=None,
+        )
+        with self.assertRaises(owasp_dispatch.DispatchBlocked) as caught:
+            owasp_dispatch.load_plan(self.run_id, request, facts)
+        self.assertEqual(caught.exception.code, "registry_refused")
+        self.assertEqual(str(caught.exception),
+                         "the registered composition cannot run a validator cell inside the handoff's claim boundary")
+
+    def test_t03_rejects_tampered_common_envelope_binding(self):
+        pointer_path = self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json"
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+        pointer["envelope_sha256"] = "0" * 64
+        write_json(pointer_path, pointer)
+        request = json.loads(self.request_path.read_text(encoding="utf-8"))
+        request["entries"][0]["producer"]["accepted_pointer_sha256"] = sha(pointer_path)
+        write_json(self.request_path, request)
+        with self.assertRaisesRegex(execution_state.Blocked, "common accepted publication is invalid"):
             owasp_lane_in.admit(
                 self.run_id, self.request_path,
                 clock=lambda: datetime(2026, 9, 27, tzinfo=timezone.utc),
             )
-
-        # T03 fails before attempt allocation; no downstream publication can be claimed.
-        self.assertFalse((self.data / "jobs" / owasp_lane_in.JOB_ID).exists())
-        self.assertFalse((self.data / "jobs" / routing.JOB).exists())
 
 
 if __name__ == "__main__":
