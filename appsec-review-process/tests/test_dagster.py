@@ -54,6 +54,9 @@ class DagsterTests(unittest.TestCase):
         self.assertIn('build_discovery_work',names)
         self.assertIn('evidence_index_work',names)
         self.assertIn('job_02_ossf_scorecard',names)
+        self.assertEqual(
+            {item['job'] for item in LIFECYCLE['06-cve-reachability']['dependencies']},
+            {'02-sca-vulnerability-match', '02-ir-facts'})
 
     def test_build_publication_rejects_mixed_generations(self):
         from dagster import build_op_context, Failure
