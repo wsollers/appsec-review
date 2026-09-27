@@ -383,7 +383,7 @@
       "lane": "01-component-characterization",
       "contract": "component-map",
       "template": "01-component-characterization",
-      "implemented": false,
+      "implemented": true,
       "namespace": "01-component-characterization",
       "dependencies": [
         {
@@ -398,7 +398,7 @@
       "lane": "03-threat-model-dfd-stride",
       "contract": "threat-model-core",
       "template": "03-threat-model-dfd-stride",
-      "implemented": false,
+      "implemented": true,
       "namespace": "03-threat-model-dfd-stride",
       "dependencies": [
         {
@@ -411,6 +411,40 @@
       "required_artifacts": [
         "integrated-threat-model.json",
         "threat-model-summary.md",
+        "status.json",
+        "permission.json",
+        "lineage.json"
+      ]
+    },
+    "03-threat-model-reconciliation": {
+      "lane": "03-threat-model-dfd-stride",
+      "contract": "threat-model-reconciliation",
+      "template": "03-threat-model-reconciliation",
+      "implemented": true,
+      "namespace": "03-threat-model-reconciliation",
+      "dependencies": [
+        {
+          "job": "03-threat-model-dfd-stride",
+          "kind": "required",
+          "contract": "threat-model-core",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-evidence-assembly",
+          "kind": "required",
+          "contract": "pregather",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "required_artifacts": [
+        "threat-model-reconciliation.json",
+        "threat-model-reconciliation-summary.md",
         "status.json",
         "permission.json",
         "lineage.json"
@@ -433,6 +467,12 @@
           "job": "03-threat-model-dfd-stride",
           "kind": "required",
           "contract": "threat-model-core",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-reconciliation",
+          "kind": "required",
+          "contract": "threat-model-reconciliation",
           "allowed_skip_reasons": []
         },
         {

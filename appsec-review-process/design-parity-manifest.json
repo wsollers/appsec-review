@@ -55,6 +55,9 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "component_characterization",
+      "threat_model_dfd_stride",
+      "threat_model_reconciliation",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -212,6 +215,27 @@
         "relationship": "standalone and lifecycle-wired offline multi-language source SAST through B13; unavailable tools remain explicit gaps"
       },
       {
+        "job": "component_characterization",
+        "lifecycle_jobs": [
+          "01-component-characterization"
+        ],
+        "relationship": "standalone and lifecycle-wired component-purpose and downstream review routing from accepted assembled evidence"
+      },
+      {
+        "job": "threat_model_dfd_stride",
+        "lifecycle_jobs": [
+          "03-threat-model-dfd-stride"
+        ],
+        "relationship": "standalone and lifecycle-wired deterministic DFD and candidate STRIDE generation from the accepted component map"
+      },
+      {
+        "job": "threat_model_reconciliation",
+        "lifecycle_jobs": [
+          "03-threat-model-reconciliation"
+        ],
+        "relationship": "standalone and lifecycle-wired reconciliation of the accepted threat model against current component and evidence generations"
+      },
+      {
         "job": "code_property_graph",
         "lifecycle_jobs": ["02-code-property-graph"],
         "relationship": "standalone and lifecycle-wired pinned offline Joern AST/CPG projection with source-locator authority"
@@ -295,6 +319,7 @@
           "02-evidence-assembly",
           "01-component-characterization",
           "03-threat-model-dfd-stride",
+          "03-threat-model-reconciliation",
           "04-asvs-masvs",
           "05-native-memory",
           "06-cve-reachability",
@@ -480,6 +505,9 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "component_characterization",
+      "threat_model_dfd_stride",
+      "threat_model_reconciliation",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -528,6 +556,9 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "component_characterization",
+      "threat_model_dfd_stride",
+      "threat_model_reconciliation",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -577,6 +608,9 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "component_characterization",
+      "threat_model_dfd_stride",
+      "threat_model_reconciliation",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -1401,7 +1435,7 @@
       ],
       "graph": {
         "node": "01-component-characterization",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-evidence-assembly"
         ]
@@ -1431,18 +1465,23 @@
         "write-run-data"
       ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "component_characterization"
+        ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:component_characterization_work"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "component_characterization"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "component_characterization"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -1453,11 +1492,9 @@
       },
       "gaps": [
         "blocked_on_02-evidence-assembly",
-        "dagster_lifecycle_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Publish an accepted COMPLETE 02-evidence-assembly envelope, then add the Dagster lifecycle and live persona qualification."
+      "next_prerequisite": "Publish an accepted COMPLETE 02-evidence-assembly envelope, then run live persona qualification."
     },
     {
       "id": "03-threat-model-dfd-stride",
@@ -1467,7 +1504,7 @@
       ],
       "graph": {
         "node": "03-threat-model-dfd-stride",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "01-component-characterization"
         ]
@@ -1497,33 +1534,112 @@
         "write-run-data"
       ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "threat_model_dfd_stride"
+        ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:threat_model_dfd_stride_work"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "threat_model_dfd_stride"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "threat_model_dfd_stride"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
-          "unit"
+          "unit",
+          "host_integration"
         ],
         "references": [
-          "appsec-review-process/tests/test_threat_model_core.py"
+          "appsec-review-process/tests/test_threat_model_core.py",
+          "appsec-review-process/tests/test_threat_model_reconciliation.py",
+          "validation/threat-model-happy-path-live.json"
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
         "claim_ledger_routing_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "freeciv_live_qualification_pending"
       ],
-      "next_prerequisite": "Bind the qualified core to accepted F03/F02 lifecycle outputs, candidate claim-ledger routing, and live qualification."
+      "next_prerequisite": "Run the accepted L6A/L6B path against a real Freeciv F03/F02 generation and route candidate hypotheses to the claim ledger."
+    },
+    {
+      "id": "03-threat-model-reconciliation",
+      "design_refs": [
+        "docs/architecture/design-v3.md#4-lane-architecture",
+        "docs/design-parity/design-parity-completion-plan.md#g1-threat-model"
+      ],
+      "graph": {
+        "node": "03-threat-model-reconciliation",
+        "implemented": true,
+        "dependencies": [
+          "03-threat-model-dfd-stride",
+          "01-component-characterization",
+          "02-evidence-assembly"
+        ]
+      },
+      "registry": {
+        "template": "03-threat-model-reconciliation",
+        "persona": "developer-engineer",
+        "role": "threat-model-reconciler",
+        "domain": "threat-model-reconciliation",
+        "tooling_profile": "threat-model-reconciliation",
+        "output_contract": "threat-model-reconciliation"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/threat_model_reconciliation.py:run",
+        "validator": "appsec-review-process/threat_model_reconciliation.py:validate"
+      },
+      "output": {
+        "contract": "threat-model-reconciliation",
+        "contract_file": "appsec-review-process/registry/output-contracts/threat-model-reconciliation.json",
+        "schema_file": "schemas/threat-model-reconciliation.schema.json",
+        "claim_class": "threat_model_reconciliation"
+      },
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "threat_model_reconciliation"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:threat_model_reconciliation_work"
+        },
+        "launcher_jobs": [
+          "threat_model_reconciliation"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "threat_model_reconciliation"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_and_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_threat_model_reconciliation.py",
+          "validation/threat-model-happy-path-live.json"
+        ]
+      },
+      "gaps": [
+        "claim_ledger_routing_not_integrated",
+        "freeciv_live_qualification_pending"
+      ],
+      "next_prerequisite": "Run against a real accepted Freeciv generation and route reconciliation actions into the review control loop."
     },
     {
       "id": "04-asvs-masvs",
@@ -1537,6 +1653,7 @@
         "dependencies": [
           "01-component-characterization",
           "03-threat-model-dfd-stride",
+          "03-threat-model-reconciliation",
           "04-owasp-validation-worklist"
         ]
       },
@@ -2921,7 +3038,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "implemented_not_qualified",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -2931,14 +3048,15 @@
         ],
         "references": [
           "appsec-review-process/tests/test_source_sast.py",
-          "docs/processes/system-acceptance-test.md"
+          "appsec-review-process/qualify_source_sast_languages_live.py",
+          "docs/processes/system-acceptance-test.md",
+          "docs/evidence/source-sast-language-live-qualification-20260927.md"
         ]
       },
       "gaps": [
-        "go_java_php_live_qualification_not_completed",
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run live Go, Java and PHP tool qualification plus fault-recovery qualification."
+      "next_prerequisite": "Run live fault-recovery qualification; retain the explicit C/C++ rule-family coverage limitation."
     },
     {
       "id": "02-code-property-graph",
