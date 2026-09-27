@@ -58,6 +58,7 @@ Task-scoped prompts:
 | [binary-intelligence-core.md](binary-intelligence-core.md) | E06-E08-core: implement nominal debug-symbol, static binary triage, CFG and intelligence producers. |
 | [test-evidence-core.md](test-evidence-core.md) | E09-E10-core: implement nominal authorized test execution plus result and coverage ingestion. |
 | [static-intelligence-ingests.md](static-intelligence-ingests.md) | D05-D08-core: implement bounded document/API/test/runbook intelligence producers and honest zero-input paths. |
+| [report-claim-lifecycle.md](report-claim-lifecycle.md) | Parallel L01 and L05-L08 nominal claim path, followed by evidence-backed draft synthesis. |
 | [design-parity-worker-envelope.md](design-parity-worker-envelope.md) | Design parity Workstream B, batch 9 (common worker envelope); holds run ids `TODO.md` cites. |
 | [scripts-to-pipeline-migration.md](scripts-to-pipeline-migration.md) | Migrating review jobs out of `scripts/` (see the Script Migration Rule in `AGENTS.md`). |
 | [g02-owasp-workbench-decision.md](g02-owasp-workbench-decision.md) | G02 OWASP control workbench decision. |
