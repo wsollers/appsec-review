@@ -118,6 +118,18 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                         declared_tool_ids=workers.SPECS[job][1], permitted_node_statuses=PERMITTED,
                         on_unhandled="refuse", limits=evidence_redaction.DEFAULT_LIMITS)
                 self.assertEqual(errors, [])
+                permission = json.loads((attempt / "permission.json").read_text())
+                lineage = json.loads((attempt / "lineage.json").read_text())
+                template = json.loads((ROOT / "registry" / "job-templates" / f"{job}.json").read_text())
+                self.assertEqual(permission, {"schema": workers.PERMISSION_SCHEMA, "run_id": "run-1",
+                    "job_id": job, "source_snapshot_sha256": SOURCE_SHA,
+                    "permissions": template["permissions"]})
+                self.assertEqual(lineage["source_snapshot_sha256"], SOURCE_SHA)
+                self.assertRegex(lineage["build_lineage_sha256"], r"^sha256:[0-9a-f]{64}$")
+                if (attempt / "result.json").is_file():
+                    envelope = json.loads((attempt / "result.json").read_text())
+                    self.assertTrue({"permission.json", "lineage.json"}.issubset(
+                        {item["path"] for item in envelope["artifacts"]}))
 
     def test_v04_canonical_run_layout_passes_the_real_dispatch(self):
         for job, files in {
@@ -164,6 +176,20 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
         first = workers.fingerprint("02-iac-config-scan", root, SOURCE_SHA)
         (root / "Dockerfile").write_bytes(b"FROM debian:12\n")
         self.assertNotEqual(first, workers.fingerprint("02-iac-config-scan", root, SOURCE_SHA))
+
+    def test_fingerprint_version_prevents_receiptless_attempt_reuse(self):
+        root = self.make_source({"Dockerfile": b"FROM alpine:3.20\n"})
+        listing = [(name, workers.HASH(path.read_bytes())) for name, path in workers._files(root)]
+        legacy = workers.HASH(workers._dump({"job_id": "02-iac-config-scan",
+            "source_snapshot_sha256": SOURCE_SHA, "files": listing}))
+        self.assertNotEqual(legacy, workers.fingerprint("02-iac-config-scan", root, SOURCE_SHA))
+
+    def test_producer_lineage_binds_tool_and_applicability_evidence(self):
+        _root, documents = self.documents("02-iac-config-scan", {"Dockerfile": b"FROM alpine:3.20\n"})
+        first = workers.producer_receipts(documents)[1]["build_lineage_sha256"]
+        changed = {**documents, "probe": {**documents["probe"],
+                                          "files_examined_count": documents["probe"]["files_examined_count"] + 1}}
+        self.assertNotEqual(first, workers.producer_receipts(changed)[1]["build_lineage_sha256"])
 
     def test_every_worker_has_a_canonical_zero_capability_permission_receipt(self):
         for job in workers.SPECS:

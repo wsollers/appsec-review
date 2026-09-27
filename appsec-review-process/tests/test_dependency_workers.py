@@ -194,6 +194,18 @@ class DependencyWorkersTest(unittest.TestCase):
             relative, schema = schema_by_job[envelope["job_id"]]
             self.assertEqual(validate_document(json.loads(self.result_path(envelope, relative).read_text()), schema), [])
             self.assertEqual(envelope["acceptance_status"], "CURRENT")
+            attempt = self.out / envelope["job_id"] / "attempts" / envelope["attempt_id"]
+            permission = json.loads((attempt / "permission.json").read_text())
+            lineage = json.loads((attempt / "lineage.json").read_text())
+            template = json.loads((ROOT / "registry" / "job-templates" /
+                                   f"{envelope['job_id']}.json").read_text())
+            self.assertEqual(permission, {"schema": workers.PERMISSION_SCHEMA, "run_id": self.run_id,
+                "job_id": envelope["job_id"], "source_snapshot_sha256": self.source,
+                "permissions": template["permissions"]})
+            self.assertEqual(lineage["source_snapshot_sha256"], self.source)
+            self.assertRegex(lineage["build_lineage_sha256"], r"^sha256:[0-9a-f]{64}$")
+            self.assertTrue({"permission.json", "lineage.json"}.issubset(
+                {item["path"] for item in envelope["artifacts"]}))
         request_path = self.root / "reachability-request.json"
         self.assertEqual(workers.run("reachability", request_path), results[-1])
 
@@ -204,6 +216,31 @@ class DependencyWorkersTest(unittest.TestCase):
         evidence_identity.write_bytes(payload({"tampered": True}))
         with self.assertRaisesRegex(workers.WorkerBlocked, "artifact changed"):
             workers.run("reachability", request_path)
+
+    def test_immutable_reuse_rejects_changed_producer_receipt(self):
+        result = self.happy_chain()[-1]
+        request_path = self.root / "reachability-request.json"
+        receipt = self.out / result["job_id"] / "attempts" / result["attempt_id"] / "permission.json"
+        changed = json.loads(receipt.read_text()); changed["permissions"] = []
+        receipt.write_bytes(payload(changed))
+        with self.assertRaisesRegex(workers.WorkerBlocked, "artifact changed"):
+            workers.run("reachability", request_path)
+
+    def test_implementation_version_prevents_reuse_of_receiptless_v1_attempt(self):
+        request = self.request()
+        old = workers._hash_bytes(workers._canonical(
+            {"kind": "sbom", "request": request, "implementation": "dependency-workers-v1"}))
+        new = workers._hash_bytes(workers._canonical(
+            {"kind": "sbom", "request": request, "implementation": workers.IMPLEMENTATION}))
+        self.assertNotEqual(old, new)
+
+    def test_producer_lineage_binds_request_upstreams_but_not_publication_root(self):
+        request = self.request(upstream={"attempt_id": "one", "sha256": "sha256:" + "a" * 64})
+        first = workers._producer_receipts(request, "02-sbom-inventory")[1]["build_lineage_sha256"]
+        relocated = {**request, "output_root": str(self.root / "elsewhere")}
+        self.assertEqual(first, workers._producer_receipts(relocated, "02-sbom-inventory")[1]["build_lineage_sha256"])
+        changed = {**request, "upstream": {"attempt_id": "two", "sha256": "sha256:" + "b" * 64}}
+        self.assertNotEqual(first, workers._producer_receipts(changed, "02-sbom-inventory")[1]["build_lineage_sha256"])
 
     def test_receipt_only_bundle_cannot_substitute_for_a_b13_attempt(self):
         output = self.write("syft.json", {"components": []})

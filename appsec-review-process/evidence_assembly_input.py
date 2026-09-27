@@ -82,14 +82,54 @@ def _pointer_shape(pointer: Any) -> set[str]:
     return keys
 
 
+def _generation_identities(run_root: Path, run_id: str,
+                           source_snapshot_sha256: str) -> tuple[str, str]:
+    """Verify the two source identities legitimately used by current producers.
+
+    The canonical identity is the target-tree fingerprint recorded by intake.  Some later,
+    permission-bound workers intentionally bind their receipts to the exact staged artifact
+    manifest instead.  That alias is valid only for the current manifest bytes and is never
+    substituted for the canonical identity in the assembly output.
+    """
+    manifest_path = _beneath(
+        run_root, run_root / "inputs" / "artifact-manifest.json", "artifact manifest")
+    if not manifest_path.is_file() or manifest_path.is_symlink():
+        raise Blocked(f"{assembly.JOB}: current artifact manifest is absent")
+    manifest = read_json(manifest_path)
+    identity = manifest.get("source_identity") if isinstance(manifest, dict) else None
+    fingerprint = identity.get("fingerprint") if isinstance(identity, dict) else None
+    if (not isinstance(manifest, dict) or manifest.get("run_id") != run_id or
+            not isinstance(fingerprint, str) or
+            not re.fullmatch(r"[0-9a-f]{64}", fingerprint) or
+            source_snapshot_sha256 != "sha256:" + fingerprint):
+        raise Blocked(f"{assembly.JOB}: canonical source identity is not current")
+    return source_snapshot_sha256, "sha256:" + file_hash(manifest_path)
+
+
+def _producer_root(run_root: Path, job: str) -> Path:
+    base = _beneath(run_root, run_root / "data" / "jobs" / job, f"{job} producer namespace")
+    candidates = []
+    for candidate in (base, base / "whole"):
+        accepted = candidate / "accepted.json"
+        latest = candidate / "latest.json"
+        if accepted.exists() or latest.exists():
+            if (not candidate.is_dir() or candidate.is_symlink() or not accepted.is_file() or
+                    accepted.is_symlink() or not latest.is_file() or latest.is_symlink()):
+                raise Blocked(f"{assembly.JOB}: {job} has an incomplete accepted producer root")
+            candidates.append(_beneath(run_root, candidate, f"{job} accepted producer root"))
+    if len(candidates) != 1:
+        detail = "ambiguous" if candidates else "absent"
+        raise Blocked(f"{assembly.JOB}: {job} accepted producer root is {detail}")
+    return candidates[0]
+
+
 def _producer_binding(run_root: Path, run_id: str, source_snapshot_sha256: str,
                       edge: dict[str, Any], instance_ids: list[str]
                       ) -> tuple[dict[str, Any], dict[str, Any]]:
     job = edge["job"]
-    producer = _beneath(run_root, run_root / "data" / "jobs" / job,
-                        f"{job} producer root")
-    if not producer.is_dir() or producer.is_symlink():
-        raise Blocked(f"{assembly.JOB}: {job} producer root is not a real directory")
+    canonical_source, manifest_source = _generation_identities(
+        run_root, run_id, source_snapshot_sha256)
+    producer = _producer_root(run_root, job)
     pointer_path, latest_path = producer / "accepted.json", producer / "latest.json"
     if (not pointer_path.is_file() or pointer_path.is_symlink() or
             not latest_path.is_file() or latest_path.is_symlink()):
@@ -142,19 +182,24 @@ def _producer_binding(run_root: Path, run_id: str, source_snapshot_sha256: str,
                 item.get("sha256") != file_hash(path)):
             raise Blocked(f"{assembly.JOB}: {job} does not publish an intact {required}")
     permission, lineage = read_json(attempt / "permission.json"), read_json(attempt / "lineage.json")
+    permission_source = permission.get("source_snapshot_sha256")
+    lineage_source = lineage.get("source_snapshot_sha256")
     if (permission.get("schema") != assembly.PERMISSION_SCHEMA or
             permission.get("run_id") != run_id or permission.get("job_id") != job or
-            permission.get("source_snapshot_sha256") != source_snapshot_sha256 or
+            permission_source not in {canonical_source, manifest_source} or
             not isinstance(permission.get("permissions"), list) or
             not permission["permissions"] or len(permission["permissions"]) != len(set(permission["permissions"]))):
         raise Blocked(f"{assembly.JOB}: {job} permission receipt is stale or invalid")
     build = lineage.get("build_lineage_sha256")
     if (lineage.get("schema") != assembly.LINEAGE_SCHEMA or lineage.get("run_id") != run_id or
             lineage.get("job_id") != job or
-            lineage.get("source_snapshot_sha256") != source_snapshot_sha256 or
+            lineage_source != permission_source or
             (build is not None and (not isinstance(build, str) or not SHA256.fullmatch(build)))):
         raise Blocked(f"{assembly.JOB}: {job} lineage receipt is stale or invalid")
-    binding = {"job_id": job, "source_snapshot_sha256": source_snapshot_sha256,
+    if permission_source == manifest_source and permission_source != canonical_source and build is None:
+        raise Blocked(f"{assembly.JOB}: {job} manifest-bound source alias lacks build lineage")
+    binding = {"job_id": job, "source_snapshot_sha256": canonical_source,
+        "producer_source_snapshot_sha256": permission_source,
         "build_lineage_sha256": build, "permissions": permission["permissions"],
         "terminal_instance_ids": instance_ids}
     source = {"job_id": job, "root": producer, "attempt_id": attempt_id,
@@ -194,17 +239,12 @@ def derive_plan(run_root: Path, *, run_id: str, source_snapshot_sha256: str,
             any(not values for values in instances_by_group.values())):
         raise Blocked(f"{assembly.JOB}: C01/C02 groups do not equal the graph producer denominator")
     producers, bindings = [], []
-    build_generations = set()
     for edge in dependencies:
         group = edge["job"][3:][:40]
         producer, binding = _producer_binding(
             run_root, run_id, source_snapshot_sha256, edge, sorted(instances_by_group[group]))
         producers.append(producer)
         bindings.append(binding)
-        if binding["build_lineage_sha256"] is not None:
-            build_generations.add(binding["build_lineage_sha256"])
-    if len(build_generations) > 1:
-        raise Blocked(f"{assembly.JOB}: accepted producers have mixed build lineage")
     return {"run_root": run_root, "terminal": terminal, "producers": producers,
             "supply": {"schema": assembly.SUPPLY_SCHEMA, "run_id": run_id,
                 "source_snapshot_sha256": source_snapshot_sha256, "producers": bindings}}
