@@ -28,6 +28,8 @@ import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
 import ossf_scorecard as ossf_scorecard_worker
 import owasp_component_routing as owasp_component_routing_worker
+import owasp_dispatch
+import owasp_join_publisher as owasp_join_publisher_worker
 import ir_evidence as ir_evidence_worker
 import joern_cpg as joern_cpg_worker
 import resource_pools
@@ -685,6 +687,42 @@ def owasp_component_routing():
     owasp_component_routing_work(build_execution_config())
 
 
+OWASP_JOIN_CONFIG = {'facts_path': str}
+
+
+def run_owasp_join_report(context, configured):
+    raw = read_json(Path(context.op_config['facts_path']))
+    required = {'registry_dir', 'allowed_models', 'invoker_id', 'source_snapshot_sha256', 'registry_ceiling'}
+    if not isinstance(raw, dict) or set(raw) != required:
+        raise Failure('OWASP join facts file must have the closed qualified shape')
+    facts = owasp_dispatch.DispatchFacts(Path(raw['registry_dir']), tuple(raw['allowed_models']),
+        raw['invoker_id'], raw['source_snapshot_sha256'], raw['registry_ceiling'])
+    result = owasp_join_publisher_worker.run(configured['engagement_run_id'], context.run_id, facts,
+                                             configured['force'])
+    attempt = owasp_join_publisher_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'matrix_manifest': MetadataValue.path(str(attempt / owasp_join_publisher_worker.MATRIX_MANIFEST)),
+        'gaps': MetadataValue.path(str(attempt / 'owasp-coverage-gaps.json')),
+        'routes': MetadataValue.path(str(attempt / 'owasp-candidate-promotion-routes.json')),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(name='job_04_asvs_masvs', ins={'configured': In(dict), 'upstream': In(list)}, config_schema=OWASP_JOIN_CONFIG, pool=CPU_POOL)
+def owasp_join_report_work(context, configured, upstream):
+    return run_owasp_join_report(context, configured)
+
+
+@op(config_schema=OWASP_JOIN_CONFIG, pool=CPU_POOL)
+def owasp_join_report_standalone_work(context, configured):
+    return run_owasp_join_report(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def owasp_join_report():
+    owasp_join_report_standalone_work(build_execution_config())
+
+
 @op(config_schema=BOUNDED_TRANSFORM_CONFIG, pool=CPU_POOL)
 def stig_srg_validation_worklist_work(context, configured):
     return run_bounded_transform(context, configured, '15-stig-srg-validation-worklist')
@@ -1179,7 +1217,7 @@ from job_graph import load_graph
 LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
-                                 '01-component-characterization','02-full-review-input-assembly','03-threat-model-dfd-stride','03-threat-model-reconciliation','10-synthesis-report',
+                                 '01-component-characterization','02-full-review-input-assembly','03-threat-model-dfd-stride','03-threat-model-reconciliation','04-asvs-masvs','10-synthesis-report',
                                  '02-binary-hardening',
                                  '02-ir-capture','02-ir-link','02-ir-facts',
                                  '02-code-property-graph',
@@ -1194,6 +1232,7 @@ LIFECYCLE_OPS['01-component-characterization']=component_characterization_work
 LIFECYCLE_OPS['02-full-review-input-assembly']=full_review_input_assembly_work
 LIFECYCLE_OPS['03-threat-model-dfd-stride']=threat_model_dfd_stride_work
 LIFECYCLE_OPS['03-threat-model-reconciliation']=threat_model_reconciliation_work
+LIFECYCLE_OPS['04-asvs-masvs']=owasp_join_report_work
 LIFECYCLE_OPS['10-synthesis-report']=synthesis_report_work
 LIFECYCLE_OPS['02-binary-hardening']=binary_hardening_lifecycle_work
 LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
@@ -1230,7 +1269,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -1240,7 +1279,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,owasp_join_report,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

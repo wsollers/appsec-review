@@ -68,6 +68,7 @@
       "fuzz_target_triage",
       "owasp_component_routing",
       "owasp_validation_worklist",
+      "owasp_join_report",
       "stig_srg_validation_worklist",
       "deployment_hardening",
       "b13_harmless_container",
@@ -243,6 +244,13 @@
           "03-threat-model-reconciliation"
         ],
         "relationship": "standalone and lifecycle-wired reconciliation of the accepted threat model against current component and evidence generations"
+      },
+      {
+        "job": "owasp_join_report",
+        "lifecycle_jobs": [
+          "04-asvs-masvs"
+        ],
+        "relationship": "standalone and lifecycle-wired accepted T14 OWASP matrix, coverage-gap, and candidate-route publisher"
       },
       {
         "job": "synthesis_report",
@@ -534,6 +542,7 @@
       "fuzz_target_triage",
       "owasp_component_routing",
       "owasp_validation_worklist",
+      "owasp_join_report",
       "stig_srg_validation_worklist",
       "deployment_hardening",
       "b13_harmless_container",
@@ -587,6 +596,7 @@
       "fuzz_target_triage",
       "owasp_component_routing",
       "owasp_validation_worklist",
+      "owasp_join_report",
       "stig_srg_validation_worklist",
       "deployment_hardening",
       "b13_harmless_container",
@@ -641,6 +651,7 @@
       "fuzz_target_triage",
       "owasp_component_routing",
       "owasp_validation_worklist",
+      "owasp_join_report",
       "stig_srg_validation_worklist",
       "deployment_hardening",
       "b13_harmless_container",
@@ -1741,7 +1752,7 @@
       ],
       "graph": {
         "node": "04-asvs-masvs",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "01-component-characterization",
           "03-threat-model-dfd-stride",
@@ -1765,7 +1776,7 @@
       "output": {
         "contract": "owasp-join-report",
         "contract_file": "appsec-review-process/registry/output-contracts/owasp-join-report.json",
-        "schema_file": "schemas/owasp-control-status-matrix.schema.json",
+        "schema_file": "schemas/owasp-control-status-matrix-manifest.schema.json",
         "claim_class": "control_accounting_candidate_routes"
       },
       "permissions": [
@@ -1773,33 +1784,39 @@
         "write-run-data"
       ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "owasp_join_report"
+        ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:owasp_join_report_work"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "owasp_join_report"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "owasp_join_report"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
-          "unit"
+          "unit",
+          "host_integration"
         ],
         "references": [
           "appsec-review-process/tests/test_owasp_join_report.py",
-          "appsec-review-process/tests/test_owasp_join_publisher.py"
+          "appsec-review-process/tests/test_owasp_join_publisher.py",
+          "appsec-review-process/tests/test_owasp_chain_qualification.py",
+          "docs/evidence/owasp-chain-qualification.md"
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "automatic_dispatch_facts_derivation_pending"
       ],
-      "next_prerequisite": "Bind the qualified T14 publisher to the shared Dagster lifecycle, assign its resource pool, and complete live qualification."
+      "next_prerequisite": "Derive dispatch facts automatically from the accepted OWASP lane instead of requiring the explicit qualified facts file."
     },
     {
       "id": "05-native-memory",

@@ -1326,7 +1326,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `01-component-characterization` | [`dynamic-rescope`](#job-dynamic-rescope) | `bounded-rescope-plan` | standalone_only | `00-intake` |
 | `03-threat-model-dfd-stride` | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | `threat-model-core` | implemented_and_qualified | `01-component-characterization` |
 | `03-threat-model-dfd-stride` | [`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation) | `threat-model-reconciliation` | implemented_and_qualified | `03-threat-model-dfd-stride`, `01-component-characterization`, `02-evidence-assembly` |
-| `04-asvs-masvs` | [`04-asvs-masvs`](#job-04-asvs-masvs) | `owasp-join-report` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `03-threat-model-reconciliation`, `04-owasp-validation-worklist` |
+| `04-asvs-masvs` | [`04-asvs-masvs`](#job-04-asvs-masvs) | `owasp-join-report` | implemented_and_qualified | `01-component-characterization`, `03-threat-model-dfd-stride`, `03-threat-model-reconciliation`, `04-owasp-validation-worklist` |
 | `04-asvs-masvs` | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | `owasp-validation-worklist` | standalone_only | `01-component-characterization`, `02-standards-source-ingest` |
 | `05-native-memory` | [`05-native-memory`](#job-05-native-memory) | `native-memory-analysis` | standalone_only | `01-component-characterization`, `02-native-sast`, `02-ir-facts` |
 | `06-cve-reachability` | [`06-cve-reachability`](#job-06-cve-reachability) | `cve-reachability` | standalone_only | `02-sca-vulnerability-match` |
@@ -2280,18 +2280,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `owasp-join-report` |
-| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Status | readiness `implemented_and_qualified`; execution `deterministic_python`; job-graph `implemented: true` |
 | Worker | `appsec-review-process/owasp_join_publisher.py:run` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `owasp_join_report`; lifecycle binding: `actual_worker` |
 | Composition | persona `owasp-validator`, role `standards-control-validator`, tooling `owasp-join-reporter` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`03-threat-model-reconciliation`](#job-03-threat-model-reconciliation) (required, contract `threat-model-reconciliation`)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) (required, contract `owasp-validation-worklist`) |
 | Declared inputs (registry/job-templates/04-asvs-masvs.json) | exact accepted OWASP dispatch accounting<br>hash-verified applicability and assessment artifacts |
 | Produces | `runs/<run_id>/data/jobs/04-asvs-masvs/` |
-| Output files (registry/output-contracts/owasp-join-report.json) | owasp-control-status-matrix.json<br>owasp-coverage-gaps.json<br>owasp-candidate-promotion-routes.json<br>permission.json<br>lineage.json<br>status.json |
+| Output files (registry/output-contracts/owasp-join-report.json) | owasp-control-status-matrix-manifest.json<br>owasp-coverage-gaps.json<br>owasp-candidate-promotion-routes.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
-| Gaps | `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Bind the qualified T14 publisher to the shared Dagster lifecycle, assign its resource pool, and complete live qualification. |
+| Gaps | `automatic_dispatch_facts_derivation_pending` |
+| Next prerequisite | Derive dispatch facts automatically from the accepted OWASP lane instead of requiring the explicit qualified facts file. |
 
 <a id="job-04-owasp-validation-worklist"></a>
 

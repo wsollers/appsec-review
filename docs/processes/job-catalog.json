@@ -7718,13 +7718,15 @@
    "lane": "04-asvs-masvs",
    "name": "OWASP Control Accounting And Candidate Routing",
    "contract": "owasp-join-report",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_and_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/owasp_join_publisher.py:run",
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "owasp_join_report"
+   ],
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "owasp-validator",
     "role_id": "standards-control-validator",
@@ -7767,7 +7769,7 @@
    "inputs_source": "registry/job-templates/04-asvs-masvs.json",
    "output_dir": "runs/<run_id>/data/jobs/04-asvs-masvs/",
    "output_files": [
-    "owasp-control-status-matrix.json",
+    "owasp-control-status-matrix-manifest.json",
     "owasp-coverage-gaps.json",
     "owasp-candidate-promotion-routes.json",
     "permission.json",
@@ -7777,11 +7779,9 @@
    "outputs_source": "registry/output-contracts/owasp-join-report.json",
    "claim_class": null,
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "automatic_dispatch_facts_derivation_pending"
    ],
-   "next_prerequisite": "Bind the qualified T14 publisher to the shared Dagster lifecycle, assign its resource pool, and complete live qualification.",
+   "next_prerequisite": "Derive dispatch facts automatically from the accepted OWASP lane instead of requiring the explicit qualified facts file.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",

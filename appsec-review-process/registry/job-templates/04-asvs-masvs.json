@@ -11,7 +11,7 @@
     "tooling_profile_id": "owasp-join-reporter",
     "output_contract_id": "owasp-join-report"
   },
-  "implemented": false,
+  "implemented": true,
   "permissions": [
     "read-run-data",
     "write-run-data"
@@ -26,7 +26,7 @@
   "outputs": {
     "directory": "data/jobs/04-asvs-masvs/attempts/<attempt_id>",
     "files": [
-      "owasp-control-status-matrix.json",
+      "owasp-control-status-matrix-manifest.json",
       "owasp-coverage-gaps.json",
       "owasp-candidate-promotion-routes.json",
       "permission.json",
@@ -39,5 +39,17 @@
     "source_lineage",
     "task",
     "output_contract"
-  ]
+  ],
+  "execution": {
+    "worker": "owasp_join_publisher.py",
+    "arguments": []
+  },
+  "applicability": "accepted OWASP dispatch accounting and validator-cell outputs",
+  "timeout_seconds": 300,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator"
 }

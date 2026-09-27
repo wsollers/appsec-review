@@ -42,7 +42,7 @@ EXECUTOR_CAPS = {"engagement_workflow": "plan", "build_discovery": 3, "build_exe
                  "synthesis_report": 1,
                  "ir_capture": 1, "ir_link": 1, "ir_facts": 1,
                  "code_property_graph": 1,
-                 "owasp_component_routing": 1,
+                 "owasp_component_routing": 1, "owasp_join_report": 1,
                  "native_memory_analysis": 1, "fuzz_target_triage": 1,
                  "owasp_validation_worklist": 1, "stig_srg_validation_worklist": 1,
                  "deployment_hardening": 1, "sbom_inventory": 1, "sca_vulnerability_match": 1,

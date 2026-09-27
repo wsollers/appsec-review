@@ -78,11 +78,13 @@ flowchart TD
   03_threat_model_dfd_stride_post -->|required| 03_threat_model_reconciliation_config
   01_component_characterization_post -->|required| 03_threat_model_reconciliation_config
   02_evidence_assembly -->|required| 03_threat_model_reconciliation_config
-  04_asvs_masvs["04-asvs-masvs (planned; not dispatched)"]
-  01_component_characterization_post -->|required| 04_asvs_masvs
-  03_threat_model_dfd_stride_post -->|required| 04_asvs_masvs
-  03_threat_model_reconciliation_post -->|required| 04_asvs_masvs
-  04_owasp_validation_worklist_post -->|required| 04_asvs_masvs
+  04_asvs_masvs_config["04-asvs-masvs: resolve job configuration"] --> 04_asvs_masvs_pre["04-asvs-masvs: pre-validation"]
+  04_asvs_masvs_pre --> 04_asvs_masvs["04-asvs-masvs: work or reuse"]
+  04_asvs_masvs --> 04_asvs_masvs_post["04-asvs-masvs: post-validation and publish"]
+  01_component_characterization_post -->|required| 04_asvs_masvs_config
+  03_threat_model_dfd_stride_post -->|required| 04_asvs_masvs_config
+  03_threat_model_reconciliation_post -->|required| 04_asvs_masvs_config
+  04_owasp_validation_worklist_post -->|required| 04_asvs_masvs_config
   05_native_memory_config["05-native-memory: resolve job configuration"] --> 05_native_memory_pre["05-native-memory: pre-validation"]
   05_native_memory_pre --> 05_native_memory["05-native-memory: work or reuse"]
   05_native_memory --> 05_native_memory_post["05-native-memory: post-validation and publish"]
@@ -109,7 +111,7 @@ flowchart TD
   07_red_team_adversarial["07-red-team-adversarial (planned; not dispatched)"]
   01_component_characterization_post -->|required| 07_red_team_adversarial
   03_threat_model_dfd_stride_post -->|required| 07_red_team_adversarial
-  04_asvs_masvs -->|required| 07_red_team_adversarial
+  04_asvs_masvs_post -->|required| 07_red_team_adversarial
   05_native_memory_post -->|required| 07_red_team_adversarial
   06_cve_reachability_post -->|required| 07_red_team_adversarial
   15_deployment_hardening_post -->|required| 07_red_team_adversarial
@@ -132,7 +134,7 @@ flowchart TD
   01_component_characterization_post -->|required| 10_synthesis_report_config
   03_threat_model_dfd_stride_post -->|required| 10_synthesis_report_config
   03_threat_model_reconciliation_post -->|required| 10_synthesis_report_config
-  04_asvs_masvs -->|required| 10_synthesis_report_config
+  04_asvs_masvs_post -->|required| 10_synthesis_report_config
   07_red_team_adversarial -->|required| 10_synthesis_report_config
   08_blue_team_refutation -->|required| 10_synthesis_report_config
   09_independent_verification -->|required| 10_synthesis_report_config

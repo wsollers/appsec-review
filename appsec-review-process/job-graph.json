@@ -473,7 +473,7 @@
       "lane": "04-asvs-masvs",
       "contract": "owasp-join-report",
       "template": "04-asvs-masvs",
-      "implemented": false,
+      "implemented": true,
       "namespace": "04-asvs-masvs",
       "dependencies": [
         {

@@ -56,6 +56,7 @@ CONTROL_JOBS = {
 }
 FINAL_PUBLICATION_JOBS = {'final_publication_gate':'final_publication_gate_work'}
 ASSEMBLY_JOBS = {'full_review_input_assembly': 'full_review_input_assembly_work'}
+FACTS_FILE_JOBS = {'owasp_join_report': 'owasp_join_report_standalone_work'}
 
 
 def graphql(query, variables):
@@ -89,13 +90,14 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
     root.mkdir(parents=True, exist_ok=True)
     previous=read_json(root/'request.json') if (root/'request.json').exists() else None
     job=job or (previous.get('job','phase1_intake') if previous else 'engagement_workflow')
-    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','component_characterization','full_review_input_assembly','threat_model_dfd_stride','threat_model_reconciliation','synthesis_report','code_property_graph','ir_capture','ir_link','ir_facts','native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','secrets_inventory','iac_config_scan','container_image_inventory','binary_hardening','mobile_sast','persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum','dynamic_rescope','completeness_audit','synthetic_hypothesis_resynthesis','remediation_retest_feedback','final_publication_gate','b13_harmless_container','full_review'): raise Blocked('unsupported Dagster job')
+    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','component_characterization','full_review_input_assembly','threat_model_dfd_stride','threat_model_reconciliation','synthesis_report','code_property_graph','ir_capture','ir_link','ir_facts','native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist','owasp_join_report','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','secrets_inventory','iac_config_scan','container_image_inventory','binary_hardening','mobile_sast','persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum','dynamic_rescope','completeness_audit','synthetic_hypothesis_resynthesis','remediation_retest_feedback','final_publication_gate','b13_harmless_container','full_review'): raise Blocked('unsupported Dagster job')
     bounded = job in BOUNDED_TRANSFORM_JOBS
     dependency = job in DEPENDENCY_JOBS
     vendor = job in VENDOR_EVIDENCE_JOBS
     control = job in CONTROL_JOBS
     final_publication = job in FINAL_PUBLICATION_JOBS
     assembly = job in ASSEMBLY_JOBS
+    facts_file = job in FACTS_FILE_JOBS
     supplied = (input_path, output_root, attempt_id, attempt_root, execution_root)
     if bounded and not (input_path and output_root and attempt_id and not attempt_root and not execution_root):
         raise Blocked('bounded transform jobs require --input-path, --output-root and --attempt-id')
@@ -109,7 +111,9 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         raise Blocked('final publication requires --input-path and --output-root')
     if assembly and not (input_path and output_root and attempt_id and not attempt_root and not execution_root):
         raise Blocked('full review input assembly requires --input-path, --output-root and --attempt-id')
-    if not bounded and not dependency and not vendor and not control and not final_publication and not assembly and any(supplied):
+    if facts_file and not (input_path and not output_root and not attempt_id and not attempt_root and not execution_root):
+        raise Blocked('OWASP join report requires --input-path naming its dispatch facts file')
+    if not bounded and not dependency and not vendor and not control and not final_publication and not assembly and not facts_file and any(supplied):
         raise Blocked('explicit lifecycle paths are only valid for config-driven jobs')
     resume = [sys.executable,'-B',str(Path(__file__).resolve()),
               '--run-id',run_id,'--launch-id',request_id,'--job',job,'--wait'] + (['--force'] if force else [])
@@ -126,6 +130,8 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         resume += ['--input-path',input_path,'--output-root',output_root]
     if assembly:
         resume += ['--input-path', input_path, '--output-root', output_root, '--attempt-id', attempt_id]
+    if facts_file:
+        resume += ['--input-path', input_path]
     lifecycle_config = ({'input_path': input_path, 'output_root': output_root, 'attempt_id': attempt_id}
                         if bounded else {'input_path': input_path, 'output_root': output_root,
                                          'attempt_root': attempt_root} if dependency else
@@ -133,7 +139,8 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                          'execution_root': execution_root} if vendor else
                         {'input_path':input_path,'output_root':output_root,'attempt_root':attempt_root} if control else
                         {'input_path':input_path,'output_root':output_root} if final_publication else
-                        {'plan_path':input_path,'output_root':output_root,'attempt_id':attempt_id} if assembly else None)
+                        {'plan_path':input_path,'output_root':output_root,'attempt_id':attempt_id} if assembly else
+                        {'facts_path':input_path} if facts_file else None)
     with Lock(root/'request.lock'):
         path = root/'request.json'
         if path.exists():
@@ -145,7 +152,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         else:
             record = {'run_id':run_id,'launch_id':request_id,'job':job,'force':force,'status':'PREPARED',
                       'created_at':now(),'resume_argv':resume}
-            if bounded or dependency or vendor or control or final_publication or assembly:
+            if bounded or dependency or vendor or control or final_publication or assembly or facts_file:
                 record['lifecycle_config'] = lifecycle_config
             atomic_json(path,record)
         try:
@@ -165,6 +172,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                 if control: run_config['ops']={CONTROL_JOBS[job]:{'config':lifecycle_config}}
                 if final_publication: run_config['ops']={FINAL_PUBLICATION_JOBS[job]:{'config':lifecycle_config}}
                 if assembly: run_config['ops']={ASSEMBLY_JOBS[job]:{'config':lifecycle_config}}
+                if facts_file: run_config['ops']={FACTS_FILE_JOBS[job]:{'config':lifecycle_config}}
                 params = {'selector':{'repositoryLocationName':'appsec_review','repositoryName':'__repository__',
                                       'jobName':job},
                           'runConfigData':run_config,
@@ -201,7 +209,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id',required=True)
     parser.add_argument('--force',action='store_true')
-    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','component_characterization','full_review_input_assembly','threat_model_dfd_stride','threat_model_reconciliation','synthesis_report','code_property_graph','ir_capture','ir_link','ir_facts','native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','secrets_inventory','iac_config_scan','container_image_inventory','binary_hardening','mobile_sast','persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum','dynamic_rescope','completeness_audit','synthetic_hypothesis_resynthesis','remediation_retest_feedback','final_publication_gate','b13_harmless_container','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
+    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','component_characterization','full_review_input_assembly','threat_model_dfd_stride','threat_model_reconciliation','synthesis_report','code_property_graph','ir_capture','ir_link','ir_facts','native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist','owasp_join_report','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','secrets_inventory','iac_config_scan','container_image_inventory','binary_hardening','mobile_sast','persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum','dynamic_rescope','completeness_audit','synthetic_hypothesis_resynthesis','remediation_retest_feedback','final_publication_gate','b13_harmless_container','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
     parser.add_argument('--input-path')
     parser.add_argument('--output-root')
     parser.add_argument('--attempt-id')
