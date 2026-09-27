@@ -1337,17 +1337,17 @@ both implemented, neither live-qualified yet; 54 on 2026-09-26 with `02-build-pl
 A closed decision batch is marked `DONE` with the accepted ADR that closed it; `DONE` is not a
 worker-readiness claim.
 
-### Active hardening coordination — 2026-09-27
+### Deferred hardening coordination — 2026-09-27
 
-The master agent owns integration and the shared surfaces. Four lanes run with strict path
-ownership; coding agents must stop and report rather than edit another lane's files.
+This work was scoped and started before the priority was corrected to nominal happy-path
+completion. Keep it isolated; do not merge it ahead of F02/F03.
 
 | Lane | Status | Exclusive scope | Must not edit | Exit condition |
 |---|---|---|---|---|
-| **H14** build-replay fault/recovery | CLAIMED | `build_replay.py`, build-replay focused tests, a new dedicated qualifier under `appsec-review-process/` | job graph, parity manifest/views, Dagster definitions/workflow, launcher, docs, source-SAST files | Prove immutable reuse, tamper rejection, newest-failure blocking, explicit forced recovery and recovered reuse for both `02-build-configure` and `02-native-build`; report run/attempt/hash evidence. |
-| **H16** source-SAST hardening | CLAIMED | `source_sast.py`, source-SAST rules/tool adapters, source-SAST focused tests, a new dedicated qualifier | job graph, parity manifest/views, Dagster definitions/workflow, launcher, docs, build-replay files | Prove the same recovery invariants for `02-source-sast`; either integrate each declared Go/Java/PHP pinned tool with normalized lead semantics or leave a precise tool-by-tool blocked gap—never synthesize coverage. |
-| **Q16** independent qualification | ACTIVE, READ-ONLY | current `main`, H14/H16 commits when available, component-characterization commit `ef415950` | all tracked files | Produce an evidence-backed test matrix, independently rerun focused/contract/parity checks, identify regressions and distinguish missing host prerequisites from code failures. |
-| **D16** documentation/integration | MASTER AGENT | this backlog, continuation prompts, operator/status docs and generated catalogs after code review | worker implementation while coding lanes are active | Keep statuses honest, integrate only reviewed commits, regenerate views, record qualification evidence, and leave F03 blocked until F02 publishes an accepted evidence-assembly envelope. |
+| **H14** build-replay fault/recovery | PARKED at `ec0d3288` | `build_replay.py`, build-replay focused tests, a dedicated qualifier | all happy-path integration surfaces | Preserve for later independent live qualification; do not merge now. |
+| **H16** source-SAST hardening | PARKED at `2d8f8f3` | `source_sast.py`, source-SAST focused tests and qualifier | all happy-path integration surfaces | 11 focused tests and a pinned-Semgrep qualifier passed, but resume independent review only after nominal F02/F03 completion; do not merge now. |
+| **Q16** independent baseline | DONE, READ-ONLY | `main` `23851c04`, H14 and component-core inspection | all tracked files | Baseline recorded below; candidate qualification now follows F02/F03. |
+| **D16** documentation/integration | SUPERSEDED | hardening prompts and baseline notes | worker implementation | Retain the prompts as deferred work packages. |
 
 H14 and H16 are independent because they own disjoint worker and test files. Neither may claim or
 edit a shared surface. If hardening reveals a required output-contract, common-runtime, Dagster or
@@ -1369,6 +1369,24 @@ deterministic source-SAST leads. The baseline does **not** prove stage 14-16 tam
 forced-recovery, B13-receipt, runtime permission, negative network/read-only or timeout behavior.
 Component core `ef415950` passes 7/7 focused tests but remains `BLOCKED(F02)` and its generated
 catalog is stale until serialized shared-surface integration.
+
+### Active nominal happy-path coordination — 2026-09-27
+
+The master agent owns shared surfaces and final integration. Two coding lanes deliberately build
+the next dependency pair without spending the critical path on recovery qualification:
+
+| Lane | Status | Exclusive scope | Exit condition |
+|---|---|---|---|
+| **F02-core** evidence assembly | CLAIMED | new `evidence_assembly.py`, dedicated schema/contract/registry records, fixtures and focused tests | Deterministically validate terminal producer envelopes and publish a hash-bound `intel-manifest.json`; missing producers remain explicit gaps/skips and the graph node remains non-executable until serial integration. |
+| **F03-core** component characterization | CLAIMED | `component_characterization.py`, dedicated component schema/registry/task files, fixtures and focused tests | Consume exact F02 manifest lineage and produce fixture-qualified component purpose, ownership, paths, relationships, citations, confidence, unknowns and tag cloud while remaining honestly `BLOCKED(F02)` until integration. |
+| **Q17** independent qualification | QUEUED, READ-ONLY | F02-core and F03-core candidate commits | Review and run focused/contract/parity/catalog checks without editing; distinguish nominal core completeness from graph/live readiness. |
+| **D17** master integration | ACTIVE | TODO/docs, shared graph/parity/runtime/Dagster/catalog surfaces | Review both cores, resolve their interface, integrate shared surfaces serially, then run the happy path and document only demonstrated readiness. |
+
+F02-core and F03-core may work in parallel because neither edits shared graph/runtime/catalog files.
+The agreed boundary is the hash-bound `intel-manifest.json` envelope: F02 produces it and F03 may
+only characterize evidence cited through it. Full producer completeness, negative-path recovery,
+Go/Java/PHP SAST expansion and OWASP worklist execution remain later work; they must not be reported
+as complete merely because the nominal fixture path runs.
 
 Cross-cutting capability ownership is explicit:
 

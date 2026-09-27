@@ -51,6 +51,8 @@ Task-scoped prompts:
 | [source-sast-hardening.md](source-sast-hardening.md) | H16: harden source-SAST recovery and close or precisely retain the Go/Java/PHP tool gaps. |
 | [hardening-test-qualification.md](hardening-test-qualification.md) | Q16: read-only independent verification of H14, H16 and the staged component-characterization core. |
 | [hardening-documentation-integration.md](hardening-documentation-integration.md) | D16: master-agent documentation, review and serialized integration instructions. |
+| [evidence-assembly-core.md](evidence-assembly-core.md) | F02-core: implement the nominal evidence-assembly contract and worker without claiming missing producer readiness. |
+| [component-characterization-core.md](component-characterization-core.md) | F03-core: complete component characterization against exact F02 manifest lineage while shared integration remains serialized. |
 | [design-parity-worker-envelope.md](design-parity-worker-envelope.md) | Design parity Workstream B, batch 9 (common worker envelope); holds run ids `TODO.md` cites. |
 | [scripts-to-pipeline-migration.md](scripts-to-pipeline-migration.md) | Migrating review jobs out of `scripts/` (see the Script Migration Rule in `AGENTS.md`). |
 | [g02-owasp-workbench-decision.md](g02-owasp-workbench-decision.md) | G02 OWASP control workbench decision. |
