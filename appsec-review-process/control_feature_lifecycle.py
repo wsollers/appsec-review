@@ -40,7 +40,7 @@ UPSTREAM = {
     "completeness-audit": JOBS["completeness-audit"],
     "synthetic-hypothesis-resynthesis": JOBS["synthetic-hypothesis-resynthesis"],
     "09-independent-verification": ("09-independent-verification", "independent-verification.json", "09-independent-verification.schema.json"),
-    "11-remediation-proposal": ("remediation-retest-feedback", "remediation-retest.json", "remediation-retest-feedback.schema.json"),
+    "11-remediation-proposal": ("11-remediation-proposal", "remediation-proposal.json", "remediation-proposal.schema.json"),
     "00-intake": ("intake", "outputs/intake.json", "intake.schema.json"),
 }
 
@@ -252,10 +252,17 @@ def _produce(run_id: str, job_id: str, inputs: dict[str, Any]) -> tuple[dict[str
         verified = {row["claim_id"] for row in verification["verifications"] if row["status"] == "VERIFIED"}
         proposal = _optional_current(run_id, "11-remediation-proposal")
         if proposal:
-            result = proposal[0]
-            if any(row["claim_id"] not in verified for row in result["proposals"]):
+            source = proposal[0]
+            if any(row["claim_id"] not in verified for row in source["proposals"]):
                 raise Blocked("remediation feedback: proposal is not bound to a current verified claim")
-            return result, "OK", [], None
+            result = {"schema":"appsec-review/remediation-retest-feedback/1.0", "run_id":run_id,
+                "proposals":[{"proposal_id":row["proposal_id"], "claim_id":row["claim_id"],
+                    "state":"PROPOSED", "author_id":"11-remediation-proposal",
+                    "change_ref":row["proposal_id"], "rationale":row["remediation_objective"],
+                    "target_components":row["component_ids"], "fixed":False}
+                    for row in source["proposals"]], "retests":[]}
+            return result, "OK_WITH_GAPS", [
+                "No authorized target change exists; same-environment retesting has not run."], None
         result = {"schema":"appsec-review/remediation-retest-feedback/1.0", "run_id":run_id,
                   "proposals":[], "retests":[]}
         if not verified:
