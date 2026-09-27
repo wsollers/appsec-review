@@ -170,25 +170,55 @@ def execute_registered(kind: str, *, snapshot_registry: Path, max_age_seconds: i
                        supplied_runtime: ce.ContainerRuntime | None = None) -> dict[str, Any]:
     if kind not in {"grype", "osv"}: raise AdapterBlocked("registered snapshots apply only to Grype and OSV")
     rt = supplied_runtime or runtime(source_snapshot_sha256)
+    resolved = resolve_registered_snapshot(kind, snapshot_registry=snapshot_registry,
+        max_age_seconds=max_age_seconds, warn_age_seconds=warn_age_seconds,
+        now=datetime.fromisoformat(rt.clock().replace("Z", "+00:00")))
+    identity = resolved["database"]
+    database_kind = identity["database_kind"]
+    # Re-resolve the content-addressed data root for the fixed read-only mount. The second lookup
+    # re-hashes the snapshot and therefore also closes a replacement race between the gate and B13.
+    try:
+        full_identity = snapshots.resolve(database_kind, snapshot_registry, max_age_seconds=max_age_seconds,
+                                          warn_age_seconds=warn_age_seconds,
+                                          now=datetime.fromisoformat(rt.clock().replace("Z", "+00:00")))
+    except (snapshots.SnapshotBlocked, snapshots.SnapshotStale, snapshots.SnapshotInvalid) as exc:
+        raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot changed during resolution") from exc
+    result = execute(kind, run_id=run_id, adapter_attempt_id=adapter_attempt_id,
+        source_snapshot_sha256=source_snapshot_sha256, attempt_root=attempt_root,
+        sbom_root=sbom_root, database_root=Path(full_identity["data_root"]), supplied_runtime=rt)
+    if any(full_identity[key] != identity[key] for key in identity):
+        raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot changed during resolution")
+    result.update(resolved)
+    return result
+
+
+def resolve_registered_snapshot(kind: str, *, snapshot_registry: Path, max_age_seconds: int,
+                                warn_age_seconds: int | None = None,
+                                now: datetime) -> dict[str, Any]:
+    """Resolve and fully validate a registered matcher snapshot without starting its tool.
+
+    This is the applicability-gate seam for a matcher whose accepted input class is absent.  It
+    deliberately retains the same content and age validation as ``execute_registered`` so a
+    per-tool skip cannot make one of the SCA job's two declared database identities disappear.
+    """
+    if kind not in {"grype", "osv"}:
+        raise AdapterBlocked("registered snapshots apply only to Grype and OSV")
     database_kind = "grype-db" if kind == "grype" else "osv"
     try:
         identity = snapshots.resolve(database_kind, snapshot_registry, max_age_seconds=max_age_seconds,
-                                     warn_age_seconds=warn_age_seconds,
-                                     now=datetime.fromisoformat(rt.clock().replace("Z", "+00:00")))
+                                     warn_age_seconds=warn_age_seconds, now=now)
     except snapshots.SnapshotBlocked as exc:
         raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot absent") from exc
     except snapshots.SnapshotStale as exc:
         raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot stale") from exc
     except snapshots.SnapshotInvalid as exc:
         raise AdapterBlocked(f"{SPECS[kind]['job']}: {database_kind} snapshot invalid") from exc
-    result = execute(kind, run_id=run_id, adapter_attempt_id=adapter_attempt_id,
-        source_snapshot_sha256=source_snapshot_sha256, attempt_root=attempt_root,
-        sbom_root=sbom_root, database_root=Path(identity["data_root"]), supplied_runtime=rt)
-    result["database"] = {key: identity[key] for key in
-        ("database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp")}
-    result["database_freshness"] = {key: identity[key] for key in
-        ("age_seconds", "warn_age_seconds", "max_age_seconds", "freshness", "warnings")}
-    return result
+    return {
+        "database": {key: identity[key] for key in
+                     ("database_kind", "vendor_build", "schema_version", "snapshot_id", "sha256", "data_timestamp")},
+        "database_freshness": {key: identity[key] for key in
+                               ("age_seconds", "warn_age_seconds", "max_age_seconds", "freshness", "warnings")},
+    }
 
 
 def main() -> int:

@@ -75,10 +75,12 @@ class DependencyOrchestrationTests(unittest.TestCase):
 
     def test_sca_resolves_both_supplied_offline_snapshots(self):
         outputs = self.jobs / "02-sbom-inventory" / "attempts" / "a" / "outputs"
-        outputs.mkdir(parents=True); manifest = outputs / "sbom-manifest.json"; manifest.write_text("{}")
+        outputs.mkdir(parents=True); manifest = outputs / "sbom-manifest.json"; manifest.write_text(json.dumps({
+            "components": [{"component_id": "SC-000001", "purl": "pkg:npm/example@1.0.0"}]}))
         accepted = self.jobs / "02-sbom-inventory" / "accepted.json"; accepted.parent.mkdir(exist_ok=True); accepted.write_text("{}")
         registry = Path(self.temp.name) / "offline-registry"; registry.mkdir()
-        payload = {"sbom": {"attempt_id": "a", "path": str(manifest), "sha256": "sha256:" + "1" * 64,
+        payload = {"sbom": {"attempt_id": "a", "path": str(manifest),
+                            "sha256": "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest(),
                             "accepted_path": str(accepted)}}
         identities = [{"database_kind": kind, "vendor_build": "v", "schema_version": "1",
                        "snapshot_id": kind + "-one", "sha256": "sha256:" + "2" * 64,
@@ -97,14 +99,43 @@ class DependencyOrchestrationTests(unittest.TestCase):
         resolved = json.loads(Path(run.call_args.args[1]).read_text())
         self.assertEqual({row["database_kind"] for row in resolved["databases"]}, {"grype-db", "osv"})
         self.assertEqual(resolved["max_database_age_seconds"], 3600)
+        self.assertEqual(resolved["osv_applicability"]["decision"], "EXECUTE")
+
+    def test_sca_skips_only_osv_for_an_sbom_without_purls_and_retains_both_snapshots(self):
+        outputs = self.jobs / "02-sbom-inventory" / "attempts" / "a" / "outputs"
+        outputs.mkdir(parents=True); manifest = outputs / "sbom-manifest.json"; manifest.write_text(json.dumps({
+            "components": [{"component_id": "SC-000001", "purl": None}]}))
+        accepted = self.jobs / "02-sbom-inventory" / "accepted.json"; accepted.parent.mkdir(exist_ok=True); accepted.write_text("{}")
+        registry = Path(self.temp.name) / "offline-registry"; registry.mkdir()
+        payload = {"sbom": {"attempt_id": "a", "path": str(manifest),
+            "sha256": "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest(), "accepted_path": str(accepted)}}
+        identities = [{"database_kind": kind, "vendor_build": "v", "schema_version": "1",
+            "snapshot_id": kind + "-one", "sha256": "sha256:" + "2" * 64,
+            "data_timestamp": "2026-09-27T11:00:00Z"} for kind in ("grype-db", "osv")]
+        request = self.request("02-sca-vulnerability-match", payload,
+            {"sbom_root": str(outputs), "snapshot_registry": str(registry), "max_database_age_seconds": 3600,
+             "snapshot_identities": identities})
+        with patch.object(orchestration.b13, "execute_registered", return_value={
+                "b13_attempt": {"kind": "grype"}, "database": identities[0]}) as execute, \
+             patch.object(orchestration.b13, "resolve_registered_snapshot", return_value={
+                "database": identities[1], "database_freshness": {}}) as resolve, \
+             patch.object(orchestration.workers, "run", return_value={"attempt_id": "worker"}) as run:
+            self.execute("02-sca-vulnerability-match", request)
+        self.assertEqual([call.args[0] for call in execute.call_args_list], ["grype"])
+        resolve.assert_called_once()
+        resolved = json.loads(Path(run.call_args.args[1]).read_text())
+        self.assertEqual(resolved["osv_applicability"], {"decision": "SKIPPED_NA",
+            "reason": "no-purl-bearing-components", "examined_component_count": 1,
+            "purl_component_count": 0, "purl_component_refs": []})
+        self.assertNotIn("osv_b13_attempt", resolved)
 
     def test_absent_or_stale_snapshot_fails_closed(self):
         outputs = self.jobs / "02-sbom-inventory" / "attempts" / "a" / "outputs"
-        outputs.mkdir(parents=True); manifest = outputs / "sbom-manifest.json"; manifest.write_text("{}")
+        outputs.mkdir(parents=True); manifest = outputs / "sbom-manifest.json"; manifest.write_text('{"components": []}')
         accepted = self.jobs / "02-sbom-inventory" / "accepted.json"; accepted.parent.mkdir(exist_ok=True); accepted.write_text("{}")
         registry = Path(self.temp.name) / "offline-registry"; registry.mkdir()
         request = self.request("02-sca-vulnerability-match", {"sbom": {"attempt_id": "a", "path": str(manifest),
-            "sha256": "sha256:" + "1" * 64, "accepted_path": str(accepted)}},
+            "sha256": "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest(), "accepted_path": str(accepted)}},
             {"sbom_root": str(outputs), "snapshot_registry": str(registry), "max_database_age_seconds": 1,
              "snapshot_identities": [{"database_kind": kind} for kind in ("grype-db", "osv")]})
         with patch.object(orchestration.b13, "execute_registered",

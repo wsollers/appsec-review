@@ -95,6 +95,7 @@ SCA_RESULT_FILE = f"{OUTPUTS_DIR}/sca-vulnerability-match.json"
 SCA_IDENTITIES_FILE = f"{OUTPUTS_DIR}/vulnerability-database-identities.json"
 SCA_GAPS_FILE = f"{OUTPUTS_DIR}/sca-coverage-gaps.json"
 SCA_SUMMARY_FILE = f"{OUTPUTS_DIR}/coverage-gap-summary.json"
+SCA_OSV_APPLICABILITY_FILE = f"{OUTPUTS_DIR}/osv-applicability-receipt.json"
 LICENSE_RESULT_FILE = f"{OUTPUTS_DIR}/license-inventory.json"
 LIFECYCLE_RESULT_FILE = f"{OUTPUTS_DIR}/dependency-lifecycle.json"
 TABLE_IDENTITY_FILE = f"{OUTPUTS_DIR}/reference-table-identity.json"
@@ -145,13 +146,14 @@ CONTRACT_POLICIES = MappingProxyType({
     SCA_CONTRACT_ID: _frozen(
         job_id="02-sca-vulnerability-match",
         required_files=(MANIFEST_FILE, STATUS_FILE, SCA_RESULT_FILE, SCA_IDENTITIES_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE,
-                        RECEIPT_FILE, TOOL_RESULTS_FILE, COVERAGE_FILE),
+                        SCA_OSV_APPLICABILITY_FILE, RECEIPT_FILE, TOOL_RESULTS_FILE, COVERAGE_FILE),
         result_schema=(SCA_RESULT_FILE, "sca-vulnerability-match.schema.json"),
         document_schemas=MappingProxyType({
             SCA_RESULT_FILE: "sca-vulnerability-match.schema.json",
             SCA_IDENTITIES_FILE: "sca-vulnerability-match-database-identities.schema.json",
             SCA_GAPS_FILE: "sca-vulnerability-match-coverage-gaps.schema.json",
-            SCA_SUMMARY_FILE: "sca-vulnerability-match-gap-summary.schema.json"}),
+            SCA_SUMMARY_FILE: "sca-vulnerability-match-gap-summary.schema.json",
+            SCA_OSV_APPLICABILITY_FILE: "osv-applicability-receipt.schema.json"}),
         claim_class_id="known_vulnerability_match_lead",
         allowed_assertions=("advisory-matches-declared-version", "database-snapshot-identity", "match-coverage-gap"),
     ),
@@ -1055,8 +1057,26 @@ def _database_block_errors(label: str, block: Mapping[str, Any], expected_databa
 
 def _sca_errors(state: _Attempt, sbom: dict, expected_databases: Mapping[str, Mapping[str, str]]) -> list[str]:
     result, gap_document, summary = (state.documents[name] for name in (SCA_RESULT_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE))
+    applicability = state.documents[SCA_OSV_APPLICABILITY_FILE]
     components = {component["component_id"]: component for component in sbom["components"]}
     errors = []
+    purl_refs = sorted(component_id for component_id, component in components.items()
+                       if isinstance(component.get("purl"), str) and component["purl"])
+    expected_decision = "EXECUTE" if purl_refs else "SKIPPED_NA"
+    wanted_applicability = {
+        "decision": expected_decision,
+        "reason": None if purl_refs else "no-purl-bearing-components",
+        "examined_component_count": len(components),
+        "purl_component_count": len(purl_refs),
+        "purl_component_refs": purl_refs,
+    }
+    for field, value in wanted_applicability.items():
+        if applicability[field] != value:
+            errors.append(f"osv-applicability-mismatch: {field} is not derived from the bound SBOM")
+    if applicability["database_identity"]["database_kind"] != "osv":
+        errors.append("osv-applicability-mismatch: database_identity must retain the OSV snapshot")
+    else:
+        errors += _database_block_errors("osv applicability receipt", applicability["database_identity"], expected_databases)
 
     evaluated: dict[str, dict] = {}
     for position, entry in enumerate(result["evaluated"], 1):
@@ -1080,6 +1100,8 @@ def _sca_errors(state: _Attempt, sbom: dict, expected_databases: Mapping[str, Ma
             errors.append(f"duplicate-record: {label}: evaluated_by repeats a database")
         if "osv" in entry["evaluated_by"] and component["purl"] is None:
             errors.append(f"match-basis-unsupported: {label}: osv evaluates by purl and this component has none")
+        if ("osv" in entry["evaluated_by"]) != (expected_decision == "EXECUTE" and component["component_id"] in purl_refs):
+            errors.append(f"osv-applicability-mismatch: {label}: evaluated_by must reflect the retained per-tool decision")
 
     errors += _ordinal_errors("matches", "VM", [match["match_id"] for match in result["matches"]])
     alias_owner: dict[tuple[str, str], str] = {}
@@ -1186,7 +1208,7 @@ def verify_sca_attempt(attempt_root: Any, *, sbom_attempt_root: Any, expected_sb
         permitted_node_statuses=permitted_node_statuses, on_unhandled=on_unhandled, limits=limits, store=store)
     if state is None:
         return errors
-    for relative in (SCA_RESULT_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE):
+    for relative in (SCA_RESULT_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE, SCA_OSV_APPLICABILITY_FILE):
         errors += _binding_errors(relative, "sbom_binding", state.documents[relative]["sbom_binding"], "sbom", expected_sbom)
     errors += _database_errors(state, expected_databases, max_age, now, declared)
     found, sbom = _load_upstream("sbom", sbom_attempt_root, expected_sbom, expected_header, limits, store)

@@ -110,6 +110,13 @@ class DependencyWorkersTest(unittest.TestCase):
                 "vendor/cJSON-1.7.18/cJSON.c": "sha256:" + "3" * 64,
                 "vendor/cJSON-1.7.18/cJSON.h": "sha256:" + "4" * 64,
             })
+        if "databases" in extra and isinstance(extra.get("sbom"), dict):
+            sbom = json.loads(Path(extra["sbom"]["path"]).read_text())
+            refs = sorted(row["component_id"] for row in sbom["components"] if row.get("purl"))
+            extra.setdefault("osv_applicability", {"decision": "EXECUTE" if refs else "SKIPPED_NA",
+                "reason": None if refs else "no-purl-bearing-components",
+                "examined_component_count": len(sbom["components"]), "purl_component_count": len(refs),
+                "purl_component_refs": refs})
         return {"run_id": self.run_id, "source_snapshot_sha256": self.source,
                 "generated_at": self.when, "output_root": str(self.out), **extra}
 
@@ -254,6 +261,23 @@ class DependencyWorkersTest(unittest.TestCase):
         enrichment_path = self.result_path(result_envelope, "outputs/build-index-vendored-members.json")
         self.assertEqual(sbom_contracts.build_index_enrichment_errors(result, enrichment_path.read_bytes()), [])
         self.assertEqual(component["citation"]["path"], "outputs/build-index-vendored-members.json")
+
+        grype_output, grype_receipt, grype_expected = self.tool(
+            "02-sca-vulnerability-match", "grype", {"matches": []})
+        databases = [{"database_kind": kind, "vendor_build": "build-1", "schema_version": "1.0",
+            "snapshot_id": kind + "-20260927", "sha256": "sha256:" + hashlib.sha256(kind.encode()).hexdigest(),
+            "data_timestamp": "2026-09-27T11:00:00Z"} for kind in ("grype-db", "osv")]
+        sca_request = self.request(sbom=self.binding(result_envelope, "outputs/sbom-manifest.json"),
+            tool_output=str(grype_output), tool_receipt=str(grype_receipt), expected_tool=grype_expected,
+            databases=databases, max_database_age_seconds=7200)
+        sca_envelope = self.run_request("sca", "hello-cjson-sca", sca_request)
+        self.assertEqual(sca_envelope["execution_status"], "OK_WITH_GAPS")
+        self.assertIn("OSV_SKIPPED_NA_NO_PURL_COMPONENTS", sca_envelope["gaps"])
+        receipt = json.loads(self.result_path(
+            sca_envelope, "outputs/osv-applicability-receipt.json").read_text())
+        self.assertEqual((receipt["decision"], receipt["reason"]),
+                         ("SKIPPED_NA", "no-purl-bearing-components"))
+        self.assertEqual(receipt["purl_component_refs"], [])
 
     def test_sbom_rejects_stale_build_index_pointer(self):
         output, receipt, expected = self.tool("02-sbom-inventory", "syft", {"components": []})

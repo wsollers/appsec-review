@@ -1539,12 +1539,13 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Offline Grype and OSV version matching against the accepted SBOM and explicitly configured, hash-verified, age-bounded supplied snapshots. Snapshot synchronization is outside the analysis DAG; matches are leads, never reachability.",
+      "planned_scope": "Offline Grype and OSV version matching against the accepted SBOM and explicitly configured, hash-verified, age-bounded supplied snapshots. Grype always executes. OSV executes only for purl-bearing components; otherwise its applicability gate publishes an evidence-supported per-tool SKIPPED_NA receipt while retaining the validated OSV snapshot identity and the node publishes OK_WITH_GAPS. Snapshot synchronization is outside the analysis DAG; matches are leads, never reachability.",
       "required_artifacts": [
         "result.json",
         "inputs.json",
         "outputs/sca-vulnerability-match.json",
         "outputs/vulnerability-database-identities.json",
+        "outputs/osv-applicability-receipt.json",
         "outputs/sca-coverage-gaps.json",
         "outputs/coverage-gap-summary.json",
         "outputs/pinned-tool-evidence.json"

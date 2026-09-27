@@ -20,6 +20,7 @@ import dependency_b13_adapters as adapters
 import dependency_workers as workers
 import dependency_snapshot_registry as snapshots
 from test_container_execution import ScriptedDocker
+from worker_result import artifact_records, terminal_envelope
 
 
 class AdapterTests(unittest.TestCase):
@@ -140,8 +141,25 @@ class AdapterTests(unittest.TestCase):
         syft, _ = self.execute("syft", ScriptedDocker(), (json.dumps(syft_raw) + "\n").encode())
         common = {"run_id": "run-dependency", "source_snapshot_sha256": self.source,
                   "generated_at": support.NOW, "output_root": str(self.root / "worker-output")}
+        build_root = self.root / "worker-output" / "02-build-index"
+        build_attempt = build_root / "attempts" / "build-one"; build_attempt.mkdir(parents=True)
+        build_index_path = build_attempt / "build-index.json"
+        build_index_path.write_text('{"schema": "appsec-review/build-index/1", "units": []}\n')
+        build_envelope = terminal_envelope(run_id="run-dependency", job_id="02-build-index", attempt_id="build-one",
+            worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+            input_fingerprint="sha256:" + "8" * 64, output_contract="build-index",
+            started_at=support.NOW, finished_at=support.NOW, summary="fixture",
+            artifacts=artifact_records(build_attempt, ["build-index.json"]))
+        (build_attempt / "result.json").write_text(json.dumps(build_envelope, sort_keys=True) + "\n")
+        build_pointer = build_root / "accepted.json"
+        build_pointer.write_text(json.dumps({"schema": "appsec-review/accepted-worker-result/1.0",
+            "run_id": "run-dependency", "job": "02-build-index", "attempt_id": "build-one", "status": "OK",
+            "fingerprint": build_envelope["input_fingerprint"], "envelope_path": "result.json",
+            "envelope_sha256": workers._hash_file(build_attempt / "result.json").split(":", 1)[1]}) + "\n")
+        build_binding = {"attempt_id": "build-one", "path": str(build_index_path),
+            "sha256": workers._hash_file(build_index_path), "accepted_path": str(build_pointer)}
         sbom_request = self.write_json("sbom-request.json", {**common, "b13_attempt": syft["b13_attempt"],
-            "source_files": {"package-lock.json": source_sha}})
+            "source_files": {"package-lock.json": source_sha}, "build_index": build_binding})
         sbom = workers.run("sbom", sbom_request)
         sbom_path = self.root / "worker-output/02-sbom-inventory/attempts" / sbom["attempt_id"] / "outputs/sbom-manifest.json"
         sbom_doc = json.loads(sbom_path.read_text()); component = sbom_doc["components"][0]
@@ -160,7 +178,10 @@ class AdapterTests(unittest.TestCase):
             "data_timestamp": "2026-09-20T11:00:00Z"} for kind in ("grype-db", "osv")]
         sca_request = self.write_json("sca-request.json", {**common, "sbom": sbom_binding,
             "b13_attempt": grype["b13_attempt"], "osv_b13_attempt": osv["b13_attempt"],
-            "databases": databases, "max_database_age_seconds": 700000})
+            "databases": databases, "max_database_age_seconds": 700000,
+            "osv_applicability": {"decision": "EXECUTE", "reason": None,
+                "examined_component_count": 1, "purl_component_count": 1,
+                "purl_component_refs": [component["component_id"]]}})
         sca = workers.run("sca", sca_request)
         sca_path = self.root / "worker-output/02-sca-vulnerability-match/attempts" / sca["attempt_id"] / "outputs/sca-vulnerability-match.json"
         self.assertEqual(len(json.loads(sca_path.read_text())["matches"]), 1, "Grype and OSV aliases must collapse")

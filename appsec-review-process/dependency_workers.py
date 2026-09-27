@@ -526,9 +526,6 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
     tool, receipt, output = _tool(request, job, "grype")
-    if "osv_b13_attempt" not in request:
-        raise WorkerBlocked(f"{job}: verified offline OSV execution evidence is required")
-    supplemental = _tool(request, job, "osv", "osv_")
     max_age = request.get("max_database_age_seconds")
     if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 0:
         raise WorkerBlocked(f"{job}: explicit non-negative database age ceiling is required")
@@ -541,6 +538,27 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
         **{key: value for key, value in item["database"].items() if key != "database_kind"},
         "data_timestamp": item["data_timestamp"]} for item in identities})
     by_id = {row["component_id"]: row for row in sbom["components"]}
+    purl_refs = sorted(row["component_id"] for row in sbom["components"]
+                       if isinstance(row.get("purl"), str) and row["purl"])
+    supplied_applicability = request.get("osv_applicability")
+    expected_applicability = {
+        "decision": "EXECUTE" if purl_refs else "SKIPPED_NA",
+        "reason": None if purl_refs else "no-purl-bearing-components",
+        "examined_component_count": len(sbom["components"]),
+        "purl_component_count": len(purl_refs),
+        "purl_component_refs": purl_refs,
+    }
+    if supplied_applicability != expected_applicability:
+        raise WorkerBlocked(f"{job}: OSV applicability decision differs from the accepted SBOM")
+    osv_executes = expected_applicability["decision"] == "EXECUTE"
+    if osv_executes:
+        if "osv_b13_attempt" not in request:
+            raise WorkerBlocked(f"{job}: applicable OSV scan requires verified offline execution evidence")
+        supplemental = _tool(request, job, "osv", "osv_")
+    else:
+        if "osv_b13_attempt" in request:
+            raise WorkerBlocked(f"{job}: non-applicable OSV scan must not carry execution evidence")
+        supplemental = None
     gaps, evaluated = [], []
     for component in sbom["components"]:
         reason = required_gap_reason(component)
@@ -548,11 +566,12 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
             gaps.append({"gap_id": "VG-" + component["component_id"][3:], "assertion": "match-coverage-gap",
                          "component_ref": component["component_id"], "ecosystem": component["ecosystem"], "reason": reason})
         else:
-            evaluated_by = ["grype-db"] + (["osv"] if component.get("purl") else [])
+            evaluated_by = ["grype-db"] + (["osv"] if osv_executes and component.get("purl") else [])
             evaluated.append({"component_ref": component["component_id"], "outcome": "no-advisory-matched",
                               "version_scheme": version_scheme_for(component), "evaluated_by": evaluated_by})
     raw_matches = _sca_rows(tool, by_id, "grype", job)
-    raw_matches.extend(_sca_rows(supplemental[0], by_id, "osv", job))
+    if supplemental is not None:
+        raw_matches.extend(_sca_rows(supplemental[0], by_id, "osv", job))
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for raw in raw_matches:
         if not isinstance(raw, dict) or raw.get("component_ref") not in by_id:
@@ -600,15 +619,25 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
                "gap_list": {"path": "outputs/sca-coverage-gaps.json", "sha256": _hash_bytes(gap_bytes)}}
     identities_doc = {"schema": "appsec-review/sca-vulnerability-match-database-identities/1.0", **header,
                       "databases_digest": digest_value, "databases": identities}
+    osv_database = next(item["database"] for item in identities if item["database"]["database_kind"] == "osv")
+    applicability_doc = {
+        "schema": "appsec-review/osv-applicability-receipt/1.0", **header,
+        "tool_id": "osv-scanner", "sbom_binding": binding,
+        **expected_applicability, "database_identity": osv_database,
+    }
     docs = [(result, "sca-vulnerability-match.schema.json"), (gap_doc, "sca-vulnerability-match-coverage-gaps.schema.json"),
             (summary, "sca-vulnerability-match-gap-summary.schema.json"),
-            (identities_doc, "sca-vulnerability-match-database-identities.schema.json")]
+            (identities_doc, "sca-vulnerability-match-database-identities.schema.json"),
+            (applicability_doc, "osv-applicability-receipt.schema.json")]
     if any(validate_document(doc, schema) for doc, schema in docs):
         raise WorkerBlocked(f"{job}: normalized result violates a closed schema")
-    return {"outputs/sca-vulnerability-match.json": _canonical(result), "outputs/sca-coverage-gaps.json": gap_bytes,
+    return ({"outputs/sca-vulnerability-match.json": _canonical(result), "outputs/sca-coverage-gaps.json": gap_bytes,
             "outputs/coverage-gap-summary.json": _canonical(summary),
             "outputs/vulnerability-database-identities.json": _canonical(identities_doc),
-            "outputs/pinned-tool-evidence.json": _canonical(receipt)}, (["SCA_COMPONENT_GAPS"] if gaps else [])
+            "outputs/osv-applicability-receipt.json": _canonical(applicability_doc),
+            "outputs/pinned-tool-evidence.json": _canonical(receipt)},
+            (["SCA_COMPONENT_GAPS"] if gaps else []) +
+            (["OSV_SKIPPED_NA_NO_PURL_COMPONENTS"] if not osv_executes else []))
 
 
 def build_license(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
