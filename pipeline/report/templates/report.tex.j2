@@ -116,12 +116,12 @@ Process assurance is \textbf{\BLOCK{if model.assurance_pct is not none}\VAR{mode
 \end{tabular}
 \end{center}
 
-\begin{longtable}{@{}p{0.09\linewidth}p{0.49\linewidth}p{0.1\linewidth}p{0.1\linewidth}p{0.1\linewidth}@{}}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.36\linewidth}p{0.1\linewidth}p{0.1\linewidth}p{0.1\linewidth}@{}}
 \toprule
 \eyebrow{ID} & \eyebrow{Finding} & \eyebrow{CVSS 4.0} & \eyebrow{Priority} & \eyebrow{Severity}\\
 \midrule\endhead
 %% for f in findings
-\hyperref[\VAR{f.id}]{\mono{\VAR{f.id}}} & \VAR{f.title|tex} & \BLOCK{if f.cvss_score is not none}\VAR{'%.1f'|format(f.cvss_score)}\BLOCK{else}--\BLOCK{endif} & \BLOCK{if f.get('priority_label')}\textbf{\VAR{f.priority_label|tex}}\BLOCK{elif f.priority is not none}\textbf{\VAR{'%.1f'|format(f.priority)}}\BLOCK{else}--\BLOCK{endif} & \sev{\VAR{f.severity}}\\
+\hyperref[\VAR{f.id}]{\mono{\VAR{f.id|texpath}}} & \VAR{f.title|tex} & \BLOCK{if f.cvss_score is not none}\VAR{'%.1f'|format(f.cvss_score)}\BLOCK{else}--\BLOCK{endif} & \BLOCK{if f.get('priority_label')}\textbf{\VAR{f.priority_label|tex}}\BLOCK{elif f.priority is not none}\textbf{\VAR{'%.1f'|format(f.priority)}}\BLOCK{else}--\BLOCK{endif} & \sev{\VAR{f.severity}}\\
 %% endfor
 \bottomrule
 \end{longtable}
@@ -275,7 +275,7 @@ A low score is only reported as low when enough of the process ran to support it
 \eyebrow{ID} & \eyebrow{Producer} & \eyebrow{Artifact} & \eyebrow{sha256}\\
 \midrule\endhead
 %% for e in evidence
-\label{\VAR{e.id}}\mono{\VAR{e.id}} & {\small \VAR{e.producer|tex}} & \mono{\VAR{e.artifact|texpath}} & \mono{\VAR{e.sha256[:8]|tex}}\\
+\label{\VAR{e.id}}\mono{\VAR{e.id}} & {\small \VAR{e.producer|tex}} & \mono{\VAR{e.artifact|texpath}} & \mono{\VAR{e.sha256[7:15]|tex}}\\
 %% endfor
 \bottomrule
 \end{longtable}
