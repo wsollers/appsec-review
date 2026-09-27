@@ -1,12 +1,13 @@
 """Nominal E09/E10 test execution and deterministic result/coverage ingestion cores."""
 from __future__ import annotations
 import json
+import math
+import os
 from datetime import datetime, timezone
 import base64
 from pathlib import Path, PurePosixPath
 import re
 import threading
-import shutil
 import xml.etree.ElementTree as ET
 from typing import Any
 import container_execution as ce
@@ -21,10 +22,23 @@ import intake
 PROHIBITED_KEYS = {"finding", "findings", "severity", "vulnerability", "vulnerabilities", "clean_claim"}
 EXECUTION_JOB="02-test-execution"; RESULT_JOB="02-test-result-ingest"; COVERAGE_JOB="02-test-coverage-ingest"
 CONTROL="test-execution-control.json"
+PERMISSIONS={EXECUTION_JOB:["target-execution","write-run-data"],
+             RESULT_JOB:["read-run-data","write-run-data"],COVERAGE_JOB:["read-run-data","write-run-data"]}
 
 def utc_now()->str: return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def sha(path: Path) -> str: return "sha256:" + file_hash(path)
+
+def source_tree_sha256(target:Path)->str:
+    records={}
+    for current,dirs,files in os.walk(target.resolve(),topdown=True,followlinks=False):
+        dirs[:]=sorted(name for name in dirs if name!=".git")
+        for name in sorted(files):
+            path=Path(current,name); relative=path.relative_to(target).as_posix()
+            if path.is_symlink(): records[relative]={"kind":"symlink","target":os.readlink(path)}
+            elif path.is_file(): records[relative]={"kind":"file","sha256":sha(path)}
+            else: raise Blocked(f"test evidence checkout contains a special file: {relative}")
+    return "sha256:"+digest(records)
 
 def variant(native: dict, unit: dict) -> str:
     return "sha256:" + digest({"source_revision":native["source_revision"], "unit_id":unit["unit_id"],
@@ -47,15 +61,20 @@ def execution_record(*, run_id:str, source:str, native_lineage:dict, native:dict
                      argv:list[str], environment:list[dict], timeout_seconds:int,
                      permission_record:dict, exit_code:int, raw_results:dict[str,Path],
                      artifact_root:Path|None=None, checkout_identity_sha256:str|None=None,
-                     result_format:str="junit-xml", coverage_format:str="lcov") -> dict:
+                     source_tree_sha256_value:str|None=None,result_format:str="junit-xml", coverage_format:str="lcov") -> dict:
     if not argv or timeout_seconds < 1 or timeout_seconds > 3600: raise Blocked("bounded declared test argv is required")
     if permission_record["decision"].get("decision") != "GRANTED": raise Blocked("test execution permission denied")
     artifact_root=artifact_root or next(iter(raw_results.values()),Path(".")).parent
     artifacts=[{"kind":kind,"path":path.relative_to(artifact_root).as_posix(),"sha256":sha(path),"size_bytes":path.stat().st_size}
                for kind,path in sorted(raw_results.items())]
-    status="PASS" if exit_code==0 else "FAIL"
+    status="PASS" if exit_code==0 else "FAIL"; kinds={item["kind"] for item in artifacts}; gaps=[]
+    if result_format=="junit-xml" and "test-results" not in kinds: gaps.append("Declared JUnit result artifact was not published.")
+    if result_format=="unsupported": gaps.append("Declared test-result format is unsupported.")
+    if coverage_format=="lcov" and "coverage" not in kinds: gaps.append("Declared LCOV coverage artifact was not published.")
+    if coverage_format in {"unsupported","none"}: gaps.append("No supported coverage format was declared; source coverage is unknown.")
     return {"schema":"appsec-review/test-execution/1","run_id":run_id,
-      "source_snapshot_sha256":source,"checkout_identity_sha256":checkout_identity_sha256 or source,
+      "source_snapshot_sha256":source,"source_tree_sha256":source_tree_sha256_value or checkout_identity_sha256 or source,
+      "checkout_identity_sha256":checkout_identity_sha256 or source,
       "source_revision":native["source_revision"],
       "native_build":native_lineage,"unit_id":unit["unit_id"],"variant_sha256":variant(native,unit),
       "image_id":unit["image_id"],"image_digest":unit["image_digest"],
@@ -65,7 +84,7 @@ def execution_record(*, run_id:str, source:str, native_lineage:dict, native:dict
       "permission_fingerprint_sha256":permission_record["fingerprint_sha256"],
       "result_format":result_format,"coverage_format":coverage_format,
       "execution_status":status,"exit_code":exit_code,"artifacts":artifacts,
-      "coverage_gaps":([] if artifacts else ["test command published no structured result or coverage artifacts"])}
+      "coverage_gaps":gaps}
 
 def junit(execution:dict, path:Path) -> dict:
     try: root=ET.parse(path).getroot()
@@ -76,8 +95,11 @@ def junit(execution:dict, path:Path) -> dict:
         if name in seen: raise Blocked("duplicate test identity")
         seen.add(name); outcome="failed" if node.find("failure") is not None or node.find("error") is not None else (
             "skipped" if node.find("skipped") is not None else "passed")
+        try: duration=float(node.get("time","0"))
+        except ValueError as exc: raise Blocked("JUnit duration is malformed") from exc
+        if not math.isfinite(duration) or duration<0: raise Blocked("JUnit duration is invalid")
         cases.append({"test_id":"test_"+digest(name)[:16],"name":name,"outcome":outcome,
-                      "duration_seconds":float(node.get("time","0"))})
+                      "duration_seconds":duration})
     cases.sort(key=lambda x:x["name"])
     result={"schema":"appsec-review/test-results/1","run_id":execution["run_id"],
       "execution":execution_lineage(execution),"raw_sha256":sha(path),"format":"junit-xml",
@@ -98,12 +120,16 @@ def lcov(execution:dict, path:Path, target:Path) -> dict:
             if rel in seen: raise Blocked("duplicate coverage source identity")
             seen.add(rel)
             if not p.is_file() or p.is_symlink(): raise Blocked("coverage source is missing")
-            current={"path":rel,"source_sha256":sha(p),"lines":[]}; files.append(current)
+            current={"path":rel,"source_sha256":sha(p),"lines":[],"_seen":set()}; files.append(current)
         elif line.startswith("DA:"):
             if current is None: raise Blocked("LCOV line data has no source file")
-            number,hits=line[3:].split(",")[:2]; current["lines"].append({"line":int(number),"hits":int(hits)})
+            try: number,hits=map(int,line[3:].split(",")[:2])
+            except (ValueError,TypeError) as exc: raise Blocked("LCOV line data is malformed") from exc
+            if number<1 or hits<0 or number in current["_seen"]: raise Blocked("LCOV line identity or hit count is invalid")
+            current["_seen"].add(number); current["lines"].append({"line":number,"hits":hits})
         elif line and not (line.startswith(("TN:","end_of_record","LF:","LH:","BR"))):
             raise Blocked("unsupported LCOV record")
+    for item in files: item.pop("_seen")
     files.sort(key=lambda x:x["path"])
     partial=any(line["hits"] == 0 for item in files for line in item["lines"])
     gaps=[] if files else ["LCOV contains no source-linked coverage"]
@@ -115,7 +141,7 @@ def lcov(execution:dict, path:Path, target:Path) -> dict:
     return result
 
 def execution_lineage(value:dict)->dict:
-    return {key:value[key] for key in ("source_snapshot_sha256","checkout_identity_sha256","source_revision","native_build","unit_id",
+    return {key:value[key] for key in ("source_snapshot_sha256","source_tree_sha256","checkout_identity_sha256","source_revision","native_build","unit_id",
       "variant_sha256","image_id","image_digest","binary_set_sha256","permission_fingerprint_sha256")}
 
 def _relative(root:Path,value:Any)->Path:
@@ -145,6 +171,7 @@ def accepted(run_id:str,job:str,artifact:str,schema:str,contract:str)->tuple[Pat
         env.get("execution_status")!=pointer["status"] or env.get("acceptance_status")!="CURRENT" or
         env.get("output_contract")!=contract): raise Blocked(f"{job}: invalid envelope")
     published={x["path"]:x["sha256"] for x in env["artifacts"]}
+    if len(published)!=len(env["artifacts"]): raise Blocked(f"{job}: envelope repeats an artifact path")
     for rel,want in published.items():
         p=_relative(attempt,rel)
         if not p.is_file() or file_hash(p)!=want: raise Blocked(f"{job}: accepted artifact changed")
@@ -160,8 +187,8 @@ def target(run_id:str)->tuple[Path,str,str,str]:
     manifest=run_path(run_id)/"inputs/artifact-manifest.json"; value=read_json(manifest).get("target",{}).get("repo_path") if manifest.is_file() else None
     path=Path(value) if isinstance(value,str) else Path()
     if not value or not path.is_absolute() or not path.is_dir() or path.is_symlink(): raise Blocked("test execution target invalid")
-    path=path.resolve(); identity=intake.source_identity(str(path))
-    return path,sha(manifest),"sha256:"+identity["fingerprint"],identity["revision"]
+    path=path.resolve(); identity=intake.source_identity(str(path)); tree=source_tree_sha256(path)
+    return path,sha(manifest),tree,identity["revision"]
 
 def execution_inputs(run_id:str)->dict:
     native_attempt,native,lineage=accepted(run_id,"02-native-build","native-build.json","native-build.schema.json","native-build")
@@ -169,7 +196,13 @@ def execution_inputs(run_id:str)->dict:
     if not control_path.is_file() or validate_document(read_json(control_path),"test-execution-control.schema.json"):
         raise Blocked("explicit trusted test execution control is required")
     control=read_json(control_path); target_path,source,checkout,revision=target(run_id); inputs=read_json(native_attempt/"inputs.json")
+    if ((control["result_format"]=="junit-xml" and not isinstance(control["result_path"],str)) or
+            (control["coverage_format"]=="lcov" and not isinstance(control["coverage_path"],str))):
+        raise Blocked("supported test evidence formats require one declared artifact path")
     if inputs.get("source_snapshot_sha256")!=source: raise Blocked("native build source generation is stale")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}",str(inputs.get("source_tree_sha256",""))):
+        raise Blocked("native build inputs lack source_tree_sha256; E02 must attest the post-build checkout bytes")
+    if inputs["source_tree_sha256"]!=checkout: raise Blocked("checkout bytes differ from accepted E02 source-tree attestation")
     if native.get("source_revision")!=revision: raise Blocked("native build checkout revision is stale")
     units=[x for x in native["units"] if x["unit_id"]==control["unit_id"]]
     if len(units)!=1: raise Blocked("declared test unit does not resolve uniquely")
@@ -181,13 +214,15 @@ def execution_inputs(run_id:str)->dict:
     if (not isinstance(image_record,dict) or image_record.get("value",{}).get("digest")!=unit["image_digest"] or
         validate_document(image_record.get("value",{}),"container-image.schema.json")):
         raise Blocked("accepted native image record is missing or mismatched")
-    grant=permission(run_id,source,control["command_profile_id"],control["grants"],utc_now())
-    return {"run_id":run_id,"job":EXECUTION_JOB,"source_snapshot_sha256":source,"target_path":str(target_path),
-      "checkout_identity_sha256":checkout,"source_revision":revision,
+    grant=permission(run_id,source,control["command_profile_id"],control["grants"],control["authorization_time"])
+    detail={"run_id":run_id,"job":EXECUTION_JOB,"source_snapshot_sha256":source,"target_path":str(target_path),
+      "source_tree_sha256":checkout,"checkout_identity_sha256":checkout,"source_revision":revision,
       "native_attempt_path":str(native_attempt),"native":native,"native_lineage":lineage,"unit":unit,
       "image_record":image_record,
       "control":control,"control_sha256":sha(control_path),
       "permission_fingerprint_sha256":grant["fingerprint_sha256"],"boundary_sha256":ce.boundary_sha256()}
+    detail["build_lineage_sha256"]="sha256:"+digest({"job":EXECUTION_JOB,"source_snapshot_sha256":source,"upstream":lineage})
+    return detail
 
 RUNNER=r'''import json,pathlib,shutil,subprocess,sys
 cfg=json.loads(sys.argv[1]); work=pathlib.Path('/scratch/workspace'); shutil.copytree('/workspace',work,symlinks=True)
@@ -200,8 +235,14 @@ sys.exit(0)'''
 
 def request(run_id:str,attempt_id:str,inputs:dict)->dict:
     c=inputs["control"]; encoded=base64.b64encode(RUNNER.encode()).decode(); trusted="import base64;exec(base64.b64decode('"+encoded+"'))"
+    for key in ("result_path","coverage_path"):
+        value=c[key]
+        if value is not None:
+            pure=PurePosixPath(value)
+            if not value or "\\" in value or pure.is_absolute() or any(part in {"",".",".."} for part in pure.parts):
+                raise Blocked(f"test control {key} is not a normalized relative path")
     cfg={key:c[key] for key in ("argv","environment","result_path","coverage_path")}
-    permit=permission(run_id,inputs["source_snapshot_sha256"],c["command_profile_id"],c["grants"],utc_now())
+    permit=permission(run_id,inputs["source_snapshot_sha256"],c["command_profile_id"],c["grants"],c["authorization_time"])
     return {"schema":ce.REQUEST_ID,"run_id":run_id,"job_id":EXECUTION_JOB,"attempt_id":attempt_id,
       "image":{"image_id":inputs["unit"]["image_id"],"digest":inputs["unit"]["image_digest"]},
       "argv":["/usr/bin/python3","-c",trusted,json.dumps(cfg,sort_keys=True)],"environment":c["environment"],
@@ -231,9 +272,11 @@ SPECS={EXECUTION_JOB:("test-execution.json","test-execution.schema.json","test-e
 def code_hashes(job:str)->dict[str,str]:
     wrapper={EXECUTION_JOB:"test_execution.py",RESULT_JOB:"test_result_ingest.py",COVERAGE_JOB:"test_coverage_ingest.py"}[job]
     names=("test_evidence.py",wrapper,"container_execution.py","permission_capabilities.py",
-           "publish_job_output.py",f"registry/output-contracts/{SPECS[job][2]}.json")
+           "publish_job_output.py",f"registry/output-contracts/{SPECS[job][2]}.json",
+           f"registry/job-templates/{job}.json","registry/roles/test-evidence-producer.json",
+           "registry/tooling-profiles/bounded-test-evidence.json")
     result={name:file_hash(ROOT/name) for name in names}
-    schemas=[SPECS[job][1],"test-execution-lineage.schema.json"]
+    schemas=[SPECS[job][1],"test-execution-lineage.schema.json","test-native-build-lineage.schema.json"]
     if job==EXECUTION_JOB: schemas += ["test-execution-control.schema.json","native-build.schema.json",
                                       "pinned-container-result.schema.json"]
     else: schemas += ["test-execution.schema.json"]
@@ -255,11 +298,23 @@ def ingest_inputs(run_id:str,job:str)->dict:
         if not raw.is_file() or sha(raw)!=records[0]["sha256"]: raise Blocked(f"raw {kind} artifact changed")
     return {"run_id":run_id,"job":job,"execution":execution,"execution_lineage":lineage,
             "execution_attempt_path":str(attempt),"raw_path":str(raw) if raw else None,
-            "raw_kind":kind,"target_path":str(target_path),"code":code_hashes(job)}
+            "raw_kind":kind,"target_path":str(target_path),
+            "source_snapshot_sha256":source,"source_tree_sha256":checkout,
+            "checkout_identity_sha256":checkout,"source_revision":revision,
+            "build_lineage_sha256":"sha256:"+digest({"job":job,"source_snapshot_sha256":source,"upstream":lineage}),
+            "code":code_hashes(job)}
 
 def current_inputs(run_id:str,job:str)->dict:
     value=execution_inputs(run_id) if job==EXECUTION_JOB else ingest_inputs(run_id,job)
     value["code"]=code_hashes(job); return value
+
+def producer_receipts(run_id:str,job:str,inputs:dict)->tuple[dict,dict]:
+    permission_receipt={"schema":"appsec-review/producer-permission-receipt/1.0","run_id":run_id,
+      "job_id":job,"source_snapshot_sha256":inputs["source_snapshot_sha256"],"permissions":PERMISSIONS[job]}
+    lineage_receipt={"schema":"appsec-review/producer-lineage-receipt/1.0","run_id":run_id,
+      "job_id":job,"source_snapshot_sha256":inputs["source_snapshot_sha256"],
+      "build_lineage_sha256":inputs["build_lineage_sha256"]}
+    return permission_receipt,lineage_receipt
 
 def _host(rt:ce.ContainerRuntime)->dict:
     return {"host_flavor":rt.host_flavor,"docker_host":rt.docker_host,"docker_executable":rt.docker_executable,
@@ -270,18 +325,20 @@ def derive_ingest(inputs:dict,job:str)->dict:
     if job==RESULT_JOB:
         if raw is None or execution["result_format"]!="junit-xml":
             return {"schema":"appsec-review/test-results/1","run_id":execution["run_id"],
-              "execution":execution_lineage(execution),"raw_sha256":None,"format":"unsupported",
+              "execution":execution_lineage(execution),"raw_sha256":sha(raw) if raw else None,"format":"unsupported",
               "outcomes":[],"counts":{"passed":0,"failed":0,"skipped":0},
               "coverage_gaps":["No supported JUnit test-result artifact was published."]}
         return junit(execution,raw)
     if raw is None or execution["coverage_format"]!="lcov":
         return {"schema":"appsec-review/test-coverage/1","run_id":execution["run_id"],
-          "execution":execution_lineage(execution),"raw_sha256":None,"format":"none","files":[],
+          "execution":execution_lineage(execution),"raw_sha256":sha(raw) if raw else None,
+          "format":"unsupported" if raw or execution["coverage_format"]=="unsupported" else "none","files":[],
           "coverage_gaps":["No coverage artifact was published; source coverage is unknown."]}
     return lcov(execution,raw,Path(inputs["target_path"]))
 
 def validate_attempt(run_id:str,job:str,attempt:Path,inputs:dict)->None:
     if read_json(attempt/"inputs.json")!=inputs: raise Blocked(f"{job}: immutable inputs changed")
+    if current_inputs(run_id,job)!=inputs: raise Blocked(f"{job}: accepted upstream, source, control, or implementation changed")
     result=read_json(attempt/SPECS[job][0])
     if validate_document(result,SPECS[job][1]): raise Blocked(f"{job}: result schema invalid")
     def prohibited(value:Any)->bool:
@@ -290,6 +347,8 @@ def validate_attempt(run_id:str,job:str,attempt:Path,inputs:dict)->None:
         if isinstance(value,list): return any(prohibited(item) for item in value)
         return False
     if prohibited(result): raise Blocked(f"{job}: prohibited finding/clean promotion")
+    if (read_json(attempt/"permission.json"),read_json(attempt/"lineage.json"))!=producer_receipts(run_id,job,inputs):
+        raise Blocked(f"{job}: F02 permission/lineage receipts changed")
     if job==EXECUTION_JOB:
         receipt=read_json(attempt/"b13-receipt.json"); trial=attempt/receipt["trial_path"]
         req=read_json(trial/"logs/container"/ce.REQUEST_FILE); registry=attempt/receipt["registry_path"]
@@ -300,6 +359,19 @@ def validate_attempt(run_id:str,job:str,attempt:Path,inputs:dict)->None:
         for item in result["artifacts"]:
             p=_relative(attempt,item["path"])
             if not p.is_file() or sha(p)!=item["sha256"]: raise Blocked(f"{job}: raw artifact changed")
+        inner=read_json(trial/"scratch/execution.json"); raw={}
+        if (trial/"scratch/test-results.xml").is_file(): raw["test-results"]=trial/"scratch/test-results.xml"
+        if (trial/"scratch/coverage.info").is_file(): raw["coverage"]=trial/"scratch/coverage.info"
+        permit=permission(run_id,inputs["source_snapshot_sha256"],inputs["control"]["command_profile_id"],
+                          inputs["control"]["grants"],req["permission"]["decision"]["evaluated_at"])
+        expected=execution_record(run_id=run_id,source=inputs["source_snapshot_sha256"],
+          native_lineage=inputs["native_lineage"],native=inputs["native"],unit=inputs["unit"],
+          argv=inputs["control"]["argv"],environment=inputs["control"]["environment"],
+          timeout_seconds=inputs["control"]["timeout_seconds"],permission_record=permit,exit_code=inner["exit_code"],
+          raw_results=raw,artifact_root=attempt,source_tree_sha256_value=inputs["source_tree_sha256"],
+          checkout_identity_sha256=inputs["checkout_identity_sha256"],result_format=inputs["control"]["result_format"],
+          coverage_format=inputs["control"]["coverage_format"])
+        if result!=expected: raise Blocked(f"{job}: execution evidence differs from immutable inputs and B13 result")
     elif result!=derive_ingest(inputs,job): raise Blocked(f"{job}: normalized evidence is stale")
 
 def run_job(run_id:str,dagster_id:str,job:str,force:bool=False)->dict:
@@ -325,6 +397,7 @@ def run_job(run_id:str,dagster_id:str,job:str,force:bool=False)->dict:
               native=inputs["native"],unit=inputs["unit"],argv=inputs["control"]["argv"],environment=inputs["control"]["environment"],
               timeout_seconds=inputs["control"]["timeout_seconds"],permission_record=permit,exit_code=inner["exit_code"],
               raw_results=raw,artifact_root=attempt,checkout_identity_sha256=inputs["checkout_identity_sha256"],
+              source_tree_sha256_value=inputs["source_tree_sha256"],
               result_format=inputs["control"]["result_format"],coverage_format=inputs["control"]["coverage_format"])
             atomic_json(attempt/"b13-receipt.json",{"adapter_attempt_id":adapter,"trial_path":trial.relative_to(attempt).as_posix(),
                                                    "registry_path":registry.relative_to(attempt).as_posix(),"expected_result_sha256":expected})
@@ -332,12 +405,14 @@ def run_job(run_id:str,dagster_id:str,job:str,force:bool=False)->dict:
         else:
             result=derive_ingest(inputs,job); extra=[]
         atomic_json(attempt/result_name,result)
+        permission_receipt,lineage_receipt=producer_receipts(run_id,job,inputs)
+        atomic_json(attempt/"permission.json",permission_receipt); atomic_json(attempt/"lineage.json",lineage_receipt)
         status={"process":job,"status":"OK_WITH_GAPS" if result["coverage_gaps"] else "OK","run_id":run_id,
                 "dagster_run_id":dagster_id,"attempt_id":allocation["attempt_id"],"qualification":"implemented_not_qualified",
                 "records":len(result.get("outcomes",result.get("files",result.get("artifacts",[])))),"ended_at":state_now()}
         atomic_json(attempt/"status.json",status); (attempt/f"{contract}-summary.md").write_text(
             f"# {job}\n\n- Evidence status: {status['status']}\n- Gaps: {len(result['coverage_gaps'])}\n",encoding="utf-8")
-        artifacts=[result_name,"status.json",f"{contract}-summary.md",*extra]
+        artifacts=[result_name,"status.json",f"{contract}-summary.md","permission.json","lineage.json",*extra]
         return record_terminal_current(base,attempt,run_id=run_id,job_id=job,dagster_run_id=dagster_id,
           worker_kind="pinned_container" if job==EXECUTION_JOB else "deterministic_python",output_contract=contract,
           input_fingerprint=fingerprint,started_at=allocation["started_at"],execution_status=status["status"],

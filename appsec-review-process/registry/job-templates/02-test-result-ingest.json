@@ -1,1 +1,55 @@
-{"schema":"appsec-review/job-template/0.1","job_template_id":"02-test-result-ingest","display_name":"Test Result Ingest","process":"02-evidence-pregather","budget_default":"probe","composition":{"persona_id":"qa-test-validator","role_id":"test-evidence-producer","domain_id":"qa-test-artifacts","tooling_profile_id":"bounded-test-evidence","output_contract_id":"test-result-intelligence"},"inputs":{"required":["accepted test execution"],"optional":[]},"outputs":{"directory":"data/jobs/02-test-result-ingest/attempts/<attempt_id>","files":["test-results.json","test-result-intelligence-summary.md","status.json"]},"prompt_sections":["governing_rules","scope","validation","output_contract"],"implemented":true,"timeout_seconds":300,"execution":{"worker":"test_result_ingest.py","arguments":["{run_id}"]},"retry":{"max_attempts":1,"transient_reasons":[],"side_effect_free":true},"applicability":"accepted executions with supported or explicitly unsupported result artifacts","permissions":["read-run-data","write-run-data"],"coordinator":"intake-coordinator"}
+{
+    "schema": "appsec-review/job-template/0.1",
+    "job_template_id": "02-test-result-ingest",
+    "display_name": "Test Result Ingest",
+    "process": "02-evidence-pregather",
+    "budget_default": "probe",
+    "composition": {
+        "persona_id": "qa-test-validator",
+        "role_id": "test-evidence-producer",
+        "domain_id": "qa-test-artifacts",
+        "tooling_profile_id": "bounded-test-evidence",
+        "output_contract_id": "test-result-intelligence"
+    },
+    "inputs": {
+        "required": [
+            "accepted test execution"
+        ],
+        "optional": []
+    },
+    "outputs": {
+        "directory": "data/jobs/02-test-result-ingest/attempts/<attempt_id>",
+        "files": [
+            "test-results.json",
+            "test-result-intelligence-summary.md",
+            "status.json",
+            "permission.json",
+            "lineage.json"
+        ]
+    },
+    "prompt_sections": [
+        "governing_rules",
+        "scope",
+        "validation",
+        "output_contract"
+    ],
+    "implemented": true,
+    "timeout_seconds": 300,
+    "execution": {
+        "worker": "test_result_ingest.py",
+        "arguments": [
+            "{run_id}"
+        ]
+    },
+    "retry": {
+        "max_attempts": 1,
+        "transient_reasons": [],
+        "side_effect_free": true
+    },
+    "applicability": "accepted executions with supported or explicitly unsupported result artifacts",
+    "permissions": [
+        "read-run-data",
+        "write-run-data"
+    ],
+    "coordinator": "intake-coordinator"
+}

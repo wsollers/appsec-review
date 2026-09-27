@@ -1,1 +1,58 @@
-{"schema":"appsec-review/job-template/0.1","job_template_id":"02-test-execution","display_name":"Test Execution","process":"02-evidence-pregather","budget_default":"probe","composition":{"persona_id":"qa-test-validator","role_id":"test-evidence-producer","domain_id":"qa-test-artifacts","tooling_profile_id":"bounded-test-evidence","output_contract_id":"test-execution"},"inputs":{"required":["accepted native build","trusted bounded test plan","target-execution grant"],"optional":[]},"outputs":{"directory":"data/jobs/02-test-execution/attempts/<attempt_id>","files":["test-execution.json","b13-receipt.json","test-execution-summary.md","status.json"]},"prompt_sections":["governing_rules","scope","validation","output_contract"],"implemented":true,"timeout_seconds":3600,"execution":{"worker":"test_execution.py","arguments":["{run_id}"]},"retry":{"max_attempts":1,"transient_reasons":[],"side_effect_free":false},"applicability":"accepted native units with an operator-authorized trusted test plan","permissions":["target-execution","write-run-data"],"coordinator":"intake-coordinator"}
+{
+    "schema": "appsec-review/job-template/0.1",
+    "job_template_id": "02-test-execution",
+    "display_name": "Test Execution",
+    "process": "02-evidence-pregather",
+    "budget_default": "probe",
+    "composition": {
+        "persona_id": "qa-test-validator",
+        "role_id": "test-evidence-producer",
+        "domain_id": "qa-test-artifacts",
+        "tooling_profile_id": "bounded-test-evidence",
+        "output_contract_id": "test-execution"
+    },
+    "inputs": {
+        "required": [
+            "accepted native build",
+            "trusted bounded test plan",
+            "target-execution grant"
+        ],
+        "optional": []
+    },
+    "outputs": {
+        "directory": "data/jobs/02-test-execution/attempts/<attempt_id>",
+        "files": [
+            "test-execution.json",
+            "b13-receipt.json",
+            "test-execution-summary.md",
+            "status.json",
+            "permission.json",
+            "lineage.json"
+        ]
+    },
+    "prompt_sections": [
+        "governing_rules",
+        "scope",
+        "validation",
+        "output_contract"
+    ],
+    "implemented": true,
+    "timeout_seconds": 3600,
+    "execution": {
+        "worker": "test_execution.py",
+        "arguments": [
+            "{run_id}"
+        ]
+    },
+    "retry": {
+        "max_attempts": 1,
+        "transient_reasons": [],
+        "side_effect_free": false
+    },
+    "applicability": "accepted native units with an operator-authorized trusted test plan",
+    "permissions": [
+        "target-execution",
+        "write-run-data"
+    ],
+    "coordinator": "intake-coordinator"
+}

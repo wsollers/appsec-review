@@ -1,1 +1,40 @@
-{"schema":"appsec-review/output-contract/0.1","contract_id":"test-coverage-intelligence","display_name":"Source-linked Test Coverage","required_files":["test-coverage.json","test-coverage-intelligence-summary.md","status.json"],"required_status_fields":["process","status","records","qualification"],"result_schema":{"artifact":"test-coverage.json","schema_file":"test-coverage.schema.json"},"claim_class":{"claim_class_id":"test_evidence","allowed_assertions":["source-coverage","coverage-gap"],"forbidden_promotions":["finding","severity","clean-claim"]},"validation_rules":["consume only accepted hash-bound execution coverage","bind every file to current source bytes","reject escaping and stale paths","missing, partial and unsupported coverage are explicit gaps"]}
+{
+    "schema": "appsec-review/output-contract/0.1",
+    "contract_id": "test-coverage-intelligence",
+    "display_name": "Source-linked Test Coverage",
+    "required_files": [
+        "test-coverage.json",
+        "test-coverage-intelligence-summary.md",
+        "status.json",
+        "permission.json",
+        "lineage.json"
+    ],
+    "required_status_fields": [
+        "process",
+        "status",
+        "records",
+        "qualification"
+    ],
+    "result_schema": {
+        "artifact": "test-coverage.json",
+        "schema_file": "test-coverage.schema.json"
+    },
+    "claim_class": {
+        "claim_class_id": "test_evidence",
+        "allowed_assertions": [
+            "source-coverage",
+            "coverage-gap"
+        ],
+        "forbidden_promotions": [
+            "finding",
+            "severity",
+            "runtime-state"
+        ]
+    },
+    "validation_rules": [
+        "consume only accepted hash-bound execution coverage",
+        "bind every file to current source bytes",
+        "reject escaping and stale paths",
+        "missing, partial and unsupported coverage are explicit gaps"
+    ]
+}
