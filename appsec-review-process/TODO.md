@@ -1340,7 +1340,8 @@ worker-readiness claim.
 ### Deferred hardening coordination — 2026-09-27
 
 This work was scoped and started before the priority was corrected to nominal happy-path
-completion. Keep it isolated; do not merge it ahead of F02/F03.
+completion. The first draft-report milestone is now complete; keep these changes isolated until
+each candidate is independently requalified against the current report path.
 
 | Lane | Status | Exclusive scope | Must not edit | Exit condition |
 |---|---|---|---|---|
@@ -1410,7 +1411,7 @@ qualifies E03-E05, two new implementation lanes close the remaining compiled-evi
 | **E06-E08-core** binary/debug intelligence | UNIT-QUALIFIED, STANDALONE | debug-symbol index, binary triage, CFG and binary-intelligence workers plus dedicated schemas/contracts/registry/tests | Merged; exact binary/build/source joins, deterministic gap aggregation and all F02 receipts passed. M02 pinned tooling and live wiring remain explicit gaps. |
 | **E09-E10-core** test evidence | UNIT-QUALIFIED, STANDALONE | test execution, result-ingest and coverage-ingest workers plus dedicated schemas/contracts/registry/tests | Merged; bounded authorization, fresh source/native lineage, JUnit/LCOV normalization and all F02 receipts passed. Operator staging and live wiring remain. |
 | **Q18-Q21** independent qualification | DONE, READ-ONLY | E03-E10 and D05-D08 candidates/retips | All merged nominal producer cores passed independent focused/common/F02 gates; live qualification is tracked separately. |
-| **D18** master/report path | ACTIVE | shared integration and the remaining S01/F01/F02/F03/threat/OWASP/synthesis sequence | Standalone parity and trusted claim policies are integrated; continue the shortest honest path to a generated report. |
+| **D18** master/report path | DONE FOR FIRST DRAFT | shared integration and the S01/F01/F02/F03/threat/OWASP/claim/synthesis sequence | The deterministic fixture now emits an immutable `DRAFT_EVIDENCE_BACKED` package. Live orchestration and final publication remain separate work. |
 
 **D05-D08-core is UNIT-QUALIFIED, STANDALONE and merged:** document, bounded OpenAPI/Bruno,
 static-test and operations-document ingestion now publish deterministic redacted records or explicit
@@ -1424,10 +1425,13 @@ index but its changed lifecycle needs live requalification and common-envelope m
 may consume it. OWASP T11-T13 remains a standalone core until T14 supplies its common publication,
 graph and Dagster bindings.
 
-Current parallel report-path construction is **L01 append-only candidate claim ledger** and the
-nominal **L05-L08 adversarial/refutation/independent-verification/scoring chain**. The next serialized
-step is `10-synthesis-report` producing an immutable `DRAFT_EVIDENCE_BACKED` package; final signoff,
-L09-L11 feedback loops and deferred recovery/load hardening are not prerequisites for that draft.
+**First-report milestone reached 2026-09-27.** T14 publishes the OWASP matrix, gaps and routes in a
+common accepted envelope. L01 and the nominal L05-L08 adversarial/refutation/independent-
+verification/scoring chain preserve distinct lifecycle-origin and final ledger heads, bind accepted
+decision authority, and feed a hash-bound report-input manifest into `10-synthesis-report`. The
+qualified fixture runner emits the immutable `DRAFT_EVIDENCE_BACKED` JSON/Markdown report,
+coverage appendix, trace index, publication manifest, receipts, status and common result envelope.
+This is fixture qualification, not live Dagster or final-publication qualification.
 
 First-report milestone: produce one immutable, evidence-backed draft report for the tracked fixture.
 It requires accepted native/source/IR/binary/test evidence, F01/F02 assembly, F03 component mapping,
@@ -1436,6 +1440,16 @@ require every deferred recovery/load/platform hardening item. Unsupported or uni
 families must appear as explicit report coverage gaps; they may not be silently omitted or reported
 clean. The report is reached only through accepted producer envelopes and the claim ledger, never by
 feeding raw tool output directly to synthesis.
+
+Post-report hardening TODO:
+
+- wire T14, L01, L05-L08, report-input and synthesis into the shared Dagster lifecycle with
+  accepted/latest publication rather than the fixture runner;
+- assign and qualify resource pools, newest-failure/recovery, load and concurrent-run behavior;
+- resume H14 build-replay and H16 source-SAST hardening only through fresh independent review;
+- complete L09-L11 remediation/retest, rescope and completeness feedback before final publication;
+- add the named human-signoff ledger and final publication gate; the current report must remain
+  `DRAFT_EVIDENCE_BACKED`, `final: false` until those gates pass.
 
 Cross-cutting capability ownership is explicit:
 
