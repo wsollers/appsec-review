@@ -227,12 +227,12 @@ class Assignments(unittest.TestCase):
                           ("engagement_workflow", "scope_check"): rp.CPU,
                           ("engagement_workflow", "workflow_intake"): rp.CPU,
                           ("phase1_intake", "intake_work"): rp.CPU,
-                          ("full_review", "job_02_dev_project_discovery"): rp.CPU}.items():
+                          ("full_review", "job_02_dev_project_discovery"): rp.CPU,
+                          ("full_review", "job_07_red_team_adversarial"): rp.PERSONA}.items():
             self.assertEqual(pooled[key], pool, key)
         reasons = {(item["job"], item["op"]): item["reason"] for item in report["unassigned"]}
         self.assertEqual(reasons[("engagement_workflow", "workflow_config")], "coordination_only")
         self.assertEqual(reasons[("engagement_workflow", "workflow_publish")], "coordination_only")
-        self.assertEqual(reasons[("full_review", "job_07_red_team_adversarial")], "worker_not_implemented")
         self.assertEqual(reasons[("orchestration_smoke", "smoke_work")], "bootstrap_diagnostic")
         # A root op in a pool would let the run coordinator hold the whole run in the queue.
         from dagster_workflow import full_review

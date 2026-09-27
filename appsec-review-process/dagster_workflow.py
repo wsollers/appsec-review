@@ -667,10 +667,10 @@ def claim_review_lifecycle_op(stage):
     def review_stage(context, configured, upstream):
         pool_result = claim_reviewer_pool.run(
             configured['engagement_run_id'], context.run_id, stage,
-            configured['force'])
+            configured.get('force', False))
         result = claim_review_worker.run(
             configured['engagement_run_id'], context.run_id, stage,
-            configured['force'])
+            configured.get('force', False))
         attempt = claim_review_worker.root(
             configured['engagement_run_id'], stage) / 'attempts' / result['attempt_id']
         context.add_output_metadata({
@@ -694,7 +694,7 @@ def analysis_feature_lifecycle_op(job_id):
     def analysis_stage(context, configured, upstream):
         result = analysis_feature_lifecycle.run(
             configured['engagement_run_id'], context.run_id, job_id,
-            configured['force'])
+            configured.get('force', False))
         attempt = data_path(configured['engagement_run_id'], 'jobs', job_id,
                             'attempts', result['attempt_id'])
         context.add_output_metadata({
@@ -716,7 +716,7 @@ def standards_lifecycle_op(job_id, pool=CPU_POOL):
     def standards_stage(context, configured, upstream):
         result = standards_lifecycle.run(
             configured['engagement_run_id'], context.run_id, job_id,
-            configured['force'])
+            configured.get('force', False))
         context.add_output_metadata({
             'output': MetadataValue.path(str(data_path(
                 configured['engagement_run_id'], 'jobs', job_id))),
@@ -736,7 +736,7 @@ deployment_lifecycle_work = standards_lifecycle_op('15-deployment-hardening')
 def evidence_assembly_lifecycle_work(context, configured, upstream):
     run_id = configured['engagement_run_id']
     prepared = evidence_assembly_runtime.prepare(
-        run_id, context.run_id, configured['force'])
+        run_id, context.run_id, configured.get('force', False))
     run_root = run_path(run_id).absolute()
     supply_root = (evidence_assembly_worker.root(run_id) / 'supplies' /
                    prepared.expected_spec['attempt_id']).absolute()
@@ -748,7 +748,7 @@ def evidence_assembly_lifecycle_work(context, configured, upstream):
     result = evidence_assembly_worker.run(
         run_id, context.run_id, supply_root=supply_root,
         source_snapshot_sha256=prepared.source_snapshot_sha256,
-        force=configured['force'], **arguments)
+        force=configured.get('force', False), **arguments)
     attempt = evidence_assembly_worker.root(run_id) / 'attempts' / result['attempt_id']
     context.add_output_metadata({
         'output': MetadataValue.path(str(attempt / evidence_assembly_worker.RESULT)),
