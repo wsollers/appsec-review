@@ -207,8 +207,16 @@ class GraphReviewInvoker:
         def dispatch(argv: list[str], prompt: str, timeout: int, transcript: Path) -> dict[str, Any]:
             return self.dispatch_fn(argv, prompt + suffix, timeout, transcript)
 
+        intake = json.loads(package.inputs[0].data)
+        expected = _expected_candidates(intake, package.inputs[0].sha256)
+
+        def fill(envelope: dict[str, Any], result_field: str) -> None:
+            # The canonical candidates are fully determined by accepted intake; supply them
+            # rather than depending on the model echoing them exactly (ADR-0013).
+            envelope[result_field] = {"candidates": expected}
+
         cli.ClaudeCliInvoker(effort=self.effort, budget_usd=self.budget_usd,
-            timeout_seconds=self.timeout_seconds, dispatch_fn=dispatch).invoke(
+            timeout_seconds=self.timeout_seconds, dispatch_fn=dispatch, fill_result=fill).invoke(
                 package, output_root=output_root, cancel=cancel)
 
 

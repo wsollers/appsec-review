@@ -840,11 +840,16 @@ class ClaudeCliInvoker:
     invoker_id = "claude-cli"
 
     def __init__(self, *, effort: str, budget_usd: float | None = None,
-                timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS, dispatch_fn=None) -> None:
+                timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS, dispatch_fn=None,
+                fill_result=None) -> None:
         self.effort = effort
         self.budget_usd = budget_usd
         self.timeout_seconds = timeout_seconds
         self._dispatch_fn = dispatch_fn or rc._dispatch_streaming
+        # Optional fill_result(envelope, result_field): a caller that knows the exact expected
+        # result (for example canonical pool candidates) supplies it, so the job does not depend
+        # on the model reproducing fixed values or formatting (ADR-0013).
+        self._fill_result = fill_result
 
     def invoke(self, package: Any, *, output_root: Path, cancel: threading.Event) -> None:
         if cancel.is_set():
@@ -891,7 +896,18 @@ class ClaudeCliInvoker:
             if not result_text:
                 raise InvokerOutputError("claude CLI dispatch produced no terminal result text",
                                          ["the response held no result text"])
-            envelope = _parse_envelope(result_text)
+            try:
+                envelope = _parse_envelope(result_text)
+            except InvokerOutputError:
+                if self._fill_result is None:
+                    raise
+                envelope = {}
+            if self._fill_result is not None:
+                for _filename, key, kind in fields:
+                    if kind == "md" and not (isinstance(envelope.get(key), str) and envelope[key].strip()):
+                        envelope[key] = result_text.strip() or "Result supplied by the orchestrator."
+                self._fill_result(envelope, result_field)
+                envelope = {key: envelope[key] for _filename, key, _kind in fields if key in envelope}
             _fill_pinned_values(envelope, result_field, output_contract, target_inputs)
             _validate_envelope(envelope, fields, output_contract, store)
             try:
