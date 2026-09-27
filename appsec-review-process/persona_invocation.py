@@ -115,7 +115,11 @@ CLAIM_TEXT_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({
                        r"\bcvss"),
     "exploitability_verdict": (r"\bexploitable\b", r"\bexploitability\s*(?:is|=|:)"),
     "compliance_verdict": (r"\b(?:is|are)\s+(?:fully\s+)?(?:compliant|certified)\b", r"\bcertified\b"),
-    "remediation_status": (r"\b(?:is|was|has\s+been)\s+(?:fixed|remediated)\b",),
+    # "fixed" alone is ordinary English ("the compiler is fixed as clang"); it only counts with a
+    # security subject. "remediated"/"patched" count on their own.
+    "remediation_status": (r"\b(?:is|was|has\s+been|have\s+been|are|were)\s+(?:now\s+)?(?:remediated|patched)\b",
+                           r"\b(?:vulnerabilit(?:y|ies)|issues?|bugs?|defects?|findings?|flaws?|weakness(?:es)?|cve[-\w]*)"
+                           r"\s+(?:is|was|has\s+been|have\s+been|are|were)\s+(?:now\s+)?fixed\b"),
     "observed_runtime_state": (r"\bobserved\s+(?:in|on)\s+(?:production|runtime|a\s+live|a\s+device)\b",),
     "malicious_intent": (r"\b(?:malicious|hostile)\s+intent\s+(?:is\s+)?(?:confirmed|established|proven)\b",),
 })
