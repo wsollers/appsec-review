@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import report_input_assembly as report
-from execution_state import Blocked, atomic_json, file_hash, tree_hashes
+from execution_state import Blocked, atomic_json, digest, file_hash, tree_hashes
 from schema_validate import validate_document as validate_schema
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
 from worker_result import artifact_records, terminal_envelope
@@ -18,7 +18,9 @@ from worker_result import artifact_records, terminal_envelope
 RUN_ID = "report-run"
 SOURCE = "sha256:" + "a" * 64
 COMPONENT_ATTEMPT = "component-1"
-CLAIM = "claim-" + "b" * 24
+CLAIM = "claim-" + digest({"route_id": "route-1", "producer": "03-threat-model-dfd-stride",
+    "attempt": "threat-1", "artifact": "sha256:" + "c" * 64,
+    "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT})[:24]
 
 
 class ReportInputAssemblyTests(unittest.TestCase):
@@ -63,6 +65,8 @@ class ReportInputAssemblyTests(unittest.TestCase):
         ledger["entries"][3]["decision_authority"] = self._authority(
             stage_pointers["09-independent-verification"], "independent-verification.json", "independent-verifier")
         ledger["head_hash"] = self._rehash_entries(ledger["entries"])
+        ledger["claim_states"] = [{"claim_id": CLAIM,
+            "latest_event_id": ledger["entries"][-1]["event_id"], "status": "verified"}]
         for name, spec in report.SPECS.items():
             if name == "verification":
                 self.pointers[name] = stage_pointers["09-independent-verification"]
@@ -88,6 +92,8 @@ class ReportInputAssemblyTests(unittest.TestCase):
         for sequence, entry in enumerate(entries):
             entry["sequence"] = sequence
             entry["previous_entry_hash"] = previous
+            entry["event_id"] = "event-" + digest({key: value for key, value in entry.items()
+                if key not in {"event_id", "entry_hash"}})[:24]
             entry["entry_hash"] = report._sha({key: value for key, value in entry.items() if key != "entry_hash"})
             previous = entry["entry_hash"]
         return previous
@@ -209,7 +215,7 @@ class ReportInputAssemblyTests(unittest.TestCase):
             started_at="2026-01-01T00:00:00Z", finished_at="2026-01-01T00:00:01Z",
             summary="fixture", artifacts=artifact_records(attempt, paths))
         atomic_json(attempt / "result.json", envelope)
-        atomic_json(base / "latest.json", {"attempt_id": attempt_id})
+        atomic_json(base / "latest.json", {"attempt_id": attempt_id, "updated_at": "2026-01-01T00:00:02Z"})
         pointer = {"schema": "appsec-review/accepted-worker-result/1.0", "status": "OK",
             "run_id": RUN_ID, "job": job, "attempt_id": attempt_id,
             "fingerprint": "sha256:" + "f" * 64, "envelope_path": "result.json",

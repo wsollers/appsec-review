@@ -133,7 +133,8 @@ def load_reference(run_root: Path, run_id: str, ref: dict[str, Any]) -> tuple[di
         if receipt not in artifacts or artifacts[receipt].get("sha256") != file_hash(path) or \
                 "sha256:" + file_hash(path) != ref[field]:
             raise Blocked(f"{JOB}: accepted {receipt} binding is invalid")
-    return read_json(artifact_path), {**deepcopy(ref), "envelope_sha256": "sha256:" + file_hash(envelope_path)}
+    binding = {key: value for key, value in deepcopy(ref).items() if key != "supporting_artifacts"}
+    return read_json(artifact_path), {**binding, "envelope_sha256": "sha256:" + file_hash(envelope_path)}
 
 
 def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
@@ -282,9 +283,9 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
     latest = _latest_ledger(ledger)
     verification, scoring = docs["verification"], docs["scoring"]
     for value in (verification, scoring):
-        if (value.get("ledger_head_id") != inputs["ledger_head_id"] or
-                value.get("ledger_head_sha256") != inputs["ledger_head_sha256"]):
-            raise Blocked(f"{JOB}: L08 artifact is stale relative to the accepted ledger")
+        if (value.get("ledger_head_id") != inputs["lifecycle_origin_head_id"] or
+                value.get("ledger_head_sha256") != inputs["lifecycle_origin_head_sha256"]):
+            raise Blocked(f"{JOB}: L08 artifact is stale relative to the lifecycle-origin ledger")
     adapter = l08_adapter(inputs["run_id"], verification, scoring)
     l08 = {item["claim_id"]:item for item in adapter["records"]}
     if not set(l08) <= set(latest):

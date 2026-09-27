@@ -35,9 +35,13 @@ class SynthesisReportTests(unittest.TestCase):
         ledger["claim_states"]=[{"claim_id":key,"latest_event_id":latest[key]["event_id"],"status":latest[key]["status"]}
             for key in sorted(latest)]
         inputs["ledger_head_sha256"]=previous; inputs["ledger_head_id"]=ledger["entries"][-1]["event_id"]
+        origin = next(entry for entry in reversed(ledger["entries"])
+                      if entry["event_type"] == "candidate_admitted")
+        inputs["lifecycle_origin_head_sha256"] = origin["entry_hash"]
+        inputs["lifecycle_origin_head_id"] = origin["event_id"]
         for name in ("verification","scoring"):
-            inputs["documents"][name]["ledger_head_sha256"]=previous
-            inputs["documents"][name]["ledger_head_id"]=inputs["ledger_head_id"]
+            inputs["documents"][name]["ledger_head_sha256"] = origin["entry_hash"]
+            inputs["documents"][name]["ledger_head_id"] = origin["event_id"]
 
     def inputs(self):
         citation = {"citation_id": "citation-a", "producer_job_id": "evidence-job",
@@ -74,10 +78,10 @@ class SynthesisReportTests(unittest.TestCase):
                 {"claim_id":item["claim_id"],"latest_event_id":item["event_id"],"status":item["status"]}
                 for item in sorted((decision,second),key=lambda item:item["claim_id"])]}
         preserved = {key: base[key] for key in ("claim_id","route_id","hypothesis","confidence","component_ids","source_generation","component_generation")}
-        verification = {"run_id":"run1","ledger_head_id":decision["event_id"],"ledger_head_sha256":decision["entry_hash"],
+        verification = {"run_id":"run1","ledger_head_id":second["event_id"],"ledger_head_sha256":second["entry_hash"],
             "verifications":[{**preserved,"status":"VERIFIED","verification_citations":[citation]},
                              {**{key: second[key] for key in preserved},"status":"UNRESOLVED","verification_citations":[citation]}]}
-        scoring = {"run_id":"run1","ledger_head_id":decision["event_id"],"ledger_head_sha256":decision["entry_hash"],
+        scoring = {"run_id":"run1","ledger_head_id":second["event_id"],"ledger_head_sha256":second["entry_hash"],
             "priorities":[{**preserved,"verification_status":"VERIFIED","severity":"HIGH","priority":"P1","score":13},
                           {**{key: second[key] for key in preserved},"verification_status":"UNRESOLVED","severity":None,"priority":"UNRESOLVED","score":None}]}
         component = {"target":"fixture","functional_components":[{"component_id":"parser","name":"Parser","observed_purpose":"Parse input."}],
@@ -99,6 +103,7 @@ class SynthesisReportTests(unittest.TestCase):
                           "artifact_path":name+".json"} for name in synthesis.INPUT_NAMES}
         return {"schema":"appsec-review/synthesis-input/0.1","run_id":"run1","source_generation":H("1"),
             "component_generation":H("2"),"ledger_head_id":decision["event_id"],"ledger_head_sha256":decision["entry_hash"],
+            "lifecycle_origin_head_id":second["event_id"],"lifecycle_origin_head_sha256":second["entry_hash"],
             "input_manifest_sha256":H("9"),
             "inputs":{},"evidence_artifacts":[],"limitations":["Source SAST did not cover PHP."],
             "documents":docs,"bindings":bindings,"evidence_bindings":[binding]}
