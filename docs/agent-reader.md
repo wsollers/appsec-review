@@ -12,23 +12,26 @@ worker contracts (the full protocol in `AGENTS.md`). Work under `pipeline/`, `sc
 
 0. [`pipeline/README.md`](../pipeline/README.md) first for any review run: it describes the
    engagement path (prepass, pregather, assemble, correlate, LLM input) that runs today.
-1. [`README.md`](../README.md) for the repo purpose and current architecture.
-2. [`docs/dagster/dagster-launching.md`](dagster/dagster-launching.md) for creating, queueing, monitoring,
+1. [`appsec-review-system-guide.md`](appsec-review-system-guide.md) for the executive and operator
+   overview: use, configuration, job interactions, analysis coverage, multi-agent decisions,
+   standards processes, reporting and current readiness.
+2. [`README.md`](../README.md) for the repo purpose and current architecture.
+3. [`docs/dagster/dagster-launching.md`](dagster/dagster-launching.md) for creating, queueing, monitoring,
    reconnecting, recovering and canceling jobs.
-3. [`docs/dagster/dagster-workflow.md`](dagster/dagster-workflow.md) for queue limits, workflow branches,
+4. [`docs/dagster/dagster-workflow.md`](dagster/dagster-workflow.md) for queue limits, workflow branches,
    parallelism, locking, recovery and where workflow state is written.
-4. [`docs/dagster/run-data-and-job-execution.md`](dagster/run-data-and-job-execution.md) for the run-owned data
+5. [`docs/dagster/run-data-and-job-execution.md`](dagster/run-data-and-job-execution.md) for the run-owned data
    contract and immutable attempt layout.
-5. [`docs/build-discovery/build-discovery-integration.md`](build-discovery/build-discovery-integration.md) before using
+6. [`docs/build-discovery/build-discovery-integration.md`](build-discovery/build-discovery-integration.md) before using
    `build_discovery`, `build_execution` or `full_review`.
-6. [`docs/evidence/evidence-retrieval.md`](evidence/evidence-retrieval.md) and
+7. [`docs/evidence/evidence-retrieval.md`](evidence/evidence-retrieval.md) and
    [`appsec-review-process/tooling/llm-retrieval-addendum.md`](../appsec-review-process/tooling/llm-retrieval-addendum.md)
    before reading indexed target evidence.
-7. [`docs/personas-and-registry/persona-catalog.md`](personas-and-registry/persona-catalog.md),
+8. [`docs/personas-and-registry/persona-catalog.md`](personas-and-registry/persona-catalog.md),
    [`appsec-review-process/registry/README.md`](../appsec-review-process/registry/README.md) and
    [`docs/evidence/intelligence-sources-and-jobs.md`](evidence/intelligence-sources-and-jobs.md) when selecting
    personas, roles, domains, tooling profiles, output contracts or intelligence-ingest jobs.
-8. [`appsec-review-process/initiate.md`](../appsec-review-process/initiate.md) only when starting
+9. [`appsec-review-process/initiate.md`](../appsec-review-process/initiate.md) only when starting
    or recovering a review lane, after reading the process docs it requires.
 
 ## Continuing Earlier Work

@@ -3,6 +3,11 @@
 The information base for the current architecture, partitioned by component. Start with
 [`agent-reader.md`](agent-reader.md); it is the entry point and read order for every agent.
 
+For a two-level introduction aimed at executives, operators, and technical leaders, read the
+[`AppSec Review system guide`](appsec-review-system-guide.md). It explains purpose, operation,
+configuration, evidence flow, multi-agent decisions, analysis families, standards processes,
+reporting, and current readiness in one place.
+
 | Folder | What lives here | Read it when |
 |---|---|---|
 | `architecture/` | The design authority (`design-v3.md`), the migration rule and the script-migration ledger. | You need the intended shape of the system or are moving code out of `scripts/`. |
