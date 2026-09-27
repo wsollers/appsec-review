@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "owasp-coverage-gaps-report.schema.json",
+  "type": "object", "additionalProperties": false, "required": ["schema", "run_id", "selection_id", "gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/owasp-coverage-gaps-report/1.0"}, "run_id": {"type": "string"}, "selection_id": {"type": "string"},
+    "gaps": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["gap_id", "kind", "row_indices", "statement", "citation_ids", "result_ids"],
+      "properties": {"gap_id": {"type": "string"}, "kind": {"enum": ["applicability", "evidence", "execution", "source_version", "contradiction", "dissent", "rescope", "dynamic_manual", "promotion"]},
+        "row_indices": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}}, "statement": {"type": "string"},
+        "citation_ids": {"type": "array", "items": {"type": "string"}}, "result_ids": {"type": "array", "items": {"type": "string"}}}}}
+  }
+}
