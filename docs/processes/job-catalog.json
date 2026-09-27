@@ -10454,6 +10454,7 @@
     "status.json",
     "outputs/sca-vulnerability-match.json",
     "outputs/vulnerability-database-identities.json",
+    "outputs/osv-applicability-receipt.json",
     "outputs/sca-coverage-gaps.json",
     "outputs/coverage-gap-summary.json",
     "outputs/redaction-receipt.json",

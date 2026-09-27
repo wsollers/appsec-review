@@ -2091,7 +2091,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`) |
 | Declared inputs (registry/job-templates/02-sca-vulnerability-match.json) | accepted SBOM<br>B16 Grype and OSV images<br>supplied current offline Grype and OSV snapshot registry<br>explicit database age ceiling |
 | Produces | `runs/<run_id>/data/jobs/02-sca-vulnerability-match/` |
-| Output files (registry/output-contracts/sca-vulnerability-match.json) | manifest.json<br>status.json<br>outputs/sca-vulnerability-match.json<br>outputs/vulnerability-database-identities.json<br>outputs/sca-coverage-gaps.json<br>outputs/coverage-gap-summary.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
+| Output files (registry/output-contracts/sca-vulnerability-match.json) | manifest.json<br>status.json<br>outputs/sca-vulnerability-match.json<br>outputs/vulnerability-database-identities.json<br>outputs/osv-applicability-receipt.json<br>outputs/sca-coverage-gaps.json<br>outputs/coverage-gap-summary.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`cve-reachability`](#step-cve-reachability)<br>[`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`06-cve-reachability`](#job-06-cve-reachability) |
 | Gaps | `no_live_docker_qualification`, `legacy_vendor_prepass_attempt_packaging_not_published` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
