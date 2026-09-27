@@ -18,7 +18,7 @@ class TestEvidenceTests(unittest.TestCase):
         self.source="sha256:"+"4"*64; self.lineage={"job_id":"02-native-build","attempt_id":"n1",
           "accepted_pointer_sha256":"sha256:"+"5"*64,"envelope_sha256":"sha256:"+"6"*64,
           "result_sha256":"sha256:"+"7"*64,"input_fingerprint":"sha256:"+"8"*64}
-        params={name:None for name in te.pc.PARAMETER_NAMES}; params.update(command_profile_id="fixture-tests-v1",target_path=".",mutation_mode="run-owned-copy")
+        params={name:None for name in te.pc.PARAMETER_NAMES}; params.update(command_profile_id="fixture-tests-v1",target_path=".")
         cap={"kind":"target-execution","version":"1.0","parameters":params,"origin":"staged-run-config"}
         self.grant={"schema":"appsec-review/permission-grant/1.0","grant_id":"fixture-test-grant","effect":"ALLOW",
           "authority":{"name":"Fixture Owner","role":"engagement-owner"},"issued_at":"2026-01-01T00:00:00Z",
