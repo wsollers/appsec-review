@@ -1,0 +1,6 @@
+{
+  "schema": "appsec-review/domain/0.1", "domain_id": "claim-ledger-lifecycle", "display_name": "Candidate Claim And Decision Lifecycle",
+  "surfaces": ["candidate admissions", "status decisions", "hash chains", "evidence citations", "proof obligations", "dissent", "causal and supersession links"],
+  "common_failure_modes": ["stale producer artifact", "mixed source generations", "broken ledger chain", "duplicate claim identity", "unauthorized transition", "candidate promoted to finding"],
+  "preferred_standards": [], "required_evidence_hints": ["accepted producer pointer", "exact candidate-route artifact hash", "source and component generations", "permission receipt for decisions"]
+}

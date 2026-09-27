@@ -158,6 +158,11 @@ CLAIM_CLASS_POLICIES = {
                                "candidate-threat-hypothesis", "assumption", "coverage-gap",
                                "rescope-trigger"},
     },
+    "claim-ledger-core": {
+        "claim_class_id": "candidate_claim_ledger",
+        "allowed_assertions": {"candidate-hypothesis", "candidate-status", "proof-obligation",
+                               "dissent", "causal-link", "supersession", "verification-route"},
+    },
 }
 PROMOTION_FIELDS = {
     "finding": {

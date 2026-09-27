@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "claim-ledger-work-routing.schema.json",
+  "type": "object", "additionalProperties": false, "required": ["schema", "run_id", "ledger_head_hash", "routes"],
+  "properties": {"schema": {"const": "appsec-review/claim-ledger-work-routing/1.0"}, "run_id": {"type": "string"}, "ledger_head_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "routes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["claim_id", "status", "stages", "current_stage", "authorization", "execution"], "properties": {"claim_id": {"type": "string"}, "status": {"type": "string"}, "stages": {"const": ["07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification"]}, "current_stage": {"const": "07-red-team-adversarial"}, "authorization": {"const": "not_authorized"}, "execution": {"const": "not_executed"}}}}
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "schema": "appsec-review/output-contract/0.1", "contract_id": "claim-ledger-core", "display_name": "Append-Only Candidate Claim Ledger",
+  "required_files": ["claim-decision-ledger.json", "claim-ledger-work-routing.json", "claim-ledger-summary.md", "permission.json", "lineage.json", "status.json"],
+  "required_status_fields": ["process", "status", "claims", "ledger_head_hash", "claim_limit"],
+  "result_schema": {"artifact": "claim-decision-ledger.json", "schema_file": "claim-decision-ledger.schema.json"},
+  "claim_class": {"claim_class_id": "candidate_claim_ledger", "allowed_assertions": ["candidate-hypothesis", "candidate-status", "proof-obligation", "dissent", "causal-link", "supersession", "verification-route"], "forbidden_promotions": ["finding", "severity", "runtime-state"]},
+  "validation_rules": ["consume only exact accepted candidate-route producers", "bind one source and component generation", "preserve citations and producer artifact identity", "validate every entry and previous-entry hash", "authorize every status transition", "candidate admission never creates a finding"]
+}
