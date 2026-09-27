@@ -13,6 +13,7 @@ import native_build as native_build_worker
 import source_sast as source_sast_worker
 import bounded_transform_orchestration as bounded_transforms
 import dependency_orchestration as dependency_jobs
+import vendor_evidence_orchestration as vendor_evidence_jobs
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
 import discovery_gate
@@ -552,6 +553,74 @@ def cve_reachability():
     cve_reachability_work(build_execution_config())
 
 
+VENDOR_EVIDENCE_CONFIG = {
+    'input_path': str, 'output_root': str, 'attempt_root': str, 'execution_root': str,
+}
+
+
+def run_vendor_evidence_job(context, configured, job_id):
+    result = vendor_evidence_jobs.execute(
+        job_id=job_id, run_id=configured['engagement_run_id'], dagster_run_id=context.run_id,
+        input_path=context.op_config['input_path'], output_root=context.op_config['output_root'],
+        attempt_root=context.op_config['attempt_root'], execution_root=context.op_config['execution_root'])
+    root = data_path(configured['engagement_run_id'], 'jobs', job_id, 'whole')
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(root)),
+        'envelope': MetadataValue.path(str(root / 'attempts' / result['attempt_id'] / 'result.json')),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
+def secrets_inventory_work(context, configured):
+    return run_vendor_evidence_job(context, configured, '02-secrets-inventory')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def secrets_inventory():
+    secrets_inventory_work(build_execution_config())
+
+
+@op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
+def iac_config_scan_work(context, configured):
+    return run_vendor_evidence_job(context, configured, '02-iac-config-scan')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def iac_config_scan():
+    iac_config_scan_work(build_execution_config())
+
+
+@op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
+def container_image_inventory_work(context, configured):
+    return run_vendor_evidence_job(context, configured, '02-container-image-inventory')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def container_image_inventory():
+    container_image_inventory_work(build_execution_config())
+
+
+@op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
+def binary_hardening_work(context, configured):
+    return run_vendor_evidence_job(context, configured, '02-binary-hardening')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def binary_hardening():
+    binary_hardening_work(build_execution_config())
+
+
+@op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
+def mobile_sast_work(context, configured):
+    return run_vendor_evidence_job(context, configured, '02-mobile-sast')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def mobile_sast():
+    mobile_sast_work(build_execution_config())
+
+
 def run_repository_partition_discovery(context, configured):
     # Validated hand-off gate, not real analysis -- see discovery_gate.py's module docstring for
     # why this job cannot honestly be a deterministic worker. Accepts an out-of-band-supplied,
@@ -853,7 +922,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -863,7 +932,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

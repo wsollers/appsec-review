@@ -65,7 +65,12 @@
       "sca_vulnerability_match",
       "license_scan",
       "dependency_lifecycle",
-      "cve_reachability"
+      "cve_reachability",
+      "secrets_inventory",
+      "iac_config_scan",
+      "container_image_inventory",
+      "binary_hardening",
+      "mobile_sast"
     ],
     "standalone_relationships": [
       {
@@ -328,6 +333,26 @@
           "06-cve-reachability"
         ],
         "relationship": "config-driven standalone static reachability transform; full-review input assembly remains blocked"
+      },
+      {
+        "job": "secrets_inventory", "lifecycle_jobs": ["02-secrets-inventory"],
+        "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
+      },
+      {
+        "job": "iac_config_scan", "lifecycle_jobs": ["02-iac-config-scan"],
+        "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
+      },
+      {
+        "job": "container_image_inventory", "lifecycle_jobs": ["02-container-image-inventory"],
+        "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
+      },
+      {
+        "job": "binary_hardening", "lifecycle_jobs": ["02-binary-hardening"],
+        "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
+      },
+      {
+        "job": "mobile_sast", "lifecycle_jobs": ["02-mobile-sast"],
+        "relationship": "config-driven standalone authenticated vendor evidence; full-review input assembly remains blocked"
       }
     ],
     "launcher_jobs": [
@@ -360,7 +385,12 @@
       "sca_vulnerability_match",
       "license_scan",
       "dependency_lifecycle",
-      "cve_reachability"
+      "cve_reachability",
+      "secrets_inventory",
+      "iac_config_scan",
+      "container_image_inventory",
+      "binary_hardening",
+      "mobile_sast"
     ],
     "failure_sensor_jobs": [
       "engagement_workflow",
@@ -391,7 +421,12 @@
       "sca_vulnerability_match",
       "license_scan",
       "dependency_lifecycle",
-      "cve_reachability"
+      "cve_reachability",
+      "secrets_inventory",
+      "iac_config_scan",
+      "container_image_inventory",
+      "binary_hardening",
+      "mobile_sast"
     ],
     "cancellation_sensor_jobs": [
       "engagement_workflow",
@@ -422,7 +457,12 @@
       "sca_vulnerability_match",
       "license_scan",
       "dependency_lifecycle",
-      "cve_reachability"
+      "cve_reachability",
+      "secrets_inventory",
+      "iac_config_scan",
+      "container_image_inventory",
+      "binary_hardening",
+      "mobile_sast"
     ],
     "queue": {
       "max_concurrent_runs": 2,
@@ -3550,16 +3590,23 @@
       ],
       "graph": {
         "node": "02-secrets-inventory",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-secrets-inventory",
+        "persona": "evidence-custodian",
+        "role": "vendor-static-evidence-curator",
+        "domain": "vendor-static-evidence",
+        "tooling_profile": "pinned-vendor-static-evidence",
+        "output_contract": "secrets-inventory"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/secrets_inventory.py:build",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
       },
       "output": {
         "contract": "secrets-inventory",
@@ -3567,34 +3614,43 @@
         "schema_file": "schemas/secrets-inventory.schema.json",
         "claim_class": "secret_exposure_lead"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "secrets_inventory"
+        ],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "secrets_inventory"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "secrets_inventory"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_vendor_evidence_workers.py",
+          "appsec-review-process/tests/test_vendor_evidence_b13.py",
+          "appsec-review-process/tests/test_vendor_evidence_orchestration.py"
+        ]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
     },
     {
       "id": "02-iac-config-scan",
@@ -3605,16 +3661,16 @@
       ],
       "graph": {
         "node": "02-iac-config-scan",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
       },
-      "registry": null,
+      "registry": {"template":"02-iac-config-scan","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"iac-config-evidence"},
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/iac_config_scan.py:build",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
       },
       "output": {
         "contract": "iac-config-evidence",
@@ -3622,34 +3678,31 @@
         "schema_file": "schemas/iac-config-evidence.schema.json",
         "claim_class": "declared_configuration_evidence"
       },
-      "permissions": [],
+      "permissions": ["read-source", "write-run-data"],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": ["iac_config_scan"],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": ["iac_config_scan"],
         "sensor_jobs": [
-          "full_review"
+          "full_review", "iac_config_scan"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
     },
     {
       "id": "02-container-image-inventory",
@@ -3660,16 +3713,16 @@
       ],
       "graph": {
         "node": "02-container-image-inventory",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
       },
-      "registry": null,
+      "registry": {"template":"02-container-image-inventory","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"container-image-inventory"},
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/container_image_inventory.py:build",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
       },
       "output": {
         "contract": "container-image-inventory",
@@ -3677,34 +3730,31 @@
         "schema_file": "schemas/container-image-inventory.schema.json",
         "claim_class": "supplied_image_static_evidence"
       },
-      "permissions": [],
+      "permissions": ["read-source", "write-run-data"],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": ["container_image_inventory"],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": ["container_image_inventory"],
         "sensor_jobs": [
-          "full_review"
+          "full_review", "container_image_inventory"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
     },
     {
       "id": "02-sbom-inventory",
@@ -4007,16 +4057,16 @@
       ],
       "graph": {
         "node": "02-binary-hardening",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
       },
-      "registry": null,
+      "registry": {"template":"02-binary-hardening","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"binary-hardening"},
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/binary_hardening.py:build",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
       },
       "output": {
         "contract": "binary-hardening",
@@ -4024,34 +4074,31 @@
         "schema_file": "schemas/binary-hardening.schema.json",
         "claim_class": "binary_hardening_property_evidence"
       },
-      "permissions": [],
+      "permissions": ["read-source", "write-run-data"],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": ["binary_hardening"],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": ["binary_hardening"],
         "sensor_jobs": [
-          "full_review"
+          "full_review", "binary_hardening"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
     },
     {
       "id": "02-mobile-sast",
@@ -4062,16 +4109,16 @@
       ],
       "graph": {
         "node": "02-mobile-sast",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
       },
-      "registry": null,
+      "registry": {"template":"02-mobile-sast","persona":"evidence-custodian","role":"vendor-static-evidence-curator","domain":"vendor-static-evidence","tooling_profile":"pinned-vendor-static-evidence","output_contract":"mobile-sast"},
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/mobile_sast.py:build",
+        "validator": "appsec-review-process/validate_job_output.py:validate_job_output"
       },
       "output": {
         "contract": "mobile-sast",
@@ -4079,34 +4126,31 @@
         "schema_file": "schemas/mobile-sast.schema.json",
         "claim_class": "mobile_static_lead"
       },
-      "permissions": [],
+      "permissions": ["read-source", "write-run-data"],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": ["mobile_sast"],
         "lifecycle_binding": {
           "kind": "blocked_op",
           "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": ["mobile_sast"],
         "sensor_jobs": [
-          "full_review"
+          "full_review", "mobile_sast"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "docker",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": ["appsec-review-process/tests/test_vendor_evidence_workers.py", "appsec-review-process/tests/test_vendor_evidence_b13.py", "appsec-review-process/tests/test_vendor_evidence_orchestration.py"]
       },
       "gaps": [
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "full_review_input_assembler_not_implemented",
+        "no_live_docker_qualification"
       ],
-      "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification."
+      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
     }
   ],
   "capabilities": [

@@ -1,6 +1,6 @@
 # Mythos design-parity report
 
-Status: **FAIL**
+Status: **PASS**
 
 Manifest schema: `appsec-review/design-parity-manifest/1.0`
 Lifecycle jobs: **55**
@@ -12,8 +12,8 @@ Design capabilities: **16**
 |---|---:|
 | `implemented_and_qualified` | 3 |
 | `implemented_not_qualified` | 7 |
-| `missing_prerequisites` | 7 |
-| `standalone_only` | 34 |
+| `missing_prerequisites` | 2 |
+| `standalone_only` | 39 |
 | `supplied_artifact_gate` | 4 |
 
 ## Lifecycle inventory
@@ -66,15 +66,15 @@ Design capabilities: **16**
 | `02-test-coverage-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `02-operations-doc-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `02-evidence-index` | true | `actual_worker` | `implemented_not_qualified` | `memory` |
-| `02-secrets-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-iac-config-scan` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-container-image-inventory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-secrets-inventory` | true | `blocked_op` | `standalone_only` | `docker` |
+| `02-iac-config-scan` | true | `blocked_op` | `standalone_only` | `docker` |
+| `02-container-image-inventory` | true | `blocked_op` | `standalone_only` | `docker` |
 | `02-sbom-inventory` | true | `blocked_op` | `standalone_only` | `docker` |
 | `02-sca-vulnerability-match` | true | `blocked_op` | `standalone_only` | `docker` |
 | `02-license-scan` | true | `blocked_op` | `standalone_only` | `docker` |
 | `02-dependency-lifecycle` | true | `blocked_op` | `standalone_only` | `cpu` |
-| `02-binary-hardening` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `02-mobile-sast` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `02-binary-hardening` | true | `blocked_op` | `standalone_only` | `docker` |
+| `02-mobile-sast` | true | `blocked_op` | `standalone_only` | `docker` |
 
 ## Explicit gaps
 
@@ -92,13 +92,8 @@ Design capabilities: **16**
 - 02-binary-cfg: resource pool unassigned
 - 02-binary-cfg: shared_dagster_graph_not_integrated
 - 02-binary-cfg: unassigned_resource_pool
-- 02-binary-hardening: missing_registry_composition
-- 02-binary-hardening: missing_validator
-- 02-binary-hardening: missing_worker
-- 02-binary-hardening: no qualification evidence
-- 02-binary-hardening: no_qualification
-- 02-binary-hardening: resource pool unassigned
-- 02-binary-hardening: unassigned_resource_pool
+- 02-binary-hardening: full_review_input_assembler_not_implemented
+- 02-binary-hardening: no_live_docker_qualification
 - 02-binary-intelligence-ingest: m02_pinned_binary_tool_unavailable
 - 02-binary-intelligence-ingest: no_live_qualification
 - 02-binary-intelligence-ingest: resource pool unassigned
@@ -113,13 +108,8 @@ Design capabilities: **16**
 - 02-build-configure: fault_recovery_not_qualified
 - 02-build-index: fault_recovery_not_qualified
 - 02-build-plan: fault_recovery_not_qualified
-- 02-container-image-inventory: missing_registry_composition
-- 02-container-image-inventory: missing_validator
-- 02-container-image-inventory: missing_worker
-- 02-container-image-inventory: no qualification evidence
-- 02-container-image-inventory: no_qualification
-- 02-container-image-inventory: resource pool unassigned
-- 02-container-image-inventory: unassigned_resource_pool
+- 02-container-image-inventory: full_review_input_assembler_not_implemented
+- 02-container-image-inventory: no_live_docker_qualification
 - 02-debug-symbol-index: m02_pinned_binary_tool_unavailable
 - 02-debug-symbol-index: no_live_qualification
 - 02-debug-symbol-index: resource pool unassigned
@@ -146,13 +136,8 @@ Design capabilities: **16**
 - 02-evidence-index: common_worker_envelope_migration_missing
 - 02-evidence-index: derived_producer_selection_not_orchestrated
 - 02-evidence-index: live_enrichment_requalification_missing
-- 02-iac-config-scan: missing_registry_composition
-- 02-iac-config-scan: missing_validator
-- 02-iac-config-scan: missing_worker
-- 02-iac-config-scan: no qualification evidence
-- 02-iac-config-scan: no_qualification
-- 02-iac-config-scan: resource pool unassigned
-- 02-iac-config-scan: unassigned_resource_pool
+- 02-iac-config-scan: full_review_input_assembler_not_implemented
+- 02-iac-config-scan: no_live_docker_qualification
 - 02-ir-capture: no_live_qualification
 - 02-ir-capture: resource pool unassigned
 - 02-ir-capture: shared_dagster_graph_not_integrated
@@ -171,13 +156,8 @@ Design capabilities: **16**
 - 02-license-scan: full_review_input_assembler_not_implemented
 - 02-license-scan: legacy_vendor_prepass_attempt_packaging_not_published
 - 02-license-scan: no_live_docker_qualification
-- 02-mobile-sast: missing_registry_composition
-- 02-mobile-sast: missing_validator
-- 02-mobile-sast: missing_worker
-- 02-mobile-sast: no qualification evidence
-- 02-mobile-sast: no_qualification
-- 02-mobile-sast: resource pool unassigned
-- 02-mobile-sast: unassigned_resource_pool
+- 02-mobile-sast: full_review_input_assembler_not_implemented
+- 02-mobile-sast: no_live_docker_qualification
 - 02-native-build: fault_recovery_not_qualified
 - 02-native-sast: no_live_qualification
 - 02-native-sast: pinned_image_live_qualification_missing
@@ -196,13 +176,8 @@ Design capabilities: **16**
 - 02-sca-vulnerability-match: full_review_input_assembler_not_implemented
 - 02-sca-vulnerability-match: legacy_vendor_prepass_attempt_packaging_not_published
 - 02-sca-vulnerability-match: no_live_docker_qualification
-- 02-secrets-inventory: missing_registry_composition
-- 02-secrets-inventory: missing_validator
-- 02-secrets-inventory: missing_worker
-- 02-secrets-inventory: no qualification evidence
-- 02-secrets-inventory: no_qualification
-- 02-secrets-inventory: resource pool unassigned
-- 02-secrets-inventory: unassigned_resource_pool
+- 02-secrets-inventory: full_review_input_assembler_not_implemented
+- 02-secrets-inventory: no_live_docker_qualification
 - 02-source-sast: fault_recovery_not_qualified
 - 02-source-sast: go_java_php_live_qualification_not_completed
 - 02-sre-operations-topology: no qualification evidence
@@ -341,4 +316,4 @@ Design capabilities: **16**
 
 ## Validation errors
 
-- stale generated readiness_table: docs/design-parity/design-parity-readiness.md
+- None.

@@ -188,15 +188,15 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Test Result Ingest](#job-02-test-result-ingest) | lifecycle job | [`02-test-execution`](#a-job-02-test-execution) | [`02-test-result-ingest`](#a-job-02-test-result-ingest) |
 | [Test Coverage Ingest](#job-02-test-coverage-ingest) | lifecycle job | [`02-test-execution`](#a-job-02-test-execution) | [`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest) |
 | [Operations Document Ingest](#job-02-operations-doc-ingest) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest) |
-| [Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-secrets-inventory`](#a-job-02-secrets-inventory) |
-| [Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-iac-config-scan`](#a-job-02-iac-config-scan) |
-| [Supplied Container Image Archive Inventory](#job-02-container-image-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-container-image-inventory`](#a-job-02-container-image-inventory) |
+| [Secrets Inventory](#job-02-secrets-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-secrets-inventory`](#a-job-02-secrets-inventory) |
+| [IaC Config Scan](#job-02-iac-config-scan) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-iac-config-scan`](#a-job-02-iac-config-scan) |
+| [Container Image Inventory](#job-02-container-image-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-container-image-inventory`](#a-job-02-container-image-inventory) |
 | [SBOM Inventory](#job-02-sbom-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-sbom-inventory`](#a-job-02-sbom-inventory) |
 | [Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-sca-vulnerability-match`](#a-job-02-sca-vulnerability-match) |
 | [License Inventory](#job-02-license-scan) | lifecycle job | [`00-intake`](#a-job-00-intake)<br>[`02-sbom-inventory`](#a-job-02-sbom-inventory) | [`02-license-scan`](#a-job-02-license-scan) |
 | [Dependency Lifecycle](#job-02-dependency-lifecycle) | lifecycle job | [`02-sbom-inventory`](#a-job-02-sbom-inventory)<br>[`02-license-scan`](#a-job-02-license-scan) | [`02-dependency-lifecycle`](#a-job-02-dependency-lifecycle) |
-| [Supplied Binary Hardening Properties](#job-02-binary-hardening) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-binary-hardening`](#a-job-02-binary-hardening) |
-| [Mobile SAST Static Leads](#job-02-mobile-sast) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-mobile-sast`](#a-job-02-mobile-sast) |
+| [Binary Hardening](#job-02-binary-hardening) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-binary-hardening`](#a-job-02-binary-hardening) |
+| [Mobile SAST](#job-02-mobile-sast) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-mobile-sast`](#a-job-02-mobile-sast) |
 | **Group rollup** | | **Enters:** [`sut-checkout`](#a-sut-checkout)<br>[`00-intake`](#a-job-00-intake)<br>[`02-repository-partition-discovery`](#a-job-02-repository-partition-discovery)<br>[`02-dev-project-discovery`](#a-job-02-dev-project-discovery)<br>[`02-evidence-index`](#a-job-02-evidence-index)<br>[`02-native-build`](#a-job-02-native-build) | **Leaves:** [`legacy-pregather`](#a-legacy-pregather)<br>[`02-build-resolution`](#a-job-02-build-resolution)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly) |
 
 ### Engagement flow: 5. Evidence index
@@ -386,7 +386,7 @@ Per lane (each job's full inputs and outputs are in Appendix B):
 | Lane | Jobs | Enters | Leaves |
 |---|---|---|---|
 | `00-intake-recovery` | [00-intake](#job-00-intake) | [`artifact-manifest`](#a-artifact-manifest) | [`00-intake`](#a-job-00-intake) |
-| `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[Native SAST](#job-02-native-sast)<br>[IR Capture](#job-02-ir-capture)<br>[IR Link](#job-02-ir-link)<br>[IR Facts](#job-02-ir-facts)<br>[Debug Symbol Index](#job-02-debug-symbol-index)<br>[Static Binary Triage](#job-02-binary-triage)<br>[Static Binary CFG](#job-02-binary-cfg)<br>[Test Execution](#job-02-test-execution)<br>[Test Result Ingest](#job-02-test-result-ingest)<br>[Test Coverage Ingest](#job-02-test-coverage-ingest)<br>[Operations Document Ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory)<br>[Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan)<br>[Supplied Container Image Archive Inventory](#job-02-container-image-inventory)<br>[SBOM Inventory](#job-02-sbom-inventory)<br>[Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match)<br>[License Inventory](#job-02-license-scan)<br>[Dependency Lifecycle](#job-02-dependency-lifecycle)<br>[Supplied Binary Hardening Properties](#job-02-binary-hardening)<br>[Mobile SAST Static Leads](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
+| `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[Native SAST](#job-02-native-sast)<br>[IR Capture](#job-02-ir-capture)<br>[IR Link](#job-02-ir-link)<br>[IR Facts](#job-02-ir-facts)<br>[Debug Symbol Index](#job-02-debug-symbol-index)<br>[Static Binary Triage](#job-02-binary-triage)<br>[Static Binary CFG](#job-02-binary-cfg)<br>[Test Execution](#job-02-test-execution)<br>[Test Result Ingest](#job-02-test-result-ingest)<br>[Test Coverage Ingest](#job-02-test-coverage-ingest)<br>[Operations Document Ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Secrets Inventory](#job-02-secrets-inventory)<br>[IaC Config Scan](#job-02-iac-config-scan)<br>[Container Image Inventory](#job-02-container-image-inventory)<br>[SBOM Inventory](#job-02-sbom-inventory)<br>[Offline SCA Vulnerability Match](#job-02-sca-vulnerability-match)<br>[License Inventory](#job-02-license-scan)<br>[Dependency Lifecycle](#job-02-dependency-lifecycle)<br>[Binary Hardening](#job-02-binary-hardening)<br>[Mobile SAST](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
 | `01-component-characterization` | [Component Purpose And Review Routing](#job-01-component-characterization) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
 | `03-threat-model-dfd-stride` | [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
 | `04-asvs-masvs` | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs)<br>[OWASP Validation Worklist Core](#job-04-owasp-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
@@ -1281,15 +1281,15 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-test-coverage-ingest`](#job-02-test-coverage-ingest) | `test-coverage-intelligence` | standalone_only | `02-test-execution` |
 | `02-evidence-pregather` | [`02-operations-doc-ingest`](#job-02-operations-doc-ingest) | `operations-doc-intelligence` | standalone_only | `00-intake` |
 | `02-evidence-pregather` | [`02-evidence-index`](#job-02-evidence-index) | `evidence-index` | implemented_not_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-secrets-inventory`](#job-02-secrets-inventory) | `secrets-inventory` | missing_prerequisites | `00-intake` |
-| `02-evidence-pregather` | [`02-iac-config-scan`](#job-02-iac-config-scan) | `iac-config-evidence` | missing_prerequisites | `00-intake` |
-| `02-evidence-pregather` | [`02-container-image-inventory`](#job-02-container-image-inventory) | `container-image-inventory` | missing_prerequisites | `00-intake` |
+| `02-evidence-pregather` | [`02-secrets-inventory`](#job-02-secrets-inventory) | `secrets-inventory` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-iac-config-scan`](#job-02-iac-config-scan) | `iac-config-evidence` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-container-image-inventory`](#job-02-container-image-inventory) | `container-image-inventory` | standalone_only | `00-intake` |
 | `02-evidence-pregather` | [`02-sbom-inventory`](#job-02-sbom-inventory) | `sbom-inventory` | standalone_only | `00-intake` |
 | `02-evidence-pregather` | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | `sca-vulnerability-match` | standalone_only | `02-sbom-inventory` |
 | `02-evidence-pregather` | [`02-license-scan`](#job-02-license-scan) | `license-inventory` | standalone_only | `00-intake`, `02-sbom-inventory` |
 | `02-evidence-pregather` | [`02-dependency-lifecycle`](#job-02-dependency-lifecycle) | `dependency-lifecycle` | standalone_only | `02-sbom-inventory`, `02-license-scan` |
-| `02-evidence-pregather` | [`02-binary-hardening`](#job-02-binary-hardening) | `binary-hardening` | missing_prerequisites | `00-intake` |
-| `02-evidence-pregather` | [`02-mobile-sast`](#job-02-mobile-sast) | `mobile-sast` | missing_prerequisites | `00-intake` |
+| `02-evidence-pregather` | [`02-binary-hardening`](#job-02-binary-hardening) | `binary-hardening` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-mobile-sast`](#job-02-mobile-sast) | `mobile-sast` | standalone_only | `00-intake` |
 | `01-component-characterization` | [`01-component-characterization`](#job-01-component-characterization) | `component-map` | standalone_only | `02-evidence-assembly` |
 | `03-threat-model-dfd-stride` | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | `threat-model-core` | standalone_only | `01-component-characterization` |
 | `04-asvs-masvs` | [`04-asvs-masvs`](#job-04-asvs-masvs) | `owasp-join-report` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-owasp-validation-worklist` |
@@ -1929,54 +1929,63 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-02-secrets-inventory"></a>
 
-#### `02-secrets-inventory` -- Redacted Secrets And Key-Material Inventory
+#### `02-secrets-inventory` -- Secrets Inventory
 
 | | |
 |---|---|
 | Contract | `secrets-inventory` (claim class `secret_exposure_lead`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/secrets_inventory.py:build` |
+| Resource pool | `docker` |
+| Dagster | standalone: `secrets_inventory`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/02-secrets-inventory.json) | fresh run artifact manifest<br>explicit run-owned source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-secrets-inventory/` |
 | Output files (registry/output-contracts/secrets-inventory.json) | manifest.json<br>status.json<br>outputs/secrets-inventory.redacted.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification` |
+| Next prerequisite | Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths. |
 
 <a id="job-02-iac-config-scan"></a>
 
-#### `02-iac-config-scan` -- Declared IaC, Kubernetes And Dockerfile Configuration Evidence
+#### `02-iac-config-scan` -- IaC Config Scan
 
 | | |
 |---|---|
 | Contract | `iac-config-evidence` (claim class `declared_configuration_evidence`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/iac_config_scan.py:build` |
+| Resource pool | `docker` |
+| Dagster | standalone: `iac_config_scan`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/02-iac-config-scan.json) | fresh run artifact manifest<br>explicit run-owned source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-iac-config-scan/` |
 | Output files (registry/output-contracts/iac-config-evidence.json) | manifest.json<br>status.json<br>outputs/iac-config-evidence.json<br>outputs/base-image-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json<br>outputs/applicability-probe-receipt.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification` |
+| Next prerequisite | Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths. |
 
 <a id="job-02-container-image-inventory"></a>
 
-#### `02-container-image-inventory` -- Supplied Container Image Archive Inventory
+#### `02-container-image-inventory` -- Container Image Inventory
 
 | | |
 |---|---|
 | Contract | `container-image-inventory` (claim class `supplied_image_static_evidence`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/container_image_inventory.py:build` |
+| Resource pool | `docker` |
+| Dagster | standalone: `container_image_inventory`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/02-container-image-inventory.json) | fresh run artifact manifest<br>explicit run inputs root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-container-image-inventory/` |
 | Output files (registry/output-contracts/container-image-inventory.json) | manifest.json<br>status.json<br>outputs/container-image-inventory.json<br>outputs/container-image-applicability.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification` |
+| Next prerequisite | Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths. |
 
 <a id="job-02-sbom-inventory"></a>
 
@@ -2060,37 +2069,43 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-02-binary-hardening"></a>
 
-#### `02-binary-hardening` -- Supplied Binary Hardening Properties
+#### `02-binary-hardening` -- Binary Hardening
 
 | | |
 |---|---|
 | Contract | `binary-hardening` (claim class `binary_hardening_property_evidence`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/binary_hardening.py:build` |
+| Resource pool | `docker` |
+| Dagster | standalone: `binary_hardening`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/02-binary-hardening.json) | fresh run artifact manifest<br>explicit manifest-declared source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-binary-hardening/` |
 | Output files (registry/output-contracts/binary-hardening.json) | manifest.json<br>status.json<br>outputs/binary-hardening.json<br>outputs/binary-hardening-applicability.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification` |
+| Next prerequisite | Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths. |
 
 <a id="job-02-mobile-sast"></a>
 
-#### `02-mobile-sast` -- Mobile SAST Static Leads
+#### `02-mobile-sast` -- Mobile SAST
 
 | | |
 |---|---|
 | Contract | `mobile-sast` (claim class `mobile_static_lead`) |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/mobile_sast.py:build` |
+| Resource pool | `docker` |
+| Dagster | standalone: `mobile_sast`; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `vendor-static-evidence-curator`, tooling `pinned-vendor-static-evidence` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/02-mobile-sast.json) | fresh run artifact manifest<br>explicit manifest-declared source root<br>B16 scanner image records |
 | Produces | `runs/<run_id>/data/jobs/02-mobile-sast/` |
 | Output files (registry/output-contracts/mobile-sast.json) | manifest.json<br>status.json<br>outputs/mobile-applicability.json<br>outputs/mobile-sast.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_docker_qualification` |
+| Next prerequisite | Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths. |
 
 ### Lane `01-component-characterization`
 

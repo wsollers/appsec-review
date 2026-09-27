@@ -37,6 +37,12 @@ EXECUTOR_CAPS = {"engagement_workflow": "plan", "build_discovery": 3, "build_exe
                  "critical_findings_sarif": 1, "ossf_scorecard": 1, "repository_partition_discovery": 1, "dev_project_discovery": 1,
                  "devops_project_discovery": 1, "sre_operations_topology": 1, "build_index": 1, "build_classify": 1, "build_plan": 1,
                  "build_resolution": 1, "build_configure": 1, "native_build": 1, "source_sast": 1,
+                 "native_memory_analysis": 1, "fuzz_target_triage": 1,
+                 "owasp_validation_worklist": 1, "stig_srg_validation_worklist": 1,
+                 "deployment_hardening": 1, "sbom_inventory": 1, "sca_vulnerability_match": 1,
+                 "license_scan": 1, "dependency_lifecycle": 1, "cve_reachability": 1,
+                 "secrets_inventory": 1, "iac_config_scan": 1, "container_image_inventory": 1,
+                 "binary_hardening": 1, "mobile_sast": 1,
                  "b13_harmless_container": 1, "full_review": 3}
 
 

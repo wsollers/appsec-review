@@ -1489,7 +1489,7 @@
       {
        "ref": "job:02-secrets-inventory",
        "id": "02-secrets-inventory",
-       "name": "Redacted Secrets And Key-Material Inventory",
+       "name": "Secrets Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -1497,12 +1497,16 @@
        "produces": [
         "job:02-secrets-inventory"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit run-owned source root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-iac-config-scan",
        "id": "02-iac-config-scan",
-       "name": "Declared IaC, Kubernetes And Dockerfile Configuration Evidence",
+       "name": "IaC Config Scan",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -1510,12 +1514,16 @@
        "produces": [
         "job:02-iac-config-scan"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit run-owned source root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-container-image-inventory",
        "id": "02-container-image-inventory",
-       "name": "Supplied Container Image Archive Inventory",
+       "name": "Container Image Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -1523,7 +1531,11 @@
        "produces": [
         "job:02-container-image-inventory"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit run inputs root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-sbom-inventory",
@@ -1600,7 +1612,7 @@
       {
        "ref": "job:02-binary-hardening",
        "id": "02-binary-hardening",
-       "name": "Supplied Binary Hardening Properties",
+       "name": "Binary Hardening",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -1608,12 +1620,16 @@
        "produces": [
         "job:02-binary-hardening"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit manifest-declared source root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-mobile-sast",
        "id": "02-mobile-sast",
-       "name": "Mobile SAST Static Leads",
+       "name": "Mobile SAST",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -1621,7 +1637,11 @@
        "produces": [
         "job:02-mobile-sast"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit manifest-declared source root",
+        "B16 scanner image records"
+       ]
       }
      ],
      "rollup": {
@@ -1727,6 +1747,9 @@
        "accepted test execution",
        "exact accepted intake source inventory",
        "fresh run artifact manifest",
+       "explicit run-owned source root",
+       "B16 scanner image records",
+       "explicit run inputs root",
        "explicit staged target path",
        "B16 Syft image record",
        "accepted SBOM",
@@ -1736,7 +1759,8 @@
        "B16 ScanCode image record",
        "accepted license inventory",
        "identified run-owned lifecycle reference table",
-       "explicit table age ceiling"
+       "explicit table age ceiling",
+       "explicit manifest-declared source root"
       ]
      }
     },
@@ -2335,6 +2359,9 @@
      "accepted test execution",
      "exact accepted intake source inventory",
      "fresh run artifact manifest",
+     "explicit run-owned source root",
+     "B16 scanner image records",
+     "explicit run inputs root",
      "explicit staged target path",
      "B16 Syft image record",
      "accepted SBOM",
@@ -2345,6 +2372,7 @@
      "accepted license inventory",
      "identified run-owned lifecycle reference table",
      "explicit table age ceiling",
+     "explicit manifest-declared source root",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "current accepted F03 component map",
@@ -3742,7 +3770,7 @@
       {
        "ref": "job:02-secrets-inventory",
        "id": "02-secrets-inventory",
-       "name": "Redacted Secrets And Key-Material Inventory",
+       "name": "Secrets Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -3750,12 +3778,16 @@
        "produces": [
         "job:02-secrets-inventory"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit run-owned source root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-iac-config-scan",
        "id": "02-iac-config-scan",
-       "name": "Declared IaC, Kubernetes And Dockerfile Configuration Evidence",
+       "name": "IaC Config Scan",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -3763,12 +3795,16 @@
        "produces": [
         "job:02-iac-config-scan"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit run-owned source root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-container-image-inventory",
        "id": "02-container-image-inventory",
-       "name": "Supplied Container Image Archive Inventory",
+       "name": "Container Image Inventory",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -3776,7 +3812,11 @@
        "produces": [
         "job:02-container-image-inventory"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit run inputs root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-sbom-inventory",
@@ -3853,7 +3893,7 @@
       {
        "ref": "job:02-binary-hardening",
        "id": "02-binary-hardening",
-       "name": "Supplied Binary Hardening Properties",
+       "name": "Binary Hardening",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -3861,12 +3901,16 @@
        "produces": [
         "job:02-binary-hardening"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit manifest-declared source root",
+        "B16 scanner image records"
+       ]
       },
       {
        "ref": "job:02-mobile-sast",
        "id": "02-mobile-sast",
-       "name": "Mobile SAST Static Leads",
+       "name": "Mobile SAST",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -3874,7 +3918,11 @@
        "produces": [
         "job:02-mobile-sast"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "fresh run artifact manifest",
+        "explicit manifest-declared source root",
+        "B16 scanner image records"
+       ]
       }
      ],
      "rollup": {
@@ -3985,6 +4033,9 @@
        "exact accepted intake source inventory",
        "accepted build discovery",
        "fresh run artifact manifest",
+       "explicit run-owned source root",
+       "B16 scanner image records",
+       "explicit run inputs root",
        "explicit staged target path",
        "B16 Syft image record",
        "accepted SBOM",
@@ -3994,7 +4045,8 @@
        "B16 ScanCode image record",
        "accepted license inventory",
        "identified run-owned lifecycle reference table",
-       "explicit table age ceiling"
+       "explicit table age ceiling",
+       "explicit manifest-declared source root"
       ]
      }
     },
@@ -4681,6 +4733,9 @@
      "exact accepted intake source inventory",
      "accepted build discovery",
      "fresh run artifact manifest",
+     "explicit run-owned source root",
+     "B16 scanner image records",
+     "explicit run inputs root",
      "explicit staged target path",
      "B16 Syft image record",
      "accepted SBOM",
@@ -4691,6 +4746,7 @@
      "accepted license inventory",
      "identified run-owned lifecycle reference table",
      "explicit table age ceiling",
+     "explicit manifest-declared source root",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -9255,16 +9311,24 @@
   {
    "id": "02-secrets-inventory",
    "lane": "02-evidence-pregather",
-   "name": "Redacted Secrets And Key-Material Inventory",
+   "name": "Secrets Inventory",
    "contract": "secrets-inventory",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/secrets_inventory.py:build",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "secrets_inventory"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "vendor-static-evidence-curator",
+    "domain_id": "vendor-static-evidence",
+    "tooling_profile_id": "pinned-vendor-static-evidence",
+    "output_contract_id": "secrets-inventory"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -9272,8 +9336,21 @@
      "contract": "intake"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "explicit run-owned source root"
+    },
+    {
+     "need": "required",
+     "input": "B16 scanner image records"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-secrets-inventory.json",
    "output_dir": "runs/<run_id>/data/jobs/02-secrets-inventory/",
    "output_files": [
     "manifest.json",
@@ -9286,13 +9363,10 @@
    "outputs_source": "registry/output-contracts/secrets-inventory.json",
    "claim_class": "secret_exposure_lead",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9303,16 +9377,24 @@
   {
    "id": "02-iac-config-scan",
    "lane": "02-evidence-pregather",
-   "name": "Declared IaC, Kubernetes And Dockerfile Configuration Evidence",
+   "name": "IaC Config Scan",
    "contract": "iac-config-evidence",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/iac_config_scan.py:build",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "iac_config_scan"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "vendor-static-evidence-curator",
+    "domain_id": "vendor-static-evidence",
+    "tooling_profile_id": "pinned-vendor-static-evidence",
+    "output_contract_id": "iac-config-evidence"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -9320,8 +9402,21 @@
      "contract": "intake"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "explicit run-owned source root"
+    },
+    {
+     "need": "required",
+     "input": "B16 scanner image records"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-iac-config-scan.json",
    "output_dir": "runs/<run_id>/data/jobs/02-iac-config-scan/",
    "output_files": [
     "manifest.json",
@@ -9336,13 +9431,10 @@
    "outputs_source": "registry/output-contracts/iac-config-evidence.json",
    "claim_class": "declared_configuration_evidence",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9353,16 +9445,24 @@
   {
    "id": "02-container-image-inventory",
    "lane": "02-evidence-pregather",
-   "name": "Supplied Container Image Archive Inventory",
+   "name": "Container Image Inventory",
    "contract": "container-image-inventory",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/container_image_inventory.py:build",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "container_image_inventory"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "vendor-static-evidence-curator",
+    "domain_id": "vendor-static-evidence",
+    "tooling_profile_id": "pinned-vendor-static-evidence",
+    "output_contract_id": "container-image-inventory"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -9370,8 +9470,21 @@
      "contract": "intake"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "explicit run inputs root"
+    },
+    {
+     "need": "required",
+     "input": "B16 scanner image records"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-container-image-inventory.json",
    "output_dir": "runs/<run_id>/data/jobs/02-container-image-inventory/",
    "output_files": [
     "manifest.json",
@@ -9385,13 +9498,10 @@
    "outputs_source": "registry/output-contracts/container-image-inventory.json",
    "claim_class": "supplied_image_static_evidence",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9695,16 +9805,24 @@
   {
    "id": "02-binary-hardening",
    "lane": "02-evidence-pregather",
-   "name": "Supplied Binary Hardening Properties",
+   "name": "Binary Hardening",
    "contract": "binary-hardening",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/binary_hardening.py:build",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "binary_hardening"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "vendor-static-evidence-curator",
+    "domain_id": "vendor-static-evidence",
+    "tooling_profile_id": "pinned-vendor-static-evidence",
+    "output_contract_id": "binary-hardening"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -9712,8 +9830,21 @@
      "contract": "intake"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "explicit manifest-declared source root"
+    },
+    {
+     "need": "required",
+     "input": "B16 scanner image records"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-binary-hardening.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-hardening/",
    "output_files": [
     "manifest.json",
@@ -9727,13 +9858,10 @@
    "outputs_source": "registry/output-contracts/binary-hardening.json",
    "claim_class": "binary_hardening_property_evidence",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9744,16 +9872,24 @@
   {
    "id": "02-mobile-sast",
    "lane": "02-evidence-pregather",
-   "name": "Mobile SAST Static Leads",
+   "name": "Mobile SAST",
    "contract": "mobile-sast",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/mobile_sast.py:build",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "mobile_sast"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "vendor-static-evidence-curator",
+    "domain_id": "vendor-static-evidence",
+    "tooling_profile_id": "pinned-vendor-static-evidence",
+    "output_contract_id": "mobile-sast"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -9761,8 +9897,21 @@
      "contract": "intake"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "fresh run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "explicit manifest-declared source root"
+    },
+    {
+     "need": "required",
+     "input": "B16 scanner image records"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-mobile-sast.json",
    "output_dir": "runs/<run_id>/data/jobs/02-mobile-sast/",
    "output_files": [
     "manifest.json",
@@ -9776,13 +9925,10 @@
    "outputs_source": "registry/output-contracts/mobile-sast.json",
    "claim_class": "mobile_static_lead",
    "gaps": [
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_docker_qualification"
    ],
-   "next_prerequisite": "WORKER_NOT_IMPLEMENTED until V12 (M04): needs the M02 image decision, the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification.",
+   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
    "consumes": [
     "job:00-intake"
    ],

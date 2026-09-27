@@ -46,15 +46,15 @@ flowchart TD
   j_02_test_coverage_ingest["02-test-coverage-ingest<br/>standalone_only"]
   j_02_operations_doc_ingest["02-operations-doc-ingest<br/>standalone_only"]
   j_02_evidence_index["02-evidence-index<br/>implemented_not_qualified"]
-  j_02_secrets_inventory["02-secrets-inventory<br/>missing_prerequisites"]
-  j_02_iac_config_scan["02-iac-config-scan<br/>missing_prerequisites"]
-  j_02_container_image_inventory["02-container-image-inventory<br/>missing_prerequisites"]
+  j_02_secrets_inventory["02-secrets-inventory<br/>standalone_only"]
+  j_02_iac_config_scan["02-iac-config-scan<br/>standalone_only"]
+  j_02_container_image_inventory["02-container-image-inventory<br/>standalone_only"]
   j_02_sbom_inventory["02-sbom-inventory<br/>standalone_only"]
   j_02_sca_vulnerability_match["02-sca-vulnerability-match<br/>standalone_only"]
   j_02_license_scan["02-license-scan<br/>standalone_only"]
   j_02_dependency_lifecycle["02-dependency-lifecycle<br/>standalone_only"]
-  j_02_binary_hardening["02-binary-hardening<br/>missing_prerequisites"]
-  j_02_mobile_sast["02-mobile-sast<br/>missing_prerequisites"]
+  j_02_binary_hardening["02-binary-hardening<br/>standalone_only"]
+  j_02_mobile_sast["02-mobile-sast<br/>standalone_only"]
   j_00_intake --> j_02_ossf_scorecard
   j_00_intake --> j_02_repository_partition_discovery
   j_02_repository_partition_discovery --> j_02_dev_project_discovery

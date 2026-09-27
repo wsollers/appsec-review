@@ -38,6 +38,13 @@ DEPENDENCY_JOBS = {
     'dependency_lifecycle': 'dependency_lifecycle_work',
     'cve_reachability': 'cve_reachability_work',
 }
+VENDOR_EVIDENCE_JOBS = {
+    'secrets_inventory': 'secrets_inventory_work',
+    'iac_config_scan': 'iac_config_scan_work',
+    'container_image_inventory': 'container_image_inventory_work',
+    'binary_hardening': 'binary_hardening_work',
+    'mobile_sast': 'mobile_sast_work',
+}
 
 
 def graphql(query, variables):
@@ -61,7 +68,7 @@ def find_run(request_id, run_id):
 
 
 def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=None,
-           input_path=None, output_root=None, attempt_id=None, attempt_root=None):
+           input_path=None, output_root=None, attempt_id=None, attempt_root=None, execution_root=None):
     run_id = identifier(run_id)
     manifest = read_json(run_path(run_id)/'inputs/artifact-manifest.json')
     if manifest.get('orchestration_version') != 1 or manifest.get('intake_config',{}).get('executor_platform') != 'posix':
@@ -71,15 +78,18 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
     root.mkdir(parents=True, exist_ok=True)
     previous=read_json(root/'request.json') if (root/'request.json').exists() else None
     job=job or (previous.get('job','phase1_intake') if previous else 'engagement_workflow')
-    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','native_memory_analysis','fuzz_target_triage','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','b13_harmless_container','full_review'): raise Blocked('unsupported Dagster job')
+    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','native_memory_analysis','fuzz_target_triage','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','secrets_inventory','iac_config_scan','container_image_inventory','binary_hardening','mobile_sast','b13_harmless_container','full_review'): raise Blocked('unsupported Dagster job')
     bounded = job in BOUNDED_TRANSFORM_JOBS
     dependency = job in DEPENDENCY_JOBS
-    supplied = (input_path, output_root, attempt_id, attempt_root)
-    if bounded and not (input_path and output_root and attempt_id and not attempt_root):
+    vendor = job in VENDOR_EVIDENCE_JOBS
+    supplied = (input_path, output_root, attempt_id, attempt_root, execution_root)
+    if bounded and not (input_path and output_root and attempt_id and not attempt_root and not execution_root):
         raise Blocked('bounded transform jobs require --input-path, --output-root and --attempt-id')
-    if dependency and not (input_path and output_root and attempt_root and not attempt_id):
+    if dependency and not (input_path and output_root and attempt_root and not attempt_id and not execution_root):
         raise Blocked('dependency jobs require --input-path, --output-root and --attempt-root')
-    if not bounded and not dependency and any(supplied):
+    if vendor and not (input_path and output_root and attempt_root and execution_root and not attempt_id):
+        raise Blocked('vendor evidence jobs require --input-path, --output-root, --attempt-root and --execution-root')
+    if not bounded and not dependency and not vendor and any(supplied):
         raise Blocked('explicit lifecycle paths are only valid for config-driven jobs')
     resume = [sys.executable,'-B',str(Path(__file__).resolve()),
               '--run-id',run_id,'--launch-id',request_id,'--job',job,'--wait'] + (['--force'] if force else [])
@@ -87,9 +97,14 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         resume += ['--input-path', input_path, '--output-root', output_root, '--attempt-id', attempt_id]
     if dependency:
         resume += ['--input-path', input_path, '--output-root', output_root, '--attempt-root', attempt_root]
+    if vendor:
+        resume += ['--input-path', input_path, '--output-root', output_root, '--attempt-root', attempt_root,
+                   '--execution-root', execution_root]
     lifecycle_config = ({'input_path': input_path, 'output_root': output_root, 'attempt_id': attempt_id}
                         if bounded else {'input_path': input_path, 'output_root': output_root,
-                                         'attempt_root': attempt_root} if dependency else None)
+                                         'attempt_root': attempt_root} if dependency else
+                        {'input_path': input_path, 'output_root': output_root, 'attempt_root': attempt_root,
+                         'execution_root': execution_root} if vendor else None)
     with Lock(root/'request.lock'):
         path = root/'request.json'
         if path.exists():
@@ -101,7 +116,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         else:
             record = {'run_id':run_id,'launch_id':request_id,'job':job,'force':force,'status':'PREPARED',
                       'created_at':now(),'resume_argv':resume}
-            if bounded or dependency:
+            if bounded or dependency or vendor:
                 record['lifecycle_config'] = lifecycle_config
             atomic_json(path,record)
         try:
@@ -116,6 +131,8 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                     run_config['ops'] = {BOUNDED_TRANSFORM_JOBS[job]: {'config': lifecycle_config}}
                 if dependency:
                     run_config['ops'] = {DEPENDENCY_JOBS[job]: {'config': lifecycle_config}}
+                if vendor:
+                    run_config['ops'] = {VENDOR_EVIDENCE_JOBS[job]: {'config': lifecycle_config}}
                 params = {'selector':{'repositoryLocationName':'appsec_review','repositoryName':'__repository__',
                                       'jobName':job},
                           'runConfigData':run_config,
@@ -152,11 +169,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id',required=True)
     parser.add_argument('--force',action='store_true')
-    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','native_memory_analysis','fuzz_target_triage','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','b13_harmless_container','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
+    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','native_memory_analysis','fuzz_target_triage','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','sbom_inventory','sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability','secrets_inventory','iac_config_scan','container_image_inventory','binary_hardening','mobile_sast','b13_harmless_container','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
     parser.add_argument('--input-path')
     parser.add_argument('--output-root')
     parser.add_argument('--attempt-id')
     parser.add_argument('--attempt-root')
+    parser.add_argument('--execution-root')
     parser.add_argument('--launch-id',help='reattach to this existing launch without resubmitting')
     parser.add_argument('--wait',action='store_true')
     parser.add_argument('--timeout',type=int,default=600)
@@ -164,7 +182,7 @@ def main(argv=None):
     if args.timeout <= 0: parser.error('--timeout must be positive')
     try:
         result = launch(args.run_id,args.force,args.launch_id,args.wait,args.timeout,args.job,
-                        args.input_path,args.output_root,args.attempt_id,args.attempt_root)
+                        args.input_path,args.output_root,args.attempt_id,args.attempt_root,args.execution_root)
         print(json.dumps(result,indent=2))
         return 0 if result['status'] not in {'FAILURE','CANCELED','REJECTED'} else 1
     except (Exception,KeyboardInterrupt) as exc:

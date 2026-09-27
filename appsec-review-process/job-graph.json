@@ -1286,8 +1286,8 @@
     "02-secrets-inventory": {
       "lane": "02-evidence-pregather",
       "contract": "secrets-inventory",
-      "template": null,
-      "implemented": false,
+      "template": "02-secrets-inventory",
+      "implemented": true,
       "namespace": "02-secrets-inventory",
       "dependencies": [
         {
@@ -1310,8 +1310,8 @@
     "02-iac-config-scan": {
       "lane": "02-evidence-pregather",
       "contract": "iac-config-evidence",
-      "template": null,
-      "implemented": false,
+      "template": "02-iac-config-scan",
+      "implemented": true,
       "namespace": "02-iac-config-scan",
       "dependencies": [
         {
@@ -1336,8 +1336,8 @@
     "02-container-image-inventory": {
       "lane": "02-evidence-pregather",
       "contract": "container-image-inventory",
-      "template": null,
-      "implemented": false,
+      "template": "02-container-image-inventory",
+      "implemented": true,
       "namespace": "02-container-image-inventory",
       "dependencies": [
         {
@@ -1465,8 +1465,8 @@
     "02-binary-hardening": {
       "lane": "02-evidence-pregather",
       "contract": "binary-hardening",
-      "template": null,
-      "implemented": false,
+      "template": "02-binary-hardening",
+      "implemented": true,
       "namespace": "02-binary-hardening",
       "dependencies": [
         {
@@ -1490,8 +1490,8 @@
     "02-mobile-sast": {
       "lane": "02-evidence-pregather",
       "contract": "mobile-sast",
-      "template": null,
-      "implemented": false,
+      "template": "02-mobile-sast",
+      "implemented": true,
       "namespace": "02-mobile-sast",
       "dependencies": [
         {

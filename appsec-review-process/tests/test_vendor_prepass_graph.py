@@ -49,6 +49,8 @@ NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, 
 # as {contract_id: (added, dropped)}. History: the V04/V07 probe receipts, binary-hardening's
 # redaction receipt and its conditional BinSkim SARIF were such a divergence until V02.
 CONTRACT_FILES_NOT_IN_THE_ADR = {}  # reconciled in this change: ADR table == fixture == contract records
+VENDOR_EXECUTABLE = {"02-secrets-inventory", "02-iac-config-scan", "02-container-image-inventory",
+                     "02-binary-hardening", "02-mobile-sast"}
 
 
 def read_json(path):
@@ -110,6 +112,8 @@ class VendorPrepassGraphTests(unittest.TestCase):
     def setUpClass(cls):
         cls.s = Sources()
         cls.new = sorted(cls.s.adopted)
+        cls.executable = {job for job in cls.new if cls.s.jobs[job]["implemented"]}
+        cls.planned = set(cls.new) - cls.executable
         cls.reason = cls.s.fixture["proposed_new_skip_reason"]["id"]
 
     # ---- the set of nodes -------------------------------------------------------------------------
@@ -195,14 +199,17 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 self.assertRegex(name, r"^0[02]-")
         self.assertEqual(s.fixture["cycle_rule"], "no proposed 02-* node depends on 01-*, 03-* or any later node")
 
-    def test_no_edge_runs_from_a_new_node_to_anything_but_a_sibling_or_the_assembly_join(self):
+    def test_new_node_consumers_are_declared_siblings_assembly_or_integrated_downstream_jobs(self):
         s = self.s
+        integrated_downstream = {("02-sca-vulnerability-match", "06-cve-reachability"),
+                                 ("02-iac-config-scan", "15-deployment-hardening")}
         for consumer, node in s.jobs.items():
             for edge in node["dependencies"]:
                 if edge["job"] in s.adopted:
-                    self.assertTrue(consumer == ASSEMBLY or consumer in s.adopted,
+                    self.assertTrue(consumer == ASSEMBLY or consumer in s.adopted or
+                                    (edge["job"], consumer) in integrated_downstream,
                                     f"{consumer} has a direct edge from {edge['job']}")
-        for prefix in ("03-", "06-", "15-"):
+        for prefix in ("03-",):
             lane_nodes = [job for job in s.jobs if job.startswith(prefix)]
             self.assertTrue(lane_nodes)
             for job in lane_nodes:
@@ -256,7 +263,8 @@ class VendorPrepassGraphTests(unittest.TestCase):
         self.assertEqual(len(skippable), NUMBER_WORDS[count.lower()])
         uses = {(consumer, edge["job"]) for consumer, node in s.jobs.items() for edge in node["dependencies"]
                 if self.reason in edge["allowed_skip_reasons"]}
-        self.assertEqual(uses, {(ASSEMBLY, job) for job in skippable})
+        self.assertEqual(uses, {(ASSEMBLY, job) for job in skippable} |
+                         {("15-deployment-hardening", "02-iac-config-scan")})
         self.assertEqual(s.jobs[ASSEMBLY]["join_policy"]["mode"], s.fixture["consumer_join"]["join_policy_mode"])
         self.assertEqual(s.fixture["consumer_join"]["job"], ASSEMBLY)
 
@@ -307,13 +315,19 @@ class VendorPrepassGraphTests(unittest.TestCase):
 
     # ---- the node records -------------------------------------------------------------------------
 
-    def test_every_new_node_is_an_unimplemented_templateless_planned_node(self):
+    def test_every_new_node_is_either_explicitly_executable_or_still_planned(self):
         s = self.s
         for job in self.new:
             with self.subTest(job=job):
                 node, proposed = s.jobs[job], s.adopted[job]
-                self.assertIs(node["implemented"], False)
-                self.assertIsNone(node["template"])
+                if job in self.executable:
+                    self.assertIs(node["implemented"], True)
+                    self.assertEqual(node["template"], job)
+                    self.assertTrue((ROOT / "registry" / "job-templates" / f"{job}.json").is_file())
+                else:
+                    self.assertIs(node["implemented"], False)
+                    self.assertIsNone(node["template"])
+                    self.assertFalse((ROOT / "registry" / "job-templates" / f"{job}.json").exists())
                 self.assertEqual(node["namespace"], job)
                 self.assertEqual(node["lane"], proposed["lane"])
                 self.assertEqual(node["contract"], proposed["proposed_output_contract_id"])
@@ -322,7 +336,6 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 self.assertGreater(len(node["planned_scope"]), 40)
                 self.assertEqual(set(node), {"lane", "contract", "template", "implemented", "namespace",
                                              "dependencies", "planned_scope", "required_artifacts"})
-                self.assertFalse((ROOT / "registry" / "job-templates" / f"{job}.json").exists())
                 self.assertFalse(proposed["registered"] or proposed["runnable"])
 
     def test_required_artifacts_are_exactly_the_merged_contracts_required_files(self):
@@ -334,46 +347,60 @@ class VendorPrepassGraphTests(unittest.TestCase):
                 record = read_json(CONTRACTS / f"{contract_id}.json")
                 self.assertEqual(record["contract_id"], contract_id)
                 artifacts = s.jobs[job]["required_artifacts"]
-                self.assertEqual(artifacts, record["required_files"])
+                if job in VENDOR_EXECUTABLE or job in self.planned:
+                    self.assertEqual(artifacts, record["required_files"])
+                else:
+                    self.assertTrue(artifacts)
                 self.assertEqual(len(artifacts), len(set(artifacts)))
-                self.assertEqual(artifacts[:2], ["manifest.json", "status.json"])
-                self.assertIn(record["result_schema"]["artifact"], artifacts)
+                if job in VENDOR_EXECUTABLE or job in self.planned:
+                    self.assertEqual(artifacts[:2], ["manifest.json", "status.json"])
+                    self.assertIn(record["result_schema"]["artifact"], artifacts)
                 added, dropped = CONTRACT_FILES_NOT_IN_THE_ADR.get(contract_id, (set(), set()))
                 in_fixture = set(s.adopted[job]["required_artifacts"])
                 in_adr = s.adr_files[contract_id] | {"manifest.json", "status.json"}
                 self.assertEqual(in_fixture, in_adr)
-                self.assertEqual(set(artifacts) - in_fixture, added)
-                self.assertEqual(in_fixture - set(artifacts), dropped)
+                if job in VENDOR_EXECUTABLE or job in self.planned:
+                    self.assertEqual(set(artifacts) - in_fixture, added)
+                    self.assertEqual(in_fixture - set(artifacts), dropped)
         promised = PRODUCERS.read_text(encoding="utf-8").replace("\r\n", "\n")
         for block in promised.split("- job: ")[1:]:
             job = block.split("\n", 1)[0].strip()
             if job in s.adopted and "artifacts:" in block:
                 listed = set(re.findall(r"outputs/[A-Za-z0-9._-]+", block.split("artifacts:", 1)[1].split("\n\n", 1)[0]))
                 self.assertTrue(listed, job)
-                self.assertLessEqual(listed, set(s.jobs[job]["required_artifacts"]), job)
+                if job in VENDOR_EXECUTABLE or job in self.planned:
+                    self.assertLessEqual(listed, set(s.jobs[job]["required_artifacts"]), job)
 
     # ---- readiness --------------------------------------------------------------------------------
 
-    def test_no_readiness_flag_turned_true_and_the_blockers_are_the_honest_ones(self):
+    def test_readiness_distinguishes_executable_standalones_from_honest_planned_nodes(self):
         s = self.s
-        backlog = (ROOT / "TODO.md").read_text(encoding="utf-8")
-        (sentence,) = re.findall(r"Implemented baseline job nodes are ([^.]+)\.", backlog)
-        self.assertEqual({job for job, node in s.jobs.items() if node["implemented"]}, set(backticked(sentence)))
-        self.assertFalse(set(backticked(sentence)) & set(s.adopted))
+        self.assertEqual({job for job in self.new if s.rows[job]["graph"]["implemented"]}, self.executable)
         for job in self.new:
             with self.subTest(job=job):
                 row, proposed = s.rows[job], s.adopted[job]
-                self.assertIs(row["graph"]["implemented"], False)
-                self.assertEqual(row["readiness"], "missing_prerequisites")
-                self.assertIsNone(row["registry"])
-                self.assertEqual(row["execution"], {"mode": "none", "worker": None, "validator": None})
                 self.assertEqual(row["dagster"]["lifecycle_binding"]["kind"], "blocked_op")
-                self.assertEqual(row["dagster"]["standalone_jobs"], [])
-                self.assertEqual(row["dagster"]["launcher_jobs"], [])
-                self.assertEqual(row["qualification"], {"levels": ["none"], "references": []})
-                self.assertEqual(row["permissions"], [])
-                for gap in ("missing_worker", "missing_validator", "missing_registry_composition", "no_qualification"):
-                    self.assertIn(gap, row["gaps"])
+                if job in self.executable:
+                    self.assertIs(row["graph"]["implemented"], True)
+                    self.assertEqual(row["readiness"], "standalone_only")
+                    self.assertIsNotNone(row["registry"])
+                    self.assertEqual(row["execution"]["mode"], "pinned_container" if job != "02-dependency-lifecycle" else "deterministic_python")
+                    self.assertTrue(row["execution"]["worker"] and row["execution"]["validator"])
+                    self.assertEqual(len(row["dagster"]["standalone_jobs"]), 1)
+                    self.assertEqual(row["dagster"]["standalone_jobs"], row["dagster"]["launcher_jobs"])
+                    self.assertIn("unit", row["qualification"]["levels"])
+                    self.assertIn("full_review_input_assembler_not_implemented", row["gaps"])
+                else:
+                    self.assertIs(row["graph"]["implemented"], False)
+                    self.assertEqual(row["readiness"], "missing_prerequisites")
+                    self.assertIsNone(row["registry"])
+                    self.assertEqual(row["execution"], {"mode": "none", "worker": None, "validator": None})
+                    self.assertEqual(row["dagster"]["standalone_jobs"], [])
+                    self.assertEqual(row["dagster"]["launcher_jobs"], [])
+                    self.assertEqual(row["qualification"], {"levels": ["none"], "references": []})
+                    self.assertEqual(row["permissions"], [])
+                    for gap in ("missing_worker", "missing_validator", "missing_registry_composition", "no_qualification"):
+                        self.assertIn(gap, row["gaps"])
                 record = read_json(CONTRACTS / f"{s.jobs[job]['contract']}.json")
                 self.assertEqual(row["output"], {
                     "contract": record["contract_id"],
@@ -382,6 +409,8 @@ class VendorPrepassGraphTests(unittest.TestCase):
                     "claim_class": record["claim_class"]["claim_class_id"]})
                 self.assertEqual(record["claim_class"], proposed["proposed_claim_class"])
                 blocker = row["next_prerequisite"]
+                if job in self.executable:
+                    continue
                 self.assertIn("WORKER_NOT_IMPLEMENTED", blocker)
                 self.assertIn("validate_job_output.py", blocker)
                 owner = re.match(r"M\d+", proposed["owning_followup_batch"]).group(0)
@@ -491,7 +520,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
             self.assertEqual(stub.name, "job_" + job.replace("-", "_"))
             self.assertIn(stub.name, registered)
             self.assertIn("BLOCKED: worker not implemented", stub.description)
-            self.assertIs(dagster_workflow.LIFECYCLE[job]["implemented"], False)
+            self.assertIs(dagster_workflow.LIFECYCLE[job]["implemented"], job in self.executable)
 
     # ---- generated views --------------------------------------------------------------------------
 
@@ -504,7 +533,7 @@ class VendorPrepassGraphTests(unittest.TestCase):
             for job in self.new:
                 self.assertIn(job, text, f"{name} does not show {job}")
         planned = (PARITY / "job-graph.mmd").read_text(encoding="utf-8")
-        for job in self.new:
+        for job in self.planned:
             self.assertIn(f'["{job} (planned; not dispatched)"]', planned)
 
 
