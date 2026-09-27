@@ -56,12 +56,22 @@ class OwaspValidatorResultTests(unittest.TestCase):
         self.write_candidate()
 
     def citation(self, fragment, obligation, suffix="evidence"):
-        entry = self.handoff["accepted_inputs"][0]
+        component = next(item for item in self.handoff["components"]
+                         if item["component_id"] == fragment["component_id"])
+        root_ids = {item["input_id"] for item in component["accepted_evidence_roots"]}
+        entry = next(item for item in self.handoff["accepted_inputs"]
+                     if item["input_id"] in root_ids and item["use"] == "canonical_evidence")
+        producer = entry.get("producer")
+        accepted_pointer = None if producer is None else {
+            "path": producer["accepted_pointer_path"],
+            "sha256": producer["accepted_pointer_sha256"],
+            "job_id": producer["job_id"], "attempt_id": producer["attempt_id"],
+        }
         return {
             "citation_id": f"citation-{fragment['fragment_id']}-{obligation['obligation_id']}-{suffix}",
             "input_id": entry["input_id"], "source_kind": "canonical_evidence",
             "artifact_path": entry["artifact"]["path"], "artifact_sha256": entry["artifact"]["sha256"],
-            "accepted_pointer": None, "locator": "$.kind",
+            "accepted_pointer": accepted_pointer, "locator": "$.kind",
             "observed_fact": "The supplied canonical artifact contains the assigned static fact.",
             "evidence_mode": obligation["primary_evidence_mode"], "freshness": entry["freshness"],
             "covered_scope": [fragment["component_id"]], "limitations": ["Supplied static scope only."],

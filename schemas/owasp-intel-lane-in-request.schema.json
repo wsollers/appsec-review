@@ -71,7 +71,17 @@
           },
           "redaction_status": {"enum": ["not_required", "applied", "reviewed", "contains_restricted_data"]},
           "caveats": {"type": "array", "items": {"type": "string"}},
-          "use": {"enum": ["canonical_evidence", "locator_only"]}
+          "use": {"enum": ["canonical_evidence", "locator_only"]},
+          "component_scope": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["component_ids", "component_map"],
+            "properties": {
+              "component_ids": {"type": "array", "minItems": 1, "uniqueItems": true,
+                                "items": {"type": "string"}},
+              "component_map": {"$ref": "owasp-component-map-binding.schema.json"}
+            }
+          }
         }
       }
     },

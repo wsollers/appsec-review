@@ -151,6 +151,10 @@ def _validate_component_binding(run_id: str, request: dict[str, Any],
             tags.setdefault(component_id, []).append(tag["tag"])
     for component_id, source in source_components.items():
         row = projected[component_id]
+        expected_evidence_inputs = sorted(
+            entry["input_id"] for entry in input_manifest["entries"]
+            if (entry.get("component_scope") or {}).get("component_map") == binding and
+            component_id in (entry.get("component_scope") or {}).get("component_ids", []))
         expected_roots = sorted(set(source["path_patterns"] + source["representative_locations"]))
         affected = {value for unknown in component_map["unknowns"]
                     for value in unknown["affected_component_ids"]}
@@ -160,6 +164,7 @@ def _validate_component_binding(run_id: str, request: dict[str, Any],
                  else "known")
         if (row["classification_hash"] != digest(source) or
                 row["name"] != source["name"] or row["input_ids"] != [entry_matches[0]["input_id"]] or
+                row.get("evidence_input_ids", []) != expected_evidence_inputs or
                 row["scope_status"] != "in_scope" or row["scope_authority"] is not None or
                 row.get("tags") != sorted(set(tags.get(component_id, []))) or
                 row.get("trust_role") != source["trust_boundary_relevance"] or
@@ -317,6 +322,7 @@ def _base_row(selection_id: str, control: dict[str, Any], component: dict[str, A
         "proof_obligations": control["proof_obligations"],
         "component_name": component["name"], "classification_hash": component["classification_hash"],
         "classification_input_ids": component["input_ids"], "override_ids": [],
+        "component_evidence_input_ids": component.get("evidence_input_ids", component["input_ids"]),
         "component_tags": component.get("tags", []),
         "component_trust_role": component.get("trust_role", ""),
         "component_evidence_roots": component.get("evidence_roots", []),
@@ -356,6 +362,14 @@ def _build(request: dict[str, Any], input_manifest: dict[str, Any], controls: li
             raise ValueError(f"{component_id}: invalid name or classification hash")
         if len(component["input_ids"]) != len(set(component["input_ids"])) or any(i not in entries for i in component["input_ids"]):
             raise ValueError(f"{component_id}: classification inputs must be unique admitted inputs")
+        evidence_ids = component.get("evidence_input_ids")
+        if evidence_ids is not None:
+            if len(evidence_ids) != len(set(evidence_ids)) or any(i not in entries for i in evidence_ids):
+                raise ValueError(f"{component_id}: evidence inputs must be unique admitted inputs")
+            for input_id in evidence_ids:
+                entry = entries[input_id]
+                if entry.get("use") != "canonical_evidence" or entry.get("freshness", {}).get("status") != "current":
+                    raise ValueError(f"{component_id}: evidence input is not current canonical evidence")
         authority = component["scope_authority"]
         if component["scope_status"] == "out_of_scope":
             if not authority or not authority["actor"].strip() or not authority["rationale"].strip():

@@ -181,6 +181,16 @@ def _validate_entry(data_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"{entry['input_id']}: derived intelligence cannot be canonical evidence")
     if entry["freshness"]["status"] == "stale_accepted" and not entry["caveats"]:
         raise ValueError(f"{entry['input_id']}: accepted staleness requires a caveat")
+    component_scope = entry.get("component_scope")
+    if component_scope is not None:
+        if admission != "accepted_run_output" or entry["use"] != "canonical_evidence":
+            raise ValueError(f"{entry['input_id']}: component-scoped evidence must be canonical accepted output")
+        if entry["freshness"]["status"] != "current":
+            raise Blocked(f"{entry['input_id']}: component-scoped canonical evidence must be current")
+        snapshot = entry.get("source_snapshot")
+        if (not isinstance(snapshot, dict) or
+                snapshot.get("snapshot_id") != component_scope["component_map"]["source_snapshot_sha256"]):
+            raise Blocked(f"{entry['input_id']}: component evidence source generation is mixed or absent")
 
     return {**entry, "artifact": {**entry["artifact"], "path": relative},
             "admission_validated": True,

@@ -28,6 +28,7 @@
           "name": {"type": "string"},
           "classification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "input_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "evidence_input_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
           "scope_status": {"enum": ["in_scope", "out_of_scope"]},
           "scope_authority": {
             "type": ["object", "null"],

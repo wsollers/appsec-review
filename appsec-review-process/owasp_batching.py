@@ -255,17 +255,18 @@ def _load_reference_records(model: dict[str, Any], root: Path) -> tuple[
 def _contexts(request: dict[str, Any], model: dict[str, Any]) -> dict[str, dict[str, Any]]:
     expected_ids = {row["component_id"] for row in model["rows"]}
     contexts = {}
-    classification_inputs: dict[str, set[str]] = defaultdict(set)
+    evidence_inputs: dict[str, set[str]] = defaultdict(set)
     for row in model["rows"]:
-        classification_inputs[row["component_id"]].update(row["classification_input_ids"])
+        evidence_inputs[row["component_id"]].update(
+            row.get("component_evidence_input_ids", row["classification_input_ids"]))
     for context in request["component_contexts"]:
         component_id = context["component_id"]
         if component_id in contexts or not all(context[key].strip() for key in
                                                 ("component_id", "component_group_id", "trust_role")):
             raise ValueError(f"invalid or duplicate component context: {component_id!r}")
         roots = context["evidence_root_input_ids"]
-        if len(roots) != len(set(roots)) or not set(roots).issubset(classification_inputs[component_id]):
-            raise ValueError(f"{component_id}: evidence roots must be unique T04 classification inputs")
+        if len(roots) != len(set(roots)) or set(roots) != evidence_inputs[component_id]:
+            raise ValueError(f"{component_id}: evidence roots must exactly match T04 canonical evidence inputs")
         contexts[component_id] = context
     if set(contexts) != expected_ids:
         raise ValueError("component contexts must exactly cover the T04 component set")

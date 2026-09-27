@@ -117,6 +117,8 @@ class OwaspComponentRoutingTests(unittest.TestCase):
         attempt.mkdir(parents=True)
         write_json(attempt / "component-purpose-map.json", value)
         (attempt / "component-purpose-map.md").write_text("# Freeciv-like component map\n", encoding="utf-8")
+        write_json(attempt / "canonical" / "server-config.json",
+                   {"component_id": "freeciv-server", "setting": "static-fixture"})
         mark_attempt_started(base, attempt_id, fingerprint)
         return record_terminal_current(
             base, attempt, run_id=self.run_id, job_id=routing.COMPONENT_JOB,
@@ -127,7 +129,8 @@ class OwaspComponentRoutingTests(unittest.TestCase):
                 "persona_id": "developer-engineer", "role_id": "component-characterizer",
                 "domain_id": "component-characterization", "tooling_profile_id": "component-evidence-router",
                 "artifacts_read": [], "classification_gaps": 1},
-            artifact_paths=["component-purpose-map.json", "component-purpose-map.md", "status.json"],
+            artifact_paths=["component-purpose-map.json", "component-purpose-map.md",
+                            "canonical/server-config.json", "status.json"],
             gaps=["client runtime surface unknown"])
 
     def _publish_lane_in(self):

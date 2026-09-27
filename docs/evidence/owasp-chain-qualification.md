@@ -25,8 +25,8 @@ The live qualification reaches these accepted results:
 - T04 applicability: `OK_WITH_GAPS`
 - T05 batching: accepted (`OK` or `OK_WITH_GAPS`)
 - T06 validator handoff: accepted (`OK` or `OK_WITH_GAPS`)
-- T10 dispatch/accounting: `OK_WITH_GAPS`; every expected static cell ran through the tracked
-  validator composition and every candidate was submitted to T07
+- T10 dispatch/accounting: accepted; every expected static cell ran through the tracked validator
+  composition and every candidate passed T07 with canonical component-scoped evidence
 
 The four components are all retained. No target is converted to technical not-applicable. Server
 targets are assigned under the approved ASVS L2 server scope; unresolved client/runtime
@@ -40,32 +40,37 @@ Its ceiling allows `control_verdict`, `coverage_gap`, `dynamic_test_request`, an
 `candidate_followup`; it expressly prohibits finding, severity, exploitability, runtime,
 remediation, compliance, and certification claims. The worklist builder still forbids verdicts.
 
+Canonical component evidence routing is now closed. A T03 entry may carry an explicit
+`component_scope` only when it is current, canonical, raw, accepted producer output. The scope
+pins the complete accepted component-map binding and names resolved component IDs. The assembler
+projects those entries separately as `evidence_input_ids`; classification remains bound only to
+the locator-only component map. T04 preserves the separate IDs, T05 requires the component context
+to match them exactly, and T06 includes the canonical roots in its component handoff. Empty evidence
+sets remain empty rather than being padded with locator-only intelligence. Stale evidence, mixed
+component generations, unresolved component IDs, producer-pointer tampering, and artifact-hash
+tampering fail closed.
+
 ## First remaining blocker
 
-The full-review evidence route supplies only the derived component map as each component's evidence
-root. That artifact is correctly admitted by T03 as locator-only derived intelligence and may not
-support a control verdict. The deterministic validator fixture therefore produces candidates from
-the bytes it was handed, but T07 rejects every candidate because locator-only intelligence was
-presented as canonical evidence. T10 retains the outcome as `validation_refused` and `not_assessed`
-for every dispatched cell; it does not adopt any result.
+The full four-component ASVS L2 run now derives the T11-T13 matrix successfully, but T14 cannot
+publish its common envelope because `owasp-control-status-matrix.json` is larger than the common
+per-artifact limit:
 
 ```text
-locator-only or derived intelligence was presented as canonical evidence
+worker result validation failed: declared result artifact exceeds 8388608 bytes
 ```
 
-This is the first remaining happy-path blocker. It is not a registry or dispatch failure: all
-expected cells launched and completed through the tracked composition, and T10 published verified
-degraded accounting. T11-T14 can report that degraded state, but doing so would not qualify the
-intended assessed-control happy path, so no successful assessment publication is claimed here.
+The failed T14 attempt is not accepted. This is a publication-shape/size blocker, not an assessment
+or evidence-lineage failure: every dispatched T10 cell completed, every candidate passed T07, and
+verified accounting retained the results before join/report publication was attempted.
 
 ## Retained executable evidence
 
 `appsec-review-process/tests/test_owasp_chain_qualification.py` publishes the four-component map
-through the common worker-result helper, runs the real T03/routing/T04/T05/T06 workers, and asserts
-that the tracked composition launches every expected T10 cell, T07 refuses the unsupported
-locator-only verdict candidates, and T10 accounts every refusal as not assessed. A mutation test
-changes the envelope binding while updating the request's pointer hash and proves T03 still rejects
-the common publication.
+through the common worker-result helper, admits a separately scoped canonical server/config
+artifact, runs the real T03/routing/T04/T05/T06/T10/T07 path, and proves every dispatched result is
+valid before retaining the exact T14 size refusal. Mutation tests prove stale, mixed-generation,
+unresolved-scope, and envelope-binding changes are rejected.
 
 Run from `appsec-review-process`:
 
@@ -76,9 +81,9 @@ python -m unittest -v tests.test_owasp_lane_in tests.test_owasp_component_routin
 
 ## Required next closure
 
-Admit canonical source/configuration evidence at T03 and deterministically assign exact evidence
-roots to components before T05. The routing must use component path/scope lineage, reject ambiguous
-or unassigned evidence, and keep indexes and the component map locator-only. Then rerun this
-qualification so validator candidates cite those canonical roots, pass T07, and continue through
-T11 join and T14 publication. This is not permission to treat classification intelligence as proof
-or to weaken T07 citation validation.
+Define a bounded publication shape for large OWASP matrices without raising the common artifact
+limit globally. The preferred closure is deterministic partitioning or paging with a small manifest
+that binds every part, exact row coverage/order, denominators, and hashes; validation must reject
+missing, duplicate, reordered, mixed-generation, or oversized parts. Then rerun this qualification
+through accepted T14 publication. Compacting the matrix is acceptable only if it preserves every
+selected target, status, citation, dissent, rescope, and accounting link.

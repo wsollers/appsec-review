@@ -21,6 +21,7 @@ import owasp_batching  # noqa: E402
 import owasp_component_routing as routing  # noqa: E402
 import owasp_dispatch  # noqa: E402
 import owasp_dispatch_support as dispatch_support  # noqa: E402
+import owasp_join_publisher  # noqa: E402
 import owasp_lane_in  # noqa: E402
 import owasp_validator_handoff  # noqa: E402
 import persona_invocation  # noqa: E402
@@ -54,7 +55,17 @@ class OwaspChainQualificationTests(unittest.TestCase):
         component_attempt = self.component_pointer["attempt_id"]
         component_path = (self.data / "jobs" / routing.COMPONENT_JOB / "attempts" /
                           component_attempt / "component-purpose-map.json")
+        canonical_path = component_path.parent / "canonical" / "server-config.json"
         pointer_path = self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json"
+        component_binding = {
+            "job_id": routing.COMPONENT_JOB, "attempt_id": component_attempt,
+            "artifact_path": component_path.relative_to(self.data).as_posix(),
+            "artifact_sha256": sha(component_path),
+            "accepted_pointer_path": pointer_path.relative_to(self.data).as_posix(),
+            "accepted_pointer_sha256": sha(pointer_path),
+            "source_snapshot_sha256": self.component_map["source_snapshot_sha256"],
+            "generation_sha256": self.component_map["evidence_manifest_lineage"]["generation_sha256"],
+        }
         self.request_path = self.run / "inputs" / "owasp-lane-in-request.json"
         write_json(self.request_path, {
             "schema": "appsec-review/owasp-intel-lane-in-request/1.0",
@@ -89,6 +100,23 @@ class OwaspChainQualificationTests(unittest.TestCase):
                 "redaction_status": "not_required",
                 "caveats": ["Classification is routing context, not proof."],
                 "use": "locator_only",
+                "component_scope": None,
+            }, {
+                "input_id": "freeciv-server-config", "evidence_class": "raw_evidence",
+                "kind": "source_configuration", "admission": "accepted_run_output",
+                "artifact": {"path": canonical_path.relative_to(self.data).as_posix(),
+                             "sha256": sha(canonical_path)},
+                "producer": {"job_id": routing.COMPONENT_JOB, "attempt_id": component_attempt,
+                             "accepted_pointer_path": pointer_path.relative_to(self.data).as_posix(),
+                             "accepted_pointer_sha256": sha(pointer_path)},
+                "source_artifacts": [],
+                "source_snapshot": {"snapshot_id": self.component_map["source_snapshot_sha256"],
+                                    "captured_at": "2026-09-27T00:00:00Z"},
+                "derivation_status": None,
+                "freshness": {"assessed_at": "2026-09-27T00:00:00Z", "status": "current"},
+                "redaction_status": "not_required", "caveats": [], "use": "canonical_evidence",
+                "component_scope": {"component_ids": ["freeciv-server"],
+                                    "component_map": component_binding},
             }],
             "nvd": {"requested": False, "snapshot_id": None, "manifest_sha256": None,
                     "advisory_freshness_seconds": 86400},
@@ -115,7 +143,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
             "component_id": row["component_id"],
             "component_group_id": source[row["component_id"]]["parallel_review_group"],
             "trust_role": source[row["component_id"]]["component_type"],
-            "evidence_root_input_ids": row["input_ids"],
+            "evidence_root_input_ids": row.get("evidence_input_ids", row["input_ids"]),
         } for row in sorted(projected, key=lambda value: value["component_id"])]
         config = json.loads((PROCESS / "config/owasp-batching/default-v1.json").read_text())
         request_path = self.run / "inputs" / "owasp-batch-request.json"
@@ -171,7 +199,7 @@ class OwaspChainQualificationTests(unittest.TestCase):
                    result["attempt_id"] / "outputs" / "owasp-validator-handoff-set.json")
         return result, handoff
 
-    def test_common_component_envelope_reaches_t10_and_exposes_evidence_gap(self):
+    def test_canonical_evidence_reaches_t14_artifact_size_boundary(self):
         pointer = json.loads((self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json").read_text())
         self.assertEqual(pointer["schema"], "appsec-review/accepted-worker-result/1.0")
         self.assertIn("hashes", pointer)
@@ -227,14 +255,20 @@ class OwaspChainQualificationTests(unittest.TestCase):
         )
         t10 = owasp_dispatch.dispatch(self.run_id, dispatch_request, runtime=runtime, force=False)
         accounting = owasp_dispatch.load_verified_accounting(self.run_id, facts=facts)
-        self.assertEqual(t10["status"], "OK_WITH_GAPS")
+        self.assertIn(t10["status"], {"OK", "OK_WITH_GAPS"})
         self.assertTrue(accounting["cells"])
         dispatched = [cell for cell in accounting["cells"] if cell["disposition"] == "dispatched"]
         self.assertEqual(len(invoker.packages), len(dispatched))
         self.assertTrue(all(cell["state"] == "succeeded" for cell in dispatched))
-        self.assertTrue(all(not cell["valid_result"] and
-                            cell["not_assessed_reason"] == "validation_refused"
+        self.assertTrue(all(cell["valid_result"] and cell["not_assessed_reason"] is None
                             for cell in dispatched))
+
+        with self.assertRaisesRegex(execution_state.Blocked,
+                                    "declared result artifact exceeds 8388608 bytes"):
+            owasp_join_publisher.run(self.run_id, "dagster-owasp-chain-qualification", facts)
+        published = owasp_join_publisher.root(self.run_id) / "accepted.json"
+        self.assertNotIn(json.loads(published.read_text(encoding="utf-8"))["status"],
+                         {"OK", "OK_WITH_GAPS"})
 
     def test_t03_rejects_tampered_common_envelope_binding(self):
         pointer_path = self.data / "jobs" / routing.COMPONENT_JOB / "accepted.json"
@@ -249,6 +283,29 @@ class OwaspChainQualificationTests(unittest.TestCase):
                 self.run_id, self.request_path,
                 clock=lambda: datetime(2026, 9, 27, tzinfo=timezone.utc),
             )
+
+    def test_component_evidence_rejects_stale_mixed_and_unresolved_scope(self):
+        request = json.loads(self.request_path.read_text(encoding="utf-8"))
+        request["entries"][1]["freshness"]["status"] = "stale_accepted"
+        request["entries"][1]["caveats"] = ["stale fixture"]
+        write_json(self.request_path, request)
+        with self.assertRaisesRegex(execution_state.Blocked, "must be current"):
+            owasp_lane_in.admit(self.run_id, self.request_path)
+
+        request["entries"][1]["freshness"]["status"] = "current"
+        request["entries"][1]["component_scope"]["component_map"]["generation_sha256"] = "sha256:" + "0" * 64
+        write_json(self.request_path, request)
+        owasp_lane_in.admit(self.run_id, self.request_path)
+        with self.assertRaisesRegex(execution_state.Blocked, "mixed or stale generation"):
+            routing.assemble(self.run_id)
+
+        request["entries"][1]["component_scope"]["component_map"]["generation_sha256"] = \
+            self.component_map["evidence_manifest_lineage"]["generation_sha256"]
+        request["entries"][1]["component_scope"]["component_ids"] = ["missing-component"]
+        write_json(self.request_path, request)
+        owasp_lane_in.admit(self.run_id, self.request_path)
+        with self.assertRaisesRegex(execution_state.Blocked, "unresolved or duplicate scope"):
+            routing.assemble(self.run_id)
 
     def test_validator_authority_is_separate_from_worklist_builder(self):
         registry = PROCESS / "registry"

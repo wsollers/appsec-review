@@ -198,6 +198,28 @@ def _family_match(family: str, enabled_scope: list[str], tokens: set[str]) -> bo
     return bool(tokens.intersection(scope | aliases.get(family, set())))
 
 
+def _component_evidence_inputs(manifest: dict[str, Any], binding: dict[str, Any],
+                               component_ids: set[str]) -> dict[str, list[str]]:
+    """Return canonical T03 input IDs explicitly bound to this component-map generation."""
+    result = {component_id: [] for component_id in component_ids}
+    for entry in manifest["entries"]:
+        scope = entry.get("component_scope")
+        if scope is None:
+            continue
+        if scope.get("component_map") != binding:
+            raise Blocked(f"{entry['input_id']}: component evidence is bound to a mixed or stale generation")
+        scoped = scope.get("component_ids", [])
+        if len(scoped) != len(set(scoped)) or set(scoped) - component_ids:
+            raise Blocked(f"{entry['input_id']}: component evidence has unresolved or duplicate scope")
+        if (entry.get("admission") != "accepted_run_output" or entry.get("use") != "canonical_evidence" or
+                entry.get("evidence_class") != "raw_evidence" or
+                entry.get("freshness", {}).get("status") != "current" or not entry.get("producer")):
+            raise Blocked(f"{entry['input_id']}: component evidence is not current accepted canonical raw evidence")
+        for component_id in scoped:
+            result[component_id].append(entry["input_id"])
+    return {component_id: sorted(set(values)) for component_id, values in result.items()}
+
+
 def assemble(run_id: str, *, reference_root: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     run_id = identifier(run_id)
     component_map, component_binding = _accepted_component(run_id)
@@ -209,6 +231,9 @@ def assemble(run_id: str, *, reference_root: Path | None = None) -> tuple[dict[s
 
     selections = {row["family"]: row for row in manifest["selection"]["selections"]}
     tag_map = _tags(component_map)
+    evidence_inputs = _component_evidence_inputs(
+        manifest, component_binding,
+        {row["component_id"] for row in component_map["functional_components"]})
     components, rules, gaps = [], [], []
     for component in sorted(component_map["functional_components"], key=lambda row: row["component_id"]):
         component_id = component["component_id"]
@@ -218,6 +243,7 @@ def assemble(run_id: str, *, reference_root: Path | None = None) -> tuple[dict[s
             "name": component["name"],
             "classification_hash": digest(component),
             "input_ids": [component_entry["input_id"]],
+            "evidence_input_ids": evidence_inputs[component_id],
             "scope_status": "in_scope",
             "scope_authority": None,
             "tags": tag_map[component_id],

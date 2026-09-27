@@ -44,6 +44,7 @@
     "component_name": {"type": "string"},
     "classification_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "classification_input_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "component_evidence_input_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
     "component_tags": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
     "component_trust_role": {"type": "string"},
     "component_evidence_roots": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
