@@ -53,10 +53,14 @@ class ReportInputAssemblyTests(unittest.TestCase):
             else:
                 actor = {"job_id": job, "attempt_id": attempt_id, "role_id": role,
                     "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT}
+                row = copy.deepcopy(self.documents["verification"]["independent-verification.json"]
+                                    ["verifications"][0])
+                row["status"] = "HYPOTHESIS" if job == "07-red-team-adversarial" else "SURVIVING"
+                row[actor_key] = actor
                 document = {"schema": "fixture", "run_id": RUN_ID, "stage": job,
                     "ledger_head_id": origin["event_id"], "ledger_head_sha256": origin["entry_hash"],
                     "upstream": {}, "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
-                    collection: [{"claim_id": CLAIM, actor_key: actor}]}
+                    collection: [row]}
             stage_pointers[job] = self._publish_job(job, job, attempt_id, {artifact: document})
         ledger["entries"][1]["decision_authority"] = self._authority(
             stage_pointers["07-red-team-adversarial"], "red-team-adversarial.json", "red-team-adversary")
@@ -286,6 +290,32 @@ class ReportInputAssemblyTests(unittest.TestCase):
         ledger = loaded["ledger"]["documents"]["claim-decision-ledger.json"]
         ledger["entries"][1]["decision_authority"]["accepted_pointer_sha256"] = "sha256:" + "0" * 64
         ledger["head_hash"] = self._rehash_entries(ledger["entries"])
+        with self.assertRaises(Blocked): report.assemble(RUN_ID, loaded, self.jobs)
+
+    def test_fully_resealed_stage_outcome_cannot_forge_ledger_status(self):
+        loaded = self.load()
+        base = self.jobs / "08-blue-team-refutation"
+        attempt = base / "attempts" / "blue-1"
+        artifact = attempt / "blue-team-refutation.json"
+        document = json.loads(artifact.read_text())
+        document["reviews"][0]["status"] = "REFUTED"
+        atomic_json(artifact, document)
+        envelope_path = attempt / "result.json"
+        envelope = json.loads(envelope_path.read_text())
+        next(item for item in envelope["artifacts"] if item["path"] == artifact.name)["sha256"] = file_hash(artifact)
+        atomic_json(envelope_path, envelope)
+        pointer_path = base / "accepted.json"
+        pointer = json.loads(pointer_path.read_text())
+        pointer["envelope_sha256"] = file_hash(envelope_path)
+        pointer["hashes"] = tree_hashes(attempt)
+        atomic_json(pointer_path, pointer)
+        ledger = loaded["ledger"]["documents"]["claim-decision-ledger.json"]
+        authority = ledger["entries"][2]["decision_authority"]
+        authority["accepted_pointer_sha256"] = "sha256:" + file_hash(pointer_path)
+        authority["envelope_sha256"] = "sha256:" + file_hash(envelope_path)
+        authority["artifact_sha256"] = "sha256:" + file_hash(artifact)
+        ledger["head_hash"] = self._rehash_entries(ledger["entries"])
+        ledger["claim_states"][0]["latest_event_id"] = ledger["entries"][-1]["event_id"]
         with self.assertRaises(Blocked): report.assemble(RUN_ID, loaded, self.jobs)
 
     def test_stale_pointer_missing_receipt_and_external_attempt_symlink_reject(self):

@@ -57,6 +57,14 @@ DECISION_PRODUCERS = {
         "09-independent-verification.schema.json", "verifications", "verifier", "independent-verifier"),
 }
 
+DECISION_OUTCOMES = {
+    "07-red-team-adversarial": {"HYPOTHESIS": "under_review"},
+    "08-blue-team-refutation": {"SURVIVING": "narrowed", "REFUTED": "refuted",
+                                 "UNRESOLVED": "unresolved"},
+    "09-independent-verification": {"VERIFIED": "verified", "REFUTED": "refuted",
+                                      "UNRESOLVED": "unresolved", "BLOCKED": "unresolved"},
+}
+
 
 def _sha(value: Any) -> str:
     return "sha256:" + digest(value)
@@ -330,10 +338,17 @@ def _verify_decision_authority(jobs_root: Path, run_id: str, entry: dict[str, An
         raise Blocked(f"{JOB}: lifecycle decision schema is unavailable") from exc
     rows = [row for row in document.get(collection, []) if row.get("claim_id") == entry.get("claim_id")]
     actor = rows[0].get(actor_field) if len(rows) == 1 else None
+    row = rows[0] if len(rows) == 1 else {}
+    inherited = ("route_id", "claim_class", "hypothesis", "confidence", "component_ids",
+        "source_generation", "component_generation", "producer", "citations", "dissent_ids",
+        "causal_claim_ids", "supersedes_claim_id")
+    expected_status = DECISION_OUTCOMES[job_id].get(row.get("status"))
     if (errors or not isinstance(actor, dict) or actor.get("job_id") != job_id or
             actor.get("attempt_id") != pointer["attempt_id"] or actor.get("role_id") != role or
             actor.get("source_generation") != source_generation or
-            actor.get("component_generation") != component_generation):
+            actor.get("component_generation") != component_generation or
+            expected_status != entry.get("status") or
+            any(row.get(field) != entry.get(field) for field in inherited)):
         raise Blocked(f"{JOB}: lifecycle decision artifact does not support its authority")
 
 
