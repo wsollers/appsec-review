@@ -104,9 +104,13 @@ def _base(request: dict[str, Any], job: str) -> dict[str, Any]:
     if not IDENT.fullmatch(str(request["run_id"])) or not SHA.fullmatch(str(request["source_snapshot_sha256"])):
         raise WorkerBlocked(f"{job}: run or source identity is invalid")
     _timestamp(request["generated_at"], "generated_at")
-    root = Path(request["output_root"])
-    if not root.is_absolute() or root == Path(root.anchor):
+    configured_root = Path(request["output_root"])
+    root = configured_root.resolve()
+    if not configured_root.is_absolute() or root == Path(root.anchor) or len(root.parts) < 3:
         raise WorkerBlocked(f"{job}: output_root must be a safe absolute directory")
+    for parent in (configured_root, *configured_root.parents):
+        if parent.exists() and parent.is_symlink():
+            raise WorkerBlocked(f"{job}: output_root cannot traverse a symbolic link")
     return {"run_id": request["run_id"], "job_id": job,
             "source_snapshot_sha256": request["source_snapshot_sha256"]}
 
@@ -453,13 +457,26 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
     fingerprint = _hash_bytes(_canonical({"kind": kind, "request": request, "implementation": "dependency-workers-v1"}))
     attempt_id = job + "-" + fingerprint[7:27]
     artifacts, gaps = BUILDERS[kind](request, attempt_id)
-    root = Path(request["output_root"]) / job
+    root = Path(request["output_root"]).resolve() / job
     attempt = root / "attempts" / attempt_id
     pointer = root / "accepted.json"
     if attempt.exists():
         envelope = _json(attempt / "result.json")
-        if envelope.get("input_fingerprint") != fingerprint:
+        if envelope.get("input_fingerprint") != fingerprint or validate_worker_result(envelope):
             raise WorkerBlocked(f"{job}: immutable attempt collision")
+        for record in envelope.get("artifacts", []):
+            relative = record.get("path") if isinstance(record, dict) else None
+            pure = PurePosixPath(relative) if isinstance(relative, str) else None
+            if pure is None or pure.is_absolute() or ".." in pure.parts or "." in pure.parts:
+                raise WorkerBlocked(f"{job}: immutable attempt has an unsafe artifact path")
+            artifact = attempt.joinpath(*pure.parts)
+            if (not artifact.is_file() or artifact.is_symlink() or
+                    _hash_file(artifact).split(":", 1)[1] != record.get("sha256")):
+                raise WorkerBlocked(f"{job}: immutable attempt artifact changed")
+        accepted = _json(pointer)
+        if (accepted.get("attempt_id") != attempt_id or
+                _hash_file(attempt / "result.json").split(":", 1)[1] != accepted.get("envelope_sha256")):
+            raise WorkerBlocked(f"{job}: accepted pointer changed")
         return envelope
     if pointer.exists():
         existing = _json(pointer)

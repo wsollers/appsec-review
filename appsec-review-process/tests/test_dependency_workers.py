@@ -128,6 +128,14 @@ class DependencyWorkersTest(unittest.TestCase):
         request_path = self.root / "reachability-request.json"
         self.assertEqual(workers.run("reachability", request_path), results[-1])
 
+    def test_immutable_reuse_rehashes_every_artifact(self):
+        results = self.happy_chain()
+        request_path = self.root / "reachability-request.json"
+        evidence_identity = self.result_path(results[-1], "outputs/reachability-evidence-identity.json")
+        evidence_identity.write_bytes(payload({"tampered": True}))
+        with self.assertRaisesRegex(workers.WorkerBlocked, "artifact changed"):
+            workers.run("reachability", request_path)
+
     def test_absent_tool_receipt_blocks_without_attempt(self):
         output = self.write("syft.json", {"components": []})
         request = self.request(tool_output=str(output), tool_receipt=str(self.root / "missing.json"),
