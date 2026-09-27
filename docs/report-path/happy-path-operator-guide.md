@@ -49,8 +49,8 @@ python3 -B appsec-review-process/stage_artifacts.py \
 python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/offline_evidence_control.py stage-control "$RUN_ID" \
-  --snapshot-registry /home/wsollers/projects/appsec-review/appsec-review-process/offline/dependency-snapshots \
-  --max-database-age-seconds 86400 \
+  --snapshot-registry "$REPO/appsec-review-process/offline/dependency-snapshots" \
+  --max-database-age-seconds 1209600 \
   --reference-table "$REPO/data/reference/dependency-lifecycle-reference.json" \
   --max-reference-age-days 30
 ```
@@ -60,7 +60,9 @@ package resolution and no-network replay of the accepted configure/build lock. T
 arbitrary commands: the workers still enforce the closed command profiles, pinned images, target
 path, expiry, and exact permission decision. The offline-evidence command performs no download: it
 fails closed unless both immutable database generations and the lifecycle table already resolve,
-rehash, and satisfy the explicit age ceilings. Snapshot synchronization remains a separate,
+rehash, and satisfy the explicit age ceilings. The engagement ceiling for the Grype and OSV
+databases is 1,209,600 seconds (14 days; William, 2026-09-27, ADR-0010 M4). The registry directory
+`appsec-review-process/offline/` is host-local and ignored by Git. Snapshot synchronization remains a separate,
 permissioned maintenance operation. Test execution requires a separate explicit control
 after the accepted native-build unit and the target's real test command are known; do not invent a
 test command or result path during initial staging.

@@ -43,6 +43,9 @@ images/audit-codeql/codeql-bundle-linux64.tar.zst
 !/appsec-review-process/registry/container-images/fixture-harmless.json
 # Stage-13 rendered images are host-local immutable state, never source artifacts.
 /appsec-review-process/data/build-images/
+# Offline Grype/OSV snapshot registry: host-local immutable data, synced by
+# dependency_snapshot_sync.py and never committed.
+/appsec-review-process/offline/
 
 .claude/worktrees/agent-a07ef96e3c1e186f6
 

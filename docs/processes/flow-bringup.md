@@ -269,6 +269,13 @@ supported". The configure worker planned as batch E01 replays S5's command plan 
 
 ## Log
 
+- 2026-09-27 -- **Offline dependency database ceiling set to 14 days; registry ignored by Git.**
+  William: the engagement ceiling for Grype and OSV is `--max-database-age-seconds 1209600`
+  (ADR-0010 M4 row, operator guide). The one-day example rejected a current OSV npm archive
+  (updated 2026-09-26T15:36:17Z). `/appsec-review-process/offline/` (the snapshot registry written by
+  `dependency_snapshot_sync.py`) is now in `.gitignore`. Snapshots for this host: Grype v6.1.9
+  (built 2026-09-27T06:30:30Z, archive `sha256:0567d832...3c56`) and OSV npm (archive
+  `sha256:f28ab42d...6e1b`).
 - 2026-09-27 -- **`02-build-resolution` implemented and live-qualified; SAT stages 1-13 PASS.**
   Fresh SAT `20260926T235610Z`, engagement `20260926T235619Z-cfd753`, build-plan Dagster
   `551e2fbc-732a-4b24-a3ac-ad0c91453a2b`, build-resolution Dagster
