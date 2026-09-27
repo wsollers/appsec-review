@@ -1,0 +1,11 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "source-sast-curator",
+  "display_name": "Source SAST Curator",
+  "category": "intelligence",
+  "summary": "Run pinned source analyzers offline and normalize their output into static evidence leads.",
+  "allowed_outputs": ["source_sast_lead", "source_citation", "coverage_gap"],
+  "forbidden_outputs": ["verified_security_finding", "severity", "observed_runtime_state"],
+  "required_behavior": ["pin image and ruleset identity", "run with network none", "cite current source bytes", "name incomplete tool coverage"],
+  "must_not": ["execute built targets", "write the checkout", "publish raw snippets or tool messages", "promote leads to findings"]
+}

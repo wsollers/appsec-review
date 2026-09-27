@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source-sast.schema.json",
+  "title": "Normalized source SAST evidence leads",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "job_id", "attempt_id", "source_snapshot_sha256", "status", "tools", "leads", "coverage_gaps"],
+  "properties": {
+    "schema": {"const": "appsec-review/source-sast/1"},
+    "run_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"},
+    "job_id": {"const": "02-source-sast"},
+    "attempt_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"},
+    "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
+    "status": {"const": "OK_WITH_GAPS"},
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool_id", "tool", "version", "image_id", "image_digest", "ruleset_sha256", "records"],
+        "properties": {
+          "tool_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,95}\\Z"},
+          "tool": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}\\Z"},
+          "version": {"type": "string", "pattern": "^[0-9][0-9A-Za-z.+_-]{0,31}\\Z"},
+          "image_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}\\Z"},
+          "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
+          "ruleset_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
+          "records": {"type": "integer"}
+        }
+      }
+    },
+    "leads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lead_id", "tool_id", "rule_id", "path", "start_line", "end_line", "source_sha256", "category"],
+        "properties": {
+          "lead_id": {"type": "string", "pattern": "^lead_[0-9a-f]{16}\\Z"},
+          "tool_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,95}\\Z"},
+          "rule_id": {"type": "string", "enum": ["appsec.c.strcpy", "appsec.c.printf-nonliteral", "appsec.c.memcpy", "appsec.c.system"]},
+          "path": {"type": "string", "pattern": "^[^/\\\\][^\\r\\n]{0,1023}\\Z"},
+          "start_line": {"type": "integer"},
+          "end_line": {"type": "integer"},
+          "source_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
+          "category": {"type": "string", "enum": ["unsafe-copy", "format-string", "memory-copy", "command-execution"]}
+        }
+      }
+    },
+    "coverage_gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}

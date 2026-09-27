@@ -1,0 +1,24 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-source-sast",
+  "display_name": "Source SAST",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "source-sast-curator",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-source-sast",
+    "output_contract_id": "source-sast"
+  },
+  "inputs": {"required": ["fresh accepted intake", "staged target checkout", "B16 tool-semgrep record", "repository-owned hashed ruleset"], "optional": []},
+  "outputs": {"directory": "data/jobs/02-source-sast/attempts/<attempt_id>", "files": ["source-sast.json", "b13-receipts.json", "source-sast-summary.md", "status.json"]},
+  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
+  "implemented": true,
+  "timeout_seconds": 900,
+  "execution": {"worker": "source_sast.py", "arguments": ["{run_id}"]},
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "applicability": "all staged source checkouts; first slice covers repository-owned C/C++ Semgrep rules and reports other languages as gaps",
+  "permissions": ["read-source", "write-run-data"],
+  "coordinator": "intake-coordinator"
+}

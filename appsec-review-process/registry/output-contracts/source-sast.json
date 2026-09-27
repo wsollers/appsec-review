@@ -1,0 +1,18 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "source-sast",
+  "display_name": "Normalized Source SAST Leads",
+  "required_files": ["source-sast.json", "b13-receipts.json", "source-sast-summary.md", "status.json"],
+  "required_status_fields": ["process", "status", "tools_run", "leads", "network", "qualification"],
+  "result_schema": {"artifact": "source-sast.json", "schema_file": "source-sast.schema.json"},
+  "validation_rules": [
+    "the pinned Semgrep image runs through B13 with network none, a read-only target and one writable scratch mount",
+    "the repository-owned ruleset and B16 image identity are part of the input fingerprint",
+    "the caller-held B13 result sha256 is re-verified on every read",
+    "raw messages and snippets remain in the immutable tool attempt; the normalized result contains only rule ids, closed categories and fresh hashed source citations",
+    "records are static-analysis evidence leads, not verified findings, severities or observed runtime state",
+    "coverage gaps name every declared language/tool family not executed by this first happy-path slice",
+    "the node reports OK_WITH_GAPS until every declared source-SAST tool family is integrated",
+    "latest failed attempt blocks older accepted output"
+  ]
+}

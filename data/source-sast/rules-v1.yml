@@ -1,0 +1,29 @@
+rules:
+  - id: appsec.c.strcpy
+    languages: [c, cpp]
+    message: unsafe copy evidence lead
+    severity: WARNING
+    pattern-either:
+      - pattern: strcpy(...)
+      - pattern: std::strcpy(...)
+  - id: appsec.c.printf-nonliteral
+    languages: [c, cpp]
+    message: non-literal format evidence lead
+    severity: WARNING
+    patterns:
+      - pattern: printf($FORMAT, ...)
+      - pattern-not: printf("...", ...)
+  - id: appsec.c.memcpy
+    languages: [c, cpp]
+    message: memory copy evidence lead
+    severity: WARNING
+    pattern-either:
+      - pattern: memcpy(...)
+      - pattern: std::memcpy(...)
+  - id: appsec.c.system
+    languages: [c, cpp]
+    message: command execution evidence lead
+    severity: WARNING
+    pattern-either:
+      - pattern: system(...)
+      - pattern: std::system(...)
