@@ -1,0 +1,45 @@
+flowchart LR
+  classDef standalone fill:#e8f1ff,stroke:#245a9b,color:#102a43
+  classDef gap fill:#fff3cd,stroke:#9a6700,color:#4d3500,stroke-dasharray: 5 4
+  classDef draft fill:#e8f5e9,stroke:#2e7d32,color:#163a18
+
+  subgraph evidence["Trust boundary A — accepted evidence (standalone cores)"]
+    F03["F03 component map\naccepted pointer + lineage"]:::standalone
+    S02["S02 DFD / STRIDE\ncandidate hypotheses"]:::standalone
+    T14["T14 OWASP join\nmatrix + gaps + routes"]:::standalone
+    F03 --> S02
+  end
+
+  subgraph claims["Trust boundary B — append-only claim decisions"]
+    ADMIT["L01 candidate admission\norigin head"]:::standalone
+    RED["07 adversarial hypothesis"]:::standalone
+    BLUE["08 refutation / narrowing"]:::standalone
+    VERIFY["09 independent verification"]:::standalone
+    APPEND["L01 append accepted decisions\ncurrent head"]:::gap
+    SCORE["12 verified-claim scoring"]:::standalone
+    ADMIT --> RED --> BLUE --> VERIFY --> APPEND --> SCORE
+  end
+
+  subgraph publication["Trust boundary C — draft publication"]
+    INPUT["Report-input assembly\nexact six-pointer join"]:::standalone
+    SYNTH["10 synthesis\nno invented claims or scores"]:::standalone
+    DRAFT["Immutable package\nDRAFT_EVIDENCE_BACKED\nfinal=false"]:::draft
+    INPUT --> SYNTH --> DRAFT
+  end
+
+  S02 --> ADMIT
+  T14 -. "adapter required" .-> ADMIT
+  VERIFY --> SCORE
+  F03 --> INPUT
+  S02 --> INPUT
+  T14 --> INPUT
+  APPEND --> INPUT
+  VERIFY --> INPUT
+  SCORE --> INPUT
+  DRAFT -. "deferred" .-> SIGNOFF["Human final signoff\ncompletion / remediation / retest"]:::gap
+
+  GAP["Not live: shared Dagster bindings, 07/08/09/12 publishers,\nT14→L01 admission, decision append, resource pools,\nrecovery/load qualification and final publication"]:::gap
+  GAP -.-> ADMIT
+  GAP -.-> APPEND
+  GAP -.-> DRAFT
+

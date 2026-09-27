@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="Definitions_ReportHappyPath" targetNamespace="https://example.invalid/appsec-review/report-path">
+  <bpmn:process id="Process_ReportHappyPath" name="Evidence-backed draft report happy path" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_ReportPath">
+      <bpmn:lane id="Lane_Evidence" name="Accepted evidence trust boundary">
+        <bpmn:flowNodeRef>Start_Run</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_EvidenceSplit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ComponentThreat</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Owasp</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_EvidenceJoin</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Claims" name="Append-only claim and decision boundary">
+        <bpmn:flowNodeRef>Task_Admission</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Red</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Blue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Verify</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Append</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Score</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Publication" name="Draft publication trust boundary">
+        <bpmn:flowNodeRef>Task_ReportInput</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Synthesis</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Draft</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Draft</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_Run" name="Exact run generation ready"/>
+    <bpmn:parallelGateway id="Gateway_EvidenceSplit" name="Run independent evidence branches"/>
+    <bpmn:task id="Task_ComponentThreat" name="Validate accepted F03 component map and S02 threat model"/>
+    <bpmn:task id="Task_Owasp" name="Publish accepted T14 OWASP matrix, gaps and routes"/>
+    <bpmn:parallelGateway id="Gateway_EvidenceJoin" name="Wait for exact accepted sources"/>
+    <bpmn:task id="Task_Admission" name="L01 admit S02 and T14 candidates; record origin head"/>
+    <bpmn:task id="Task_Red" name="07 record adversarial hypotheses"/>
+    <bpmn:task id="Task_Blue" name="08 refute or narrow each hypothesis"/>
+    <bpmn:task id="Task_Verify" name="09 independently verify, refute or block"/>
+    <bpmn:task id="Task_Append" name="L01 append exact accepted decisions; record current head"/>
+    <bpmn:task id="Task_Score" name="12 score independently verified claims only"/>
+    <bpmn:task id="Task_ReportInput" name="Assemble exact six-pointer synthesis input"/>
+    <bpmn:task id="Task_Synthesis" name="10 render evidence-backed draft"/>
+    <bpmn:task id="Task_Draft" name="Hash immutable DRAFT_EVIDENCE_BACKED package"/>
+    <bpmn:endEvent id="End_Draft" name="Draft ready for human review; not final"/>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_Run" targetRef="Gateway_EvidenceSplit"/>
+    <bpmn:sequenceFlow id="Flow_02A" sourceRef="Gateway_EvidenceSplit" targetRef="Task_ComponentThreat"/>
+    <bpmn:sequenceFlow id="Flow_02B" sourceRef="Gateway_EvidenceSplit" targetRef="Task_Owasp"/>
+    <bpmn:sequenceFlow id="Flow_03A" sourceRef="Task_ComponentThreat" targetRef="Gateway_EvidenceJoin"/>
+    <bpmn:sequenceFlow id="Flow_03B" sourceRef="Task_Owasp" targetRef="Gateway_EvidenceJoin"/>
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Gateway_EvidenceJoin" targetRef="Task_Admission"/>
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Admission" targetRef="Task_Red"/>
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Red" targetRef="Task_Blue"/>
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Blue" targetRef="Task_Verify"/>
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Verify" targetRef="Task_Append"/>
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Append" targetRef="Task_Score"/>
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Score" targetRef="Task_ReportInput"/>
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_ReportInput" targetRef="Task_Synthesis"/>
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_Synthesis" targetRef="Task_Draft"/>
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Draft" targetRef="End_Draft"/>
+    <bpmn:textAnnotation id="Note_Standalone"><bpmn:text>All cores are standalone/unit-qualified. Shared Dagster bindings, resource pools and live qualification are absent.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Adapters"><bpmn:text>Hard gates: T14-to-L01 admission, 07/08/09/12 common-envelope publishers, decision append and final publication adapters.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:textAnnotation id="Note_Final"><bpmn:text>The package is DRAFT_EVIDENCE_BACKED only. Recovery/load hardening, remediation/retest, completion audit and human final signoff are deferred.</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Standalone" sourceRef="Note_Standalone" targetRef="Task_Red"/>
+    <bpmn:association id="Assoc_Adapters" sourceRef="Note_Adapters" targetRef="Task_Append"/>
+    <bpmn:association id="Assoc_Final" sourceRef="Note_Final" targetRef="Task_Draft"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_ReportHappyPath">
+    <bpmndi:BPMNPlane id="Plane_ReportHappyPath" bpmnElement="Process_ReportHappyPath">
+      <bpmndi:BPMNShape id="Shape_Lane_Evidence" bpmnElement="Lane_Evidence" isHorizontal="true"><dc:Bounds x="20" y="20" width="2780" height="180"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Claims" bpmnElement="Lane_Claims" isHorizontal="true"><dc:Bounds x="20" y="200" width="2780" height="180"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Lane_Publication" bpmnElement="Lane_Publication" isHorizontal="true"><dc:Bounds x="20" y="380" width="2780" height="230"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Start" bpmnElement="Start_Run"><dc:Bounds x="70" y="92" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EvidenceSplit" bpmnElement="Gateway_EvidenceSplit"><dc:Bounds x="125" y="85" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ComponentThreat" bpmnElement="Task_ComponentThreat"><dc:Bounds x="220" y="30" width="180" height="65"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Owasp" bpmnElement="Task_Owasp"><dc:Bounds x="220" y="120" width="180" height="65"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_EvidenceJoin" bpmnElement="Gateway_EvidenceJoin"><dc:Bounds x="505" y="85" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Admission" bpmnElement="Task_Admission"><dc:Bounds x="610" y="250" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Red" bpmnElement="Task_Red"><dc:Bounds x="840" y="250" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Blue" bpmnElement="Task_Blue"><dc:Bounds x="1050" y="250" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Verify" bpmnElement="Task_Verify"><dc:Bounds x="1260" y="250" width="160" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Append" bpmnElement="Task_Append"><dc:Bounds x="1470" y="250" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Score" bpmnElement="Task_Score"><dc:Bounds x="1700" y="250" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ReportInput" bpmnElement="Task_ReportInput"><dc:Bounds x="1930" y="430" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Synthesis" bpmnElement="Task_Synthesis"><dc:Bounds x="2160" y="430" width="170" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Draft" bpmnElement="Task_Draft"><dc:Bounds x="2380" y="430" width="180" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End" bpmnElement="End_Draft"><dc:Bounds x="2630" y="452" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Standalone" bpmnElement="Note_Standalone"><dc:Bounds x="830" y="535" width="310" height="55"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Adapters" bpmnElement="Note_Adapters"><dc:Bounds x="1420" y="535" width="360" height="55"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Note_Final" bpmnElement="Note_Final"><dc:Bounds x="2280" y="535" width="380" height="55"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_01" bpmnElement="Flow_01"><di:waypoint x="106" y="110"/><di:waypoint x="125" y="110"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_02A" bpmnElement="Flow_02A"><di:waypoint x="150" y="85"/><di:waypoint x="150" y="63"/><di:waypoint x="220" y="63"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_02B" bpmnElement="Flow_02B"><di:waypoint x="150" y="135"/><di:waypoint x="150" y="153"/><di:waypoint x="220" y="153"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03A" bpmnElement="Flow_03A"><di:waypoint x="400" y="63"/><di:waypoint x="470" y="63"/><di:waypoint x="530" y="85"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03B" bpmnElement="Flow_03B"><di:waypoint x="400" y="153"/><di:waypoint x="470" y="153"/><di:waypoint x="530" y="135"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_03" bpmnElement="Flow_03"><di:waypoint x="555" y="110"/><di:waypoint x="585" y="110"/><di:waypoint x="585" y="290"/><di:waypoint x="610" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_04" bpmnElement="Flow_04"><di:waypoint x="790" y="290"/><di:waypoint x="840" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_05" bpmnElement="Flow_05"><di:waypoint x="1000" y="290"/><di:waypoint x="1050" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_06" bpmnElement="Flow_06"><di:waypoint x="1210" y="290"/><di:waypoint x="1260" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_07" bpmnElement="Flow_07"><di:waypoint x="1420" y="290"/><di:waypoint x="1470" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_08" bpmnElement="Flow_08"><di:waypoint x="1650" y="290"/><di:waypoint x="1700" y="290"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_09" bpmnElement="Flow_09"><di:waypoint x="1870" y="290"/><di:waypoint x="1900" y="290"/><di:waypoint x="1900" y="470"/><di:waypoint x="1930" y="470"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_10" bpmnElement="Flow_10"><di:waypoint x="2110" y="470"/><di:waypoint x="2160" y="470"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_11" bpmnElement="Flow_11"><di:waypoint x="2330" y="470"/><di:waypoint x="2380" y="470"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_12" bpmnElement="Flow_12"><di:waypoint x="2560" y="470"/><di:waypoint x="2630" y="470"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Standalone" bpmnElement="Assoc_Standalone"><di:waypoint x="985" y="535"/><di:waypoint x="920" y="330"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Adapters" bpmnElement="Assoc_Adapters"><di:waypoint x="1600" y="535"/><di:waypoint x="1560" y="330"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Assoc_Final" bpmnElement="Assoc_Final"><di:waypoint x="2470" y="535"/><di:waypoint x="2470" y="510"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
