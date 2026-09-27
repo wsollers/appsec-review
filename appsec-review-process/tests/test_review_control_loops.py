@@ -49,7 +49,7 @@ class ReviewControlLoopTests(unittest.TestCase):
         self.assertEqual(plan["affected_nodes"], ["owasp", "report", "threat"])
         self.assertEqual(plan["preserved_nodes"], ["component"])
         stalled = controls.bounded_rescope("run-1", index, ["threat"], iteration=2,
-                                           max_iterations=3, prior_affected=plan["affected_nodes"])
+                                           max_iterations=3, previous_plan=plan)
         self.assertEqual(stalled["state"], "NO_PROGRESS")
         with self.assertRaisesRegex(Blocked, "cycle"):
             controls.dependency_index("run-1", ["a", "b"], [
@@ -57,13 +57,14 @@ class ReviewControlLoopTests(unittest.TestCase):
 
     def test_completeness_feedback_routes_and_terminates(self):
         expected = [{"obligation_id": "o1"}, {"obligation_id": "o2"}]
-        audit = controls.completeness_audit("run-1", expected, [{"obligation_id": "o1"}], [])
+        audit = controls.completeness_audit("run-1", expected, [{"obligation_id": "o1",
+            "evidence_sha256":"sha256:"+"1"*64}], [])
         self.assertFalse(audit["complete"])
         routed = controls.synthetic_feedback("run-1", audit, {"o2": "02-source-sast"},
                                              iteration=1, max_iterations=2)
         self.assertEqual(routed["terminal_state"], "TARGETED_ANALYSIS_REQUIRED")
         terminal = controls.synthetic_feedback("run-1", audit, {"o2": "02-source-sast"},
-                                               iteration=2, max_iterations=2)
+                                               iteration=2, max_iterations=2, previous_feedback=routed)
         self.assertEqual(terminal["terminal_state"], "UNRESOLVED_AND_REPORTED")
 
     def test_remediation_never_claims_fixed_without_same_environment_independent_retest(self):

@@ -19,7 +19,7 @@ class ProcessTests(unittest.TestCase):
         value=self.invoke(dynamic_rescope,{"run_id":"r1","nodes":["a","b"],"edges":[{"upstream":"a","downstream":"b"}],"changed_nodes":["a"],"iteration":1,"max_iterations":2})
         self.assertEqual(value["affected_nodes"],["a","b"])
     def test_completeness_feedback_is_separate(self):
-        value=self.invoke(completeness_feedback,{"run_id":"r1","expected":[{"obligation_id":"o1"}],"observed":[],"declared_gaps":[],"routes":{"o1":"worker"},"iteration":1,"max_iterations":2})
+        value=self.invoke(completeness_feedback,{"run_id":"r1","expected":[{"obligation_id":"o1"}],"observed":[],"declared_gaps":[],"routes":{"o1":"02-source-sast"},"iteration":1,"max_iterations":2})
         self.assertEqual(value["feedback"]["terminal_state"],"TARGETED_ANALYSIS_REQUIRED")
     def test_remediation_retest_is_separate(self):
         environment={"source_sha256":"sha256:"+"a"*64,"build_sha256":"sha256:"+"b"*64,"target_sha256":"sha256:"+"c"*64,"change_ref":"patch-1"}; value=self.invoke(remediation_retest,{"run_id":"r1","verified_claims":[{"claim_id":"c1","status":"VERIFIED"}],"proposals":[{"proposal_id":"p1","claim_id":"c1","state":"AUTHORIZED","author_id":"author","change_ref":"patch-1","rationale":"Bounded fix proposal.","target_components":["component-1"]}],"retests":[{"proposal_id":"p1","original_environment":environment,"retest":{"environment":environment,"result":"PASSED","executor_id":"executor"},"verifier":{"producer_id":"verifier","decision":"VERIFIED"}}]})

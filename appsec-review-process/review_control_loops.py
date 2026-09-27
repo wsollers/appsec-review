@@ -139,7 +139,7 @@ def dependency_index(run_id: str, nodes: list[str], edges: list[dict[str, str]])
 
 
 def bounded_rescope(run_id: str, index: dict[str, Any], changed_nodes: list[str], *, iteration: int,
-                    max_iterations: int, prior_affected: list[str] | None = None) -> dict[str, Any]:
+                    max_iterations: int, previous_plan: dict[str, Any] | None = None) -> dict[str, Any]:
     if type(iteration) is not int or type(max_iterations) is not int or not 1 <= iteration <= max_iterations:
         raise Blocked("review controls: rescope iteration is outside its bound")
     nodes = set(index.get("nodes", [])); changed = set(changed_nodes)
@@ -151,7 +151,15 @@ def bounded_rescope(run_id: str, index: dict[str, Any], changed_nodes: list[str]
     while queue:
         for child in sorted(downstream[queue.popleft()]):
             if child not in affected: affected.add(child); queue.append(child)
-    prior = set(prior_affected or [])
+    if iteration == 1 and previous_plan is not None:
+        raise Blocked("review controls: first rescope iteration cannot have a predecessor")
+    if iteration > 1:
+        if (not isinstance(previous_plan, dict) or previous_plan.get("run_id") != run_id or
+                previous_plan.get("index_sha256") != index.get("index_sha256") or
+                previous_plan.get("iteration") != iteration - 1 or
+                previous_plan.get("max_iterations") != max_iterations):
+            raise Blocked("review controls: rescope predecessor chain is invalid")
+    prior = set(previous_plan.get("affected_nodes", []) if previous_plan else [])
     no_progress = bool(prior) and affected == prior
     state = "NO_PROGRESS" if no_progress else ("ITERATION_LIMIT" if iteration == max_iterations else "RESCOPE_REQUIRED")
     return {"schema": "appsec-review/bounded-rescope-plan/1.0", "run_id": run_id,
@@ -168,6 +176,12 @@ def completeness_audit(run_id: str, expected: list[dict[str, str]], observed: li
     unknown = (set(observed_by_id) | set(gaps_by_id)) - set(expected_by_id)
     if unknown or set(observed_by_id) & set(gaps_by_id):
         raise Blocked("review controls: completeness evidence is contradictory or unknown")
+    for row in observed_by_id.values():
+        if set(row) != {"obligation_id", "evidence_sha256"} or not row["evidence_sha256"].startswith(SHA):
+            raise Blocked("review controls: observed obligation lacks evidence binding")
+    for row in gaps_by_id.values():
+        if set(row) != {"obligation_id", "reason", "evidence_sha256"} or not row["evidence_sha256"].startswith(SHA):
+            raise Blocked("review controls: declared gap lacks evidence binding")
     missing = sorted(set(expected_by_id) - set(observed_by_id) - set(gaps_by_id))
     false_gaps = sorted(key for key in gaps_by_id if gaps_by_id[key].get("reason") in {"", None})
     return {"schema": "appsec-review/completeness-audit/1.0", "run_id": run_id,
@@ -177,11 +191,18 @@ def completeness_audit(run_id: str, expected: list[dict[str, str]], observed: li
 
 
 def synthetic_feedback(run_id: str, audit: dict[str, Any], routes: dict[str, str], *, iteration: int,
-                       max_iterations: int, prior_missing: list[str] | None = None) -> dict[str, Any]:
+                       max_iterations: int, previous_feedback: dict[str, Any] | None = None) -> dict[str, Any]:
     missing = sorted(audit.get("missing_ids", []))
     if any(item not in routes for item in missing):
         raise Blocked("review controls: missing obligation lacks a bounded route")
-    prior = sorted(prior_missing or [])
+    if iteration == 1 and previous_feedback is not None:
+        raise Blocked("review controls: first feedback iteration cannot have a predecessor")
+    if iteration > 1:
+        if (not isinstance(previous_feedback, dict) or previous_feedback.get("run_id") != run_id or
+                previous_feedback.get("iteration") != iteration - 1 or
+                previous_feedback.get("max_iterations") != max_iterations):
+            raise Blocked("review controls: feedback predecessor chain is invalid")
+    prior = sorted(previous_feedback.get("unresolved_obligation_ids", []) if previous_feedback else [])
     if not missing:
         terminal = "COMPLETE"
     elif iteration >= max_iterations:
