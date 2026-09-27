@@ -26,6 +26,11 @@ def make_run(folder: Path, plan) -> tuple[Path, Path]:
     run_root = folder / "run"
     jobs = run_root / "data" / "jobs"
     jobs.mkdir(parents=True)
+    atomic_json(run_root / "inputs" / "artifact-manifest.json", {
+        "run_id": PLAN["run_id"],
+        "source_identity": {"revision": "fixture-revision",
+                            "fingerprint": PLAN["source_snapshot_sha256"].removeprefix("sha256:")},
+    })
     for producer in (source / "producers").iterdir():
         shutil.copytree(producer, jobs / producer.name)
     return run_root.resolve(), source
@@ -103,26 +108,42 @@ class EvidenceAssemblyInputTests(unittest.TestCase):
                         **self.pool_arguments())
                 self.assertFalse(output.exists())
 
-    def test_resealed_mixed_source_or_build_lineage_is_rejected(self):
-        variants = ("source", "build")
-        for variant in variants:
-            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as folder_value:
-                folder = Path(folder_value)
-                run_root, _ = make_run(folder, self.plan)
-                job = "02-source-sast"
-                producer = run_root / "data" / "jobs" / job
-                pointer = read_json(producer / "accepted.json")
-                attempt = producer / "attempts" / pointer["attempt_id"]
-                name = "permission.json" if variant == "source" else "lineage.json"
-                receipt = read_json(attempt / name)
-                key = "source_snapshot_sha256" if variant == "source" else "build_lineage_sha256"
-                receipt[key] = "sha256:" + ("c" if variant == "source" else "d") * 64
-                reseal_receipt(run_root, job, name, receipt)
-                with self.assertRaises(Blocked):
-                    constructor.derive_plan(
-                        run_root, run_id=PLAN["run_id"],
-                        source_snapshot_sha256=PLAN["source_snapshot_sha256"],
-                        **self.pool_arguments())
+    def test_resealed_stale_source_lineage_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder_value:
+            folder = Path(folder_value)
+            run_root, _ = make_run(folder, self.plan)
+            job = "02-source-sast"
+            producer = run_root / "data" / "jobs" / job
+            pointer = read_json(producer / "accepted.json")
+            attempt = producer / "attempts" / pointer["attempt_id"]
+            receipt = read_json(attempt / "permission.json")
+            receipt["source_snapshot_sha256"] = "sha256:" + "c" * 64
+            reseal_receipt(run_root, job, "permission.json", receipt)
+            with self.assertRaises(Blocked):
+                constructor.derive_plan(
+                    run_root, run_id=PLAN["run_id"],
+                    source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                    **self.pool_arguments())
+
+    def test_producer_specific_build_lineage_is_retained(self):
+        with tempfile.TemporaryDirectory() as folder_value:
+            folder = Path(folder_value)
+            run_root, _ = make_run(folder, self.plan)
+            job = "02-source-sast"
+            changed = "sha256:" + "d" * 64
+            producer = run_root / "data" / "jobs" / job
+            pointer = read_json(producer / "accepted.json")
+            attempt = producer / "attempts" / pointer["attempt_id"]
+            receipt = read_json(attempt / "lineage.json")
+            receipt["build_lineage_sha256"] = changed
+            reseal_receipt(run_root, job, "lineage.json", receipt)
+            plan = constructor.derive_plan(
+                run_root, run_id=PLAN["run_id"],
+                source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                **self.pool_arguments())
+            binding = next(item for item in plan["supply"]["producers"]
+                           if item["job_id"] == job)
+            self.assertEqual(binding["build_lineage_sha256"], changed)
 
     def test_c01_specification_or_output_boundary_mismatch_fails_closed(self):
         with tempfile.TemporaryDirectory() as folder_value:
@@ -140,6 +161,90 @@ class EvidenceAssemblyInputTests(unittest.TestCase):
             with self.assertRaises(Blocked):
                 constructor.stage_supply(
                     run_root, folder / "outside-run", run_id=PLAN["run_id"],
+                    source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                    **self.pool_arguments())
+
+    def test_manifest_bound_alias_is_retained_without_rewriting_receipts(self):
+        with tempfile.TemporaryDirectory() as folder_value:
+            folder = Path(folder_value)
+            run_root, _ = make_run(folder, self.plan)
+            alias = "sha256:" + file_hash(run_root / "inputs" / "artifact-manifest.json")
+            job = "02-source-sast"
+            producer = run_root / "data" / "jobs" / job
+            pointer = read_json(producer / "accepted.json")
+            attempt = producer / "attempts" / pointer["attempt_id"]
+            permission = read_json(attempt / "permission.json")
+            permission["source_snapshot_sha256"] = alias
+            lineage = read_json(attempt / "lineage.json")
+            lineage["source_snapshot_sha256"] = alias
+            reseal_receipt(run_root, job, "permission.json", permission)
+            reseal_receipt(run_root, job, "lineage.json", lineage)
+            before = read_json(attempt / "lineage.json")
+            output = run_root / "data" / "assembly-inputs" / "manifest-alias"
+            staged = constructor.stage_supply(
+                run_root, output, run_id=PLAN["run_id"],
+                source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                **self.pool_arguments())
+            supply = read_json(staged / assembly.SUPPLY)
+            binding = next(item for item in supply["producers"] if item["job_id"] == job)
+            self.assertEqual(binding["source_snapshot_sha256"], PLAN["source_snapshot_sha256"])
+            self.assertEqual(binding["producer_source_snapshot_sha256"], alias)
+            self.assertEqual(read_json(attempt / "lineage.json"), before)
+            manifest, _copies = assembly.inspect_supply(
+                staged, run_id=PLAN["run_id"],
+                source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                **self.pool_arguments())
+            entry = next(item for item in manifest["producers"] if item["job_id"] == job)
+            self.assertEqual(entry["source_snapshot_sha256"], PLAN["source_snapshot_sha256"])
+            self.assertEqual(entry["producer_source_snapshot_sha256"], alias)
+
+    def test_stale_manifest_alias_and_alias_without_build_lineage_are_rejected(self):
+        for stale, without_build in ((True, False), (False, True)):
+            with self.subTest(stale=stale, without_build=without_build), \
+                    tempfile.TemporaryDirectory() as folder_value:
+                folder = Path(folder_value)
+                run_root, _ = make_run(folder, self.plan)
+                alias = ("sha256:" + "e" * 64 if stale else
+                         "sha256:" + file_hash(run_root / "inputs" / "artifact-manifest.json"))
+                job = "02-source-sast"
+                producer = run_root / "data" / "jobs" / job
+                pointer = read_json(producer / "accepted.json")
+                attempt = producer / "attempts" / pointer["attempt_id"]
+                permission = read_json(attempt / "permission.json")
+                permission["source_snapshot_sha256"] = alias
+                lineage = read_json(attempt / "lineage.json")
+                lineage["source_snapshot_sha256"] = alias
+                if without_build:
+                    lineage["build_lineage_sha256"] = None
+                reseal_receipt(run_root, job, "permission.json", permission)
+                reseal_receipt(run_root, job, "lineage.json", lineage)
+                with self.assertRaises(Blocked):
+                    constructor.derive_plan(
+                        run_root, run_id=PLAN["run_id"],
+                        source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                        **self.pool_arguments())
+
+    def test_whole_scope_root_is_accepted_and_dual_roots_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder_value:
+            folder = Path(folder_value)
+            run_root, _ = make_run(folder, self.plan)
+            job = "02-source-sast"
+            root = run_root / "data" / "jobs" / job
+            whole = root / "whole"
+            whole.mkdir()
+            for name in ("accepted.json", "latest.json", "attempts"):
+                shutil.move(str(root / name), str(whole / name))
+            plan = constructor.derive_plan(
+                run_root, run_id=PLAN["run_id"],
+                source_snapshot_sha256=PLAN["source_snapshot_sha256"],
+                **self.pool_arguments())
+            selected = next(item for item in plan["producers"] if item["job_id"] == job)
+            self.assertEqual(selected["root"], whole.resolve())
+            shutil.copy2(whole / "accepted.json", root / "accepted.json")
+            shutil.copy2(whole / "latest.json", root / "latest.json")
+            with self.assertRaises(Blocked):
+                constructor.derive_plan(
+                    run_root, run_id=PLAN["run_id"],
                     source_snapshot_sha256=PLAN["source_snapshot_sha256"],
                     **self.pool_arguments())
 
