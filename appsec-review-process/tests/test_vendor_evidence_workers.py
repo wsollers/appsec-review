@@ -13,6 +13,7 @@ import container_mobile_binary_contracts as cmb
 import evidence_redaction
 import secrets_iac_contracts as sic
 import vendor_evidence_workers as workers
+import vendor_evidence_b13 as b13
 
 SOURCE_SHA = "sha256:" + "a" * 64
 PERMITTED = ["OK", "OK_WITH_GAPS", "SKIPPED", "BLOCKED", "FAILED", "CANCELED"]
@@ -140,6 +141,29 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                 self.assertEqual(receipt["decision"]["decision"], "GRANTED")
                 self.assertEqual(receipt["requirement"]["capabilities"], [])
                 self.assertTrue(receipt["fingerprint_sha256"].startswith("sha256:"))
+
+    def test_authenticated_vendor_success_projects_into_all_five_contracts(self):
+        cases={
+          "02-secrets-inventory":({"src/a.py":b"x\n"},{"gitleaks":{"status":"OK","raw":b'[{"RuleID":"generic","File":"/inputs/src/a.py","StartLine":1,"EndLine":1}]',"records":[{"rule_id":"generic","path":"src/a.py","start_line":1,"end_line":1}]}}),
+          "02-iac-config-scan":({"Dockerfile":b"FROM alpine:3.20\n"},{"hadolint":{"status":"OK","raw":b'[{"code":"DL3002","file":"Dockerfile","line":1}]',"records":[{"rule_id":"DL3002","path":"Dockerfile","start_line":1,"end_line":1}]}}),
+          "02-mobile-sast":({"AndroidManifest.xml":b"<manifest/>\n","App.kt":b"class App\n"},{"mobsfscan-android":{"status":"OK","raw":b'{"runs":[]}',"records":[{"rule_id":"android_logging","path":"App.kt","line":1}]}}),
+          "02-binary-hardening":({"a.exe":b"MZ"+b"x"*40},{"binskim":{"status":"OK","raw":b'{"runs":[]}',"records":[{"rule_id":"BA2002","path":"a.exe","line":1}]}}),
+          "02-container-image-inventory":({"image.tar":b"archive"},{
+             "oci-archive-inventory":{"status":"OK","raw":json.dumps({"artifacts":[],"source":{"metadata":{"manifestDigest":"sha256:"+"b"*64,"layers":[{"digest":"sha256:"+"c"*64,"size":7}],"config":{"digest":"sha256:"+"d"*64,"architecture":"amd64","os":"linux","user":None,"entrypoint":None,"entrypointArgs":0,"command":None,"commandArgs":0,"ports":[],"envNames":[]}}}}).encode(),"records":[]},
+             "image-package-and-config-inspection":{"status":"OK","raw":b'{"Results":[]}',"records":[{"name":"openssl","version":"3.0","ecosystem":"deb","layer_index":0}]}}),
+        }
+        for job,(files,vendor) in cases.items():
+            with self.subTest(job=job):
+                root=self.make_source(files)
+                def collector(*args,**kwargs): return vendor
+                doc=workers.execute_and_build(job,root,run_id="run-1",attempt_id="attempt-1",source_snapshot_sha256=SOURCE_SHA,execution_root=root.parent/"execution",now="2026-09-27T12:00:00Z",collector=collector)
+                attempt=root.parent/"attempt-1"; workers.materialize_attempt(doc,attempt,dagster_run_id="dagster-1",started_at="2026-09-27T12:00:00Z",finished_at="2026-09-27T12:00:01Z")
+                if job=="02-secrets-inventory": errors=sic.validate_secrets_attempt(attempt,tool_outputs_root=attempt,node_status=doc["status"],declared_tool_ids=workers.SPECS[job][1],permitted_node_statuses=sic.NEVER_SKIPS,on_unhandled="refuse",limits=evidence_redaction.DEFAULT_LIMITS,expected_dagster_run_id="dagster-1")
+                elif job=="02-iac-config-scan": errors=sic.validate_iac_attempt(attempt,tool_outputs_root=attempt,node_status=doc["status"],declared_tool_ids=workers.SPECS[job][1],permitted_node_statuses=sic.CAN_SKIP,on_unhandled="refuse",limits=evidence_redaction.DEFAULT_LIMITS,expected_dagster_run_id="dagster-1")
+                else: errors=cmb.verify_attempt(workers.SPECS[job][0],attempt,root,expected_header=doc["header"],expected_dagster_run_id="dagster-1",node_status=doc["status"],declared_tool_ids=workers.SPECS[job][1],permitted_node_statuses=PERMITTED,on_unhandled="refuse",limits=evidence_redaction.DEFAULT_LIMITS)
+                self.assertEqual(errors,[])
+                self.assertIn(doc["status"],("OK","OK_WITH_GAPS"))
+                self.assertEqual(json.loads((attempt/"result.json").read_text())["acceptance_status"],"CURRENT")
 
 
 if __name__ == "__main__":

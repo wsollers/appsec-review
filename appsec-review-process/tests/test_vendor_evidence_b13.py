@@ -12,7 +12,7 @@ class B13Tests(unittest.TestCase):
         for tool,spec in b.SPECS.items():
             self.assertTrue(spec.argv[0].startswith('/'))
             self.assertNotIn('sh', spec.argv[:1]); self.assertNotIn('-c', spec.argv)
-            self.assertTrue(spec.output.endswith(('.json','.sarif')))
+            self.assertTrue(spec.output.endswith(('.json','.sarif','.log')))
 
     def call(self,status='OK',verify_errors=(),write=True):
         td=tempfile.TemporaryDirectory(); self.addCleanup(td.cleanup); root=Path(td.name)
@@ -52,5 +52,14 @@ class B13Tests(unittest.TestCase):
                              now='2026-09-27T12:00:00Z',runtime_factory=lambda *a: Runtime())
         self.assertEqual(result['checkov']['status'],'BLOCKED')
         self.assertEqual(result['hadolint']['status'],'OK')
+
+    def test_container_metadata_projection_requires_real_digests_and_layers(self):
+        import json
+        raw=json.dumps({'source':{'metadata':{'manifestDigest':'sha256:'+'a'*64,'layers':[{'digest':'sha256:'+'b'*64,'size':9}],
+             'config':{'digest':'sha256:'+'c'*64,'architecture':'amd64','os':'linux','user':None,'entrypoint':None,
+                       'entrypointArgs':0,'command':None,'commandArgs':0,'ports':[],'envNames':[]}}}}).encode()
+        facts=b.container_image_facts(raw,'image.tar')['image.tar']
+        self.assertEqual(facts['layers'][0]['layer_bytes'],9)
+        with self.assertRaises(b.VendorToolFailed): b.container_image_facts(b'{"source":{"metadata":{}}}','image.tar')
 
 if __name__=='__main__': unittest.main()

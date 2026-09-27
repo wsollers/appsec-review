@@ -21,6 +21,7 @@ class ToolSpec:
     image_id: str
     argv: tuple[str, ...]
     output: str
+    captured_stdout: bool = False
 
 
 SPECS = {
@@ -34,9 +35,9 @@ SPECS = {
     "tfsec": ToolSpec("audit-iac", ("/opt/tools/tfsec", "--format", "json", "--out", "/scratch/tfsec.json",
                                       "/inputs"), "tfsec.json"),
     "kube-linter": ToolSpec("audit-iac", ("/opt/tools/kube-linter", "lint", "--format", "json", "/inputs"),
-                            "kube-linter.json"),
+                            "stdout.log", True),
     "hadolint": ToolSpec("tool-hadolint", ("/opt/tool/bin/hadolint", "--format", "json", "/inputs/Dockerfile"),
-                         "hadolint.json"),
+                         "stdout.log", True),
     "oci-archive-inventory": ToolSpec("tool-syft", ("/opt/tool/bin/syft", "scan", "file:/inputs/image.tar",
                                                           "-o", "json=/scratch/oci-inventory.json"), "oci-inventory.json"),
     "image-package-and-config-inspection": ToolSpec("tool-trivy", ("/opt/tool/bin/trivy", "image", "--input",
@@ -136,6 +137,29 @@ def normalize(tool_id: str, data: bytes) -> list[dict[str, Any]]:
     return records
 
 
+def container_image_facts(data: bytes, archive_path: str) -> dict[str, dict[str, Any]]:
+    """Project the closed image metadata required by the V07 contract from pinned Syft JSON."""
+    try: document=json.loads(data); meta=document["source"]["metadata"]
+    except (ValueError, KeyError, TypeError) as exc: raise VendorToolFailed("container-metadata-invalid") from exc
+    layers=[]
+    for n,layer in enumerate(meta.get("layers",[])):
+        digest=layer.get("digest"); size=layer.get("size")
+        if not isinstance(digest,str) or not digest.startswith("sha256:") or not isinstance(size,int):
+            raise VendorToolFailed("container-layer-invalid")
+        layers.append({"layer_index":n,"layer_digest":digest,"layer_bytes":size})
+    manifest=meta.get("manifestDigest"); config=meta.get("config",{})
+    if not layers or not isinstance(manifest,str) or not manifest.startswith("sha256:"):
+        raise VendorToolFailed("container-metadata-invalid")
+    closed={"config_digest":config.get("digest"),"architecture":config.get("architecture"),"os":config.get("os"),
+            "declared_user":config.get("user"),"declared_entrypoint_executable":config.get("entrypoint"),
+            "declared_entrypoint_argument_count":config.get("entrypointArgs",0),
+            "declared_command_executable":config.get("command"),"declared_command_argument_count":config.get("commandArgs",0),
+            "declared_ports":config.get("ports",[]),"declared_env_names":config.get("envNames",[])}
+    if not isinstance(closed["config_digest"],str) or not closed["config_digest"].startswith("sha256:"):
+        raise VendorToolFailed("container-config-invalid")
+    return {archive_path:{"manifest_digest":manifest,"layers":layers,"config":closed}}
+
+
 def _runtime(source_sha: str, clock: Callable[[], str]) -> ce.ContainerRuntime:
     defaults = ce.host_defaults()
     if defaults["docker_executable"] is None:
@@ -185,7 +209,8 @@ def execute(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: 
         raise VendorToolFailed("b13-verification-failed")
     if terminal["execution_status"] == "BLOCKED": raise VendorToolBlocked(terminal.get("cause") or "blocked")
     if terminal["execution_status"] != "OK": raise VendorToolFailed(terminal.get("cause") or "tool-failed")
-    output = attempt_root / "scratch" / SPECS[tool_id].output
+    spec=SPECS[tool_id]
+    output = attempt_root / ("logs/container" if spec.captured_stdout else "scratch") / spec.output
     if not output.is_file() or output.is_symlink(): raise VendorToolFailed("expected-output-missing")
     data = output.read_bytes()
     normalize(tool_id, data)

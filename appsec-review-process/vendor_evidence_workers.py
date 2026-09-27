@@ -115,8 +115,9 @@ def probe(job_id: str, source_root: Path) -> dict[str, Any]:
         binaries = [n for n, p in files if _binary(p)]
         candidates = {"binskim": binaries}
     else:
-        candidates = {"mobsfscan-android": [n for n in paths if _android(n)],
-                      "mobsfscan-ios": [n for n in paths if _ios(n)]}
+        android_markers=[n for n in paths if _android(n)]; ios_markers=[n for n in paths if _ios(n)]
+        candidates = {"mobsfscan-android": ([n for n in paths if n.endswith((".java",".kt",".xml"))] if android_markers else []),
+                      "mobsfscan-ios": ([n for n in paths if n.endswith((".swift",".m",".mm",".plist"))] if ios_markers else [])}
     return {"files_examined": len(files), "candidates": {k: sorted(set(v)) for k, v in candidates.items()}}
 
 
@@ -145,7 +146,7 @@ def _header(job_id: str, run_id: str, attempt_id: str, source_sha: str) -> dict[
 
 
 def _instance(tool: str, status: str, *, executor: str, records: int | None = None,
-              output: tuple[str, bytes, str] | None = None) -> dict:
+              output: dict | None = None) -> dict:
     started = status not in ("SKIPPED", "BLOCKED")
     cause = {"OK": None, "OK_WITH_GAPS": "partial-input-coverage", "SKIPPED": None,
              "BLOCKED": "image-unavailable", "FAILED": "tool-error"}[status]
@@ -153,9 +154,10 @@ def _instance(tool: str, status: str, *, executor: str, records: int | None = No
                "SKIPPED": "not-started", "BLOCKED": "not-started", "FAILED": "tool-error"}[status]
     outputs = []
     if output:
-        path, data, schema = output
-        outputs = [{"path": path, "sha256": HASH(data), "bytes": len(data), "media_type": "application/json",
-                    "role": "normalized-result", "validation": "schema-validated", "validated_against": schema}]
+        outputs = [{"path": output["path"], "sha256": HASH(output["data"]), "bytes": len(output["data"]),
+                    "media_type": "application/json", "role": output.get("role", "normalized-result"),
+                    "validation": output.get("validation", "schema-validated"),
+                    "validated_against": output["schema"]}]
     container = executor == "pinned_container"
     return {"tool_id": tool, "attempt_id": f"{tool}-attempt-0001", "terminal_status": status,
             "skip_reason": SKIP if status == "SKIPPED" else None, "cause_code": cause,
@@ -164,7 +166,9 @@ def _instance(tool: str, status: str, *, executor: str, records: int | None = No
                          "image_digest": HASH(tool.encode()) if container else None,
                          "executable_sha256": None if container else HASH(("module:" + tool).encode()),
                          "tool_name": tool, "tool_version": "1.0.0" if started else None,
-                         "data_identities": [],
+                         "data_identities": ([{"kind": "policy-bundle", "identity_id": f"{tool}-rules",
+                                                "version": "pinned", "sha256": HASH(("rules:"+tool).encode())}]
+                                               if executor == "pinned_container" else []),
                          "redactor": ({"redactor_id": "evidence-redaction",
                                        "redactor_version": evidence_redaction.MODULE_VERSION,
                                        "ruleset_sha256": "sha256:" + evidence_redaction.RULESET_SHA256}
@@ -176,7 +180,7 @@ def _instance(tool: str, status: str, *, executor: str, records: int | None = No
 
 
 def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
-               successful: dict[str, tuple[bytes, int, str]], *, can_skip: bool) -> tuple[str, dict, dict, dict | None, dict]:
+               successful: dict[str, dict], *, can_skip: bool) -> tuple[str, dict, dict, dict | None, dict]:
     instances, coverage_tools, gaps, probe_tools, raw = [], [], [], [], {}
     any_candidates = any(candidates[t] for t in tools)
     for tool in tools:
@@ -189,18 +193,16 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
             status = "BLOCKED"
         output = None
         if status == "OK":
-            data, count, schema = successful[tool]
-            relative = f"outputs/tools/{tool}/result.json"
-            raw[relative] = data
-            output = (relative, data, schema)
+            output = successful[tool]
+            raw[output["path"]] = output["data"]
         instances.append(_instance(tool, status,
                                    executor="deterministic_python" if tool in {"key-material-file-inventory",
                                                                               "dockerfile-base-image-inventory"}
                                    else "pinned_container",
-                                   records=successful[tool][1] if tool in successful else None, output=output))
+                                   records=successful[tool]["count"] if tool in successful else None, output=output))
         unanalyzed = [] if status in ("OK", "SKIPPED") else [
             {"path": p, "reason_code": "tool-instance-did-not-complete"} for p in paths]
-        coverage_tools.append({"tool_id": tool, "applicability": "applicable" if paths else SKIP,
+        coverage_tools.append({"tool_id": tool, "applicability": "applicable" if paths or status != "SKIPPED" else SKIP,
                                "candidate_input_count": len(paths), "analyzed_input_count": len(paths) if status == "OK" else 0,
                                "not_analyzed_input_count": len(unanalyzed), "unsupported_input_count": 0,
                                "not_analyzed_inputs": unanalyzed, "unsupported_inputs": [], "input_lists_truncated": False})
@@ -209,6 +211,9 @@ def _aggregate(header: dict, tools: list[str], candidates: dict[str, list[str]],
                       "affected_input_count": None},
                      {"gap_id": f"gap-{tool}-inputs", "kind": "inputs-not-analyzed", "tool_id": tool,
                       "affected_input_count": len(paths)}]
+        elif status == "OK" and not paths:
+            gaps.append({"gap_id": f"gap-{tool}-zero", "kind": "zero-analyzed-inputs", "tool_id": tool,
+                         "affected_input_count": None})
         probe_tools.append({"tool_id": tool,
                             "detectors": [{"detector_id": f"{tool}-probe", "patterns_searched": PROBE_PATTERNS[tool],
                                            "matching_input_count": len(paths)}],
@@ -262,22 +267,37 @@ def _scan_base_images(root: Path, paths: list[str]) -> list[dict]:
 
 
 def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: str,
-                    source_snapshot_sha256: str) -> dict[str, Any]:
+                    source_snapshot_sha256: str, vendor_results: dict[str, dict] | None = None) -> dict[str, Any]:
     """Build one deterministic contract document set; no filesystem publication occurs here."""
     contract, tools = SPECS[job_id]
     found = probe(job_id, source_root)
     candidates = found["candidates"]
     header = _header(job_id, run_id, attempt_id, source_snapshot_sha256)
-    successful: dict[str, tuple[bytes, int, str]] = {}
+    successful: dict[str, dict] = {}
+    vendor_results = vendor_results or {}
     key_entries, base_images = [], []
     if job_id == "02-secrets-inventory":
         key_entries = _scan_keys(source_root, candidates["key-material-file-inventory"])
         raw = _dump({"records": [{"ordinal": n + 1, "path": e["location"]["path"]} for n, e in enumerate(key_entries)]})
-        successful["key-material-file-inventory"] = (raw, len(key_entries), "vendor-key-material-result-1")
+        successful["key-material-file-inventory"] = {"data": raw, "count": len(key_entries),
+            "schema": "vendor-key-material-result-1", "path": "outputs/tools/key-material-file-inventory/result.json"}
     elif job_id == "02-iac-config-scan" and candidates["dockerfile-base-image-inventory"]:
         base_images = _scan_base_images(source_root, candidates["dockerfile-base-image-inventory"])
         raw = _dump({"records": len(base_images)})
-        successful["dockerfile-base-image-inventory"] = (raw, len(base_images), "vendor-base-image-result-1")
+        successful["dockerfile-base-image-inventory"] = {"data": raw, "count": len(base_images),
+            "schema": "vendor-base-image-result-1", "path": "outputs/tools/dockerfile-base-image-inventory/result.json"}
+    for tool, result in vendor_results.items():
+        if tool not in tools or result.get("status") != "OK":
+            continue
+        path = "outputs/binskim.sarif" if tool == "binskim" else f"outputs/tools/{tool}/" + (
+            f"{tool}.sarif" if tool.startswith("mobsfscan-") else "result.json")
+        successful[tool] = {"data": result["raw"], "count": len(result["records"]), "schema":
+            "sarif-2.1.0" if path.endswith(".sarif") else "vendor-json-1", "path": path,
+            "role": "raw-tool-output", "validation": "format-validated"}
+    if "binskim" in successful:
+        successful["binskim"]["count"] = len(candidates["binskim"])
+    if "oci-archive-inventory" in successful:
+        successful["oci-archive-inventory"]["count"] = len(candidates["oci-archive-inventory"])
     status, tool_results, coverage, probe_doc, raw_files = _aggregate(
         header, tools, candidates, successful, can_skip=job_id != "02-secrets-inventory")
 
@@ -285,9 +305,14 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
                             "tool-results.json": tool_results, "coverage.json": coverage,
                             "raw_files": raw_files, "probe": probe_doc}
     if job_id == "02-secrets-inventory":
-        instance = tool_results["tool_instances"][1]
-        out = instance["outputs"][0]
+        for record in vendor_results.get("gitleaks", {}).get("records", []):
+            key_entries.append({"assertion": "candidate-secret-location", "tool_id": "gitleaks",
+                "rule_id": record["rule_id"].lower().replace("_", "-")[:48], "data_class": "other", "confidence": "medium",
+                "location": {"path": record["path"], "path_disposition": "published",
+                             "start_line": record["start_line"], "end_line": record["end_line"]}})
         for n, entry in enumerate(key_entries, 1):
+            instance = next(i for i in tool_results["tool_instances"] if i["tool_id"] == entry["tool_id"])
+            out = instance["outputs"][0]
             entry.update({"entry_id": f"SI-{n:06d}", "citation": {"source_class": "raw", "producer": job_id,
                           "attempt_id": instance["attempt_id"], "path": out["path"],
                           "sha256": out["sha256"].removeprefix("sha256:")}})
@@ -304,42 +329,107 @@ def build_documents(job_id: str, source_root: Path, *, run_id: str, attempt_id: 
                                        "attempt_id": instance["attempt_id"], "path": out["path"],
                                        "sha256": out["sha256"].removeprefix("sha256:")}})
             rendered.append(image)
+        hits=[]
+        for tool,result in vendor_results.items():
+            if tool not in {"checkov","trivy-config","tfsec","kube-linter","hadolint"} or result.get("status") != "OK": continue
+            inst=next(i for i in tool_results["tool_instances"] if i["tool_id"]==tool); out=inst["outputs"][0]
+            identity=inst["identity"]["data_identities"][0]
+            for record in result["records"]:
+                path=record["path"]; kind="dockerfile" if _dockerfile(path) else "terraform" if path.endswith(".tf") else "kubernetes"
+                hits.append({"hit_id":f"IC-{len(hits)+1:06d}","assertion":"declared-configuration-rule-hit","tool_id":tool,
+                    "rule":{"rule_id":record["rule_id"],"rule_pack":{"kind":identity["kind"],"identity_id":identity["identity_id"],"sha256":identity["sha256"]}},
+                    "category":"other","exposure":None,"resource":{"iac_kind":kind,"address":None,"address_disposition":"not-applicable"},
+                    "location":{"path":path,"path_disposition":"published","start_line":record["start_line"],"end_line":record["end_line"]},
+                    "citation":{"source_class":"raw","producer":job_id,"attempt_id":inst["attempt_id"],"path":out["path"],"sha256":out["sha256"].removeprefix("sha256:")}})
         docs["iac-config-evidence.json"] = {"schema": "appsec-review/iac-config-evidence/1.0", **header,
-                                            "redactor": REDACTOR, "rule_hits": []}
+                                            "redactor": REDACTOR, "rule_hits": hits}
         docs["base-image-inventory.json"] = {"schema": "appsec-review/iac-config-base-image-inventory/1.0", **header,
                                              "redactor": REDACTOR, "base_images": rendered}
     elif job_id == "02-mobile-sast":
+        hits=[]
+        for platform,tool in (("android","mobsfscan-android"),("ios","mobsfscan-ios")):
+            for record in vendor_results.get(tool,{}).get("records",[]):
+                path=record["path"]; data=(source_root/path).read_bytes()
+                hits.append({"hit_id":f"hit-{len(hits)+1:04d}","tool_id":tool,"platform":platform,
+                             "rule_id":record["rule_id"],"category":"other-mobile-rule","file_path":path,
+                             "file_sha256":HASH(data),"line":record["line"]})
         docs["mobile-sast.json"] = {"schema": "appsec-review/mobile-sast/1.0", **header,
                                     "platforms": [{"platform": "android", "tool_id": "mobsfscan-android",
                                                    "marker_present": bool(candidates["mobsfscan-android"])},
                                                   {"platform": "ios", "tool_id": "mobsfscan-ios",
                                                    "marker_present": bool(candidates["mobsfscan-ios"])}],
-                                    "rule_hits": []}
+                                    "rule_hits": hits}
     elif job_id == "02-binary-hardening":
         records = []
+        mapped={"BA2001":"position_independent","BA2002":"control_flow_guard","BA2004":"high_entropy_aslr",
+                "BA2005":"stack_protector","BA2010":"non_executable_data"}
+        hits_by={p:[] for p in candidates["binskim"]}
+        for hit in vendor_results.get("binskim",{}).get("records",[]):
+            if hit["path"] in hits_by: hits_by[hit["path"]].append(hit)
         for path in candidates["binskim"]:
             data = (source_root / path).read_bytes()
+            fmt=cmb.detect_format(data[:8]); checks={name:("present" if fmt in formats else "not-applicable-for-format")
+                                                    for name,formats in cmb.CHECK_FORMATS.items()}
+            rule_hits=[]
+            for hit in hits_by[path]:
+                check=mapped.get(hit["rule_id"],"other")
+                if check != "other" and fmt in cmb.CHECK_FORMATS[check]: checks[check]="absent"
+                rule_hits.append({"rule_id":hit["rule_id"],"check":check})
             records.append({"binary_id": "bin-" + hashlib.sha256(path.encode()).hexdigest()[:12], "tool_id": "binskim",
-                            "path": path, "sha256": HASH(data), "bytes": len(data), "format": cmb.detect_format(data[:8]),
-                            "checks": {name: "not-assessed" for name in cmb.CHECK_FORMATS}, "rule_hits": []})
+                            "path": path, "sha256": HASH(data), "bytes": len(data), "format": fmt,
+                            "checks": checks if "binskim" in successful else {name:"not-assessed" for name in cmb.CHECK_FORMATS},
+                            "rule_hits": rule_hits if "binskim" in successful else []})
         docs["binary-hardening.json"] = {"schema": "appsec-review/binary-hardening/1.0", **header, "binaries": records}
     else:
         records = []
+        image_facts=vendor_results.get("oci-archive-inventory",{}).get("image_facts",{})
+        package_records=vendor_results.get("image-package-and-config-inspection",{}).get("records",[])
         for path in candidates["oci-archive-inventory"]:
             data = (source_root / path).read_bytes()
+            fact=image_facts.get(path)
+            inspected=bool(fact and "oci-archive-inventory" in successful and "image-package-and-config-inspection" in successful)
+            packages=[]
+            if inspected:
+                for package in package_records:
+                    if package.get("archive_path",path)==path:
+                        packages.append({"tool_id":"image-package-and-config-inspection","layer_index":package.get("layer_index",0),
+                                         "ecosystem":package["ecosystem"],"name":package["name"],"version":package["version"]})
             records.append({"image_id": "img-" + hashlib.sha256(path.encode()).hexdigest()[:12],
                             "tool_id": "oci-archive-inventory",
                             "source": {"kind": "supplied-archive", "archive_path": path,
                                        "archive_sha256": HASH(data), "archive_bytes": len(data)},
                             "archive_format": "oci-layout" if path.endswith(".oci.tar") else "docker-save",
-                            "inspection": "not-inspected", "image_manifest_digest": None, "layers": [],
-                            "config": None, "packages": [], "hardening_rule_hits": []})
+                            "inspection": "inspected" if inspected else "not-inspected",
+                            "image_manifest_digest": fact["manifest_digest"] if inspected else None,
+                            "layers": fact["layers"] if inspected else [], "config": fact["config"] if inspected else None,
+                            "packages": packages if inspected else [], "hardening_rule_hits": []})
         docs["container-image-inventory.json"] = {"schema": "appsec-review/container-image-inventory/1.0", **header,
                                                   "images": records}
     return docs
 
 
-def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run_id: str) -> None:
+def execute_and_build(job_id: str, source_root: Path, *, run_id: str, attempt_id: str,
+                      source_snapshot_sha256: str, execution_root: Path, now: str,
+                      collector=None) -> dict[str, Any]:
+    """Applicability -> authenticated B13 collection -> exact contract projection."""
+    import vendor_evidence_b13 as b13
+    found=probe(job_id,source_root); tools=[t for t in SPECS[job_id][1]
+        if found["candidates"][t] and t not in {"key-material-file-inventory","dockerfile-base-image-inventory"}]
+    collector=collector or b13.collect
+    results=collector(job_id,tools,run_id=run_id,node_attempt_id=attempt_id,source_root=source_root,
+                      source_sha=source_snapshot_sha256,attempt_root=execution_root,now=now)
+    if job_id=="02-container-image-inventory" and results.get("oci-archive-inventory",{}).get("status")=="OK":
+        paths=found["candidates"]["oci-archive-inventory"]
+        if len(paths)!=1: raise b13.VendorToolFailed("container-batch-association-ambiguous")
+        results["oci-archive-inventory"]["image_facts"]=b13.container_image_facts(
+            results["oci-archive-inventory"]["raw"],paths[0])
+        for item in results.get("image-package-and-config-inspection",{}).get("records",[]): item["archive_path"]=paths[0]
+    return build_documents(job_id,source_root,run_id=run_id,attempt_id=attempt_id,
+                           source_snapshot_sha256=source_snapshot_sha256,vendor_results=results)
+
+
+def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run_id: str,
+                        started_at: str | None = None, finished_at: str | None = None) -> None:
     """Publish a closed immutable-attempt layout through V06. Existing paths are never reused."""
     if attempt.exists():
         raise FileExistsError(str(attempt))
@@ -378,6 +468,21 @@ def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run
                for p in sorted((attempt / "outputs").rglob("*")) if p.is_file()]
     (attempt / "manifest.json").write_bytes(_dump({"schema": sic.MANIFEST_SCHEMA,
                                                     "contract_id": contract, "outputs": outputs}))
+    if started_at is not None and finished_at is not None:
+        from worker_result import artifact_records, terminal_envelope, validate_worker_result
+        artifacts=["manifest.json","status.json",*[entry["path"] for entry in outputs]]
+        gaps=[g["gap_id"] for g in documents["coverage.json"]["gaps"]]
+        envelope=terminal_envelope(run_id=header["run_id"],job_id=header["job_id"],attempt_id=header["attempt_id"],
+            worker_kind="pinned_container",execution_status=documents["status"],
+            acceptance_status="CURRENT" if documents["status"] in ("OK","OK_WITH_GAPS","SKIPPED") else "NOT_ACCEPTED",
+            input_fingerprint=HASH(_dump({"header":header,"contract":contract})),output_contract=contract,
+            started_at=started_at,finished_at=finished_at,summary=f"{header['job_id']} vendor evidence attempt",
+            artifacts=artifact_records(attempt,artifacts),gaps=gaps,
+            skip_reason=SKIP if documents["status"]=="SKIPPED" else None,
+            cause="vendor-tool-unavailable" if documents["status"] in ("BLOCKED","FAILED") else None)
+        errors=validate_worker_result(envelope)
+        if errors: raise RuntimeError("common envelope invalid: "+"; ".join(errors))
+        (attempt/"result.json").write_bytes(_dump(envelope))
     for path in sorted(staging.rglob("*"), reverse=True):
         if path.is_file(): path.unlink()
         elif path.is_dir(): path.rmdir()
