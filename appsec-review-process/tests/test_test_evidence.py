@@ -123,6 +123,20 @@ class TestEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(te.Blocked,"source-tree attestation"):
                 te.execution_inputs("run1")
 
+    def test_stage_control_uses_the_single_accepted_unit_and_closed_make_check_command(self):
+        native={"source_revision":"rev1","units":[self.unit]}
+        def fake_data(_run,*parts): return self.owner.joinpath(*parts)
+        with mock.patch.object(te,"accepted",return_value=(self.owner,native,self.lineage)), \
+             mock.patch.object(te,"target",return_value=(self.target,self.source,"sha256:"+"9"*64,"rev1")), \
+             mock.patch.object(te,"data_path",side_effect=fake_data):
+            path=te.stage_control("run1",authority="Fixture Owner")
+        control=te.read_json(path)
+        self.assertEqual(control["unit_id"],"root")
+        self.assertEqual(control["argv"],["make","check"])
+        self.assertEqual(control["result_format"],"unsupported")
+        self.assertEqual(control["coverage_format"],"none")
+        self.assertEqual(validate_document(control,"test-execution-control.schema.json"),[])
+
     def test_all_three_jobs_publish_f02_compatible_receipts(self):
         supply=self.owner/"supply"; build="sha256:"+"9"*64
         for index,(job,(artifact,_schema,contract)) in enumerate(te.SPECS.items()):

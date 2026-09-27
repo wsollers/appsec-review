@@ -57,6 +57,19 @@ path, expiry, and exact permission decision. Test execution requires a separate 
 after the accepted native-build unit and the target's real test command are known; do not invent a
 test command or result path during initial staging.
 
+For the Hello Autotools workflow, if an earlier `full_review` attempt has retained the accepted
+single native-build unit but stopped at the explicit test gate, stage the closed `make check`
+authorization and resume the same run:
+
+```bash
+python3 -B appsec-review-process/test_evidence.py stage-control "$RUN_ID"
+python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait
+```
+
+The generated control deliberately declares unsupported result format and no coverage artifact;
+the execution therefore remains evidence-backed `OK_WITH_GAPS` unless the target later publishes
+JUnit/LCOV output. A successful command is never relabeled as coverage evidence.
+
 Offline vulnerability and standards snapshots are configured outside the engagement and then
 hash-bound when consumed. Confirm the configured snapshot registries are current before launch;
 do not replace a missing or stale snapshot with a live network lookup.

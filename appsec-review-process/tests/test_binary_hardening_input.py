@@ -59,7 +59,8 @@ class BinaryHardeningInputTests(unittest.TestCase):
     def test_stages_only_declared_accepted_binaries_and_reuses_identically(self):
         (self.attempt / "tool.log").write_text("not an input", encoding="utf-8")
         root = subject.stage(self.run_id)
-        self.assertEqual((root / "unit-a/bin/hello").read_bytes(), self.binary.read_bytes())
+        self.assertEqual((root / ("unit-" + subject.digest("unit-a")[:12]) / "bin/hello").read_bytes(),
+                         self.binary.read_bytes())
         self.assertFalse((root / "tool.log").exists())
         self.assertEqual(subject.stage(self.run_id), root)
         manifest = subject.validate(self.run_id, root)
@@ -67,10 +68,11 @@ class BinaryHardeningInputTests(unittest.TestCase):
 
     def test_tampered_staged_or_native_binary_fails_closed(self):
         root = subject.stage(self.run_id)
-        (root / "unit-a/bin/hello").write_bytes(b"changed")
+        projected = root / ("unit-" + subject.digest("unit-a")[:12]) / "bin/hello"
+        projected.write_bytes(b"changed")
         with self.assertRaisesRegex(Blocked, "staged binary changed"):
             subject.validate(self.run_id, root)
-        (root / "unit-a/bin/hello").write_bytes(self.binary.read_bytes())
+        projected.write_bytes(self.binary.read_bytes())
         self.binary.write_bytes(b"\x7fELFchanged")
         with self.assertRaisesRegex(Blocked, "accepted native binary changed"):
             subject.validate(self.run_id, root)
@@ -81,7 +83,16 @@ class BinaryHardeningInputTests(unittest.TestCase):
         self.assertEqual(request["job_id"], "02-binary-hardening")
         self.assertEqual(Path(request["source_root"]),
                          execution_state.data_path(self.run_id, "jobs", "02-binary-hardening",
-                                                   "inputs", "native-1", "binaries"))
+                                                   "inputs", "native-1-v2", "binaries"))
+
+    def test_semantic_build_unit_id_never_becomes_a_path_segment(self):
+        value = json.loads((self.attempt / "native-build.json").read_text())
+        value["units"][0]["unit_id"] = "dir:."
+        (self.attempt / "native-build.json").write_text(json.dumps(value), encoding="utf-8")
+        root = subject.stage(self.run_id)
+        relative = next(path.relative_to(root).as_posix() for path in root.rglob("hello"))
+        self.assertNotIn(":", relative)
+        self.assertNotIn("./", relative)
 
 
 if __name__ == "__main__":

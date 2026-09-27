@@ -76,9 +76,11 @@
             "enum": [
               "LANG",
               "LC_ALL",
+              "LOGNAME",
               "NO_COLOR",
               "SOURCE_DATE_EPOCH",
               "TZ",
+              "USER",
               "XDG_CACHE_HOME"
             ]
           },

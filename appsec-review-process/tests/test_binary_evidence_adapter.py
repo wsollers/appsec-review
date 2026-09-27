@@ -94,6 +94,8 @@ class BinaryEvidenceAdapterTests(unittest.TestCase):
             self.assertEqual(request["target_mounts"], [{"host_path":str(self.accepted),
                                                           "container_path":"/workspace"}])
             self.assertTrue(request["argv"][0].startswith("/usr/local/bin/"))
+            self.assertIn({"name":"USER", "value":"appsec-worker"}, request["environment"])
+            self.assertIn({"name":"LOGNAME", "value":"appsec-worker"}, request["environment"])
             self.assertFalse(receipt["target_execution"])
         self.assertEqual(self.requests[0]["argv"][0], "/usr/local/bin/analyze-binary")
 

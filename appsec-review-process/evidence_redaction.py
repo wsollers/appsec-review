@@ -34,7 +34,7 @@ from typing import Any, Iterator
 from execution_state import atomic_bytes, beneath, digest
 from schema_validate import validate_document
 
-MODULE_VERSION = "1.1.1"
+MODULE_VERSION = "1.1.2"
 REDACTOR_NAME = "appsec-review-process/evidence_redaction"
 RECEIPT_SCHEMA = "redaction-receipt.schema.json"
 RECEIPT_FILENAME = "redaction-receipt.json"
@@ -157,10 +157,14 @@ RULESET: dict[str, Any] = {
         # every published document. The suffix carries at most 48 bits and is an identifier.
         "exempt_patterns": {
             "automatic-attempt-id": r"auto-[0-9a-f]{24}\Z",
+            "automatic-tool-attempt-id": r"[a-z0-9][a-z0-9-]{0,31}-auto-[0-9a-f]{19}-[1-9][0-9]{0,2}(?:-version)?\Z",
+            "native-attempt-id": r"native-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z",
+            "native-tool-attempt-id": r"[a-z0-9][a-z0-9-]{0,31}-native-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{3}-[1-9][0-9]{0,2}(?:-version)?\Z",
             "utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9a-f]{4,12})?\Z",
         },
         "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake",
-                   "automatic-attempt-id", "utc-stamp-id", "public-pem-body", "ssh-public-key"],
+                   "automatic-attempt-id", "automatic-tool-attempt-id", "native-attempt-id",
+                   "native-tool-attempt-id", "utc-stamp-id", "public-pem-body", "ssh-public-key"],
     },
     "json_extensions": [".json", ".sarif"],
     "text_extensions": [".csv", ".err", ".jsonl", ".log", ".md", ".ndjson", ".out", ".tsv", ".txt", ".xml", ".yaml", ".yml"],

@@ -190,6 +190,20 @@ class DependencyWorkersTest(unittest.TestCase):
         self.assertEqual(envelope["execution_status"], "OK_WITH_GAPS")
         self.assertEqual(envelope["gaps"], ["no-dependency-components-detected"])
 
+    def test_new_verified_generation_atomically_supersedes_the_pointer(self):
+        output, receipt, expected = self.tool("02-sbom-inventory", "syft", {
+            "bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
+            "metadata": {"component": {"type": "file", "name": "/workspace"}}})
+        first = self.run_request("sbom", "first", self.request(
+            tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected))
+        second_request = self.request(
+            tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected)
+        second_request["generated_at"] = "2026-09-27T12:01:00Z"
+        second = self.run_request("sbom", "second", second_request)
+        self.assertNotEqual(first["attempt_id"], second["attempt_id"])
+        accepted = json.loads((self.out / "02-sbom-inventory" / "accepted.json").read_text())
+        self.assertEqual(accepted["attempt_id"], second["attempt_id"])
+
     def test_mutated_receipt_from_real_attempt_is_rejected(self):
         _output, receipt, binding = self.tool("02-sbom-inventory", "syft", {"components": []})
         forged = json.loads(receipt.read_text()); forged["tool_id"] = "caller-selected-tool"

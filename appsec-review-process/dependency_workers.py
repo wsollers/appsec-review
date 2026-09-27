@@ -706,10 +706,9 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
                 _hash_file(attempt / "result.json").split(":", 1)[1] != accepted.get("envelope_sha256")):
             raise WorkerBlocked(f"{job}: accepted pointer changed")
         return envelope
-    if pointer.exists():
-        existing = _json(pointer)
-        if existing.get("attempt_id") != attempt_id:
-            raise WorkerBlocked(f"{job}: another accepted input generation already exists")
+    # A later, independently verified orchestration attempt may supersede the current pointer.
+    # The new immutable attempt is completely materialized and validated before the atomic pointer
+    # replacement below, so failures cannot fall back silently or corrupt the accepted generation.
     root.mkdir(parents=True, exist_ok=True)
     staging = root / (".attempt." + attempt_id)
     if staging.exists():

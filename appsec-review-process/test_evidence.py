@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import base64
 from pathlib import Path, PurePosixPath
 import re
@@ -56,6 +56,40 @@ def permission(run_id: str, source: str, command_profile_id: str, grants: list[d
         decision,requirement=requirement,grants=grants,context=context)
     return {"requirement":requirement,"grants":grants,"decision":decision,
             "fingerprint_sha256":pc.input_fingerprint_component(decision)}
+
+def stage_control(run_id: str, *, authority: str = "Task-authorized engagement owner") -> Path:
+    """Stage the closed no-network Autotools test command against one accepted native unit."""
+    _attempt,native,_lineage=accepted(run_id,"02-native-build","native-build.json",
+        "native-build.schema.json","native-build")
+    units=native.get("units",[])
+    if len(units)!=1 or not isinstance(units[0].get("unit_id"),str):
+        raise Blocked("test control staging requires exactly one accepted native build unit")
+    _target_path,source,_tree,revision=target(run_id)
+    if native.get("source_revision")!=revision:
+        raise Blocked("test control staging requires the current accepted native build")
+    issued=datetime.now(timezone.utc).replace(microsecond=0)
+    profile="hello-autotools-make-check-v1"
+    params={name:None for name in pc.PARAMETER_NAMES}; params.update(
+        command_profile_id=profile,target_path=".")
+    capability={"kind":"target-execution","version":"1.0","parameters":params,
+                "origin":"staged-run-config"}
+    grant={"schema":"appsec-review/permission-grant/1.0",
+        "grant_id":"happy-path-02-test-execution","effect":"ALLOW",
+        "authority":{"name":authority,"role":"engagement-owner"},
+        "issued_at":issued.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "expires_at":(issued+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "binding":{"run_id":run_id,"source_snapshot_sha256":source,"job_id":EXECUTION_JOB},
+        "justification":"Run the target's bounded Autotools test target in the accepted build image.",
+        "capabilities":[capability]}
+    value={"schema":"appsec-review/test-execution-control/1","command_profile_id":profile,
+        "unit_id":units[0]["unit_id"],"argv":["make","check"],
+        "environment":[{"name":"LANG","value":"C"},{"name":"LC_ALL","value":"C"}],
+        "timeout_seconds":600,"authorization_time":issued.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "result_format":"unsupported","result_path":None,
+        "coverage_format":"none","coverage_path":None,"grants":[grant]}
+    errors=validate_document(value,"test-execution-control.schema.json")
+    if errors: raise Blocked("generated test execution control is invalid")
+    path=data_path(run_id,"controls",CONTROL); atomic_json(path,value); return path
 
 def execution_record(*, run_id:str, source:str, native_lineage:dict, native:dict, unit:dict,
                      argv:list[str], environment:list[dict], timeout_seconds:int,
@@ -432,3 +466,10 @@ def validate_job(run_id:str,job:str,pointer:dict|None=None)->Path:
     base=data_path(run_id,"jobs",job); inputs=current_inputs(run_id,job); pointer=pointer or read_json(base/"accepted.json")
     attempt,_=validate_published(base,pointer,"sha256:"+digest(inputs),expected_run_id=run_id,expected_job_id=job)
     validate_attempt(run_id,job,attempt,inputs); return attempt
+
+if __name__=="__main__":
+    import argparse
+    parser=argparse.ArgumentParser(); parser.add_argument("command",choices=["stage-control","validate"])
+    parser.add_argument("run_id"); parser.add_argument("--job",default=EXECUTION_JOB,choices=sorted(SPECS))
+    args=parser.parse_args()
+    print(stage_control(args.run_id) if args.command=="stage-control" else validate_job(args.run_id,args.job))
