@@ -1731,7 +1731,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
 | Declared inputs (registry/job-templates/02-source-sast.json) | fresh accepted intake<br>staged target checkout<br>B16 tool-semgrep record<br>repository-owned hashed ruleset |
 | Produces | `runs/<run_id>/data/jobs/02-source-sast/` |
-| Output files (registry/output-contracts/source-sast.json) | source-sast.json<br>b13-receipts.json<br>source-sast-summary.md<br>status.json |
+| Output files (registry/output-contracts/source-sast.json) | source-sast.json<br>b13-receipts.json<br>source-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | Gaps | `fault_recovery_not_qualified` |
 | Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |

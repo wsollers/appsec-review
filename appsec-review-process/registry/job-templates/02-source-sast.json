@@ -12,7 +12,7 @@
     "output_contract_id": "source-sast"
   },
   "inputs": {"required": ["fresh accepted intake", "staged target checkout", "B16 tool-semgrep record", "repository-owned hashed ruleset"], "optional": []},
-  "outputs": {"directory": "data/jobs/02-source-sast/attempts/<attempt_id>", "files": ["source-sast.json", "b13-receipts.json", "source-sast-summary.md", "status.json"]},
+  "outputs": {"directory": "data/jobs/02-source-sast/attempts/<attempt_id>", "files": ["source-sast.json", "b13-receipts.json", "source-sast-summary.md", "status.json", "permission.json", "lineage.json"]},
   "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
   "implemented": true,
   "timeout_seconds": 900,
