@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "intel-manifest.schema.json",
+  "title": "Hash-bound evidence assembly manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "source_snapshot_sha256", "assembly_status", "generation", "terminal_instances", "producers", "coverage_gaps", "manifest_sha256"],
+  "properties": {
+    "schema": {"const": "appsec-review/intel-manifest/1.0"},
+    "run_id": {"type": "string"},
+    "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "assembly_status": {"enum": ["COMPLETE", "INCOMPLETE"]},
+    "generation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["generation_sha256", "graph_sha256", "terminal_manifest_sha256"],
+      "properties": {"generation_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "graph_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "terminal_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+    },
+    "terminal_instances": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "manifest_sha256", "outcome", "counts"],
+      "properties": {
+        "path": {"const": "terminal-instances.json"}, "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "outcome": {"enum": ["EMPTY", "COMPLETE", "DEGRADED", "FAILED", "CANCELED"]},
+        "counts": {"type": "object"}
+      }
+    },
+    "producers": {"type": "array", "items": {"$ref": "intel-manifest-producer.schema.json"}},
+    "coverage_gaps": {"type": "array", "items": {"$ref": "intel-manifest-gap.schema.json"}},
+    "manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

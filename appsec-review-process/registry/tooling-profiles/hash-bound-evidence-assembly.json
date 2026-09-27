@@ -1,0 +1,12 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "hash-bound-evidence-assembly",
+  "display_name": "Hash-bound Evidence Assembly",
+  "mode": "static-only",
+  "required_inputs": ["assembly supply binding", "terminal-instances manifest", "newest accepted producer envelopes", "permission receipts"],
+  "optional_inputs": [],
+  "allowed_actions": ["read run-owned producer attempts", "validate schemas and SHA-256 bindings", "copy declared artifacts into an immutable attempt", "write intel-manifest.json"],
+  "isolation": "Trusted deterministic Python join; run-data reads and immutable run-data writes only; no target execution or network.",
+  "disallowed_actions": ["execute target content", "network access", "rewrite producer attempts", "invent missing evidence", "publish an incomplete generation"],
+  "claim_limits": {"allowed": ["evidence_manifest"], "forbidden": ["verified_security_finding", "severity", "control_verdict", "runtime_state"]}
+}

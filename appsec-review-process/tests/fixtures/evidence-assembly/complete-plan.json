@@ -1,0 +1,12 @@
+{
+  "run_id": "f02-fixture-run",
+  "source_snapshot_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "build_lineage_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "authorized_skip": {
+    "job_id": "02-dev-project-discovery",
+    "reason": "not-applicable-after-partition-review"
+  },
+  "gapped_job": "02-source-sast",
+  "gap": "Go, Java and PHP source tool families were not available in this generation.",
+  "permissions": ["read-source", "write-run-data"]
+}

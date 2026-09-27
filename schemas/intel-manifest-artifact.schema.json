@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "intel-manifest-artifact.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["producer_job_id", "producer_attempt_id", "producer_path", "path", "sha256", "media_type"],
+  "properties": {
+    "producer_job_id": {"type": "string"}, "producer_attempt_id": {"type": "string"},
+    "producer_path": {"type": "string"}, "path": {"type": "string"},
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "media_type": {"type": "string"}
+  }
+}

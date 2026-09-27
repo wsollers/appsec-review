@@ -1,0 +1,18 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "pregather",
+  "display_name": "Hash-bound Pregather Evidence Assembly",
+  "required_files": ["intel-manifest.json", "status.json"],
+  "required_status_fields": ["status", "source_snapshot_sha256", "generation_sha256", "producers", "permissions"],
+  "result_schema": {"artifact": "intel-manifest.json", "schema_file": "intel-manifest.schema.json"},
+  "claim_types": ["evidence_manifest"],
+  "validation_rules": [
+    "all graph-required producers have a newest accepted common envelope or an edge-authorized SKIPPED envelope",
+    "terminal instance, accepted pointer, envelope, artifact and permission-receipt hashes are revalidated before publication",
+    "every producer binds the same run and source snapshot and all non-null build lineage hashes are compatible",
+    "missing, failed, blocked, canceled, stale, corrupt, duplicate, mixed-generation or unclaimed terminal inputs prevent complete publication",
+    "coverage gaps and authorized skips remain explicit and are never described as successful coverage",
+    "producer artifacts are copied into the immutable assembly attempt and retain producer job, attempt, path and hash identity",
+    "manifest_sha256 binds every other intel-manifest field; the common envelope and accepted pointer bind the manifest bytes"
+  ]
+}

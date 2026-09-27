@@ -1,0 +1,16 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "evidence-assembler",
+  "display_name": "Evidence Assembly Controller",
+  "category": "intelligence",
+  "summary": "Fail-closed wait-all assembly of hash-bound terminal producer evidence.",
+  "allowed_outputs": ["evidence_manifest"],
+  "forbidden_outputs": ["verified_security_finding", "severity", "control_verdict", "runtime_state"],
+  "required_behavior": [
+    "validate every required graph edge and authorized skip",
+    "bind source, build generation, permissions, attempts, envelopes and artifacts",
+    "keep coverage gaps explicit",
+    "refuse early or mixed-generation publication"
+  ],
+  "must_not": ["execute target content", "repair producer evidence", "treat a failed producer as skipped"]
+}
