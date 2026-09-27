@@ -1,9 +1,8 @@
 """Nominal, static-only binary evidence workers for E06--E08.
 
-Tool execution is intentionally outside this slice while M02 remains unresolved.  These workers
-consume a closed, run-owned raw evidence record, re-verify the accepted native build and every
-upstream result, and publish deterministic normalized evidence.  Target binaries are only hashed;
-they are never executed.
+The E06--E08 workers obtain their closed raw records through the M02 pinned-container adapter,
+re-verify the accepted native build and every upstream result, and publish deterministic normalized
+evidence.  Target binaries are statically parsed and are never executed.
 """
 from __future__ import annotations
 
@@ -12,6 +11,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import build_replay
+import binary_evidence_adapter as adapter
 import native_build
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
@@ -23,8 +23,12 @@ SPECS = {
     "02-binary-cfg": ("binary-cfg", "cfg-manifest.json", "binary-cfg.schema.json"),
     "02-binary-intelligence-ingest": ("binary-intelligence", "binary-intelligence.json", "binary-intelligence.schema.json"),
 }
+PRIMARY_CONSUMER = {
+    "02-debug-symbol-index": "02-binary-cfg",
+    "02-binary-triage": "02-binary-cfg",
+    "02-binary-cfg": "02-binary-intelligence-ingest",
+}
 RAW_SCHEMA = "appsec-review/binary-static-evidence-input/1"
-M02_GAP = "m02-binary-analysis-image-pinning-unresolved"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 
@@ -59,7 +63,12 @@ def _permissions(job: str) -> list[str]:
 
 
 def _native(run_id: str) -> tuple[Path, dict[str, Any]]:
-    attempt = native_build.validate(run_id)
+    try:
+        attempt = native_build.validate(run_id)
+    except Blocked:
+        raise
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise Blocked("binary evidence: accepted native-build publication is unavailable") from exc
     pointer = read_json(native_build.root(run_id) / "accepted.json")
     result = read_json(attempt / native_build.RESULT)
     inputs = read_json(attempt / "inputs.json")
@@ -112,7 +121,7 @@ def _upstream(run_id: str, job: str) -> dict[str, Any]:
     }[job]
     values = {}
     for dep in deps:
-        attempt = validate(run_id, dep)
+        attempt = validate(run_id, dep, consumer_job_id=job)
         contract, result_name, _schema = SPECS[dep]
         pointer = read_json(root(run_id, dep) / "accepted.json")
         values[dep] = {
@@ -135,12 +144,20 @@ def _code_hashes(job: str) -> dict[str, str]:
                  "binary-evidence-image.schema.json", "binary-evidence-tool.schema.json",
                  "binary-evidence-upstream.schema.json"):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
+    if job in adapter.SUPPORTED:
+        values["binary_evidence_adapter.py"] = file_hash(ROOT / "binary_evidence_adapter.py")
+        for name in ("binary-static-evidence-input.schema.json",
+                     "binary-evidence-b13-receipts.schema.json"):
+            values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
     return values
 
 
 def current_inputs(run_id: str, job: str) -> dict[str, Any]:
-    raise Blocked(f"{job}: M02 pinned binary image and authenticated static adapter remain unresolved")
-    # The normalization core below is intentionally unreachable from publication until M02 lands.
+    if job in adapter.SUPPORTED:
+        _attempt, native = _native(run_id)
+        return {"run_id": run_id, "job_id": job, "native_build": native,
+                "upstream": _upstream(run_id, job), "image": adapter.image_identity(),
+                "code": _code_hashes(job)}
     path = control_path(run_id, job)
     if not path.is_file() or path.is_symlink():
         raise Blocked(f"{job}: missing run-owned static evidence input")
@@ -216,7 +233,8 @@ def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, An
     }[job]
     return {
         "schema": schema, "run_id": inputs["run_id"], "job_id": job,
-        "attempt_id": attempt_id, "status": "OK_WITH_GAPS" if aggregate_gaps else "OK",
+        "attempt_id": attempt_id, "status": ("SKIPPED" if not inputs["native_build"]["binaries"]
+            else ("OK_WITH_GAPS" if aggregate_gaps else "OK")),
         "native_build": native_projection,
         "upstream": upstream, "authority": {"analysis_authority": "M02_PINNED_ADAPTER",
             "source_tree_sha256": inputs["native_build"]["source_tree_sha256"]}, "image": raw["image"],
@@ -334,14 +352,28 @@ def _normalize_record(job: str, item: dict[str, Any], binary: dict[str, Any], in
             "proof_obligation": item["proof_obligation"], "gaps": sorted(set(item["gaps"]))}
 
 
+def _materialized_inputs(run_id: str, job: str, attempt: Path,
+                         inputs: dict[str, Any]) -> dict[str, Any]:
+    if job not in adapter.SUPPORTED:
+        return inputs
+    native_attempt, current = _native(run_id)
+    if current != inputs["native_build"]:
+        raise Blocked(f"{job}: accepted native build changed after input allocation")
+    raw = adapter.validate_materialized(run_id, job, attempt, native_attempt, inputs)
+    return {**inputs, "raw": raw,
+            "raw_evidence_sha256": "sha256:" + file_hash(attempt / adapter.RAW_FILE),
+            "config_sha256": _hash(raw["config"])}
+
+
 def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{job}: immutable inputs changed")
+    effective = _materialized_inputs(run_id, job, attempt, inputs)
     _contract, result_name, schema = SPECS[job]
     result = read_json(attempt / result_name)
     if validate_document(result, schema):
         raise Blocked(f"{job}: result schema validation failed")
-    if result != normalize(job, inputs, attempt.name):
+    if result != normalize(job, effective, attempt.name):
         raise Blocked(f"{job}: normalized result no longer matches hash-bound raw evidence")
     lineage_keys = ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "envelope_sha256", "result_sha256", "source_revision")
     native_lineage = {key: inputs["native_build"][key] for key in lineage_keys}
@@ -355,13 +387,23 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
         raise Blocked(f"{job}: evidence-assembly receipts changed")
 
 
-def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str, Any]:
+def run(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> dict[str, Any]:
+    job = job_id
     contract, result_name, _schema = SPECS[job]
     base = root(run_id, job)
     def execute(allocation, inputs, fingerprint):
         attempt = allocation["attempt"]
         if inputs["code"] != _code_hashes(job): raise Blocked(f"{job}: implementation changed")
-        result = normalize(job, inputs, allocation["attempt_id"])
+        effective = inputs
+        if job in adapter.SUPPORTED:
+            native_attempt, current = _native(run_id)
+            if current != inputs["native_build"]:
+                raise Blocked(f"{job}: accepted native build changed after input allocation")
+            raw = adapter.materialize(run_id, job, attempt, native_attempt, inputs)
+            effective = {**inputs, "raw": raw,
+                "raw_evidence_sha256": "sha256:" + file_hash(attempt / adapter.RAW_FILE),
+                "config_sha256": _hash(raw["config"])}
+        result = normalize(job, effective, allocation["attempt_id"])
         atomic_json(attempt / result_name, result)
         lineage_keys = ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "envelope_sha256", "result_sha256", "source_revision")
         native_lineage = {key: inputs["native_build"][key] for key in lineage_keys}
@@ -372,30 +414,42 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
             "job_id": job, "source_snapshot_sha256": inputs["native_build"]["source_snapshot_sha256"],
             "build_lineage_sha256": _hash(native_lineage)})
         status = {"process": job, "status": result["status"], "run_id": run_id,
-                  "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
+                  "dagster_run_id": dagster_run_id, "attempt_id": allocation["attempt_id"],
                   "records": len(result["records"]), "static_only": True,
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
+        artifact_paths = [result_name, "status.json", "permission.json", "lineage.json"]
+        if job in adapter.SUPPORTED:
+            artifact_paths += [adapter.RAW_FILE, adapter.RECEIPT_FILE]
+        skip_reason = "not-applicable-no-native-binaries" if result["status"] == "SKIPPED" else None
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
-            dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
+            dagster_run_id=dagster_run_id,
+            worker_kind="pinned_container" if job in adapter.SUPPORTED else "deterministic_python",
+            output_contract=contract,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=result["status"], summary=f"Published {len(result['records'])} static evidence record(s).",
-            status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json"], gaps=result["coverage_gaps"],
+            status_record=status, artifact_paths=artifact_paths, gaps=result["coverage_gaps"],
+            skip_reason=skip_reason,
+            consumer_job_id=PRIMARY_CONSUMER.get(job),
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))
-    return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
-        worker_kind="deterministic_python", output_contract=contract,
+    return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_run_id,
+        worker_kind="pinned_container" if job in adapter.SUPPORTED else "deterministic_python",
+        output_contract=contract,
         resume_command=f"python -B appsec-review-process/{job[3:].replace('-', '_')}.py {run_id}",
         derive_inputs=lambda: current_inputs(run_id, job),
         fingerprint_inputs=lambda value: _hash(value), execute_attempt=execute,
         preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,
             "preflight_error": f"{type(exc).__name__}: {exc}", "code": _code_hashes(job)},
         force=force, post_validate=lambda attempt, _envelope, inputs: _validate_attempt(run_id, job, attempt, inputs),
+        consumer_job_id=PRIMARY_CONSUMER.get(job),
         blocked_summary=f"{job} preflight did not complete.", failed_summary=f"{job} did not publish.")
 
 
-def validate(run_id: str, job: str, pointer: dict[str, Any] | None = None) -> Path:
+def validate(run_id: str, job: str, pointer: dict[str, Any] | None = None,
+             consumer_job_id: str | None = None) -> Path:
     base = root(run_id, job); pointer = pointer or read_json(base / "accepted.json")
     inputs = current_inputs(run_id, job)
-    attempt, _ = validate_published(base, pointer, _hash(inputs), expected_run_id=run_id, expected_job_id=job)
+    attempt, _ = validate_published(base, pointer, _hash(inputs), expected_run_id=run_id,
+        expected_job_id=job, consumer_job_id=consumer_job_id or PRIMARY_CONSUMER.get(job))
     _validate_attempt(run_id, job, attempt, inputs)
     return attempt

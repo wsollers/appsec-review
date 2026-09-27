@@ -4,7 +4,11 @@
     "display_name": "Static Binary Triage",
     "process": "02-evidence-pregather",
     "budget_default": "standard",
-    "implemented": false,
+    "implemented": true,
+    "timeout_seconds": 3600,
+    "execution": {"worker":"binary_triage.py","arguments":["{run_id}"]},
+    "retry": {"max_attempts":1,"transient_reasons":[],"side_effect_free":true},
+    "applicability": "accepted native-build publications; SKIPPED only when the accepted build contains zero binaries",
     "permissions": ["read-run-data", "write-run-data"],
     "composition": {
         "persona_id": "reverse-engineer",
@@ -16,7 +20,7 @@
     "inputs": {
         "required": [
             "accepted native-build binary lineage",
-            "run-owned static triage evidence"
+            "registered audit-binary-analysis image"
         ],
         "optional": []
     },
@@ -26,7 +30,9 @@
             "binary-triage-manifest.json",
             "status.json",
             "permission.json",
-            "lineage.json"
+            "lineage.json",
+            "binary-static-raw.json",
+            "binary-b13-receipts.json"
         ]
     },
     "prompt_sections": [
@@ -37,5 +43,6 @@
         "tooling_profile",
         "task",
         "output_contract"
-    ]
+    ],
+    "coordinator": "intake-coordinator"
 }

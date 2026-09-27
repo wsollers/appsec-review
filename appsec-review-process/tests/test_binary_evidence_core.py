@@ -171,29 +171,39 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
         self.assertEqual(result["status"], "OK")
         self.assertEqual(result["coverage_gaps"], [])
 
-    def test_registry_composition_stays_nominal_static_and_not_executable(self):
+    def test_registry_composition_is_pinned_static_and_not_target_executable(self):
         source = (ROOT / "binary_evidence_core.py").read_text()
         self.assertNotIn("subprocess", source)
         self.assertNotIn("run_container", source)
         for job, (contract_id, result_name, schema_name) in core.SPECS.items():
             template = json.loads((ROOT / f"registry/job-templates/{job}.json").read_text())
             contract = json.loads((ROOT / f"registry/output-contracts/{contract_id}.json").read_text())
-            self.assertFalse(template["implemented"])
+            self.assertEqual(template["implemented"], job in core.adapter.SUPPORTED)
             self.assertEqual(template["composition"]["output_contract_id"], contract_id)
             self.assertEqual(contract["result_schema"], {"artifact": result_name,
                                                          "schema_file": schema_name})
             self.assertTrue({"permission.json", "lineage.json"}.issubset(contract["required_files"]))
             self.assertNotIn("claim_types", contract)
 
-    def test_m02_blocks_publication_and_records_common_blocked_envelope(self):
+    def test_zero_accepted_binaries_normalizes_to_evidence_supported_skip(self):
+        value = raw("02-binary-triage", self.fixture["triage"])
+        value["records"] = []
+        inp = inputs("02-binary-triage", value)
+        inp["native_build"]["binaries"] = []
+        result = core.normalize("02-binary-triage", inp, "skip-attempt")
+        self.assertEqual(result["status"], "SKIPPED")
+        self.assertEqual(result["records"], [])
+        self.assertEqual(validate_document(result, "binary-triage.schema.json"), [])
+
+    def test_missing_accepted_native_build_blocks_before_container_execution(self):
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(core, "root", return_value=Path(folder)):
-            with self.assertRaisesRegex(Blocked, "M02"):
+            with self.assertRaisesRegex(Blocked, "accepted native-build"):
                 core.run("run-binary", "dag", "02-binary-triage")
             attempts = list((Path(folder) / "attempts").iterdir())
             self.assertEqual(len(attempts), 1)
             envelope = json.loads((attempts[0] / "result.json").read_text())
             self.assertEqual(envelope["execution_status"], "BLOCKED")
-            self.assertEqual(envelope["worker_kind"], "deterministic_python")
+            self.assertEqual(envelope["worker_kind"], "pinned_container")
 
     def test_claim_ceiling_and_schema_closure_matrix(self):
         for _job, (contract_id, _result, schema) in core.SPECS.items():
