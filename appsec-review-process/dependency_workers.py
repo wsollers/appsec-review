@@ -24,7 +24,7 @@ import evidence_redaction
 import container_execution as ce
 import dependency_b13_adapters as dependency_adapters
 from sbom_family_contracts import (
-    canonical_advisory_id, databases_digest, declaration_kind, lifecycle_row_for,
+    build_index_enrichment_errors, canonical_advisory_id, databases_digest, declaration_kind, lifecycle_row_for,
     required_gap_reason, spdx_expression_shape_ok, version_scheme_for,
 )
 
@@ -35,6 +35,10 @@ JOBS = {
     "lifecycle": ("02-dependency-lifecycle", "dependency-lifecycle", "outputs/dependency-lifecycle.json"),
     "reachability": ("06-cve-reachability", "cve-reachability", "outputs/cve-reachability.json"),
 }
+REGISTRY = Path(__file__).resolve().parent / "registry" / "job-templates"
+PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
+LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
+IMPLEMENTATION = "dependency-workers-v2-producer-receipts"
 PINNED_RECEIPT_SCHEMA = "appsec-review/pinned-tool-evidence/1.0"
 REDACTOR = {
     "name": "appsec-review-process/evidence_redaction",
@@ -82,6 +86,30 @@ def _json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise WorkerBlocked(f"required JSON is not an object: {path.name}")
     return value
+
+
+def _producer_receipts(request: dict[str, Any], job: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Derive assembly receipts from tracked policy and the exact worker request.
+
+    The template, rather than caller input, is the permission authority.  The lineage digest binds
+    the complete closed request except for its publication destination; upstream accepted pointers,
+    tool-result hashes, snapshot identities, and source generation therefore all affect it.
+    """
+    template = _json(REGISTRY / f"{job}.json")
+    permissions = template.get("permissions")
+    if (template.get("job_template_id") != job or not isinstance(permissions, list) or not all(
+            isinstance(item, str) and item for item in permissions) or
+            len(set(permissions)) != len(permissions)):
+        raise WorkerBlocked(f"{job}: registry template permissions are invalid")
+    generation = request["source_snapshot_sha256"]
+    lineage_request = {key: value for key, value in request.items() if key != "output_root"}
+    return (
+        {"schema": PERMISSION_SCHEMA, "run_id": request["run_id"], "job_id": job,
+         "source_snapshot_sha256": generation, "permissions": permissions},
+        {"schema": LINEAGE_SCHEMA, "run_id": request["run_id"], "job_id": job,
+         "source_snapshot_sha256": generation,
+         "build_lineage_sha256": _hash_bytes(_canonical({"request": lineage_request}))},
+    )
 
 
 def _path(value: Any, label: str) -> Path:
@@ -246,7 +274,12 @@ def _sbom_rows(tool: dict[str, Any], request: dict[str, Any], job: str) -> list[
     if tool.get("bomFormat") != "CycloneDX":
         if not isinstance(rows, list): raise WorkerBlocked(f"{job}: tool export has no components array")
         return rows
-    if not isinstance(rows, list): raise WorkerBlocked(f"{job}: CycloneDX has no components array")
+    # CycloneDX permits an omitted components member when a scan discovers no
+    # dependency components.  Preserve that as an empty, evidence-backed
+    # inventory; malformed non-list values still fail closed.
+    if rows is None: rows = []
+    if not isinstance(rows, list): raise WorkerBlocked(f"{job}: CycloneDX components is not an array")
+    if not rows: return []
     source_files = _source_files(request, job); normalized = []
     for raw in rows:
         if not isinstance(raw, dict) or not isinstance(raw.get("name"), str):
@@ -266,7 +299,8 @@ def _sbom_rows(tool: dict[str, Any], request: dict[str, Any], job: str) -> list[
     return normalized
 
 
-def _upstream(request: dict[str, Any], key: str, job: str, result_path: str) -> tuple[dict[str, Any], dict[str, str], Path]:
+def _upstream(request: dict[str, Any], key: str, job: str, result_path: str, *,
+              embedded_identity: bool = True) -> tuple[dict[str, Any], dict[str, str], Path]:
     block = request.get(key)
     if not isinstance(block, dict) or set(block) != {"attempt_id", "path", "sha256", "accepted_path"}:
         raise WorkerBlocked(f"{job}: exact {key} binding is required")
@@ -274,7 +308,7 @@ def _upstream(request: dict[str, Any], key: str, job: str, result_path: str) -> 
     if not SHA.fullmatch(str(block["sha256"])) or _hash_file(path) != block["sha256"]:
         raise WorkerBlocked(f"{job}: {key} bytes differ from the accepted binding")
     value = _json(path)
-    if value.get("attempt_id") != block["attempt_id"] or value.get("job_id") != job:
+    if embedded_identity and (value.get("attempt_id") != block["attempt_id"] or value.get("job_id") != job):
         raise WorkerBlocked(f"{job}: {key} identity differs from the accepted binding")
     accepted_path = _path(block["accepted_path"], key + ".accepted_path")
     accepted = _json(accepted_path)
@@ -310,10 +344,86 @@ def _component_id(value: dict[str, Any]) -> str:
     return "SC-" + str(int(hashlib.sha256(_canonical(value)).hexdigest()[:12], 16) % 1000000).zfill(6)
 
 
+_CJSON_MEMBER = re.compile(r"(?:[A-Za-z0-9._+@%~,-]+/)*cJSON-([0-9]+\.[0-9]+\.[0-9]+)\Z")
+_BUILD_INDEX_ENRICHMENT = "outputs/build-index-vendored-members.json"
+_BUILD_INDEX_TOOL_ID = "build-index-vendored-member"
+
+
+def _build_index_rows(request: dict[str, Any], attempt_id: str,
+                      syft_rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bytes, list[str]]:
+    """Project only unambiguous, build-referenced cJSON members into dependency evidence.
+
+    The accepted build index establishes that the target build names the vendored tree.  The
+    directory spelling establishes only the component name and version; it does not establish a
+    package URL, CPE, supplier, license, advisory status, or reachability.  Both canonical source
+    files must be present in the accepted source snapshot before a row is emitted.
+    """
+    job = JOBS["sbom"][0]
+    index, binding, _path = _upstream(request, "build_index", "02-build-index", "build-index.json",
+                                     embedded_identity=False)
+    if index.get("schema") != "appsec-review/build-index/1" or not isinstance(index.get("units"), list):
+        raise WorkerBlocked(f"{job}: accepted build index has an unsupported shape")
+    source_files = _source_files(request, job)
+    candidates: list[dict[str, Any]] = []
+    for unit in index["units"]:
+        if not isinstance(unit, dict) or not isinstance(unit.get("members"), list):
+            raise WorkerBlocked(f"{job}: accepted build index member records are malformed")
+        for member in unit["members"]:
+            if not isinstance(member, dict):
+                raise WorkerBlocked(f"{job}: accepted build index member record is malformed")
+            path = member.get("path")
+            match = _CJSON_MEMBER.fullmatch(path) if isinstance(path, str) else None
+            if match is None:
+                continue
+            if member.get("reason") not in {"referenced-by-parent-build", "autotools-subdirectory"}:
+                continue
+            source_path, header_path = path + "/cJSON.c", path + "/cJSON.h"
+            if source_path not in source_files or header_path not in source_files:
+                continue
+            candidates.append({"name": "cJSON", "version": match.group(1), "purl": None,
+                "cpe": None, "ecosystem": "generic", "declaration": "inferred-vendored",
+                "source": {"path": source_path, "sha256": source_files[source_path]},
+                "member": {"path": path, "reason": member["reason"],
+                           "signal_ids": member.get("signal_ids", [])},
+                "header": {"path": header_path, "sha256": source_files[header_path]}})
+    candidates.sort(key=lambda row: (row["member"]["path"], row["version"]))
+    if len({row["member"]["path"] for row in candidates}) != len(candidates):
+        raise WorkerBlocked(f"{job}: accepted build index repeats a cJSON vendored member")
+
+    evidence = {"schema": "appsec-review/build-index-sbom-enrichment/1.0",
+        "run_id": request["run_id"], "job_id": job, "attempt_id": attempt_id,
+        "producer_id": _BUILD_INDEX_TOOL_ID, "build_index_binding": binding,
+        "members": [{"name": row["name"], "version": row["version"],
+                     "member": row["member"], "source": row["source"], "header": row["header"],
+                     "purl": None, "cpe": None} for row in candidates],
+        "coverage_gaps": (["Vendored-member inference supplies no purl or CPE; vulnerability matching remains uncovered."]
+                          if candidates else [])}
+    evidence_bytes = _canonical(evidence)
+    existing = {(str(row.get("name", "")).lower(), row.get("version"), row.get("source", {}).get("path"))
+                for row in syft_rows if isinstance(row, dict) and isinstance(row.get("source"), dict)}
+    rows, gaps = [], []
+    for row in candidates:
+        identity = ("cjson", row["version"], row["source"]["path"])
+        if identity in existing:
+            continue
+        rows.append({key: row[key] for key in
+                     ("name", "version", "purl", "cpe", "ecosystem", "declaration", "source")})
+        gaps.append("vendored-component-inferred-without-package-identifier:" + row["member"]["path"])
+    citation = {"source_class": "raw", "producer": job, "attempt_id": attempt_id,
+                "path": _BUILD_INDEX_ENRICHMENT,
+                "sha256": _hash_bytes(evidence_bytes).split(":", 1)[1]}
+    for row in rows:
+        row["tool_id"] = _BUILD_INDEX_TOOL_ID
+        row["citation"] = citation
+    return rows, evidence_bytes, gaps
+
+
 def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
     job = JOBS["sbom"][0]; base = _base(request, job)
     tool, receipt, output = _tool(request, job, "syft")
-    rows = _sbom_rows(tool, request, job)
+    syft_rows = _sbom_rows(tool, request, job)
+    enriched_rows, enrichment_bytes, enrichment_gaps = _build_index_rows(request, attempt_id, syft_rows)
+    rows = syft_rows + enriched_rows
     components = []
     for raw in rows:
         if not isinstance(raw, dict) or not isinstance(raw.get("source"), dict):
@@ -333,7 +443,8 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
         component = {"component_id": _component_id({**identity, "source": source}), "assertion": assertion,
                      "declaration": declaration, **identity,
                      "source": {"evidence_kind": evidence_kind, **source},
-                     "tool_id": receipt["tool_id"], "citation": _citation(receipt, output)}
+                     "tool_id": raw.get("tool_id", receipt["tool_id"]),
+                     "citation": raw.get("citation", _citation(receipt, output))}
         components.append(component)
     components.sort(key=lambda row: row["component_id"])
     if len({row["component_id"] for row in components}) != len(components):
@@ -347,11 +458,17 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
               "redactor": REDACTOR, "generated_at": request["generated_at"],
               "sbom_document": {"path": "outputs/sbom.cdx.json", "sha256": _hash_bytes(cdx_bytes),
                                 "bytes": len(cdx_bytes), "bom_format": "CycloneDX", "spec_version": "1.5"},
+              "enrichment_document": {"path": _BUILD_INDEX_ENRICHMENT,
+                                      "sha256": _hash_bytes(enrichment_bytes),
+                                      "producer_id": _BUILD_INDEX_TOOL_ID},
               "components": components}
     errors = validate_document(result, "sbom-inventory.schema.json")
+    errors += build_index_enrichment_errors(result, enrichment_bytes)
     if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors)")
+    gaps = enrichment_gaps or ([] if components else ["no-dependency-components-detected"])
     return {"outputs/sbom.cdx.json": cdx_bytes, "outputs/sbom-manifest.json": _canonical(result),
-            "outputs/pinned-tool-evidence.json": _canonical(receipt)}, []
+            _BUILD_INDEX_ENRICHMENT: enrichment_bytes,
+            "outputs/pinned-tool-evidence.json": _canonical(receipt)}, gaps
 
 
 def _database_block(raw: dict[str, Any], evaluated: str, max_age: int) -> dict[str, Any]:
@@ -437,9 +554,6 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
     if sbom.get("source_snapshot_sha256") != request["source_snapshot_sha256"]:
         raise WorkerBlocked(f"{job}: SBOM has mixed source lineage")
     tool, receipt, output = _tool(request, job, "grype")
-    if "osv_b13_attempt" not in request:
-        raise WorkerBlocked(f"{job}: verified offline OSV execution evidence is required")
-    supplemental = _tool(request, job, "osv", "osv_")
     max_age = request.get("max_database_age_seconds")
     if isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 0:
         raise WorkerBlocked(f"{job}: explicit non-negative database age ceiling is required")
@@ -452,6 +566,27 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
         **{key: value for key, value in item["database"].items() if key != "database_kind"},
         "data_timestamp": item["data_timestamp"]} for item in identities})
     by_id = {row["component_id"]: row for row in sbom["components"]}
+    purl_refs = sorted(row["component_id"] for row in sbom["components"]
+                       if isinstance(row.get("purl"), str) and row["purl"])
+    supplied_applicability = request.get("osv_applicability")
+    expected_applicability = {
+        "decision": "EXECUTE" if purl_refs else "SKIPPED_NA",
+        "reason": None if purl_refs else "no-purl-bearing-components",
+        "examined_component_count": len(sbom["components"]),
+        "purl_component_count": len(purl_refs),
+        "purl_component_refs": purl_refs,
+    }
+    if supplied_applicability != expected_applicability:
+        raise WorkerBlocked(f"{job}: OSV applicability decision differs from the accepted SBOM")
+    osv_executes = expected_applicability["decision"] == "EXECUTE"
+    if osv_executes:
+        if "osv_b13_attempt" not in request:
+            raise WorkerBlocked(f"{job}: applicable OSV scan requires verified offline execution evidence")
+        supplemental = _tool(request, job, "osv", "osv_")
+    else:
+        if "osv_b13_attempt" in request:
+            raise WorkerBlocked(f"{job}: non-applicable OSV scan must not carry execution evidence")
+        supplemental = None
     gaps, evaluated = [], []
     for component in sbom["components"]:
         reason = required_gap_reason(component)
@@ -459,11 +594,12 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
             gaps.append({"gap_id": "VG-" + component["component_id"][3:], "assertion": "match-coverage-gap",
                          "component_ref": component["component_id"], "ecosystem": component["ecosystem"], "reason": reason})
         else:
-            evaluated_by = ["grype-db"] + (["osv"] if component.get("purl") else [])
+            evaluated_by = ["grype-db"] + (["osv"] if osv_executes and component.get("purl") else [])
             evaluated.append({"component_ref": component["component_id"], "outcome": "no-advisory-matched",
                               "version_scheme": version_scheme_for(component), "evaluated_by": evaluated_by})
     raw_matches = _sca_rows(tool, by_id, "grype", job)
-    raw_matches.extend(_sca_rows(supplemental[0], by_id, "osv", job))
+    if supplemental is not None:
+        raw_matches.extend(_sca_rows(supplemental[0], by_id, "osv", job))
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for raw in raw_matches:
         if not isinstance(raw, dict) or raw.get("component_ref") not in by_id:
@@ -511,15 +647,25 @@ def build_sca(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes
                "gap_list": {"path": "outputs/sca-coverage-gaps.json", "sha256": _hash_bytes(gap_bytes)}}
     identities_doc = {"schema": "appsec-review/sca-vulnerability-match-database-identities/1.0", **header,
                       "databases_digest": digest_value, "databases": identities}
+    osv_database = next(item["database"] for item in identities if item["database"]["database_kind"] == "osv")
+    applicability_doc = {
+        "schema": "appsec-review/osv-applicability-receipt/1.0", **header,
+        "tool_id": "osv-scanner", "sbom_binding": binding,
+        **expected_applicability, "database_identity": osv_database,
+    }
     docs = [(result, "sca-vulnerability-match.schema.json"), (gap_doc, "sca-vulnerability-match-coverage-gaps.schema.json"),
             (summary, "sca-vulnerability-match-gap-summary.schema.json"),
-            (identities_doc, "sca-vulnerability-match-database-identities.schema.json")]
+            (identities_doc, "sca-vulnerability-match-database-identities.schema.json"),
+            (applicability_doc, "osv-applicability-receipt.schema.json")]
     if any(validate_document(doc, schema) for doc, schema in docs):
         raise WorkerBlocked(f"{job}: normalized result violates a closed schema")
-    return {"outputs/sca-vulnerability-match.json": _canonical(result), "outputs/sca-coverage-gaps.json": gap_bytes,
+    return ({"outputs/sca-vulnerability-match.json": _canonical(result), "outputs/sca-coverage-gaps.json": gap_bytes,
             "outputs/coverage-gap-summary.json": _canonical(summary),
             "outputs/vulnerability-database-identities.json": _canonical(identities_doc),
-            "outputs/pinned-tool-evidence.json": _canonical(receipt)}, (["SCA_COMPONENT_GAPS"] if gaps else [])
+            "outputs/osv-applicability-receipt.json": _canonical(applicability_doc),
+            "outputs/pinned-tool-evidence.json": _canonical(receipt)},
+            (["SCA_COMPONENT_GAPS"] if gaps else []) +
+            (["OSV_SKIPPED_NA_NO_PURL_COMPONENTS"] if not osv_executes else []))
 
 
 def build_license(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, bytes], list[str]]:
@@ -676,9 +822,10 @@ BUILDERS: dict[str, Callable[[dict[str, Any], str], tuple[dict[str, bytes], list
 def run(kind: str, request_path: Path) -> dict[str, Any]:
     request = _json(request_path); job, contract, _ = JOBS[kind]
     _base(request, job)
-    fingerprint = _hash_bytes(_canonical({"kind": kind, "request": request, "implementation": "dependency-workers-v1"}))
+    fingerprint = _hash_bytes(_canonical({"kind": kind, "request": request, "implementation": IMPLEMENTATION}))
     attempt_id = job + "-" + fingerprint[7:27]
     artifacts, gaps = BUILDERS[kind](request, attempt_id)
+    permission, lineage = _producer_receipts(request, job)
     root = Path(request["output_root"]).resolve() / job
     attempt = root / "attempts" / attempt_id
     pointer = root / "accepted.json"
@@ -695,15 +842,17 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
             if (not artifact.is_file() or artifact.is_symlink() or
                     _hash_file(artifact).split(":", 1)[1] != record.get("sha256")):
                 raise WorkerBlocked(f"{job}: immutable attempt artifact changed")
+        if (_json(attempt / "permission.json") != permission or
+                _json(attempt / "lineage.json") != lineage):
+            raise WorkerBlocked(f"{job}: immutable attempt producer receipts changed")
         accepted = _json(pointer)
         if (accepted.get("attempt_id") != attempt_id or
                 _hash_file(attempt / "result.json").split(":", 1)[1] != accepted.get("envelope_sha256")):
             raise WorkerBlocked(f"{job}: accepted pointer changed")
         return envelope
-    if pointer.exists():
-        existing = _json(pointer)
-        if existing.get("attempt_id") != attempt_id:
-            raise WorkerBlocked(f"{job}: another accepted input generation already exists")
+    # A later, independently verified orchestration attempt may supersede the current pointer.
+    # The new immutable attempt is completely materialized and validated before the atomic pointer
+    # replacement below, so failures cannot fall back silently or corrupt the accepted generation.
     root.mkdir(parents=True, exist_ok=True)
     staging = root / (".attempt." + attempt_id)
     if staging.exists():
@@ -714,7 +863,9 @@ def run(kind: str, request_path: Path) -> dict[str, Any]:
             path = staging.joinpath(*PurePosixPath(relative).parts); path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(payload)
         (staging / "inputs.json").write_bytes(_canonical(request))
-        paths = sorted(artifacts) + ["inputs.json"]
+        (staging / "permission.json").write_bytes(_canonical(permission))
+        (staging / "lineage.json").write_bytes(_canonical(lineage))
+        paths = sorted(artifacts) + ["inputs.json", "permission.json", "lineage.json"]
         status = "OK_WITH_GAPS" if gaps else "OK"
         stamp = request["generated_at"]
         envelope = terminal_envelope(run_id=request["run_id"], job_id=job, attempt_id=attempt_id,

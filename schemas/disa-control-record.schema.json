@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "disa-control-record.schema.json",
+  "title": "DISA STIG/SRG Control Reference Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "record_type", "standard_family", "standard_version", "control_id",
+    "rule_id", "rule_version", "srg_id", "title", "severity", "text", "check",
+    "fix", "cci", "profiles", "proof_obligations", "source"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/disa-control-record/1.0"},
+    "record_type": {"const": "control"},
+    "standard_family": {"enum": ["disa_asd_stig", "disa_gpos_srg"]},
+    "standard_version": {"type": "string", "minLength": 1},
+    "control_id": {"type": "string", "pattern": "^V-[0-9]+$"},
+    "rule_id": {"type": "string", "pattern": "^SV-[0-9]+r[0-9]+_rule$"},
+    "rule_version": {"type": "string", "minLength": 1},
+    "srg_id": {"type": "string", "pattern": "^SRG-[A-Z]+-[0-9]+$"},
+    "title": {"type": "string", "minLength": 1},
+    "severity": {"enum": ["low", "medium", "high"]},
+    "text": {"type": "string", "minLength": 1},
+    "check": {"type": "string", "minLength": 1},
+    "fix": {"type": "string", "minLength": 1},
+    "cci": {"type": "array", "items": {"type": "string", "pattern": "^CCI-[0-9]+$"}},
+    "profiles": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "proof_obligations": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["obligation_id", "text", "evidence_classification", "minimum_evidence_modes"],
+        "properties": {
+          "obligation_id": {"type": "string", "minLength": 1},
+          "text": {"type": "string", "minLength": 1},
+          "evidence_classification": {"const": "classified"},
+          "minimum_evidence_modes": {
+            "type": "array", "minItems": 1,
+            "items": {"enum": ["document_or_process", "static_source", "static_config", "built_artifact", "test_evidence", "dynamic_runtime", "manual_inspection"]}
+          }
+        }
+      }
+    },
+    "source": {"$ref": "owasp-source-citation.schema.json"}
+  }
+}

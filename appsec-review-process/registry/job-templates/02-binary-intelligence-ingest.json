@@ -4,7 +4,11 @@
   "display_name": "Binary Intelligence Ingest",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
-  "implemented": false,
+  "implemented": true,
+  "timeout_seconds": 1800,
+  "execution": {"worker":"binary_intelligence_ingest.py","arguments":["{run_id}"]},
+  "retry": {"max_attempts":1,"transient_reasons":[],"side_effect_free":true},
+  "applicability": "accepted binary-triage and binary-cfg publications; SKIPPED only when the accepted build contains zero binaries",
   "permissions": ["read-run-data", "write-run-data"],
   "composition": {
     "persona_id": "reverse-engineer",
@@ -17,11 +21,11 @@
     "required": [
       "accepted native-build binary lineage",
       "accepted binary-triage result",
-      "accepted binary-cfg result",
-      "run-owned normalized lead evidence"
+      "accepted binary-cfg result"
     ],
     "optional": [
-      "source component map"
+      "source component map",
+      "deterministically derived normalized binary leads"
     ]
   },
   "outputs": {
@@ -30,7 +34,8 @@
       "binary-intelligence.json",
       "status.json",
       "permission.json",
-      "lineage.json"
+      "lineage.json",
+      "applicability-receipt.json"
     ]
   },
   "prompt_sections": [
@@ -42,5 +47,6 @@
     "buildenv_catalog",
     "task",
     "output_contract"
-  ]
+  ],
+  "coordinator": "intake-coordinator"
 }

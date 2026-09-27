@@ -416,6 +416,15 @@ class GateTests(unittest.TestCase):
         self.assertFalse((attempt / "project-discovery-summary.md").exists())
         self.assertEqual(discovery_gate.validate(self.run_id, SRE), attempt)
 
+    def test_sre_output_contract_has_the_exact_trusted_claim_policy(self):
+        import validate_job_output
+        contract = json.loads((ROOT / "registry" / "output-contracts" /
+                               "operations-topology.json").read_text(encoding="utf-8"))
+        policy = validate_job_output.CLAIM_CLASS_POLICIES["operations-topology"]
+        self.assertEqual(policy["claim_class_id"], contract["claim_class"]["claim_class_id"])
+        self.assertEqual(policy["allowed_assertions"],
+                         set(contract["claim_class"]["allowed_assertions"]))
+
     def test_upstream_record_keeps_the_one_upstream_shape_and_records_every_upstream_for_d04(self):
         files = {}
         for name, text in (("map.json", '{"target": "t"}\n'), ("devops.json", '{"projects": []}\n')):

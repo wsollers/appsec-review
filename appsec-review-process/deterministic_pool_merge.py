@@ -12,6 +12,10 @@ JOB = "deterministic-pool-merge"
 RESULT = "deterministic-pool-merge.json"
 CONTRACT = "deterministic-pool-merge"
 
+def run_lifecycle(run_id: str, dagster_run_id: str, force: bool = False):
+    from control_feature_lifecycle import run as lifecycle_run
+    return lifecycle_run(run_id, dagster_run_id, JOB, force)
+
 def _verified_file(attempt_root: Path, relative: str, record: dict):
     path=attempt_root.joinpath(*Path(relative).parts)
     if path.is_symlink() or not path.is_file(): raise Blocked("deterministic merge: verified output is unsafe")

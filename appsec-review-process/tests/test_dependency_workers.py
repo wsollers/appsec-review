@@ -13,11 +13,13 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dependency_workers as workers
+import sbom_family_contracts as sbom_contracts
 import dependency_b13_adapters as adapters
 import container_execution as ce
 import container_execution_support as support
 from test_container_execution import ScriptedDocker
 from schema_validate import validate_document
+from worker_result import artifact_records, terminal_envelope
 
 
 def payload(value):
@@ -44,6 +46,24 @@ class DependencyWorkersTest(unittest.TestCase):
         for spec in adapters.SPECS.values():
             record = {**base, "image_id": spec["image"], "repository": "docker.io/library/" + spec["image"]}
             (self.images / (spec["image"] + ".json")).write_text(json.dumps(record))
+        build_root = self.out / "02-build-index"; build_attempt = build_root / "attempts" / "build-one"
+        build_attempt.mkdir(parents=True)
+        self.build_index_path = build_attempt / "build-index.json"
+        self.build_index_path.write_bytes(payload({"schema": "appsec-review/build-index/1", "units": []}))
+        envelope = terminal_envelope(run_id=self.run_id, job_id="02-build-index", attempt_id="build-one",
+            worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+            input_fingerprint="sha256:" + "9" * 64, output_contract="build-index",
+            started_at=self.when, finished_at=self.when, summary="fixture",
+            artifacts=artifact_records(build_attempt, ["build-index.json"]))
+        (build_attempt / "result.json").write_bytes(payload(envelope))
+        build_root.mkdir(parents=True, exist_ok=True)
+        self.build_pointer = build_root / "accepted.json"
+        self.build_pointer.write_bytes(payload({"schema": "appsec-review/accepted-worker-result/1.0",
+            "run_id": self.run_id, "job": "02-build-index", "attempt_id": "build-one", "status": "OK",
+            "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
+            "envelope_sha256": workers._hash_file(build_attempt / "result.json").split(":", 1)[1]}))
+        self.build_index = {"attempt_id": "build-one", "path": str(self.build_index_path),
+            "sha256": workers._hash_file(self.build_index_path), "accepted_path": str(self.build_pointer)}
 
     def tearDown(self):
         self.temp.cleanup()
@@ -82,6 +102,21 @@ class DependencyWorkersTest(unittest.TestCase):
             extra["b13_attempt"] = extra.pop("expected_tool"); extra.pop("tool_output", None); extra.pop("tool_receipt", None)
         if isinstance(extra.get("osv_expected_tool"), dict) and "attempt_root" in extra["osv_expected_tool"]:
             extra["osv_b13_attempt"] = extra.pop("osv_expected_tool"); extra.pop("osv_tool_output", None); extra.pop("osv_tool_receipt", None)
+        b13 = extra.get("b13_attempt")
+        if isinstance(b13, dict) and b13.get("request", {}).get("job_id") == "02-sbom-inventory":
+            extra.setdefault("build_index", self.build_index)
+            extra.setdefault("source_files", {
+                "package-lock.json": "sha256:" + "2" * 64,
+                "vendor/cJSON-1.7.18/cJSON.c": "sha256:" + "3" * 64,
+                "vendor/cJSON-1.7.18/cJSON.h": "sha256:" + "4" * 64,
+            })
+        if "databases" in extra and isinstance(extra.get("sbom"), dict):
+            sbom = json.loads(Path(extra["sbom"]["path"]).read_text())
+            refs = sorted(row["component_id"] for row in sbom["components"] if row.get("purl"))
+            extra.setdefault("osv_applicability", {"decision": "EXECUTE" if refs else "SKIPPED_NA",
+                "reason": None if refs else "no-purl-bearing-components",
+                "examined_component_count": len(sbom["components"]), "purl_component_count": len(refs),
+                "purl_component_refs": refs})
         return {"run_id": self.run_id, "source_snapshot_sha256": self.source,
                 "generated_at": self.when, "output_root": str(self.out), **extra}
 
@@ -159,6 +194,18 @@ class DependencyWorkersTest(unittest.TestCase):
             relative, schema = schema_by_job[envelope["job_id"]]
             self.assertEqual(validate_document(json.loads(self.result_path(envelope, relative).read_text()), schema), [])
             self.assertEqual(envelope["acceptance_status"], "CURRENT")
+            attempt = self.out / envelope["job_id"] / "attempts" / envelope["attempt_id"]
+            permission = json.loads((attempt / "permission.json").read_text())
+            lineage = json.loads((attempt / "lineage.json").read_text())
+            template = json.loads((ROOT / "registry" / "job-templates" /
+                                   f"{envelope['job_id']}.json").read_text())
+            self.assertEqual(permission, {"schema": workers.PERMISSION_SCHEMA, "run_id": self.run_id,
+                "job_id": envelope["job_id"], "source_snapshot_sha256": self.source,
+                "permissions": template["permissions"]})
+            self.assertEqual(lineage["source_snapshot_sha256"], self.source)
+            self.assertRegex(lineage["build_lineage_sha256"], r"^sha256:[0-9a-f]{64}$")
+            self.assertTrue({"permission.json", "lineage.json"}.issubset(
+                {item["path"] for item in envelope["artifacts"]}))
         request_path = self.root / "reachability-request.json"
         self.assertEqual(workers.run("reachability", request_path), results[-1])
 
@@ -170,6 +217,31 @@ class DependencyWorkersTest(unittest.TestCase):
         with self.assertRaisesRegex(workers.WorkerBlocked, "artifact changed"):
             workers.run("reachability", request_path)
 
+    def test_immutable_reuse_rejects_changed_producer_receipt(self):
+        result = self.happy_chain()[-1]
+        request_path = self.root / "reachability-request.json"
+        receipt = self.out / result["job_id"] / "attempts" / result["attempt_id"] / "permission.json"
+        changed = json.loads(receipt.read_text()); changed["permissions"] = []
+        receipt.write_bytes(payload(changed))
+        with self.assertRaisesRegex(workers.WorkerBlocked, "artifact changed"):
+            workers.run("reachability", request_path)
+
+    def test_implementation_version_prevents_reuse_of_receiptless_v1_attempt(self):
+        request = self.request()
+        old = workers._hash_bytes(workers._canonical(
+            {"kind": "sbom", "request": request, "implementation": "dependency-workers-v1"}))
+        new = workers._hash_bytes(workers._canonical(
+            {"kind": "sbom", "request": request, "implementation": workers.IMPLEMENTATION}))
+        self.assertNotEqual(old, new)
+
+    def test_producer_lineage_binds_request_upstreams_but_not_publication_root(self):
+        request = self.request(upstream={"attempt_id": "one", "sha256": "sha256:" + "a" * 64})
+        first = workers._producer_receipts(request, "02-sbom-inventory")[1]["build_lineage_sha256"]
+        relocated = {**request, "output_root": str(self.root / "elsewhere")}
+        self.assertEqual(first, workers._producer_receipts(relocated, "02-sbom-inventory")[1]["build_lineage_sha256"])
+        changed = {**request, "upstream": {"attempt_id": "two", "sha256": "sha256:" + "b" * 64}}
+        self.assertNotEqual(first, workers._producer_receipts(changed, "02-sbom-inventory")[1]["build_lineage_sha256"])
+
     def test_receipt_only_bundle_cannot_substitute_for_a_b13_attempt(self):
         output = self.write("syft.json", {"components": []})
         request = self.request(tool_output=str(output), tool_receipt=str(self.root / "missing.json"),
@@ -178,6 +250,93 @@ class DependencyWorkersTest(unittest.TestCase):
         with self.assertRaisesRegex(workers.WorkerBlocked, "immutable B13 attempt binding"):
             self.run_request("sbom", "missing", request)
         self.assertFalse((self.out / "02-sbom-inventory").exists())
+
+    def test_valid_cyclonedx_without_components_is_accepted_with_bounded_gap(self):
+        output, receipt, expected = self.tool("02-sbom-inventory", "syft", {
+            "bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
+            "metadata": {"component": {"type": "file", "name": "/workspace"}}})
+        envelope = self.run_request("sbom", "empty-cyclonedx", self.request(
+            tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected))
+        result = json.loads(self.result_path(envelope, "outputs/sbom-manifest.json").read_text())
+        self.assertEqual(result["components"], [])
+        self.assertEqual(envelope["execution_status"], "OK_WITH_GAPS")
+        self.assertEqual(envelope["gaps"], ["no-dependency-components-detected"])
+
+    def test_hello_build_index_enriches_empty_syft_with_cjson_and_no_package_ids(self):
+        self.build_index_path.write_bytes(payload({"schema": "appsec-review/build-index/1", "units": [{
+            "unit_id": "dir:.", "members": [{"path": "vendor/cJSON-1.7.18",
+                "reason": "referenced-by-parent-build", "signal_ids": ["s0005"], "manifests": []}]}]}))
+        build_attempt = self.build_index_path.parent
+        envelope = terminal_envelope(run_id=self.run_id, job_id="02-build-index", attempt_id="build-one",
+            worker_kind="deterministic_python", execution_status="OK", acceptance_status="CURRENT",
+            input_fingerprint="sha256:" + "8" * 64, output_contract="build-index",
+            started_at=self.when, finished_at=self.when, summary="hello build index",
+            artifacts=artifact_records(build_attempt, ["build-index.json"]))
+        (build_attempt / "result.json").write_bytes(payload(envelope))
+        self.build_pointer.write_bytes(payload({"schema": "appsec-review/accepted-worker-result/1.0",
+            "run_id": self.run_id, "job": "02-build-index", "attempt_id": "build-one", "status": "OK",
+            "fingerprint": envelope["input_fingerprint"], "envelope_path": "result.json",
+            "envelope_sha256": workers._hash_file(build_attempt / "result.json").split(":", 1)[1]}))
+        self.build_index["sha256"] = workers._hash_file(self.build_index_path)
+        output, receipt, expected = self.tool("02-sbom-inventory", "syft", {
+            "bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1, "components": []})
+        result_envelope = self.run_request("sbom", "hello-cjson", self.request(
+            tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected))
+        result = json.loads(self.result_path(result_envelope, "outputs/sbom-manifest.json").read_text())
+        self.assertEqual([(row["name"], row["version"]) for row in result["components"]], [("cJSON", "1.7.18")])
+        component = result["components"][0]
+        self.assertEqual(component["declaration"], "inferred-vendored")
+        self.assertIsNone(component["purl"]); self.assertIsNone(component["cpe"])
+        self.assertEqual(component["tool_id"], "build-index-vendored-member")
+        self.assertIn("vendored-component-inferred-without-package-identifier:vendor/cJSON-1.7.18",
+                      result_envelope["gaps"])
+        enrichment = json.loads(self.result_path(
+            result_envelope, "outputs/build-index-vendored-members.json").read_text())
+        self.assertEqual(enrichment["build_index_binding"]["attempt_id"], "build-one")
+        cdx_path = self.result_path(result_envelope, "outputs/sbom.cdx.json")
+        self.assertEqual(sbom_contracts._cdx_errors(cdx_path.read_bytes(), result), [])
+        enrichment_path = self.result_path(result_envelope, "outputs/build-index-vendored-members.json")
+        self.assertEqual(sbom_contracts.build_index_enrichment_errors(result, enrichment_path.read_bytes()), [])
+        self.assertEqual(component["citation"]["path"], "outputs/build-index-vendored-members.json")
+
+        grype_output, grype_receipt, grype_expected = self.tool(
+            "02-sca-vulnerability-match", "grype", {"matches": []})
+        databases = [{"database_kind": kind, "vendor_build": "build-1", "schema_version": "1.0",
+            "snapshot_id": kind + "-20260927", "sha256": "sha256:" + hashlib.sha256(kind.encode()).hexdigest(),
+            "data_timestamp": "2026-09-27T11:00:00Z"} for kind in ("grype-db", "osv")]
+        sca_request = self.request(sbom=self.binding(result_envelope, "outputs/sbom-manifest.json"),
+            tool_output=str(grype_output), tool_receipt=str(grype_receipt), expected_tool=grype_expected,
+            databases=databases, max_database_age_seconds=7200)
+        sca_envelope = self.run_request("sca", "hello-cjson-sca", sca_request)
+        self.assertEqual(sca_envelope["execution_status"], "OK_WITH_GAPS")
+        self.assertIn("OSV_SKIPPED_NA_NO_PURL_COMPONENTS", sca_envelope["gaps"])
+        receipt = json.loads(self.result_path(
+            sca_envelope, "outputs/osv-applicability-receipt.json").read_text())
+        self.assertEqual((receipt["decision"], receipt["reason"]),
+                         ("SKIPPED_NA", "no-purl-bearing-components"))
+        self.assertEqual(receipt["purl_component_refs"], [])
+
+    def test_sbom_rejects_stale_build_index_pointer(self):
+        output, receipt, expected = self.tool("02-sbom-inventory", "syft", {"components": []})
+        pointer = json.loads(self.build_pointer.read_text()); pointer["attempt_id"] = "newer-build"
+        self.build_pointer.write_bytes(payload(pointer))
+        with self.assertRaisesRegex(workers.WorkerBlocked, "accepted"):
+            self.run_request("sbom", "stale-build-index", self.request(
+                tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected))
+
+    def test_new_verified_generation_atomically_supersedes_the_pointer(self):
+        output, receipt, expected = self.tool("02-sbom-inventory", "syft", {
+            "bomFormat": "CycloneDX", "specVersion": "1.5", "version": 1,
+            "metadata": {"component": {"type": "file", "name": "/workspace"}}})
+        first = self.run_request("sbom", "first", self.request(
+            tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected))
+        second_request = self.request(
+            tool_output=str(output), tool_receipt=str(receipt), expected_tool=expected)
+        second_request["generated_at"] = "2026-09-27T12:01:00Z"
+        second = self.run_request("sbom", "second", second_request)
+        self.assertNotEqual(first["attempt_id"], second["attempt_id"])
+        accepted = json.loads((self.out / "02-sbom-inventory" / "accepted.json").read_text())
+        self.assertEqual(accepted["attempt_id"], second["attempt_id"])
 
     def test_mutated_receipt_from_real_attempt_is_rejected(self):
         _output, receipt, binding = self.tool("02-sbom-inventory", "syft", {"components": []})

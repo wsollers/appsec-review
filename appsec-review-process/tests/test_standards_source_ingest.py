@@ -84,10 +84,11 @@ class StandardsSourceIngestTests(unittest.TestCase):
         self.assertEqual(validate_document(result, "standards-source-extract.schema.json"), [])
         self.assertEqual(result["status"], "OK_WITH_GAPS")
         self.assertEqual([(item["family"], item["record_count"]) for item in result["snapshots"]],
-                         [("opencre", 522), ("owasp_asvs", 345), ("owasp_top_10", 10)])
-        self.assertEqual(len(result["records"]), 877)
-        self.assertEqual(len(result["coverage_gaps"]), 4)
-        self.assertEqual(len(artifacts), 883)
+                         [("disa_asd_stig", 286), ("opencre", 522),
+                          ("owasp_asvs", 345), ("owasp_top_10", 10)])
+        self.assertEqual(len(result["records"]), 1163)
+        self.assertEqual(len(result["coverage_gaps"]), 5)
+        self.assertEqual(len(artifacts), 1171)
         sample = json.loads((attempt / result["records"][0]["path"]).read_text())
         self.assertEqual(validate_document(sample, "standards-source-record.schema.json"), [])
         self.assertEqual(sample["claim_boundary"] if "claim_boundary" in sample else None, None)
@@ -158,7 +159,7 @@ class StandardsSourceIngestTests(unittest.TestCase):
                 self.assertEqual((envelope["worker_kind"], envelope["output_contract"],
                                   envelope["execution_status"], envelope["acceptance_status"]),
                                  ("deterministic_python", worker.CONTRACT, "OK_WITH_GAPS", "CURRENT"))
-                self.assertEqual(len(envelope["artifacts"]), 887)
+                self.assertEqual(len(envelope["artifacts"]), 1175)
                 before = {path.relative_to(attempt).as_posix(): file_hash(path)
                           for path in attempt.rglob("*") if path.is_file()}
                 worker.validate(self.fixture["run_id"], pointer)

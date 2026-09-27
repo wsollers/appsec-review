@@ -16,6 +16,7 @@ import secrets_iac_contracts as sic
 import vendor_evidence_workers as workers
 import vendor_evidence_b13 as b13
 import tool_instance_shapes as shapes
+import validate_job_output as validator
 
 SOURCE_SHA = "sha256:" + "a" * 64
 PERMITTED = ["OK", "OK_WITH_GAPS", "SKIPPED", "BLOCKED", "FAILED", "CANCELED"]
@@ -117,6 +118,46 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
                         declared_tool_ids=workers.SPECS[job][1], permitted_node_statuses=PERMITTED,
                         on_unhandled="refuse", limits=evidence_redaction.DEFAULT_LIMITS)
                 self.assertEqual(errors, [])
+                permission = json.loads((attempt / "permission.json").read_text())
+                lineage = json.loads((attempt / "lineage.json").read_text())
+                template = json.loads((ROOT / "registry" / "job-templates" / f"{job}.json").read_text())
+                self.assertEqual(permission, {"schema": workers.PERMISSION_SCHEMA, "run_id": "run-1",
+                    "job_id": job, "source_snapshot_sha256": SOURCE_SHA,
+                    "permissions": template["permissions"]})
+                self.assertEqual(lineage["source_snapshot_sha256"], SOURCE_SHA)
+                self.assertRegex(lineage["build_lineage_sha256"], r"^sha256:[0-9a-f]{64}$")
+                if (attempt / "result.json").is_file():
+                    envelope = json.loads((attempt / "result.json").read_text())
+                    self.assertTrue({"permission.json", "lineage.json"}.issubset(
+                        {item["path"] for item in envelope["artifacts"]}))
+
+    def test_v04_canonical_run_layout_passes_the_real_dispatch(self):
+        for job, files in {
+                "02-secrets-inventory": {"key.pem": b"-----BEGIN PRIVATE KEY-----\nx\n"},
+                "02-iac-config-scan": {"Dockerfile": b"FROM alpine:3.20\n"}}.items():
+            with self.subTest(job=job), tempfile.TemporaryDirectory() as folder:
+                run_id, attempt_id = "run-canonical-v04", "attempt-canonical-v04"
+                run = Path(folder) / run_id
+                manifest = run / "inputs" / "artifact-manifest.json"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_bytes(json.dumps({"run_id": run_id}, sort_keys=True).encode() + b"\n")
+                source_sha = "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest()
+                source = run / "data" / "source"; source.mkdir(parents=True)
+                for relative, data in files.items():
+                    path = source / relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+                documents = workers.build_documents(job, source, run_id=run_id, attempt_id=attempt_id,
+                                                     source_snapshot_sha256=source_sha)
+                attempt = run / "data/jobs" / job / "whole/attempts" / attempt_id
+                workers.materialize_attempt(documents, attempt, dagster_run_id="dagster-canonical-v04",
+                    started_at="2026-09-27T12:00:00Z", finished_at="2026-09-27T12:00:01Z")
+                contract = json.loads((ROOT / "registry/output-contracts" /
+                    (workers.SPECS[job][0] + ".json")).read_text())
+                errors = validator.validate_vendor_prepass_attempt(attempt, contract, run_id=run_id,
+                    job_id=job, attempt_id=attempt_id, node_status=documents["status"],
+                    orchestration=validator.OrchestrationFacts(
+                        "dagster-canonical-v04", source_sha,
+                        validator.datetime.fromisoformat("2026-09-27T12:00:00+00:00")))
+                self.assertEqual(errors, [])
 
     def test_attempt_is_immutable_and_tamper_is_detected(self):
         source, doc, attempt = self.materialize("02-binary-hardening", {"a.so": b"\x7fELFxxxx"})
@@ -135,6 +176,20 @@ class VendorEvidenceWorkerTests(unittest.TestCase):
         first = workers.fingerprint("02-iac-config-scan", root, SOURCE_SHA)
         (root / "Dockerfile").write_bytes(b"FROM debian:12\n")
         self.assertNotEqual(first, workers.fingerprint("02-iac-config-scan", root, SOURCE_SHA))
+
+    def test_fingerprint_version_prevents_receiptless_attempt_reuse(self):
+        root = self.make_source({"Dockerfile": b"FROM alpine:3.20\n"})
+        listing = [(name, workers.HASH(path.read_bytes())) for name, path in workers._files(root)]
+        legacy = workers.HASH(workers._dump({"job_id": "02-iac-config-scan",
+            "source_snapshot_sha256": SOURCE_SHA, "files": listing}))
+        self.assertNotEqual(legacy, workers.fingerprint("02-iac-config-scan", root, SOURCE_SHA))
+
+    def test_producer_lineage_binds_tool_and_applicability_evidence(self):
+        _root, documents = self.documents("02-iac-config-scan", {"Dockerfile": b"FROM alpine:3.20\n"})
+        first = workers.producer_receipts(documents)[1]["build_lineage_sha256"]
+        changed = {**documents, "probe": {**documents["probe"],
+                                          "files_examined_count": documents["probe"]["files_examined_count"] + 1}}
+        self.assertNotEqual(first, workers.producer_receipts(changed)[1]["build_lineage_sha256"])
 
     def test_every_worker_has_a_canonical_zero_capability_permission_receipt(self):
         for job in workers.SPECS:

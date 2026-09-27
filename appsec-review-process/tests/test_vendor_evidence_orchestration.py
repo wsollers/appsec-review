@@ -30,19 +30,34 @@ class VendorEvidenceOrchestrationTests(unittest.TestCase):
         self.manifest = self.owner / "inputs" / "artifact-manifest.json"
         self.manifest.write_text(json.dumps({"target": {"repo_path": str(self.source)}}))
         self.generation = "sha256:" + hashlib.sha256(self.manifest.read_bytes()).hexdigest()
+        self.source_binding = {key: "fixture" for key in orchestration.automatic_inputs.SOURCE_BINDING_KEYS}
+        self.source_patch = patch.object(orchestration.automatic_inputs, "source_projection",
+            return_value=(self.source, self.source_binding, {}))
+        self.validate_patch = patch.object(orchestration.automatic_inputs, "validate_source_projection",
+            return_value={"binding": self.source_binding, "files": {}})
+        self.source_patch.start(); self.validate_patch.start()
 
     def tearDown(self):
         if self.previous is None:
             os.environ.pop("PHASE1_TEST_DATA", None)
         else:
             os.environ["PHASE1_TEST_DATA"] = self.previous
+        self.source_patch.stop(); self.validate_patch.stop()
         self.temp.cleanup()
 
     def request(self, job: str, source: Path | None = None) -> Path:
-        path = self.owner / "inputs" / (job + ".json")
+        selected = source or self.source
+        probe = orchestration.vendor_workers.probe(job, selected)
+        applicable = any(probe["candidates"].values()) or job == "02-secrets-inventory"
+        path = self.owner / "data" / "controls" / "tests" / (job + ".json")
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"schema": orchestration.REQUEST_SCHEMA, "run_id": self.run_id,
             "job_id": job, "source_generation": self.generation,
-            "generated_at": "2026-09-27T12:00:00Z", "source_root": str(source or self.source)}))
+            "generated_at": "2026-09-27T12:00:00Z", "source_root": str(selected),
+            "source_binding": self.source_binding,
+            "applicability": {"decision": "EXECUTE" if applicable else "SKIPPED_NA",
+                "skip_reason": None if applicable else orchestration.vendor_workers.SKIP,
+                "probe_sha256": "sha256:" + orchestration.digest(probe), "probe": probe}}))
         return path
 
     def paths(self, job: str, attempt_id: str):
@@ -84,6 +99,7 @@ class VendorEvidenceOrchestrationTests(unittest.TestCase):
                 self.assertEqual(build.call_args.kwargs["execution_root"], execution)
                 self.assertEqual(materialize.call_args.args[1], attempt)
                 self.assertEqual(publish.call_args.kwargs["orchestration"].source_snapshot_sha256, self.generation)
+                self.assertEqual(publish.call_args.kwargs["consumer_job_id"], "02-evidence-assembly")
                 self.assertEqual(documents["gaps"], ["gap-tool-a", "gap-tool-b"])
 
     def test_missing_stale_or_noncanonical_paths_fail_closed(self):

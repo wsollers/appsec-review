@@ -32,7 +32,8 @@
       "properties": {
         "url": {"type": "string"},
         "immutable_ref": {"type": "string"},
-        "resolved_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "resolved_commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "artifact_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
         "tag_object": {"type": ["string", "null"]}
       }
     },

@@ -29,7 +29,7 @@
       "lane": "02-evidence-pregather",
       "contract": "repository-partition-map",
       "template": "02-repository-partition-discovery",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-repository-partition-discovery",
       "dependencies": [
         {
@@ -44,7 +44,7 @@
       "lane": "02-evidence-pregather",
       "contract": "project-discovery",
       "template": "02-dev-project-discovery",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-dev-project-discovery",
       "dependencies": [
         {
@@ -59,7 +59,7 @@
       "lane": "02-evidence-pregather",
       "contract": "project-discovery",
       "template": "02-devops-project-discovery",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-devops-project-discovery",
       "dependencies": [
         {
@@ -74,7 +74,7 @@
       "lane": "02-evidence-pregather",
       "contract": "operations-topology",
       "template": "02-sre-operations-topology",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-sre-operations-topology",
       "dependencies": [
         {
@@ -167,7 +167,7 @@
       "lane": "02-evidence-pregather",
       "contract": "pregather",
       "template": "02-evidence-assembly",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-evidence-assembly",
       "dependencies": [
         {
@@ -554,6 +554,12 @@
           "kind": "required",
           "contract": "sca-vulnerability-match",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "required",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": []
         }
       ],
       "planned_scope": "Deterministic static reachability classification over the exact accepted SCA matches and explicit hash-bound run-owned evidence. Version matches alone never establish reachability and outputs remain evidence leads.",
@@ -587,7 +593,9 @@
           "job": "05-native-memory",
           "kind": "required",
           "contract": "native-memory-analysis",
-          "allowed_skip_reasons": []
+          "allowed_skip_reasons": [
+            "not-applicable-no-routed-native-unit"
+          ]
         },
         {
           "job": "06-cve-reachability",
@@ -642,13 +650,51 @@
         "status.json"
       ]
     },
+    "claim-ledger-routing": {
+      "lane": "07-red-team-adversarial",
+      "contract": "claim-ledger-core",
+      "template": "claim-ledger-routing",
+      "implemented": true,
+      "namespace": "claim-ledger-routing",
+      "dependencies": [
+        {
+          "job": "03-threat-model-reconciliation",
+          "kind": "required",
+          "contract": "threat-model-reconciliation",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "04-asvs-masvs",
+          "kind": "required",
+          "contract": "owasp-join-report",
+          "allowed_skip_reasons": [
+            "not-applicable-after-partition-review"
+          ]
+        }
+      ],
+      "planned_scope": "Admit accepted threat-model and OWASP candidate routes into the append-only, hash-linked claim ledger before adversarial review.",
+      "required_artifacts": [
+        "claim-decision-ledger.json",
+        "claim-ledger-work-routing.json",
+        "claim-ledger-summary.md",
+        "permission.json",
+        "lineage.json",
+        "status.json"
+      ]
+    },
     "07-red-team-adversarial": {
       "lane": "07-red-team-adversarial",
       "contract": "07-red-team-adversarial",
       "template": "07-red-team-adversarial",
-      "implemented": false,
+      "implemented": true,
       "namespace": "07-red-team-adversarial",
       "dependencies": [
+        {
+          "job": "claim-ledger-routing",
+          "kind": "required",
+          "contract": "claim-ledger-core",
+          "allowed_skip_reasons": []
+        },
         {
           "job": "01-component-characterization",
           "kind": "required",
@@ -671,7 +717,9 @@
           "job": "05-native-memory",
           "kind": "required",
           "contract": "native-memory-analysis",
-          "allowed_skip_reasons": []
+          "allowed_skip_reasons": [
+            "not-applicable-no-routed-native-unit"
+          ]
         },
         {
           "job": "06-cve-reachability",
@@ -689,7 +737,9 @@
           "job": "13-fuzz-target-triage",
           "kind": "required",
           "contract": "fuzz-target-triage",
-          "allowed_skip_reasons": []
+          "allowed_skip_reasons": [
+            "not-applicable-no-fuzz-target"
+          ]
         }
       ]
     },
@@ -697,7 +747,7 @@
       "lane": "08-blue-team-refutation",
       "contract": "08-blue-team-refutation",
       "template": "08-blue-team-refutation",
-      "implemented": false,
+      "implemented": true,
       "namespace": "08-blue-team-refutation",
       "dependencies": [
         {
@@ -718,7 +768,7 @@
       "lane": "09-independent-verification",
       "contract": "09-independent-verification",
       "template": "09-independent-verification",
-      "implemented": false,
+      "implemented": true,
       "namespace": "09-independent-verification",
       "dependencies": [
         {
@@ -738,8 +788,8 @@
     "11-remediation-proposal": {
       "lane": "11-remediation-proposal",
       "contract": "11-remediation-proposal",
-      "template": null,
-      "implemented": false,
+      "template": "11-remediation-proposal",
+      "implemented": true,
       "namespace": "11-remediation-proposal",
       "dependencies": [
         {
@@ -754,7 +804,7 @@
       "lane": "12-scoring-prioritization",
       "contract": "12-scoring-prioritization",
       "template": "12-scoring-prioritization",
-      "implemented": false,
+      "implemented": true,
       "namespace": "12-scoring-prioritization",
       "dependencies": [
         {
@@ -848,7 +898,7 @@
       "lane": "02-evidence-pregather",
       "contract": "api-collection-intelligence",
       "template": "02-api-collection-intelligence-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-api-collection-intelligence-ingest",
       "dependencies": [
         {
@@ -869,7 +919,7 @@
       "lane": "02-evidence-pregather",
       "contract": "binary-intelligence",
       "template": "02-binary-intelligence-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-binary-intelligence-ingest",
       "dependencies": [
         {
@@ -894,7 +944,7 @@
       "lane": "02-evidence-pregather",
       "contract": "doc-intelligence",
       "template": "02-doc-intelligence-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-doc-intelligence-ingest",
       "dependencies": [
         {
@@ -915,7 +965,7 @@
       "lane": "02-evidence-pregather",
       "contract": "standards-source-extract",
       "template": "02-standards-source-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-standards-source-ingest",
       "dependencies": [
         {
@@ -930,7 +980,7 @@
       "lane": "02-evidence-pregather",
       "contract": "test-intelligence",
       "template": "02-test-intelligence-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-test-intelligence-ingest",
       "dependencies": [
         {
@@ -1092,7 +1142,7 @@
       "lane": "02-evidence-pregather",
       "contract": "native-sast",
       "template": "02-native-sast",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-native-sast",
       "dependencies": [
         {
@@ -1186,7 +1236,7 @@
       "lane": "02-evidence-pregather",
       "contract": "debug-symbol-index",
       "template": "02-debug-symbol-index",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-debug-symbol-index",
       "dependencies": [
         {
@@ -1210,7 +1260,7 @@
       "lane": "02-evidence-pregather",
       "contract": "binary-triage",
       "template": "02-binary-triage",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-binary-triage",
       "dependencies": [
         {
@@ -1234,7 +1284,7 @@
       "lane": "02-evidence-pregather",
       "contract": "binary-cfg",
       "template": "02-binary-cfg",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-binary-cfg",
       "dependencies": [
         {
@@ -1267,7 +1317,7 @@
       "lane": "02-evidence-pregather",
       "contract": "test-execution",
       "template": "02-test-execution",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-test-execution",
       "dependencies": [
         {
@@ -1292,7 +1342,7 @@
       "lane": "02-evidence-pregather",
       "contract": "test-result-intelligence",
       "template": "02-test-result-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-test-result-ingest",
       "dependencies": [
         {
@@ -1316,7 +1366,7 @@
       "lane": "02-evidence-pregather",
       "contract": "test-coverage-intelligence",
       "template": "02-test-coverage-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-test-coverage-ingest",
       "dependencies": [
         {
@@ -1340,7 +1390,7 @@
       "lane": "02-evidence-pregather",
       "contract": "operations-doc-intelligence",
       "template": "02-operations-doc-ingest",
-      "implemented": false,
+      "implemented": true,
       "namespace": "02-operations-doc-ingest",
       "dependencies": [
         {
@@ -1463,14 +1513,21 @@
           "kind": "required",
           "contract": "intake",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-build-index",
+          "kind": "required",
+          "contract": "build-index",
+          "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Offline CycloneDX inventory through the pinned Syft B13 adapter from an explicit run-owned source snapshot; unresolved or inferred vendored components remain gaps.",
+      "planned_scope": "Offline CycloneDX inventory through the pinned Syft B13 adapter from an explicit run-owned source snapshot, enriched from exact accepted build-index lineage for conservatively recognized build-referenced vendored members. Enrichment never fabricates purl or CPE identifiers; inferred vendored components remain explicit gaps.",
       "required_artifacts": [
         "result.json",
         "inputs.json",
         "outputs/sbom.cdx.json",
         "outputs/sbom-manifest.json",
+        "outputs/build-index-vendored-members.json",
         "outputs/pinned-tool-evidence.json"
       ]
     },
@@ -1488,12 +1545,13 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Offline Grype and OSV version matching against the accepted SBOM and explicitly configured, hash-verified, age-bounded supplied snapshots. Snapshot synchronization is outside the analysis DAG; matches are leads, never reachability.",
+      "planned_scope": "Offline Grype and OSV version matching against the accepted SBOM and explicitly configured, hash-verified, age-bounded supplied snapshots. Grype always executes. OSV executes only for purl-bearing components; otherwise its applicability gate publishes an evidence-supported per-tool SKIPPED_NA receipt while retaining the validated OSV snapshot identity and the node publishes OK_WITH_GAPS. Snapshot synchronization is outside the analysis DAG; matches are leads, never reachability.",
       "required_artifacts": [
         "result.json",
         "inputs.json",
         "outputs/sca-vulnerability-match.json",
         "outputs/vulnerability-database-identities.json",
+        "outputs/osv-applicability-receipt.json",
         "outputs/sca-coverage-gaps.json",
         "outputs/coverage-gap-summary.json",
         "outputs/pinned-tool-evidence.json"
@@ -1749,6 +1807,14 @@
           "kind": "required",
           "contract": "09-independent-verification",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "11-remediation-proposal",
+          "kind": "required",
+          "contract": "11-remediation-proposal",
+          "allowed_skip_reasons": [
+            "not-applicable-no-verified-claims"
+          ]
         }
       ],
       "planned_scope": "Remediation proposals and same-environment independently verified retest decisions without promotion of declined or stale results.",
@@ -1783,6 +1849,26 @@
           "kind": "required",
           "contract": "synthetic-hypothesis-resynthesis",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "evidence-qualified-quorum",
+          "kind": "required",
+          "contract": "evidence-qualified-quorum",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "dynamic-rescope",
+          "kind": "required",
+          "contract": "bounded-rescope-plan",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "remediation-retest-feedback",
+          "kind": "required",
+          "contract": "remediation-retest-feedback",
+          "allowed_skip_reasons": [
+            "not-applicable-no-verified-claims"
+          ]
         }
       ],
       "planned_scope": "Atomic immutable final publication only after exact accepted completion evidence and keyed human approval of the report hash.",

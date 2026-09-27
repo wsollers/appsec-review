@@ -88,6 +88,7 @@ def make_supply(folder, plan, *, omit=(), duplicate=None, source_override=None, 
         binding_build = build_override if build_override and build_override[0] == job else None
         bindings.append({"job_id": job,
             "source_snapshot_sha256": binding_source[1] if binding_source else PLAN["source_snapshot_sha256"],
+            "producer_source_snapshot_sha256": PLAN["source_snapshot_sha256"],
             "build_lineage_sha256": binding_build[1] if binding_build else PLAN["build_lineage_sha256"],
             "permissions": PLAN["permissions"],
             "terminal_instance_ids": [terminal_ids[job[3:][:40]]]})
@@ -140,8 +141,10 @@ class EvidenceAssemblyTests(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(first["assembly_status"], "COMPLETE")
             self.assertEqual(first["manifest_sha256"], worker.manifest_sha256(first))
-            self.assertEqual(len(first["producers"]), 25)
-            self.assertEqual(len(copies), 76)
+            dependencies = read_json(worker.GRAPH)["jobs"][worker.JOB]["dependencies"]
+            self.assertEqual(len(first["producers"]), len(dependencies))
+            self.assertEqual(len(copies), 1 + sum(len(item["artifacts"])
+                                                  for item in first["producers"]))
             artifact = first["producers"][0]["artifacts"][0]
             self.assertEqual(set(artifact), {"producer_job_id", "producer_attempt_id", "producer_path",
                                               "path", "sha256", "media_type"})
@@ -190,16 +193,35 @@ class EvidenceAssemblyTests(unittest.TestCase):
                 with self.assertRaises(Blocked):
                     self.inspect(supply)
 
-    def test_mixed_source_or_build_generation_fails_closed(self):
-        cases = (
-            {"source_override": ("02-source-sast", "sha256:" + "c" * 64)},
-            {"build_override": ("02-source-sast", "sha256:" + "d" * 64)},
-        )
-        for kwargs in cases:
-            with self.subTest(kwargs=kwargs), tempfile.TemporaryDirectory() as folder:
-                supply = make_supply(folder, self.plan, **kwargs)
-                with self.assertRaises(Blocked):
-                    self.inspect(supply)
+    def test_mixed_source_generation_fails_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            supply = make_supply(
+                folder, self.plan,
+                source_override=("02-source-sast", "sha256:" + "c" * 64))
+            with self.assertRaises(Blocked):
+                self.inspect(supply)
+
+    def test_producer_specific_build_lineage_is_retained(self):
+        with tempfile.TemporaryDirectory() as folder:
+            changed = "sha256:" + "d" * 64
+            supply = make_supply(
+                folder, self.plan, build_override=("02-source-sast", changed))
+            producer_root = supply / "producers" / "02-source-sast"
+            pointer = read_json(producer_root / "accepted.json")
+            lineage_path = producer_root / "attempts" / pointer["attempt_id"] / "lineage.json"
+            lineage = read_json(lineage_path)
+            lineage["build_lineage_sha256"] = changed
+            atomic_json(lineage_path, lineage)
+            attempt = lineage_path.parent
+            envelope = read_json(attempt / "result.json")
+            envelope["artifacts"] = artifact_records(
+                attempt, [item["path"] for item in envelope["artifacts"]])
+            atomic_json(attempt / "result.json", envelope)
+            reseal_producer(supply, "02-source-sast")
+            manifest, _copies = self.inspect(supply)
+            producer = next(item for item in manifest["producers"]
+                            if item["job_id"] == "02-source-sast")
+            self.assertEqual(producer["build_lineage_sha256"], changed)
 
     def test_duplicate_producer_binding_fails_closed(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -264,6 +286,21 @@ class EvidenceAssemblyTests(unittest.TestCase):
                 atomic_json(producer / "accepted.json", pointer)
                 with self.assertRaises(Blocked):
                     self.inspect(supply)
+
+    def test_graph_accepts_implemented_barrier_and_rejects_blocked_or_unimplemented(self):
+        graph = read_json(worker.GRAPH)
+        self.assertTrue(graph["jobs"][worker.JOB]["implemented"])
+        dependencies, _sha = worker._graph()
+        self.assertTrue(dependencies)
+        for mutation in (lambda node: node.update(implemented=False),
+                         lambda node: node.pop("join_policy")):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as folder:
+                candidate = copy.deepcopy(graph)
+                mutation(candidate["jobs"][worker.JOB])
+                path = Path(folder, "job-graph.json")
+                atomic_json(path, candidate)
+                with mock.patch.object(worker, "GRAPH", path), self.assertRaises(Blocked):
+                    worker._graph()
 
 
 if __name__ == "__main__":

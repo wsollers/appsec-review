@@ -358,6 +358,7 @@
         "status.json",
         "outputs/sbom.cdx.json",
         "outputs/sbom-manifest.json",
+        "outputs/build-index-vendored-members.json",
         "outputs/redaction-receipt.json",
         "outputs/tool-results.json",
         "outputs/coverage.json"
@@ -442,6 +443,7 @@
         "status.json",
         "outputs/sca-vulnerability-match.json",
         "outputs/vulnerability-database-identities.json",
+        "outputs/osv-applicability-receipt.json",
         "outputs/sca-coverage-gaps.json",
         "outputs/coverage-gap-summary.json",
         "outputs/redaction-receipt.json",

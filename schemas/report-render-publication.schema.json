@@ -14,12 +14,12 @@
     "render_input_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "generator_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "artifacts": {
-      "type": "array", "minItems": 5, "maxItems": 5,
+      "type": "array", "minItems": 6, "maxItems": 6,
       "items": {
         "type": "object", "additionalProperties": false,
         "required": ["path", "sha256"],
         "properties": {
-          "path": {"type": "string", "pattern": "^presentation/(report\\.(tex|html|fragment\\.html)|workbench\\.(html|fragment\\.html))$"},
+          "path": {"type": "string", "pattern": "^presentation/(report\\.(tex|pdf|html|fragment\\.html)|workbench\\.(html|fragment\\.html))$"},
           "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
         }
       }

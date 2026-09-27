@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import shutil
+import subprocess
 import tarfile
 import tempfile
 from typing import Any, Callable
@@ -22,6 +23,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
+import container_execution as ce
 import dependency_snapshot_registry as snapshots
 import permission_capabilities as pc
 
@@ -68,8 +70,11 @@ def _authorize(url: str, grants: Any, *, run_id: str, source: str, now: str) -> 
 def _spec(value: Any) -> dict[str, Any]:
     fields = {"database_kind", "url", "sha256", "bytes", "archive", "metadata",
               "required_paths", "max_extracted_bytes", "max_files"}
-    if (not isinstance(value, dict) or set(value) != fields or value.get("database_kind") not in snapshots.KINDS or
-            value.get("archive") not in {"tar", "tar.gz", "zip"} or not isinstance(value.get("url"), str) or
+    present = set(value) if isinstance(value, dict) else set()
+    if (not isinstance(value, dict) or present not in (fields, fields | {"target_path"}) or
+            value.get("database_kind") not in snapshots.KINDS or
+            value.get("archive") not in {"file", "tar", "tar.gz", "tar.zst", "zip"} or
+            not isinstance(value.get("url"), str) or
             not snapshots.SHA.fullmatch(str(value.get("sha256"))) or isinstance(value.get("bytes"), bool) or
             not isinstance(value.get("bytes"), int) or not 0 < value["bytes"] <= HARD_MAX_ARCHIVE_BYTES or
             isinstance(value.get("max_extracted_bytes"), bool) or not isinstance(value.get("max_extracted_bytes"), int) or
@@ -84,6 +89,12 @@ def _spec(value: Any) -> dict[str, Any]:
         path = _safe_member(name); required.append(path.as_posix())
     if not required or len(required) != len(set(required)):
         raise SyncBlocked("snapshot sync requires a unique non-empty required path set")
+    if value["archive"] == "file":
+        target = _safe_member(value.get("target_path"))
+        if target.as_posix() not in required:
+            raise SyncBlocked("file snapshot target must be one of the required paths")
+    elif "target_path" in value:
+        raise SyncBlocked("target_path is valid only for a file snapshot")
     return value
 
 
@@ -110,7 +121,10 @@ def _copy_member(incoming, target: Path, state: dict[str, int], spec: dict[str, 
 
 def _extract(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
     state = {"files": 0, "bytes": 0}
-    if spec["archive"] == "zip":
+    if spec["archive"] == "file":
+        with archive.open("rb") as incoming:
+            _copy_member(incoming, destination.joinpath(*_safe_member(spec["target_path"]).parts), state, spec)
+    elif spec["archive"] == "zip":
         with zipfile.ZipFile(archive) as source:
             for item in source.infolist():
                 path = _safe_member(item.filename)
@@ -120,7 +134,33 @@ def _extract(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
                 with source.open(item) as incoming:
                     _copy_member(incoming, destination.joinpath(*path.parts), state, spec)
     else:
-        with tarfile.open(archive, "r:gz" if spec["archive"] == "tar.gz" else "r:") as source:
+        expanded = archive
+        if spec["archive"] == "tar.zst":
+            expanded = archive.with_name("archive.tar")
+            limit = spec["max_extracted_bytes"] + (spec["max_files"] + 2) * 512
+            try:
+                process = subprocess.Popen(["/usr/bin/zstd", "--decompress", "--stdout", str(archive)],
+                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            except OSError as exc:
+                raise SyncBlocked("zstd decompressor is unavailable") from exc
+            written = 0
+            try:
+                assert process.stdout is not None
+                with expanded.open("xb") as output:
+                    while True:
+                        chunk = process.stdout.read(1024 * 1024)
+                        if not chunk: break
+                        written += len(chunk)
+                        if written > limit:
+                            process.kill()
+                            raise SyncBlocked("snapshot archive exceeds its decompressed tar limit")
+                        output.write(chunk)
+                if process.wait() != 0:
+                    raise SyncBlocked("snapshot archive zstd decompression failed")
+            finally:
+                if process.poll() is None:
+                    process.kill(); process.wait()
+        with tarfile.open(expanded, "r:gz" if spec["archive"] == "tar.gz" else "r:") as source:
             for item in source:
                 path = _safe_member(item.name)
                 if item.isdir(): continue
@@ -133,6 +173,62 @@ def _extract(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
         raise SyncBlocked("snapshot archive lacks required database content")
 
 
+def _activate_grype(archive: Path, destination: Path, spec: dict[str, Any]) -> dict[str, Any]:
+    """Activate a verified vendor archive with the pinned Grype image, entirely offline."""
+    try:
+        defaults = ce.host_defaults()
+        executable = defaults["docker_executable"]
+        container_user = defaults["container_user"]
+        image = ce.load_image_registry(ce.IMAGES_DIR)["tool-grype"]["digest"]
+    except (KeyError, OSError, ce.ContainerRequestError) as exc:
+        raise SyncBlocked("pinned Grype image identity is unavailable") from exc
+    if executable is None:
+        raise SyncBlocked("Docker is unavailable for pinned Grype database activation")
+    if not isinstance(container_user, str) or not container_user:
+        raise SyncBlocked("bounded container user is unavailable for Grype database activation")
+    temporary = destination / ".import-tmp"
+    temporary.mkdir()
+    temporary.chmod(0o700)
+    common = [str(executable), "run", "--rm", "--network", "none", "--read-only",
+              "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "128",
+              "--user", container_user,
+              "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=64m",
+              "-e", "GRYPE_DB_CACHE_DIR=/scratch/grype/db",
+              "-e", "TMPDIR=/scratch/.import-tmp", "-e", "SQLITE_TMPDIR=/scratch/.import-tmp",
+              "-v", f"{archive.resolve()}:/input/db.tar.zst:ro",
+              "-v", f"{destination.resolve()}:/scratch:rw",
+              "--entrypoint", "/opt/tool/bin/grype", image]
+    try:
+        imported = subprocess.run([*common, "db", "import", "/input/db.tar.zst"],
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, timeout=900, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SyncBlocked("pinned Grype database activation failed") from exc
+    if imported.returncode != 0:
+        raise SyncBlocked("pinned Grype database activation failed")
+    try:
+        checked = subprocess.run([*common, "db", "status", "-o", "json"],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, timeout=120, check=False)
+        status = json.loads(checked.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        raise SyncBlocked("pinned Grype database status validation failed") from exc
+    expected_schema = "v" + spec["metadata"]["schema_version"]
+    if (checked.returncode != 0 or not isinstance(status, dict) or status.get("valid") is not True or
+            status.get("schemaVersion") != expected_schema or
+            status.get("built") != spec["metadata"]["data_timestamp"]):
+        raise SyncBlocked("activated Grype database identity differs from the pinned declaration")
+    shutil.rmtree(temporary)
+    present = {item["path"] for item in snapshots.inventory(destination)}
+    if not set(spec["required_paths"]).issubset(present):
+        raise SyncBlocked("activated Grype database lacks required cache content")
+    status_bytes = (json.dumps(status, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    return {"kind": "pinned-grype-db-import", "image_digest": image,
+            "argv": ["/opt/tool/bin/grype", "db", "import", "/input/db.tar.zst"],
+            "network_mode": "none", "status": status,
+            "status_sha256": "sha256:" + hashlib.sha256(status_bytes).hexdigest()}
+
+
 def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str, now: str,
              registry_root: Path, opener: Callable[..., Any] | None = None) -> dict[str, Any]:
     spec = _spec(spec); _authorize(spec["url"], grants, run_id=run_id, source=source_snapshot_sha256, now=now)
@@ -143,7 +239,10 @@ def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str
     opener = opener or urllib.request.build_opener(NoRedirect()).open
     try:
         archive = staging / "archive"; digest = hashlib.sha256(); size = 0
-        request = urllib.request.Request(spec["url"], headers={"Accept": "application/octet-stream"})
+        request = urllib.request.Request(spec["url"], headers={
+            "Accept": "application/octet-stream",
+            "User-Agent": "appsec-review-snapshot-sync/1.0",
+        })
         try:
             with opener(request, timeout=300) as response, archive.open("xb") as output:
                 if getattr(response, "status", 200) != 200: raise SyncBlocked("snapshot server did not return HTTP 200")
@@ -157,7 +256,18 @@ def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str
         except (OSError, urllib.error.URLError) as exc: raise SyncBlocked("snapshot archive download failed") from exc
         if size != spec["bytes"] or "sha256:" + digest.hexdigest() != spec["sha256"]:
             raise SyncBlocked("snapshot archive bytes differ from the pinned declaration")
-        mirror = staging / "mirror"; mirror.mkdir(); _extract(archive, mirror, spec)
+        mirror = staging / "mirror"; mirror.mkdir()
+        if spec["database_kind"] == "grype-db" and spec["archive"] == "tar.zst":
+            transformation = _activate_grype(archive, mirror, spec)
+        else:
+            _extract(archive, mirror, spec)
+            transformation = {"kind": "retained-vendor-archive" if spec["archive"] == "file" else "safe-extraction"}
+        provenance = {"schema": "appsec-review/dependency-snapshot-source-provenance/1.0",
+            "database_kind": spec["database_kind"], "url": spec["url"],
+            "archive_sha256": spec["sha256"], "archive_bytes": spec["bytes"],
+            "retrieved_at": now, "transformation": transformation}
+        (mirror / "source-provenance.json").write_text(
+            json.dumps(provenance, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
         metadata = staging / "metadata.json"; metadata.write_text(json.dumps(spec["metadata"], sort_keys=True) + "\n")
         # register() re-inventories the extracted bytes, stages a new immutable generation and
         # atomically replaces only the small current pointer after full validation.

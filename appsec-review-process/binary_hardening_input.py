@@ -14,7 +14,7 @@ import shutil
 import tempfile
 from typing import Any
 
-from execution_state import Blocked, atomic_json, data_path, file_hash, read_json, run_path
+from execution_state import Blocked, atomic_json, data_path, digest, file_hash, read_json, run_path
 import native_build
 from schema_validate import validate_document
 
@@ -69,7 +69,10 @@ def _expected(run_id: str) -> tuple[Path, dict[str, Any], dict[str, Any]]:
                 published_rel = Path(*suffix[marker + 1:])
             except (ValueError, IndexError):
                 published_rel = Path(source.name)
-            target_rel = Path("binaries") / unit_id / published_rel
+            # Build unit IDs are semantic identifiers (for example ``dir:.``), not path segments.
+            # Project them through a stable filesystem-safe identity and retain the original unit
+            # in the accepted native-build lineage rather than weakening the path contract.
+            target_rel = Path("binaries") / ("unit-" + digest(unit_id)[:12]) / published_rel
             binaries.append({"path": target_rel.as_posix(), "source_artifact_path": source_rel.as_posix(),
                 "sha256": expected_sha, "bytes": source.stat().st_size})
     if not binaries:
@@ -90,7 +93,7 @@ def stage(run_id: str) -> Path:
     """Return an immutable run-owned directory containing accepted native binaries only."""
     attempt, manifest, _pointer = _expected(run_id)
     base = data_path(run_id, "jobs", JOB, "inputs")
-    destination = base / manifest["native_build"]["attempt_id"]
+    destination = base / (manifest["native_build"]["attempt_id"] + "-v2")
     if destination.exists():
         validate(run_id, destination / "binaries")
         return destination / "binaries"

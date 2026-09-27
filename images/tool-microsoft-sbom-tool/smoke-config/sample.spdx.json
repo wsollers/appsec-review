@@ -1,0 +1,27 @@
+{
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "microsoft-sbom-tool-smoke",
+  "documentNamespace": "https://example.invalid/spdx/microsoft-sbom-tool-smoke",
+  "creationInfo": {
+    "created": "2026-01-01T00:00:00Z",
+    "creators": [
+      "Tool: appsec-review-smoke"
+    ]
+  },
+  "packages": [],
+  "files": [
+    {
+      "fileName": "./payload.txt",
+      "SPDXID": "SPDXRef-File-payload",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  ],
+  "relationships": []
+}

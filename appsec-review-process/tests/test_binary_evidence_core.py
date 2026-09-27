@@ -115,6 +115,7 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
 
     def test_stale_native_build_binding_and_m02_claim_are_rejected(self):
         value = raw("02-binary-triage", self.fixture["triage"])
+        value["job_id"] = "02-binary-intelligence-ingest"
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder, "raw.json"); atomic_json(path, value)
             stale = copy.deepcopy(NATIVE); stale["result_sha256"] = "sha256:" + "9" * 64
@@ -122,11 +123,41 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
                  mock.patch.object(core, "_native", return_value=(Path(folder), stale)), \
                  mock.patch.object(core, "_upstream", return_value={}), \
                  mock.patch.object(core, "_code_hashes", return_value={}):
-                with self.assertRaises(Blocked): core.current_inputs("run-binary", "02-binary-triage")
+                with self.assertRaises(Blocked):
+                    core.current_inputs("run-binary", "02-binary-intelligence-ingest")
         claimed = copy.deepcopy(value)
         claimed["image"] = {"image_id": "audit-binary-analysis", "image_digest": None,
                             "status": "M02_UNRESOLVED"}
         with self.assertRaises(Blocked): core._validate_raw(claimed, "02-binary-triage")
+
+    def test_intelligence_inputs_are_derived_from_accepted_upstreams(self):
+        triage = core.normalize("02-binary-triage",
+            inputs("02-binary-triage", raw("02-binary-triage", self.fixture["triage"])), "a-triage")
+        debug = core.normalize("02-debug-symbol-index",
+            inputs("02-debug-symbol-index", raw("02-debug-symbol-index", self.fixture["debug"])), "a-debug")
+        cfg_raw = raw("02-binary-cfg", self.fixture["cfg"])
+        symbols = {item["name"]: item["symbol_id"] for item in debug["records"][0]["symbols"]}
+        for function in cfg_raw["records"][0]["functions"]:
+            function["symbol_id"] = symbols[function["name"]]
+        cfg = core.normalize("02-binary-cfg", inputs("02-binary-cfg", cfg_raw, {
+            "02-debug-symbol-index": {"attempt_id":"a-debug","contract_id":"debug-symbol-index",
+                "result_sha256":H2,"envelope_sha256":H3,"result":debug},
+            "02-binary-triage": {"attempt_id":"a-triage","contract_id":"binary-triage",
+                "result_sha256":H3,"envelope_sha256":H2,"result":triage}}), "a-cfg")
+        upstream = {
+            "02-binary-triage": {"attempt_id":"a-triage","contract_id":"binary-triage",
+                "result_sha256":H3,"envelope_sha256":H2,"result":triage},
+            "02-binary-cfg": {"attempt_id":"a-cfg","contract_id":"binary-cfg",
+                "result_sha256":H2,"envelope_sha256":H3,"result":cfg}}
+        derived = core._derive_intelligence_raw(copy.deepcopy(NATIVE), upstream)
+        self.assertEqual(derived, core._derive_intelligence_raw(copy.deepcopy(NATIVE), upstream))
+        self.assertTrue(derived["records"])
+        self.assertTrue(all(record["citations"] for record in derived["records"]))
+        self.assertNotIn("finding", json.dumps(derived).lower())
+        mixed = copy.deepcopy(upstream)
+        mixed["02-binary-cfg"]["result"]["image"]["image_digest"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(Blocked, "mixed analysis images"):
+            core._derive_intelligence_raw(copy.deepcopy(NATIVE), mixed)
 
     def test_cfg_rejects_mixed_accepted_generations(self):
         debug = core.normalize("02-debug-symbol-index",
@@ -171,29 +202,45 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
         self.assertEqual(result["status"], "OK")
         self.assertEqual(result["coverage_gaps"], [])
 
-    def test_registry_composition_stays_nominal_static_and_not_executable(self):
+    def test_registry_composition_is_pinned_static_and_not_target_executable(self):
         source = (ROOT / "binary_evidence_core.py").read_text()
         self.assertNotIn("subprocess", source)
         self.assertNotIn("run_container", source)
         for job, (contract_id, result_name, schema_name) in core.SPECS.items():
             template = json.loads((ROOT / f"registry/job-templates/{job}.json").read_text())
             contract = json.loads((ROOT / f"registry/output-contracts/{contract_id}.json").read_text())
-            self.assertFalse(template["implemented"])
+            self.assertEqual(template["implemented"],
+                             job in core.adapter.SUPPORTED or job == "02-binary-intelligence-ingest")
             self.assertEqual(template["composition"]["output_contract_id"], contract_id)
             self.assertEqual(contract["result_schema"], {"artifact": result_name,
                                                          "schema_file": schema_name})
             self.assertTrue({"permission.json", "lineage.json"}.issubset(contract["required_files"]))
             self.assertNotIn("claim_types", contract)
 
-    def test_m02_blocks_publication_and_records_common_blocked_envelope(self):
+    def test_zero_accepted_binaries_normalizes_to_evidence_supported_skip(self):
+        value = raw("02-binary-triage", self.fixture["triage"])
+        value["records"] = []
+        inp = inputs("02-binary-triage", value)
+        inp["native_build"]["binaries"] = []
+        result = core.normalize("02-binary-triage", inp, "skip-attempt")
+        self.assertEqual(result["status"], "SKIPPED")
+        self.assertEqual(result["records"], [])
+        self.assertEqual(validate_document(result, "binary-triage.schema.json"), [])
+        receipt = core._applicability("run-binary", "02-binary-triage", inp)
+        self.assertEqual(receipt["decision"], "SKIPPED_NA")
+        self.assertEqual(receipt["reason"], "not-applicable-no-native-binaries")
+        self.assertEqual(receipt["evidence"]["artifact_sha256"], NATIVE["result_sha256"])
+        self.assertEqual(validate_document(receipt, "analysis-applicability-receipt.schema.json"), [])
+
+    def test_missing_accepted_native_build_blocks_before_container_execution(self):
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(core, "root", return_value=Path(folder)):
-            with self.assertRaisesRegex(Blocked, "M02"):
+            with self.assertRaisesRegex(Blocked, "accepted native-build"):
                 core.run("run-binary", "dag", "02-binary-triage")
             attempts = list((Path(folder) / "attempts").iterdir())
             self.assertEqual(len(attempts), 1)
             envelope = json.loads((attempts[0] / "result.json").read_text())
             self.assertEqual(envelope["execution_status"], "BLOCKED")
-            self.assertEqual(envelope["worker_kind"], "deterministic_python")
+            self.assertEqual(envelope["worker_kind"], "pinned_container")
 
     def test_claim_ceiling_and_schema_closure_matrix(self):
         for _job, (contract_id, _result, schema) in core.SPECS.items():

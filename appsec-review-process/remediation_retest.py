@@ -11,6 +11,10 @@ JOB = "remediation-retest-feedback"
 RESULT = "remediation-retest.json"
 CONTRACT = "remediation-retest-feedback"
 
+def run_lifecycle(run_id: str, dagster_run_id: str, force: bool = False):
+    from control_feature_lifecycle import run as lifecycle_run
+    return lifecycle_run(run_id, dagster_run_id, JOB, force)
+
 def run(source: Path, output: Path):
     value=read_json(source); proposals=remediation_proposals(value["run_id"],value["verified_claims"],value["proposals"]); retests=[]
     by_id={row["proposal_id"]:row for row in proposals["proposals"]}

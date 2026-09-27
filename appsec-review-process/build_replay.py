@@ -200,6 +200,7 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     if errors:
         raise Blocked(f"{job}: control fails its closed schema ({len(errors)} errors)")
     source = _source_snapshot(run_id)
+    target = _target(run_id)
     permission = _permission(control, job, run_id, source)
     _resolution, lock_set, upstream = _upstream(run_id, job)
     records = {}

@@ -1152,7 +1152,10 @@ def _upstream_attempts(run_id):
                           f'({type(exc).__name__})') from exc
         if attempt is None:
             raise Blocked(f'{JOB}: the accepted {job} result predates the common envelope; re-run it')
-        name = discovery_gate._upstream_payload_filename(job)
+        # Automatic discovery publishes the output contract's named artifact.  Passing the
+        # validated attempt keeps legacy supplied-result attempts compatible without silently
+        # falling back to their historical output.json name for new common-envelope results.
+        name = discovery_gate._upstream_payload_filename(job, attempt)
         found[job] = (attempt, name, attempt / name)
     return found
 

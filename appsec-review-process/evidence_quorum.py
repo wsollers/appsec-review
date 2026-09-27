@@ -12,6 +12,10 @@ JOB = "evidence-qualified-quorum"
 RESULT = "evidence-qualified-quorum.json"
 CONTRACT = "evidence-qualified-quorum"
 
+def run_lifecycle(run_id: str, dagster_run_id: str, force: bool = False):
+    from control_feature_lifecycle import run as lifecycle_run
+    return lifecycle_run(run_id, dagster_run_id, JOB, force)
+
 def run(source: Path, output: Path):
     value=read_json(source); result=evidence_qualified_quorum(value["run_id"],value["merge"],minimum_producers=value["minimum_producers"],require_complete_pool=value.get("require_complete_pool",True)); atomic_json(output,result); return result
 

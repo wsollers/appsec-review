@@ -336,10 +336,39 @@ def _execute(argv: list[str], cwd: Path, log_dir: Path, timeout: int, env: dict[
 
 
 def _environment() -> dict[str, str]:
-    keep = {"PATH", "HOME", "LANG", "LC_ALL", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR"}
+    # Docker Desktop's Windows CLI discovers bundled CLI plugins (notably
+    # buildx) through the native user/system environment.  Dropping these
+    # variables makes an otherwise healthy Docker installation report that
+    # buildx is missing before the build starts.  Retain only the small set of
+    # platform variables required to launch the signed CLI/plugin binaries;
+    # build arguments and target-controlled variables remain excluded.
+    keep = {
+        "PATH", "HOME", "LANG", "LC_ALL", "DOCKER_HOST", "DOCKER_CONFIG",
+        "DOCKER_CONTEXT", "XDG_RUNTIME_DIR", "SystemRoot", "SYSTEMROOT",
+        "WINDIR", "USERPROFILE", "PATHEXT", "APPDATA", "LOCALAPPDATA",
+        "ProgramData", "PROGRAMDATA", "ProgramFiles", "PROGRAMFILES",
+        "ProgramFiles(x86)", "CommonProgramFiles",
+    }
     env = {k: v for k, v in os.environ.items() if k in keep}
     env["DOCKER_BUILDKIT"] = "1"
     return env
+
+
+def _build_command(docker: Path, build: dict[str, Any], context: Path,
+                   dockerfile: Path) -> list[str]:
+    # These records bind the locally runnable image ID.  BuildKit provenance
+    # exports an attested manifest list whose export-time digest can differ
+    # from the image ID returned by a later local inspect, making the retained
+    # success pointer unverifiable.  Provenance is therefore disabled for
+    # this host-local registry; source/input hashes remain in the build plan.
+    argv = [str(docker), *_docker_prefix(build), "build", "--progress=plain",
+            "--provenance=false"]
+    if build["no_cache"]:
+        argv.append("--no-cache")
+    for key in sorted(build["build_args"]):
+        argv += ["--build-arg", f"{key}={build['build_args'][key]}"]
+    argv += ["-f", str(dockerfile), "-t", build["tag"], str(context)]
+    return argv
 
 
 def _reclaim_stale_lock(lock: Path) -> bool:
@@ -446,12 +475,7 @@ def run(image_id: str, override: dict[str, Any] | None = None, *, force: bool = 
                 return finish("REUSED", image_digest=current, reused_attempt=previous.get("attempt_id"))
         context = (folder / build["context"]).resolve()
         dockerfile = (context / build["dockerfile"]).resolve()
-        argv = [str(docker), *_docker_prefix(build), "build", "--progress=plain"]
-        if build["no_cache"]:
-            argv.append("--no-cache")
-        for key in sorted(build["build_args"]):
-            argv += ["--build-arg", f"{key}={build['build_args'][key]}"]
-        argv += ["-f", str(dockerfile), "-t", build["tag"], str(context)]
+        argv = _build_command(docker, build, context, dockerfile)
         result = _execute(argv, context, attempt / "logs", build["timeout_seconds"], _environment())
         atomic_json(attempt / "command.json", result)
         tail = _tail(attempt / "logs" / "stderr.log") or _tail(attempt / "logs" / "stdout.log")

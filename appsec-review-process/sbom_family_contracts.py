@@ -90,10 +90,12 @@ TOOL_RESULTS_FILE = f"{OUTPUTS_DIR}/tool-results.json"
 COVERAGE_FILE = f"{OUTPUTS_DIR}/coverage.json"
 SBOM_CDX_FILE = f"{OUTPUTS_DIR}/sbom.cdx.json"
 SBOM_MANIFEST_FILE = f"{OUTPUTS_DIR}/sbom-manifest.json"
+SBOM_ENRICHMENT_FILE = f"{OUTPUTS_DIR}/build-index-vendored-members.json"
 SCA_RESULT_FILE = f"{OUTPUTS_DIR}/sca-vulnerability-match.json"
 SCA_IDENTITIES_FILE = f"{OUTPUTS_DIR}/vulnerability-database-identities.json"
 SCA_GAPS_FILE = f"{OUTPUTS_DIR}/sca-coverage-gaps.json"
 SCA_SUMMARY_FILE = f"{OUTPUTS_DIR}/coverage-gap-summary.json"
+SCA_OSV_APPLICABILITY_FILE = f"{OUTPUTS_DIR}/osv-applicability-receipt.json"
 LICENSE_RESULT_FILE = f"{OUTPUTS_DIR}/license-inventory.json"
 LIFECYCLE_RESULT_FILE = f"{OUTPUTS_DIR}/dependency-lifecycle.json"
 TABLE_IDENTITY_FILE = f"{OUTPUTS_DIR}/reference-table-identity.json"
@@ -134,8 +136,8 @@ def _frozen(**fields: Any) -> MappingProxyType:
 CONTRACT_POLICIES = MappingProxyType({
     SBOM_CONTRACT_ID: _frozen(
         job_id="02-sbom-inventory",
-        required_files=(MANIFEST_FILE, STATUS_FILE, SBOM_CDX_FILE, SBOM_MANIFEST_FILE, RECEIPT_FILE, TOOL_RESULTS_FILE,
-                        COVERAGE_FILE),
+        required_files=(MANIFEST_FILE, STATUS_FILE, SBOM_CDX_FILE, SBOM_MANIFEST_FILE, SBOM_ENRICHMENT_FILE,
+                        RECEIPT_FILE, TOOL_RESULTS_FILE, COVERAGE_FILE),
         result_schema=(SBOM_MANIFEST_FILE, "sbom-inventory.schema.json"),
         document_schemas=MappingProxyType({SBOM_MANIFEST_FILE: "sbom-inventory.schema.json"}),
         claim_class_id="dependency_inventory_evidence",
@@ -144,13 +146,14 @@ CONTRACT_POLICIES = MappingProxyType({
     SCA_CONTRACT_ID: _frozen(
         job_id="02-sca-vulnerability-match",
         required_files=(MANIFEST_FILE, STATUS_FILE, SCA_RESULT_FILE, SCA_IDENTITIES_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE,
-                        RECEIPT_FILE, TOOL_RESULTS_FILE, COVERAGE_FILE),
+                        SCA_OSV_APPLICABILITY_FILE, RECEIPT_FILE, TOOL_RESULTS_FILE, COVERAGE_FILE),
         result_schema=(SCA_RESULT_FILE, "sca-vulnerability-match.schema.json"),
         document_schemas=MappingProxyType({
             SCA_RESULT_FILE: "sca-vulnerability-match.schema.json",
             SCA_IDENTITIES_FILE: "sca-vulnerability-match-database-identities.schema.json",
             SCA_GAPS_FILE: "sca-vulnerability-match-coverage-gaps.schema.json",
-            SCA_SUMMARY_FILE: "sca-vulnerability-match-gap-summary.schema.json"}),
+            SCA_SUMMARY_FILE: "sca-vulnerability-match-gap-summary.schema.json",
+            SCA_OSV_APPLICABILITY_FILE: "osv-applicability-receipt.schema.json"}),
         claim_class_id="known_vulnerability_match_lead",
         allowed_assertions=("advisory-matches-declared-version", "database-snapshot-identity", "match-coverage-gap"),
     ),
@@ -255,6 +258,61 @@ def required_gap_reason(component: Mapping[str, Any]) -> str | None:
     if not _VERSION_PARSERS[version_scheme_for(component)].match(component["version"]):
         return "version-unparseable"
     return None
+
+
+def build_index_enrichment_errors(manifest: Mapping[str, Any], raw: bytes) -> list[str]:
+    """Validate the deterministic build-index enrichment and its component citations.
+
+    This producer is intentionally separate from the Syft tool instance.  Its retained document
+    is the citation target and carries the exact accepted build-index binding; it may infer only
+    name/version from a build-referenced cJSON directory and may never invent package identifiers.
+    """
+    descriptor = manifest.get("enrichment_document")
+    if not isinstance(descriptor, Mapping):
+        return ["enrichment-document-missing: the SBOM manifest must bind deterministic build-index enrichment"]
+    errors = []
+    if descriptor.get("path") != "outputs/build-index-vendored-members.json":
+        errors.append("enrichment-path: enrichment_document.path is not the fixed output path")
+    if descriptor.get("producer_id") != "build-index-vendored-member":
+        errors.append("enrichment-producer: enrichment_document.producer_id is not the fixed producer")
+    if "sha256:" + hashlib.sha256(raw).hexdigest() != descriptor.get("sha256"):
+        errors.append("enrichment-hash: enrichment_document.sha256 does not bind the retained bytes")
+    try:
+        document = _parse(raw)
+    except (ValueError, RecursionError):
+        return errors + ["enrichment-invalid: enrichment is not strict UTF-8 JSON with unique keys"]
+    required = {"schema", "run_id", "job_id", "attempt_id", "producer_id", "build_index_binding",
+                "members", "coverage_gaps"}
+    if not isinstance(document, dict) or set(document) != required:
+        return errors + ["enrichment-invalid: enrichment has an open or incomplete shape"]
+    if (document.get("schema") != "appsec-review/build-index-sbom-enrichment/1.0" or
+            document.get("run_id") != manifest.get("run_id") or document.get("job_id") != manifest.get("job_id") or
+            document.get("attempt_id") != manifest.get("attempt_id") or
+            document.get("producer_id") != descriptor.get("producer_id")):
+        errors.append("enrichment-identity: enrichment identity differs from the SBOM manifest")
+    binding = document.get("build_index_binding")
+    if (not isinstance(binding, dict) or set(binding) != {"job_id", "attempt_id", "path", "sha256"} or
+            binding.get("job_id") != "02-build-index" or not _SHA_RE.match(str(binding.get("sha256")))):
+        errors.append("enrichment-lineage: exact accepted build-index lineage is absent")
+    members = document.get("members")
+    gaps = document.get("coverage_gaps")
+    if not isinstance(members, list) or not isinstance(gaps, list):
+        return errors + ["enrichment-invalid: members and coverage_gaps must be arrays"]
+    enriched = [component for component in manifest.get("components", [])
+                if component.get("tool_id") == "build-index-vendored-member"]
+    if len(enriched) != len(members):
+        errors.append("enrichment-projection: enriched component count differs from retained member evidence")
+    for component in enriched:
+        citation = component.get("citation", {})
+        if (component.get("declaration") != "inferred-vendored" or component.get("purl") is not None or
+                component.get("cpe") is not None or citation.get("producer") != "02-sbom-inventory" or
+                citation.get("attempt_id") != manifest.get("attempt_id") or
+                citation.get("path") != "outputs/build-index-vendored-members.json" or
+                citation.get("sha256") != hashlib.sha256(raw).hexdigest()):
+            errors.append("enrichment-citation: enriched component is not bounded to the deterministic producer artifact")
+    if members and not gaps:
+        errors.append("enrichment-gap: inferred vendored members require an explicit package-identifier coverage gap")
+    return errors
 
 
 def gap_summary_counts(gaps: Iterable[Mapping[str, Any]]) -> tuple[tuple[str, str, int], ...]:
@@ -944,8 +1002,11 @@ def verify_sbom_attempt(attempt_root: Any, *, source_root: Any, tool_outputs_roo
     components = manifest["components"]
     errors += _component_errors(components)
     errors += _cdx_errors(state.raw[SBOM_CDX_FILE], manifest)
+    errors += build_index_enrichment_errors(manifest, state.raw[SBOM_ENRICHMENT_FILE])
     labelled = [(f"SC-{index:06d}", component) for index, component in enumerate(components, 1)]
-    errors += _citation_errors(labelled, CONTRACT_POLICIES[SBOM_CONTRACT_ID]["job_id"], state, declared)
+    tool_labelled = [(label, component) for label, component in labelled
+                     if component.get("tool_id") != "build-index-vendored-member"]
+    errors += _citation_errors(tool_labelled, CONTRACT_POLICIES[SBOM_CONTRACT_ID]["job_id"], state, declared)
     errors += _source_file_errors(Path(source_root).absolute(),
                                   [(label, item["source"]["path"], item["source"]["sha256"], None) for label, item in labelled],
                                   limits)
@@ -996,8 +1057,26 @@ def _database_block_errors(label: str, block: Mapping[str, Any], expected_databa
 
 def _sca_errors(state: _Attempt, sbom: dict, expected_databases: Mapping[str, Mapping[str, str]]) -> list[str]:
     result, gap_document, summary = (state.documents[name] for name in (SCA_RESULT_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE))
+    applicability = state.documents[SCA_OSV_APPLICABILITY_FILE]
     components = {component["component_id"]: component for component in sbom["components"]}
     errors = []
+    purl_refs = sorted(component_id for component_id, component in components.items()
+                       if isinstance(component.get("purl"), str) and component["purl"])
+    expected_decision = "EXECUTE" if purl_refs else "SKIPPED_NA"
+    wanted_applicability = {
+        "decision": expected_decision,
+        "reason": None if purl_refs else "no-purl-bearing-components",
+        "examined_component_count": len(components),
+        "purl_component_count": len(purl_refs),
+        "purl_component_refs": purl_refs,
+    }
+    for field, value in wanted_applicability.items():
+        if applicability[field] != value:
+            errors.append(f"osv-applicability-mismatch: {field} is not derived from the bound SBOM")
+    if applicability["database_identity"]["database_kind"] != "osv":
+        errors.append("osv-applicability-mismatch: database_identity must retain the OSV snapshot")
+    else:
+        errors += _database_block_errors("osv applicability receipt", applicability["database_identity"], expected_databases)
 
     evaluated: dict[str, dict] = {}
     for position, entry in enumerate(result["evaluated"], 1):
@@ -1021,6 +1100,8 @@ def _sca_errors(state: _Attempt, sbom: dict, expected_databases: Mapping[str, Ma
             errors.append(f"duplicate-record: {label}: evaluated_by repeats a database")
         if "osv" in entry["evaluated_by"] and component["purl"] is None:
             errors.append(f"match-basis-unsupported: {label}: osv evaluates by purl and this component has none")
+        if ("osv" in entry["evaluated_by"]) != (expected_decision == "EXECUTE" and component["component_id"] in purl_refs):
+            errors.append(f"osv-applicability-mismatch: {label}: evaluated_by must reflect the retained per-tool decision")
 
     errors += _ordinal_errors("matches", "VM", [match["match_id"] for match in result["matches"]])
     alias_owner: dict[tuple[str, str], str] = {}
@@ -1127,7 +1208,7 @@ def verify_sca_attempt(attempt_root: Any, *, sbom_attempt_root: Any, expected_sb
         permitted_node_statuses=permitted_node_statuses, on_unhandled=on_unhandled, limits=limits, store=store)
     if state is None:
         return errors
-    for relative in (SCA_RESULT_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE):
+    for relative in (SCA_RESULT_FILE, SCA_GAPS_FILE, SCA_SUMMARY_FILE, SCA_OSV_APPLICABILITY_FILE):
         errors += _binding_errors(relative, "sbom_binding", state.documents[relative]["sbom_binding"], "sbom", expected_sbom)
     errors += _database_errors(state, expected_databases, max_age, now, declared)
     found, sbom = _load_upstream("sbom", sbom_attempt_root, expected_sbom, expected_header, limits, store)

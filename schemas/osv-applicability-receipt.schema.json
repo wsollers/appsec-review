@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "osv-applicability-receipt.schema.json",
+  "title": "OSV Scanner per-tool applicability receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "job_id", "attempt_id", "source_snapshot_sha256", "tool_id",
+    "sbom_binding", "decision", "reason", "examined_component_count", "purl_component_count",
+    "purl_component_refs", "database_identity"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/osv-applicability-receipt/1.0"},
+    "run_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"},
+    "job_id": {"const": "02-sca-vulnerability-match"},
+    "attempt_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}\\Z"},
+    "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
+    "tool_id": {"const": "osv-scanner"},
+    "sbom_binding": {"$ref": "sbom-inventory-upstream-binding.schema.json"},
+    "decision": {"type": "string", "enum": ["EXECUTE", "SKIPPED_NA"]},
+    "reason": {"type": ["string", "null"], "enum": ["no-purl-bearing-components", null]},
+    "examined_component_count": {"type": "integer"},
+    "purl_component_count": {"type": "integer"},
+    "purl_component_refs": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^SC-[0-9]{6}\\Z"}
+    },
+    "database_identity": {"$ref": "sca-vulnerability-match-database.schema.json"}
+  }
+}

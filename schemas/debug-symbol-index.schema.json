@@ -31,7 +31,7 @@
             "type": "string"
         },
         "status": {
-            "enum": ["OK", "OK_WITH_GAPS"]
+            "enum": ["OK", "OK_WITH_GAPS", "SKIPPED"]
         },
         "native_build": {"$ref": "binary-evidence-native.schema.json"},
         "upstream": {

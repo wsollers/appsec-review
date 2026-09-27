@@ -60,6 +60,13 @@ CLAIM_CLASS_POLICIES = {
             "declared-project-structure", "statically-inferred-build-plan", "coverage-gap",
         },
     },
+    "operations-topology": {
+        "claim_class_id": "supplied_operations_topology",
+        "allowed_assertions": {
+            "declared-operations-topology", "statically-inferred-service-dependency",
+            "coverage-gap",
+        },
+    },
     "build-classification": {
         "claim_class_id": "build_unit_classification",
         "allowed_assertions": {
@@ -863,7 +870,7 @@ def _attempt_layout(attempt_root: Path, run_id: str, job_id: str) -> tuple[Path 
 # Nothing else: no `inputs.json`, no logs, no heartbeat or temporary file. The goldens of all three
 # families hold exactly this; docs/contracts/validator-vendor-prepass-dispatch.md has the consequence for the
 # common runtime's `allocate_attempt`.
-ATTEMPT_ROOT_FILES = ("status.json", "manifest.json", "result.json")
+ATTEMPT_ROOT_FILES = ("status.json", "manifest.json", "result.json", "permission.json", "lineage.json")
 ATTEMPT_ROOT_DIRECTORIES = ("outputs",)
 
 
@@ -1014,6 +1021,39 @@ def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any]
     if layout_error:
         return [prefix + layout_error]
 
+    # Common producer receipts are part of the closed attempt and bind the evidence producer to
+    # tracked permissions plus the caller-owned run/source identity.  Validate these before any
+    # vendor result is parsed so a missing or stale receipt can never be repaired downstream.
+    try:
+        permission = read_json(beneath(attempt_root, attempt_root / "permission.json"))
+        lineage = read_json(beneath(attempt_root, attempt_root / "lineage.json"))
+        template = read_json(REGISTRY / "job-templates" / f"{node['job_id']}.json")
+    except (OSError, ValueError, json.JSONDecodeError):
+        return [prefix + "the common producer receipts or canonical job template are unreadable"]
+    expected_permission = {
+        "schema": "appsec-review/producer-permission-receipt/1.0",
+        "run_id": run_id,
+        "job_id": node["job_id"],
+        "source_snapshot_sha256": orchestration.source_snapshot_sha256,
+        "permissions": template.get("permissions"),
+    }
+    lineage_keys = {"schema", "run_id", "job_id", "source_snapshot_sha256", "build_lineage_sha256"}
+    if (template.get("job_template_id") != node["job_id"] or
+            not isinstance(template.get("permissions"), list) or
+            not template["permissions"] or
+            len(template["permissions"]) != len(set(template["permissions"])) or
+            not all(isinstance(item, str) and item for item in template["permissions"])):
+        return [prefix + "the canonical job template has invalid permissions"]
+    if permission != expected_permission:
+        return [prefix + "the producer permission receipt differs from canonical caller-owned policy"]
+    if (not isinstance(lineage, dict) or set(lineage) != lineage_keys or
+            lineage.get("schema") != "appsec-review/producer-lineage-receipt/1.0" or
+            lineage.get("run_id") != run_id or lineage.get("job_id") != node["job_id"] or
+            lineage.get("source_snapshot_sha256") != orchestration.source_snapshot_sha256 or
+            not isinstance(lineage.get("build_lineage_sha256"), str) or
+            not re.fullmatch(r"sha256:[0-9a-f]{64}", lineage["build_lineage_sha256"])):
+        return [prefix + "the producer lineage receipt is not bound to canonical caller-owned facts"]
+
     # Facts. Every problem is collected, so a caller sees all that is missing at once.
     problems: list[str] = []
     header = {"run_id": run_id, "job_id": node["job_id"], "attempt_id": attempt_id,
@@ -1053,7 +1093,11 @@ def validate_vendor_prepass_attempt(attempt_root: Path, contract: dict[str, Any]
         if family == "V04":
             verifier = (_v04.validate_secrets_attempt if contract_id == _v04.SECRETS_CONTRACT_ID
                         else _v04.validate_iac_attempt)
-            errors = verifier(attempt_root, tool_outputs_root=tool_outputs_root, **common)
+            # Current V04 workers publish authenticated raw outputs below outputs/tools in the
+            # closed attempt.  Retain validation of qualified legacy V04 generations whose tool
+            # attempts lived at the job root; never infer the choice from a document value.
+            v04_tool_root = attempt_root if (attempt_root / "outputs" / "tools").is_dir() else tool_outputs_root
+            errors = verifier(attempt_root, tool_outputs_root=v04_tool_root, **common)
         elif family == "V07":
             inputs_root = owner / "inputs" if contract_id == "container-image-inventory" else source_root
             errors = _v07.verify_attempt(contract_id, attempt_root, inputs_root, expected_header=header, **common)

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "final-publication-preparation.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "status", "draft_report_sha256",
+    "draft_publication_manifest_sha256", "draft_render_manifest_sha256", "draft_artifacts",
+    "completion_gate", "control_evidence", "draft_attempt", "required_action"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/final-publication-preparation/1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"const": "PENDING_HUMAN_APPROVAL"},
+    "draft_report_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "draft_publication_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "draft_render_manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "draft_artifacts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["presentation/report.html", "presentation/report.pdf"],
+      "properties": {
+        "presentation/report.html": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "presentation/report.pdf": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "completion_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "run_id", "draft_report_sha256", "eligible", "publication_status", "blockers", "human_signoff"],
+      "properties": {
+        "schema": {"const": "appsec-review/final-publication-gate/1.0"},
+        "run_id": {"type": "string"},
+        "draft_report_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "eligible": {"const": false},
+        "publication_status": {"const": "BLOCKED"},
+        "blockers": {"const": ["human_signoff_missing"]},
+        "human_signoff": {"type": "null"}
+      }
+    },
+    "control_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quorum", "rescope", "remediation_retest"],
+      "properties": {
+        "quorum": {
+          "type": "object", "additionalProperties": false,
+          "required": ["binding", "decision_count", "admitted_count", "insufficient_diversity_count", "conflicting_evidence_count"],
+          "properties": {
+            "binding": {"$ref": "control-publication-binding.schema.json"},
+            "decision_count": {"type": "integer", "minimum": 0},
+            "admitted_count": {"type": "integer", "minimum": 0},
+            "insufficient_diversity_count": {"type": "integer", "minimum": 0},
+            "conflicting_evidence_count": {"type": "integer", "minimum": 0}
+          }
+        },
+        "rescope": {
+          "type": "object", "additionalProperties": false,
+          "required": ["binding", "state", "final_publication_affected"],
+          "properties": {
+            "binding": {"$ref": "control-publication-binding.schema.json"},
+            "state": {"enum": ["NO_PROGRESS", "ITERATION_LIMIT"]},
+            "final_publication_affected": {"const": true}
+          }
+        },
+        "remediation_retest": {
+          "type": "object", "additionalProperties": false,
+          "required": ["binding", "proposal_count", "retest_count", "skipped_not_applicable", "disposition"],
+          "properties": {
+            "binding": {"$ref": "control-publication-binding.schema.json"},
+            "proposal_count": {"type": "integer", "minimum": 0},
+            "retest_count": {"type": "integer", "minimum": 0},
+            "skipped_not_applicable": {"type": "boolean"},
+            "disposition": {
+              "type": "object", "additionalProperties": false,
+              "required": ["execution_status", "skip_reason", "gaps"],
+              "properties": {
+                "execution_status": {"enum": ["OK", "OK_WITH_GAPS", "SKIPPED"]},
+                "skip_reason": {"type": ["string", "null"]},
+                "gaps": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        }
+      }
+    },
+    "draft_attempt": {"type": "string", "minLength": 1},
+    "required_action": {"type": "string", "minLength": 1}
+  }
+}

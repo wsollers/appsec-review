@@ -16,14 +16,20 @@ import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
 import full_review_input_assembly as full_review_input_assembly_worker
+import evidence_assembly as evidence_assembly_worker
+import evidence_assembly_input
+import evidence_assembly_runtime
 import synthesis_report_worker
 import bounded_transform_orchestration as bounded_transforms
 import dependency_orchestration as dependency_jobs
 import vendor_evidence_orchestration as vendor_evidence_jobs
+import automatic_evidence_inputs
+import analysis_feature_lifecycle
 import control_lane_orchestration as control_lane_jobs
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
 import discovery_gate
+import automatic_discovery
 import evidence_store
 import critical_findings_sarif as critical_findings_sarif_worker
 import ossf_scorecard as ossf_scorecard_worker
@@ -32,6 +38,26 @@ import owasp_dispatch
 import owasp_join_publisher as owasp_join_publisher_worker
 import ir_evidence as ir_evidence_worker
 import joern_cpg as joern_cpg_worker
+import api_collection_intelligence_ingest as api_collection_intelligence_worker
+import binary_cfg as binary_cfg_worker
+import binary_intelligence_ingest as binary_intelligence_worker
+import binary_triage as binary_triage_worker
+import debug_symbol_index as debug_symbol_index_worker
+import doc_intelligence_ingest as doc_intelligence_worker
+import native_sast as native_sast_worker
+import operations_doc_ingest as operations_doc_worker
+import standards_source_ingest as standards_source_worker
+import standards_lifecycle
+import claim_ledger
+import persona_tool_pool_lifecycle
+import control_feature_lifecycle
+import test_coverage_ingest as test_coverage_worker
+import test_execution as test_execution_worker
+import test_intelligence_ingest as test_intelligence_worker
+import test_result_ingest as test_result_worker
+import remediation_proposal as remediation_proposal_worker
+import claim_review_lifecycle as claim_review_worker
+import claim_reviewer_pool
 import resource_pools
 import json
 import os
@@ -501,7 +527,10 @@ def run_full_review_input_assembly(context, configured):
         plan_path, root_path, output_root, attempt_id=attempt_id,
         started_at=started, finished_at=now())
     attempt = output_root / 'attempts' / attempt_id
-    if context.op_config.get('dispatch', True):
+    # The standalone job can still request the legacy aggregate dispatcher.  In full_review each
+    # planned feature owns its own Dagster node and accepted/skip receipt, so dispatching here would
+    # execute analyzers outside their lifecycle nodes and create duplicate generations.
+    if getattr(context, 'job_name', None) != 'full_review' and context.op_config.get('dispatch', True):
         dispatch_root = Path(context.op_config.get('dispatch_root') or
                              root_path / 'data/jobs/02-full-review-input-dispatch')
         dispatched = full_review_input_assembly_worker.dispatch(
@@ -538,6 +567,7 @@ def run_synthesis_report(context, configured):
     attempt = synthesis_report_worker.root(run_root) / 'attempts' / result['attempt_id']
     context.add_output_metadata({'output': MetadataValue.path(str(attempt / 'report.json')),
         'html': MetadataValue.path(str(attempt / 'presentation/report.html')),
+        'pdf': MetadataValue.path(str(attempt / 'presentation/report.pdf')),
         'latex': MetadataValue.path(str(attempt / 'presentation/report.tex')),
         'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': result['attempt_id']})
     return result
@@ -584,6 +614,224 @@ def code_property_graph_standalone_work(context, configured):
      op_retry_policy=RetryPolicy(max_retries=0))
 def code_property_graph():
     code_property_graph_standalone_work(build_execution_config())
+
+
+def run_automatic_common_worker(context, configured, worker):
+    """Run a worker whose complete input is derived from accepted run-owned state."""
+    result = worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
+    base = worker.root(configured['engagement_run_id']) if hasattr(worker, 'root') else data_path(
+        configured['engagement_run_id'], 'jobs', worker.JOB)
+    attempt = base / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(attempt / getattr(worker, 'RESULT', 'result.json'))),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+def automatic_common_lifecycle_op(job_id, worker, pool):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def automatic_worker(context, configured, upstream):
+        return run_automatic_common_worker(context, configured, worker)
+    return automatic_worker
+
+
+api_collection_intelligence_work = automatic_common_lifecycle_op(
+    '02-api-collection-intelligence-ingest', api_collection_intelligence_worker, CPU_POOL)
+doc_intelligence_work = automatic_common_lifecycle_op(
+    '02-doc-intelligence-ingest', doc_intelligence_worker, CPU_POOL)
+test_intelligence_work = automatic_common_lifecycle_op(
+    '02-test-intelligence-ingest', test_intelligence_worker, CPU_POOL)
+operations_doc_work = automatic_common_lifecycle_op(
+    '02-operations-doc-ingest', operations_doc_worker, CPU_POOL)
+standards_source_work = automatic_common_lifecycle_op(
+    '02-standards-source-ingest', standards_source_worker, CPU_POOL)
+debug_symbol_index_work = automatic_common_lifecycle_op(
+    '02-debug-symbol-index', debug_symbol_index_worker, OFFLINE_DOCKER_POOL)
+binary_triage_work = automatic_common_lifecycle_op(
+    '02-binary-triage', binary_triage_worker, OFFLINE_DOCKER_POOL)
+binary_cfg_work = automatic_common_lifecycle_op(
+    '02-binary-cfg', binary_cfg_worker, OFFLINE_DOCKER_POOL)
+binary_intelligence_work = automatic_common_lifecycle_op(
+    '02-binary-intelligence-ingest', binary_intelligence_worker, CPU_POOL)
+test_execution_lifecycle_work = automatic_common_lifecycle_op(
+    '02-test-execution', test_execution_worker, OFFLINE_DOCKER_POOL)
+test_result_lifecycle_work = automatic_common_lifecycle_op(
+    '02-test-result-ingest', test_result_worker, CPU_POOL)
+test_coverage_lifecycle_work = automatic_common_lifecycle_op(
+    '02-test-coverage-ingest', test_coverage_worker, CPU_POOL)
+remediation_proposal_lifecycle_work = automatic_common_lifecycle_op(
+    '11-remediation-proposal', remediation_proposal_worker, CPU_POOL)
+
+
+def claim_review_lifecycle_op(stage):
+    @op(name='job_' + stage.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
+    def review_stage(context, configured, upstream):
+        pool_result = claim_reviewer_pool.run(
+            configured['engagement_run_id'], context.run_id, stage,
+            configured.get('force', False))
+        result = claim_review_worker.run(
+            configured['engagement_run_id'], context.run_id, stage,
+            configured.get('force', False))
+        attempt = claim_review_worker.root(
+            configured['engagement_run_id'], stage) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / claim_review_worker.core.STAGES[stage][4])),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'reviewer_pool_attempt_id': pool_result['attempt_id'],
+            'attempt_id': result['attempt_id']})
+        return result
+    return review_stage
+
+
+red_team_lifecycle_work = claim_review_lifecycle_op('07-red-team-adversarial')
+blue_team_lifecycle_work = claim_review_lifecycle_op('08-blue-team-refutation')
+verification_lifecycle_work = claim_review_lifecycle_op('09-independent-verification')
+scoring_lifecycle_work = claim_review_lifecycle_op('12-scoring-prioritization')
+
+
+def analysis_feature_lifecycle_op(job_id):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def analysis_stage(context, configured, upstream):
+        result = analysis_feature_lifecycle.run(
+            configured['engagement_run_id'], context.run_id, job_id,
+            configured.get('force', False))
+        attempt = data_path(configured['engagement_run_id'], 'jobs', job_id,
+                            'attempts', result['attempt_id'])
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / analysis_feature_lifecycle.JOBS[job_id][1])),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return analysis_stage
+
+
+native_memory_lifecycle_work = analysis_feature_lifecycle_op('05-native-memory')
+cve_reachability_lifecycle_work = analysis_feature_lifecycle_op('06-cve-reachability')
+fuzz_triage_lifecycle_work = analysis_feature_lifecycle_op('13-fuzz-target-triage')
+
+
+def standards_lifecycle_op(job_id, pool=CPU_POOL):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def standards_stage(context, configured, upstream):
+        result = standards_lifecycle.run(
+            configured['engagement_run_id'], context.run_id, job_id,
+            configured.get('force', False))
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(data_path(
+                configured['engagement_run_id'], 'jobs', job_id))),
+            'attempt_id': result['attempt_id']})
+        return result
+    return standards_stage
+
+
+owasp_worklist_lifecycle_work = standards_lifecycle_op('04-owasp-validation-worklist')
+owasp_join_lifecycle_work = standards_lifecycle_op('04-asvs-masvs', PERSONA_POOL)
+stig_worklist_lifecycle_work = standards_lifecycle_op('15-stig-srg-validation-worklist')
+deployment_lifecycle_work = standards_lifecycle_op('15-deployment-hardening')
+
+
+def claim_ledger_lifecycle_op():
+    @op(name='job_claim_ledger_routing',
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def claim_ledger_stage(context, configured, upstream):
+        result = claim_ledger.run(
+            configured['engagement_run_id'], context.run_id,
+            configured.get('force', False))
+        attempt = claim_ledger.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / claim_ledger.LEDGER)),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return claim_ledger_stage
+
+
+claim_ledger_lifecycle_work = claim_ledger_lifecycle_op()
+
+
+@op(name='job_persona_tool_pool_dispatch_lifecycle',
+    ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
+def persona_tool_pool_lifecycle_work(context, configured, upstream):
+    result = persona_tool_pool_lifecycle.run(
+        configured['engagement_run_id'], context.run_id,
+        configured.get('force', False))
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(data_path(
+            configured['engagement_run_id'], 'jobs', 'persona-tool-pool-dispatch', 'whole'))),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+def control_feature_lifecycle_op(graph_job_id, worker_job_id=None):
+    worker_job_id = worker_job_id or graph_job_id
+    @op(name='job_' + graph_job_id.replace('-', '_') + '_lifecycle',
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+    def control_stage(context, configured, upstream):
+        result = control_feature_lifecycle.run(
+            configured['engagement_run_id'], context.run_id, worker_job_id,
+            configured.get('force', False))
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(data_path(
+                configured['engagement_run_id'], 'jobs', worker_job_id))),
+            'attempt_id': result['attempt_id']})
+        return result
+    return control_stage
+
+
+deterministic_pool_merge_lifecycle_work = control_feature_lifecycle_op('deterministic-pool-merge')
+evidence_qualified_quorum_lifecycle_work = control_feature_lifecycle_op('evidence-qualified-quorum')
+dynamic_rescope_lifecycle_work = control_feature_lifecycle_op('dynamic-rescope')
+completeness_audit_lifecycle_work = control_feature_lifecycle_op('completeness-audit')
+synthetic_resynthesis_lifecycle_work = control_feature_lifecycle_op('synthetic-hypothesis-resynthesis')
+remediation_retest_feedback_lifecycle_work = control_feature_lifecycle_op('remediation-retest-feedback')
+final_publication_preparation_lifecycle_work = control_feature_lifecycle_op(
+    'final-publication-gate', 'final-publication-preparation')
+
+
+@op(name='job_02_evidence_assembly', ins={'configured': In(dict), 'upstream': In(list)},
+    pool=PERSONA_POOL)
+def evidence_assembly_lifecycle_work(context, configured, upstream):
+    run_id = configured['engagement_run_id']
+    prepared = evidence_assembly_runtime.prepare(
+        run_id, context.run_id, configured.get('force', False))
+    run_root = run_path(run_id).absolute()
+    supply_root = (evidence_assembly_worker.root(run_id) / 'supplies' /
+                   prepared.expected_spec['attempt_id']).absolute()
+    arguments = prepared.assembly_arguments()
+    if not supply_root.exists():
+        evidence_assembly_input.stage_supply(
+            run_root, supply_root, run_id=run_id,
+            source_snapshot_sha256=prepared.source_snapshot_sha256, **arguments)
+    result = evidence_assembly_worker.run(
+        run_id, context.run_id, supply_root=supply_root,
+        source_snapshot_sha256=prepared.source_snapshot_sha256,
+        force=configured.get('force', False), **arguments)
+    attempt = evidence_assembly_worker.root(run_id) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(attempt / evidence_assembly_worker.RESULT)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'supply': MetadataValue.path(str(supply_root)),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(name='job_02_native_sast', ins={'configured': In(dict), 'upstream': In(list)},
+    pool=OFFLINE_DOCKER_POOL)
+def native_sast_lifecycle_work(context, configured, upstream):
+    run_id = configured['engagement_run_id']
+    base = native_build_worker.root(run_id)
+    pointer = read_json(base / 'accepted.json')
+    result = native_sast_worker.run(run_id, context.run_id, native_build_root=base,
+        native_build_fingerprint=pointer['fingerprint'], force=configured['force'])
+    attempt = native_sast_worker.root(run_id) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(attempt / native_sast_worker.RESULT)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': result['attempt_id']})
+    return result
 
 
 def run_ir_evidence(context, configured, job_id):
@@ -875,6 +1123,43 @@ def run_vendor_evidence_job(context, configured, job_id):
     return result
 
 
+def run_automatic_evidence_job(context, configured, job_id):
+    run_id = configured['engagement_run_id']
+    request = automatic_evidence_inputs.prepare(run_id, job_id, context.run_id)
+    if job_id in automatic_evidence_inputs.VENDOR_JOBS:
+        result = vendor_evidence_jobs.execute(job_id=job_id, run_id=run_id,
+            dagster_run_id=context.run_id, **request)
+        base = data_path(run_id, 'jobs', job_id, 'whole')
+    else:
+        result = dependency_jobs.execute(job_id=job_id, run_id=run_id, **request)
+        base = data_path(run_id, 'jobs', job_id)
+    attempt = base / 'attempts' / result['attempt_id']
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(base)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')),
+        'attempt_id': result['attempt_id'],
+        'automatic_request': MetadataValue.path(request['input_path'])})
+    return result
+
+
+def automatic_evidence_lifecycle_op(job_id, pool):
+    @op(name='job_' + job_id.replace('-', '_'),
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=pool)
+    def automatic_evidence(context, configured, upstream):
+        return run_automatic_evidence_job(context, configured, job_id)
+    return automatic_evidence
+
+
+secrets_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-secrets-inventory', OFFLINE_DOCKER_POOL)
+iac_config_scan_lifecycle_work = automatic_evidence_lifecycle_op('02-iac-config-scan', OFFLINE_DOCKER_POOL)
+container_image_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-container-image-inventory', OFFLINE_DOCKER_POOL)
+mobile_sast_lifecycle_work = automatic_evidence_lifecycle_op('02-mobile-sast', OFFLINE_DOCKER_POOL)
+sbom_inventory_lifecycle_work = automatic_evidence_lifecycle_op('02-sbom-inventory', OFFLINE_DOCKER_POOL)
+sca_vulnerability_match_lifecycle_work = automatic_evidence_lifecycle_op('02-sca-vulnerability-match', OFFLINE_DOCKER_POOL)
+license_scan_lifecycle_work = automatic_evidence_lifecycle_op('02-license-scan', OFFLINE_DOCKER_POOL)
+dependency_lifecycle_lifecycle_work = automatic_evidence_lifecycle_op('02-dependency-lifecycle', CPU_POOL)
+
+
 @op(config_schema=VENDOR_EVIDENCE_CONFIG, pool=OFFLINE_DOCKER_POOL)
 def secrets_inventory_work(context, configured):
     return run_vendor_evidence_job(context, configured, '02-secrets-inventory')
@@ -993,7 +1278,7 @@ def run_repository_partition_discovery(context, configured):
     # schema-valid repository-partition-map if present; otherwise issues an actionable hand-off
     # and fails clearly (never silently succeeds as a no-op).
     job = '02-repository-partition-discovery'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
     context.add_output_metadata({
         'output': MetadataValue.path(str(path / 'repository-partition-map.json')),
@@ -1023,9 +1308,10 @@ def run_dev_project_discovery(context, configured):
     # project-discovery contract. The gate also requires an accepted partition map (the graph's
     # declared dependency) and checks citation freshness. See discovery_gate.py.
     job = '02-dev-project-discovery'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'project-inventory.json')),
+                                 'envelope': MetadataValue.path(str(path / 'result.json'))})
     return result
 
 
@@ -1051,9 +1337,10 @@ def run_devops_project_discovery(context, configured):
     # contract (container/pipeline build definition). Requires the accepted partition map (the
     # graph's declared dependency) at the same source revision. See discovery_gate.py.
     job = '02-devops-project-discovery'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'project-inventory.json')),
+                                 'envelope': MetadataValue.path(str(path / 'result.json'))})
     return result
 
 
@@ -1080,9 +1367,10 @@ def run_sre_operations_topology(context, configured):
     # revision -- operations topology is read off the containers/services devops discovery found.
     # See discovery_gate.py.
     job = '02-sre-operations-topology'
-    result = discovery_gate.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
+    result = automatic_discovery.run(configured['engagement_run_id'], context.run_id, job, configured['force'])
     path = discovery_gate.root(configured['engagement_run_id'], job) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json'))})
+    context.add_output_metadata({'output': MetadataValue.path(str(path / 'service-inventory.json')),
+                                 'envelope': MetadataValue.path(str(path / 'result.json'))})
     return result
 
 
@@ -1260,19 +1548,61 @@ LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                                  '02-build-index','02-build-classify','02-build-plan',
                                  '02-build-resolution','02-ossf-scorecard')}
 LIFECYCLE_OPS['02-build-configure']=build_configure_work
+LIFECYCLE_OPS['02-evidence-assembly']=evidence_assembly_lifecycle_work
 LIFECYCLE_OPS['02-native-build']=native_build_work
 LIFECYCLE_OPS['02-source-sast']=source_sast_work
 LIFECYCLE_OPS['01-component-characterization']=component_characterization_work
 LIFECYCLE_OPS['02-full-review-input-assembly']=full_review_input_assembly_work
 LIFECYCLE_OPS['03-threat-model-dfd-stride']=threat_model_dfd_stride_work
 LIFECYCLE_OPS['03-threat-model-reconciliation']=threat_model_reconciliation_work
-LIFECYCLE_OPS['04-asvs-masvs']=owasp_join_report_work
+LIFECYCLE_OPS['04-asvs-masvs']=owasp_join_lifecycle_work
 LIFECYCLE_OPS['10-synthesis-report']=synthesis_report_work
 LIFECYCLE_OPS['02-binary-hardening']=binary_hardening_lifecycle_work
 LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
 LIFECYCLE_OPS['02-ir-link']=ir_link_work
 LIFECYCLE_OPS['02-ir-facts']=ir_facts_work
 LIFECYCLE_OPS['02-code-property-graph']=code_property_graph_work
+LIFECYCLE_OPS['02-api-collection-intelligence-ingest']=api_collection_intelligence_work
+LIFECYCLE_OPS['02-doc-intelligence-ingest']=doc_intelligence_work
+LIFECYCLE_OPS['02-test-intelligence-ingest']=test_intelligence_work
+LIFECYCLE_OPS['02-operations-doc-ingest']=operations_doc_work
+LIFECYCLE_OPS['02-standards-source-ingest']=standards_source_work
+LIFECYCLE_OPS['02-native-sast']=native_sast_lifecycle_work
+LIFECYCLE_OPS['02-debug-symbol-index']=debug_symbol_index_work
+LIFECYCLE_OPS['02-binary-triage']=binary_triage_work
+LIFECYCLE_OPS['02-binary-cfg']=binary_cfg_work
+LIFECYCLE_OPS['02-binary-intelligence-ingest']=binary_intelligence_work
+LIFECYCLE_OPS['02-test-execution']=test_execution_lifecycle_work
+LIFECYCLE_OPS['02-test-result-ingest']=test_result_lifecycle_work
+LIFECYCLE_OPS['02-test-coverage-ingest']=test_coverage_lifecycle_work
+LIFECYCLE_OPS['02-secrets-inventory']=secrets_inventory_lifecycle_work
+LIFECYCLE_OPS['02-iac-config-scan']=iac_config_scan_lifecycle_work
+LIFECYCLE_OPS['02-container-image-inventory']=container_image_inventory_lifecycle_work
+LIFECYCLE_OPS['02-mobile-sast']=mobile_sast_lifecycle_work
+LIFECYCLE_OPS['02-sbom-inventory']=sbom_inventory_lifecycle_work
+LIFECYCLE_OPS['02-sca-vulnerability-match']=sca_vulnerability_match_lifecycle_work
+LIFECYCLE_OPS['02-license-scan']=license_scan_lifecycle_work
+LIFECYCLE_OPS['02-dependency-lifecycle']=dependency_lifecycle_lifecycle_work
+LIFECYCLE_OPS['11-remediation-proposal']=remediation_proposal_lifecycle_work
+LIFECYCLE_OPS['07-red-team-adversarial']=red_team_lifecycle_work
+LIFECYCLE_OPS['08-blue-team-refutation']=blue_team_lifecycle_work
+LIFECYCLE_OPS['09-independent-verification']=verification_lifecycle_work
+LIFECYCLE_OPS['12-scoring-prioritization']=scoring_lifecycle_work
+LIFECYCLE_OPS['05-native-memory']=native_memory_lifecycle_work
+LIFECYCLE_OPS['06-cve-reachability']=cve_reachability_lifecycle_work
+LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
+LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work
+LIFECYCLE_OPS['15-stig-srg-validation-worklist']=stig_worklist_lifecycle_work
+LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
+LIFECYCLE_OPS['claim-ledger-routing']=claim_ledger_lifecycle_work
+LIFECYCLE_OPS['persona-tool-pool-dispatch']=persona_tool_pool_lifecycle_work
+LIFECYCLE_OPS['deterministic-pool-merge']=deterministic_pool_merge_lifecycle_work
+LIFECYCLE_OPS['evidence-qualified-quorum']=evidence_qualified_quorum_lifecycle_work
+LIFECYCLE_OPS['dynamic-rescope']=dynamic_rescope_lifecycle_work
+LIFECYCLE_OPS['completeness-audit']=completeness_audit_lifecycle_work
+LIFECYCLE_OPS['synthetic-hypothesis-resynthesis']=synthetic_resynthesis_lifecycle_work
+LIFECYCLE_OPS['remediation-retest-feedback']=remediation_retest_feedback_lifecycle_work
+LIFECYCLE_OPS['final-publication-gate']=final_publication_preparation_lifecycle_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work

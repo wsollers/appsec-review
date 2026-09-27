@@ -6,21 +6,29 @@ flowchart TD
   02_ossf_scorecard_pre --> 02_ossf_scorecard["02-ossf-scorecard: work or reuse"]
   02_ossf_scorecard --> 02_ossf_scorecard_post["02-ossf-scorecard: post-validation and publish"]
   00_intake_post -->|required| 02_ossf_scorecard_config
-  02_repository_partition_discovery["02-repository-partition-discovery (planned; not dispatched)"]
-  00_intake_post -->|required| 02_repository_partition_discovery
-  02_dev_project_discovery["02-dev-project-discovery (planned; not dispatched)"]
-  02_repository_partition_discovery -->|required| 02_dev_project_discovery
-  02_devops_project_discovery["02-devops-project-discovery (planned; not dispatched)"]
-  02_repository_partition_discovery -->|required| 02_devops_project_discovery
-  02_sre_operations_topology["02-sre-operations-topology (planned; not dispatched)"]
-  02_devops_project_discovery -->|required| 02_sre_operations_topology
+  02_repository_partition_discovery_config["02-repository-partition-discovery: resolve job configuration"] --> 02_repository_partition_discovery_pre["02-repository-partition-discovery: pre-validation"]
+  02_repository_partition_discovery_pre --> 02_repository_partition_discovery["02-repository-partition-discovery: work or reuse"]
+  02_repository_partition_discovery --> 02_repository_partition_discovery_post["02-repository-partition-discovery: post-validation and publish"]
+  00_intake_post -->|required| 02_repository_partition_discovery_config
+  02_dev_project_discovery_config["02-dev-project-discovery: resolve job configuration"] --> 02_dev_project_discovery_pre["02-dev-project-discovery: pre-validation"]
+  02_dev_project_discovery_pre --> 02_dev_project_discovery["02-dev-project-discovery: work or reuse"]
+  02_dev_project_discovery --> 02_dev_project_discovery_post["02-dev-project-discovery: post-validation and publish"]
+  02_repository_partition_discovery_post -->|required| 02_dev_project_discovery_config
+  02_devops_project_discovery_config["02-devops-project-discovery: resolve job configuration"] --> 02_devops_project_discovery_pre["02-devops-project-discovery: pre-validation"]
+  02_devops_project_discovery_pre --> 02_devops_project_discovery["02-devops-project-discovery: work or reuse"]
+  02_devops_project_discovery --> 02_devops_project_discovery_post["02-devops-project-discovery: post-validation and publish"]
+  02_repository_partition_discovery_post -->|required| 02_devops_project_discovery_config
+  02_sre_operations_topology_config["02-sre-operations-topology: resolve job configuration"] --> 02_sre_operations_topology_pre["02-sre-operations-topology: pre-validation"]
+  02_sre_operations_topology_pre --> 02_sre_operations_topology["02-sre-operations-topology: work or reuse"]
+  02_sre_operations_topology --> 02_sre_operations_topology_post["02-sre-operations-topology: post-validation and publish"]
+  02_devops_project_discovery_post -->|required| 02_sre_operations_topology_config
   02_build_index_config["02-build-index: resolve job configuration"] --> 02_build_index_pre["02-build-index: pre-validation"]
   02_build_index_pre --> 02_build_index["02-build-index: work or reuse"]
   02_build_index --> 02_build_index_post["02-build-index: post-validation and publish"]
   00_intake_post -->|required| 02_build_index_config
-  02_repository_partition_discovery -->|required| 02_build_index_config
-  02_dev_project_discovery -->|required| 02_build_index_config
-  02_devops_project_discovery -->|required| 02_build_index_config
+  02_repository_partition_discovery_post -->|required| 02_build_index_config
+  02_dev_project_discovery_post -->|required| 02_build_index_config
+  02_devops_project_discovery_post -->|required| 02_build_index_config
   02_build_classify_config["02-build-classify: resolve job configuration"] --> 02_build_classify_pre["02-build-classify: pre-validation"]
   02_build_classify_pre --> 02_build_classify["02-build-classify: work or reuse"]
   02_build_classify --> 02_build_classify_post["02-build-classify: post-validation and publish"]
@@ -33,37 +41,39 @@ flowchart TD
   02_build_resolution_pre --> 02_build_resolution["02-build-resolution: work or reuse"]
   02_build_resolution --> 02_build_resolution_post["02-build-resolution: post-validation and publish"]
   02_build_plan_post -->|required| 02_build_resolution_config
-  02_evidence_assembly["02-evidence-assembly (planned; not dispatched)"]
-  02_dev_project_discovery -->|required| 02_evidence_assembly
-  02_devops_project_discovery -->|required| 02_evidence_assembly
-  02_sre_operations_topology -->|required| 02_evidence_assembly
-  02_api_collection_intelligence_ingest -->|required| 02_evidence_assembly
-  02_binary_intelligence_ingest -->|required| 02_evidence_assembly
-  02_doc_intelligence_ingest -->|required| 02_evidence_assembly
-  02_standards_source_ingest -->|required| 02_evidence_assembly
-  02_test_intelligence_ingest -->|required| 02_evidence_assembly
-  02_source_sast_post -->|required| 02_evidence_assembly
-  02_code_property_graph_post -->|required| 02_evidence_assembly
-  02_native_sast -->|required| 02_evidence_assembly
-  02_ir_facts_post -->|required| 02_evidence_assembly
-  02_test_result_ingest -->|required| 02_evidence_assembly
-  02_test_coverage_ingest -->|required| 02_evidence_assembly
-  02_operations_doc_ingest -->|required| 02_evidence_assembly
-  02_evidence_index_post -->|required| 02_evidence_assembly
-  02_ossf_scorecard_post -->|required| 02_evidence_assembly
-  02_secrets_inventory_post -->|required| 02_evidence_assembly
-  02_iac_config_scan_post -->|required| 02_evidence_assembly
-  02_container_image_inventory_post -->|required| 02_evidence_assembly
-  02_sbom_inventory_post -->|required| 02_evidence_assembly
-  02_sca_vulnerability_match_post -->|required| 02_evidence_assembly
-  02_license_scan_post -->|required| 02_evidence_assembly
-  02_dependency_lifecycle_post -->|required| 02_evidence_assembly
-  02_binary_hardening_post -->|required| 02_evidence_assembly
-  02_mobile_sast_post -->|required| 02_evidence_assembly
+  02_evidence_assembly_config["02-evidence-assembly: resolve job configuration"] --> 02_evidence_assembly_pre["02-evidence-assembly: pre-validation"]
+  02_evidence_assembly_pre --> 02_evidence_assembly["02-evidence-assembly: work or reuse"]
+  02_evidence_assembly --> 02_evidence_assembly_post["02-evidence-assembly: post-validation and publish"]
+  02_dev_project_discovery_post -->|required| 02_evidence_assembly_config
+  02_devops_project_discovery_post -->|required| 02_evidence_assembly_config
+  02_sre_operations_topology_post -->|required| 02_evidence_assembly_config
+  02_api_collection_intelligence_ingest_post -->|required| 02_evidence_assembly_config
+  02_binary_intelligence_ingest_post -->|required| 02_evidence_assembly_config
+  02_doc_intelligence_ingest_post -->|required| 02_evidence_assembly_config
+  02_standards_source_ingest_post -->|required| 02_evidence_assembly_config
+  02_test_intelligence_ingest_post -->|required| 02_evidence_assembly_config
+  02_source_sast_post -->|required| 02_evidence_assembly_config
+  02_code_property_graph_post -->|required| 02_evidence_assembly_config
+  02_native_sast_post -->|required| 02_evidence_assembly_config
+  02_ir_facts_post -->|required| 02_evidence_assembly_config
+  02_test_result_ingest_post -->|required| 02_evidence_assembly_config
+  02_test_coverage_ingest_post -->|required| 02_evidence_assembly_config
+  02_operations_doc_ingest_post -->|required| 02_evidence_assembly_config
+  02_evidence_index_post -->|required| 02_evidence_assembly_config
+  02_ossf_scorecard_post -->|required| 02_evidence_assembly_config
+  02_secrets_inventory_post -->|required| 02_evidence_assembly_config
+  02_iac_config_scan_post -->|required| 02_evidence_assembly_config
+  02_container_image_inventory_post -->|required| 02_evidence_assembly_config
+  02_sbom_inventory_post -->|required| 02_evidence_assembly_config
+  02_sca_vulnerability_match_post -->|required| 02_evidence_assembly_config
+  02_license_scan_post -->|required| 02_evidence_assembly_config
+  02_dependency_lifecycle_post -->|required| 02_evidence_assembly_config
+  02_binary_hardening_post -->|required| 02_evidence_assembly_config
+  02_mobile_sast_post -->|required| 02_evidence_assembly_config
   01_component_characterization_config["01-component-characterization: resolve job configuration"] --> 01_component_characterization_pre["01-component-characterization: pre-validation"]
   01_component_characterization_pre --> 01_component_characterization["01-component-characterization: work or reuse"]
   01_component_characterization --> 01_component_characterization_post["01-component-characterization: post-validation and publish"]
-  02_evidence_assembly -->|required| 01_component_characterization_config
+  02_evidence_assembly_post -->|required| 01_component_characterization_config
   02_full_review_input_assembly_config["02-full-review-input-assembly: resolve job configuration"] --> 02_full_review_input_assembly_pre["02-full-review-input-assembly: pre-validation"]
   02_full_review_input_assembly_pre --> 02_full_review_input_assembly["02-full-review-input-assembly: work or reuse"]
   02_full_review_input_assembly --> 02_full_review_input_assembly_post["02-full-review-input-assembly: post-validation and publish"]
@@ -77,7 +87,7 @@ flowchart TD
   03_threat_model_reconciliation --> 03_threat_model_reconciliation_post["03-threat-model-reconciliation: post-validation and publish"]
   03_threat_model_dfd_stride_post -->|required| 03_threat_model_reconciliation_config
   01_component_characterization_post -->|required| 03_threat_model_reconciliation_config
-  02_evidence_assembly -->|required| 03_threat_model_reconciliation_config
+  02_evidence_assembly_post -->|required| 03_threat_model_reconciliation_config
   04_asvs_masvs_config["04-asvs-masvs: resolve job configuration"] --> 04_asvs_masvs_pre["04-asvs-masvs: pre-validation"]
   04_asvs_masvs_pre --> 04_asvs_masvs["04-asvs-masvs: work or reuse"]
   04_asvs_masvs --> 04_asvs_masvs_post["04-asvs-masvs: post-validation and publish"]
@@ -89,12 +99,13 @@ flowchart TD
   05_native_memory_pre --> 05_native_memory["05-native-memory: work or reuse"]
   05_native_memory --> 05_native_memory_post["05-native-memory: post-validation and publish"]
   01_component_characterization_post -->|required| 05_native_memory_config
-  02_native_sast -->|required| 05_native_memory_config
+  02_native_sast_post -->|required| 05_native_memory_config
   02_ir_facts_post -->|required| 05_native_memory_config
   06_cve_reachability_config["06-cve-reachability: resolve job configuration"] --> 06_cve_reachability_pre["06-cve-reachability: pre-validation"]
   06_cve_reachability_pre --> 06_cve_reachability["06-cve-reachability: work or reuse"]
   06_cve_reachability --> 06_cve_reachability_post["06-cve-reachability: post-validation and publish"]
   02_sca_vulnerability_match_post -->|required| 06_cve_reachability_config
+  02_ir_facts_post -->|required| 06_cve_reachability_config
   13_fuzz_target_triage_config["13-fuzz-target-triage: resolve job configuration"] --> 13_fuzz_target_triage_pre["13-fuzz-target-triage: pre-validation"]
   13_fuzz_target_triage_pre --> 13_fuzz_target_triage["13-fuzz-target-triage: work or reuse"]
   13_fuzz_target_triage --> 13_fuzz_target_triage_post["13-fuzz-target-triage: post-validation and publish"]
@@ -108,26 +119,42 @@ flowchart TD
   01_component_characterization_post -->|required| 15_deployment_hardening_config
   02_iac_config_scan_post -->|required| 15_deployment_hardening_config
   15_stig_srg_validation_worklist_post -->|required| 15_deployment_hardening_config
-  07_red_team_adversarial["07-red-team-adversarial (planned; not dispatched)"]
-  01_component_characterization_post -->|required| 07_red_team_adversarial
-  03_threat_model_dfd_stride_post -->|required| 07_red_team_adversarial
-  04_asvs_masvs_post -->|required| 07_red_team_adversarial
-  05_native_memory_post -->|required| 07_red_team_adversarial
-  06_cve_reachability_post -->|required| 07_red_team_adversarial
-  15_deployment_hardening_post -->|required| 07_red_team_adversarial
-  13_fuzz_target_triage_post -->|required| 07_red_team_adversarial
-  08_blue_team_refutation["08-blue-team-refutation (planned; not dispatched)"]
-  07_red_team_adversarial -->|required| 08_blue_team_refutation
-  01_component_characterization_post -->|required| 08_blue_team_refutation
-  09_independent_verification["09-independent-verification (planned; not dispatched)"]
-  07_red_team_adversarial -->|required| 09_independent_verification
-  08_blue_team_refutation -->|required| 09_independent_verification
-  11_remediation_proposal["11-remediation-proposal (planned; not dispatched)"]
-  09_independent_verification -->|required| 11_remediation_proposal
-  12_scoring_prioritization["12-scoring-prioritization (planned; not dispatched)"]
-  09_independent_verification -->|required| 12_scoring_prioritization
-  15_deployment_hardening_post -->|required| 12_scoring_prioritization
-  03_threat_model_dfd_stride_post -->|required| 12_scoring_prioritization
+  claim_ledger_routing_config["claim-ledger-routing: resolve job configuration"] --> claim_ledger_routing_pre["claim-ledger-routing: pre-validation"]
+  claim_ledger_routing_pre --> claim_ledger_routing["claim-ledger-routing: work or reuse"]
+  claim_ledger_routing --> claim_ledger_routing_post["claim-ledger-routing: post-validation and publish"]
+  03_threat_model_reconciliation_post -->|required| claim_ledger_routing_config
+  04_asvs_masvs_post -->|required| claim_ledger_routing_config
+  07_red_team_adversarial_config["07-red-team-adversarial: resolve job configuration"] --> 07_red_team_adversarial_pre["07-red-team-adversarial: pre-validation"]
+  07_red_team_adversarial_pre --> 07_red_team_adversarial["07-red-team-adversarial: work or reuse"]
+  07_red_team_adversarial --> 07_red_team_adversarial_post["07-red-team-adversarial: post-validation and publish"]
+  claim_ledger_routing_post -->|required| 07_red_team_adversarial_config
+  01_component_characterization_post -->|required| 07_red_team_adversarial_config
+  03_threat_model_dfd_stride_post -->|required| 07_red_team_adversarial_config
+  04_asvs_masvs_post -->|required| 07_red_team_adversarial_config
+  05_native_memory_post -->|required| 07_red_team_adversarial_config
+  06_cve_reachability_post -->|required| 07_red_team_adversarial_config
+  15_deployment_hardening_post -->|required| 07_red_team_adversarial_config
+  13_fuzz_target_triage_post -->|required| 07_red_team_adversarial_config
+  08_blue_team_refutation_config["08-blue-team-refutation: resolve job configuration"] --> 08_blue_team_refutation_pre["08-blue-team-refutation: pre-validation"]
+  08_blue_team_refutation_pre --> 08_blue_team_refutation["08-blue-team-refutation: work or reuse"]
+  08_blue_team_refutation --> 08_blue_team_refutation_post["08-blue-team-refutation: post-validation and publish"]
+  07_red_team_adversarial_post -->|required| 08_blue_team_refutation_config
+  01_component_characterization_post -->|required| 08_blue_team_refutation_config
+  09_independent_verification_config["09-independent-verification: resolve job configuration"] --> 09_independent_verification_pre["09-independent-verification: pre-validation"]
+  09_independent_verification_pre --> 09_independent_verification["09-independent-verification: work or reuse"]
+  09_independent_verification --> 09_independent_verification_post["09-independent-verification: post-validation and publish"]
+  07_red_team_adversarial_post -->|required| 09_independent_verification_config
+  08_blue_team_refutation_post -->|required| 09_independent_verification_config
+  11_remediation_proposal_config["11-remediation-proposal: resolve job configuration"] --> 11_remediation_proposal_pre["11-remediation-proposal: pre-validation"]
+  11_remediation_proposal_pre --> 11_remediation_proposal["11-remediation-proposal: work or reuse"]
+  11_remediation_proposal --> 11_remediation_proposal_post["11-remediation-proposal: post-validation and publish"]
+  09_independent_verification_post -->|required| 11_remediation_proposal_config
+  12_scoring_prioritization_config["12-scoring-prioritization: resolve job configuration"] --> 12_scoring_prioritization_pre["12-scoring-prioritization: pre-validation"]
+  12_scoring_prioritization_pre --> 12_scoring_prioritization["12-scoring-prioritization: work or reuse"]
+  12_scoring_prioritization --> 12_scoring_prioritization_post["12-scoring-prioritization: post-validation and publish"]
+  09_independent_verification_post -->|required| 12_scoring_prioritization_config
+  15_deployment_hardening_post -->|required| 12_scoring_prioritization_config
+  03_threat_model_dfd_stride_post -->|required| 12_scoring_prioritization_config
   10_synthesis_report_config["10-synthesis-report: resolve job configuration"] --> 10_synthesis_report_pre["10-synthesis-report: pre-validation"]
   10_synthesis_report_pre --> 10_synthesis_report["10-synthesis-report: work or reuse"]
   10_synthesis_report --> 10_synthesis_report_post["10-synthesis-report: post-validation and publish"]
@@ -135,32 +162,42 @@ flowchart TD
   03_threat_model_dfd_stride_post -->|required| 10_synthesis_report_config
   03_threat_model_reconciliation_post -->|required| 10_synthesis_report_config
   04_asvs_masvs_post -->|required| 10_synthesis_report_config
-  07_red_team_adversarial -->|required| 10_synthesis_report_config
-  08_blue_team_refutation -->|required| 10_synthesis_report_config
-  09_independent_verification -->|required| 10_synthesis_report_config
-  12_scoring_prioritization -->|required| 10_synthesis_report_config
-  11_remediation_proposal -->|optional| 10_synthesis_report_config
-  02_api_collection_intelligence_ingest["02-api-collection-intelligence-ingest (planned; not dispatched)"]
-  00_intake_post -->|required| 02_api_collection_intelligence_ingest
-  02_binary_intelligence_ingest["02-binary-intelligence-ingest (planned; not dispatched)"]
-  02_binary_triage -->|required| 02_binary_intelligence_ingest
-  02_binary_cfg -->|required| 02_binary_intelligence_ingest
-  02_doc_intelligence_ingest["02-doc-intelligence-ingest (planned; not dispatched)"]
-  00_intake_post -->|required| 02_doc_intelligence_ingest
-  02_standards_source_ingest["02-standards-source-ingest (planned; not dispatched)"]
-  00_intake_post -->|required| 02_standards_source_ingest
-  02_test_intelligence_ingest["02-test-intelligence-ingest (planned; not dispatched)"]
-  00_intake_post -->|required| 02_test_intelligence_ingest
+  07_red_team_adversarial_post -->|required| 10_synthesis_report_config
+  08_blue_team_refutation_post -->|required| 10_synthesis_report_config
+  09_independent_verification_post -->|required| 10_synthesis_report_config
+  12_scoring_prioritization_post -->|required| 10_synthesis_report_config
+  11_remediation_proposal_post -->|optional| 10_synthesis_report_config
+  02_api_collection_intelligence_ingest_config["02-api-collection-intelligence-ingest: resolve job configuration"] --> 02_api_collection_intelligence_ingest_pre["02-api-collection-intelligence-ingest: pre-validation"]
+  02_api_collection_intelligence_ingest_pre --> 02_api_collection_intelligence_ingest["02-api-collection-intelligence-ingest: work or reuse"]
+  02_api_collection_intelligence_ingest --> 02_api_collection_intelligence_ingest_post["02-api-collection-intelligence-ingest: post-validation and publish"]
+  00_intake_post -->|required| 02_api_collection_intelligence_ingest_config
+  02_binary_intelligence_ingest_config["02-binary-intelligence-ingest: resolve job configuration"] --> 02_binary_intelligence_ingest_pre["02-binary-intelligence-ingest: pre-validation"]
+  02_binary_intelligence_ingest_pre --> 02_binary_intelligence_ingest["02-binary-intelligence-ingest: work or reuse"]
+  02_binary_intelligence_ingest --> 02_binary_intelligence_ingest_post["02-binary-intelligence-ingest: post-validation and publish"]
+  02_binary_triage_post -->|required| 02_binary_intelligence_ingest_config
+  02_binary_cfg_post -->|required| 02_binary_intelligence_ingest_config
+  02_doc_intelligence_ingest_config["02-doc-intelligence-ingest: resolve job configuration"] --> 02_doc_intelligence_ingest_pre["02-doc-intelligence-ingest: pre-validation"]
+  02_doc_intelligence_ingest_pre --> 02_doc_intelligence_ingest["02-doc-intelligence-ingest: work or reuse"]
+  02_doc_intelligence_ingest --> 02_doc_intelligence_ingest_post["02-doc-intelligence-ingest: post-validation and publish"]
+  00_intake_post -->|required| 02_doc_intelligence_ingest_config
+  02_standards_source_ingest_config["02-standards-source-ingest: resolve job configuration"] --> 02_standards_source_ingest_pre["02-standards-source-ingest: pre-validation"]
+  02_standards_source_ingest_pre --> 02_standards_source_ingest["02-standards-source-ingest: work or reuse"]
+  02_standards_source_ingest --> 02_standards_source_ingest_post["02-standards-source-ingest: post-validation and publish"]
+  00_intake_post -->|required| 02_standards_source_ingest_config
+  02_test_intelligence_ingest_config["02-test-intelligence-ingest: resolve job configuration"] --> 02_test_intelligence_ingest_pre["02-test-intelligence-ingest: pre-validation"]
+  02_test_intelligence_ingest_pre --> 02_test_intelligence_ingest["02-test-intelligence-ingest: work or reuse"]
+  02_test_intelligence_ingest --> 02_test_intelligence_ingest_post["02-test-intelligence-ingest: post-validation and publish"]
+  00_intake_post -->|required| 02_test_intelligence_ingest_config
   04_owasp_validation_worklist_config["04-owasp-validation-worklist: resolve job configuration"] --> 04_owasp_validation_worklist_pre["04-owasp-validation-worklist: pre-validation"]
   04_owasp_validation_worklist_pre --> 04_owasp_validation_worklist["04-owasp-validation-worklist: work or reuse"]
   04_owasp_validation_worklist --> 04_owasp_validation_worklist_post["04-owasp-validation-worklist: post-validation and publish"]
   01_component_characterization_post -->|required| 04_owasp_validation_worklist_config
-  02_standards_source_ingest -->|required| 04_owasp_validation_worklist_config
+  02_standards_source_ingest_post -->|required| 04_owasp_validation_worklist_config
   15_stig_srg_validation_worklist_config["15-stig-srg-validation-worklist: resolve job configuration"] --> 15_stig_srg_validation_worklist_pre["15-stig-srg-validation-worklist: pre-validation"]
   15_stig_srg_validation_worklist_pre --> 15_stig_srg_validation_worklist["15-stig-srg-validation-worklist: work or reuse"]
   15_stig_srg_validation_worklist --> 15_stig_srg_validation_worklist_post["15-stig-srg-validation-worklist: post-validation and publish"]
   01_component_characterization_post -->|required| 15_stig_srg_validation_worklist_config
-  02_standards_source_ingest -->|required| 15_stig_srg_validation_worklist_config
+  02_standards_source_ingest_post -->|required| 15_stig_srg_validation_worklist_config
   02_build_configure_config["02-build-configure: resolve job configuration"] --> 02_build_configure_pre["02-build-configure: pre-validation"]
   02_build_configure_pre --> 02_build_configure["02-build-configure: work or reuse"]
   02_build_configure --> 02_build_configure_post["02-build-configure: post-validation and publish"]
@@ -177,8 +214,10 @@ flowchart TD
   02_code_property_graph_pre --> 02_code_property_graph["02-code-property-graph: work or reuse"]
   02_code_property_graph --> 02_code_property_graph_post["02-code-property-graph: post-validation and publish"]
   00_intake_post -->|required| 02_code_property_graph_config
-  02_native_sast["02-native-sast (planned; not dispatched)"]
-  02_native_build_post -->|required| 02_native_sast
+  02_native_sast_config["02-native-sast: resolve job configuration"] --> 02_native_sast_pre["02-native-sast: pre-validation"]
+  02_native_sast_pre --> 02_native_sast["02-native-sast: work or reuse"]
+  02_native_sast --> 02_native_sast_post["02-native-sast: post-validation and publish"]
+  02_native_build_post -->|required| 02_native_sast_config
   02_ir_capture_config["02-ir-capture: resolve job configuration"] --> 02_ir_capture_pre["02-ir-capture: pre-validation"]
   02_ir_capture_pre --> 02_ir_capture["02-ir-capture: work or reuse"]
   02_ir_capture --> 02_ir_capture_post["02-ir-capture: post-validation and publish"]
@@ -191,21 +230,35 @@ flowchart TD
   02_ir_facts_pre --> 02_ir_facts["02-ir-facts: work or reuse"]
   02_ir_facts --> 02_ir_facts_post["02-ir-facts: post-validation and publish"]
   02_ir_link_post -->|required| 02_ir_facts_config
-  02_debug_symbol_index["02-debug-symbol-index (planned; not dispatched)"]
-  02_native_build_post -->|required| 02_debug_symbol_index
-  02_binary_triage["02-binary-triage (planned; not dispatched)"]
-  02_native_build_post -->|required| 02_binary_triage
-  02_binary_cfg["02-binary-cfg (planned; not dispatched)"]
-  02_binary_triage -->|required| 02_binary_cfg
-  02_debug_symbol_index -->|required| 02_binary_cfg
-  02_test_execution["02-test-execution (planned; not dispatched)"]
-  02_native_build_post -->|required| 02_test_execution
-  02_test_result_ingest["02-test-result-ingest (planned; not dispatched)"]
-  02_test_execution -->|required| 02_test_result_ingest
-  02_test_coverage_ingest["02-test-coverage-ingest (planned; not dispatched)"]
-  02_test_execution -->|required| 02_test_coverage_ingest
-  02_operations_doc_ingest["02-operations-doc-ingest (planned; not dispatched)"]
-  00_intake_post -->|required| 02_operations_doc_ingest
+  02_debug_symbol_index_config["02-debug-symbol-index: resolve job configuration"] --> 02_debug_symbol_index_pre["02-debug-symbol-index: pre-validation"]
+  02_debug_symbol_index_pre --> 02_debug_symbol_index["02-debug-symbol-index: work or reuse"]
+  02_debug_symbol_index --> 02_debug_symbol_index_post["02-debug-symbol-index: post-validation and publish"]
+  02_native_build_post -->|required| 02_debug_symbol_index_config
+  02_binary_triage_config["02-binary-triage: resolve job configuration"] --> 02_binary_triage_pre["02-binary-triage: pre-validation"]
+  02_binary_triage_pre --> 02_binary_triage["02-binary-triage: work or reuse"]
+  02_binary_triage --> 02_binary_triage_post["02-binary-triage: post-validation and publish"]
+  02_native_build_post -->|required| 02_binary_triage_config
+  02_binary_cfg_config["02-binary-cfg: resolve job configuration"] --> 02_binary_cfg_pre["02-binary-cfg: pre-validation"]
+  02_binary_cfg_pre --> 02_binary_cfg["02-binary-cfg: work or reuse"]
+  02_binary_cfg --> 02_binary_cfg_post["02-binary-cfg: post-validation and publish"]
+  02_binary_triage_post -->|required| 02_binary_cfg_config
+  02_debug_symbol_index_post -->|required| 02_binary_cfg_config
+  02_test_execution_config["02-test-execution: resolve job configuration"] --> 02_test_execution_pre["02-test-execution: pre-validation"]
+  02_test_execution_pre --> 02_test_execution["02-test-execution: work or reuse"]
+  02_test_execution --> 02_test_execution_post["02-test-execution: post-validation and publish"]
+  02_native_build_post -->|required| 02_test_execution_config
+  02_test_result_ingest_config["02-test-result-ingest: resolve job configuration"] --> 02_test_result_ingest_pre["02-test-result-ingest: pre-validation"]
+  02_test_result_ingest_pre --> 02_test_result_ingest["02-test-result-ingest: work or reuse"]
+  02_test_result_ingest --> 02_test_result_ingest_post["02-test-result-ingest: post-validation and publish"]
+  02_test_execution_post -->|required| 02_test_result_ingest_config
+  02_test_coverage_ingest_config["02-test-coverage-ingest: resolve job configuration"] --> 02_test_coverage_ingest_pre["02-test-coverage-ingest: pre-validation"]
+  02_test_coverage_ingest_pre --> 02_test_coverage_ingest["02-test-coverage-ingest: work or reuse"]
+  02_test_coverage_ingest --> 02_test_coverage_ingest_post["02-test-coverage-ingest: post-validation and publish"]
+  02_test_execution_post -->|required| 02_test_coverage_ingest_config
+  02_operations_doc_ingest_config["02-operations-doc-ingest: resolve job configuration"] --> 02_operations_doc_ingest_pre["02-operations-doc-ingest: pre-validation"]
+  02_operations_doc_ingest_pre --> 02_operations_doc_ingest["02-operations-doc-ingest: work or reuse"]
+  02_operations_doc_ingest --> 02_operations_doc_ingest_post["02-operations-doc-ingest: post-validation and publish"]
+  00_intake_post -->|required| 02_operations_doc_ingest_config
   02_evidence_index_config["02-evidence-index: resolve job configuration"] --> 02_evidence_index_pre["02-evidence-index: pre-validation"]
   02_evidence_index_pre --> 02_evidence_index["02-evidence-index: work or reuse"]
   02_evidence_index --> 02_evidence_index_post["02-evidence-index: post-validation and publish"]
@@ -226,6 +279,7 @@ flowchart TD
   02_sbom_inventory_pre --> 02_sbom_inventory["02-sbom-inventory: work or reuse"]
   02_sbom_inventory --> 02_sbom_inventory_post["02-sbom-inventory: post-validation and publish"]
   00_intake_post -->|required| 02_sbom_inventory_config
+  02_build_index_post -->|required| 02_sbom_inventory_config
   02_sca_vulnerability_match_config["02-sca-vulnerability-match: resolve job configuration"] --> 02_sca_vulnerability_match_pre["02-sca-vulnerability-match: pre-validation"]
   02_sca_vulnerability_match_pre --> 02_sca_vulnerability_match["02-sca-vulnerability-match: work or reuse"]
   02_sca_vulnerability_match --> 02_sca_vulnerability_match_post["02-sca-vulnerability-match: post-validation and publish"]
@@ -275,10 +329,14 @@ flowchart TD
   remediation_retest_feedback_config["remediation-retest-feedback: resolve job configuration"] --> remediation_retest_feedback_pre["remediation-retest-feedback: pre-validation"]
   remediation_retest_feedback_pre --> remediation_retest_feedback["remediation-retest-feedback: work or reuse"]
   remediation_retest_feedback --> remediation_retest_feedback_post["remediation-retest-feedback: post-validation and publish"]
-  09_independent_verification -->|required| remediation_retest_feedback_config
+  09_independent_verification_post -->|required| remediation_retest_feedback_config
+  11_remediation_proposal_post -->|required| remediation_retest_feedback_config
   final_publication_gate_config["final-publication-gate: resolve job configuration"] --> final_publication_gate_pre["final-publication-gate: pre-validation"]
   final_publication_gate_pre --> final_publication_gate["final-publication-gate: work or reuse"]
   final_publication_gate --> final_publication_gate_post["final-publication-gate: post-validation and publish"]
   10_synthesis_report_post -->|required| final_publication_gate_config
   completeness_audit_post -->|required| final_publication_gate_config
   synthetic_hypothesis_resynthesis_post -->|required| final_publication_gate_config
+  evidence_qualified_quorum_post -->|required| final_publication_gate_config
+  dynamic_rescope_post -->|required| final_publication_gate_config
+  remediation_retest_feedback_post -->|required| final_publication_gate_config

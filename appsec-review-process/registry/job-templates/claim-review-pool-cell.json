@@ -1,0 +1,19 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "claim-review-pool-cell",
+  "display_name": "Stage-scoped Claim Reviewer Cell",
+  "process": "claim-review-pool",
+  "budget_default": "standard",
+  "model": {"model": "claude-sonnet-5", "effort": "high"},
+  "composition": {"persona_id": "claim-reviewer", "role_id": "claim-reviewer", "domain_id": "claim-review-lifecycle", "tooling_profile_id": "claim-review-static", "output_contract_id": "claim-review-pool-candidates"},
+  "inputs": {"required": ["newest accepted upstream claim artifact", "runtime-supplied stage and invocation identity"], "optional": []},
+  "outputs": {"directory": "private persona instance output", "files": ["candidates.json"]},
+  "permissions": ["read-run-data"],
+  "prompt_sections": ["governing_rules", "persona", "role", "domain", "tooling_profile", "task", "output_contract"],
+  "task_prompt": "appsec-review-process/claim-review-pool-task.md",
+  "implemented": true,
+  "applicability": "one real persona cell when the newest accepted stage input contains claims; zero instances otherwise",
+  "timeout_seconds": 1800,
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "coordinator": "intake-coordinator"
+}

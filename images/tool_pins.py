@@ -24,6 +24,7 @@ Verification kinds (``assets[].verify.kind``):
 
     vendor-checksums   the release's own checksums file lists the asset's sha256
     vendor-sha256-file a file next to the asset holds its sha256 (Go, Maven Central)
+    vendor-spdx        the release's SPDX manifest lists the asset's sha256
     sigstore-checksums vendor-checksums, and the checksums file is verified with ``cosign verify-blob``
                        against the vendor's sigstore bundle, certificate identity and OIDC issuer
     sigstore-cert-checksums  the same, for vendors that publish a detached ``.sig`` and ``.pem``
@@ -67,7 +68,7 @@ PINNED_REF_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:
 TOOL_KEYS = {"schema", "image_id", "tool", "version", "purpose", "feeds", "executable",
              "version_argv", "version_expect", "assets", "smoke"}
 OPTIONAL_TOOL_KEYS = {"bundles", "pip_lock", "pip_package", "notes"}
-VERIFY_KINDS = {"vendor-checksums", "vendor-sha256-file", "sigstore-checksums", "sigstore-cert-checksums",
+VERIFY_KINDS = {"vendor-checksums", "vendor-sha256-file", "vendor-spdx", "sigstore-checksums", "sigstore-cert-checksums",
                 "sigstore-key-checksums", "pgp"}
 SMOKE_KEYS = {"name", "argv", "exit_codes", "workspace"}
 OPTIONAL_SMOKE_KEYS = {"expect_files", "stdout_contains", "file_contains", "config"}
@@ -187,6 +188,7 @@ def verify_errors(verify: Any, folder: Path) -> list[str]:
     wanted = {
         "vendor-checksums": {"kind", "checksums_url", "entry"},
         "vendor-sha256-file": {"kind", "sha256_url"},
+        "vendor-spdx": {"kind", "manifest_url", "entry"},
         "sigstore-checksums": {"kind", "checksums_url", "entry", "bundle_url",
                                "certificate_identity_regexp", "certificate_oidc_issuer"},
         "sigstore-cert-checksums": {"kind", "checksums_url", "entry", "signature_url", "certificate_url",
@@ -359,6 +361,33 @@ def single_hash(text: str) -> str:
     return token
 
 
+def spdx_sha256(text: str, entry: str) -> str:
+    """Return the one SHA-256 value recorded for an exact SPDX ``files[].fileName``."""
+    try:
+        document = json.loads(text)
+    except ValueError as exc:
+        raise PinError("SPDX manifest is not valid JSON") from exc
+    found = set()
+    files = document.get("files", []) if isinstance(document, dict) else []
+    if not isinstance(files, list):
+        raise PinError("SPDX manifest files is not an array")
+    for file_record in files:
+        if not isinstance(file_record, dict) or file_record.get("fileName") != entry:
+            continue
+        checksums = file_record.get("checksums", [])
+        if not isinstance(checksums, list):
+            continue
+        for checksum in checksums:
+            if not isinstance(checksum, dict) or str(checksum.get("algorithm", "")).upper() != "SHA256":
+                continue
+            value = str(checksum.get("checksumValue", "")).lower()
+            if SHA_RE.match(value):
+                found.add(value)
+    if len(found) != 1:
+        raise PinError(f"SPDX manifest lists {len(found)} sha256 values for {entry}")
+    return found.pop()
+
+
 def run_verifier(argv: list[str]) -> str:
     if not shutil.which(argv[0]):
         raise PinError(f"{argv[0]} is required for this asset's verification and is not on PATH")
@@ -419,6 +448,12 @@ def verify_asset(asset: dict[str, Any], version: str, path: Path, sha: str, fold
     elif kind == "vendor-sha256-file":
         expected = single_hash(fetch_text(verify["sha256_url"]))
         evidence.update(sha256_url=verify["sha256_url"])
+    elif kind == "vendor-spdx":
+        manifest = work / "manifest.spdx.json"
+        manifest_sha, _ = fetch(verify["manifest_url"], manifest)
+        expected = spdx_sha256(manifest.read_text(encoding="utf-8"), verify["entry"])
+        evidence.update(manifest_url=verify["manifest_url"], manifest_sha256=manifest_sha,
+                        entry=verify["entry"])
     else:  # pgp
         signature = work / "asset.asc"
         signature_sha, _ = fetch(verify["signature_url"], signature)

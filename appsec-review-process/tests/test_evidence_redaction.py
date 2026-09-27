@@ -1150,7 +1150,15 @@ class OwnDocumentsTests(unittest.TestCase):
             changed = deepcopy(er.RULESET)
             changed["entropy"].pop(key)
             self.assertNotEqual(er.digest({"module_version": er.MODULE_VERSION, "ruleset": changed}), er.RULESET_SHA256, key)
-        self.assertEqual(er.MODULE_VERSION, "1.1.0")
+        self.assertEqual(er.MODULE_VERSION, "1.1.3")
+
+    def test_automatic_attempt_identity_is_not_treated_as_a_secret(self):
+        attempt_id = "auto-" + hashlib.sha256(b"dagster-run-and-job").hexdigest()[:24]
+        self.assertEqual(er._merged_spans(attempt_id), [])
+        self.assertEqual(er._merged_spans("gitleaks-auto-627496c3a8075964cbf-1"), [])
+        self.assertEqual(er._merged_spans("native-a67b5345-2bac-4a76-a847-c1da2fb29cee"), [])
+        self.assertEqual(er._merged_spans("binskim-native-a67b5345-2bac-4a7-1"), [])
+        self.assertTrue(er._merged_spans("gh" + "p_" + stream("still-secret", ALNUM, 36)))
 
 
 class CheckoutIndependenceTests(unittest.TestCase):
@@ -1288,6 +1296,17 @@ class VerificationProbeTests(unittest.TestCase):
         receipt, _, _ = self.redact({"benign.txt": text})
         self.assertEqual(receipt["files"][0]["disposition"], "unchanged")
 
+    def test_api_key_documentation_placeholder_is_not_a_credential(self):
+        placeholder = "checkov --bc-api-key <api-key> --output json\n"
+        receipt, published, _ = self.redact({"tool.json": placeholder})
+        self.assertEqual(receipt["files"][0]["disposition"], "unchanged")
+        self.assertEqual((published / "nested" / "tool.json").read_text(encoding="utf-8"), placeholder)
+        actual = "checkov --bc-api-key " + SECRETS["SK_KEY"] + " --output json\n"
+        receipt, published, _ = self.redact({"tool.json": actual})
+        self.assertEqual(receipt["files"][0]["disposition"], "redacted")
+        self.assertNotIn(SECRETS["SK_KEY"],
+                         (published / "nested" / "tool.json").read_text(encoding="utf-8"))
+
     def test_new_bounded_patterns_stay_linear_on_hostile_lines(self):
         import time
         width = LIMITS.max_line_length - 8
@@ -1310,11 +1329,11 @@ class VerificationProbeTests(unittest.TestCase):
 
 # Produced by running the redactor over fixtures/evidence-redaction/sarif-snippets, then pinned.
 GOLDEN = {
-    "ruleset_sha256": "4f180f5abeb92829a7ff02d4d9eb560f86dc72fe5897bcc9748b5a783d4fa651",
+    "ruleset_sha256": "f92300607398d85ae92ae5af21411f810786551c819b26d532a94ca13e6c5c06",
     "sarif_published_sha256": "bbf1eac71274b50cd3e39a71ff1d0979803ab1ad4d60329a153be848a253e93b",
     "sarif_redactions": {"private-key-block": 0, "named-secret": 8, "url-credential": 0, "bearer-token": 0,
                          "provider-token": 1, "jwt": 0, "high-entropy": 1, "fingerprint": 2},
-    "sarif_receipt_sha256": "9563aca5f463b7f6b83693744ca7da055838f1f1f9495c83fd5aa09282b198e1",
+    "sarif_receipt_sha256": "b4782898d2c86c6a1fa8056013dca4b2098c69d4f5f5d4761b7c5cb63ca29d34",
 }
 
 

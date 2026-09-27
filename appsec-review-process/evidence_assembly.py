@@ -1,7 +1,6 @@
 """Deterministic, fail-closed core for the planned 02-evidence-assembly barrier.
 
-This module is intentionally not wired into Dagster or the lifecycle graph.  It consumes one
-explicit supplied generation rooted at ``supply_root``::
+This module consumes one explicit supplied generation rooted at ``supply_root``::
 
     assembly-supply.json
     terminal-instances.json
@@ -104,9 +103,9 @@ def _graph() -> tuple[list[dict[str, Any]], str]:
     value = read_json(GRAPH)
     node = value.get("jobs", {}).get(JOB, {})
     dependencies = node.get("dependencies")
-    if (node.get("implemented") is not False or node.get("join_policy", {}).get("mode") !=
+    if (node.get("implemented") is not True or node.get("join_policy", {}).get("mode") !=
             "all-required-terminal-accepted" or not isinstance(dependencies, list)):
-        raise Blocked(f"{JOB}: graph still must describe the planned fail-closed barrier")
+        raise Blocked(f"{JOB}: graph must describe the implemented fail-closed barrier")
     return dependencies, "sha256:" + file_hash(GRAPH)
 
 
@@ -130,6 +129,10 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
     job = edge["job"]
     if binding["source_snapshot_sha256"] != source:
         raise Blocked(f"{JOB}: {job} belongs to a different source snapshot")
+    # Direct core callers created before the dual-identity supply contract necessarily use the
+    # canonical identity for their producer receipts. Schema-validated supplies always carry the
+    # explicit field; this fallback preserves that narrow core API without inventing an alias.
+    producer_source = binding.get("producer_source_snapshot_sha256", source)
     producer_root = supply_root / "producers" / job
     if not producer_root.is_dir() or producer_root.is_symlink():
         raise Blocked(f"{JOB}: {job} producer root is absent or not a real directory")
@@ -200,7 +203,7 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
         raise Blocked(f"{JOB}: {job} envelope does not publish permission.json")
     permission_value = read_json(attempt / "permission.json")
     expected_permission = {"schema": PERMISSION_SCHEMA, "run_id": run_id, "job_id": job,
-        "source_snapshot_sha256": source, "permissions": binding["permissions"]}
+        "source_snapshot_sha256": producer_source, "permissions": binding["permissions"]}
     if permission_value != expected_permission:
         raise Blocked(f"{JOB}: {job} permission receipt does not match its generation binding")
     lineage = next((item for item in artifacts if item["producer_path"] == "lineage.json"), None)
@@ -208,7 +211,7 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
         raise Blocked(f"{JOB}: {job} envelope does not publish lineage.json")
     lineage_value = read_json(attempt / "lineage.json")
     expected_lineage = {"schema": LINEAGE_SCHEMA, "run_id": run_id, "job_id": job,
-        "source_snapshot_sha256": source,
+        "source_snapshot_sha256": producer_source,
         "build_lineage_sha256": binding["build_lineage_sha256"]}
     if lineage_value != expected_lineage:
         raise Blocked(f"{JOB}: {job} lineage receipt does not match its generation binding")
@@ -218,7 +221,9 @@ def _producer(supply_root: Path, run_id: str, source: str, edge: dict[str, Any],
         "execution_status": envelope["execution_status"],
         "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path),
         "envelope_sha256": "sha256:" + pointer["envelope_sha256"],
-        "source_snapshot_sha256": source, "build_lineage_sha256": binding["build_lineage_sha256"],
+        "source_snapshot_sha256": source,
+        "producer_source_snapshot_sha256": producer_source,
+        "build_lineage_sha256": binding["build_lineage_sha256"],
         "terminal_instance_ids": list(terminal_ids), "permissions": list(binding["permissions"]),
         "artifacts": sorted(artifacts, key=lambda item: item["path"]),
         "gaps": list(envelope["gaps"]), "skip_reason": envelope["skip_reason"]}
@@ -257,6 +262,7 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
                 "attempt_id": None, "input_fingerprint": None, "execution_status": None,
                 "accepted_pointer_sha256": None, "envelope_sha256": None,
                 "source_snapshot_sha256": None,
+                "producer_source_snapshot_sha256": None,
                 "build_lineage_sha256": None, "terminal_instance_ids": [], "permissions": [],
                 "artifacts": [], "gaps": [], "skip_reason": None})
             gaps.append({"producer_job_id": job, "kind": "missing-producer",
@@ -277,17 +283,14 @@ def inspect_supply(supply_root: Path, *, run_id: str, source_snapshot_sha256: st
     if claimed != set(terminal_by_id):
         gaps.append({"producer_job_id": JOB, "kind": "producer-gap",
                      "detail": "Terminal manifest contains unclaimed producer instances."})
-    build_generations = {item["build_lineage_sha256"] for item in producers
-                         if item["build_lineage_sha256"] is not None}
-    if len(build_generations) > 1:
-        raise Blocked(f"{JOB}: producer build lineage is mixed-generation")
     complete = (not any(item["disposition"] == "missing" for item in producers)
                 and claimed == set(terminal_by_id) and terminal["outcome"] == "COMPLETE")
     generation = {"source_snapshot_sha256": source_snapshot_sha256,
         "terminal_manifest_sha256": terminal["manifest_sha256"],
         "producer_envelopes": [(item["job_id"], item["accepted_pointer_sha256"],
-                                item["envelope_sha256"],
-                                item["build_lineage_sha256"]) for item in producers]}
+                                 item["envelope_sha256"],
+                                 item["producer_source_snapshot_sha256"],
+                                 item["build_lineage_sha256"]) for item in producers]}
     manifest = {"schema": SCHEMA, "run_id": run_id,
         "source_snapshot_sha256": source_snapshot_sha256,
         "assembly_status": "COMPLETE" if complete else "INCOMPLETE",

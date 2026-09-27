@@ -42,7 +42,8 @@ CONTRACT_DIR = ROOT / "registry" / "output-contracts"
 PROPOSAL = REPO / "docs" / "proposals" / "vendor-prepass" / "job-nodes.proposal.json"
 PRODUCERS = REPO / "docs" / "proposals" / "vendor-prepass" / "threat-workbench-producers.proposal.yaml"
 ALL_SCHEMAS = sorted(path.name for prefix in ("sbom-inventory", "sca-vulnerability-match", "license-inventory",
-                                              "dependency-lifecycle") for path in (REPO / "schemas").glob(f"{prefix}*.schema.json"))
+                                              "dependency-lifecycle", "osv-applicability")
+                     for path in (REPO / "schemas").glob(f"{prefix}*.schema.json"))
 POLICY = "refuse"
 LIMITS = redaction.DEFAULT_LIMITS
 REDACTOR = {"name": redaction.REDACTOR_NAME, "module_version": redaction.MODULE_VERSION,
@@ -281,6 +282,22 @@ def sbom_components(variant: str) -> list:
 
 def sbom_spec(variant: str) -> Spec:
     header, components = header_for(SBOM), sbom_components(variant)
+    enrichment = {
+        "schema": "appsec-review/build-index-sbom-enrichment/1.0",
+        "run_id": header["run_id"],
+        "job_id": header["job_id"],
+        "attempt_id": header["attempt_id"],
+        "producer_id": "build-index-vendored-member",
+        "build_index_binding": {
+            "job_id": "02-build-index",
+            "attempt_id": "build-index-node-attempt-0001",
+            "path": "outputs/build-index.json",
+            "sha256": label_sha("accepted-build-index"),
+        },
+        "members": [],
+        "coverage_gaps": [],
+    }
+    enrichment_bytes = dump(enrichment)
     cdx = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
            "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
            "components": [{"type": "library", "bom-ref": item["component_id"], "name": item["name"],
@@ -290,8 +307,12 @@ def sbom_spec(variant: str) -> Spec:
                 "generated_at": "2026-09-20T12:01:00Z",
                 "sbom_document": {"path": contracts.SBOM_CDX_FILE, "sha256": "", "bytes": 0, "bom_format": "CycloneDX",
                                   "spec_version": "1.6"},
+                "enrichment_document": {"path": contracts.SBOM_ENRICHMENT_FILE,
+                                        "sha256": sha(enrichment_bytes),
+                                        "producer_id": "build-index-vendored-member"},
                 "components": components}
     documents = {contracts.SBOM_CDX_FILE: cdx, contracts.SBOM_MANIFEST_FILE: manifest,
+                 contracts.SBOM_ENRICHMENT_FILE: enrichment,
                  **build_aggregate(header, TOOLS[SBOM], EXECUTORS[SBOM], len(components), [], 6, [])}
     return Spec(SBOM, documents).reseal()
 
@@ -345,6 +366,11 @@ def sca_spec(sbom: dict, expected_sbom: dict, max_age) -> Spec:
                   "databases": [{"assertion": "database-snapshot-identity", "database": database_block(kind),
                                  "data_timestamp": DATABASES[kind]["data_timestamp"],
                                  **age_block(DATABASES[kind]["data_timestamp"], max_age)} for kind in contracts.DATABASE_KINDS]}
+    purl_refs = sorted(item["component_id"] for item in sbom["components"] if item["purl"] is not None)
+    applicability = {"schema": "appsec-review/osv-applicability-receipt/1.0", **header,
+        "tool_id": "osv-scanner", "sbom_binding": dict(binding), "decision": "EXECUTE", "reason": None,
+        "examined_component_count": len(sbom["components"]), "purl_component_count": len(purl_refs),
+        "purl_component_refs": purl_refs, "database_identity": database_block("osv")}
     gap_document = {"schema": "appsec-review/sca-vulnerability-match-coverage-gaps/1.0", **header, "redactor": dict(REDACTOR),
                     "sbom_binding": dict(binding), "gaps": gaps}
     summary = {"schema": "appsec-review/sca-vulnerability-match-gap-summary/1.0", **header, "sbom_binding": dict(binding),
@@ -354,6 +380,7 @@ def sca_spec(sbom: dict, expected_sbom: dict, max_age) -> Spec:
     identities_listed = [{"kind": "vulnerability-database", "identity_id": kind, "version": DATABASES[kind]["schema_version"],
                           "sha256": DATABASES[kind]["sha256"]} for kind in contracts.DATABASE_KINDS]
     documents = {contracts.SCA_RESULT_FILE: result, contracts.SCA_IDENTITIES_FILE: identities,
+                 contracts.SCA_OSV_APPLICABILITY_FILE: applicability,
                  contracts.SCA_GAPS_FILE: gap_document, contracts.SCA_SUMMARY_FILE: summary,
                  **build_aggregate(header, tool_id, EXECUTORS[SCA], len(matches), identities_listed, 1,
                                    unmapped_gap(tool_id, len(gaps)))}
@@ -781,7 +808,7 @@ class SchemaHygieneTests(unittest.TestCase):
         cls.schemas = {name: json.loads((REPO / "schemas" / name).read_text(encoding="utf-8")) for name in ALL_SCHEMAS}
 
     def test_the_slice_owns_the_expected_schema_files(self):
-        self.assertEqual(len(ALL_SCHEMAS), 16)
+        self.assertEqual(len(ALL_SCHEMAS), 17)
         for policy in contracts.CONTRACT_POLICIES.values():
             for schema_name in policy["document_schemas"].values():
                 self.assertIn(schema_name, ALL_SCHEMAS)
@@ -1336,7 +1363,8 @@ class FieldBindingTests(unittest.TestCase):
         def cdx_spec(d): d["specVersion"] = "1.5"
 
         self.check(SBOM, [
-            (manifest, run_id, ["header-mismatch"]), (manifest, job_id, [schema]), (manifest, attempt_id, ["header-mismatch"]),
+            (manifest, run_id, ["header-mismatch", "enrichment-identity"]), (manifest, job_id, [schema]),
+            (manifest, attempt_id, ["header-mismatch", "enrichment-identity"]),
             (manifest, snapshot, ["header-mismatch"]), (manifest, redactor_version, ["redactor-mismatch"]),
             (manifest, redactor_ruleset, ["redactor-mismatch"]), (manifest, document_sha, ["sbom-document-mismatch"]),
             (manifest, document_bytes, ["sbom-document-mismatch"]), (manifest, spec_version, ["sbom-document-invalid"]),
@@ -1360,8 +1388,9 @@ class FieldBindingTests(unittest.TestCase):
         self.assertEqual(names(mutated(self, SBOM, edit(cdx, cdx_extra))), {"sbom-projection-mismatch"})
 
     def test_each_sca_field_edited_alone_is_rejected(self):
-        result, identities, gap_file, summary = (contracts.SCA_RESULT_FILE, contracts.SCA_IDENTITIES_FILE,
-                                                 contracts.SCA_GAPS_FILE, contracts.SCA_SUMMARY_FILE)
+        result, identities, gap_file, summary, applicability = (
+            contracts.SCA_RESULT_FILE, contracts.SCA_IDENTITIES_FILE,
+            contracts.SCA_GAPS_FILE, contracts.SCA_SUMMARY_FILE, contracts.SCA_OSV_APPLICABILITY_FILE)
 
         def binding_attempt(d): d["sbom_binding"]["attempt_id"] = "sbom-node-attempt-0002"
         def binding_sha(d): d["sbom_binding"]["sha256"] = label_sha(CANARY)
@@ -1420,6 +1449,9 @@ class FieldBindingTests(unittest.TestCase):
         def counts_dropped(d): d["counts"].pop()
         def counts_order(d): d["counts"].reverse()
         def gap_list_sha(d): d["gap_list"]["sha256"] = label_sha(CANARY)
+        def applicability_count(d): d["purl_component_count"] -= 1
+        def applicability_decision(d): d.update(decision="SKIPPED_NA", reason="no-purl-bearing-components")
+        def applicability_database(d): d["database_identity"]["snapshot_id"] = "osv-20260101"
 
         stale = "gap-summary-mismatch"
         self.check(SCA, [
@@ -1451,6 +1483,9 @@ class FieldBindingTests(unittest.TestCase):
             (summary, component_count, [stale]), (summary, evaluated_count, [stale]), (summary, gap_count, [stale]),
             (summary, counts_value, [stale]), (summary, counts_reason, [stale]), (summary, counts_dropped, [stale]),
             (summary, counts_order, [stale]), (summary, gap_list_sha, [stale]),
+            (applicability, applicability_count, ["osv-applicability-mismatch"]),
+            (applicability, applicability_decision, ["osv-applicability-mismatch"]),
+            (applicability, applicability_database, ["database-identity-mismatch"]),
         ])
 
     def test_the_sca_aggregate_is_bound_to_the_databases_and_the_gap_count(self):

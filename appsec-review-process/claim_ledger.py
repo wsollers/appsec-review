@@ -13,6 +13,7 @@ from publish_job_output import ACCEPTED_SCHEMA, coordinate_worker_lifecycle, rec
 from schema_validate import validate_document
 from worker_result import validate_worker_result
 import threat_model_core
+import bounded_analysis_workers
 
 JOB = "claim-ledger-routing"
 CONTRACT = "claim-ledger-core"
@@ -488,7 +489,21 @@ def current_inputs(run_id: str) -> dict[str, Any]:
         "accepted_pointer_sha256": "sha256:" + file_hash(pointer_path),
         "source_generation": artifact["source_snapshot"], "component_generation": artifact["component_map_attempt_id"],
         "artifact": artifact}
-    return {"run_id": run_id, "sources": [source], "code": _code_hashes()}
+    sources = [source]
+    owasp_pointer = data_path(run_id, "jobs", "04-asvs-masvs", "accepted.json")
+    if owasp_pointer.is_file():
+        routes, binding = bounded_analysis_workers.load_accepted(
+            owasp_pointer, run_id=run_id, job_id="04-asvs-masvs", contract="owasp-join-report",
+            artifact="owasp-candidate-promotion-routes.json",
+            schema="owasp-candidate-promotion-routes.schema.json")
+        sources.append({"contract_id": "owasp-join-report", "producer_job_id": binding["job_id"],
+            "producer_attempt_id": binding["attempt_id"],
+            "artifact_path": f"jobs/04-asvs-masvs/attempts/{binding['attempt_id']}/{binding['artifact_path']}",
+            "artifact_sha256": binding["artifact_sha256"],
+            "accepted_pointer_sha256": binding["accepted_pointer_sha256"],
+            "source_generation": artifact["source_snapshot"],
+            "component_generation": artifact["component_map_attempt_id"], "artifact": routes})
+    return {"run_id": run_id, "sources": sources, "code": _code_hashes()}
 
 
 def _receipts(inputs: dict[str, Any], ledger: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

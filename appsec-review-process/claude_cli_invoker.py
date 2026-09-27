@@ -695,12 +695,42 @@ def _schema_safe_claims(claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return safe
 
 
+def _claims_from_evidence_producer_binding(value: dict[str, Any], inputs: tuple,
+                                           allowed_claim_classes: tuple[str, ...],
+                                           result_filename: str) -> list[dict[str, Any]]:
+    """Accept only an exact echo of the four B14-pinned producer identity files."""
+    if "evidence_manifest" not in allowed_claim_classes:
+        raise InvokerOutputError("claim class 'evidence_manifest' is not allowed")
+    by_name = {Path(item.path).name: item for item in inputs}
+    expected = {"accepted_pointer_sha256": by_name.get("accepted.json"),
+                "envelope_sha256": by_name.get("result.json"),
+                "permission_sha256": by_name.get("permission.json"),
+                "lineage_sha256": by_name.get("lineage.json")}
+    if any(item is None for item in expected.values()):
+        raise InvokerOutputError("producer binding is missing a required pinned input")
+    if any(value.get(field) != item.sha256 for field, item in expected.items()):
+        raise InvokerOutputError("producer binding does not echo the pinned input hashes")
+    pointer = by_name["accepted.json"]
+    try:
+        pointer_value = json.loads(pointer.data)
+    except ValueError:
+        raise InvokerOutputError("accepted producer pointer is not JSON") from None
+    if value.get("producer_job_id") != pointer_value.get("job"):
+        raise InvokerOutputError("producer binding job does not match the accepted pointer")
+    return [{"claim_id": "producer-binding", "claim_class": "evidence_manifest",
+             "statement": "Accepted producer identity is bound to four pinned run-owned files.",
+             "file": result_filename,
+             "citations": [{"root": pointer.root, "path": pointer.path,
+                            "sha256": pointer.sha256, "locator": "whole file"}]}]
+
+
 _CLAIM_BUILDERS = {
     "repository-partition-map.schema.json": _claims_from_partition_map,
     "project-discovery.schema.json": _claims_from_project_inventory,
     "operations-topology.schema.json": _claims_from_operations_topology,
     "build-classification.schema.json": _claims_from_build_classification,
     "build-plan.schema.json": _claims_from_build_plan,
+    "evidence-producer-binding.schema.json": _claims_from_evidence_producer_binding,
 }
 
 

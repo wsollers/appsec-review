@@ -13,6 +13,7 @@ from execution_state import Blocked, atomic_json, digest, file_hash, read_json, 
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+import control_process_worker
 
 LEDGER_SCHEMA = "claim-ledger-input.schema.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
@@ -355,6 +356,20 @@ def permission_receipt(stage: str, result: dict[str, Any]) -> dict[str, Any]:
             "permissions": PERMISSIONS}
 
 
+def source_generation(result: dict[str, Any]) -> str:
+    """Return the one source generation preserved by every stage record."""
+    records = next((value for value in result.values() if isinstance(value, list)), None)
+    if not records:
+        raise Blocked("claim lifecycle: result has no claim records")
+    generations = {record.get("source_generation") for record in records
+                   if isinstance(record, dict)}
+    generation = next(iter(generations), None)
+    if (len(generations) != 1 or not isinstance(generation, str) or
+            not generation.startswith("sha256:") or len(generation) != 71):
+        raise Blocked("claim lifecycle: result source generation is absent or mixed")
+    return generation
+
+
 def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[str, Any]) -> dict[str, Any]:
     _validate_ledger(ledger)
     candidates = _index(ledger["candidates"])
@@ -513,3 +528,46 @@ def run_stage(stage: str, accepted_pointer: Path, decisions_path: Path, output_p
     atomic_json(output_path, result)
     atomic_json(output_path.parent / "permission.json", permission_receipt(stage, result))
     return result
+
+
+def run_attempt(stage: str, accepted_pointer: Path, decisions_path: Path, output_root: Path,
+                run_id: str, attempt_id: str, started_at: str, finished_at: str) -> dict[str, Any]:
+    """Publish a lifecycle-ready immutable common-envelope attempt.
+
+    The decision document remains untrusted input.  Its exact bytes and the reverified accepted
+    upstream binding are folded into the attempt fingerprint; the publisher validates the stage's
+    registered closed result schema before atomically exposing any output.
+    """
+    if stage not in STAGES:
+        raise Blocked("claim lifecycle: unknown stage")
+    contract, artifact, upstream_schema, _output_schema, output_artifact = STAGES[stage]
+    upstream_job = "claim-ledger-routing" if stage == "07-red-team-adversarial" else contract
+    upstream, binding = load_accepted(accepted_pointer, run_id=run_id, job_id=upstream_job,
+                                      contract=contract, artifact=artifact, schema=upstream_schema)
+    decisions = read_json(decisions_path)
+    function = {"07-red-team-adversarial": red_team, "08-blue-team-refutation": blue_team,
+                "09-independent-verification": verify, "12-scoring-prioritization": score}[stage]
+    result = function(upstream, binding, decisions)
+    input_binding = {"accepted_upstream": binding,
+                     "decisions_sha256": "sha256:" + file_hash(Path(decisions_path))}
+    return control_process_worker.publish(
+        run_id=run_id, job_id=stage, attempt_id=attempt_id, contract_id=stage,
+        result_name=output_artifact, result=result, output_root=Path(output_root),
+        source_snapshot_sha256=source_generation(result), input_binding=input_binding,
+        started_at=started_at, finished_at=finished_at)
+
+
+def command(stage: str, description: str) -> None:
+    """Run one stage as an immutable worker attempt from its thin CLI module."""
+    import argparse
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--attempt-id", required=True)
+    parser.add_argument("--accepted", type=Path, required=True)
+    parser.add_argument("--decisions", type=Path, required=True)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--started-at", required=True)
+    parser.add_argument("--finished-at", required=True)
+    args = parser.parse_args()
+    run_attempt(stage, args.accepted, args.decisions, args.output_root, args.run_id,
+                args.attempt_id, args.started_at, args.finished_at)

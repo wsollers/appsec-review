@@ -100,7 +100,7 @@ _ALLOWED_OPTION_COUNTS = {
 }
 _FLAG_OPTIONS = {"--read-only"}
 
-ENVIRONMENT_NAMES = ("LANG", "LC_ALL", "NO_COLOR", "SOURCE_DATE_EPOCH", "TZ", "XDG_CACHE_HOME")
+ENVIRONMENT_NAMES = ("LANG", "LC_ALL", "LOGNAME", "NO_COLOR", "SOURCE_DATE_EPOCH", "TZ", "USER", "XDG_CACHE_HOME")
 # Host variables the docker *client* may see. None of them reaches the container: the adapter
 # never emits ``--env NAME`` without a value and never emits ``--env-file``.
 CLIENT_ENVIRONMENT_NAMES = ("PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "WINDIR", "PROGRAMDATA",

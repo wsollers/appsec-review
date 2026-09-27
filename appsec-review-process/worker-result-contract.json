@@ -55,6 +55,10 @@
     "no-debug-symbols",
     "not-applicable-after-partition-review",
     "not-applicable-no-matching-inputs",
+    "not-applicable-no-native-binaries",
+    "not-applicable-no-routed-native-unit",
+    "not-applicable-no-fuzz-target",
+    "not-applicable-no-verified-claims",
     "not-applicable-non-native",
     "not-requested",
     "not-requested-no-scorecard-projects"

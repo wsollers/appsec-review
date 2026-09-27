@@ -8,17 +8,21 @@ or remediation state.
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+import re
+import subprocess
 import sys
 from typing import Any
 
+import container_execution
 from execution_state import Blocked, ROOT, atomic_json, file_hash
 
 
 PIPELINE_REPORT = ROOT.parent / "pipeline" / "report"
 RENDER_INPUT = "report.review.json"
 RENDER_MANIFEST = "render-publication-manifest.json"
-RENDERED = ("report.tex", "report.html", "report.fragment.html",
+RENDERED = ("report.tex", "report.pdf", "report.html", "report.fragment.html",
             "workbench.html", "workbench.fragment.html")
 SEVERITIES = {"CRITICAL": "Critical", "HIGH": "High", "MEDIUM": "Medium",
               "LOW": "Low", "NONE": "None"}
@@ -33,6 +37,51 @@ def _renderer():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _compile_pdf(render_root: Path) -> None:
+    """Compile the retained TeX with the exact locally pinned report image."""
+    render_root = Path(render_root).resolve(strict=True)
+    defaults = container_execution.host_defaults()
+    docker = defaults.get("docker_executable")
+    if docker is None:
+        raise Blocked("10-synthesis-report: Docker is unavailable for pinned PDF rendering")
+    records = container_execution.load_image_registry(container_execution.IMAGES_DIR)
+    record = records.get("audit-report")
+    if not isinstance(record, dict):
+        raise Blocked("10-synthesis-report: pinned audit-report image record is absent")
+    reference = container_execution.image_reference(record)
+    inspect = subprocess.run(
+        [str(docker), "image", "inspect", "--format", "{{.Id}}", reference],
+        capture_output=True, text=True, timeout=60, check=False,
+        env=container_execution.docker_client_environment(os.environ, None))
+    if inspect.returncode != 0 or inspect.stdout.strip() != record["digest"]:
+        raise Blocked("10-synthesis-report: pinned audit-report image is unavailable or drifted")
+    name = "appsec-report-" + re.sub(r"[^a-z0-9]", "", file_hash(render_root / "report.tex"))[:24]
+    mount = str(render_root)
+    argv = [str(docker), "run", "--name", name, "--rm", "--pull", "never",
+        "--log-driver", "none", "--network", "none", "--read-only",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+        "--user", defaults["container_user"], "--pids-limit", "256",
+        "--memory", "2g", "--memory-swap", "2g", "--cpus", "2",
+        "--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=512m", "--workdir", "/out",
+        "--env", "HOME=/tmp", "--env", "SOURCE_DATE_EPOCH=0", "--env", "TZ=UTC",
+        "--env", "TEXINPUTS=/src//:", "--volume", f"{mount}:/src:ro",
+        "--volume", f"{mount}:/out:rw", reference, "latexmk", "-pdf",
+        "-interaction=nonstopmode", "-halt-on-error", "-quiet", "-outdir=/out",
+        "/src/report.tex"]
+    try:
+        completed = subprocess.run(argv, capture_output=True, text=True, timeout=900, check=False,
+            env=container_execution.docker_client_environment(os.environ, None))
+    except subprocess.TimeoutExpired as exc:
+        subprocess.run([str(docker), "rm", "-f", name], capture_output=True, timeout=60,
+            env=container_execution.docker_client_environment(os.environ, None), check=False)
+        raise Blocked("10-synthesis-report: pinned PDF rendering timed out") from exc
+    if completed.returncode != 0:
+        raise Blocked("10-synthesis-report: pinned PDF rendering failed")
+    pdf = render_root / "report.pdf"
+    if pdf.is_symlink() or not pdf.is_file() or pdf.stat().st_size < 1024 or not pdf.read_bytes().startswith(b"%PDF-"):
+        raise Blocked("10-synthesis-report: renderer did not produce a valid PDF artifact")
 
 
 def _evidence(trace: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, str]]:
@@ -117,7 +166,7 @@ def build_review(report: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any
         families.append({"id": "limitations", "name": "Unresolved coverage and assumptions",
             "note": "Preserved without promotion or omission."})
     return {"report": {"title": "Application Security Review Draft",
-        "target": report["scope"]["target"], "target_commit": "not asserted",
+        "target": report["scope"]["target"], "target_commit": report["scope"].get("source_revision") or "not asserted",
         "engagement": "Evidence-backed draft; human decision required", "run_id": report["run_id"],
         "sat_id": "not asserted", "pipeline_commit": "not asserted", "report_date": "not asserted",
         "classification": "Internal - DRAFT_EVIDENCE_BACKED", "native_tier": "N/A",
@@ -126,6 +175,19 @@ def build_review(report: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any
         "finding_scoring": "authoritative_retained_publication", "process_assurance": "not_asserted",
         "families": families, "processes": processes,
         "findings": _findings(report, evidence_ids), "evidence": evidence,
+        "target_context": {"source_snapshot_sha256": report["scope"].get("source_snapshot_sha256", "not asserted"),
+            "components": report["scope"]["components"],
+            "relationships": report.get("component_relationships", []),
+            "elements": report.get("threat_model", {}).get("elements", []),
+            "flows": report.get("threat_model", {}).get("flows", []),
+            "trust_boundaries": report.get("threat_model", {}).get("trust_boundaries", []),
+            "abuse_scenarios": report.get("threat_model", {}).get("abuse_scenarios", []),
+            "attack_trees": report.get("threat_model", {}).get("attack_trees", []),
+            "stride_hypotheses": report.get("threat_model", {}).get("stride_hypotheses", []),
+            "assumptions": report.get("threat_model", {}).get("assumptions", []),
+            "gaps": report.get("threat_model", {}).get("gaps", []),
+            "unresolved_candidates": report["unresolved_candidates"],
+            "owasp_coverage": report["owasp_coverage"]},
         "provenance": {"images": [], "models": [], "ledger_head": report["ledger_head_sha256"]},
         "scoring": {"evidence_weight": {"DIRECT_EVIDENCE": 1.0, "STRONG_INFERENCE": 0.8,
             "WEAK_INFERENCE": 0.5}, "verification_weight": {"VERIFIED": 1.0,
@@ -145,6 +207,7 @@ def render(report: dict[str, Any], trace: dict[str, Any], output_root: Path,
     atomic_json(output_root / RENDER_INPUT, review)
     render_root = output_root / "presentation"
     _renderer().render(output_root / RENDER_INPUT, render_root)
+    _compile_pdf(render_root)
     artifacts = [{"path": f"presentation/{name}",
                   "sha256": "sha256:" + file_hash(render_root / name)} for name in RENDERED]
     manifest = {"schema": "appsec-review/report-render-publication/1.0",

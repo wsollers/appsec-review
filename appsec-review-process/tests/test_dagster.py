@@ -54,6 +54,9 @@ class DagsterTests(unittest.TestCase):
         self.assertIn('build_discovery_work',names)
         self.assertIn('evidence_index_work',names)
         self.assertIn('job_02_ossf_scorecard',names)
+        self.assertEqual(
+            {item['job'] for item in LIFECYCLE['06-cve-reachability']['dependencies']},
+            {'02-sca-vulnerability-match', '02-ir-facts'})
 
     def test_build_publication_rejects_mixed_generations(self):
         from dagster import build_op_context, Failure
@@ -65,19 +68,11 @@ class DagsterTests(unittest.TestCase):
                     build_discovery_publish(context,{'engagement_run_id':self.run_id,'intake':{'fingerprint':'new'}},
                                             {'upstream':'old'})
 
-    def test_unavailable_worker_records_resume_command(self):
-        from dagster import build_op_context, Failure
+    def test_evidence_assembly_is_a_real_lifecycle_op(self):
         from dagster_workflow import LIFECYCLE_OPS
-        (self.root/'dagster').mkdir()
-        with DagsterInstance.local_temp(str(self.root/'dagster')) as instance:
-            with build_op_context(instance=instance) as context:
-                with self.assertRaisesRegex(Failure,'WORKER_NOT_IMPLEMENTED'):
-                    LIFECYCLE_OPS['02-evidence-assembly'](context,{'engagement_run_id':self.run_id},[])
-                record=state.read_json(state.data_path(self.run_id,'orchestration','dagster',context.run_id,
-                                                     '02-evidence-assembly','pre.json'))
-                self.assertEqual(record['status'],'BLOCKED')
-                self.assertEqual(record['resume_command'],
-                    'python -B appsec-review-process/launch_job.py --run-id '+self.run_id+' --job full_review --wait')
+        self.assertEqual(LIFECYCLE_OPS['02-evidence-assembly'].name,
+                         'job_02_evidence_assembly')
+        self.assertNotIn('blocked', LIFECYCLE_OPS['02-evidence-assembly'].name)
 
     def dispatch(self):
         (self.root/'dagster').mkdir()

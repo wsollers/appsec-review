@@ -12,6 +12,10 @@ JOB = "dynamic-rescope"
 RESULT = "bounded-rescope-plan.json"
 CONTRACT = "bounded-rescope-plan"
 
+def run_lifecycle(run_id: str, dagster_run_id: str, force: bool = False):
+    from control_feature_lifecycle import run as lifecycle_run
+    return lifecycle_run(run_id, dagster_run_id, JOB, force)
+
 def run(source: Path, output: Path):
     value=read_json(source); index=dependency_index(value["run_id"],value["nodes"],value["edges"])
     result=bounded_rescope(value["run_id"],index,value["changed_nodes"],iteration=value["iteration"],max_iterations=value["max_iterations"],previous_plan=value.get("previous_plan")); result["dependency_index"]=index; atomic_json(output,result); return result

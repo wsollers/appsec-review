@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 from datetime import timedelta
 from pathlib import Path
 import sys
+import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -98,6 +101,78 @@ class SnapshotSyncTests(unittest.TestCase):
             registry_root=self.root / "registry", opener=lambda *_a, **_k: Response(self.archive))
         self.assertEqual(calls, [{"coordinator_id": "periodic"}])
         self.assertEqual(result["dependencies"][0]["database_kind"], "grype-db")
+
+    def test_file_snapshot_retains_the_exact_vendor_archive_at_a_fixed_cache_path(self):
+        spec = {**self.spec("osv"), "archive": "file",
+                "target_path": "osv-scanner/OSS-Fuzz/all.zip",
+                "required_paths": ["osv-scanner/OSS-Fuzz/all.zip"]}
+        result = syncer.sync_one(spec, self.grants(), run_id=self.run,
+            source_snapshot_sha256=self.source, now=self.now, registry_root=self.root / "registry",
+            opener=lambda *_args, **_kwargs: Response(self.archive))
+        retained = Path(result["data_root"], "osv-scanner", "OSS-Fuzz", "all.zip")
+        self.assertEqual(retained.read_bytes(), self.archive)
+
+        unsafe = {**spec, "target_path": "../all.zip", "required_paths": ["../all.zip"]}
+        with self.assertRaisesRegex(syncer.SyncBlocked, "unsafe path"):
+            syncer.sync_one(unsafe, self.grants(), run_id=self.run,
+                source_snapshot_sha256=self.source, now=self.now, registry_root=self.root / "registry",
+                opener=lambda *_args, **_kwargs: Response(self.archive))
+
+    def test_grype_zstd_archive_is_activated_before_registration(self):
+        spec = {**self.spec("grype-db"), "archive": "tar.zst",
+                "required_paths": ["grype/db/6/vulnerability.db", "grype/db/6/import.json"]}
+
+        def activate(_archive, destination, declared):
+            self.assertEqual(declared, spec)
+            cache = destination / "grype/db/6"; cache.mkdir(parents=True)
+            (cache / "vulnerability.db").write_bytes(b"db")
+            (cache / "import.json").write_bytes(b"{}\n")
+            return {"kind": "pinned-grype-db-import", "image_digest": "sha256:" + "a" * 64,
+                    "argv": ["grype", "db", "import"], "network_mode": "none",
+                    "status": {"valid": True}, "status_sha256": "sha256:" + "b" * 64}
+
+        with mock.patch.object(syncer, "_activate_grype", side_effect=activate) as called:
+            result = syncer.sync_one(spec, self.grants(), run_id=self.run,
+                source_snapshot_sha256=self.source, now=self.now, registry_root=self.root / "registry",
+                opener=lambda *_args, **_kwargs: Response(self.archive))
+        self.assertEqual(called.call_count, 1)
+        self.assertTrue(Path(result["data_root"], "grype/db/6/import.json").is_file())
+        provenance = json.loads(Path(result["data_root"], "source-provenance.json").read_text())
+        self.assertEqual(provenance["archive_sha256"], spec["sha256"])
+        self.assertEqual(provenance["transformation"]["network_mode"], "none")
+
+    def test_grype_activation_uses_bounded_host_user_and_staging_tmp(self):
+        destination = self.root / "activation"
+        destination.mkdir()
+        archive = self.root / "grype.tar.zst"
+        archive.write_bytes(b"archive")
+        spec = {**self.spec("grype-db"), "archive": "tar.zst",
+                "metadata": {**self.spec("grype-db")["metadata"],
+                    "schema_version": "6.1.9", "data_timestamp": self.now},
+                "required_paths": ["grype/db/6/vulnerability.db", "grype/db/6/import.json"]}
+        cache = destination / "grype/db/6"
+
+        def run(argv, **_kwargs):
+            self.assertIn("--user", argv)
+            self.assertEqual(argv[argv.index("--user") + 1], "1234:1234")
+            self.assertIn("TMPDIR=/scratch/.import-tmp", argv)
+            self.assertIn("SQLITE_TMPDIR=/scratch/.import-tmp", argv)
+            if argv[-3:] == ["db", "import", "/input/db.tar.zst"]:
+                cache.mkdir(parents=True)
+                (cache / "vulnerability.db").write_bytes(b"db")
+                (cache / "import.json").write_bytes(b"{}\n")
+                return subprocess.CompletedProcess(argv, 0, b"", b"")
+            status = {"valid": True, "schemaVersion": "v6.1.9", "built": self.now}
+            return subprocess.CompletedProcess(argv, 0, json.dumps(status).encode(), b"")
+
+        with (mock.patch.object(syncer.ce, "host_defaults", return_value={
+                    "docker_executable": "docker", "container_user": "1234:1234"}),
+              mock.patch.object(syncer.ce, "load_image_registry", return_value={
+                    "tool-grype": {"digest": "sha256:" + "a" * 64}}),
+              mock.patch.object(syncer.subprocess, "run", side_effect=run)):
+            result = syncer._activate_grype(archive, destination, spec)
+        self.assertEqual(result["kind"], "pinned-grype-db-import")
+        self.assertFalse((destination / ".import-tmp").exists())
 
     def test_nvd_warning_window_is_usable_and_hard_ceiling_still_fails(self):
         nvd = self.root / "nvd"; Publisher(nvd).sync(T0)

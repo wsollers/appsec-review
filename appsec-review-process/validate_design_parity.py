@@ -521,6 +521,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, default=MANIFEST)
     parser.add_argument("--write-report", type=Path)
     parser.add_argument("--write-generated-views", action="store_true")
+    parser.add_argument(
+        "--check-generated-views",
+        action="store_true",
+        help=(
+            "Explicitly request the generated-view check. The check is fail-closed and "
+            "already runs by default; this option exists so operator-guide commands are "
+            "self-documenting and executable."
+        ),
+    )
     args = parser.parse_args(argv)
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     result = validate_manifest(manifest)

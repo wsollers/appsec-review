@@ -39,6 +39,18 @@ class CommittedTools(unittest.TestCase):
             self.assertEqual(len(builds), 1)
             self.assertEqual(builds[0]["tag"], f"{folder.name}:local")
 
+    def test_hash_bound_text_inputs_are_checkout_stable(self):
+        attributes = (IMAGES / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn("tool-*/requirements.txt text eol=lf", attributes.splitlines())
+        self.assertIn("tool-*/keys/*.pub text eol=lf", attributes.splitlines())
+        paths = [folder / "requirements.txt" for folder in tp.tool_dirs()
+                 if (folder / "requirements.txt").is_file()]
+        paths.extend(IMAGES.glob("tool-*/keys/*.pub"))
+        self.assertTrue(paths)
+        for path in paths:
+            with self.subTest(path=path.relative_to(IMAGES).as_posix()):
+                self.assertNotIn(b"\r\n", path.read_bytes())
+
 
 class Checksums(unittest.TestCase):
     def test_entry_found_exactly(self):
@@ -56,6 +68,18 @@ class Checksums(unittest.TestCase):
         self.assertEqual(tp.single_hash(("d" * 64) + "  go.tar.gz\n"), "d" * 64)
         with self.assertRaises(tp.PinError):
             tp.single_hash("not a hash\n")
+
+    def test_spdx_file_hash(self):
+        document = json.dumps({"files": [{
+            "fileName": "./bin/tool",
+            "checksums": [{"algorithm": "SHA1", "checksumValue": "1" * 40},
+                          {"algorithm": "SHA256", "checksumValue": "E" * 64}],
+        }]})
+        self.assertEqual(tp.spdx_sha256(document, "./bin/tool"), "e" * 64)
+        with self.assertRaises(tp.PinError):
+            tp.spdx_sha256(document, "./bin/other")
+        with self.assertRaises(tp.PinError):
+            tp.spdx_sha256("not json", "./bin/tool")
 
 
 class VerifyAsset(unittest.TestCase):

@@ -87,13 +87,38 @@ class BuildReplayTests(unittest.TestCase):
         self.assertEqual(path.relative_to(state.run_path("run-1")).as_posix(),
                          "data/controls/build-replay.json")
 
+    def test_current_inputs_resolves_and_binds_the_target(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            control = root / "build-replay.json"
+            control.write_text("{}", encoding="utf-8")
+            target = root / "target"
+            target.mkdir()
+            with mock.patch.object(worker, "control_path", return_value=control), \
+                 mock.patch.object(worker, "read_json", return_value={}), \
+                 mock.patch.object(worker, "validate_document", return_value=[]), \
+                 mock.patch.object(worker, "_source_snapshot", return_value="sha256:" + "a" * 64), \
+                 mock.patch.object(worker, "_target", return_value=target) as resolve, \
+                 mock.patch.object(worker, "_permission", return_value={"decision": {}}), \
+                 mock.patch.object(worker, "_upstream", return_value=(root, {"locks": [], "source_revision": "rev"}, {})), \
+                 mock.patch.object(worker, "source_tree_sha256", return_value="sha256:" + "b" * 64), \
+                 mock.patch.object(worker.pc, "input_fingerprint_component", return_value="sha256:" + "c" * 64), \
+                 mock.patch.object(worker.ce, "boundary_sha256", return_value="sha256:" + "d" * 64), \
+                 mock.patch.object(worker, "_code_hashes", return_value={}):
+                result = worker.current_inputs("run", "02-build-configure")
+            resolve.assert_called_once_with("run")
+            self.assertEqual(result["target_path"], str(target))
+
     def test_source_tree_sha256_binds_bytes_and_symlink_targets_but_not_git(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder)
             (target / "src").mkdir()
             source = target / "src" / "main.c"
             source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
-            (target / "main-link.c").symlink_to("src/main.c")
+            try:
+                (target / "main-link.c").symlink_to("src/main.c")
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable on this host: {exc}")
             (target / ".git").mkdir()
             (target / ".git" / "index").write_bytes(b"first")
             initial = worker.source_tree_sha256(target)

@@ -8,6 +8,10 @@ import synthesis_report
 
 JOB="synthetic-hypothesis-resynthesis"; RESULT="synthetic-hypothesis-resynthesis.json"; CONTRACT="synthetic-hypothesis-resynthesis"
 
+def run_lifecycle(run_id: str, dagster_run_id: str, force: bool = False):
+    from control_feature_lifecycle import run as lifecycle_run
+    return lifecycle_run(run_id, dagster_run_id, JOB, force)
+
 def _routes(routes):
     registered={path.stem for path in (Path(__file__).resolve().parent/"registry"/"job-templates").glob("*.json")}
     if any(job not in registered for job in routes.values()): raise Blocked("synthetic resynthesis: route is not registered")

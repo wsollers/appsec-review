@@ -34,7 +34,7 @@ from typing import Any, Iterator
 from execution_state import atomic_bytes, beneath, digest
 from schema_validate import validate_document
 
-MODULE_VERSION = "1.1.0"
+MODULE_VERSION = "1.1.3"
 REDACTOR_NAME = "appsec-review-process/evidence_redaction"
 RECEIPT_SCHEMA = "redaction-receipt.schema.json"
 RECEIPT_FILENAME = "redaction-receipt.json"
@@ -113,7 +113,9 @@ RULESET: dict[str, Any] = {
     "xml_prefix": r"<[A-Za-z0-9_:.\-]{0,64}\Z",
     "xml_tail": r"[A-Za-z0-9_:.\-]{0,64}(?:\s[^<>]{0,512})?>(?P<v>[^<]{1,4096})<",
     "unquoted_value": r"[^\s\"',;]{1,4096}",
-    "unquoted_literals": ["false", "nil", "none", "null", "true", "undefined"],
+    # Exact documentation/tool placeholders carry no credential value.  Keep this list closed;
+    # real values following the same secret-named flags still redact.
+    "unquoted_literals": ["<api-key>", "false", "nil", "none", "null", "true", "undefined"],
     "bearer": r"(?i)\bbearer[ \t]+(?P<v>[A-Za-z0-9._~+/=\-]{16,})",
     "url_credential": r"://[^/\s:@]{1,256}:(?P<v>[^/\s@]{1,256})@",
     "jwt": r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}",
@@ -155,8 +157,16 @@ RULESET: dict[str, Any] = {
         # `20260919T123919Z-0b9e70`: this repository's run-id shape (UTC stamp plus a short hex
         # suffix). About a third of real run ids were being flagged, which mangled the header of
         # every published document. The suffix carries at most 48 bits and is an identifier.
-        "exempt_patterns": {"utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9a-f]{4,12})?\Z"},
-        "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake", "utc-stamp-id", "public-pem-body", "ssh-public-key"],
+        "exempt_patterns": {
+            "automatic-attempt-id": r"auto-[0-9a-f]{24}\Z",
+            "automatic-tool-attempt-id": r"[a-z0-9][a-z0-9-]{0,31}-auto-[0-9a-f]{19}-[1-9][0-9]{0,2}(?:-version)?\Z",
+            "native-attempt-id": r"native-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z",
+            "native-tool-attempt-id": r"[a-z0-9][a-z0-9-]{0,31}-native-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{3}-[1-9][0-9]{0,2}(?:-version)?\Z",
+            "utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9a-f]{4,12})?\Z",
+        },
+        "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake",
+                   "automatic-attempt-id", "automatic-tool-attempt-id", "native-attempt-id",
+                   "native-tool-attempt-id", "utc-stamp-id", "public-pem-body", "ssh-public-key"],
     },
     "json_extensions": [".json", ".sarif"],
     "text_extensions": [".csv", ".err", ".jsonl", ".log", ".md", ".ndjson", ".out", ".tsv", ".txt", ".xml", ".yaml", ".yml"],

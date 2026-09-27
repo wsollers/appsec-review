@@ -1,0 +1,14 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "evidence-producer-binding",
+  "display_name": "Accepted Evidence Producer Binding",
+  "required_files": ["evidence-producer-binding.json"],
+  "required_status_fields": ["producer_job_id", "accepted_pointer_sha256", "envelope_sha256", "permission_sha256", "lineage_sha256"],
+  "result_schema": {"artifact": "evidence-producer-binding.json", "schema_file": "evidence-producer-binding.schema.json"},
+  "claim_class": {"claim_class_id": "evidence_manifest", "allowed_assertions": ["hash-bound-input"], "forbidden_promotions": ["finding", "severity", "runtime-state"]},
+  "validation_rules": [
+    "all four values exactly match the pinned readable inputs",
+    "producer identity comes from the accepted pointer and common envelope",
+    "no security finding or runtime assertion is produced"
+  ]
+}

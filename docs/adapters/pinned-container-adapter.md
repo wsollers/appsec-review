@@ -82,8 +82,8 @@ capability, a device, a user, a working directory or a writable target.
   rejected; `argv[0]` naming a listed shell (`sh`, `bash`, `pwsh`, ...) is rejected too. That last
   rule is a lint against shell-string assembly, not a boundary: a multiplexer such as busybox is
   not caught, and the container is what contains the process.
-- `environment`: `{name, value}` pairs whose names are `LANG`, `LC_ALL`, `NO_COLOR`,
-  `SOURCE_DATE_EPOCH`, `TZ` or `XDG_CACHE_HOME`; printable ASCII values up to 256 characters.
+- `environment`: `{name, value}` pairs whose names are `LANG`, `LC_ALL`, `LOGNAME`, `NO_COLOR`,
+  `SOURCE_DATE_EPOCH`, `TZ`, `USER` or `XDG_CACHE_HOME`; printable ASCII values up to 256 characters.
   The host environment never passes through. The docker client itself receives only `PATH`, `HOME`
   and the Windows profile variables; host `DOCKER_*` variables are dropped and the endpoint comes
   from the trusted runtime.
