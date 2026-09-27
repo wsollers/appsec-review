@@ -51,15 +51,29 @@ class ReportInputAssemblyTests(unittest.TestCase):
             if job == "09-independent-verification":
                 document = self.documents["verification"][artifact]
             else:
-                actor = {"job_id": job, "attempt_id": attempt_id, "role_id": role,
-                    "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT}
-                row = copy.deepcopy(self.documents["verification"]["independent-verification.json"]
-                                    ["verifications"][0])
-                row["status"] = "HYPOTHESIS" if job == "07-red-team-adversarial" else "SURVIVING"
-                row[actor_key] = actor
-                document = {"schema": "fixture", "run_id": RUN_ID, "stage": job,
+                verified = self.documents["verification"]["independent-verification.json"]["verifications"][0]
+                common = ("claim_id", "route_id", "claim_class", "hypothesis", "confidence", "component_ids",
+                    "component_generation", "source_generation", "producer", "citations", "proof_obligations",
+                    "dissent_ids", "causal_claim_ids", "supersedes_claim_id", "hypothesis_id")
+                keep = {key: copy.deepcopy(verified[key]) for key in common}
+                if job == "07-red-team-adversarial":
+                    row = {**keep, "status": "HYPOTHESIS", "attacker_case": "Bounded fixture attacker case.",
+                           "reviewer": copy.deepcopy(verified["red_reviewer"]),
+                           "review_citations": copy.deepcopy(verified["citations"])}
+                    schema = "appsec-review/red-team-adversarial/1.0"
+                else:
+                    row = {**keep, "status": "SURVIVING", "attacker_case": "Bounded fixture attacker case.",
+                           "red_reviewer": copy.deepcopy(verified["red_reviewer"]),
+                           "blue_reviewer": copy.deepcopy(verified["blue_reviewer"]),
+                           "refutation_rationale": "Fixture obligations survived refutation.",
+                           "refutation_citations": copy.deepcopy(verified["citations"])}
+                    schema = "appsec-review/blue-team-refutation/1.0"
+                document = {"schema": schema, "run_id": RUN_ID, "stage": job,
                     "ledger_head_id": origin["event_id"], "ledger_head_sha256": origin["entry_hash"],
-                    "upstream": {}, "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
+                    "upstream": {"job_id": "fixture-upstream", "attempt_id": "fixture-1",
+                        "pointer_sha256": "sha256:" + "1" * 64, "artifact_path": "upstream.json",
+                        "artifact_sha256": "sha256:" + "2" * 64},
+                    "claim_boundary": "DECISION_RECORD_NOT_RUNTIME_OR_COMPLIANCE_PROOF",
                     collection: [row]}
             stage_pointers[job] = self._publish_job(job, job, attempt_id, {artifact: document})
         ledger["entries"][1]["decision_authority"] = self._authority(
@@ -103,6 +117,13 @@ class ReportInputAssemblyTests(unittest.TestCase):
         return previous
 
     def _documents(self):
+        def actor(job, attempt, role, artifact, fill):
+            return {"job_id": job, "attempt_id": attempt, "role_id": role,
+                "source_generation": SOURCE, "component_generation": COMPONENT_ATTEMPT,
+                "artifact_path": artifact, "artifact_sha256": "sha256:" + fill * 64,
+                "permission_receipt_path": "permission.json",
+                "permission_receipt_sha256": "sha256:" + fill * 64,
+                "reason": f"Authorized {role} fixture decision."}
         component = json.loads((ROOT / "tests/fixtures/component-characterization/hello-autotools.json").read_text())
         component["source_snapshot_sha256"] = SOURCE
         threat = json.loads((ROOT / "tests/fixtures/threat-workbench/schema/integrated-threat-model.golden.json").read_text())
@@ -150,9 +171,12 @@ class ReportInputAssemblyTests(unittest.TestCase):
                   "claim_states": [{"claim_id": CLAIM, "latest_event_id": verified["event_id"], "status": "verified"}],
                   "claim_limits": {"candidate_only": True, "finding_created": False,
                   "severity_assigned": False, "runtime_claimed": False, "compliance_claimed": False}}
-        verifier = {"job_id": "09-independent-verification", "attempt_id": "verification-1",
-            "role_id": "independent-verifier", "source_generation": SOURCE,
-            "component_generation": COMPONENT_ATTEMPT}
+        red_actor = actor("07-red-team-adversarial", "red-1", "red-team-adversary",
+                          "red-assessment.json", "7")
+        blue_actor = actor("08-blue-team-refutation", "blue-1", "blue-team-refuter",
+                           "blue-assessment.json", "8")
+        verifier = actor("09-independent-verification", "verification-1", "independent-verifier",
+                         "verification-evidence.json", "9")
         inherited = {"claim_id": CLAIM, "route_id": "route-1", "claim_class": "candidate_only",
             "hypothesis": "A bounded fixture hypothesis.", "confidence": "medium",
             "component_ids": ["component-1"], "source_generation": SOURCE,
@@ -162,12 +186,7 @@ class ReportInputAssemblyTests(unittest.TestCase):
                                    "status": "SATISFIED", "citations": [self._citation()]}],
             "dissent_ids": ["dissent-1"], "causal_claim_ids": [], "supersedes_claim_id": None}
         verification_record = {**inherited, "hypothesis_id": "hyp_" + "4" * 20,
-            "status": "VERIFIED", "red_reviewer": {"job_id": "07-red-team-adversarial", "attempt_id": "red-1",
-                "role_id": "red-team-adversary", "source_generation": SOURCE,
-                "component_generation": COMPONENT_ATTEMPT},
-            "blue_reviewer": {"job_id": "08-blue-team-refutation", "attempt_id": "blue-1",
-                "role_id": "blue-team-refuter", "source_generation": SOURCE,
-                "component_generation": COMPONENT_ATTEMPT},
+            "status": "VERIFIED", "red_reviewer": red_actor, "blue_reviewer": blue_actor,
             "verifier": verifier, "verification_method": "Hash-bound fixture verification.",
             "verification_citations": [self._citation()]}
         upstream = {"job_id": "upstream", "attempt_id": "upstream-1",

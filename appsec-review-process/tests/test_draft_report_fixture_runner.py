@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import unittest
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -14,7 +14,6 @@ sys.path.insert(0, str(ROOT / "tests"))
 import draft_report_fixture_runner as runner
 from execution_state import Blocked, file_hash
 import synthesis_report as synthesis
-from schema_validate import validate_document as validate_schema
 import test_report_input_assembly as report_fixture_tests
 import test_owasp_join_publisher as owasp_publisher_tests
 
@@ -52,22 +51,19 @@ class DraftReportFixtureRunnerTests(unittest.TestCase):
             if source.name != "04-owasp-join-report":
                 shutil.copytree(source, target_jobs / source.name, dirs_exist_ok=True)
         self.fixture.jobs = target_jobs
+        self.fixture.schema_patcher.stop()
 
     def tearDown(self):
-        self.fixture.tearDown()
+        self.fixture.temp.cleanup()
         (report_fixture_tests.RUN_ID, report_fixture_tests.SOURCE,
          report_fixture_tests.CLAIM) = self._fixture_globals
         self.owasp_fixture.tearDown()
 
-    @staticmethod
-    def _synthesis_validation(document, schema):
-        if schema in {"09-independent-verification.schema.json", "scoring-prioritization.schema.json"}:
-            return []
-        return validate_schema(document, schema)
-
-    def test_real_assembler_to_synthesis_handoff_emits_immutable_draft(self):
-        with patch.object(synthesis, "validate_document", side_effect=self._synthesis_validation):
-            result = runner.run_fixture(self.run_root, self.owasp_fixture.run_id, "draft-1")
+    def test_exact_cli_real_assembler_to_synthesis_emits_immutable_draft(self):
+        completed = subprocess.run([sys.executable, str(ROOT / "draft_report_fixture_runner.py"),
+            "--run-root", str(self.run_root), "--run-id", self.owasp_fixture.run_id,
+            "--attempt-id", "draft-1"], cwd=ROOT.parent, text=True, capture_output=True, check=True)
+        result = json.loads(completed.stdout)
         attempt = Path(result["attempt_path"])
         self.assertEqual(result["status"], "DRAFT_EVIDENCE_BACKED")
         self.assertFalse(json.loads((attempt / synthesis.PUBLICATION).read_text())["final"])
@@ -77,6 +73,20 @@ class DraftReportFixtureRunnerTests(unittest.TestCase):
         self.assertEqual(set(result["artifacts"]), {item.name for item in attempt.iterdir()})
         with self.assertRaises(Blocked):
             runner.run_fixture(self.run_root, self.owasp_fixture.run_id, "draft-1")
+
+    def test_failed_staging_does_not_reserve_attempt_and_same_id_retries(self):
+        pointer = self.run_root / "data/jobs/01-component-characterization/accepted.json"
+        parked = pointer.with_suffix(".parked")
+        pointer.rename(parked)
+        with self.assertRaises(Blocked):
+            runner.run_fixture(self.run_root, self.owasp_fixture.run_id, "retry-1")
+        attempts = self.run_root / "data/jobs/10-synthesis-report/attempts"
+        self.assertFalse((attempts / "retry-1").exists())
+        self.assertEqual(list(attempts.glob(".staging-retry-1-*")), [])
+        parked.rename(pointer)
+        result = runner.run_fixture(self.run_root, self.owasp_fixture.run_id, "retry-1")
+        self.assertEqual(result["status"], synthesis.STATUS)
+        self.assertTrue((attempts / "retry-1/result.json").is_file())
 
 
 if __name__ == "__main__":
