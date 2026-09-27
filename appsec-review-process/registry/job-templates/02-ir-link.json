@@ -1,1 +1,53 @@
-{"schema":"appsec-review/job-template/0.1","job_template_id":"02-ir-link","display_name":"IR Link","process":"02-evidence-pregather","budget_default":"probe","composition":{"persona_id":"evidence-custodian","role_id":"ir-evidence-producer","domain_id":"llvm-ir-evidence","tooling_profile_id":"llvm-ir-evidence","output_contract_id":"ir-link"},"inputs":{"required":["accepted IR capture"],"optional":[]},"outputs":{"directory":"data/jobs/02-ir-link/attempts/<attempt_id>","files":["ir-link.json"]},"prompt_sections":["governing_rules","scope","validation","output_contract"],"implemented":true,"timeout_seconds":300,"execution":{"worker":"ir_link.py","arguments":["{run_id}"]},"retry":{"max_attempts":1,"transient_reasons":[],"side_effect_free":true},"applicability":"runs with one or more accepted LLVM modules","permissions":["read-run-data","write-run-data"],"coordinator":"intake-coordinator"}
+{
+    "schema": "appsec-review/job-template/0.1",
+    "job_template_id": "02-ir-link",
+    "display_name": "IR Link",
+    "process": "02-evidence-pregather",
+    "budget_default": "probe",
+    "composition": {
+        "persona_id": "evidence-custodian",
+        "role_id": "ir-evidence-producer",
+        "domain_id": "llvm-ir-evidence",
+        "tooling_profile_id": "llvm-ir-evidence",
+        "output_contract_id": "ir-link"
+    },
+    "inputs": {
+        "required": [
+            "accepted IR capture"
+        ],
+        "optional": []
+    },
+    "outputs": {
+        "directory": "data/jobs/02-ir-link/attempts/<attempt_id>",
+        "files": [
+            "ir-link.json",
+            "permission.json",
+            "lineage.json"
+        ]
+    },
+    "prompt_sections": [
+        "governing_rules",
+        "scope",
+        "validation",
+        "output_contract"
+    ],
+    "implemented": true,
+    "timeout_seconds": 300,
+    "execution": {
+        "worker": "ir_link.py",
+        "arguments": [
+            "{run_id}"
+        ]
+    },
+    "retry": {
+        "max_attempts": 1,
+        "transient_reasons": [],
+        "side_effect_free": true
+    },
+    "applicability": "runs with one or more accepted LLVM modules",
+    "permissions": [
+        "read-run-data",
+        "write-run-data"
+    ],
+    "coordinator": "intake-coordinator"
+}

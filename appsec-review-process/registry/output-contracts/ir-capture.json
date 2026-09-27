@@ -1,1 +1,39 @@
-{"schema":"appsec-review/output-contract/0.1","contract_id":"ir-capture","display_name":"LLVM Bitcode Capture","required_files":["ir-capture.json"],"required_status_fields":["process","status","modules","coverage_gaps","qualification"],"result_schema":{"artifact":"ir-capture.json","schema_file":"ir-capture.schema.json"},"claim_class":{"claim_class_id":"ir_static_evidence","allowed_assertions":["bitcode-module","coverage-gap"],"forbidden_promotions":["finding","severity","runtime-state"]},"validation_rules":["bind exact accepted native-build pointer, envelope, result, source snapshot and compile database","derive exact build variant from unit, image and compile entries","hash every source, compiler argv and bitcode module","record zero and partial capture as explicit gaps"]}
+{
+    "schema": "appsec-review/output-contract/0.1",
+    "contract_id": "ir-capture",
+    "display_name": "LLVM Bitcode Capture",
+    "required_files": [
+        "ir-capture.json",
+        "permission.json",
+        "lineage.json"
+    ],
+    "required_status_fields": [
+        "process",
+        "status",
+        "modules",
+        "coverage_gaps",
+        "qualification"
+    ],
+    "result_schema": {
+        "artifact": "ir-capture.json",
+        "schema_file": "ir-capture.schema.json"
+    },
+    "claim_class": {
+        "claim_class_id": "ir_static_evidence",
+        "allowed_assertions": [
+            "bitcode-module",
+            "coverage-gap"
+        ],
+        "forbidden_promotions": [
+            "finding",
+            "severity",
+            "runtime-state"
+        ]
+    },
+    "validation_rules": [
+        "bind exact accepted native-build pointer, envelope, result, source snapshot and compile database",
+        "derive exact build variant from unit, image and compile entries",
+        "hash every source, compiler argv and bitcode module",
+        "record zero and partial capture as explicit gaps"
+    ]
+}

@@ -96,6 +96,18 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "native_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "source-citation", "coverage-gap"},
     },
+    "ir-capture": {
+        "claim_class_id": "ir_static_evidence",
+        "allowed_assertions": {"bitcode-module", "coverage-gap"},
+    },
+    "ir-link": {
+        "claim_class_id": "ir_static_evidence",
+        "allowed_assertions": {"linked-module", "coverage-gap"},
+    },
+    "ir-facts": {
+        "claim_class_id": "ir_static_evidence",
+        "allowed_assertions": {"debug-location", "pointer-memory-fact", "coverage-gap"},
+    },
     "component-map": {
         "claim_class_id": "component_characterization",
         "allowed_assertions": {
