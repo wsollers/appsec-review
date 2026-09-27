@@ -3997,20 +3997,24 @@
         "09-independent-verification"
       ],
       "execution_mode": "join_controller",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "resource_pool": "unassigned",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_claim_ledger.py"
+        ]
       },
       "gaps": [
-        "append_only_claim_ledger_missing",
-        "candidate_routing_missing"
+        "owasp_common_lifecycle_wrapper_missing",
+        "downstream_decision_append_wiring_missing",
+        "no_live_qualification",
+        "unassigned_resource_pool"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Implement the hash-linked claim ledger and routing state machine."
+      "next_prerequisite": "Bind accepted OWASP and decision-stage publications to the qualified ledger core, then add shared lifecycle and live qualification."
     },
     {
       "id": "remediation-retest-feedback",
