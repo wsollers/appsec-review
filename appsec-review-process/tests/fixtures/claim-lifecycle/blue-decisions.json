@@ -1,0 +1,88 @@
+{
+  "decisions": [
+    {
+      "claim_id": "claim-aaaaaaaaaaaaaaaaaaaaaaaa",
+      "reviewer": {
+        "job_id": "08-blue-team-refutation",
+        "attempt_id": "blue-1",
+        "role_id": "blue-team",
+        "source_generation": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "component_generation": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "artifact_path": "blue-assessment.json",
+        "artifact_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "permission_receipt_path": "permission.json",
+        "permission_receipt_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "reason": "Authorized independent refutation."
+      },
+      "disposition": "SURVIVING",
+      "rationale": "Static flow evidence satisfies the current obligation.",
+      "proof_obligations": [
+        {
+          "obligation_id": "po-a",
+          "statement": "Show attacker-controlled bytes reach the parser.",
+          "status": "SATISFIED",
+          "citations": [
+            {
+              "citation_id": "citation-a",
+              "producer_job_id": "03-threat-model-dfd-stride",
+              "producer_attempt_id": "threat-1",
+              "artifact_path": "threats.json",
+              "artifact_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+              "locator_json": "/threats/0",
+              "observed_fact": "A modeled data flow reaches the parser."
+            }
+          ]
+        }
+      ],
+      "citations": [
+        {
+          "citation_id": "citation-a",
+          "producer_job_id": "03-threat-model-dfd-stride",
+          "producer_attempt_id": "threat-1",
+          "artifact_path": "threats.json",
+          "artifact_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "locator_json": "/threats/0",
+          "observed_fact": "A modeled data flow reaches the parser."
+        }
+      ],
+      "dissent_ids": []
+    },
+    {
+      "claim_id": "claim-bbbbbbbbbbbbbbbbbbbbbbbb",
+      "reviewer": {
+        "job_id": "08-blue-team-refutation",
+        "attempt_id": "blue-1",
+        "role_id": "blue-team",
+        "source_generation": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "component_generation": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "artifact_path": "blue-assessment.json",
+        "artifact_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "permission_receipt_path": "permission.json",
+        "permission_receipt_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "reason": "Authorized independent refutation."
+      },
+      "disposition": "UNRESOLVED",
+      "rationale": "No deployed-code evidence resolves the documented route.",
+      "proof_obligations": [
+        {
+          "obligation_id": "po-b",
+          "statement": "Resolve whether the route exists in deployed code.",
+          "status": "UNRESOLVED",
+          "citations": []
+        }
+      ],
+      "citations": [
+        {
+          "citation_id": "citation-b",
+          "producer_job_id": "04-asvs-masvs",
+          "producer_attempt_id": "owasp-1",
+          "artifact_path": "assessment.json",
+          "artifact_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "locator_json": "/candidates/0",
+          "observed_fact": "A supplied document describes an administrative route."
+        }
+      ],
+      "dissent_ids": []
+    }
+  ]
+}

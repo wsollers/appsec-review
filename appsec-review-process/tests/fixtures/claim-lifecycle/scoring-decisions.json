@@ -1,0 +1,1 @@
+{"decisions":[{"claim_id":"claim-aaaaaaaaaaaaaaaaaaaaaaaa","factors":{"impact":4,"exploitability":4,"exposure":4,"confidence":4},"rationale":"All four evidence-bound factors are maximal."},{"claim_id":"claim-bbbbbbbbbbbbbbbbbbbbbbbb","factors":null,"rationale":"Unresolved candidate remains visible and unscored."}]}
