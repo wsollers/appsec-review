@@ -35,6 +35,9 @@ class DagsterTests(unittest.TestCase):
         self.assertIn('critical_findings_sarif',{job.name for job in repository.get_all_jobs()})
         self.assertIn('ossf_scorecard',{job.name for job in repository.get_all_jobs()})
         self.assertIn('repository_partition_discovery',{job.name for job in repository.get_all_jobs()})
+        for job in ('native_memory_analysis','fuzz_target_triage','owasp_validation_worklist',
+                    'stig_srg_validation_worklist','deployment_hardening'):
+            self.assertIn(job,{item.name for item in repository.get_all_jobs()})
         self.assertIn('nvd_reference_sync',{job.name for job in repository.get_all_jobs()})
         self.assertIn('nvd_reference_schedule',{schedule.name for schedule in repository.schedule_defs})
         names={node.name for node in full_review.graph.node_defs}

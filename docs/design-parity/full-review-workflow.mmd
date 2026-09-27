@@ -14,10 +14,10 @@ flowchart TD
   j_01_component_characterization["01-component-characterization<br/>standalone_only"]
   j_03_threat_model_dfd_stride["03-threat-model-dfd-stride<br/>standalone_only"]
   j_04_asvs_masvs["04-asvs-masvs<br/>standalone_only"]
-  j_05_native_memory["05-native-memory<br/>missing_prerequisites"]
+  j_05_native_memory["05-native-memory<br/>standalone_only"]
   j_06_cve_reachability["06-cve-reachability<br/>missing_prerequisites"]
-  j_13_fuzz_target_triage["13-fuzz-target-triage<br/>missing_prerequisites"]
-  j_15_deployment_hardening["15-deployment-hardening<br/>missing_prerequisites"]
+  j_13_fuzz_target_triage["13-fuzz-target-triage<br/>standalone_only"]
+  j_15_deployment_hardening["15-deployment-hardening<br/>standalone_only"]
   j_07_red_team_adversarial["07-red-team-adversarial<br/>standalone_only"]
   j_08_blue_team_refutation["08-blue-team-refutation<br/>standalone_only"]
   j_09_independent_verification["09-independent-verification<br/>standalone_only"]
@@ -29,8 +29,8 @@ flowchart TD
   j_02_doc_intelligence_ingest["02-doc-intelligence-ingest<br/>standalone_only"]
   j_02_standards_source_ingest["02-standards-source-ingest<br/>standalone_only"]
   j_02_test_intelligence_ingest["02-test-intelligence-ingest<br/>standalone_only"]
-  j_04_owasp_validation_worklist["04-owasp-validation-worklist<br/>registered_planned_not_executable"]
-  j_15_stig_srg_validation_worklist["15-stig-srg-validation-worklist<br/>registered_planned_not_executable"]
+  j_04_owasp_validation_worklist["04-owasp-validation-worklist<br/>standalone_only"]
+  j_15_stig_srg_validation_worklist["15-stig-srg-validation-worklist<br/>standalone_only"]
   j_02_build_configure["02-build-configure<br/>implemented_not_qualified"]
   j_02_native_build["02-native-build<br/>implemented_not_qualified"]
   j_02_source_sast["02-source-sast<br/>implemented_not_qualified"]
@@ -98,12 +98,15 @@ flowchart TD
   j_03_threat_model_dfd_stride --> j_04_asvs_masvs
   j_04_owasp_validation_worklist --> j_04_asvs_masvs
   j_01_component_characterization --> j_05_native_memory
+  j_02_native_sast --> j_05_native_memory
+  j_02_ir_facts --> j_05_native_memory
   j_01_component_characterization --> j_06_cve_reachability
   j_01_component_characterization --> j_13_fuzz_target_triage
   j_03_threat_model_dfd_stride --> j_13_fuzz_target_triage
   j_05_native_memory --> j_13_fuzz_target_triage
   j_06_cve_reachability --> j_13_fuzz_target_triage
   j_01_component_characterization --> j_15_deployment_hardening
+  j_02_iac_config_scan --> j_15_deployment_hardening
   j_15_stig_srg_validation_worklist --> j_15_deployment_hardening
   j_01_component_characterization --> j_07_red_team_adversarial
   j_03_threat_model_dfd_stride --> j_07_red_team_adversarial
@@ -135,7 +138,9 @@ flowchart TD
   j_00_intake --> j_02_standards_source_ingest
   j_00_intake --> j_02_test_intelligence_ingest
   j_01_component_characterization --> j_04_owasp_validation_worklist
+  j_02_standards_source_ingest --> j_04_owasp_validation_worklist
   j_01_component_characterization --> j_15_stig_srg_validation_worklist
+  j_02_standards_source_ingest --> j_15_stig_srg_validation_worklist
   j_02_build_resolution --> j_02_build_configure
   j_02_build_configure --> j_02_native_build
   j_00_intake --> j_02_source_sast

@@ -3,7 +3,7 @@
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
   "lifecycle_jobs": 55,
-  "steps": 55,
+  "steps": 60,
   "artifacts": 60,
   "models": 5
  },
@@ -1815,39 +1815,36 @@
       {
        "ref": "job:04-owasp-validation-worklist",
        "id": "04-owasp-validation-worklist",
-       "name": "OWASP Validation Worklist Generation",
+       "name": "OWASP Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-standards-source-ingest"
        ],
        "produces": [
         "job:04-owasp-validation-worklist"
        ],
        "declared_inputs": [
-        "appsec-review-process/standards/catalog/owasp-*",
-        "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
-        "scratch/<project>-engagement/standards-intel/component-tag-cloud.json"
+        "accepted standards source",
+        "accepted applicability evidence"
        ]
       },
       {
        "ref": "job:05-native-memory",
        "id": "05-native-memory",
-       "name": "05-native-memory",
+       "name": "Native Memory Analysis",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-native-sast",
+        "job:02-ir-facts"
        ],
        "produces": [
         "job:05-native-memory"
        ],
        "declared_inputs": [
-        "native scratch directory",
-        "native bundle",
-        "deep confirmation",
-        "CodeQL SARIF",
-        "CSA output",
-        "IR facts",
-        "source context"
+        "accepted native SAST/IR evidence",
+        "hash-bound citations"
        ]
       },
       {
@@ -1874,7 +1871,7 @@
       {
        "ref": "job:13-fuzz-target-triage",
        "id": "13-fuzz-target-triage",
-       "name": "13-fuzz-target-triage",
+       "name": "Fuzz Target Triage",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
@@ -1886,52 +1883,43 @@
         "job:13-fuzz-target-triage"
        ],
        "declared_inputs": [
-        "component-purpose map (from `01-component-characterization`)",
-        "DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available",
-        "native memory-safety findings and native bundle coverage (from `05-native-memory`)",
-        "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
-        "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
-        "existing test suite locations and any existing fuzz harnesses already in the target repo",
-        "symbol/semantic indexes"
+        "accepted component/native evidence",
+        "candidate entrypoints"
        ]
       },
       {
        "ref": "job:15-deployment-hardening",
        "id": "15-deployment-hardening",
-       "name": "15-deployment-hardening",
+       "name": "Deployment Hardening",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
+        "job:02-iac-config-scan",
         "job:15-stig-srg-validation-worklist"
        ],
        "produces": [
         "job:15-deployment-hardening"
        ],
        "declared_inputs": [
-        "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
-        "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
-        "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
-        "Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`",
-        "Component-purpose map (for mapping images/manifests to components)",
-        "Any supplied image manifests, digests, or signature/provenance artifacts",
-        "Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1)"
+        "accepted deployment configuration evidence",
+        "accepted STIG/SRG worklist"
        ]
       },
       {
        "ref": "job:15-stig-srg-validation-worklist",
        "id": "15-stig-srg-validation-worklist",
-       "name": "STIG/SRG Validation Worklist Generation",
+       "name": "STIG/SRG Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-standards-source-ingest"
        ],
        "produces": [
         "job:15-stig-srg-validation-worklist"
        ],
        "declared_inputs": [
-        "Dockerfile/image/platform inventory",
-        "SBOM or package inventory",
-        "curated STIG/SRG/NSA reference records"
+        "accepted STIG/SRG source records",
+        "accepted platform inventory"
        ]
       }
      ],
@@ -1939,7 +1927,11 @@
       "enters": [
        "job:02-evidence-index",
        "legacy-pregather",
-       "job:02-evidence-assembly"
+       "job:02-evidence-assembly",
+       "job:02-standards-source-ingest",
+       "job:02-native-sast",
+       "job:02-ir-facts",
+       "job:02-iac-config-scan"
       ],
       "leaves": [
        "lane-handoff",
@@ -1962,16 +1954,10 @@
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
        "exact accepted OWASP dispatch accounting",
        "hash-verified applicability and assessment artifacts",
-       "appsec-review-process/standards/catalog/owasp-*",
-       "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
-       "scratch/<project>-engagement/standards-intel/component-tag-cloud.json",
-       "native scratch directory",
-       "native bundle",
-       "deep confirmation",
-       "CodeQL SARIF",
-       "CSA output",
-       "IR facts",
-       "source context",
+       "accepted standards source",
+       "accepted applicability evidence",
+       "accepted native SAST/IR evidence",
+       "hash-bound citations",
        "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
        "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
        "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
@@ -1979,23 +1965,12 @@
        "source imports/callers",
        "runtime/deployment evidence",
        "known dependency versions",
-       "component-purpose map (from `01-component-characterization`)",
-       "DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available",
-       "native memory-safety findings and native bundle coverage (from `05-native-memory`)",
-       "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
-       "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
-       "existing test suite locations and any existing fuzz harnesses already in the target repo",
-       "symbol/semantic indexes",
-       "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
-       "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
-       "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
-       "Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`",
-       "Component-purpose map (for mapping images/manifests to components)",
-       "Any supplied image manifests, digests, or signature/provenance artifacts",
-       "Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1)",
-       "Dockerfile/image/platform inventory",
-       "SBOM or package inventory",
-       "curated STIG/SRG/NSA reference records"
+       "accepted component/native evidence",
+       "candidate entrypoints",
+       "accepted deployment configuration evidence",
+       "accepted STIG/SRG worklist",
+       "accepted STIG/SRG source records",
+       "accepted platform inventory"
       ]
      }
     },
@@ -2345,16 +2320,10 @@
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
      "exact accepted OWASP dispatch accounting",
      "hash-verified applicability and assessment artifacts",
-     "appsec-review-process/standards/catalog/owasp-*",
-     "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
-     "scratch/<project>-engagement/standards-intel/component-tag-cloud.json",
-     "native scratch directory",
-     "native bundle",
-     "deep confirmation",
-     "CodeQL SARIF",
-     "CSA output",
-     "IR facts",
-     "source context",
+     "accepted standards source",
+     "accepted applicability evidence",
+     "accepted native SAST/IR evidence",
+     "hash-bound citations",
      "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
      "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
      "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
@@ -2362,23 +2331,12 @@
      "source imports/callers",
      "runtime/deployment evidence",
      "known dependency versions",
-     "component-purpose map (from `01-component-characterization`)",
-     "DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available",
-     "native memory-safety findings and native bundle coverage (from `05-native-memory`)",
-     "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
-     "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
-     "existing test suite locations and any existing fuzz harnesses already in the target repo",
-     "symbol/semantic indexes",
-     "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
-     "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
-     "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
-     "Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`",
-     "Component-purpose map (for mapping images/manifests to components)",
-     "Any supplied image manifests, digests, or signature/provenance artifacts",
-     "Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1)",
-     "Dockerfile/image/platform inventory",
-     "SBOM or package inventory",
-     "curated STIG/SRG/NSA reference records",
+     "accepted component/native evidence",
+     "candidate entrypoints",
+     "accepted deployment configuration evidence",
+     "accepted STIG/SRG worklist",
+     "accepted STIG/SRG source records",
+     "accepted platform inventory",
      "exact accepted claim ledger",
      "bounded reviewer decisions",
      "exact accepted adversarial hypotheses",
@@ -4077,25 +4035,26 @@
       {
        "ref": "job:04-owasp-validation-worklist",
        "id": "04-owasp-validation-worklist",
-       "name": "OWASP Validation Worklist Generation",
+       "name": "OWASP Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-standards-source-ingest"
        ],
        "produces": [
         "job:04-owasp-validation-worklist"
        ],
        "declared_inputs": [
-        "appsec-review-process/standards/catalog/owasp-*",
-        "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
-        "scratch/<project>-engagement/standards-intel/component-tag-cloud.json"
+        "accepted standards source",
+        "accepted applicability evidence"
        ]
       }
      ],
      "rollup": {
       "enters": [
        "job:01-component-characterization",
-       "job:03-threat-model-dfd-stride"
+       "job:03-threat-model-dfd-stride",
+       "job:02-standards-source-ingest"
       ],
       "leaves": [
        "job:04-asvs-masvs"
@@ -4106,9 +4065,8 @@
       "declared_inputs": [
        "exact accepted OWASP dispatch accounting",
        "hash-verified applicability and assessment artifacts",
-       "appsec-review-process/standards/catalog/owasp-*",
-       "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
-       "scratch/<project>-engagement/standards-intel/component-tag-cloud.json"
+       "accepted standards source",
+       "accepted applicability evidence"
       ]
      }
     },
@@ -4118,41 +4076,35 @@
       {
        "ref": "job:05-native-memory",
        "id": "05-native-memory",
-       "name": "05-native-memory",
+       "name": "Native Memory Analysis",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-native-sast",
+        "job:02-ir-facts"
        ],
        "produces": [
         "job:05-native-memory"
        ],
        "declared_inputs": [
-        "native scratch directory",
-        "native bundle",
-        "deep confirmation",
-        "CodeQL SARIF",
-        "CSA output",
-        "IR facts",
-        "source context"
+        "accepted native SAST/IR evidence",
+        "hash-bound citations"
        ]
       }
      ],
      "rollup": {
       "enters": [
-       "job:01-component-characterization"
+       "job:01-component-characterization",
+       "job:02-native-sast",
+       "job:02-ir-facts"
       ],
       "leaves": [
        "job:05-native-memory"
       ],
       "passes": [],
       "declared_inputs": [
-       "native scratch directory",
-       "native bundle",
-       "deep confirmation",
-       "CodeQL SARIF",
-       "CSA output",
-       "IR facts",
-       "source context"
+       "accepted native SAST/IR evidence",
+       "hash-bound citations"
       ]
      }
     },
@@ -4206,7 +4158,7 @@
       {
        "ref": "job:13-fuzz-target-triage",
        "id": "13-fuzz-target-triage",
-       "name": "13-fuzz-target-triage",
+       "name": "Fuzz Target Triage",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
@@ -4218,13 +4170,8 @@
         "job:13-fuzz-target-triage"
        ],
        "declared_inputs": [
-        "component-purpose map (from `01-component-characterization`)",
-        "DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available",
-        "native memory-safety findings and native bundle coverage (from `05-native-memory`)",
-        "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
-        "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
-        "existing test suite locations and any existing fuzz harnesses already in the target repo",
-        "symbol/semantic indexes"
+        "accepted component/native evidence",
+        "candidate entrypoints"
        ]
       }
      ],
@@ -4240,13 +4187,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "component-purpose map (from `01-component-characterization`)",
-       "DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available",
-       "native memory-safety findings and native bundle coverage (from `05-native-memory`)",
-       "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
-       "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
-       "existing test suite locations and any existing fuzz harnesses already in the target repo",
-       "symbol/semantic indexes"
+       "accepted component/native evidence",
+       "candidate entrypoints"
       ]
      }
     },
@@ -4256,46 +4198,44 @@
       {
        "ref": "job:15-deployment-hardening",
        "id": "15-deployment-hardening",
-       "name": "15-deployment-hardening",
+       "name": "Deployment Hardening",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
+        "job:02-iac-config-scan",
         "job:15-stig-srg-validation-worklist"
        ],
        "produces": [
         "job:15-deployment-hardening"
        ],
        "declared_inputs": [
-        "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
-        "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
-        "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
-        "Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`",
-        "Component-purpose map (for mapping images/manifests to components)",
-        "Any supplied image manifests, digests, or signature/provenance artifacts",
-        "Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1)"
+        "accepted deployment configuration evidence",
+        "accepted STIG/SRG worklist"
        ]
       },
       {
        "ref": "job:15-stig-srg-validation-worklist",
        "id": "15-stig-srg-validation-worklist",
-       "name": "STIG/SRG Validation Worklist Generation",
+       "name": "STIG/SRG Validation Worklist Core",
        "kind": "lifecycle",
        "consumes": [
-        "job:01-component-characterization"
+        "job:01-component-characterization",
+        "job:02-standards-source-ingest"
        ],
        "produces": [
         "job:15-stig-srg-validation-worklist"
        ],
        "declared_inputs": [
-        "Dockerfile/image/platform inventory",
-        "SBOM or package inventory",
-        "curated STIG/SRG/NSA reference records"
+        "accepted STIG/SRG source records",
+        "accepted platform inventory"
        ]
       }
      ],
      "rollup": {
       "enters": [
-       "job:01-component-characterization"
+       "job:01-component-characterization",
+       "job:02-iac-config-scan",
+       "job:02-standards-source-ingest"
       ],
       "leaves": [
        "job:15-deployment-hardening"
@@ -4304,16 +4244,10 @@
        "job:15-stig-srg-validation-worklist"
       ],
       "declared_inputs": [
-       "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
-       "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
-       "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
-       "Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`",
-       "Component-purpose map (for mapping images/manifests to components)",
-       "Any supplied image manifests, digests, or signature/provenance artifacts",
-       "Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1)",
-       "Dockerfile/image/platform inventory",
-       "SBOM or package inventory",
-       "curated STIG/SRG/NSA reference records"
+       "accepted deployment configuration evidence",
+       "accepted STIG/SRG worklist",
+       "accepted STIG/SRG source records",
+       "accepted platform inventory"
       ]
      }
     },
@@ -4706,16 +4640,10 @@
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
      "exact accepted OWASP dispatch accounting",
      "hash-verified applicability and assessment artifacts",
-     "appsec-review-process/standards/catalog/owasp-*",
-     "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary",
-     "scratch/<project>-engagement/standards-intel/component-tag-cloud.json",
-     "native scratch directory",
-     "native bundle",
-     "deep confirmation",
-     "CodeQL SARIF",
-     "CSA output",
-     "IR facts",
-     "source context",
+     "accepted standards source",
+     "accepted applicability evidence",
+     "accepted native SAST/IR evidence",
+     "hash-bound citations",
      "SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)",
      "dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)",
      "license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict",
@@ -4723,23 +4651,12 @@
      "source imports/callers",
      "runtime/deployment evidence",
      "known dependency versions",
-     "component-purpose map (from `01-component-characterization`)",
-     "DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available",
-     "native memory-safety findings and native bundle coverage (from `05-native-memory`)",
-     "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
-     "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
-     "existing test suite locations and any existing fuzz harnesses already in the target repo",
-     "symbol/semantic indexes",
-     "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
-     "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
-     "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
-     "Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`",
-     "Component-purpose map (for mapping images/manifests to components)",
-     "Any supplied image manifests, digests, or signature/provenance artifacts",
-     "Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1)",
-     "Dockerfile/image/platform inventory",
-     "SBOM or package inventory",
-     "curated STIG/SRG/NSA reference records",
+     "accepted component/native evidence",
+     "candidate entrypoints",
+     "accepted deployment configuration evidence",
+     "accepted STIG/SRG worklist",
+     "accepted STIG/SRG source records",
+     "accepted platform inventory",
      "exact accepted claim ledger",
      "bounded reviewer decisions",
      "exact accepted adversarial hypotheses",
@@ -5570,7 +5487,96 @@
     "job:02-source-sast",
     "source-sast-leads"
    ],
-   "notes": "Implemented and C/C++ happy-path qualified in SAT 20260927T005731Z. Runs pinned Semgrep offline through B13 with repository-owned hashed rules and publishes normalized static-analysis leads, never findings or severity. This output is one required input to 02-evidence-assembly; it is not a component-purpose map, OWASP applicability decision, validation worklist or ASVS/MASVS assessment. Downstream order is 02-source-sast -> 02-evidence-assembly -> 01-component-characterization -> 04-owasp-validation-worklist, while 04-asvs-masvs additionally waits for 03-threat-model-dfd-stride and the worklist. Those downstream jobs are currently non-executable. Go, Java and PHP tool families plus fault/recovery qualification remain gaps."
+   "notes": "Implemented with pinned offline C/C++, Go, Java and PHP adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain."
+  },
+  {
+   "id": "native-memory-analysis",
+   "name": "native_memory_analysis (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job native_memory_analysis --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "05-native-memory"
+   ],
+   "consumes": [
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "job:05-native-memory"
+   ],
+   "notes": "Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations. Full-review input assembly and live qualification remain gaps."
+  },
+  {
+   "id": "fuzz-target-triage",
+   "name": "fuzz_target_triage (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job fuzz_target_triage --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "13-fuzz-target-triage"
+   ],
+   "consumes": [
+    "job:01-component-characterization",
+    "job:03-threat-model-dfd-stride",
+    "job:05-native-memory",
+    "job:06-cve-reachability"
+   ],
+   "produces": [
+    "job:13-fuzz-target-triage"
+   ],
+   "notes": "Standalone config-driven deterministic harness-feasibility ranking. No fuzz campaign, crash observation or finding is claimed. Full-review input assembly and live qualification remain gaps."
+  },
+  {
+   "id": "owasp-validation-worklist",
+   "name": "owasp_validation_worklist (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job owasp_validation_worklist --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "04-owasp-validation-worklist"
+   ],
+   "consumes": [
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "job:04-owasp-validation-worklist"
+   ],
+   "notes": "Standalone OWASP-only worklist transform. Applicability and evidence requirements remain NOT_ASSESSED; it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
+  },
+  {
+   "id": "stig-srg-validation-worklist",
+   "name": "stig_srg_validation_worklist (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job stig_srg_validation_worklist --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "15-stig-srg-validation-worklist"
+   ],
+   "consumes": [
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "job:15-stig-srg-validation-worklist"
+   ],
+   "notes": "Standalone DISA STIG/SRG-only worklist transform. Platform tailoring remains NOT_ASSESSED; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps."
+  },
+  {
+   "id": "deployment-hardening",
+   "name": "deployment_hardening (Dagster job)",
+   "kind": "dagster-job",
+   "runs": "launch_job.py --run-id <run_id> --job deployment_hardening --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait",
+   "bpmn": [],
+   "lifecycle": [
+    "15-deployment-hardening"
+   ],
+   "consumes": [
+    "job:01-component-characterization",
+    "job:15-stig-srg-validation-worklist"
+   ],
+   "produces": [
+    "job:15-deployment-hardening"
+   ],
+   "notes": "Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps."
   },
   {
    "id": "b13-harmless-container",
@@ -6849,7 +6855,7 @@
     {
      "job": "04-owasp-validation-worklist",
      "kind": "required",
-     "contract": "control-worklist"
+     "contract": "owasp-validation-worklist"
     }
    ],
    "declared_inputs": [
@@ -6892,75 +6898,70 @@
   {
    "id": "05-native-memory",
    "lane": "05-native-memory",
-   "name": "05-native-memory",
-   "contract": "05-native-memory",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "name": "Native Memory Analysis",
+   "contract": "native-memory-analysis",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/bounded_analysis_workers.py:native_memory",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "native_memory_analysis"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "reverse-engineer",
+    "role_id": "native-sast-curator",
+    "domain_id": "native-static-analysis",
+    "tooling_profile_id": "pinned-native-sast",
+    "output_contract_id": "native-memory-analysis"
+   },
    "depends_on": [
     {
      "job": "01-component-characterization",
      "kind": "required",
      "contract": "component-map"
+    },
+    {
+     "job": "02-native-sast",
+     "kind": "required",
+     "contract": "native-sast"
+    },
+    {
+     "job": "02-ir-facts",
+     "kind": "required",
+     "contract": "ir-facts"
     }
    ],
    "declared_inputs": [
     {
      "need": "required",
-     "input": "native scratch directory"
+     "input": "accepted native SAST/IR evidence"
     },
     {
      "need": "required",
-     "input": "native bundle"
-    },
-    {
-     "need": "required",
-     "input": "deep confirmation"
-    },
-    {
-     "need": "required",
-     "input": "CodeQL SARIF"
-    },
-    {
-     "need": "required",
-     "input": "CSA output"
-    },
-    {
-     "need": "required",
-     "input": "IR facts"
-    },
-    {
-     "need": "required",
-     "input": "source context"
+     "input": "hash-bound citations"
     }
    ],
-   "inputs_source": "05-native-memory/config.md",
+   "inputs_source": "registry/job-templates/05-native-memory.json",
    "output_dir": "runs/<run_id>/data/jobs/05-native-memory/",
    "output_files": [
-    "reviewed native findings",
-    "refutations",
-    "missing-evidence list",
-    "verification candidates"
+    "native-memory-analysis.json",
+    "permission-receipt.json",
+    "lineage-receipt.json",
+    "status.json"
    ],
-   "outputs_source": "05-native-memory/config.md",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/native-memory-analysis.json",
+   "claim_class": "candidate_only",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Build the lifecycle input assembler from accepted native evidence, replace the blocked full-review op, and complete live qualification.",
    "consumes": [
-    "job:01-component-characterization"
+    "job:01-component-characterization",
+    "job:02-native-sast",
+    "job:02-ir-facts"
    ],
    "produces": [
     "job:05-native-memory"
@@ -7048,16 +7049,24 @@
   {
    "id": "13-fuzz-target-triage",
    "lane": "13-fuzz-target-triage",
-   "name": "13-fuzz-target-triage",
-   "contract": "13-fuzz-target-triage",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "name": "Fuzz Target Triage",
+   "contract": "fuzz-target-triage",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/bounded_analysis_workers.py:fuzz_triage",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "fuzz_target_triage"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "reverse-engineer",
+    "role_id": "native-sast-curator",
+    "domain_id": "native-static-analysis",
+    "tooling_profile_id": "pinned-native-sast",
+    "output_contract_id": "fuzz-target-triage"
+   },
    "depends_on": [
     {
      "job": "01-component-characterization",
@@ -7072,7 +7081,7 @@
     {
      "job": "05-native-memory",
      "kind": "required",
-     "contract": "05-native-memory"
+     "contract": "native-memory-analysis"
     },
     {
      "job": "06-cve-reachability",
@@ -7083,54 +7092,28 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "component-purpose map (from `01-component-characterization`)"
+     "input": "accepted component/native evidence"
     },
     {
      "need": "required",
-     "input": "DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available"
-    },
-    {
-     "need": "required",
-     "input": "native memory-safety findings and native bundle coverage (from `05-native-memory`)"
-    },
-    {
-     "need": "required",
-     "input": "dependency/CVE/EOL evidence (from `06-cve-reachability`)"
-    },
-    {
-     "need": "required",
-     "input": "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available"
-    },
-    {
-     "need": "required",
-     "input": "existing test suite locations and any existing fuzz harnesses already in the target repo"
-    },
-    {
-     "need": "required",
-     "input": "symbol/semantic indexes"
+     "input": "candidate entrypoints"
     }
    ],
-   "inputs_source": "13-fuzz-target-triage/config.md",
+   "inputs_source": "registry/job-templates/13-fuzz-target-triage.json",
    "output_dir": "runs/<run_id>/data/jobs/13-fuzz-target-triage/",
    "output_files": [
-    "**Target**: component id, specific function(s)/entry point(s), and the untrusted-input path that reaches them (cite the DFD trust boundary it crosses, if one exists)",
-    "**Benefit case** (why fuzzing here would likely find real bugs), grounded in evidence, not generic \"parsing code is risky\" reasoning -- e.g.: handles attacker-controlled byte-level input directly (decoders, deserializers, parsers, codec/compression code); has known-CWE-adjacent patterns (manual pointer arithmetic, manual length/bounds tracking, custom allocators); is in Tier B/C native-analysis coverage (i.e., IR/CSA/CodeQL substrate is weaker or absent here, per ADR-0001) so static tools are least likely to have already caught what fuzzing would find; has no or thin existing unit-test coverage of malformed/adversarial inputs; has a CVE history in this library or a structurally similar one (from 06's evidence)",
-    "**Cost case** (what it would take to actually fuzz this), concretely: whether a harness can reuse an existing test/example entry point or needs new scaffolding; whether the function is reachable standalone or needs heavy setup/state to call meaningfully; build integration effort (does it fit the existing compile database, or does it need new build wiring); realistic seed-corpus availability (existing test vectors, sample files, structured-input needed); expected iteration speed (µs-scale pure-function fuzzing vs. slow end-to-end harnesses)",
-    "**Recommendation**: `fuzz now` / `fuzz later` / `not worth it`, with the stated reasoning comparing benefit to cost -- not a bare label",
-    "a \"known coverage gaps\" summary section, in the format `07-red-team-adversarial` expects to consume directly: the areas with the weakest current analysis coverage (static + dynamic + manual review combined), independent of whether they end up recommended for fuzzing -- this is the required-input handoff to lane 07, not just this lane's own fuzzing opinion"
+    "fuzz-target-triage.json",
+    "permission-receipt.json",
+    "lineage-receipt.json",
+    "status.json"
    ],
-   "outputs_source": "13-fuzz-target-triage/config.md",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/fuzz-target-triage.json",
+   "claim_class": "planning_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Build the lifecycle input assembler from accepted component, threat, native-memory and reachability evidence, then complete live qualification.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
@@ -7144,16 +7127,24 @@
   {
    "id": "15-deployment-hardening",
    "lane": "15-deployment-hardening",
-   "name": "15-deployment-hardening",
-   "contract": "15-deployment-hardening",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "name": "Deployment Hardening",
+   "contract": "deployment-hardening",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/bounded_analysis_workers.py:deployment_hardening",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "deployment_hardening"
+   ],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "sre-engineer",
+    "role_id": "platform-hardening-validator",
+    "domain_id": "platform-hardening-controls",
+    "tooling_profile_id": "stig-worklist-builder",
+    "output_contract_id": "deployment-hardening"
+   },
    "depends_on": [
     {
      "job": "01-component-characterization",
@@ -7161,65 +7152,44 @@
      "contract": "component-map"
     },
     {
+     "job": "02-iac-config-scan",
+     "kind": "required",
+     "contract": "iac-config-evidence"
+    },
+    {
      "job": "15-stig-srg-validation-worklist",
      "kind": "required",
-     "contract": "control-worklist"
+     "contract": "stig-srg-validation-worklist"
     }
    ],
    "declared_inputs": [
     {
      "need": "required",
-     "input": "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)"
+     "input": "accepted deployment configuration evidence"
     },
     {
      "need": "required",
-     "input": "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)"
-    },
-    {
-     "need": "required",
-     "input": "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`"
-    },
-    {
-     "need": "required",
-     "input": "Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`"
-    },
-    {
-     "need": "required",
-     "input": "Component-purpose map (for mapping images/manifests to components)"
-    },
-    {
-     "need": "required",
-     "input": "Any supplied image manifests, digests, or signature/provenance artifacts"
-    },
-    {
-     "need": "required",
-     "input": "Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1)"
+     "input": "accepted STIG/SRG worklist"
     }
    ],
-   "inputs_source": "15-deployment-hardening/config.md",
+   "inputs_source": "registry/job-templates/15-deployment-hardening.json",
    "output_dir": "runs/<run_id>/data/jobs/15-deployment-hardening/",
    "output_files": [
-    "`deployment-image-map.json` update: static chain from deployment configuration to referenced image/digest and image assessment; unresolved image references are `IMAGE_ARTIFACT_NOT_PROVIDED`, not PASS",
-    "`network-exposure.json` update: DECLARED_EXPOSURE inventory built from source/configuration only, explicitly not labeled OBSERVED_EXPOSURE",
-    "`identity-graph.json` update: workload → identity → role → action → resource, modeled statically",
-    "HARDENING_BASELINE_ASSESSMENT status against applicable CIS/DISA/NIST baselines for Kubernetes/IaC — do not report PASS unless every applicable requirement was actually evaluated",
-    "FOLLOW_ON_EFFECTIVE_STATE_REVIEW_RECOMMENDED where live state would materially change assurance, instead of performing any live access",
-    "Findings citing image user/entrypoint/layers/package residue/exposed ports/secrets/setuid-setgid files/base-image lifecycle where evidence supports it"
+    "deployment-hardening.json",
+    "permission-receipt.json",
+    "lineage-receipt.json",
+    "status.json"
    ],
-   "outputs_source": "15-deployment-hardening/config.md",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/deployment-hardening.json",
+   "claim_class": "static_configuration_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Build the lifecycle input assembler from accepted deployment configuration and STIG/SRG worklist evidence, then complete live qualification.",
    "consumes": [
     "job:01-component-characterization",
+    "job:02-iac-config-scan",
     "job:15-stig-srg-validation-worklist"
    ],
    "produces": [
@@ -7264,7 +7234,7 @@
     {
      "job": "05-native-memory",
      "kind": "required",
-     "contract": "05-native-memory"
+     "contract": "native-memory-analysis"
     },
     {
      "job": "06-cve-reachability",
@@ -7274,12 +7244,12 @@
     {
      "job": "15-deployment-hardening",
      "kind": "required",
-     "contract": "15-deployment-hardening"
+     "contract": "deployment-hardening"
     },
     {
      "job": "13-fuzz-target-triage",
      "kind": "required",
-     "contract": "13-fuzz-target-triage"
+     "contract": "fuzz-target-triage"
     }
    ],
    "declared_inputs": [
@@ -7550,7 +7520,7 @@
     {
      "job": "15-deployment-hardening",
      "kind": "required",
-     "contract": "15-deployment-hardening"
+     "contract": "deployment-hardening"
     },
     {
      "job": "03-threat-model-dfd-stride",
@@ -8087,78 +8057,64 @@
   {
    "id": "04-owasp-validation-worklist",
    "lane": "04-asvs-masvs",
-   "name": "OWASP Validation Worklist Generation",
-   "contract": "control-worklist",
-   "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "name": "OWASP Validation Worklist Core",
+   "contract": "owasp-validation-worklist",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/owasp_validation_worklist.py:build",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "owasp_validation_worklist"
+   ],
    "lifecycle_binding": "blocked_op",
    "composition": {
     "persona_id": "owasp-validator",
     "role_id": "standards-control-validator",
     "domain_id": "owasp-application-controls",
     "tooling_profile_id": "owasp-worklist-builder",
-    "output_contract_id": "control-worklist"
+    "output_contract_id": "owasp-validation-worklist"
    },
    "depends_on": [
     {
      "job": "01-component-characterization",
      "kind": "required",
      "contract": "component-map"
+    },
+    {
+     "job": "02-standards-source-ingest",
+     "kind": "required",
+     "contract": "standards-source-extract"
     }
    ],
    "declared_inputs": [
     {
      "need": "required",
-     "input": "appsec-review-process/standards/catalog/owasp-*"
+     "input": "accepted standards source"
     },
     {
      "need": "required",
-     "input": "scratch/<project>-engagement/llm/component-purpose-map or component-ir summary"
-    },
-    {
-     "need": "required",
-     "input": "scratch/<project>-engagement/standards-intel/component-tag-cloud.json"
-    },
-    {
-     "need": "optional",
-     "input": "scratch/<project>-engagement/doc-intel/*.json"
-    },
-    {
-     "need": "optional",
-     "input": "scratch/<project>-engagement/qa-intel/*.json"
-    },
-    {
-     "need": "optional",
-     "input": "scratch/<project>-engagement/intel/lane-briefs/04-asvs-masvs.md"
-    },
-    {
-     "need": "optional",
-     "input": "appsec-review-process/standards/indexes/opencre-crosswalk.json"
+     "input": "accepted applicability evidence"
     }
    ],
-   "inputs_source": "registry/job-templates/04-owasp-validation-worklist.json",
+   "inputs_source": "registry/job-templates/04-owasp-validation-worklist-core.json",
    "output_dir": "runs/<run_id>/data/jobs/04-owasp-validation-worklist/",
    "output_files": [
-    "worklist.json",
-    "summary.md",
+    "owasp-validation-worklist.json",
+    "permission-receipt.json",
+    "lineage-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/control-worklist.json",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/owasp-validation-worklist.json",
+   "claim_class": "control_worklist",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Build the lifecycle input assembler from accepted OWASP source and applicability evidence, replace the blocked full-review op, and complete live qualification.",
    "consumes": [
-    "job:01-component-characterization"
+    "job:01-component-characterization",
+    "job:02-standards-source-ingest"
    ],
    "produces": [
     "job:04-owasp-validation-worklist"
@@ -8167,78 +8123,64 @@
   {
    "id": "15-stig-srg-validation-worklist",
    "lane": "15-deployment-hardening",
-   "name": "STIG/SRG Validation Worklist Generation",
-   "contract": "control-worklist",
-   "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
+   "name": "STIG/SRG Validation Worklist Core",
+   "contract": "stig-srg-validation-worklist",
+   "implemented": true,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/stig_srg_validation_worklist.py:build",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "stig_srg_validation_worklist"
+   ],
    "lifecycle_binding": "blocked_op",
    "composition": {
     "persona_id": "nsa-stig-platform-engineer",
     "role_id": "platform-hardening-validator",
     "domain_id": "platform-hardening-controls",
     "tooling_profile_id": "stig-worklist-builder",
-    "output_contract_id": "control-worklist"
+    "output_contract_id": "stig-srg-validation-worklist"
    },
    "depends_on": [
     {
      "job": "01-component-characterization",
      "kind": "required",
      "contract": "component-map"
+    },
+    {
+     "job": "02-standards-source-ingest",
+     "kind": "required",
+     "contract": "standards-source-extract"
     }
    ],
    "declared_inputs": [
     {
      "need": "required",
-     "input": "Dockerfile/image/platform inventory"
+     "input": "accepted STIG/SRG source records"
     },
     {
      "need": "required",
-     "input": "SBOM or package inventory"
-    },
-    {
-     "need": "required",
-     "input": "curated STIG/SRG/NSA reference records"
-    },
-    {
-     "need": "optional",
-     "input": "scratch/<project>-engagement/static-evidence/**"
-    },
-    {
-     "need": "optional",
-     "input": "scratch/<project>-engagement/standards-intel/component-tag-cloud.json"
-    },
-    {
-     "need": "optional",
-     "input": "service configuration files"
-    },
-    {
-     "need": "optional",
-     "input": "kube-bench, Docker Bench, Trivy, Grype, or Syft outputs"
+     "input": "accepted platform inventory"
     }
    ],
-   "inputs_source": "registry/job-templates/15-stig-srg-validation-worklist.json",
+   "inputs_source": "registry/job-templates/15-stig-srg-validation-worklist-core.json",
    "output_dir": "runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/",
    "output_files": [
-    "worklist.json",
-    "summary.md",
+    "stig-srg-validation-worklist.json",
+    "permission-receipt.json",
+    "lineage-receipt.json",
     "status.json"
    ],
-   "outputs_source": "registry/output-contracts/control-worklist.json",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/stig-srg-validation-worklist.json",
+   "claim_class": "control_worklist",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "full_review_input_assembler_not_implemented",
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Build the lifecycle input assembler from accepted STIG/SRG source and platform evidence, replace the blocked full-review op, and complete live qualification.",
    "consumes": [
-    "job:01-component-characterization"
+    "job:01-component-characterization",
+    "job:02-standards-source-ingest"
    ],
    "produces": [
     "job:15-stig-srg-validation-worklist"
@@ -8439,10 +8381,10 @@
    "outputs_source": "registry/output-contracts/source-sast.json",
    "claim_class": "source_static_evidence",
    "gaps": [
-    "go_java_php_tools_not_integrated",
+    "go_java_php_live_qualification_not_completed",
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Add the remaining declared language tools and run live fault-recovery qualification.",
+   "next_prerequisite": "Run live Go, Java and PHP tool qualification plus fault-recovery qualification.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10595,6 +10537,11 @@
     "job:01-component-characterization"
    ],
    "consumed_by": [
+    "step:native-memory-analysis",
+    "step:fuzz-target-triage",
+    "step:owasp-validation-worklist",
+    "step:stig-srg-validation-worklist",
+    "step:deployment-hardening",
     "job:03-threat-model-dfd-stride",
     "job:04-asvs-masvs",
     "job:05-native-memory",
@@ -10617,6 +10564,7 @@
     "job:03-threat-model-dfd-stride"
    ],
    "consumed_by": [
+    "step:fuzz-target-triage",
     "job:04-asvs-masvs",
     "job:13-fuzz-target-triage",
     "job:07-red-team-adversarial",
@@ -10641,11 +10589,13 @@
    "id": "job:05-native-memory",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/05-native-memory/",
-   "about": "Accepted 05-native-memory output of 05-native-memory.",
+   "about": "Accepted native-memory-analysis output of 05-native-memory.",
    "produced_by": [
+    "step:native-memory-analysis",
     "job:05-native-memory"
    ],
    "consumed_by": [
+    "step:fuzz-target-triage",
     "job:13-fuzz-target-triage",
     "job:07-red-team-adversarial"
    ]
@@ -10659,6 +10609,7 @@
     "job:06-cve-reachability"
    ],
    "consumed_by": [
+    "step:fuzz-target-triage",
     "job:13-fuzz-target-triage",
     "job:07-red-team-adversarial"
    ]
@@ -10667,8 +10618,9 @@
    "id": "job:13-fuzz-target-triage",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/13-fuzz-target-triage/",
-   "about": "Accepted 13-fuzz-target-triage output of 13-fuzz-target-triage.",
+   "about": "Accepted fuzz-target-triage output of 13-fuzz-target-triage.",
    "produced_by": [
+    "step:fuzz-target-triage",
     "job:13-fuzz-target-triage"
    ],
    "consumed_by": [
@@ -10679,8 +10631,9 @@
    "id": "job:15-deployment-hardening",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/15-deployment-hardening/",
-   "about": "Accepted 15-deployment-hardening output of 15-deployment-hardening.",
+   "about": "Accepted deployment-hardening output of 15-deployment-hardening.",
    "produced_by": [
+    "step:deployment-hardening",
     "job:15-deployment-hardening"
    ],
    "consumed_by": [
@@ -10810,7 +10763,9 @@
     "job:02-standards-source-ingest"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:04-owasp-validation-worklist",
+    "job:15-stig-srg-validation-worklist"
    ]
   },
   "job:02-test-intelligence-ingest": {
@@ -10829,8 +10784,9 @@
    "id": "job:04-owasp-validation-worklist",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/04-owasp-validation-worklist/",
-   "about": "Accepted control-worklist output of 04-owasp-validation-worklist.",
+   "about": "Accepted owasp-validation-worklist output of 04-owasp-validation-worklist.",
    "produced_by": [
+    "step:owasp-validation-worklist",
     "job:04-owasp-validation-worklist"
    ],
    "consumed_by": [
@@ -10841,11 +10797,13 @@
    "id": "job:15-stig-srg-validation-worklist",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/",
-   "about": "Accepted control-worklist output of 15-stig-srg-validation-worklist.",
+   "about": "Accepted stig-srg-validation-worklist output of 15-stig-srg-validation-worklist.",
    "produced_by": [
+    "step:stig-srg-validation-worklist",
     "job:15-stig-srg-validation-worklist"
    ],
    "consumed_by": [
+    "step:deployment-hardening",
     "job:15-deployment-hardening"
    ]
   },
@@ -10902,7 +10860,8 @@
     "job:02-native-sast"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:05-native-memory"
    ]
   },
   "job:02-ir-capture": {
@@ -10938,7 +10897,8 @@
     "job:02-ir-facts"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:05-native-memory"
    ]
   },
   "job:02-debug-symbol-index": {
@@ -11062,7 +11022,8 @@
     "job:02-iac-config-scan"
    ],
    "consumed_by": [
-    "job:02-evidence-assembly"
+    "job:02-evidence-assembly",
+    "job:15-deployment-hardening"
    ]
   },
   "job:02-container-image-inventory": {

@@ -12,9 +12,8 @@ Design capabilities: **16**
 |---|---:|
 | `implemented_and_qualified` | 3 |
 | `implemented_not_qualified` | 7 |
-| `missing_prerequisites` | 15 |
-| `registered_planned_not_executable` | 2 |
-| `standalone_only` | 24 |
+| `missing_prerequisites` | 12 |
+| `standalone_only` | 29 |
 | `supplied_artifact_gate` | 4 |
 
 ## Lifecycle inventory
@@ -35,10 +34,10 @@ Design capabilities: **16**
 | `01-component-characterization` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `03-threat-model-dfd-stride` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `04-asvs-masvs` | false | `blocked_op` | `standalone_only` | `unassigned` |
-| `05-native-memory` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `05-native-memory` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `06-cve-reachability` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `13-fuzz-target-triage` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
-| `15-deployment-hardening` | false | `blocked_op` | `missing_prerequisites` | `unassigned` |
+| `13-fuzz-target-triage` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `15-deployment-hardening` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `07-red-team-adversarial` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `08-blue-team-refutation` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `09-independent-verification` | false | `blocked_op` | `standalone_only` | `unassigned` |
@@ -50,8 +49,8 @@ Design capabilities: **16**
 | `02-doc-intelligence-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `02-standards-source-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
 | `02-test-intelligence-ingest` | false | `blocked_op` | `standalone_only` | `unassigned` |
-| `04-owasp-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
-| `15-stig-srg-validation-worklist` | false | `blocked_op` | `registered_planned_not_executable` | `unassigned` |
+| `04-owasp-validation-worklist` | true | `blocked_op` | `standalone_only` | `cpu` |
+| `15-stig-srg-validation-worklist` | true | `blocked_op` | `standalone_only` | `cpu` |
 | `02-build-configure` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
 | `02-native-build` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
 | `02-source-sast` | true | `actual_worker` | `implemented_not_qualified` | `docker` |
@@ -221,7 +220,7 @@ Design capabilities: **16**
 - 02-secrets-inventory: resource pool unassigned
 - 02-secrets-inventory: unassigned_resource_pool
 - 02-source-sast: fault_recovery_not_qualified
-- 02-source-sast: go_java_php_tools_not_integrated
+- 02-source-sast: go_java_php_live_qualification_not_completed
 - 02-sre-operations-topology: no qualification evidence
 - 02-sre-operations-topology: not_automatic_analysis_dispatch
 - 02-sre-operations-topology: supplied_result_required
@@ -257,22 +256,10 @@ Design capabilities: **16**
 - 04-asvs-masvs: resource pool unassigned
 - 04-asvs-masvs: shared_dagster_graph_not_integrated
 - 04-asvs-masvs: unassigned_resource_pool
-- 04-owasp-validation-worklist: missing_dedicated_output_schema
-- 04-owasp-validation-worklist: missing_validator
-- 04-owasp-validation-worklist: missing_worker
-- 04-owasp-validation-worklist: no qualification evidence
-- 04-owasp-validation-worklist: no_qualification
-- 04-owasp-validation-worklist: resource pool unassigned
-- 04-owasp-validation-worklist: unassigned_resource_pool
-- 05-native-memory: missing_dedicated_output_schema
-- 05-native-memory: missing_output_contract
-- 05-native-memory: missing_registry_composition
-- 05-native-memory: missing_validator
-- 05-native-memory: missing_worker
-- 05-native-memory: no qualification evidence
-- 05-native-memory: no_qualification
-- 05-native-memory: resource pool unassigned
-- 05-native-memory: unassigned_resource_pool
+- 04-owasp-validation-worklist: full_review_input_assembler_not_implemented
+- 04-owasp-validation-worklist: no_live_qualification
+- 05-native-memory: full_review_input_assembler_not_implemented
+- 05-native-memory: no_live_qualification
 - 06-cve-reachability: missing_dedicated_output_schema
 - 06-cve-reachability: missing_output_contract
 - 06-cve-reachability: missing_registry_composition
@@ -320,31 +307,12 @@ Design capabilities: **16**
 - 12-scoring-prioritization: resource pool unassigned
 - 12-scoring-prioritization: shared_dagster_graph_not_integrated
 - 12-scoring-prioritization: unassigned_resource_pool
-- 13-fuzz-target-triage: missing_dedicated_output_schema
-- 13-fuzz-target-triage: missing_output_contract
-- 13-fuzz-target-triage: missing_registry_composition
-- 13-fuzz-target-triage: missing_validator
-- 13-fuzz-target-triage: missing_worker
-- 13-fuzz-target-triage: no qualification evidence
-- 13-fuzz-target-triage: no_qualification
-- 13-fuzz-target-triage: resource pool unassigned
-- 13-fuzz-target-triage: unassigned_resource_pool
-- 15-deployment-hardening: missing_dedicated_output_schema
-- 15-deployment-hardening: missing_output_contract
-- 15-deployment-hardening: missing_registry_composition
-- 15-deployment-hardening: missing_validator
-- 15-deployment-hardening: missing_worker
-- 15-deployment-hardening: no qualification evidence
-- 15-deployment-hardening: no_qualification
-- 15-deployment-hardening: resource pool unassigned
-- 15-deployment-hardening: unassigned_resource_pool
-- 15-stig-srg-validation-worklist: missing_dedicated_output_schema
-- 15-stig-srg-validation-worklist: missing_validator
-- 15-stig-srg-validation-worklist: missing_worker
-- 15-stig-srg-validation-worklist: no qualification evidence
-- 15-stig-srg-validation-worklist: no_qualification
-- 15-stig-srg-validation-worklist: resource pool unassigned
-- 15-stig-srg-validation-worklist: unassigned_resource_pool
+- 13-fuzz-target-triage: full_review_input_assembler_not_implemented
+- 13-fuzz-target-triage: no_live_qualification
+- 15-deployment-hardening: full_review_input_assembler_not_implemented
+- 15-deployment-hardening: no_live_qualification
+- 15-stig-srg-validation-worklist: full_review_input_assembler_not_implemented
+- 15-stig-srg-validation-worklist: no_live_qualification
 - claim-ledger-routing: downstream_decision_append_wiring_missing
 - claim-ledger-routing: no_live_qualification
 - claim-ledger-routing: owasp_common_lifecycle_wrapper_missing

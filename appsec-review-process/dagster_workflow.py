@@ -11,6 +11,7 @@ import build_resolution as build_resolution_worker
 import build_configure as build_configure_worker
 import native_build as native_build_worker
 import source_sast as source_sast_worker
+import bounded_transform_orchestration as bounded_transforms
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
 import discovery_gate
@@ -396,6 +397,83 @@ def source_sast():
     source_sast_standalone_work(build_execution_config())
 
 
+BOUNDED_TRANSFORM_CONFIG = {'input_path': str, 'output_root': str, 'attempt_id': str}
+
+
+def run_bounded_transform(context, configured, job_id):
+    result = bounded_transforms.execute(
+        job_id=job_id, run_id=configured['engagement_run_id'],
+        input_path=context.op_config['input_path'], output_root=context.op_config['output_root'],
+        attempt_id=context.op_config['attempt_id'])
+    path = data_path(configured['engagement_run_id'], 'jobs', job_id,
+                     'attempts', result['attempt_id'])
+    context.add_output_metadata({
+        'output': MetadataValue.path(str(path)),
+        'envelope': MetadataValue.path(str(path / 'result.json')),
+        'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(config_schema=BOUNDED_TRANSFORM_CONFIG, pool=CPU_POOL)
+def native_memory_analysis_work(context, configured):
+    return run_bounded_transform(context, configured, '05-native-memory')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def native_memory_analysis():
+    native_memory_analysis_work(build_execution_config())
+
+
+@op(config_schema=BOUNDED_TRANSFORM_CONFIG, pool=CPU_POOL)
+def fuzz_target_triage_work(context, configured):
+    return run_bounded_transform(context, configured, '13-fuzz-target-triage')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def fuzz_target_triage():
+    fuzz_target_triage_work(build_execution_config())
+
+
+@op(config_schema=BOUNDED_TRANSFORM_CONFIG, pool=CPU_POOL)
+def owasp_validation_worklist_work(context, configured):
+    return run_bounded_transform(context, configured, '04-owasp-validation-worklist')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def owasp_validation_worklist():
+    owasp_validation_worklist_work(build_execution_config())
+
+
+@op(config_schema=BOUNDED_TRANSFORM_CONFIG, pool=CPU_POOL)
+def stig_srg_validation_worklist_work(context, configured):
+    return run_bounded_transform(context, configured, '15-stig-srg-validation-worklist')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def stig_srg_validation_worklist():
+    stig_srg_validation_worklist_work(build_execution_config())
+
+
+@op(config_schema=BOUNDED_TRANSFORM_CONFIG, pool=CPU_POOL)
+def deployment_hardening_work(context, configured):
+    return run_bounded_transform(context, configured, '15-deployment-hardening')
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def deployment_hardening():
+    deployment_hardening_work(build_execution_config())
+
+
 def run_repository_partition_discovery(context, configured):
     # Validated hand-off gate, not real analysis -- see discovery_gate.py's module docstring for
     # why this job cannot honestly be a deterministic worker. Accepts an out-of-band-supplied,
@@ -697,7 +775,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -707,7 +785,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,native_memory_analysis,fuzz_target_triage,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

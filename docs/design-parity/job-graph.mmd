@@ -66,27 +66,36 @@ flowchart TD
   04_asvs_masvs["04-asvs-masvs (planned; not dispatched)"]
   01_component_characterization -->|required| 04_asvs_masvs
   03_threat_model_dfd_stride -->|required| 04_asvs_masvs
-  04_owasp_validation_worklist -->|required| 04_asvs_masvs
-  05_native_memory["05-native-memory (planned; not dispatched)"]
-  01_component_characterization -->|required| 05_native_memory
+  04_owasp_validation_worklist_post -->|required| 04_asvs_masvs
+  05_native_memory_config["05-native-memory: resolve job configuration"] --> 05_native_memory_pre["05-native-memory: pre-validation"]
+  05_native_memory_pre --> 05_native_memory["05-native-memory: work or reuse"]
+  05_native_memory --> 05_native_memory_post["05-native-memory: post-validation and publish"]
+  01_component_characterization -->|required| 05_native_memory_config
+  02_native_sast -->|required| 05_native_memory_config
+  02_ir_facts -->|required| 05_native_memory_config
   06_cve_reachability["06-cve-reachability (planned; not dispatched)"]
   01_component_characterization -->|required| 06_cve_reachability
-  13_fuzz_target_triage["13-fuzz-target-triage (planned; not dispatched)"]
-  01_component_characterization -->|required| 13_fuzz_target_triage
-  03_threat_model_dfd_stride -->|required| 13_fuzz_target_triage
-  05_native_memory -->|required| 13_fuzz_target_triage
-  06_cve_reachability -->|required| 13_fuzz_target_triage
-  15_deployment_hardening["15-deployment-hardening (planned; not dispatched)"]
-  01_component_characterization -->|required| 15_deployment_hardening
-  15_stig_srg_validation_worklist -->|required| 15_deployment_hardening
+  13_fuzz_target_triage_config["13-fuzz-target-triage: resolve job configuration"] --> 13_fuzz_target_triage_pre["13-fuzz-target-triage: pre-validation"]
+  13_fuzz_target_triage_pre --> 13_fuzz_target_triage["13-fuzz-target-triage: work or reuse"]
+  13_fuzz_target_triage --> 13_fuzz_target_triage_post["13-fuzz-target-triage: post-validation and publish"]
+  01_component_characterization -->|required| 13_fuzz_target_triage_config
+  03_threat_model_dfd_stride -->|required| 13_fuzz_target_triage_config
+  05_native_memory_post -->|required| 13_fuzz_target_triage_config
+  06_cve_reachability -->|required| 13_fuzz_target_triage_config
+  15_deployment_hardening_config["15-deployment-hardening: resolve job configuration"] --> 15_deployment_hardening_pre["15-deployment-hardening: pre-validation"]
+  15_deployment_hardening_pre --> 15_deployment_hardening["15-deployment-hardening: work or reuse"]
+  15_deployment_hardening --> 15_deployment_hardening_post["15-deployment-hardening: post-validation and publish"]
+  01_component_characterization -->|required| 15_deployment_hardening_config
+  02_iac_config_scan -->|required| 15_deployment_hardening_config
+  15_stig_srg_validation_worklist_post -->|required| 15_deployment_hardening_config
   07_red_team_adversarial["07-red-team-adversarial (planned; not dispatched)"]
   01_component_characterization -->|required| 07_red_team_adversarial
   03_threat_model_dfd_stride -->|required| 07_red_team_adversarial
   04_asvs_masvs -->|required| 07_red_team_adversarial
-  05_native_memory -->|required| 07_red_team_adversarial
+  05_native_memory_post -->|required| 07_red_team_adversarial
   06_cve_reachability -->|required| 07_red_team_adversarial
-  15_deployment_hardening -->|required| 07_red_team_adversarial
-  13_fuzz_target_triage -->|required| 07_red_team_adversarial
+  15_deployment_hardening_post -->|required| 07_red_team_adversarial
+  13_fuzz_target_triage_post -->|required| 07_red_team_adversarial
   08_blue_team_refutation["08-blue-team-refutation (planned; not dispatched)"]
   07_red_team_adversarial -->|required| 08_blue_team_refutation
   01_component_characterization -->|required| 08_blue_team_refutation
@@ -97,7 +106,7 @@ flowchart TD
   09_independent_verification -->|required| 11_remediation_proposal
   12_scoring_prioritization["12-scoring-prioritization (planned; not dispatched)"]
   09_independent_verification -->|required| 12_scoring_prioritization
-  15_deployment_hardening -->|required| 12_scoring_prioritization
+  15_deployment_hardening_post -->|required| 12_scoring_prioritization
   03_threat_model_dfd_stride -->|required| 12_scoring_prioritization
   10_synthesis_report["10-synthesis-report (planned; not dispatched)"]
   01_component_characterization -->|required| 10_synthesis_report
@@ -119,10 +128,16 @@ flowchart TD
   00_intake_post -->|required| 02_standards_source_ingest
   02_test_intelligence_ingest["02-test-intelligence-ingest (planned; not dispatched)"]
   00_intake_post -->|required| 02_test_intelligence_ingest
-  04_owasp_validation_worklist["04-owasp-validation-worklist (planned; not dispatched)"]
-  01_component_characterization -->|required| 04_owasp_validation_worklist
-  15_stig_srg_validation_worklist["15-stig-srg-validation-worklist (planned; not dispatched)"]
-  01_component_characterization -->|required| 15_stig_srg_validation_worklist
+  04_owasp_validation_worklist_config["04-owasp-validation-worklist: resolve job configuration"] --> 04_owasp_validation_worklist_pre["04-owasp-validation-worklist: pre-validation"]
+  04_owasp_validation_worklist_pre --> 04_owasp_validation_worklist["04-owasp-validation-worklist: work or reuse"]
+  04_owasp_validation_worklist --> 04_owasp_validation_worklist_post["04-owasp-validation-worklist: post-validation and publish"]
+  01_component_characterization -->|required| 04_owasp_validation_worklist_config
+  02_standards_source_ingest -->|required| 04_owasp_validation_worklist_config
+  15_stig_srg_validation_worklist_config["15-stig-srg-validation-worklist: resolve job configuration"] --> 15_stig_srg_validation_worklist_pre["15-stig-srg-validation-worklist: pre-validation"]
+  15_stig_srg_validation_worklist_pre --> 15_stig_srg_validation_worklist["15-stig-srg-validation-worklist: work or reuse"]
+  15_stig_srg_validation_worklist --> 15_stig_srg_validation_worklist_post["15-stig-srg-validation-worklist: post-validation and publish"]
+  01_component_characterization -->|required| 15_stig_srg_validation_worklist_config
+  02_standards_source_ingest -->|required| 15_stig_srg_validation_worklist_config
   02_build_configure_config["02-build-configure: resolve job configuration"] --> 02_build_configure_pre["02-build-configure: pre-validation"]
   02_build_configure_pre --> 02_build_configure["02-build-configure: work or reuse"]
   02_build_configure --> 02_build_configure_post["02-build-configure: post-validation and publish"]

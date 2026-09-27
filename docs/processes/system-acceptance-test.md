@@ -97,7 +97,7 @@ Stages 14-16 completed the live happy path in SAT `20260927T005731Z`, engagement
 `hello-autotools` ELF; stage 16 ran pinned Semgrep and published four normalized leads from four
 repository rules with one explicit language-coverage gap. Immutable reuse,
 tamper/newer-failure handling and recovery for these three stages remain a separate qualification
-gap; source-SAST also retains the Go, Java and PHP tool-family gap.
+gap; source-SAST has integrated Go, Java and PHP adapters, with their live qualification still open.
 
 Phase 3 prerequisite status (2026-09-27): **complete.** B13's three result-verification entry points
 require the caller-retained `result_sha256`, including C02 handoff and cancellation; B16 generates
@@ -123,7 +123,8 @@ raw messages and snippets remain in the immutable tool attempt.
 Stage 16 does **not** categorize components or fulfill the OWASP path. `02-source-sast` is one
 required producer for the still non-executable `02-evidence-assembly`; only an accepted assembly
 can feed the non-executable `01-component-characterization`, which must produce the component-purpose
-map. That map is required by the registered but non-executable `04-owasp-validation-worklist`.
+map. That map is required by `04-owasp-validation-worklist`, whose bounded transform is executable
+only as a config-driven standalone job until the full-review input assembler exists.
 `04-asvs-masvs` is also non-executable and waits for the component map, the threat-model output and
 the accepted OWASP worklist. The dependency order is therefore:
 

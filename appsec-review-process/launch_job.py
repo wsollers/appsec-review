@@ -24,6 +24,13 @@ LAUNCH = '''mutation($params:ExecutionParams!) {
   }
 }'''
 TERMINAL = {'SUCCESS','FAILURE','CANCELED'}
+BOUNDED_TRANSFORM_JOBS = {
+    'native_memory_analysis': 'native_memory_analysis_work',
+    'fuzz_target_triage': 'fuzz_target_triage_work',
+    'owasp_validation_worklist': 'owasp_validation_worklist_work',
+    'stig_srg_validation_worklist': 'stig_srg_validation_worklist_work',
+    'deployment_hardening': 'deployment_hardening_work',
+}
 
 
 def graphql(query, variables):
@@ -46,7 +53,8 @@ def find_run(request_id, run_id):
     return next(iter(result['results']), None)
 
 
-def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=None):
+def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=None,
+           input_path=None, output_root=None, attempt_id=None):
     run_id = identifier(run_id)
     manifest = read_json(run_path(run_id)/'inputs/artifact-manifest.json')
     if manifest.get('orchestration_version') != 1 or manifest.get('intake_config',{}).get('executor_platform') != 'posix':
@@ -56,18 +64,32 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
     root.mkdir(parents=True, exist_ok=True)
     previous=read_json(root/'request.json') if (root/'request.json').exists() else None
     job=job or (previous.get('job','phase1_intake') if previous else 'engagement_workflow')
-    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','b13_harmless_container','full_review'): raise Blocked('unsupported Dagster job')
+    if job not in ('engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','native_memory_analysis','fuzz_target_triage','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','b13_harmless_container','full_review'): raise Blocked('unsupported Dagster job')
+    bounded = job in BOUNDED_TRANSFORM_JOBS
+    supplied = (input_path, output_root, attempt_id)
+    if bounded and not all(supplied):
+        raise Blocked('bounded transform jobs require --input-path, --output-root and --attempt-id')
+    if not bounded and any(supplied):
+        raise Blocked('explicit transform paths are only valid for bounded transform jobs')
     resume = [sys.executable,'-B',str(Path(__file__).resolve()),
               '--run-id',run_id,'--launch-id',request_id,'--job',job,'--wait'] + (['--force'] if force else [])
+    if bounded:
+        resume += ['--input-path', input_path, '--output-root', output_root, '--attempt-id', attempt_id]
     with Lock(root/'request.lock'):
         path = root/'request.json'
         if path.exists():
             record = read_json(path)
-            if record['force'] != force or record['run_id'] != run_id or record.get('job','phase1_intake') != job:
+            if (record['force'] != force or record['run_id'] != run_id or
+                    record.get('job','phase1_intake') != job or
+                    record.get('transform_config') != ({'input_path': input_path, 'output_root': output_root,
+                                                         'attempt_id': attempt_id} if bounded else None)):
                 raise Blocked('launch request configuration cannot change; use a new launch ID')
         else:
             record = {'run_id':run_id,'launch_id':request_id,'job':job,'force':force,'status':'PREPARED',
                       'created_at':now(),'resume_argv':resume}
+            if bounded:
+                record['transform_config'] = {'input_path': input_path, 'output_root': output_root,
+                                              'attempt_id': attempt_id}
             atomic_json(path,record)
         try:
             remote = find_run(request_id, run_id)
@@ -76,9 +98,12 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                     raise Blocked('submission outcome is uncertain or history was removed; inspect Dagster before a new launch. No automatic resubmission.')
                 record.update(status='SUBMITTING',updated_at=now())
                 atomic_json(path,record)  # Durable intent precedes the external side effect.
+                run_config = {'resources':{('session' if job=='phase1_intake' else 'workflow_settings'):{'config':{'engagement_run_id':run_id,'force':force}}}}
+                if bounded:
+                    run_config['ops'] = {BOUNDED_TRANSFORM_JOBS[job]: {'config': record['transform_config']}}
                 params = {'selector':{'repositoryLocationName':'appsec_review','repositoryName':'__repository__',
                                       'jobName':job},
-                          'runConfigData':{'resources':{('session' if job=='phase1_intake' else 'workflow_settings'):{'config':{'engagement_run_id':run_id,'force':force}}}},
+                          'runConfigData':run_config,
                           'executionMetadata':{'tags':[{'key':'appsec/request_id','value':request_id},
                                                        {'key':'engagement_run_id','value':run_id}]}}
                 result = graphql(LAUNCH, {'params':params})['launchRun']
@@ -112,14 +137,18 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-id',required=True)
     parser.add_argument('--force',action='store_true')
-    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','b13_harmless_container','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
+    parser.add_argument('--job',choices=['engagement_workflow','phase1_intake','build_discovery','build_execution','evidence_index','critical_findings_sarif','ossf_scorecard','repository_partition_discovery','dev_project_discovery','devops_project_discovery','sre_operations_topology','build_index','build_classify','build_plan','build_resolution','build_configure','native_build','source_sast','native_memory_analysis','fuzz_target_triage','owasp_validation_worklist','stig_srg_validation_worklist','deployment_hardening','b13_harmless_container','full_review'],help='default: engagement_workflow; reattachment preserves the original job')
+    parser.add_argument('--input-path')
+    parser.add_argument('--output-root')
+    parser.add_argument('--attempt-id')
     parser.add_argument('--launch-id',help='reattach to this existing launch without resubmitting')
     parser.add_argument('--wait',action='store_true')
     parser.add_argument('--timeout',type=int,default=600)
     args = parser.parse_args(argv)
     if args.timeout <= 0: parser.error('--timeout must be positive')
     try:
-        result = launch(args.run_id,args.force,args.launch_id,args.wait,args.timeout,args.job)
+        result = launch(args.run_id,args.force,args.launch_id,args.wait,args.timeout,args.job,
+                        args.input_path,args.output_root,args.attempt_id)
         print(json.dumps(result,indent=2))
         return 0 if result['status'] not in {'FAILURE','CANCELED','REJECTED'} else 1
     except (Exception,KeyboardInterrupt) as exc:

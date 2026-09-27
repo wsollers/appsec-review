@@ -36,7 +36,7 @@ flowchart TD
   CPP["C++ buildenv prerequisite<br/>audit-native + LLVM 21.1.0 + autotools/Bear<br/>built and boundary-smoke PASS 2026-09-26"]:::done
   S6["S6b 02-build-configure / 02-native-build<br/>SAT stages 14-15 happy path qualified"]:::done
   S7["S7 02-source-sast first slice<br/>offline Semgrep C/C++; SAT stage 16 happy path qualified<br/>language/recovery gaps remain"]:::done
-  DOWN["Downstream categorization + OWASP path<br/>evidence assembly -> 01 characterization -> OWASP worklist -> 04 ASVS/MASVS<br/>F02/F03 standalone cores unit-qualified; lifecycle non-executable<br/>source-SAST does not fulfill these jobs"]:::blocked
+  DOWN["Downstream categorization + standards paths<br/>bounded native/fuzz, OWASP, STIG/SRG, and deployment transforms are standalone config-driven<br/>full-review input assemblers remain blocked; source-SAST does not fulfill these jobs"]:::blocked
   B13["Phase 3: B13 verifier binding + B16 registry + live harmless Dagster job<br/>complete 2026-09-27"]:::done
   E01["E01/E02: replay the lock through B13<br/>implemented; fault/recovery qualification remains"]:::next
 

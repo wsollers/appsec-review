@@ -432,7 +432,7 @@
         {
           "job": "04-owasp-validation-worklist",
           "kind": "required",
-          "contract": "control-worklist",
+          "contract": "owasp-validation-worklist",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review"
           ]
@@ -441,9 +441,9 @@
     },
     "05-native-memory": {
       "lane": "05-native-memory",
-      "contract": "05-native-memory",
-      "template": null,
-      "implemented": false,
+      "contract": "native-memory-analysis",
+      "template": "05-native-memory",
+      "implemented": true,
       "namespace": "05-native-memory",
       "dependencies": [
         {
@@ -451,7 +451,30 @@
           "kind": "required",
           "contract": "component-map",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-native-sast",
+          "kind": "required",
+          "contract": "native-sast",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
+        },
+        {
+          "job": "02-ir-facts",
+          "kind": "required",
+          "contract": "ir-facts",
+          "allowed_skip_reasons": [
+            "not-applicable-non-native"
+          ]
         }
+      ],
+      "planned_scope": "Config-driven bounded transform over explicitly named accepted native evidence; publishes candidate-only memory analysis and open proof obligations without host/runtime verification.",
+      "required_artifacts": [
+        "native-memory-analysis.json",
+        "permission-receipt.json",
+        "lineage-receipt.json",
+        "status.json"
       ]
     },
     "06-cve-reachability": {
@@ -471,9 +494,9 @@
     },
     "13-fuzz-target-triage": {
       "lane": "13-fuzz-target-triage",
-      "contract": "13-fuzz-target-triage",
-      "template": null,
-      "implemented": false,
+      "contract": "fuzz-target-triage",
+      "template": "13-fuzz-target-triage",
+      "implemented": true,
       "namespace": "13-fuzz-target-triage",
       "dependencies": [
         {
@@ -491,7 +514,7 @@
         {
           "job": "05-native-memory",
           "kind": "required",
-          "contract": "05-native-memory",
+          "contract": "native-memory-analysis",
           "allowed_skip_reasons": []
         },
         {
@@ -500,13 +523,20 @@
           "contract": "06-cve-reachability",
           "allowed_skip_reasons": []
         }
+      ],
+      "planned_scope": "Config-driven deterministic ranking of explicitly supplied, evidence-bound harness candidates; no fuzz execution or crash claim.",
+      "required_artifacts": [
+        "fuzz-target-triage.json",
+        "permission-receipt.json",
+        "lineage-receipt.json",
+        "status.json"
       ]
     },
     "15-deployment-hardening": {
       "lane": "15-deployment-hardening",
-      "contract": "15-deployment-hardening",
-      "template": null,
-      "implemented": false,
+      "contract": "deployment-hardening",
+      "template": "15-deployment-hardening",
+      "implemented": true,
       "namespace": "15-deployment-hardening",
       "dependencies": [
         {
@@ -516,13 +546,28 @@
           "allowed_skip_reasons": []
         },
         {
+          "job": "02-iac-config-scan",
+          "kind": "required",
+          "contract": "iac-config-evidence",
+          "allowed_skip_reasons": [
+            "not-applicable-no-matching-inputs"
+          ]
+        },
+        {
           "job": "15-stig-srg-validation-worklist",
           "kind": "required",
-          "contract": "control-worklist",
+          "contract": "stig-srg-validation-worklist",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review"
           ]
         }
+      ],
+      "planned_scope": "Config-driven static deployment assessment over explicit accepted configuration and STIG/SRG inputs; runtime state and compliance remain unclaimed gaps.",
+      "required_artifacts": [
+        "deployment-hardening.json",
+        "permission-receipt.json",
+        "lineage-receipt.json",
+        "status.json"
       ]
     },
     "07-red-team-adversarial": {
@@ -553,7 +598,7 @@
         {
           "job": "05-native-memory",
           "kind": "required",
-          "contract": "05-native-memory",
+          "contract": "native-memory-analysis",
           "allowed_skip_reasons": []
         },
         {
@@ -565,13 +610,13 @@
         {
           "job": "15-deployment-hardening",
           "kind": "required",
-          "contract": "15-deployment-hardening",
+          "contract": "deployment-hardening",
           "allowed_skip_reasons": []
         },
         {
           "job": "13-fuzz-target-triage",
           "kind": "required",
-          "contract": "13-fuzz-target-triage",
+          "contract": "fuzz-target-triage",
           "allowed_skip_reasons": []
         }
       ]
@@ -649,7 +694,7 @@
         {
           "job": "15-deployment-hardening",
           "kind": "required",
-          "contract": "15-deployment-hardening",
+          "contract": "deployment-hardening",
           "allowed_skip_reasons": []
         },
         {
@@ -826,9 +871,9 @@
     },
     "04-owasp-validation-worklist": {
       "lane": "04-asvs-masvs",
-      "contract": "control-worklist",
-      "template": "04-owasp-validation-worklist",
-      "implemented": false,
+      "contract": "owasp-validation-worklist",
+      "template": "04-owasp-validation-worklist-core",
+      "implemented": true,
       "namespace": "04-owasp-validation-worklist",
       "dependencies": [
         {
@@ -836,14 +881,27 @@
           "kind": "required",
           "contract": "component-map",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-standards-source-ingest",
+          "kind": "required",
+          "contract": "standards-source-extract",
+          "allowed_skip_reasons": []
         }
+      ],
+      "planned_scope": "Config-driven OWASP-only worklist generation from explicitly named accepted standards and applicability evidence; controls remain NOT_ASSESSED.",
+      "required_artifacts": [
+        "owasp-validation-worklist.json",
+        "permission-receipt.json",
+        "lineage-receipt.json",
+        "status.json"
       ]
     },
     "15-stig-srg-validation-worklist": {
       "lane": "15-deployment-hardening",
-      "contract": "control-worklist",
-      "template": "15-stig-srg-validation-worklist",
-      "implemented": false,
+      "contract": "stig-srg-validation-worklist",
+      "template": "15-stig-srg-validation-worklist-core",
+      "implemented": true,
       "namespace": "15-stig-srg-validation-worklist",
       "dependencies": [
         {
@@ -851,7 +909,20 @@
           "kind": "required",
           "contract": "component-map",
           "allowed_skip_reasons": []
+        },
+        {
+          "job": "02-standards-source-ingest",
+          "kind": "required",
+          "contract": "standards-source-extract",
+          "allowed_skip_reasons": []
         }
+      ],
+      "planned_scope": "Config-driven DISA STIG/SRG-only worklist generation from explicitly named accepted standards and platform evidence; controls remain NOT_ASSESSED.",
+      "required_artifacts": [
+        "stig-srg-validation-worklist.json",
+        "permission-receipt.json",
+        "lineage-receipt.json",
+        "status.json"
       ]
     },
     "02-build-configure": {
@@ -911,7 +982,7 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Pinned offline Semgrep with repository-owned C/C++ rules publishes normalized evidence leads; no build, binary or IR dependency.",
+      "planned_scope": "Pinned offline Semgrep plus Go, Java and PHP language adapters publish normalized evidence leads; unavailable tools remain explicit coverage gaps and no build, binary or IR result is promoted.",
       "required_artifacts": [
         "source-sast.json",
         "b13-receipts.json"

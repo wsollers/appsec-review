@@ -13,6 +13,7 @@ import source_sast_language_adapters as language
 from execution_state import Blocked, atomic_json, file_hash, tree_hashes
 from schema_validate import validate_document
 from worker_result import validate_worker_result
+from validate_job_output import _claim_class_errors
 
 H="sha256:"+"a"*64
 B=[{"job_id":"02-native-sast","attempt_id":"a1","artifact_path":"native-sast.json",
@@ -55,6 +56,11 @@ class BoundedWorkers(unittest.TestCase):
         self.assertEqual({o["job_id"],s["job_id"],d["job_id"]},{"04-owasp-validation-worklist","15-stig-srg-validation-worklist","15-deployment-hardening"})
         self.assertEqual(o["work_items"][0]["assessment_status"],"NOT_ASSESSED")
         self.assertFalse(d["assessments"][0]["runtime_observed"])
+        for contract_id,value in (("owasp-validation-worklist",o),
+                                  ("stig-srg-validation-worklist",s),
+                                  ("deployment-hardening",d)):
+            contract=json.loads((ROOT/f"registry/output-contracts/{contract_id}.json").read_text())
+            self.assertEqual(_claim_class_errors(contract,value),[])
         self.assertEqual(validate_document(o,"owasp-validation-worklist-core.schema.json"),[])
         self.assertEqual(validate_document(s,"stig-srg-validation-worklist.schema.json"),[])
         forged=copy.deepcopy(o); forged["schema"]="appsec-review/stig-srg-validation-worklist/1.0"

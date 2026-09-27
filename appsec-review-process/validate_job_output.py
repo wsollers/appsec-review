@@ -92,6 +92,32 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "source_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
     },
+    "native-memory-analysis": {
+        "claim_class_id": "candidate_only",
+        "allowed_assertions": {
+            "static-memory-safety-candidate", "coverage-gap", "open-proof-obligation",
+        },
+    },
+    "fuzz-target-triage": {
+        "claim_class_id": "planning_evidence",
+        "allowed_assertions": {"harness-feasibility", "coverage-gap"},
+    },
+    "owasp-validation-worklist": {
+        "claim_class_id": "control_worklist",
+        "allowed_assertions": {
+            "applicability", "tailoring", "evidence-requirement", "coverage-gap",
+        },
+    },
+    "stig-srg-validation-worklist": {
+        "claim_class_id": "control_worklist",
+        "allowed_assertions": {
+            "applicability", "tailoring", "evidence-requirement", "coverage-gap",
+        },
+    },
+    "deployment-hardening": {
+        "claim_class_id": "static_configuration_evidence",
+        "allowed_assertions": {"declared-static-state", "applicability", "runtime-gap"},
+    },
     "native-sast": {
         "claim_class_id": "native_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "source-citation", "coverage-gap"},
@@ -339,7 +365,10 @@ def _claim_promotion_errors(value: Any, forbidden: set[str], path: str = "$") ->
             child = f"{path}.{key}"
             normalized = key.lower().replace("-", "_")
             for category in forbidden:
-                if normalized in PROMOTION_FIELDS[category]:
+                # Closed schemas use explicit false sentinels (for example finding_created=false)
+                # to make prohibited promotions machine-checkable.  Absence and false both make
+                # no positive assertion; any other value remains forbidden.
+                if normalized in PROMOTION_FIELDS[category] and item is not False:
                     errors.append(
                         f"{child}: {category} promotion is forbidden by the declared claim class")
             errors.extend(_claim_promotion_errors(item, forbidden, child))

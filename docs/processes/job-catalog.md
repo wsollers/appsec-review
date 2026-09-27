@@ -9,7 +9,7 @@ output contracts, lane `config.md` files, and the hand-maintained `docs/processe
 Regenerate after any process change: `python3 docs/processes/job_catalog.py`;
 `--check` fails when this file is stale or a reference is broken.
 
-Covers 5 process models, 55 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 55 lifecycle jobs and 115 artifacts.
+Covers 5 process models, 60 steps (operator scripts, human tasks, standalone Dagster jobs and ops), 55 lifecycle jobs and 115 artifacts.
 
 How to read the rollups: **Enters** is what the model or group consumes but does not produce itself
 (its inputs); **Leaves** is what it produces that nothing inside consumes (its results); **Passes**
@@ -214,13 +214,13 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Component Purpose And Review Routing](#job-01-component-characterization) | lifecycle job | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
 | [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
 | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
-| [OWASP Validation Worklist Generation](#job-04-owasp-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
-| [05-native-memory](#job-05-native-memory) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`05-native-memory`](#a-job-05-native-memory) |
+| [OWASP Validation Worklist Core](#job-04-owasp-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
+| [Native Memory Analysis](#job-05-native-memory) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts) | [`05-native-memory`](#a-job-05-native-memory) |
 | [06-cve-reachability](#job-06-cve-reachability) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
-| [13-fuzz-target-triage](#job-13-fuzz-target-triage) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
-| [15-deployment-hardening](#job-15-deployment-hardening) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
-| [STIG/SRG Validation Worklist Generation](#job-15-stig-srg-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
-| **Group rollup** | | **Enters:** [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly) | **Leaves:** [`lane-handoff`](#a-lane-handoff)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening) |
+| [Fuzz Target Triage](#job-13-fuzz-target-triage) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
+| [Deployment Hardening](#job-15-deployment-hardening) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
+| [STIG/SRG Validation Worklist Core](#job-15-stig-srg-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
+| **Group rollup** | | **Enters:** [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather)<br>[`02-evidence-assembly`](#a-job-02-evidence-assembly)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan) | **Leaves:** [`lane-handoff`](#a-lane-handoff)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 
 ### Engagement flow: 7. Refutation, verification, scoring, synthesis, report
 
@@ -389,11 +389,11 @@ Per lane (each job's full inputs and outputs are in Appendix B):
 | `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[Native SAST](#job-02-native-sast)<br>[IR Capture](#job-02-ir-capture)<br>[IR Link](#job-02-ir-link)<br>[IR Facts](#job-02-ir-facts)<br>[Debug Symbol Index](#job-02-debug-symbol-index)<br>[Static Binary Triage](#job-02-binary-triage)<br>[Static Binary CFG](#job-02-binary-cfg)<br>[Test Execution](#job-02-test-execution)<br>[Test Result Ingest](#job-02-test-result-ingest)<br>[Test Coverage Ingest](#job-02-test-coverage-ingest)<br>[Operations Document Ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory)<br>[Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan)<br>[Supplied Container Image Archive Inventory](#job-02-container-image-inventory)<br>[SBOM Component Inventory (Manifests And Lockfiles Only)](#job-02-sbom-inventory)<br>[Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)](#job-02-sca-vulnerability-match)<br>[Licence Detection Inventory](#job-02-license-scan)<br>[Dependency Lifecycle Against An Offline Reference Table](#job-02-dependency-lifecycle)<br>[Supplied Binary Hardening Properties](#job-02-binary-hardening)<br>[Mobile SAST Static Leads](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
 | `01-component-characterization` | [Component Purpose And Review Routing](#job-01-component-characterization) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
 | `03-threat-model-dfd-stride` | [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
-| `04-asvs-masvs` | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs)<br>[OWASP Validation Worklist Generation](#job-04-owasp-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
-| `05-native-memory` | [05-native-memory](#job-05-native-memory) | [`01-component-characterization`](#a-job-01-component-characterization) | [`05-native-memory`](#a-job-05-native-memory) |
+| `04-asvs-masvs` | [OWASP Control Accounting And Candidate Routing](#job-04-asvs-masvs)<br>[OWASP Validation Worklist Core](#job-04-owasp-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
+| `05-native-memory` | [Native Memory Analysis](#job-05-native-memory) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-native-sast`](#a-job-02-native-sast)<br>[`02-ir-facts`](#a-job-02-ir-facts) | [`05-native-memory`](#a-job-05-native-memory) |
 | `06-cve-reachability` | [06-cve-reachability](#job-06-cve-reachability) | [`01-component-characterization`](#a-job-01-component-characterization) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
-| `13-fuzz-target-triage` | [13-fuzz-target-triage](#job-13-fuzz-target-triage) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
-| `15-deployment-hardening` | [15-deployment-hardening](#job-15-deployment-hardening)<br>[STIG/SRG Validation Worklist Generation](#job-15-stig-srg-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
+| `13-fuzz-target-triage` | [Fuzz Target Triage](#job-13-fuzz-target-triage) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
+| `15-deployment-hardening` | [Deployment Hardening](#job-15-deployment-hardening)<br>[STIG/SRG Validation Worklist Core](#job-15-stig-srg-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`02-iac-config-scan`](#a-job-02-iac-config-scan)<br>[`02-standards-source-ingest`](#a-job-02-standards-source-ingest) | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
 | `07-red-team-adversarial` | [Red-team Adversarial Hypothesis Core](#job-07-red-team-adversarial) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#a-job-04-asvs-masvs)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability)<br>[`15-deployment-hardening`](#a-job-15-deployment-hardening)<br>[`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial) |
 | `08-blue-team-refutation` | [Blue-team Refutation Core](#job-08-blue-team-refutation) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`01-component-characterization`](#a-job-01-component-characterization) | [`08-blue-team-refutation`](#a-job-08-blue-team-refutation) |
 | `09-independent-verification` | [Independent Verification Core](#job-09-independent-verification) | [`07-red-team-adversarial`](#a-job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#a-job-08-blue-team-refutation) | [`09-independent-verification`](#a-job-09-independent-verification) |
@@ -974,7 +974,72 @@ and the ops of `engagement_workflow`. Source: `docs/processes/catalog/steps.json
 | Lifecycle job(s) | [`02-source-sast`](#job-02-source-sast) |
 | Consumes | [`00-intake`](#a-job-00-intake)<br>[`sut-checkout`](#a-sut-checkout)<br>[`source-sast-rules`](#a-source-sast-rules)<br>[`semgrep-image`](#a-semgrep-image) |
 | Produces | [`02-source-sast`](#a-job-02-source-sast)<br>[`source-sast-leads`](#a-source-sast-leads) |
-| Notes | Implemented and C/C++ happy-path qualified in SAT 20260927T005731Z. Runs pinned Semgrep offline through B13 with repository-owned hashed rules and publishes normalized static-analysis leads, never findings or severity. This output is one required input to 02-evidence-assembly; it is not a component-purpose map, OWASP applicability decision, validation worklist or ASVS/MASVS assessment. Downstream order is 02-source-sast -> 02-evidence-assembly -> 01-component-characterization -> 04-owasp-validation-worklist, while 04-asvs-masvs additionally waits for 03-threat-model-dfd-stride and the worklist. Those downstream jobs are currently non-executable. Go, Java and PHP tool families plus fault/recovery qualification remain gaps. |
+| Notes | Implemented with pinned offline C/C++, Go, Java and PHP adapters through the existing run seam. Outputs remain normalized evidence leads, never findings or severity; unavailable language tools remain explicit coverage gaps. C/C++ happy path was live-qualified in SAT 20260927T005731Z; Go/Java/PHP live and fault/recovery qualification remain. |
+
+<a id="step-native-memory-analysis"></a>
+
+### native_memory_analysis (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job native_memory_analysis --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait` |
+| Lifecycle job(s) | [`05-native-memory`](#job-05-native-memory) |
+| Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
+| Produces | [`05-native-memory`](#a-job-05-native-memory) |
+| Notes | Standalone config-driven bounded transform. Re-verifies explicitly named accepted native inputs and publishes candidate-only memory analysis with open proof obligations. Full-review input assembly and live qualification remain gaps. |
+
+<a id="step-fuzz-target-triage"></a>
+
+### fuzz_target_triage (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job fuzz_target_triage --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait` |
+| Lifecycle job(s) | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage) |
+| Consumes | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`05-native-memory`](#a-job-05-native-memory)<br>[`06-cve-reachability`](#a-job-06-cve-reachability) |
+| Produces | [`13-fuzz-target-triage`](#a-job-13-fuzz-target-triage) |
+| Notes | Standalone config-driven deterministic harness-feasibility ranking. No fuzz campaign, crash observation or finding is claimed. Full-review input assembly and live qualification remain gaps. |
+
+<a id="step-owasp-validation-worklist"></a>
+
+### owasp_validation_worklist (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job owasp_validation_worklist --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait` |
+| Lifecycle job(s) | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) |
+| Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
+| Produces | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
+| Notes | Standalone OWASP-only worklist transform. Applicability and evidence requirements remain NOT_ASSESSED; it is distinct from STIG/SRG validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
+
+<a id="step-stig-srg-validation-worklist"></a>
+
+### stig_srg_validation_worklist (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job stig_srg_validation_worklist --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait` |
+| Lifecycle job(s) | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
+| Consumes | [`01-component-characterization`](#a-job-01-component-characterization) |
+| Produces | [`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
+| Notes | Standalone DISA STIG/SRG-only worklist transform. Platform tailoring remains NOT_ASSESSED; it is distinct from OWASP validation and deployment hardening. Full-review input assembly and live qualification remain gaps. |
+
+<a id="step-deployment-hardening"></a>
+
+### deployment_hardening (Dagster job)
+
+| | |
+|---|---|
+| Type | Dagster job |
+| Runs | `launch_job.py --run-id <run_id> --job deployment_hardening --input-path <run-owned-request> --output-root <canonical-job-root> --attempt-id <attempt_id> --wait` |
+| Lifecycle job(s) | [`15-deployment-hardening`](#job-15-deployment-hardening) |
+| Consumes | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`15-stig-srg-validation-worklist`](#a-job-15-stig-srg-validation-worklist) |
+| Produces | [`15-deployment-hardening`](#a-job-15-deployment-hardening) |
+| Notes | Standalone static deployment-hardening transform. Runtime state and compliance remain explicit gaps; this assessment is distinct from both standards worklist jobs. Full-review input assembly and live qualification remain gaps. |
 
 <a id="step-b13-harmless-container"></a>
 
@@ -1163,12 +1228,12 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `01-component-characterization` | [`01-component-characterization`](#job-01-component-characterization) | `component-map` | standalone_only | `02-evidence-assembly` |
 | `03-threat-model-dfd-stride` | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | `threat-model-core` | standalone_only | `01-component-characterization` |
 | `04-asvs-masvs` | [`04-asvs-masvs`](#job-04-asvs-masvs) | `owasp-join-report` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-owasp-validation-worklist` |
-| `04-asvs-masvs` | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | `control-worklist` | registered_planned_not_executable | `01-component-characterization` |
-| `05-native-memory` | [`05-native-memory`](#job-05-native-memory) | `05-native-memory` | missing_prerequisites | `01-component-characterization` |
+| `04-asvs-masvs` | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | `owasp-validation-worklist` | standalone_only | `01-component-characterization`, `02-standards-source-ingest` |
+| `05-native-memory` | [`05-native-memory`](#job-05-native-memory) | `native-memory-analysis` | standalone_only | `01-component-characterization`, `02-native-sast`, `02-ir-facts` |
 | `06-cve-reachability` | [`06-cve-reachability`](#job-06-cve-reachability) | `06-cve-reachability` | missing_prerequisites | `01-component-characterization` |
-| `13-fuzz-target-triage` | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage) | `13-fuzz-target-triage` | missing_prerequisites | `01-component-characterization`, `03-threat-model-dfd-stride`, `05-native-memory`, `06-cve-reachability` |
-| `15-deployment-hardening` | [`15-deployment-hardening`](#job-15-deployment-hardening) | `15-deployment-hardening` | missing_prerequisites | `01-component-characterization`, `15-stig-srg-validation-worklist` |
-| `15-deployment-hardening` | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) | `control-worklist` | registered_planned_not_executable | `01-component-characterization` |
+| `13-fuzz-target-triage` | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage) | `fuzz-target-triage` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `05-native-memory`, `06-cve-reachability` |
+| `15-deployment-hardening` | [`15-deployment-hardening`](#job-15-deployment-hardening) | `deployment-hardening` | standalone_only | `01-component-characterization`, `02-iac-config-scan`, `15-stig-srg-validation-worklist` |
+| `15-deployment-hardening` | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) | `stig-srg-validation-worklist` | standalone_only | `01-component-characterization`, `02-standards-source-ingest` |
 | `07-red-team-adversarial` | [`07-red-team-adversarial`](#job-07-red-team-adversarial) | `07-red-team-adversarial` | standalone_only | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-asvs-masvs`, `05-native-memory`, `06-cve-reachability`, `15-deployment-hardening`, `13-fuzz-target-triage` |
 | `08-blue-team-refutation` | [`08-blue-team-refutation`](#job-08-blue-team-refutation) | `08-blue-team-refutation` | standalone_only | `07-red-team-adversarial`, `01-component-characterization` |
 | `09-independent-verification` | [`09-independent-verification`](#job-09-independent-verification) | `09-independent-verification` | standalone_only | `07-red-team-adversarial`, `08-blue-team-refutation` |
@@ -1473,7 +1538,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/02-standards-source-ingest.json) | exact accepted intake source identity<br>run-owned standards-source-binding.json<br>repository-pinned data/reference/source-lock.json and selected snapshots |
 | Produces | `runs/<run_id>/data/jobs/02-standards-source-ingest/` |
 | Output files (registry/output-contracts/standards-source-extract.json) | standards-source.json<br>status.json<br>permission.json<br>lineage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | Gaps | `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Bind the qualified offline core into the shared Dagster lifecycle and complete live fixture qualification. |
 
@@ -1554,8 +1619,8 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Produces | `runs/<run_id>/data/jobs/02-source-sast/` |
 | Output files (registry/output-contracts/source-sast.json) | source-sast.json<br>b13-receipts.json<br>source-sast-summary.md<br>status.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `go_java_php_tools_not_integrated`, `fault_recovery_not_qualified` |
-| Next prerequisite | Add the remaining declared language tools and run live fault-recovery qualification. |
+| Gaps | `go_java_php_live_qualification_not_completed`, `fault_recovery_not_qualified` |
+| Next prerequisite | Run live Go, Java and PHP tool qualification plus fault-recovery qualification. |
 
 <a id="job-02-native-sast"></a>
 
@@ -1573,7 +1638,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/02-native-sast.json) | exact accepted 02-native-build publication<br>caller-held native-build fingerprint<br>B16 audit-native record<br>tracked native-SAST configuration |
 | Produces | `runs/<run_id>/data/jobs/02-native-sast/` |
 | Output files (registry/output-contracts/native-sast.json) | native-sast.json<br>b13-receipts.json<br>native-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory) |
 | Gaps | `shared_dagster_graph_not_integrated`, `pinned_image_live_qualification_missing`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
@@ -1633,7 +1698,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/02-ir-facts.json) | accepted linked LLVM module |
 | Produces | `runs/<run_id>/data/jobs/02-ir-facts/` |
 | Output files (registry/output-contracts/ir-facts.json) | ir-facts.json<br>permission.json<br>lineage.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory) |
 | Gaps | `shared_dagster_graph_not_integrated`, `toolchain_factory_binding_missing`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
@@ -1827,7 +1892,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
 | Produces | `runs/<run_id>/data/jobs/02-iac-config-scan/` |
 | Output files (registry/output-contracts/iac-config-evidence.json) | manifest.json<br>status.json<br>outputs/iac-config-evidence.json<br>outputs/base-image-inventory.json<br>outputs/redaction-receipt.json<br>outputs/tool-results.json<br>outputs/coverage.json<br>outputs/applicability-probe-receipt.json |
-| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
 | Gaps | `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | WORKER_NOT_IMPLEMENTED until V10 (M03): needs the B13 pinned-container adapter and V06 redactor adoption; validator policy and dispatch in validate_job_output.py pending (sibling PR); then registry composition, pool, and qualification. |
 
@@ -1968,7 +2033,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/01-component-characterization.json) | target repository path<br>accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts<br>repository partition map *(optional)*<br>symbol and semantic indexes *(optional)*<br>build, source-SAST and operations evidence *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/01-component-characterization/` |
 | Output files (registry/output-contracts/component-map.json) | component-purpose-map.json<br>component-purpose-map.md<br>status.json |
-| Consumed by | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
+| Consumed by | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`deployment-hardening`](#step-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | Gaps | `blocked_on_02-evidence-assembly`, `dagster_lifecycle_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Publish an accepted COMPLETE 02-evidence-assembly envelope, then add the Dagster lifecycle and live persona qualification. |
 
@@ -1990,7 +2055,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (registry/job-templates/03-threat-model-dfd-stride.json) | current accepted F03 component map<br>exact F02 evidence assembly and dereferenced artifact cited through F03 |
 | Produces | `runs/<run_id>/data/jobs/03-threat-model-dfd-stride/` |
 | Output files (registry/output-contracts/threat-model-core.json) | integrated-threat-model.json<br>threat-model-summary.md<br>permission.json<br>lineage.json<br>status.json |
-| Consumed by | [`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
+| Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | Gaps | `shared_dagster_graph_not_integrated`, `claim_ledger_routing_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Bind the qualified core to accepted F03/F02 lifecycle outputs, candidate claim-ledger routing, and live qualification. |
 
@@ -2008,7 +2073,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `owasp-validator`, role `standards-control-validator`, tooling `owasp-join-reporter` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) (required, contract `control-worklist`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) (required, contract `owasp-validation-worklist`) |
 | Declared inputs (registry/job-templates/04-asvs-masvs.json) | exact accepted OWASP dispatch accounting<br>hash-verified applicability and assessment artifacts |
 | Produces | `runs/<run_id>/data/jobs/04-asvs-masvs/` |
 | Output files (registry/output-contracts/owasp-join-report.json) | owasp-control-status-matrix.json<br>owasp-coverage-gaps.json<br>owasp-candidate-promotion-routes.json<br>permission.json<br>lineage.json<br>status.json |
@@ -2018,42 +2083,45 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-04-owasp-validation-worklist"></a>
 
-#### `04-owasp-validation-worklist` -- OWASP Validation Worklist Generation
+#### `04-owasp-validation-worklist` -- OWASP Validation Worklist Core
 
 | | |
 |---|---|
-| Contract | `control-worklist` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Contract | `owasp-validation-worklist` (claim class `control_worklist`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/owasp_validation_worklist.py:build` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `owasp_validation_worklist`; lifecycle binding: `blocked_op` |
 | Composition | persona `owasp-validator`, role `standards-control-validator`, tooling `owasp-worklist-builder` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (registry/job-templates/04-owasp-validation-worklist.json) | appsec-review-process/standards/catalog/owasp-*<br>scratch/<project>-engagement/llm/component-purpose-map or component-ir summary<br>scratch/<project>-engagement/standards-intel/component-tag-cloud.json<br>scratch/<project>-engagement/doc-intel/*.json *(optional)*<br>scratch/<project>-engagement/qa-intel/*.json *(optional)*<br>scratch/<project>-engagement/intel/lane-briefs/04-asvs-masvs.md *(optional)*<br>appsec-review-process/standards/indexes/opencre-crosswalk.json *(optional)* |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest) (required, contract `standards-source-extract`) |
+| Declared inputs (registry/job-templates/04-owasp-validation-worklist-core.json) | accepted standards source<br>accepted applicability evidence |
 | Produces | `runs/<run_id>/data/jobs/04-owasp-validation-worklist/` |
-| Output files (registry/output-contracts/control-worklist.json) | worklist.json<br>summary.md<br>status.json |
+| Output files (registry/output-contracts/owasp-validation-worklist.json) | owasp-validation-worklist.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
 | Consumed by | [`04-asvs-masvs`](#job-04-asvs-masvs) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_qualification` |
+| Next prerequisite | Build the lifecycle input assembler from accepted OWASP source and applicability evidence, replace the blocked full-review op, and complete live qualification. |
 
 ### Lane `05-native-memory`
 
 <a id="job-05-native-memory"></a>
 
-#### `05-native-memory` -- 05-native-memory
+#### `05-native-memory` -- Native Memory Analysis
 
 | | |
 |---|---|
-| Contract | `05-native-memory` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (05-native-memory/config.md) | native scratch directory<br>native bundle<br>deep confirmation<br>CodeQL SARIF<br>CSA output<br>IR facts<br>source context |
+| Contract | `native-memory-analysis` (claim class `candidate_only`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/bounded_analysis_workers.py:native_memory` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `native_memory_analysis`; lifecycle binding: `blocked_op` |
+| Composition | persona `reverse-engineer`, role `native-sast-curator`, tooling `pinned-native-sast` |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-native-sast`](#job-02-native-sast) (required, contract `native-sast`)<br>[`02-ir-facts`](#job-02-ir-facts) (required, contract `ir-facts`) |
+| Declared inputs (registry/job-templates/05-native-memory.json) | accepted native SAST/IR evidence<br>hash-bound citations |
 | Produces | `runs/<run_id>/data/jobs/05-native-memory/` |
-| Output files (05-native-memory/config.md) | reviewed native findings<br>refutations<br>missing-evidence list<br>verification candidates |
-| Consumed by | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Output files (registry/output-contracts/native-memory-analysis.json) | native-memory-analysis.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
+| Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_qualification` |
+| Next prerequisite | Build the lifecycle input assembler from accepted native evidence, replace the blocked full-review op, and complete live qualification. |
 
 ### Lane `06-cve-reachability`
 
@@ -2071,7 +2139,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Declared inputs (06-cve-reachability/config.md) | SBOM/SCA evidence (`static-evidence/sbom/sbom.cdx.json`, `static-evidence/sca/osv-scanner.json`)<br>dependency-lifecycle evidence (`static-evidence/sbom/dependency-lifecycle.json`) — license inventory (re-surfaced from the SBOM) and EOL/abandonware signals (from the curated reference table)<br>license evidence (`static-evidence/license/scancode.json`) — deeper, more authoritative license/copyright/origin detection; treat as the tie-breaker over the SBOM's own license field on conflict<br>component-purpose map<br>source imports/callers<br>runtime/deployment evidence<br>known dependency versions |
 | Produces | `runs/<run_id>/data/jobs/06-cve-reachability/` |
 | Output files (06-cve-reachability/config.md) | reachable/unreachable/unused classification (CVE reachability, as before)<br>dependency inventory: every component the SBOM lists, with resolved version where possible<br>license inventory: per-component license(s), flagging anything with no declared license, a copyleft license inconsistent with the stated business goal, or a license mismatch between the SBOM's own field and scancode.json<br>EOL/abandonware disposition per component: `known_eol`, `known_supported_but_old`, or `unknown` (per `static-evidence/sbom/dependency-lifecycle.json`) — cite the reference table entry when status is not `unknown`; never assert a component is current just because it's `unknown`<br>evidence citations<br>upgrade/remediation backlog |
-| Consumed by | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
+| Consumed by | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
 | Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
 | Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
 
@@ -2079,60 +2147,65 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-13-fuzz-target-triage"></a>
 
-#### `13-fuzz-target-triage` -- 13-fuzz-target-triage
+#### `13-fuzz-target-triage` -- Fuzz Target Triage
 
 | | |
 |---|---|
-| Contract | `13-fuzz-target-triage` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `05-native-memory`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`) |
-| Declared inputs (13-fuzz-target-triage/config.md) | component-purpose map (from `01-component-characterization`)<br>DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available<br>native memory-safety findings and native bundle coverage (from `05-native-memory`)<br>dependency/CVE/EOL evidence (from `06-cve-reachability`)<br>native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available<br>existing test suite locations and any existing fuzz harnesses already in the target repo<br>symbol/semantic indexes |
+| Contract | `fuzz-target-triage` (claim class `planning_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/bounded_analysis_workers.py:fuzz_triage` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `fuzz_target_triage`; lifecycle binding: `blocked_op` |
+| Composition | persona `reverse-engineer`, role `native-sast-curator`, tooling `pinned-native-sast` |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`) |
+| Declared inputs (registry/job-templates/13-fuzz-target-triage.json) | accepted component/native evidence<br>candidate entrypoints |
 | Produces | `runs/<run_id>/data/jobs/13-fuzz-target-triage/` |
-| Output files (13-fuzz-target-triage/config.md) | **Target**: component id, specific function(s)/entry point(s), and the untrusted-input path that reaches them (cite the DFD trust boundary it crosses, if one exists)<br>**Benefit case** (why fuzzing here would likely find real bugs), grounded in evidence, not generic "parsing code is risky" reasoning -- e.g.: handles attacker-controlled byte-level input directly (decoders, deserializers, parsers, codec/compression code); has known-CWE-adjacent patterns (manual pointer arithmetic, manual length/bounds tracking, custom allocators); is in Tier B/C native-analysis coverage (i.e., IR/CSA/CodeQL substrate is weaker or absent here, per ADR-0001) so static tools are least likely to have already caught what fuzzing would find; has no or thin existing unit-test coverage of malformed/adversarial inputs; has a CVE history in this library or a structurally similar one (from 06's evidence)<br>**Cost case** (what it would take to actually fuzz this), concretely: whether a harness can reuse an existing test/example entry point or needs new scaffolding; whether the function is reachable standalone or needs heavy setup/state to call meaningfully; build integration effort (does it fit the existing compile database, or does it need new build wiring); realistic seed-corpus availability (existing test vectors, sample files, structured-input needed); expected iteration speed (µs-scale pure-function fuzzing vs. slow end-to-end harnesses)<br>**Recommendation**: `fuzz now` / `fuzz later` / `not worth it`, with the stated reasoning comparing benefit to cost -- not a bare label<br>a "known coverage gaps" summary section, in the format `07-red-team-adversarial` expects to consume directly: the areas with the weakest current analysis coverage (static + dynamic + manual review combined), independent of whether they end up recommended for fuzzing -- this is the required-input handoff to lane 07, not just this lane's own fuzzing opinion |
+| Output files (registry/output-contracts/fuzz-target-triage.json) | fuzz-target-triage.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
 | Consumed by | [`07-red-team-adversarial`](#job-07-red-team-adversarial) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_qualification` |
+| Next prerequisite | Build the lifecycle input assembler from accepted component, threat, native-memory and reachability evidence, then complete live qualification. |
 
 ### Lane `15-deployment-hardening`
 
 <a id="job-15-deployment-hardening"></a>
 
-#### `15-deployment-hardening` -- 15-deployment-hardening
+#### `15-deployment-hardening` -- Deployment Hardening
 
 | | |
 |---|---|
-| Contract | `15-deployment-hardening` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) (required, contract `control-worklist`) |
-| Declared inputs (15-deployment-hardening/config.md) | IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)<br>Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)<br>Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`<br>Dockerfile lint and base-image inventory: `static-evidence/iac-docker/{hadolint.txt,base-images.txt}`<br>Component-purpose map (for mapping images/manifests to components)<br>Any supplied image manifests, digests, or signature/provenance artifacts<br>Declared network/IAM configuration present in the repo (source and config only — no live cloud access; see design §2.1) |
+| Contract | `deployment-hardening` (claim class `static_configuration_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/bounded_analysis_workers.py:deployment_hardening` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `deployment_hardening`; lifecycle binding: `blocked_op` |
+| Composition | persona `sre-engineer`, role `platform-hardening-validator`, tooling `stig-worklist-builder` |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-iac-config-scan`](#job-02-iac-config-scan) (required, contract `iac-config-evidence`)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) (required, contract `stig-srg-validation-worklist`) |
+| Declared inputs (registry/job-templates/15-deployment-hardening.json) | accepted deployment configuration evidence<br>accepted STIG/SRG worklist |
 | Produces | `runs/<run_id>/data/jobs/15-deployment-hardening/` |
-| Output files (15-deployment-hardening/config.md) | `deployment-image-map.json` update: static chain from deployment configuration to referenced image/digest and image assessment; unresolved image references are `IMAGE_ARTIFACT_NOT_PROVIDED`, not PASS<br>`network-exposure.json` update: DECLARED_EXPOSURE inventory built from source/configuration only, explicitly not labeled OBSERVED_EXPOSURE<br>`identity-graph.json` update: workload → identity → role → action → resource, modeled statically<br>HARDENING_BASELINE_ASSESSMENT status against applicable CIS/DISA/NIST baselines for Kubernetes/IaC — do not report PASS unless every applicable requirement was actually evaluated<br>FOLLOW_ON_EFFECTIVE_STATE_REVIEW_RECOMMENDED where live state would materially change assurance, instead of performing any live access<br>Findings citing image user/entrypoint/layers/package residue/exposed ports/secrets/setuid-setgid files/base-image lifecycle where evidence supports it |
+| Output files (registry/output-contracts/deployment-hardening.json) | deployment-hardening.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
 | Consumed by | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_qualification` |
+| Next prerequisite | Build the lifecycle input assembler from accepted deployment configuration and STIG/SRG worklist evidence, then complete live qualification. |
 
 <a id="job-15-stig-srg-validation-worklist"></a>
 
-#### `15-stig-srg-validation-worklist` -- STIG/SRG Validation Worklist Generation
+#### `15-stig-srg-validation-worklist` -- STIG/SRG Validation Worklist Core
 
 | | |
 |---|---|
-| Contract | `control-worklist` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
-| Resource pool | `unassigned` |
-| Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Contract | `stig-srg-validation-worklist` (claim class `control_worklist`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/stig_srg_validation_worklist.py:build` |
+| Resource pool | `cpu` |
+| Dagster | standalone: `stig_srg_validation_worklist`; lifecycle binding: `blocked_op` |
 | Composition | persona `nsa-stig-platform-engineer`, role `platform-hardening-validator`, tooling `stig-worklist-builder` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (registry/job-templates/15-stig-srg-validation-worklist.json) | Dockerfile/image/platform inventory<br>SBOM or package inventory<br>curated STIG/SRG/NSA reference records<br>scratch/<project>-engagement/static-evidence/** *(optional)*<br>scratch/<project>-engagement/standards-intel/component-tag-cloud.json *(optional)*<br>service configuration files *(optional)*<br>kube-bench, Docker Bench, Trivy, Grype, or Syft outputs *(optional)* |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest) (required, contract `standards-source-extract`) |
+| Declared inputs (registry/job-templates/15-stig-srg-validation-worklist-core.json) | accepted STIG/SRG source records<br>accepted platform inventory |
 | Produces | `runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/` |
-| Output files (registry/output-contracts/control-worklist.json) | worklist.json<br>summary.md<br>status.json |
-| Consumed by | [`15-deployment-hardening`](#job-15-deployment-hardening) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Output files (registry/output-contracts/stig-srg-validation-worklist.json) | stig-srg-validation-worklist.json<br>permission-receipt.json<br>lineage-receipt.json<br>status.json |
+| Consumed by | [`deployment-hardening`](#step-deployment-hardening)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
+| Gaps | `full_review_input_assembler_not_implemented`, `no_live_qualification` |
+| Next prerequisite | Build the lifecycle input assembler from accepted STIG/SRG source and platform evidence, replace the blocked full-review op, and complete live qualification. |
 
 ### Lane `07-red-team-adversarial`
 
@@ -2148,7 +2221,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `05-native-memory`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `15-deployment-hardening`)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) (required, contract `13-fuzz-target-triage`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `owasp-join-report`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `native-memory-analysis`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `deployment-hardening`)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) (required, contract `fuzz-target-triage`) |
 | Declared inputs (registry/job-templates/07-red-team-adversarial.json) | exact accepted claim ledger<br>bounded reviewer decisions |
 | Produces | `runs/<run_id>/data/jobs/07-red-team-adversarial/` |
 | Output files (registry/output-contracts/07-red-team-adversarial.json) | red-team-adversarial.json<br>permission.json<br>status.json |
@@ -2234,7 +2307,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
-| Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `15-deployment-hardening`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`) |
+| Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `deployment-hardening`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`) |
 | Declared inputs (registry/job-templates/12-scoring-prioritization.json) | exact accepted independent verification<br>bounded scoring factors |
 | Produces | `runs/<run_id>/data/jobs/12-scoring-prioritization/` |
 | Output files (registry/output-contracts/12-scoring-prioritization.json) | scoring-prioritization.json<br>permission.json<br>status.json |
@@ -2340,13 +2413,13 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-build-plan"></a>`02-build-plan` | job output | runs/<run_id>/data/jobs/02-build-plan/ | [`build-plan`](#step-build-plan)<br>[`02-build-plan`](#job-02-build-plan) | [`02-build-resolution`](#job-02-build-resolution) |
 | <a id="a-job-02-build-resolution"></a>`02-build-resolution` | job output | runs/<run_id>/data/jobs/02-build-resolution/ | [`02-build-resolution`](#job-02-build-resolution) | [`build-configure`](#step-build-configure)<br>[`02-build-configure`](#job-02-build-configure) |
 | <a id="a-job-02-evidence-assembly"></a>`02-evidence-assembly` | job output | runs/<run_id>/data/jobs/02-evidence-assembly/ | [`02-evidence-assembly`](#job-02-evidence-assembly) | [`01-component-characterization`](#job-01-component-characterization) |
-| <a id="a-job-01-component-characterization"></a>`01-component-characterization` | job output | runs/<run_id>/data/jobs/01-component-characterization/ | [`01-component-characterization`](#job-01-component-characterization) | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
-| <a id="a-job-03-threat-model-dfd-stride"></a>`03-threat-model-dfd-stride` | job output | runs/<run_id>/data/jobs/03-threat-model-dfd-stride/ | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | [`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
+| <a id="a-job-01-component-characterization"></a>`01-component-characterization` | job output | runs/<run_id>/data/jobs/01-component-characterization/ | [`01-component-characterization`](#job-01-component-characterization) | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`deployment-hardening`](#step-deployment-hardening)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`05-native-memory`](#job-05-native-memory)<br>[`06-cve-reachability`](#job-06-cve-reachability)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`15-deployment-hardening`](#job-15-deployment-hardening)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`10-synthesis-report`](#job-10-synthesis-report)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
+| <a id="a-job-03-threat-model-dfd-stride"></a>`03-threat-model-dfd-stride` | job output | runs/<run_id>/data/jobs/03-threat-model-dfd-stride/ | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | <a id="a-job-04-asvs-masvs"></a>`04-asvs-masvs` | job output | runs/<run_id>/data/jobs/04-asvs-masvs/ | [`04-asvs-masvs`](#job-04-asvs-masvs) | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
-| <a id="a-job-05-native-memory"></a>`05-native-memory` | job output | runs/<run_id>/data/jobs/05-native-memory/ | [`05-native-memory`](#job-05-native-memory) | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
-| <a id="a-job-06-cve-reachability"></a>`06-cve-reachability` | job output | runs/<run_id>/data/jobs/06-cve-reachability/ | [`06-cve-reachability`](#job-06-cve-reachability) | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
-| <a id="a-job-13-fuzz-target-triage"></a>`13-fuzz-target-triage` | job output | runs/<run_id>/data/jobs/13-fuzz-target-triage/ | [`13-fuzz-target-triage`](#job-13-fuzz-target-triage) | [`07-red-team-adversarial`](#job-07-red-team-adversarial) |
-| <a id="a-job-15-deployment-hardening"></a>`15-deployment-hardening` | job output | runs/<run_id>/data/jobs/15-deployment-hardening/ | [`15-deployment-hardening`](#job-15-deployment-hardening) | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) |
+| <a id="a-job-05-native-memory"></a>`05-native-memory` | job output | runs/<run_id>/data/jobs/05-native-memory/ | [`native-memory-analysis`](#step-native-memory-analysis)<br>[`05-native-memory`](#job-05-native-memory) | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
+| <a id="a-job-06-cve-reachability"></a>`06-cve-reachability` | job output | runs/<run_id>/data/jobs/06-cve-reachability/ | [`06-cve-reachability`](#job-06-cve-reachability) | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) |
+| <a id="a-job-13-fuzz-target-triage"></a>`13-fuzz-target-triage` | job output | runs/<run_id>/data/jobs/13-fuzz-target-triage/ | [`fuzz-target-triage`](#step-fuzz-target-triage)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) | [`07-red-team-adversarial`](#job-07-red-team-adversarial) |
+| <a id="a-job-15-deployment-hardening"></a>`15-deployment-hardening` | job output | runs/<run_id>/data/jobs/15-deployment-hardening/ | [`deployment-hardening`](#step-deployment-hardening)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) | [`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) |
 | <a id="a-job-07-red-team-adversarial"></a>`07-red-team-adversarial` | job output | runs/<run_id>/data/jobs/07-red-team-adversarial/ | [`07-red-team-adversarial`](#job-07-red-team-adversarial) | [`08-blue-team-refutation`](#job-08-blue-team-refutation)<br>[`09-independent-verification`](#job-09-independent-verification)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | <a id="a-job-08-blue-team-refutation"></a>`08-blue-team-refutation` | job output | runs/<run_id>/data/jobs/08-blue-team-refutation/ | [`08-blue-team-refutation`](#job-08-blue-team-refutation) | [`09-independent-verification`](#job-09-independent-verification)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
 | <a id="a-job-09-independent-verification"></a>`09-independent-verification` | job output | runs/<run_id>/data/jobs/09-independent-verification/ | [`09-independent-verification`](#job-09-independent-verification) | [`11-remediation-proposal`](#job-11-remediation-proposal)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
@@ -2356,17 +2429,17 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-api-collection-intelligence-ingest"></a>`02-api-collection-intelligence-ingest` | job output | runs/<run_id>/data/jobs/02-api-collection-intelligence-ingest/ | [`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-binary-intelligence-ingest"></a>`02-binary-intelligence-ingest` | job output | runs/<run_id>/data/jobs/02-binary-intelligence-ingest/ | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-doc-intelligence-ingest"></a>`02-doc-intelligence-ingest` | job output | runs/<run_id>/data/jobs/02-doc-intelligence-ingest/ | [`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-standards-source-ingest"></a>`02-standards-source-ingest` | job output | runs/<run_id>/data/jobs/02-standards-source-ingest/ | [`02-standards-source-ingest`](#job-02-standards-source-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-standards-source-ingest"></a>`02-standards-source-ingest` | job output | runs/<run_id>/data/jobs/02-standards-source-ingest/ | [`02-standards-source-ingest`](#job-02-standards-source-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) |
 | <a id="a-job-02-test-intelligence-ingest"></a>`02-test-intelligence-ingest` | job output | runs/<run_id>/data/jobs/02-test-intelligence-ingest/ | [`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-04-owasp-validation-worklist"></a>`04-owasp-validation-worklist` | job output | runs/<run_id>/data/jobs/04-owasp-validation-worklist/ | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | [`04-asvs-masvs`](#job-04-asvs-masvs) |
-| <a id="a-job-15-stig-srg-validation-worklist"></a>`15-stig-srg-validation-worklist` | job output | runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/ | [`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) | [`15-deployment-hardening`](#job-15-deployment-hardening) |
+| <a id="a-job-04-owasp-validation-worklist"></a>`04-owasp-validation-worklist` | job output | runs/<run_id>/data/jobs/04-owasp-validation-worklist/ | [`owasp-validation-worklist`](#step-owasp-validation-worklist)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | [`04-asvs-masvs`](#job-04-asvs-masvs) |
+| <a id="a-job-15-stig-srg-validation-worklist"></a>`15-stig-srg-validation-worklist` | job output | runs/<run_id>/data/jobs/15-stig-srg-validation-worklist/ | [`stig-srg-validation-worklist`](#step-stig-srg-validation-worklist)<br>[`15-stig-srg-validation-worklist`](#job-15-stig-srg-validation-worklist) | [`deployment-hardening`](#step-deployment-hardening)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
 | <a id="a-job-02-build-configure"></a>`02-build-configure` | job output | runs/<run_id>/data/jobs/02-build-configure/ | [`build-configure`](#step-build-configure)<br>[`02-build-configure`](#job-02-build-configure) | [`native-build`](#step-native-build)<br>[`02-native-build`](#job-02-native-build) |
 | <a id="a-job-02-native-build"></a>`02-native-build` | job output | runs/<run_id>/data/jobs/02-native-build/ | [`native-build`](#step-native-build)<br>[`02-native-build`](#job-02-native-build) | [`02-native-sast`](#job-02-native-sast)<br>[`02-ir-capture`](#job-02-ir-capture)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index)<br>[`02-binary-triage`](#job-02-binary-triage)<br>[`02-test-execution`](#job-02-test-execution) |
 | <a id="a-job-02-source-sast"></a>`02-source-sast` | job output | runs/<run_id>/data/jobs/02-source-sast/ | [`source-sast`](#step-source-sast)<br>[`02-source-sast`](#job-02-source-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-native-sast"></a>`02-native-sast` | job output | runs/<run_id>/data/jobs/02-native-sast/ | [`02-native-sast`](#job-02-native-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-native-sast"></a>`02-native-sast` | job output | runs/<run_id>/data/jobs/02-native-sast/ | [`02-native-sast`](#job-02-native-sast) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory) |
 | <a id="a-job-02-ir-capture"></a>`02-ir-capture` | job output | runs/<run_id>/data/jobs/02-ir-capture/ | [`02-ir-capture`](#job-02-ir-capture) | [`02-ir-link`](#job-02-ir-link) |
 | <a id="a-job-02-ir-link"></a>`02-ir-link` | job output | runs/<run_id>/data/jobs/02-ir-link/ | [`02-ir-link`](#job-02-ir-link) | [`02-ir-facts`](#job-02-ir-facts) |
-| <a id="a-job-02-ir-facts"></a>`02-ir-facts` | job output | runs/<run_id>/data/jobs/02-ir-facts/ | [`02-ir-facts`](#job-02-ir-facts) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-ir-facts"></a>`02-ir-facts` | job output | runs/<run_id>/data/jobs/02-ir-facts/ | [`02-ir-facts`](#job-02-ir-facts) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`05-native-memory`](#job-05-native-memory) |
 | <a id="a-job-02-debug-symbol-index"></a>`02-debug-symbol-index` | job output | runs/<run_id>/data/jobs/02-debug-symbol-index/ | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | [`02-binary-cfg`](#job-02-binary-cfg) |
 | <a id="a-job-02-binary-triage"></a>`02-binary-triage` | job output | runs/<run_id>/data/jobs/02-binary-triage/ | [`02-binary-triage`](#job-02-binary-triage) | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
 | <a id="a-job-02-binary-cfg"></a>`02-binary-cfg` | job output | runs/<run_id>/data/jobs/02-binary-cfg/ | [`02-binary-cfg`](#job-02-binary-cfg) | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) |
@@ -2376,7 +2449,7 @@ job. Producers and consumers are computed from the catalog.
 | <a id="a-job-02-operations-doc-ingest"></a>`02-operations-doc-ingest` | job output | runs/<run_id>/data/jobs/02-operations-doc-ingest/ | [`02-operations-doc-ingest`](#job-02-operations-doc-ingest) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-evidence-index"></a>`02-evidence-index` | job output | runs/<run_id>/data/jobs/02-evidence-index/ | [`evidence_index`](#step-evidence-index)<br>[`02-evidence-index`](#job-02-evidence-index) | [`lane-handoffs`](#step-lane-handoffs)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-secrets-inventory"></a>`02-secrets-inventory` | job output | runs/<run_id>/data/jobs/02-secrets-inventory/ | [`02-secrets-inventory`](#job-02-secrets-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| <a id="a-job-02-iac-config-scan"></a>`02-iac-config-scan` | job output | runs/<run_id>/data/jobs/02-iac-config-scan/ | [`02-iac-config-scan`](#job-02-iac-config-scan) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| <a id="a-job-02-iac-config-scan"></a>`02-iac-config-scan` | job output | runs/<run_id>/data/jobs/02-iac-config-scan/ | [`02-iac-config-scan`](#job-02-iac-config-scan) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) |
 | <a id="a-job-02-container-image-inventory"></a>`02-container-image-inventory` | job output | runs/<run_id>/data/jobs/02-container-image-inventory/ | [`02-container-image-inventory`](#job-02-container-image-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
 | <a id="a-job-02-sbom-inventory"></a>`02-sbom-inventory` | job output | runs/<run_id>/data/jobs/02-sbom-inventory/ | [`02-sbom-inventory`](#job-02-sbom-inventory) | [`02-evidence-assembly`](#job-02-evidence-assembly)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match)<br>[`02-license-scan`](#job-02-license-scan)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) |
 | <a id="a-job-02-sca-vulnerability-match"></a>`02-sca-vulnerability-match` | job output | runs/<run_id>/data/jobs/02-sca-vulnerability-match/ | [`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) | [`02-evidence-assembly`](#job-02-evidence-assembly) |
