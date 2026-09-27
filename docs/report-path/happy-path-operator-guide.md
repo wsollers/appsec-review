@@ -46,7 +46,16 @@ python3 -B appsec-review-process/stage_artifacts.py \
   --permission write-run-data \
   --permission read-offline-snapshots \
   --execution-environment dagster-read-only-linux
+python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
+python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 ```
+
+The two control commands retain the engagement owner's run- and source-bound authorization for
+package resolution and no-network replay of the accepted configure/build lock. They do not grant
+arbitrary commands: the workers still enforce the closed command profiles, pinned images, target
+path, expiry, and exact permission decision. Test execution requires a separate explicit control
+after the accepted native-build unit and the target's real test command are known; do not invent a
+test command or result path during initial staging.
 
 Offline vulnerability and standards snapshots are configured outside the engagement and then
 hash-bound when consumed. Confirm the configured snapshot registries are current before launch;

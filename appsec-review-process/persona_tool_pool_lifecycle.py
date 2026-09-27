@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,17 @@ ROOT_ID = "accepted-intake"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 VIEW_REQUEST = "downstream/deterministic-pool-merge-request.json"
 VIEW_CONTEXT = "downstream/pool-context.json"
+
+
+def _permission_timestamp(value: str) -> str:
+    """Normalize accepted-pointer timestamps to the permission model's UTC-seconds format."""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise Blocked("persona/tool pool: accepted intake publication time is malformed") from exc
+    if parsed.tzinfo is None:
+        raise Blocked("persona/tool pool: accepted intake publication time has no timezone")
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def root(run_id: str) -> Path:
@@ -79,7 +91,7 @@ def _load_intake(run_id: str) -> tuple[dict, dict, Path, str, str]:
         "pointer_path": str(pointer_path.absolute()), "pointer_sha256": "sha256:" + file_hash(pointer_path),
         "artifact_path": "outputs/intake.json", "artifact_sha256": "sha256:" + file_hash(artifact),
         "source_snapshot_sha256": source}
-    return intake, binding, attempt, control_generation, pointer["published_at"]
+    return intake, binding, attempt, control_generation, _permission_timestamp(pointer["published_at"])
 
 
 def _request(run_id: str, template_id: str, prompt_name: str, intake_path: Path,

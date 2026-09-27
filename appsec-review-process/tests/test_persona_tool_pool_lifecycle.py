@@ -77,14 +77,19 @@ class GraphPoolLifecycleTests(unittest.TestCase):
             atomic_json(base / "accepted.json", {"retained": True})
             atomic_json(run / "inputs" / "artifact-manifest.json", {"run_id": RUN_ID})
             pointer = {"status":"OK", "run_id":RUN_ID, "attempt_id":"intake-1",
-                       "published_at":"2026-09-27T12:00:00Z"}
+                       "published_at":"2026-09-27T12:00:00.123456+00:00"}
             with mock.patch.object(lifecycle.phase1, "accepted", return_value=pointer), \
                  mock.patch.object(lifecycle, "data_path",
                      side_effect=lambda _run,*parts:run.joinpath("data", *parts)), \
                  mock.patch.object(lifecycle, "run_path", return_value=run):
-                _value, _binding, _attempt, generation, _accepted_at = lifecycle._load_intake(RUN_ID)
+                _value, _binding, _attempt, generation, accepted_at = lifecycle._load_intake(RUN_ID)
             self.assertEqual(generation, "sha256:" + lifecycle.file_hash(
                 run / "inputs" / "artifact-manifest.json"))
+            self.assertEqual(accepted_at, "2026-09-27T12:00:00Z")
+
+    def test_permission_timestamp_rejects_naive_time(self):
+        with self.assertRaisesRegex(Blocked, "has no timezone"):
+            lifecycle._permission_timestamp("2026-09-27T12:00:00")
 
     def test_c01_plan_has_two_distinct_persona_producers(self):
         with tempfile.TemporaryDirectory() as folder:
