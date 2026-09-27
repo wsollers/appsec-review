@@ -12,6 +12,7 @@ flowchart TD
   j_02_build_resolution["02-build-resolution<br/>implemented_and_qualified"]
   j_02_evidence_assembly["02-evidence-assembly<br/>standalone_only"]
   j_01_component_characterization["01-component-characterization<br/>implemented_not_qualified"]
+  j_02_full_review_input_assembly["02-full-review-input-assembly<br/>implemented_and_qualified"]
   j_03_threat_model_dfd_stride["03-threat-model-dfd-stride<br/>implemented_and_qualified"]
   j_03_threat_model_reconciliation["03-threat-model-reconciliation<br/>implemented_and_qualified"]
   j_04_asvs_masvs["04-asvs-masvs<br/>standalone_only"]
@@ -24,7 +25,7 @@ flowchart TD
   j_09_independent_verification["09-independent-verification<br/>standalone_only"]
   j_11_remediation_proposal["11-remediation-proposal<br/>missing_prerequisites"]
   j_12_scoring_prioritization["12-scoring-prioritization<br/>standalone_only"]
-  j_10_synthesis_report["10-synthesis-report<br/>missing_prerequisites"]
+  j_10_synthesis_report["10-synthesis-report<br/>implemented_and_qualified"]
   j_02_api_collection_intelligence_ingest["02-api-collection-intelligence-ingest<br/>standalone_only"]
   j_02_binary_intelligence_ingest["02-binary-intelligence-ingest<br/>standalone_only"]
   j_02_doc_intelligence_ingest["02-doc-intelligence-ingest<br/>standalone_only"]
@@ -104,6 +105,7 @@ flowchart TD
   j_02_binary_hardening --> j_02_evidence_assembly
   j_02_mobile_sast --> j_02_evidence_assembly
   j_02_evidence_assembly --> j_01_component_characterization
+  j_01_component_characterization --> j_02_full_review_input_assembly
   j_01_component_characterization --> j_03_threat_model_dfd_stride
   j_03_threat_model_dfd_stride --> j_03_threat_model_reconciliation
   j_01_component_characterization --> j_03_threat_model_reconciliation
@@ -140,6 +142,7 @@ flowchart TD
   j_03_threat_model_dfd_stride --> j_12_scoring_prioritization
   j_01_component_characterization --> j_10_synthesis_report
   j_03_threat_model_dfd_stride --> j_10_synthesis_report
+  j_03_threat_model_reconciliation --> j_10_synthesis_report
   j_04_asvs_masvs --> j_10_synthesis_report
   j_07_red_team_adversarial --> j_10_synthesis_report
   j_08_blue_team_refutation --> j_10_synthesis_report

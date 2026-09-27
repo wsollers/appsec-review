@@ -394,6 +394,25 @@
         }
       ]
     },
+    "02-full-review-input-assembly": {
+      "lane": "01-component-characterization",
+      "contract": "full-review-input-assembly",
+      "template": "02-full-review-input-assembly",
+      "implemented": true,
+      "namespace": "02-full-review-input-assembly",
+      "dependencies": [
+        {
+          "job": "01-component-characterization",
+          "kind": "required",
+          "contract": "component-map",
+          "allowed_skip_reasons": []
+        }
+      ],
+      "required_artifacts": [
+        "full-review-input-assembly.json",
+        "status.json"
+      ]
+    },
     "03-threat-model-dfd-stride": {
       "lane": "03-threat-model-dfd-stride",
       "contract": "threat-model-core",
@@ -760,9 +779,9 @@
     },
     "10-synthesis-report": {
       "lane": "10-synthesis-report",
-      "contract": "10-synthesis-report",
-      "template": null,
-      "implemented": false,
+      "contract": "synthesis-report-publication",
+      "template": "10-synthesis-report",
+      "implemented": true,
       "namespace": "10-synthesis-report",
       "dependencies": [
         {
@@ -775,6 +794,12 @@
           "job": "03-threat-model-dfd-stride",
           "kind": "required",
           "contract": "threat-model-core",
+          "allowed_skip_reasons": []
+        },
+        {
+          "job": "03-threat-model-reconciliation",
+          "kind": "required",
+          "contract": "threat-model-reconciliation",
           "allowed_skip_reasons": []
         },
         {
@@ -1678,7 +1703,7 @@
         {
           "job": "10-synthesis-report",
           "kind": "required",
-          "contract": "10-synthesis-report",
+          "contract": "synthesis-report-publication",
           "allowed_skip_reasons": []
         }
       ],
@@ -1744,7 +1769,7 @@
         {
           "job": "10-synthesis-report",
           "kind": "required",
-          "contract": "10-synthesis-report",
+          "contract": "synthesis-report-publication",
           "allowed_skip_reasons": []
         },
         {

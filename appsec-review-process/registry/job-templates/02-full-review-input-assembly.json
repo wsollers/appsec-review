@@ -2,7 +2,7 @@
   "schema": "appsec-review/job-template/0.1",
   "job_template_id": "02-full-review-input-assembly",
   "display_name": "Full Review Input Assembly",
-  "process": "02-full-review-input-assembly",
+  "process": "01-component-characterization",
   "budget_default": "probe",
   "composition": {
     "persona_id": "intake-coordinator",

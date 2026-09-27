@@ -18,8 +18,8 @@ import synthesis_report_presentation as presentation
 
 JOB = synthesis.JOB
 CONTRACT = "synthesis-report-publication"
-STANDALONE_REGISTRY = ROOT / "10-synthesis-report" / "standalone-registry"
-STANDALONE_GRAPH = ROOT / "10-synthesis-report" / "standalone-job-graph.json"
+STANDALONE_REGISTRY = ROOT / "registry"
+STANDALONE_GRAPH = ROOT / "job-graph.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthesis.APPENDIX,
     synthesis.TRACE, synthesis.PUBLICATION, presentation.RENDER_INPUT, presentation.RENDER_MANIFEST,
@@ -27,9 +27,8 @@ ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthe
     "permission.json", "lineage.json", "status.json"]
 CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", "synthesis_report.py",
     "report_input_assembly.py", "publish_job_output.py",
-    "10-synthesis-report/standalone-registry/output-contracts/synthesis-report-publication.json",
-    "10-synthesis-report/standalone-registry/job-templates/10-synthesis-report.json",
-    "10-synthesis-report/standalone-job-graph.json")
+    "registry/output-contracts/synthesis-report-publication.json",
+    "registry/job-templates/10-synthesis-report.json", "job-graph.json")
 RENDER_FILES = ("pipeline/report/render.py", "pipeline/report/templates/report.tex.j2",
     "pipeline/report/templates/report.html.j2", "pipeline/report/templates/workbench.html.j2",
     "pipeline/report/templates/vendor/katex-0.16.11.css", "pipeline/report/latex/appsec-house.sty")

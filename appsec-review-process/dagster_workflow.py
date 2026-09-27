@@ -1,7 +1,8 @@
 """Dagster multiprocessing graph. Each stateful unit owns its lock in one process."""
+from pathlib import Path
 from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, MetadataValue, RetryPolicy, In, failure_hook,
                      job, multiprocess_executor, op, resource, run_failure_sensor, run_status_sensor)
-from execution_state import Blocked, Lock, atomic_json, data_path, emergency, now, read_json
+from execution_state import Blocked, Lock, atomic_json, data_path, emergency, now, read_json, run_path
 from phase1 import Session, config_for
 import workflow
 import build_execution as build_execution_worker
@@ -14,6 +15,8 @@ import source_sast as source_sast_worker
 import component_characterization as component_characterization_worker
 import threat_model_core as threat_model_worker
 import threat_model_reconciliation as threat_model_reconciliation_worker
+import full_review_input_assembly as full_review_input_assembly_worker
+import synthesis_report_worker
 import bounded_transform_orchestration as bounded_transforms
 import dependency_orchestration as dependency_jobs
 import vendor_evidence_orchestration as vendor_evidence_jobs
@@ -460,6 +463,63 @@ def threat_model_reconciliation_standalone_work(context, configured):
 @job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
 def threat_model_reconciliation():
     threat_model_reconciliation_standalone_work(build_execution_config())
+
+
+FULL_REVIEW_INPUT_CONFIG = {'plan_path': str, 'output_root': str, 'attempt_id': str}
+
+
+def run_full_review_input_assembly(context, configured):
+    started = now()
+    result = full_review_input_assembly_worker.assemble(
+        Path(context.op_config['plan_path']), run_path(configured['engagement_run_id']),
+        Path(context.op_config['output_root']), attempt_id=context.op_config['attempt_id'],
+        started_at=started, finished_at=now())
+    attempt = Path(context.op_config['output_root']) / 'attempts' / context.op_config['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(attempt / full_review_input_assembly_worker.RESULT)),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': context.op_config['attempt_id']})
+    return result
+
+
+@op(name='job_02_full_review_input_assembly', ins={'configured': In(dict), 'upstream': In(list)}, config_schema=FULL_REVIEW_INPUT_CONFIG, pool=CPU_POOL)
+def full_review_input_assembly_work(context, configured, upstream):
+    return run_full_review_input_assembly(context, configured)
+
+
+@op(config_schema=FULL_REVIEW_INPUT_CONFIG, pool=CPU_POOL)
+def full_review_input_assembly_standalone_work(context, configured):
+    return run_full_review_input_assembly(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def full_review_input_assembly():
+    full_review_input_assembly_standalone_work(build_execution_config())
+
+
+def run_synthesis_report(context, configured):
+    run_root = run_path(configured['engagement_run_id'])
+    result = synthesis_report_worker.run(run_root, configured['engagement_run_id'], context.run_id,
+                                         configured['force'])
+    attempt = synthesis_report_worker.root(run_root) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(attempt / 'report.json')),
+        'html': MetadataValue.path(str(attempt / 'presentation/report.html')),
+        'latex': MetadataValue.path(str(attempt / 'presentation/report.tex')),
+        'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(name='job_10_synthesis_report', ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+def synthesis_report_work(context, configured, upstream):
+    return run_synthesis_report(context, configured)
+
+
+@op(pool=CPU_POOL)
+def synthesis_report_standalone_work(context, configured):
+    return run_synthesis_report(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings}, executor_def=multiprocess_executor.configured({'max_concurrent': 1}), op_retry_policy=RetryPolicy(max_retries=0))
+def synthesis_report():
+    synthesis_report_standalone_work(build_execution_config())
 
 
 def run_code_property_graph(context, configured):
@@ -1119,7 +1179,7 @@ from job_graph import load_graph
 LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
                 if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
-                                 '01-component-characterization','03-threat-model-dfd-stride','03-threat-model-reconciliation',
+                                 '01-component-characterization','02-full-review-input-assembly','03-threat-model-dfd-stride','03-threat-model-reconciliation','10-synthesis-report',
                                  '02-binary-hardening',
                                  '02-ir-capture','02-ir-link','02-ir-facts',
                                  '02-code-property-graph',
@@ -1131,8 +1191,10 @@ LIFECYCLE_OPS['02-build-configure']=build_configure_work
 LIFECYCLE_OPS['02-native-build']=native_build_work
 LIFECYCLE_OPS['02-source-sast']=source_sast_work
 LIFECYCLE_OPS['01-component-characterization']=component_characterization_work
+LIFECYCLE_OPS['02-full-review-input-assembly']=full_review_input_assembly_work
 LIFECYCLE_OPS['03-threat-model-dfd-stride']=threat_model_dfd_stride_work
 LIFECYCLE_OPS['03-threat-model-reconciliation']=threat_model_reconciliation_work
+LIFECYCLE_OPS['10-synthesis-report']=synthesis_report_work
 LIFECYCLE_OPS['02-binary-hardening']=binary_hardening_lifecycle_work
 LIFECYCLE_OPS['02-ir-capture']=ir_capture_work
 LIFECYCLE_OPS['02-ir-link']=ir_link_work
@@ -1168,7 +1230,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,threat_model_dfd_stride,threat_model_reconciliation,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -1178,7 +1240,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,threat_model_dfd_stride,threat_model_reconciliation,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,component_characterization,full_review_input_assembly,threat_model_dfd_stride,threat_model_reconciliation,synthesis_report,code_property_graph,ir_capture,ir_link,ir_facts,native_memory_analysis,fuzz_target_triage,owasp_component_routing,owasp_validation_worklist,stig_srg_validation_worklist,deployment_hardening,sbom_inventory,sca_vulnerability_match,license_scan,dependency_lifecycle,cve_reachability,secrets_inventory,iac_config_scan,container_image_inventory,binary_hardening,mobile_sast,persona_tool_pool_dispatch,deterministic_pool_merge,evidence_qualified_quorum,dynamic_rescope,completeness_audit,synthetic_hypothesis_resynthesis,remediation_retest_feedback,final_publication_gate,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

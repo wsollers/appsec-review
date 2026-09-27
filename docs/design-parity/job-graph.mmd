@@ -64,6 +64,10 @@ flowchart TD
   01_component_characterization_pre --> 01_component_characterization["01-component-characterization: work or reuse"]
   01_component_characterization --> 01_component_characterization_post["01-component-characterization: post-validation and publish"]
   02_evidence_assembly -->|required| 01_component_characterization_config
+  02_full_review_input_assembly_config["02-full-review-input-assembly: resolve job configuration"] --> 02_full_review_input_assembly_pre["02-full-review-input-assembly: pre-validation"]
+  02_full_review_input_assembly_pre --> 02_full_review_input_assembly["02-full-review-input-assembly: work or reuse"]
+  02_full_review_input_assembly --> 02_full_review_input_assembly_post["02-full-review-input-assembly: post-validation and publish"]
+  01_component_characterization_post -->|required| 02_full_review_input_assembly_config
   03_threat_model_dfd_stride_config["03-threat-model-dfd-stride: resolve job configuration"] --> 03_threat_model_dfd_stride_pre["03-threat-model-dfd-stride: pre-validation"]
   03_threat_model_dfd_stride_pre --> 03_threat_model_dfd_stride["03-threat-model-dfd-stride: work or reuse"]
   03_threat_model_dfd_stride --> 03_threat_model_dfd_stride_post["03-threat-model-dfd-stride: post-validation and publish"]
@@ -122,15 +126,18 @@ flowchart TD
   09_independent_verification -->|required| 12_scoring_prioritization
   15_deployment_hardening_post -->|required| 12_scoring_prioritization
   03_threat_model_dfd_stride_post -->|required| 12_scoring_prioritization
-  10_synthesis_report["10-synthesis-report (planned; not dispatched)"]
-  01_component_characterization_post -->|required| 10_synthesis_report
-  03_threat_model_dfd_stride_post -->|required| 10_synthesis_report
-  04_asvs_masvs -->|required| 10_synthesis_report
-  07_red_team_adversarial -->|required| 10_synthesis_report
-  08_blue_team_refutation -->|required| 10_synthesis_report
-  09_independent_verification -->|required| 10_synthesis_report
-  12_scoring_prioritization -->|required| 10_synthesis_report
-  11_remediation_proposal -->|optional| 10_synthesis_report
+  10_synthesis_report_config["10-synthesis-report: resolve job configuration"] --> 10_synthesis_report_pre["10-synthesis-report: pre-validation"]
+  10_synthesis_report_pre --> 10_synthesis_report["10-synthesis-report: work or reuse"]
+  10_synthesis_report --> 10_synthesis_report_post["10-synthesis-report: post-validation and publish"]
+  01_component_characterization_post -->|required| 10_synthesis_report_config
+  03_threat_model_dfd_stride_post -->|required| 10_synthesis_report_config
+  03_threat_model_reconciliation_post -->|required| 10_synthesis_report_config
+  04_asvs_masvs -->|required| 10_synthesis_report_config
+  07_red_team_adversarial -->|required| 10_synthesis_report_config
+  08_blue_team_refutation -->|required| 10_synthesis_report_config
+  09_independent_verification -->|required| 10_synthesis_report_config
+  12_scoring_prioritization -->|required| 10_synthesis_report_config
+  11_remediation_proposal -->|optional| 10_synthesis_report_config
   02_api_collection_intelligence_ingest["02-api-collection-intelligence-ingest (planned; not dispatched)"]
   00_intake_post -->|required| 02_api_collection_intelligence_ingest
   02_binary_intelligence_ingest["02-binary-intelligence-ingest (planned; not dispatched)"]
@@ -258,7 +265,7 @@ flowchart TD
   completeness_audit_config["completeness-audit: resolve job configuration"] --> completeness_audit_pre["completeness-audit: pre-validation"]
   completeness_audit_pre --> completeness_audit["completeness-audit: work or reuse"]
   completeness_audit --> completeness_audit_post["completeness-audit: post-validation and publish"]
-  10_synthesis_report -->|required| completeness_audit_config
+  10_synthesis_report_post -->|required| completeness_audit_config
   synthetic_hypothesis_resynthesis_config["synthetic-hypothesis-resynthesis: resolve job configuration"] --> synthetic_hypothesis_resynthesis_pre["synthetic-hypothesis-resynthesis: pre-validation"]
   synthetic_hypothesis_resynthesis_pre --> synthetic_hypothesis_resynthesis["synthetic-hypothesis-resynthesis: work or reuse"]
   synthetic_hypothesis_resynthesis --> synthetic_hypothesis_resynthesis_post["synthetic-hypothesis-resynthesis: post-validation and publish"]
@@ -270,6 +277,6 @@ flowchart TD
   final_publication_gate_config["final-publication-gate: resolve job configuration"] --> final_publication_gate_pre["final-publication-gate: pre-validation"]
   final_publication_gate_pre --> final_publication_gate["final-publication-gate: work or reuse"]
   final_publication_gate --> final_publication_gate_post["final-publication-gate: post-validation and publish"]
-  10_synthesis_report -->|required| final_publication_gate_config
+  10_synthesis_report_post -->|required| final_publication_gate_config
   completeness_audit_post -->|required| final_publication_gate_config
   synthetic_hypothesis_resynthesis_post -->|required| final_publication_gate_config

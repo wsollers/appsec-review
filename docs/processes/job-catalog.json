@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 65,
+  "lifecycle_jobs": 66,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1855,6 +1855,23 @@
        ]
       },
       {
+       "ref": "job:02-full-review-input-assembly",
+       "id": "02-full-review-input-assembly",
+       "name": "Full Review Input Assembly",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:02-full-review-input-assembly"
+       ],
+       "declared_inputs": [
+        "run artifact manifest",
+        "current accepted producer pointers",
+        "closed launch plan"
+       ]
+      },
+      {
        "ref": "job:dynamic-rescope",
        "id": "dynamic-rescope",
        "name": "Dynamic Rescope",
@@ -2042,6 +2059,7 @@
       ],
       "leaves": [
        "lane-handoff",
+       "job:02-full-review-input-assembly",
        "job:dynamic-rescope",
        "job:04-asvs-masvs",
        "job:13-fuzz-target-triage",
@@ -2059,6 +2077,9 @@
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "run artifact manifest",
+       "current accepted producer pointers",
+       "closed launch plan",
        "run-owned dependency and changed-node request",
        "current accepted F03 component map",
        "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -2272,11 +2293,12 @@
       {
        "ref": "job:10-synthesis-report",
        "id": "10-synthesis-report",
-       "name": "10-synthesis-report",
+       "name": "Accepted Evidence-backed Draft Report Publisher",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
+        "job:03-threat-model-reconciliation",
         "job:04-asvs-masvs",
         "job:07-red-team-adversarial",
         "job:08-blue-team-refutation",
@@ -2288,14 +2310,12 @@
         "job:10-synthesis-report"
        ],
        "declared_inputs": [
-        "verified findings",
-        "unresolved risks",
-        "coverage ledger",
-        "component map",
-        "threat model",
-        "ASVS/MASVS assessment",
-        "red/blue/verifier outputs",
-        "scoring and priority ranking (from `12-scoring-prioritization`)"
+        "exact accepted synthesis-input manifest",
+        "F03 component map",
+        "S02 threat model",
+        "OWASP matrix/gaps/routes",
+        "L01 ledger",
+        "L08 verification/scoring"
        ]
       },
       {
@@ -2372,6 +2392,7 @@
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake",
+       "job:03-threat-model-reconciliation",
        "critical-findings-md"
       ],
       "leaves": [
@@ -2411,14 +2432,12 @@
        "verified claims and remediation proposals",
        "exact accepted independent verification",
        "bounded scoring factors",
-       "verified findings",
-       "unresolved risks",
-       "coverage ledger",
-       "component map",
-       "threat model",
-       "ASVS/MASVS assessment",
-       "red/blue/verifier outputs",
-       "scoring and priority ranking (from `12-scoring-prioritization`)",
+       "exact accepted synthesis-input manifest",
+       "F03 component map",
+       "S02 threat model",
+       "OWASP matrix/gaps/routes",
+       "L01 ledger",
+       "L08 verification/scoring",
        "evidence-bound obligation inventory",
        "completeness audit and registered routes",
        "draft publication",
@@ -2453,6 +2472,7 @@
      "build-lock",
      "build-execution",
      "lane-handoff",
+     "job:02-full-review-input-assembly",
      "job:dynamic-rescope",
      "threat-model-reconciliation-planned",
      "job:evidence-qualified-quorum",
@@ -2615,6 +2635,9 @@
      "explicit manifest-declared source root",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "run artifact manifest",
+     "current accepted producer pointers",
+     "closed launch plan",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -2653,14 +2676,12 @@
      "verified claims and remediation proposals",
      "exact accepted independent verification",
      "bounded scoring factors",
-     "verified findings",
-     "unresolved risks",
-     "coverage ledger",
-     "component map",
-     "threat model",
-     "ASVS/MASVS assessment",
-     "red/blue/verifier outputs",
-     "scoring and priority ranking (from `12-scoring-prioritization`)",
+     "exact accepted synthesis-input manifest",
+     "F03 component map",
+     "S02 threat model",
+     "OWASP matrix/gaps/routes",
+     "L01 ledger",
+     "L08 verification/scoring",
      "evidence-bound obligation inventory",
      "completeness audit and registered routes",
      "draft publication",
@@ -4348,6 +4369,23 @@
        ]
       },
       {
+       "ref": "job:02-full-review-input-assembly",
+       "id": "02-full-review-input-assembly",
+       "name": "Full Review Input Assembly",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:01-component-characterization"
+       ],
+       "produces": [
+        "job:02-full-review-input-assembly"
+       ],
+       "declared_inputs": [
+        "run artifact manifest",
+        "current accepted producer pointers",
+        "closed launch plan"
+       ]
+      },
+      {
        "ref": "job:dynamic-rescope",
        "id": "dynamic-rescope",
        "name": "Dynamic Rescope",
@@ -4369,13 +4407,18 @@
        "job:00-intake"
       ],
       "leaves": [
-       "job:01-component-characterization",
+       "job:02-full-review-input-assembly",
        "job:dynamic-rescope"
       ],
-      "passes": [],
+      "passes": [
+       "job:01-component-characterization"
+      ],
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "run artifact manifest",
+       "current accepted producer pointers",
+       "closed launch plan",
        "run-owned dependency and changed-node request"
       ]
      }
@@ -4946,11 +4989,12 @@
       {
        "ref": "job:10-synthesis-report",
        "id": "10-synthesis-report",
-       "name": "10-synthesis-report",
+       "name": "Accepted Evidence-backed Draft Report Publisher",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
+        "job:03-threat-model-reconciliation",
         "job:04-asvs-masvs",
         "job:07-red-team-adversarial",
         "job:08-blue-team-refutation",
@@ -4962,14 +5006,12 @@
         "job:10-synthesis-report"
        ],
        "declared_inputs": [
-        "verified findings",
-        "unresolved risks",
-        "coverage ledger",
-        "component map",
-        "threat model",
-        "ASVS/MASVS assessment",
-        "red/blue/verifier outputs",
-        "scoring and priority ranking (from `12-scoring-prioritization`)"
+        "exact accepted synthesis-input manifest",
+        "F03 component map",
+        "S02 threat model",
+        "OWASP matrix/gaps/routes",
+        "L01 ledger",
+        "L08 verification/scoring"
        ]
       },
       {
@@ -5027,6 +5069,7 @@
       "enters": [
        "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
+       "job:03-threat-model-reconciliation",
        "job:04-asvs-masvs",
        "job:07-red-team-adversarial",
        "job:08-blue-team-refutation",
@@ -5043,14 +5086,12 @@
        "job:synthetic-hypothesis-resynthesis"
       ],
       "declared_inputs": [
-       "verified findings",
-       "unresolved risks",
-       "coverage ledger",
-       "component map",
-       "threat model",
-       "ASVS/MASVS assessment",
-       "red/blue/verifier outputs",
-       "scoring and priority ranking (from `12-scoring-prioritization`)",
+       "exact accepted synthesis-input manifest",
+       "F03 component map",
+       "S02 threat model",
+       "OWASP matrix/gaps/routes",
+       "L01 ledger",
+       "L08 verification/scoring",
        "evidence-bound obligation inventory",
        "completeness audit and registered routes",
        "draft publication",
@@ -5066,6 +5107,7 @@
      "artifact-manifest"
     ],
     "leaves": [
+     "job:02-full-review-input-assembly",
      "job:dynamic-rescope",
      "job:evidence-qualified-quorum",
      "job:remediation-retest-feedback",
@@ -5218,6 +5260,9 @@
      "accepted 02-native-build binary projection",
      "explicit manifest-declared source root",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "run artifact manifest",
+     "current accepted producer pointers",
+     "closed launch plan",
      "run-owned dependency and changed-node request",
      "current accepted F03 component map",
      "exact F02 evidence assembly and dereferenced artifact cited through F03",
@@ -5256,14 +5301,12 @@
      "verified claims and remediation proposals",
      "exact accepted independent verification",
      "bounded scoring factors",
-     "verified findings",
-     "unresolved risks",
-     "coverage ledger",
-     "component map",
-     "threat model",
-     "ASVS/MASVS assessment",
-     "red/blue/verifier outputs",
-     "scoring and priority ranking (from `12-scoring-prioritization`)",
+     "exact accepted synthesis-input manifest",
+     "F03 component map",
+     "S02 threat model",
+     "OWASP matrix/gaps/routes",
+     "L01 ledger",
+     "L08 verification/scoring",
      "evidence-bound obligation inventory",
      "completeness audit and registered routes",
      "draft publication",
@@ -7471,6 +7514,68 @@
    ]
   },
   {
+   "id": "02-full-review-input-assembly",
+   "lane": "01-component-characterization",
+   "name": "Full Review Input Assembly",
+   "contract": "full-review-input-assembly",
+   "implemented": true,
+   "readiness": "implemented_and_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/full_review_input_assembly.py:assemble",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "full_review_input_assembly"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "intake-coordinator",
+    "role_id": "evidence-assembler",
+    "domain_id": "evidence-assembly",
+    "tooling_profile_id": "local-evidence-retrieval",
+    "output_contract_id": "full-review-input-assembly"
+   },
+   "depends_on": [
+    {
+     "job": "01-component-characterization",
+     "kind": "required",
+     "contract": "component-map"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "run artifact manifest"
+    },
+    {
+     "need": "required",
+     "input": "current accepted producer pointers"
+    },
+    {
+     "need": "required",
+     "input": "closed launch plan"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-full-review-input-assembly.json",
+   "output_dir": "runs/<run_id>/data/jobs/02-full-review-input-assembly/",
+   "output_files": [
+    "full-review-input-assembly.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/full-review-input-assembly.json",
+   "claim_class": null,
+   "gaps": [
+    "automatic_plan_derivation_from_component_map_pending",
+    "request_dispatch_not_yet_orchestrated"
+   ],
+   "next_prerequisite": "Derive the closed plan automatically from the accepted component map and dispatch the emitted requests in full_review.",
+   "consumes": [
+    "job:01-component-characterization"
+   ],
+   "produces": [
+    "job:02-full-review-input-assembly"
+   ]
+  },
+  {
    "id": "03-threat-model-dfd-stride",
    "lane": "03-threat-model-dfd-stride",
    "name": "Deterministic DFD And STRIDE Core",
@@ -8339,16 +8444,24 @@
   {
    "id": "10-synthesis-report",
    "lane": "10-synthesis-report",
-   "name": "10-synthesis-report",
-   "contract": "10-synthesis-report",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
-   "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "name": "Accepted Evidence-backed Draft Report Publisher",
+   "contract": "synthesis-report-publication",
+   "implemented": true,
+   "readiness": "implemented_and_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/synthesis_report_worker.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [
+    "synthesis_report"
+   ],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "synthesis-report-drafter",
+    "role_id": "synthesis-report-drafter",
+    "domain_id": "synthesis-report-core",
+    "tooling_profile_id": "synthesis-report-static",
+    "output_contract_id": "synthesis-report-publication"
+   },
    "depends_on": [
     {
      "job": "01-component-characterization",
@@ -8359,6 +8472,11 @@
      "job": "03-threat-model-dfd-stride",
      "kind": "required",
      "contract": "threat-model-core"
+    },
+    {
+     "job": "03-threat-model-reconciliation",
+     "kind": "required",
+     "contract": "threat-model-reconciliation"
     },
     {
      "job": "04-asvs-masvs",
@@ -8394,62 +8512,60 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "verified findings"
+     "input": "exact accepted synthesis-input manifest"
     },
     {
      "need": "required",
-     "input": "unresolved risks"
+     "input": "F03 component map"
     },
     {
      "need": "required",
-     "input": "coverage ledger"
+     "input": "S02 threat model"
     },
     {
      "need": "required",
-     "input": "component map"
+     "input": "OWASP matrix/gaps/routes"
     },
     {
      "need": "required",
-     "input": "threat model"
+     "input": "L01 ledger"
     },
     {
      "need": "required",
-     "input": "ASVS/MASVS assessment"
-    },
-    {
-     "need": "required",
-     "input": "red/blue/verifier outputs"
-    },
-    {
-     "need": "required",
-     "input": "scoring and priority ranking (from `12-scoring-prioritization`)"
+     "input": "L08 verification/scoring"
     }
    ],
-   "inputs_source": "10-synthesis-report/config.md",
+   "inputs_source": "registry/job-templates/10-synthesis-report.json",
    "output_dir": "runs/<run_id>/data/jobs/10-synthesis-report/",
    "output_files": [
-    "final findings table",
-    "merged/deduplicated finding set",
-    "limitations",
-    "go/no-go recommendation",
-    "remediation plan",
-    "report draft"
+    "synthesis-input.json",
+    "report.json",
+    "report.md",
+    "coverage-unresolved-appendix.md",
+    "evidence-trace-index.json",
+    "publication-manifest.json",
+    "report.review.json",
+    "render-publication-manifest.json",
+    "presentation/report.tex",
+    "presentation/report.html",
+    "presentation/report.fragment.html",
+    "presentation/workbench.html",
+    "presentation/workbench.fragment.html",
+    "permission.json",
+    "lineage.json",
+    "status.json"
    ],
-   "outputs_source": "10-synthesis-report/config.md",
+   "outputs_source": "registry/output-contracts/synthesis-report-publication.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
+    "real_accepted_upstream_chain_pending",
+    "final_human_approval_and_publication_remain_separate"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Run the qualified publisher against the real accepted upstream chain, then pass its draft to the separate final publication gate.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
+    "job:03-threat-model-reconciliation",
     "job:04-asvs-masvs",
     "job:07-red-team-adversarial",
     "job:08-blue-team-refutation",
@@ -10842,7 +10958,7 @@
     {
      "job": "10-synthesis-report",
      "kind": "required",
-     "contract": "10-synthesis-report"
+     "contract": "synthesis-report-publication"
     }
    ],
    "declared_inputs": [
@@ -11015,7 +11131,7 @@
     {
      "job": "10-synthesis-report",
      "kind": "required",
-     "contract": "10-synthesis-report"
+     "contract": "synthesis-report-publication"
     },
     {
      "job": "completeness-audit",
@@ -12131,6 +12247,7 @@
     "step:stig-srg-validation-worklist",
     "step:deployment-hardening",
     "step:threat-model-reconciliation-active",
+    "job:02-full-review-input-assembly",
     "job:03-threat-model-dfd-stride",
     "job:03-threat-model-reconciliation",
     "job:04-asvs-masvs",
@@ -12143,6 +12260,16 @@
     "job:04-owasp-validation-worklist",
     "job:15-stig-srg-validation-worklist"
    ]
+  },
+  "job:02-full-review-input-assembly": {
+   "id": "job:02-full-review-input-assembly",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/02-full-review-input-assembly/",
+   "about": "Accepted full-review-input-assembly output of 02-full-review-input-assembly.",
+   "produced_by": [
+    "job:02-full-review-input-assembly"
+   ],
+   "consumed_by": []
   },
   "job:03-threat-model-dfd-stride": {
    "id": "job:03-threat-model-dfd-stride",
@@ -12172,7 +12299,8 @@
     "job:03-threat-model-reconciliation"
    ],
    "consumed_by": [
-    "job:04-asvs-masvs"
+    "job:04-asvs-masvs",
+    "job:10-synthesis-report"
    ]
   },
   "job:04-asvs-masvs": {
@@ -12315,7 +12443,7 @@
    "id": "job:10-synthesis-report",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/10-synthesis-report/",
-   "about": "Accepted 10-synthesis-report output of 10-synthesis-report.",
+   "about": "Accepted synthesis-report-publication output of 10-synthesis-report.",
    "produced_by": [
     "step:critical_findings_sarif",
     "step:full_review",

@@ -292,6 +292,29 @@ def assemble(plan_path: Path, run_root: Path, output_root: Path, *, attempt_id: 
     return result
 
 
+def validate(output_root: Path) -> dict[str, Any]:
+    """Revalidate the currently accepted immutable assembly attempt."""
+    output_root = Path(output_root)
+    accepted = read_json(output_root / "accepted.json")
+    attempt_id = identifier(accepted.get("attempt_id", ""))
+    attempt = output_root / "attempts" / attempt_id
+    envelope = read_json(attempt / "result.json")
+    errors = validate_worker_result(envelope)
+    if errors:
+        raise Blocked("full review input assembly: common envelope is invalid: " + errors[0])
+    if accepted.get("envelope_sha256") != file_hash(attempt / "result.json"):
+        raise Blocked("full review input assembly: accepted envelope hash is stale")
+    result = read_json(attempt / RESULT)
+    schema_errors = validate_document(result, "full-review-input-assembly.schema.json")
+    if schema_errors:
+        raise Blocked("full review input assembly: result schema failed: " + schema_errors[0])
+    for request in result.get("requests", []):
+        path = attempt / request["path"]
+        if not path.is_file() or request["sha256"] != HASH + file_hash(path):
+            raise Blocked("full review input assembly: request artifact is missing or changed")
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)

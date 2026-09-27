@@ -56,8 +56,10 @@
       "native_build",
       "source_sast",
       "component_characterization",
+      "full_review_input_assembly",
       "threat_model_dfd_stride",
       "threat_model_reconciliation",
+      "synthesis_report",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -222,6 +224,13 @@
         "relationship": "standalone and lifecycle-wired component-purpose and downstream review routing from accepted assembled evidence"
       },
       {
+        "job": "full_review_input_assembly",
+        "lifecycle_jobs": [
+          "02-full-review-input-assembly"
+        ],
+        "relationship": "standalone and lifecycle-wired deterministic assembly of validated analysis requests from a closed launch plan"
+      },
+      {
         "job": "threat_model_dfd_stride",
         "lifecycle_jobs": [
           "03-threat-model-dfd-stride"
@@ -234,6 +243,13 @@
           "03-threat-model-reconciliation"
         ],
         "relationship": "standalone and lifecycle-wired reconciliation of the accepted threat model against current component and evidence generations"
+      },
+      {
+        "job": "synthesis_report",
+        "lifecycle_jobs": [
+          "10-synthesis-report"
+        ],
+        "relationship": "standalone and lifecycle-wired evidence-backed draft report and presentation publisher"
       },
       {
         "job": "code_property_graph",
@@ -506,8 +522,10 @@
       "native_build",
       "source_sast",
       "component_characterization",
+      "full_review_input_assembly",
       "threat_model_dfd_stride",
       "threat_model_reconciliation",
+      "synthesis_report",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -557,8 +575,10 @@
       "native_build",
       "source_sast",
       "component_characterization",
+      "full_review_input_assembly",
       "threat_model_dfd_stride",
       "threat_model_reconciliation",
+      "synthesis_report",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -609,8 +629,10 @@
       "native_build",
       "source_sast",
       "component_characterization",
+      "full_review_input_assembly",
       "threat_model_dfd_stride",
       "threat_model_reconciliation",
+      "synthesis_report",
       "code_property_graph",
       "ir_capture",
       "ir_link",
@@ -1497,6 +1519,76 @@
       "next_prerequisite": "Publish an accepted COMPLETE 02-evidence-assembly envelope, then run live persona qualification."
     },
     {
+      "id": "02-full-review-input-assembly",
+      "design_refs": [
+        "docs/architecture/design-v3.md#55-pool-launcher-waiter-and-rendezvous",
+        "docs/design-parity/design-parity-completion-plan.md#workstream-c-persona-and-tool-work-pools"
+      ],
+      "graph": {
+        "node": "02-full-review-input-assembly",
+        "implemented": true,
+        "dependencies": [
+          "01-component-characterization"
+        ]
+      },
+      "registry": {
+        "template": "02-full-review-input-assembly",
+        "persona": "intake-coordinator",
+        "role": "evidence-assembler",
+        "domain": "evidence-assembly",
+        "tooling_profile": "local-evidence-retrieval",
+        "output_contract": "full-review-input-assembly"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/full_review_input_assembly.py:assemble",
+        "validator": "appsec-review-process/full_review_input_assembly.py:validate"
+      },
+      "output": {
+        "contract": "full-review-input-assembly",
+        "contract_file": "appsec-review-process/registry/output-contracts/full-review-input-assembly.json",
+        "schema_file": "schemas/full-review-input-assembly.schema.json",
+        "claim_class": "analysis_request_assembly"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "full_review_input_assembly"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review_input_assembly_work"
+        },
+        "launcher_jobs": [
+          "full_review_input_assembly"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "full_review_input_assembly"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_and_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_full_review_input_assembly.py",
+          "qualification-evidence/full-review-input-assembly/accepted-nominal-happy-path.json"
+        ]
+      },
+      "gaps": [
+        "automatic_plan_derivation_from_component_map_pending",
+        "request_dispatch_not_yet_orchestrated"
+      ],
+      "next_prerequisite": "Derive the closed plan automatically from the accepted component map and dispatch the emitted requests in full_review."
+    },
+    {
       "id": "03-threat-model-dfd-stride",
       "design_refs": [
         "docs/architecture/design-v3.md#4-lane-architecture",
@@ -2320,10 +2412,11 @@
       ],
       "graph": {
         "node": "10-synthesis-report",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "01-component-characterization",
           "03-threat-model-dfd-stride",
+          "03-threat-model-reconciliation",
           "04-asvs-masvs",
           "07-red-team-adversarial",
           "08-blue-team-refutation",
@@ -2332,48 +2425,62 @@
           "11-remediation-proposal"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "10-synthesis-report",
+        "persona": "synthesis-report-drafter",
+        "role": "synthesis-report-drafter",
+        "domain": "synthesis-report-core",
+        "tooling_profile": "synthesis-report-static",
+        "output_contract": "synthesis-report-publication"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/synthesis_report_worker.py:run",
+        "validator": "appsec-review-process/synthesis_report_worker.py:validate"
       },
       "output": {
-        "contract": "10-synthesis-report",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "synthesis-report-publication",
+        "contract_file": "appsec-review-process/registry/output-contracts/synthesis-report-publication.json",
+        "schema_file": "schemas/synthesis-report.schema.json",
+        "claim_class": "evidence_backed_draft_report"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": [],
+        "standalone_jobs": [
+          "synthesis_report"
+        ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:synthesis_report_work"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "synthesis_report"
+        ],
         "sensor_jobs": [
-          "full_review"
+          "full_review",
+          "synthesis_report"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "cpu",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
-          "none"
+          "unit",
+          "host_integration"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_synthesis_report_worker.py",
+          "docs/evidence/synthesis-report-live-qualification-20260927.md"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
+        "real_accepted_upstream_chain_pending",
+        "final_human_approval_and_publication_remain_separate"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Run the qualified publisher against the real accepted upstream chain, then pass its draft to the separate final publication gate."
     },
     {
       "id": "02-api-collection-intelligence-ingest",

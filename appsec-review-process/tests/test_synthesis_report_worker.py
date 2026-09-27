@@ -64,7 +64,7 @@ class SynthesisReportWorkerTests(unittest.TestCase):
             presentation.build_review(report, {})
 
     def test_standalone_contract_and_template_are_schema_valid(self):
-        registry = ROOT / "10-synthesis-report/standalone-registry"
+        registry = ROOT / "registry"
         records = ((registry / "output-contracts/synthesis-report-publication.json",
                     "output-contract.schema.json"),
                    (registry / "job-templates/10-synthesis-report.json", "job-template.schema.json"))
