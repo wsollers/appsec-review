@@ -1,0 +1,510 @@
+<title>LaTeX Workbench</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+:root{
+  --bg:#E9EDF2; --chrome:#F7F8FA; --ink:#16202B; --muted:#5B6878; --rule:#CBD3DD; --accent:#2F5D8A;
+  --editor-bg:#FFFFFF; --editor-ink:#16202B; --warn:#9A7810;
+  --f-head:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Source Serif 4",Charter,"Bitstream Charter",Georgia,serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0B0F13; --chrome:#141B22; --ink:#E3E8EE; --muted:#93A0AF; --rule:#2A3541; --accent:#86AEDA;
+    --editor-bg:#10161C; --editor-ink:#DCE3EA; --warn:#D1AE3C;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0B0F13; --chrome:#141B22; --ink:#E3E8EE; --muted:#93A0AF; --rule:#2A3541; --accent:#86AEDA;
+  --editor-bg:#10161C; --editor-ink:#DCE3EA; --warn:#D1AE3C;
+}
+html,body{height:100%}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-head);display:flex;flex-direction:column}
+header.bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 16px;background:var(--chrome);border-bottom:1px solid var(--rule)}
+header.bar h1{font-size:17px;margin:0 8px 0 0;font-weight:700;letter-spacing:.01em}
+.btn{font:600 13px var(--f-head);background:transparent;color:var(--ink);border:1px solid var(--rule);padding:5px 11px;cursor:pointer}
+.btn.primary{background:var(--ink);color:var(--chrome);border-color:var(--ink)}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+label.btn input{display:none}
+.status{margin-left:auto;font-size:12.5px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.status .warn{color:var(--warn)}
+main.panes{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:0}
+@media (max-width:860px){main.panes{grid-template-columns:1fr;grid-template-rows:45vh auto}}
+.pane{min-height:0;display:flex;flex-direction:column}
+.pane>.lab{font:600 11px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 16px;border-bottom:1px solid var(--rule);background:var(--chrome);display:flex;justify-content:space-between}
+textarea#src{flex:1;min-height:0;width:100%;resize:none;border:0;border-right:1px solid var(--rule);background:var(--editor-bg);color:var(--editor-ink);font:13px/1.55 var(--f-mono);padding:12px 16px;tab-size:2;white-space:pre;overflow:auto}
+#view{flex:1;min-height:0;overflow:auto;padding:20px 16px}
+#unk{font-size:12px;color:var(--warn);padding:6px 16px;border-top:1px solid var(--rule);background:var(--chrome)}
+
+/* ---------- the rendered page: a fixed light "paper", like the PDF ---------- */
+.paper{color-scheme:light;max-width:800px;margin:0 auto;background:#FFFFFF;color:#16202B;padding:clamp(18px,4vw,52px);box-shadow:0 1px 3px rgba(20,30,40,.18);font:15.5px/1.6 var(--f-body);overflow-wrap:anywhere}
+.paper h2,.paper h3,.paper h4{font-family:var(--f-head);color:#16202B;text-wrap:balance}
+.paper h2{font-size:23px;margin:1.6em 0 .6em;padding-bottom:.25em;border-bottom:1px solid #D5DBE3}
+.paper h3{font-size:18px;margin:1.3em 0 .4em}
+.paper h4{font-size:15.5px;margin:1em 0 .3em}
+.paper .num{color:#2F5D8A;margin-right:.55em}
+.paper .pb{display:block;height:.7em}
+.paper .tt,.paper code{font-family:var(--f-mono);font-size:.88em}
+.paper .sf{font-family:var(--f-head)}
+.paper .sc{font-variant:small-caps}
+.paper .unk{font-family:var(--f-mono);font-size:.8em;color:#9A7810;background:#FBF3D9;padding:0 3px}
+.paper .err{font-family:var(--f-mono);font-size:.85em;color:#A8201A}
+.paper .center{text-align:center}
+.paper .tbl{overflow-x:auto;margin:.7em 0}
+.paper table{border-collapse:collapse;width:100%;font-size:14px}
+.paper table.book thead td,.paper table.book thead th{border-bottom:1px solid #16202B}
+.paper table.book{border-top:1.2px solid #16202B;border-bottom:1.2px solid #16202B}
+.paper td,.paper th{padding:5px 8px;vertical-align:top;text-align:left;font-weight:inherit}
+.paper tr.mid td{border-top:1px solid #16202B}
+.paper tr.hl td{border-top:1px solid #9AA5B1}
+.paper .chip{display:inline-block;font:700 10.5px/1.5 var(--f-head);letter-spacing:.06em;text-transform:uppercase;padding:1px 7px;color:#FFFFFF;white-space:nowrap}
+.paper .eyebrow{font:600 10.5px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:#5B6878}
+.paper .tcb{border:1px solid #D5DBE3;padding:12px 16px;margin:12px 0}
+.paper ul,.paper ol{padding-left:1.3em;margin:.4em 0}
+.paper li{margin:.2em 0}
+.paper .katex-display{overflow-x:auto;overflow-y:hidden;padding:2px 0}
+.paper .titleblock{text-align:center;margin-bottom:1.5em}
+.paper .titleblock .t{font:700 28px/1.2 var(--f-head)}
+.paper figure.snippet{margin:10px 0 4px;border:1px solid #D5DBE3}
+.paper figure.snippet figcaption{display:flex;justify-content:space-between;gap:12px;font:12px var(--f-mono);color:#5B6878;background:#EEF2F6;padding:3px 10px}
+.paper pre.code,.paper pre.verb{margin:0;background:#F6F8FA;font:12.5px/1.55 var(--f-mono);overflow-x:auto;padding:4px 0}
+.paper pre.verb{padding:8px 12px;border:1px solid #D5DBE3;margin:.6em 0}
+.paper pre.code .l{display:block;padding-right:12px;min-width:max-content}
+.paper pre.code .n{display:inline-block;width:3.2em;padding-right:1em;text-align:right;color:#5B6878;user-select:none}
+.paper pre.code .l.flaw{background:#FDE2E1;box-shadow:inset 3px 0 0 #C8352B}
+.paper pre.code .l.flaw .n{color:#C8352B;font-weight:600}
+.paper blockquote{margin:.6em 0;padding-left:1em;border-left:3px solid #D5DBE3;color:#39434F}
+.paper a{color:#2F5D8A;text-decoration:none}
+</style>
+<style>{{ katex_css|safe }}</style>
+
+<header class="bar">
+  <h1>LaTeX Workbench</h1>
+  <button class="btn primary" type="button" id="reset">Load report.tex</button>
+  <label class="btn" for="file">Open .tex file<input type="file" id="file" accept=".tex,.ltx,.sty,.txt,text/plain"></label>
+  <button class="btn" type="button" id="copy">Copy source</button>
+  <button class="btn" type="button" id="clear">Clear</button>
+  <div class="status" aria-live="polite"><span id="msg"></span><span id="time"></span></div>
+</header>
+
+<main class="panes">
+  <section class="pane">
+    <div class="lab"><span>Source</span><span id="count"></span></div>
+    <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="LaTeX source"></textarea>
+  </section>
+  <section class="pane">
+    <div class="lab"><span>Preview</span><span>KaTeX math · report macros · tables · lists</span></div>
+    <div id="view"><div class="paper" id="out"></div></div>
+    <div id="unk" hidden></div>
+  </section>
+</main>
+
+<script id="report-tex" type="application/json">{{ tex_source|jsonscript }}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+<script>
+/* A small LaTeX-to-HTML previewer. Not a TeX engine: it covers the report template's vocabulary
+   (sections, tables, lists, tcolorbox, colors, \newcommand, code snippets) and hands math to KaTeX.
+   Anything it does not know is shown inline in amber and listed under the preview. */
+(function(){
+"use strict";
+var BASE_COLORS={black:"#000000",white:"#FFFFFF",red:"#FF0000",green:"#00A000",blue:"#0000FF",cyan:"#00FFFF",
+  magenta:"#FF00FF",yellow:"#FFFF00",gray:"#808080",grey:"#808080",darkgray:"#404040",lightgray:"#BFBFBF",
+  orange:"#FF8000",purple:"#BF0040",brown:"#BF8040",teal:"#008080",olive:"#808000",violet:"#800080"};
+var SIZES={tiny:".62em",scriptsize:".72em",footnotesize:".83em",small:".92em",normalsize:"1em",
+  large:"1.18em",Large:"1.4em",LARGE:"1.66em",huge:"2em",Huge:"2.4em"};
+var SYMBOLS={textperiodcentered:"·",textbackslash:"\\",textasciitilde:"~",textasciicircum:"^",textless:"<",
+  textgreater:">",ldots:"…",dots:"…",textellipsis:"…",rightarrow:"→",leftarrow:"←",textendash:"–",textemdash:"—",
+  textbullet:"•",textquoteleft:"‘",textquoteright:"’",textquotedblleft:"“",textquotedblright:"”",
+  textregistered:"®",copyright:"©",textdegree:"°",S:"§",P:"¶",dag:"†",ddag:"‡",quad:"\u2003",qquad:"\u2003\u2003",
+  enspace:"\u2002",thinspace:"\u2009",LaTeX:"LaTeX",TeX:"TeX",textbar:"|",checkmark:"✓",times:"×"};
+var IGNORE=new Set(["noindent","indent","leavevmode","strut","allowbreak","relax","selectfont","centering",
+  "raggedright","raggedleft","maketitle_","protect","nobreak","hline_","smallskip_","nolinkurl_","sloppy",
+  "fussy","frenchspacing","normalfont","null","hfil","vfill","hss","ignorespaces","unskip","break",
+  "arraybackslash","displaystyle","endhead","endfirsthead","endfoot","endlastfoot","phantomsection",
+  "tableofcontents","listoffigures","listoftables","clearpage","newpage","pagebreak","cleardoublepage","thispagestyle_"]);
+var BREAKS=new Set(["par","bigskip","medskip","smallskip"]);
+var SKIP1=new Set(["vspace","hspace","label_","pagestyle","thispagestyle","setcounter_","addtocounter_",
+  "setlength_","enlargethispage","bibliographystyle","hypersetup","geometry","usetikzlibrary","linespread","fontencoding"]);
+var DECL={bfseries:"font-weight:700",mdseries:"font-weight:400",itshape:"font-style:italic",slshape:"font-style:oblique",
+  upshape:"font-style:normal",ttfamily:"TT",sffamily:"SF",rmfamily:"font-family:var(--f-body)",scshape:"font-variant:small-caps",
+  em:"font-style:italic"};
+var ARG1={textbf:"font-weight:700",textit:"font-style:italic",emph:"font-style:italic",textsl:"font-style:oblique",
+  textmd:"font-weight:400",textup:"font-style:normal",textnormal:"",underline:"text-decoration:underline",
+  textsc:"font-variant:small-caps",MakeUppercase:"text-transform:uppercase",uppercase:"text-transform:uppercase",
+  MakeLowercase:"text-transform:lowercase",textrm:"font-family:var(--f-body)"};
+
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+
+function Ctx(){ this.colors=Object.assign({},BASE_COLORS); this.macros={}; this.envs={}; this.unknown={};
+  this.sec=[0,0,0]; this.appendix=false; this.title=null; this.author=null; this.date=null; this.katexMacros={}; }
+Ctx.prototype.miss=function(n){ this.unknown[n]=(this.unknown[n]||0)+1; };
+Ctx.prototype.color=function(spec){
+  spec=(spec||"").trim(); if(!spec) return "inherit";
+  if(/^#?[0-9a-fA-F]{6}$/.test(spec)) return spec[0]==="#"?spec:"#"+spec;
+  var parts=spec.split("!");
+  if(parts.length>=2){ var a=this.color(parts[0]), p=parseFloat(parts[1])||0, b=parts[2]?this.color(parts[2]):"#FFFFFF";
+    return "color-mix(in srgb, "+a+" "+p+"%, "+b+")"; }
+  return this.colors[spec]||this.colors[spec.toLowerCase()]||spec;
+};
+
+function P(s,ctx,mode){ this.s=s; this.i=0; this.ctx=ctx; this.mode=mode||"text"; }
+P.prototype.peek=function(){return this.s[this.i];};
+P.prototype.eof=function(){return this.i>=this.s.length;};
+P.prototype.ws=function(){ while(!this.eof()){ var c=this.s[this.i];
+    if(c===" "||c==="\t"||c==="\n"||c==="\r") this.i++;
+    else if(c==="%"){ while(!this.eof()&&this.s[this.i]!=="\n") this.i++; }
+    else break; } };
+P.prototype.name=function(){ var m=/^([A-Za-z@]+|.)/.exec(this.s.slice(this.i)); if(!m) return ""; this.i+=m[1].length; return m[1]; };
+/* raw text of a balanced {...} group; returns null if none */
+P.prototype.rawGroup=function(){ this.ws(); if(this.peek()!=="{") return null; var d=0,st=this.i;
+  for(;this.i<this.s.length;this.i++){ var c=this.s[this.i];
+    if(c==="\\"){ this.i++; continue; }
+    if(c==="{") d++; else if(c==="}"){ d--; if(d===0){ this.i++; return this.s.slice(st+1,this.i-1); } } }
+  return this.s.slice(st+1); };
+P.prototype.rawOpt=function(){ var save=this.i; this.ws(); if(this.peek()!=="["){ this.i=save; return null; } var d=0,st=this.i;
+  for(;this.i<this.s.length;this.i++){ var c=this.s[this.i];
+    if(c==="\\"){ this.i++; continue; }
+    if(c==="{") d++; else if(c==="}") d--;
+    else if(c==="]"&&d===0){ this.i++; return this.s.slice(st+1,this.i-1); } }
+  return null; };
+/* a single argument: {group} or one token */
+P.prototype.rawArg=function(){ this.ws(); if(this.peek()==="{") return this.rawGroup();
+  if(this.peek()==="\\"){ var st=this.i; this.i++; this.name(); return this.s.slice(st,this.i); }
+  return this.s[this.i++]||""; };
+P.prototype.sub=function(src,mode){ return new P(src,this.ctx,mode||this.mode).run(); };
+P.prototype.math=function(tex,display){
+  try{ return katex.renderToString(tex,{displayMode:display,throwOnError:false,strict:"ignore",macros:this.ctx.katexMacros,trust:false}); }
+  catch(e){ return '<span class="err">'+esc(tex)+'</span>'; } };
+/* body of \begin{env} ... \end{env}, respecting nesting */
+P.prototype.envBody=function(env){ var open="\\begin{"+env+"}", close="\\end{"+env+"}", d=1, st=this.i;
+  while(this.i<this.s.length){
+    if(this.s.startsWith(close,this.i)){ d--; if(d===0){ var b=this.s.slice(st,this.i); this.i+=close.length; return b; } this.i+=close.length; }
+    else if(this.s.startsWith(open,this.i)){ d++; this.i+=open.length; }
+    else if(this.s[this.i]==="\\"){ this.i+=2; }
+    else this.i++; }
+  return this.s.slice(st); };
+
+P.prototype.run=function(){
+  var out=[], opened=0, c;
+  while(!this.eof()){
+    c=this.s[this.i];
+    if(c==="%"){ while(!this.eof()&&this.s[this.i]!=="\n") this.i++; continue; }
+    if(c==="\\"){ this.i++; var r=this.command(); if(r&&r.decl){ out.push('<span style="'+r.decl+'">'); opened++; } else if(r) out.push(r); continue; }
+    if(c==="{"){ var g=this.rawGroup(); out.push(this.sub(g)); continue; }
+    if(c==="}"){ this.i++; continue; }
+    if(c==="$"){ var disp=this.s[this.i+1]==="$", open=disp?2:1; this.i+=open; var st=this.i;
+      while(!this.eof()&&!(this.s[this.i]==="$"&&this.s[this.i-1]!=="\\")) this.i++;
+      var m=this.s.slice(st,this.i); this.i+=open; out.push(this.math(m,disp)); continue; }
+    if(this.mode==="code"&&/\s/.test(c)){ this.i++; continue; }
+    if(c==="\n"){ var j=this.i+1; while(j<this.s.length&&/[ \t\r]/.test(this.s[j])) j++;
+      if(this.s[j]==="\n"){ out.push('<span class="pb"></span>'); this.i=j+1; continue; } out.push(" "); this.i++; continue; }
+    if(c==="~"){ out.push("&nbsp;"); this.i++; continue; }
+    if(c==="-"&&this.s.startsWith("---",this.i)){ out.push("—"); this.i+=3; continue; }
+    if(c==="-"&&this.s.startsWith("--",this.i)){ out.push("–"); this.i+=2; continue; }
+    if(c==="`"&&this.s[this.i+1]==="`"){ out.push("“"); this.i+=2; continue; }
+    if(c==="'"&&this.s[this.i+1]==="'"){ out.push("”"); this.i+=2; continue; }
+    out.push(esc(c)); this.i++;
+  }
+  while(opened--) out.push("</span>");
+  return out.join("");
+};
+
+P.prototype.heading=function(level,star,title){
+  var ctx=this.ctx, num="";
+  if(!star){ ctx.sec[level]++; for(var k=level+1;k<3;k++) ctx.sec[k]=0;
+    var first=ctx.appendix?String.fromCharCode(64+ctx.sec[0]):String(ctx.sec[0]);
+    num=[first].concat(ctx.sec.slice(1,level+1)).join("."); }
+  var id=title.replace(/<[^>]+>/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+  var tag="h"+(level+2);
+  return "<"+tag+' id="'+id+'">'+(num?'<span class="num">'+num+"</span>":"")+title+"</"+tag+">";
+};
+
+P.prototype.command=function(){
+  var ctx=this.ctx, n=this.name(), star=false;
+  if(!n) return "";
+  if(this.peek()==="*"&&/^[A-Za-z]/.test(n)){ star=true; this.i++; }
+  /* single-character commands */
+  if(n==="\\"){ this.rawOpt(); return "<br>"; }
+  if("&%$#_{}".indexOf(n)>=0) return esc(n);
+  if(n===" "||n==="\n") return this.mode==="code"?" ":" ";
+  if(n===",") return "\u2009"; if(n===";"||n===":") return "\u2005"; if(n==="!"||n==="/"||n==="-") return "";
+  if(n==="["){ var e=this.s.indexOf("\\]",this.i); var m=this.s.slice(this.i,e<0?undefined:e); this.i=e<0?this.s.length:e+2; return this.math(m,true); }
+  if(n==="("){ var e2=this.s.indexOf("\\)",this.i); var m2=this.s.slice(this.i,e2<0?undefined:e2); this.i=e2<0?this.s.length:e2+2; return this.math(m2,false); }
+  if(n==="begin") return this.environment(this.rawGroup());
+  if(n==="end"){ this.rawGroup(); return ""; }
+  /* user macros (\newcommand) win over nothing but builtins below that are report-specific */
+  var BUILTIN=this.builtin(n,star);
+  if(BUILTIN!==undefined) return BUILTIN;
+  if(ctx.macros[n]) return this.expand(n);
+  if(SYMBOLS[n]!==undefined) return SYMBOLS[n];
+  if(IGNORE.has(n)) return "";
+  if(BREAKS.has(n)) return '<span class="pb"></span>';
+  if(SIZES[n]) return {decl:"font-size:"+SIZES[n]};
+  if(DECL[n]){ var d=DECL[n]; return {decl:d==="TT"?"font-family:var(--f-mono);font-size:.9em":d==="SF"?"font-family:var(--f-head)":d}; }
+  if(ARG1[n]!==undefined){ var a=this.rawArg(); return '<span style="'+ARG1[n]+'">'+this.sub(a)+"</span>"; }
+  ctx.miss("\\"+n);
+  return '<span class="unk">\\'+esc(n)+"</span>";
+};
+
+P.prototype.expand=function(n){
+  var mac=this.ctx.macros[n], args=[], k;
+  if(mac.opt!==null){ var o=this.rawOpt(); args.push(o===null?mac.opt:o); k=1; } else k=0;
+  for(;k<mac.n;k++) args.push(this.rawArg());
+  var body=mac.body.replace(/#([1-9])/g,function(_,d){ return args[+d-1]!==undefined?args[+d-1]:""; });
+  if(!this.depth) this.depth=0;
+  if(this.depth>40) return '<span class="err">macro recursion: \\'+esc(n)+"</span>";
+  var p=new P(body,this.ctx,this.mode); p.depth=this.depth+1; return p.run();
+};
+
+/* returns undefined when not a builtin */
+P.prototype.builtin=function(n,star){
+  var ctx=this.ctx, a, b;
+  switch(n){
+    case "section": this.rawOpt(); return this.heading(0,star,this.sub(this.rawGroup()));
+    case "subsection": this.rawOpt(); return this.heading(1,star,this.sub(this.rawGroup()));
+    case "subsubsection": this.rawOpt(); return this.heading(2,star,this.sub(this.rawGroup()));
+    case "paragraph": this.rawOpt(); return "<b>"+this.sub(this.rawGroup())+"</b> ";
+    case "chapter": case "part": this.rawOpt(); return "<h2>"+this.sub(this.rawGroup())+"</h2>";
+    case "appendix": ctx.appendix=true; ctx.sec=[0,0,0]; return "";
+    case "title": ctx.title=this.sub(this.rawGroup()); return "";
+    case "author": ctx.author=this.sub(this.rawGroup()); return "";
+    case "date": ctx.date=this.sub(this.rawGroup()); return "";
+    case "today": return new Date().toISOString().slice(0,10);
+    case "maketitle": return '<div class="titleblock"><div class="t">'+(ctx.title||"")+"</div>"+(ctx.author?"<div>"+ctx.author+"</div>":"")+(ctx.date?'<div class="eyebrow">'+ctx.date+"</div>":"")+"</div>";
+    case "texttt": case "mono": case "path": case "code": return '<span class="tt">'+this.sub(this.rawArg())+"</span>";
+    case "textsf": return '<span class="sf">'+this.sub(this.rawArg())+"</span>";
+    case "url": case "nolinkurl": a=this.rawGroup(); return '<a class="tt" href="'+esc(a)+'" target="_blank" rel="noopener">'+esc(a)+"</a>";
+    case "href": a=this.rawGroup(); b=this.rawGroup(); return '<a href="'+esc(a)+'" target="_blank" rel="noopener">'+this.sub(b)+"</a>";
+    case "hyperref": a=this.rawOpt(); b=this.rawGroup(); return '<a href="#'+esc(a||"")+'">'+this.sub(b)+"</a>";
+    case "label": a=this.rawGroup(); return '<a id="'+esc(a)+'"></a>';
+    case "ref": case "autoref": case "pageref": case "cref": a=this.rawGroup(); return '<a href="#'+esc(a)+'">'+esc(a)+"</a>";
+    case "cite": case "citep": case "citet": this.rawOpt(); a=this.rawGroup(); return "["+esc(a)+"]";
+    case "footnote": a=this.rawGroup(); return '<sup title="footnote">('+this.sub(a)+")</sup>";
+    case "textcolor": a=this.rawGroup(); b=this.rawArg(); return '<span style="color:'+ctx.color(a)+'">'+this.sub(b)+"</span>";
+    case "color": a=this.rawGroup(); return {decl:"color:"+ctx.color(a)};
+    case "colorbox": a=this.rawGroup(); b=this.rawGroup(); return '<span style="background:'+ctx.color(a)+';padding:0 3px">'+this.sub(b)+"</span>";
+    case "fcolorbox": a=this.rawGroup(); var bg=this.rawGroup(); b=this.rawGroup(); return '<span style="border:1px solid '+ctx.color(a)+';background:'+ctx.color(bg)+';padding:0 3px">'+this.sub(b)+"</span>";
+    case "fontsize": this.rawGroup(); this.rawGroup(); return "";
+    case "newline": case "linebreak": this.rawOpt(); return "<br>";
+    case "hfill": case "hfil": case "dotfill": return '<span style="display:inline-block;min-width:2em"></span>';
+    case "vspace": case "hspace": this.rawGroup(); return n==="vspace"?"":" ";
+    case "makebox": case "framebox": this.rawOpt(); this.rawOpt(); return this.sub(this.rawGroup());
+    case "parbox": this.rawOpt(); this.rawGroup(); return this.sub(this.rawGroup());
+    case "raisebox": this.rawGroup(); this.rawOpt(); this.rawOpt(); return this.sub(this.rawGroup());
+    case "mbox": case "text": case "hbox": return this.sub(this.rawGroup());
+    case "rule": this.rawOpt(); this.rawGroup(); this.rawGroup(); return '<hr style="border:0;border-top:1px solid currentColor;opacity:.4">';
+    case "includegraphics": this.rawOpt(); a=this.rawGroup(); return '<span class="unk">[image: '+esc(a)+"]</span>";
+    case "caption": this.rawOpt(); return '<div class="eyebrow" style="text-transform:none;letter-spacing:0;font-size:13px">'+this.sub(this.rawGroup())+"</div>";
+    case "item": a=this.rawOpt(); return a!==null?"<b>"+this.sub(a)+"</b> ":"";
+    case "multicolumn": this.rawGroup(); this.rawGroup(); return this.sub(this.rawGroup());
+    case "toprule": case "midrule": case "bottomrule": case "hline": this.rawOpt(); return "";
+    case "cmidrule": this.s.slice(this.i).match(/^\s*\(/)&&(this.i=this.s.indexOf(")",this.i)+1); this.rawGroup(); return "";
+    case "cline": this.rawGroup(); return "";
+    case "addlinespace": this.rawOpt(); return "";
+    case "newcommand": case "renewcommand": case "providecommand": case "DeclareRobustCommand": this.defineMacro(); return "";
+    case "def": { this.ws(); this.i++; var nm=this.name(); var params=0; while(this.peek()==="#"){ this.i+=2; params++; } var body=this.rawGroup(); ctx.macros[nm]={n:params,opt:null,body:body||""}; return ""; }
+    case "definecolor": a=this.rawGroup(); var model=this.rawGroup(); b=this.rawGroup(); ctx.colors[a]=colorFrom(model,b); return "";
+    case "colorlet": a=this.rawGroup(); b=this.rawGroup(); ctx.colors[a]=ctx.color(b); return "";
+    case "newenvironment": case "renewenvironment": { a=this.rawGroup(); var nn=this.rawOpt(); var opt=this.rawOpt(); var bb=this.rawGroup(); var ee=this.rawGroup(); ctx.envs[a]={n:+(nn||0),opt:opt,begin:bb||"",end:ee||""}; return ""; }
+    case "newtcolorbox": case "renewtcolorbox": { a=this.rawGroup(); this.rawOpt(); this.rawOpt(); b=this.rawGroup(); if(!ctx.envs[a]) ctx.envs[a]={tcb:b||""}; return ""; }
+    case "usepackage": case "RequirePackage": case "documentclass": this.rawOpt(); this.rawGroup(); this.rawOpt(); return "";
+    case "setlength": case "addtolength": case "setcounter": case "addtocounter": this.rawArg(); this.rawGroup(); return "";
+    case "newlength": case "newcounter": this.rawGroup(); this.rawOpt(); return "";
+    case "stepcounter": case "refstepcounter": this.rawGroup(); return "";
+    case "titleformat": this.rawArg(); this.rawOpt(); this.rawGroup(); this.rawGroup(); this.rawGroup(); this.rawGroup(); this.rawOpt(); return "";
+    case "titlespacing": this.rawGroup(); this.rawGroup(); this.rawGroup(); this.rawGroup(); return "";
+    case "fancyhead": case "fancyfoot": case "lhead": case "rhead": case "chead": case "lfoot": case "rfoot": case "cfoot": this.rawOpt(); this.rawGroup(); return "";
+    case "fancyhf": case "pagestyle": case "thispagestyle": case "pagenumbering": case "bibliography": case "setlist": case "hypersetup": case "geometry": case "linespread": case "input": case "include": case "usetikzlibrary": case "tcbuselibrary": this.rawOpt(); this.rawGroup(); return "";
+    case "renewcommand\\": return "";
+    /* report template macros */
+    case "sev": a=this.rawGroup(); return '<span class="chip" style="background:'+ctx.color("sev"+a)+'">'+esc(a)+"</span>";
+    case "st": a=this.rawGroup(); b=this.rawGroup(); return '<span class="sf" style="font-weight:700;font-size:.8em;color:'+ctx.color("st"+a)+'">'+this.sub(b)+"</span>";
+    case "eyebrow": return '<span class="eyebrow">'+this.sub(this.rawGroup())+"</span>";
+    case "codeline": case "flawline": a=this.rawGroup(); b=this.rawGroup();
+      return '<span class="l'+(n==="flawline"?" flaw":"")+'"><span class="n">'+esc(a)+"</span>"+new P(b,ctx,"codetext").run()+"</span>";
+  }
+  return undefined;
+};
+
+function colorFrom(model,v){
+  v=(v||"").trim();
+  if(model==="HTML") return "#"+v;
+  var p=v.split(",").map(function(x){return parseFloat(x);});
+  if(model==="rgb") return "rgb("+p.map(function(x){return Math.round(x*255);}).join(",")+")";
+  if(model==="RGB") return "rgb("+p.join(",")+")";
+  if(model==="gray") return "rgb("+[p[0],p[0],p[0]].map(function(x){return Math.round(x*255);}).join(",")+")";
+  if(model==="cmyk"){ var k=p[3]; return "rgb("+[p[0],p[1],p[2]].map(function(x){return Math.round(255*(1-x)*(1-k));}).join(",")+")"; }
+  return v;
+}
+
+P.prototype.defineMacro=function(){
+  this.ws(); var nm;
+  if(this.peek()==="{"){ nm=this.rawGroup().replace(/^\\/,"").trim(); } else { this.i++; nm=this.name(); }
+  var n=this.rawOpt(), opt=this.rawOpt(), body=this.rawGroup();
+  /* report builtins keep their HTML rendering even though the preamble defines them for TeX */
+  if(["sev","st","eyebrow","mono","codeline","flawline"].indexOf(nm)>=0) return;
+  this.ctx.macros[nm]={n:+(n||0),opt:opt,body:body||""};
+  if(!/\\(color|textcolor|colorbox|sffamily|MakeUppercase|makebox|parbox|leavevmode)/.test(body||"")) this.ctx.katexMacros["\\"+nm]=body;
+};
+
+/* split on a separator at brace depth 0, ignoring escaped chars */
+function splitTop(s,sep){
+  var out=[],d=0,st=0,i;
+  for(i=0;i<s.length;i++){ var c=s[i];
+    if(c==="\\"){ if(sep==="\\\\"&&s[i+1]==="\\"&&d===0){ out.push(s.slice(st,i)); i++; st=i+1; continue; } i++; continue; }
+    if(c==="{") d++; else if(c==="}") d--;
+    else if(c==="%"){ while(i<s.length&&s[i]!=="\n") i++; }
+    else if(sep==="&"&&c==="&"&&d===0){ out.push(s.slice(st,i)); st=i+1; } }
+  out.push(s.slice(st)); return out;
+}
+function colAligns(spec){
+  var out=[],i=0,d;
+  spec=spec.replace(/\s/g,"");
+  while(i<spec.length){ var c=spec[i];
+    if(c==="@"||c===">"||c==="<"||c==="!"){ i++; if(spec[i]==="{"){ d=0; do{ if(spec[i]==="{")d++; else if(spec[i]==="}")d--; i++; }while(d>0&&i<spec.length);} continue; }
+    if(c==="*"){ i++; var cnt="",sub=""; d=0; i++; while(spec[i]!=="}"){cnt+=spec[i++];} i+=2; d=1; while(d>0&&i<spec.length){ if(spec[i]==="{")d++; else if(spec[i]==="}")d--; if(d>0) sub+=spec[i]; i++; } for(var k=0;k<+cnt;k++) out=out.concat(colAligns(sub)); continue; }
+    if(c==="l"||c==="X"||c==="p"||c==="m"||c==="b"||c==="L") out.push("left");
+    else if(c==="c"||c==="C") out.push("center");
+    else if(c==="r"||c==="R"||c==="S") out.push("right");
+    if((c==="p"||c==="m"||c==="b")&&spec[i+1]==="{"){ i++; d=0; do{ if(spec[i]==="{")d++; else if(spec[i]==="}")d--; i++; }while(d>0&&i<spec.length); continue; }
+    i++; }
+  return out;
+}
+
+P.prototype.table=function(spec,body){
+  var ctx=this.ctx, aligns=colAligns(spec||""), rows=splitTop(body,"\\\\"), html=[], seenMid=false, head=[], bodyRows=[];
+  var pendingRule="";
+  rows.forEach(function(raw){
+    var r=raw.replace(/^\s*\[[^\]]*\]/,"");
+    var rule=/\\(midrule|hline|cmidrule)/.test(r)?"mid":"";
+    var isMid=/\\midrule/.test(r);
+    r=r.replace(/\\(toprule|midrule|bottomrule|hline|endhead|endfirsthead|endfoot|endlastfoot)\b(\[[^\]]*\])?/g,"")
+       .replace(/\\cmidrule(\([^)]*\))?\{[^}]*\}/g,"").replace(/\\cline\{[^}]*\}/g,"").replace(/\\addlinespace(\[[^\]]*\])?/g,"");
+    if(isMid&&!seenMid&&bodyRows.length===0&&head.length===0){ seenMid=true; }
+    if(!r.trim()){ if(isMid&&!seenMid){ seenMid=true; } if(rule) pendingRule=rule; if(isMid) seenMid=true; return; }
+    var cells=splitTop(r,"&"), tds=[], col=0;
+    cells.forEach(function(cell){
+      var span=1, al=aligns[col]||"left", mc=/^\s*\\multicolumn\{(\d+)\}\{([^}]*)\}/.exec(cell);
+      if(mc){ span=+mc[1]; var a2=colAligns(mc[2]); if(a2[0]) al=a2[0]; }
+      var content=new P(cell.trim(),ctx,"text").run();
+      tds.push('<td'+(span>1?' colspan="'+span+'"':"")+(al!=="left"?' style="text-align:'+al+'"':"")+">"+content+"</td>");
+      col+=span; });
+    var tr='<tr'+(pendingRule&&(head.length||bodyRows.length)?' class="'+(pendingRule==="mid"?"mid":"hl")+'"':"")+">"+tds.join("")+"</tr>";
+    pendingRule=rule;
+    if(!seenMid) head.push(tr); else bodyRows.push(tr);
+  });
+  if(!seenMid){ bodyRows=head; head=[]; }
+  return '<div class="tbl"><table class="book">'+(head.length?"<thead>"+head.join("").replace(/ class="mid"/g,"")+"</thead>":"")+"<tbody>"+bodyRows.join("")+"</tbody></table></div>";
+};
+
+P.prototype.tcbStyle=function(opts){
+  var ctx=this.ctx, st=[], m;
+  if((m=/colback=([^,\]]+)/.exec(opts))) st.push("background:"+ctx.color(m[1]));
+  if((m=/colframe=([^,\]]+)/.exec(opts))) st.push("border-color:"+ctx.color(m[1]));
+  if((m=/borderline west=\{([^}]*)\}\{[^}]*\}\{([^}]*)\}/.exec(opts))) st.push("border-left:"+(parseFloat(m[1])+1)+"px solid "+ctx.color(m[2]));
+  if(/boxrule=0pt/.test(opts)&&!/borderline/.test(opts)) st.push("border:0");
+  return st.join(";");
+};
+
+P.prototype.environment=function(env){
+  var ctx=this.ctx, body, a, b, c, name=(env||"").replace(/\*$/,"");
+  switch(name){
+    case "document": return this.sub(this.envBody(env));
+    case "center": return '<div class="center">'+this.sub(this.envBody(env))+"</div>";
+    case "flushleft": return '<div style="text-align:left">'+this.sub(this.envBody(env))+"</div>";
+    case "flushright": return '<div style="text-align:right">'+this.sub(this.envBody(env))+"</div>";
+    case "quote": case "quotation": return "<blockquote>"+this.sub(this.envBody(env))+"</blockquote>";
+    case "abstract": return '<div style="margin:0 2em"><div class="eyebrow">Abstract</div>'+this.sub(this.envBody(env))+"</div>";
+    case "itemize": case "enumerate": case "description": {
+      this.rawOpt(); body=this.envBody(env); var self=this;
+      var items=splitItems(body).map(function(it){ return "<li>"+self.sub(it)+"</li>"; }).join("");
+      var tag=name==="enumerate"?"ol":"ul"; return "<"+tag+(name==="description"?' style="list-style:none;padding-left:0"':"")+">"+items+"</"+tag+">"; }
+    case "tabular": case "longtable": case "array": this.rawOpt(); a=this.rawGroup(); return this.table(a,this.envBody(env));
+    case "tabularx": case "tabulary": this.rawGroup(); a=this.rawGroup(); return this.table(a,this.envBody(env));
+    case "tcolorbox": case "mdframed": a=this.rawOpt()||""; body=this.envBody(env);
+      return '<div class="tcb" style="'+this.tcbStyle(a)+'">'+this.sub(body)+"</div>";
+    case "codesnippet": a=this.rawGroup(); b=this.rawGroup(); c=this.rawGroup(); body=this.envBody(env);
+      return '<figure class="snippet"><figcaption><span>'+this.sub(a||"")+"</span><span>lines "+esc(b||"")+"–"+esc(c||"")+'</span></figcaption><pre class="code">'+new P(body,ctx,"code").run()+"</pre></figure>";
+    case "equation": case "displaymath": case "math": return this.math(this.envBody(env).replace(/\\label\{[^}]*\}/g,""),name!=="math");
+    case "align": case "eqnarray": case "flalign": case "alignat":
+      return this.math("\\begin{aligned}"+this.envBody(env).replace(/\\label\{[^}]*\}/g,"").replace(/\\(nonumber|notag)/g,"")+"\\end{aligned}",true);
+    case "gather": return this.math("\\begin{gathered}"+this.envBody(env)+"\\end{gathered}",true);
+    case "multline": return this.math(this.envBody(env).replace(/\\\\/g," "),true);
+    case "cases": case "matrix": case "pmatrix": case "bmatrix": return this.math("\\begin{"+env+"}"+this.envBody(env)+"\\end{"+env+"}",false);
+    case "verbatim": case "lstlisting": case "minted": case "Verbatim": this.rawOpt(); if(name==="minted") this.rawGroup();
+      body=this.envBody(env).replace(/^\n/,""); return '<pre class="verb">'+esc(body)+"</pre>";
+    case "minipage": this.rawOpt(); this.rawGroup(); return '<div style="display:inline-block;vertical-align:top;max-width:100%">'+this.sub(this.envBody(env))+"</div>";
+    case "figure": case "table": this.rawOpt(); return '<div style="margin:1em 0">'+this.sub(this.envBody(env))+"</div>";
+    case "comment": this.envBody(env); return "";
+  }
+  var def=ctx.envs[name];
+  if(def&&def.tcb!==undefined){ var args=[]; var o=this.rawOpt(); for(var k=0;k<3&&/^\s*\{/.test(this.s.slice(this.i));k++) args.push(this.rawGroup());
+    return '<div class="tcb" style="'+this.tcbStyle(def.tcb+","+(o||""))+'">'+this.sub(this.envBody(env))+"</div>"; }
+  if(def){ var args2=[]; var k2=0; if(def.opt!==null&&def.opt!==undefined){ var oo=this.rawOpt(); args2.push(oo===null?def.opt:oo); k2=1; }
+    for(;k2<def.n;k2++) args2.push(this.rawArg());
+    var sub=function(t){ return t.replace(/#([1-9])/g,function(_,d){return args2[+d-1]||"";}); };
+    return this.sub(sub(def.begin)+this.envBody(env)+sub(def.end)); }
+  ctx.miss("\\begin{"+env+"}");
+  return '<div style="border:1px dashed #D1AE3C;padding:6px 10px;margin:.5em 0"><span class="unk">'+esc(env)+"</span> "+this.sub(this.envBody(env))+"</div>";
+};
+
+function splitItems(body){
+  var out=[],d=0,st=-1,i;
+  for(i=0;i<body.length;i++){ var c=body[i];
+    if(c==="\\"){ if(d===0&&body.startsWith("\\item",i)&&!/[A-Za-z]/.test(body[i+5]||"")){ if(st>=0) out.push(body.slice(st,i)); st=i+5; i+=4; continue; }
+      if(body.startsWith("\\begin{",i)) d++; else if(body.startsWith("\\end{",i)) d--; i++; continue; }
+    if(c==="{") d++; else if(c==="}") d--; }
+  if(st>=0) out.push(body.slice(st)); return out;
+}
+
+function renderLatex(src){
+  var ctx=new Ctx(), pre="", body=src, bd=src.indexOf("\\begin{document}");
+  if(bd>=0){ pre=src.slice(0,bd); var ed=src.indexOf("\\end{document}",bd); body=src.slice(bd+16,ed<0?undefined:ed); }
+  if(pre) new P(pre,ctx,"text").run();     /* collects colors, macros, environments, title */
+  var html=new P(body,ctx,"text").run();
+  return {html:html,unknown:ctx.unknown};
+}
+
+/* ---------- UI ---------- */
+var srcEl=document.getElementById("src"), out=document.getElementById("out"), unk=document.getElementById("unk"),
+    msg=document.getElementById("msg"), tm=document.getElementById("time"), count=document.getElementById("count");
+var REPORT=JSON.parse(document.getElementById("report-tex").textContent);
+var KEY="latex-workbench-draft";
+function save(){ try{ localStorage.setItem(KEY,srcEl.value); }catch(e){} }
+function load(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+var timer=null;
+function update(){
+  var t0=performance.now(), r;
+  try{ r=renderLatex(srcEl.value); out.innerHTML=r.html; }
+  catch(e){ out.innerHTML='<p class="err">Render error: '+esc(String(e&&e.message||e))+"</p>"; r={unknown:{}}; }
+  var keys=Object.keys(r.unknown);
+  unk.hidden=!keys.length;
+  unk.textContent=keys.length?"Not rendered: "+keys.map(function(k){return k+(r.unknown[k]>1?" ×"+r.unknown[k]:"");}).join(", "):"";
+  tm.textContent="rendered in "+Math.round(performance.now()-t0)+" ms";
+  count.textContent=srcEl.value.split("\n").length+" lines";
+}
+function schedule(){ clearTimeout(timer); timer=setTimeout(function(){ update(); save(); },220); }
+srcEl.addEventListener("input",schedule);
+srcEl.addEventListener("keydown",function(e){ if(e.key==="Tab"){ e.preventDefault(); var s=srcEl.selectionStart; srcEl.setRangeText("  ",s,srcEl.selectionEnd,"end"); schedule(); } });
+document.getElementById("reset").addEventListener("click",function(){ srcEl.value=REPORT; msg.textContent="Loaded the generated report.tex"; update(); save(); });
+document.getElementById("clear").addEventListener("click",function(){ srcEl.value=""; msg.textContent="Cleared"; update(); save(); srcEl.focus(); });
+document.getElementById("file").addEventListener("change",function(e){ var f=e.target.files&&e.target.files[0]; if(!f) return;
+  var rd=new FileReader(); rd.onload=function(){ srcEl.value=String(rd.result); msg.textContent="Opened "+f.name; update(); save(); }; rd.readAsText(f); e.target.value=""; });
+document.getElementById("copy").addEventListener("click",function(){
+  var done=function(){ msg.textContent="Source copied"; };
+  var fb=function(){ srcEl.focus(); srcEl.select(); msg.textContent="Selected. Press Ctrl+C to copy."; };
+  try{ navigator.clipboard.writeText(srcEl.value).then(done,fb); }catch(err){ fb(); } });
+srcEl.addEventListener("dragover",function(e){ e.preventDefault(); });
+srcEl.addEventListener("drop",function(e){ var f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(!f) return; e.preventDefault();
+  f.text().then(function(t){ srcEl.value=t; msg.textContent="Opened "+f.name; update(); save(); }); });
+function boot(){ var d=load(); srcEl.value=d!==null&&d!==""?d:REPORT; msg.textContent=d?"Restored your draft":"Loaded the generated report.tex"; update(); }
+if(window.katex) boot(); else window.addEventListener("load",boot);
+})();
+</script>

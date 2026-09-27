@@ -28,6 +28,11 @@
 #   pandoc                   markdown (lane 10 report draft, findings tables) -> LaTeX
 #   python3                  for any report-assembly scripting (e.g. templating
 #                             per-finding LaTeX sections from correlated-findings.json)
+#   python3-jinja2, cvss     pipeline/report/render.py: Jinja2 templates -> report.tex, and
+#                             CVSS 4.0 base scores computed from vectors. Jinja2 comes from
+#                             Debian; cvss is pinned by hash in requirements.lock (the only
+#                             repo file copied in). The renderer itself is mounted read-only
+#                             at run time, never copied (see pipeline/report/README.md).
 
 FROM texlive/texlive:latest@sha256:2f9918a156cfc6c7527590e06f69bfb4fbc827278e4736c90e567382855d7cd1
 
@@ -45,16 +50,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         perl \
         poppler-utils \
         python3 \
+        python3-jinja2 \
         python3-pip \
         qpdf \
         ripgrep \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+COPY requirements.lock /tmp/requirements.lock
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+        --require-hashes --no-deps -r /tmp/requirements.lock \
+    && rm /tmp/requirements.lock
+
 RUN fc-cache -fv
 
 ENV TEXMFVAR=/tmp/texmf-var
 ENV TEXMFCONFIG=/tmp/texmf-config
+ENV HOME=/tmp
 ENV max_print_line=1000
 
 WORKDIR /workspace

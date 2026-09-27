@@ -1,0 +1,291 @@
+%# AppSec review report template. Rendered by render.py (Jinja2, LaTeX-safe delimiters):
+%#   \VAR{expr}   value        \BLOCK{stmt} / %% stmt   control     %# comment
+%# Filters: |tex escapes text, |texpath escapes and allows breaks in paths.
+\documentclass[10pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{charter}
+\usepackage{amssymb}
+\usepackage[scaled=0.9]{helvet}
+\usepackage{courier}
+\usepackage{microtype}
+\usepackage[margin=22mm,top=24mm,bottom=24mm]{geometry}
+\usepackage{amsmath}
+\usepackage[table]{xcolor}
+\usepackage{booktabs,longtable,tabularx,array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[most]{tcolorbox}
+\usepackage[hidelinks]{hyperref}
+
+%# ---------- palette (mirrors the HTML tokens) ----------
+\definecolor{ink}{HTML}{16202B}
+\definecolor{muted}{HTML}{5B6878}
+\definecolor{rule}{HTML}{D5DBE3}
+\definecolor{accent}{HTML}{2F5D8A}
+\definecolor{panel}{HTML}{F1F4F8}
+\definecolor{sevCritical}{HTML}{A8201A}
+\definecolor{sevHigh}{HTML}{C8561B}
+\definecolor{sevMedium}{HTML}{B08A12}
+\definecolor{sevLow}{HTML}{3F7F48}
+\definecolor{sevNone}{HTML}{6B7785}
+\definecolor{sevRefuted}{HTML}{8C96A3}
+\definecolor{sevIndeterminate}{HTML}{6A4C93}
+\definecolor{stOK}{HTML}{3F7F48}
+\definecolor{stOKWITHGAPS}{HTML}{B08A12}
+\definecolor{stBLOCKED}{HTML}{A8201A}
+\definecolor{stFAILED}{HTML}{A8201A}
+\definecolor{stNOTBUILT}{HTML}{6A4C93}
+\definecolor{stSKIPPEDNA}{HTML}{8C96A3}
+\color{ink}
+
+\newcommand{\sev}[1]{\colorbox{sev#1}{\sffamily\scriptsize\bfseries\color{white}\strut\,\MakeUppercase{#1}\,}}
+\newcommand{\st}[2]{\textcolor{st#1}{\sffamily\scriptsize\bfseries #2}}
+\newcommand{\mono}[1]{{\ttfamily\small #1}}
+\newcommand{\eyebrow}[1]{\leavevmode{\sffamily\scriptsize\bfseries\color{muted}\MakeUppercase{#1}}}
+
+%# ---------- code snippets: +-5 lines, flaw lines on light red ----------
+\definecolor{codebg}{HTML}{F6F8FA}
+\definecolor{flawbg}{HTML}{FDE2E1}
+\definecolor{flawrule}{HTML}{C8352B}
+\newlength{\codenumw}\setlength{\codenumw}{2.4em}
+%# one source line: #1 line number, #2 escaped text (spaces as control spaces, so they wrap)
+\newcommand{\codeline}[2]{\par\noindent\makebox[\codenumw][r]{\textcolor{muted}{#1}}\hspace{0.9em}%
+  \parbox[t]{\dimexpr\linewidth-\codenumw-0.9em\relax}{\raggedright\strut #2\strut}}
+\newcommand{\flawline}[2]{\par\noindent{\setlength{\fboxsep}{0pt}\colorbox{flawbg}{%
+  \makebox[\codenumw][r]{\textcolor{flawrule}{\bfseries #1}}\hspace{0.9em}%
+  \parbox[t]{\dimexpr\linewidth-\codenumw-0.9em\relax}{\raggedright\strut #2\strut}}}}
+%# \begin{codesnippet}{path}{first}{last} ... \end{codesnippet}
+\newtcolorbox{codesnippet}[3]{enhanced,breakable,colback=codebg,colframe=rule,boxrule=0.4pt,arc=0pt,
+  left=0pt,right=4pt,top=2pt,bottom=2pt,fontupper=\ttfamily\footnotesize\linespread{1.05}\selectfont,
+  title={\ttfamily\footnotesize #1\hfill lines #2--#3},coltitle=muted,colbacktitle=panel,
+  toptitle=1pt,bottomtitle=1pt,before skip=4pt,after skip=6pt}
+
+\titleformat{\section}{\sffamily\Large\bfseries\color{ink}}{\color{accent}\thesection}{0.6em}{}[\vspace{-0.4em}{\color{rule}\rule{\linewidth}{0.6pt}}]
+\titleformat{\subsection}{\sffamily\large\bfseries}{\color{accent}\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.8em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhead[L]{\eyebrow{\VAR{report.title|tex} \textperiodcentered{} \VAR{report.target|tex}}}
+\fancyhead[R]{\eyebrow{\VAR{report.classification|tex}}}
+\fancyfoot[L]{\eyebrow{run \VAR{report.run_id|tex}}}
+\fancyfoot[R]{\sffamily\scriptsize\thepage}
+
+\setlength{\parindent}{0pt}\setlength{\parskip}{0.5em}
+\setlist{nosep,leftmargin=1.2em}
+\renewcommand{\arraystretch}{1.25}
+
+\begin{document}
+
+%# ==== cover block ====
+\begin{tcolorbox}[enhanced,colback=panel,colframe=panel,arc=0pt,boxrule=0pt,left=10pt,right=10pt,top=10pt,bottom=10pt]
+\eyebrow{\VAR{report.engagement|tex}}\\[2pt]
+{\sffamily\fontsize{24}{28}\selectfont\bfseries \VAR{report.title|tex}}\\[4pt]
+{\sffamily\large \VAR{report.target|tex} \textcolor{muted}{@ \mono{\VAR{report.target_commit|tex}}}}
+
+\vspace{6pt}
+\begin{tabularx}{\linewidth}{@{}p{0.23\linewidth}p{0.23\linewidth}p{0.23\linewidth}X@{}}
+\eyebrow{Overall rating} & \eyebrow{Process assurance} & \eyebrow{Native tier} & \eyebrow{Report date}\\
+\sev{\VAR{model.rating}} & {\sffamily\Large\bfseries \VAR{model.assurance_pct}\%} & {\sffamily\Large\bfseries \VAR{report.native_tier|tex}} & {\sffamily \VAR{report.report_date|tex}}\\
+{\scriptsize\color{muted} top priority \VAR{'%.1f'|format(model.top_priority)}} & {\scriptsize\color{muted} \VAR{model.n_ok} of \VAR{model.n_processes} processes OK, \VAR{model.gaps|length} gaps} & {\scriptsize\color{muted} ADR-0001 gate} & {\scriptsize\color{muted} SAT \VAR{report.sat_id|tex}}\\
+\end{tabularx}
+\end{tcolorbox}
+%% if report.sample
+{\small\color{sevMedium}\textbf{Sample data.} Values are illustrative, shaped like a hello-autotools SAT run.}
+%% endif
+
+%# ==== 1 ====
+\section{Executive summary}
+The review ran \VAR{model.n_processes} processes across \VAR{model.families|length} families.
+\VAR{model.n_ok} completed cleanly, \VAR{model.n_na} were skipped as not applicable with a probe receipt,
+and \VAR{model.gaps|length} left coverage gaps. Overall rating is \textbf{\VAR{model.rating}}, driven by the
+highest verified priority score of \VAR{'%.1f'|format(model.top_priority)}. Process assurance is
+\textbf{\VAR{model.assurance_pct}\%}; a process that did not run is reported as a gap, never as a clean result.
+
+\begin{center}
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+%% for k in ['Critical','High','Medium','Low','Refuted']
+\sev{\VAR{k}}\BLOCK{if not loop.last} & \BLOCK{endif}
+%% endfor
+\\
+\midrule
+\VAR{model.counts.Critical} & \VAR{model.counts.High} & \VAR{model.counts.Medium} & \VAR{model.counts.Low} & \VAR{model.counts.Refuted}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{longtable}{@{}p{0.09\linewidth}p{0.49\linewidth}p{0.1\linewidth}p{0.1\linewidth}p{0.1\linewidth}@{}}
+\toprule
+\eyebrow{ID} & \eyebrow{Finding} & \eyebrow{CVSS 4.0} & \eyebrow{Priority} & \eyebrow{Severity}\\
+\midrule\endhead
+%% for f in findings
+\hyperref[\VAR{f.id}]{\mono{\VAR{f.id}}} & \VAR{f.title|tex} & \BLOCK{if f.cvss_score is not none}\VAR{'%.1f'|format(f.cvss_score)}\BLOCK{else}--\BLOCK{endif} & \BLOCK{if f.priority is not none}\textbf{\VAR{'%.1f'|format(f.priority)}}\BLOCK{else}--\BLOCK{endif} & \sev{\VAR{f.severity}}\\
+%% endfor
+\bottomrule
+\end{longtable}
+
+%# ==== 2 ====
+\section{Scope and process coverage}
+Every process in the flow appears here, including designed lanes that are not built yet.
+Credit $c_i$ per process: \st{OK}{OK} $=1$, \st{OKWITHGAPS}{OK\_WITH\_GAPS} $=$ measured coverage,
+\st{BLOCKED}{BLOCKED}/\st{FAILED}{FAILED}/\st{NOTBUILT}{NOT\_BUILT} $=0$, \st{SKIPPEDNA}{SKIPPED\_NA} excluded from the denominator.
+
+\[ \VAR{model.assurance_tex} \]
+
+\begin{center}
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+\eyebrow{Family} & \eyebrow{$w_k$} & \eyebrow{OK} & \eyebrow{Gaps} & \eyebrow{Blocked} & \eyebrow{Not built} & \eyebrow{N/A} & \eyebrow{$A_k$}\\
+\midrule
+%% for fam in model.families
+\VAR{fam.name|tex} & \VAR{fam.weight} & \VAR{fam.counts.OK} & \VAR{fam.counts.OK_WITH_GAPS} & \VAR{fam.counts.BLOCKED + fam.counts.FAILED} & \VAR{fam.counts.NOT_BUILT} & \VAR{fam.counts.SKIPPED_NA} & \textbf{\BLOCK{if fam.assurance is not none}\VAR{'%.2f'|format(fam.assurance)}\BLOCK{else}--\BLOCK{endif}}\\
+%% endfor
+\bottomrule
+\end{tabular}
+\end{center}
+
+%% for fam in model.families
+\subsection{\VAR{fam.name|tex}}
+{\small\color{muted}\VAR{fam.note|tex}}
+\begin{longtable}{@{}p{0.34\linewidth}p{0.15\linewidth}p{0.07\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\eyebrow{Process} & \eyebrow{Status} & \eyebrow{$c_i$} & \eyebrow{Tools / gap / receipt}\\
+\midrule\endhead
+%% for p in fam.procs
+\mono{\VAR{p.id|texpath}} & \st{\VAR{p.status|replace('_','')}}{\VAR{p.status|tex}} & \BLOCK{if p.credit is not none}\VAR{'%.2f'|format(p.credit)}\BLOCK{else}--\BLOCK{endif} & {\small \BLOCK{for k, txt in p.detail}\BLOCK{if not loop.first}\newline \BLOCK{endif}\BLOCK{if k == 'gap'}\textcolor{sevHigh}{\VAR{txt|tex}}\BLOCK{elif k == 'receipt'}\textcolor{muted}{\VAR{txt|tex}}\BLOCK{elif k == 'evidence'}\textcolor{accent}{\VAR{txt|tex}}\BLOCK{else}\VAR{txt|tex}\BLOCK{endif}\BLOCK{endfor}}\\
+%% endfor
+\bottomrule
+\end{longtable}
+%% endfor
+
+%# ==== 3 ====
+\section{Findings}
+Findings reach this section only after refutation (lane 08) and, for High or Critical, independent
+verification (lane 09). Refuted hypotheses are kept for the record with priority zero.
+
+%% for f in findings
+\begin{tcolorbox}[enhanced,breakable,colback=white,colframe=rule,boxrule=0.5pt,arc=0pt,
+  borderline west={3pt}{0pt}{sev\VAR{f.severity}},left=10pt,right=8pt,top=6pt,bottom=6pt]
+\label{\VAR{f.id}}
+{\sffamily\mono{\VAR{f.id}} \hfill \sev{\VAR{f.severity}}}\\[2pt]
+{\sffamily\large\bfseries \VAR{f.title|tex}}
+
+{\small
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}m{0.2\linewidth}>{\raggedright\arraybackslash}X@{}}
+\eyebrow{Location} & \mono{\VAR{f.location|texpath}}\\
+\eyebrow{Component} & \VAR{f.component|tex} \quad \textcolor{muted}{\VAR{f.cwe|tex}}\\
+\eyebrow{CVSS 4.0} & \BLOCK{if f.cvss}\mono{\VAR{f.cvss|texpath}} \quad \textbf{\VAR{'%.1f'|format(f.cvss_score)}} \VAR{f.cvss_band}\BLOCK{else}not scored\BLOCK{endif}\\
+\eyebrow{Evidence / status} & \VAR{f.evidence_strength|tex} \textperiodcentered{} \VAR{f.verification|tex} \textperiodcentered{} \VAR{f.reachability|tex}\\
+\end{tabularx}}
+
+\[ \VAR{f.priority_tex} \]
+
+\VAR{f.summary|tex}
+
+%% for sn in f.snippets
+\begin{codesnippet}{\VAR{sn.path|tex}}{\VAR{sn.start}}{\VAR{sn.end}}
+%% for ln in sn.lines
+\BLOCK{if ln.flaw}\flawline\BLOCK{else}\codeline\BLOCK{endif}{\VAR{ln.n}}{\VAR{ln.text|texcode}}
+%% endfor
+\end{codesnippet}
+%% if sn.note
+{\small\color{muted}\VAR{sn.note|tex}\par}
+
+%% endif
+%% endfor
+
+\eyebrow{Lane trail}\\
+{\small
+%% for lane, note in f.trail
+\colorbox{panel}{\sffamily\scriptsize\bfseries \VAR{lane|tex}} \VAR{note|tex}\BLOCK{if not loop.last}\quad$\rightarrow$\quad\BLOCK{endif}
+%% endfor
+}
+
+\eyebrow{Evidence}\\
+{\small
+%% for eid in f.evidence
+%% set e = evidence_by_id[eid]
+\hyperref[\VAR{eid}]{\mono{\VAR{eid}}} \VAR{e.producer|tex}: \mono{\VAR{e.artifact|texpath}}\\
+%% endfor
+}
+
+\eyebrow{Remediation}\\ \VAR{f.remediation|tex}
+\end{tcolorbox}
+\vspace{4pt}
+%% endfor
+
+%# ==== 4 ====
+\section{Coverage gaps}
+Each item below is an area the review did not fully examine. None of them may be read as ``no issues''.
+\begin{itemize}
+%% for p in model.gaps
+\item \mono{\VAR{p.id|texpath}} \st{\VAR{p.status|replace('_','')}}{\VAR{p.status|tex}}\BLOCK{if p.get('gap')} --- \VAR{p.gap|tex}\BLOCK{endif}
+%% endfor
+\end{itemize}
+
+%# ==== 5 ====
+\section{Scoring method}
+\subsection{Finding priority}
+Lane 12 computes the CVSS 4.0 score $S_f$ from the vector. Priority adjusts it by how strong the
+evidence is, whether it survived verification, whether the code is reachable, and exploitation signals:
+\[ P_f = \min\!\big(10,\; S_f \cdot e_f \cdot v_f \cdot r_f \cdot t_f\big), \qquad t_f = 1 + \beta_{\mathrm{KEV}}\,\mathbf{1}[\mathrm{KEV}] + \beta_{\mathrm{EPSS}}\,\mathrm{EPSS}_f \]
+\begin{center}\small
+\begin{tabular}{@{}ll@{\qquad}ll@{\qquad}ll@{}}
+\toprule
+\multicolumn{2}{@{}l}{\eyebrow{Evidence $e$}} & \multicolumn{2}{l}{\eyebrow{Verification $v$}} & \multicolumn{2}{l@{}}{\eyebrow{Reachability $r$}}\\
+\midrule
+%% set E = scoring.evidence_weight|dictsort_insertion
+%% set V = scoring.verification_weight|dictsort_insertion
+%% set R = scoring.reachability_weight|dictsort_insertion
+%% for i in range([E|length, V|length, R|length]|max)
+\BLOCK{if i < E|length}\VAR{E[i][0]|tex} & \VAR{E[i][1]}\BLOCK{else} & \BLOCK{endif} & \BLOCK{if i < V|length}\VAR{V[i][0]|tex} & \VAR{V[i][1]}\BLOCK{else} & \BLOCK{endif} & \BLOCK{if i < R|length}\VAR{R[i][0]|tex} & \VAR{R[i][1]}\BLOCK{else} & \BLOCK{endif}\\
+%% endfor
+\bottomrule
+\end{tabular}
+\end{center}
+$\beta_{\mathrm{KEV}} = \VAR{scoring.kev_bonus}$, $\beta_{\mathrm{EPSS}} = \VAR{scoring.epss_bonus}$. Severity bands follow CVSS 4.0 qualitative ratings applied to $P_f$.
+
+\subsection{Process assurance}
+\[ c_i = \begin{cases} 1 & \text{OK}\\ \text{coverage}_i & \text{OK\_WITH\_GAPS}\\ 0 & \text{BLOCKED, FAILED, NOT\_BUILT}\\ \varnothing & \text{SKIPPED\_NA (with probe receipt)} \end{cases}
+\qquad A_k = \frac{1}{|K_k|}\sum_{i\in K_k} c_i \cdot \kappa_k \]
+$\kappa_k$ is the native tier cap (A $=\VAR{scoring.tier_cap.A}$, B $=\VAR{scoring.tier_cap.B}$, C $=\VAR{scoring.tier_cap.C}$), applied only to the native family.
+
+\subsection{Overall rating}
+\[ \text{rating} = \operatorname{band}\Big(\max_{f\,\notin\,\text{refuted}} P_f\Big), \qquad \text{rating} \in \{\text{None},\text{Low}\} \wedge A < \VAR{scoring.assurance_floor_for_clean} \;\Rightarrow\; \text{Indeterminate} \]
+A low score is only reported as low when enough of the process ran to support it.
+
+%# ==== appendices ====
+\appendix
+\section{Evidence register}
+\begin{longtable}{@{}p{0.08\linewidth}p{0.24\linewidth}p{0.5\linewidth}p{0.1\linewidth}@{}}
+\toprule
+\eyebrow{ID} & \eyebrow{Producer} & \eyebrow{Artifact} & \eyebrow{sha256}\\
+\midrule\endhead
+%% for e in evidence
+\label{\VAR{e.id}}\mono{\VAR{e.id}} & {\small \VAR{e.producer|tex}} & \mono{\VAR{e.artifact|texpath}} & \mono{\VAR{e.sha256[:8]|tex}}\\
+%% endfor
+\bottomrule
+\end{longtable}
+
+\section{Provenance}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+\eyebrow{Run} & \mono{\VAR{report.run_id|tex}} (SAT \mono{\VAR{report.sat_id|tex}})\\
+\eyebrow{Pipeline} & \mono{\VAR{report.pipeline_commit|texpath}}\\
+\eyebrow{Ledger head} & \mono{\VAR{provenance.ledger_head|tex}}\\
+\eyebrow{Native tier} & \VAR{report.native_tier|tex} --- \VAR{report.native_tier_note|tex}\\
+\midrule
+%% for name, digest in provenance.images
+\mono{\VAR{name|tex}} & \mono{\VAR{digest|tex}}\\
+%% endfor
+\midrule
+%% for m, note in provenance.models
+\VAR{m|tex} & \VAR{note|tex}\\
+%% endfor
+\bottomrule
+\end{tabularx}
+
+\end{document}

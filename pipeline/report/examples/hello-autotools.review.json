@@ -1,0 +1,1154 @@
+{
+  "_comment": "SAMPLE DATA. Illustrative values shaped like a hello-autotools SAT run. Replace with the real run's aggregates (tool-results.json, coverage.json, lane outputs, lane-12 scores). Math fields are LaTeX and render verbatim in both the PDF and the KaTeX preview.",
+  "report": {
+    "title": "Application Security Review",
+    "target": "hello-autotools",
+    "target_commit": "e3ad863",
+    "engagement": "SAT fixture - system acceptance",
+    "run_id": "20260927T141502Z-7a3e91",
+    "sat_id": "20260927T141440Z",
+    "pipeline_commit": "report-template (from origin/main b3b87de2)",
+    "report_date": "2026-09-27",
+    "classification": "Internal - sample",
+    "native_tier": "A",
+    "native_tier_note": "clang compiled 6/6 project TUs plus vendored cJSON; IR, CSA/CTU and SVF substrate available (ADR-0001).",
+    "authors": [
+      "appsec-review pipeline",
+      "W. Sollers (reviewer)"
+    ],
+    "sample": true,
+    "source_root": null
+  },
+  "scoring": {
+    "evidence_weight": {
+      "DIRECT_EVIDENCE": 1.0,
+      "STRONG_INFERENCE": 0.8,
+      "WEAK_INFERENCE": 0.5
+    },
+    "verification_weight": {
+      "VERIFIED": 1.0,
+      "UNRESOLVED": 0.7,
+      "REFUTED": 0.0
+    },
+    "reachability_weight": {
+      "reachable-default": 1.0,
+      "reachable-flag": 0.85,
+      "reachable-build-config": 0.75,
+      "unknown": 0.7,
+      "unreachable": 0.3
+    },
+    "status_credit": {
+      "OK": 1.0,
+      "OK_WITH_GAPS": null,
+      "FAILED": 0.0,
+      "BLOCKED": 0.0,
+      "NOT_BUILT": 0.0,
+      "SKIPPED_NA": null
+    },
+    "family_weight": {
+      "intake": 1,
+      "build": 2,
+      "scan": 3,
+      "native": 3,
+      "lanes": 4,
+      "design-gap": 1
+    },
+    "tier_cap": {
+      "A": 1.0,
+      "B": 0.85,
+      "C": 0.6
+    },
+    "assurance_floor_for_clean": 0.85,
+    "kev_bonus": 0.5,
+    "epss_bonus": 0.5
+  },
+  "families": [
+    {
+      "id": "intake",
+      "name": "Intake and discovery",
+      "note": "00-intake plus D01-D04 persona discovery."
+    },
+    {
+      "id": "build",
+      "name": "Build resolution",
+      "note": "Build index, plan, resolution and hostile native build."
+    },
+    {
+      "id": "scan",
+      "name": "Deterministic scan jobs",
+      "note": "One graph node per evidence family, one attempt-bearing instance per tool (ADR-0010)."
+    },
+    {
+      "id": "native",
+      "name": "Native analysis substrate",
+      "note": "Compile DB, IR, CSA/CTU, CodeQL, correlation and deep confirmation."
+    },
+    {
+      "id": "lanes",
+      "name": "LLM review lanes",
+      "note": "Hypothesis, refutation, verification, scoring and synthesis."
+    },
+    {
+      "id": "design-gap",
+      "name": "Designed, not built",
+      "note": "Design-v3 lanes with no evidence-gathering step yet. Counted as gaps."
+    }
+  ],
+  "processes": [
+    {
+      "id": "00-intake",
+      "family": "intake",
+      "kind": "deterministic",
+      "status": "OK",
+      "tools": "intake.py",
+      "evidence": [
+        "E-001"
+      ]
+    },
+    {
+      "id": "02-repository-partition-discovery",
+      "family": "intake",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "developer-engineer / D01",
+      "evidence": [
+        "E-002"
+      ]
+    },
+    {
+      "id": "02-dev-project-discovery",
+      "family": "intake",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "developer-engineer / D02"
+    },
+    {
+      "id": "02-devops-project-discovery",
+      "family": "intake",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "devops-engineer / D03"
+    },
+    {
+      "id": "02-sre-operations-topology",
+      "family": "intake",
+      "kind": "persona",
+      "status": "OK_WITH_GAPS",
+      "coverage": 0.7,
+      "tools": "sre-engineer / D04",
+      "gap": "No runbooks or monitoring config in target; topology inferred from Dockerfile only."
+    },
+    {
+      "id": "02-build-index",
+      "family": "build",
+      "kind": "deterministic",
+      "status": "OK",
+      "tools": "build_index.py",
+      "evidence": [
+        "E-003"
+      ]
+    },
+    {
+      "id": "02-build-plan",
+      "family": "build",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "haiku / build planner"
+    },
+    {
+      "id": "02-build-resolution",
+      "family": "build",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "repair loop, 1 retry"
+    },
+    {
+      "id": "native-build",
+      "family": "build",
+      "kind": "container",
+      "status": "OK",
+      "tools": "audit-native (network none)",
+      "evidence": [
+        "E-004"
+      ]
+    },
+    {
+      "id": "02-secrets-inventory",
+      "family": "scan",
+      "kind": "container",
+      "status": "OK",
+      "tools": "gitleaks, key-material-file-inventory",
+      "evidence": [
+        "E-010"
+      ]
+    },
+    {
+      "id": "02-iac-config-scan",
+      "family": "scan",
+      "kind": "container",
+      "status": "OK_WITH_GAPS",
+      "coverage": 0.6,
+      "tools": "checkov, trivy-config, hadolint (tfsec, kube-linter BLOCKED: no image)",
+      "gap": "tfsec and kube-linter declared but no pinned image; 2 of 5 scanner instances did not run.",
+      "evidence": [
+        "E-011"
+      ]
+    },
+    {
+      "id": "02-sbom-inventory",
+      "family": "scan",
+      "kind": "container",
+      "status": "OK_WITH_GAPS",
+      "coverage": 0.5,
+      "tools": "syft-directory",
+      "gap": "syft found 0 components; vendored cJSON has no manifest. Second source (build index vendored members) not yet wired.",
+      "evidence": [
+        "E-012"
+      ]
+    },
+    {
+      "id": "02-sca-vulnerability-match",
+      "family": "scan",
+      "kind": "container",
+      "status": "BLOCKED",
+      "tools": "grype",
+      "gap": "Blocked on V16/V18 offline vulnerability DB mirror. No CVE matching was performed."
+    },
+    {
+      "id": "02-license-scan",
+      "family": "scan",
+      "kind": "container",
+      "status": "OK",
+      "tools": "scancode-toolkit",
+      "evidence": [
+        "E-013"
+      ]
+    },
+    {
+      "id": "02-dependency-lifecycle",
+      "family": "scan",
+      "kind": "deterministic",
+      "status": "BLOCKED",
+      "tools": "dependency-lifecycle-transform",
+      "gap": "EOL reference table unowned. Lifecycle of cJSON 1.7.18 reported unknown."
+    },
+    {
+      "id": "02-binary-hardening",
+      "family": "scan",
+      "kind": "container",
+      "status": "BLOCKED",
+      "tools": "binskim",
+      "gap": "M02 unresolved; no ELF hardening check ran on the built binary."
+    },
+    {
+      "id": "02-container-image-inventory",
+      "family": "scan",
+      "kind": "container",
+      "status": "SKIPPED_NA",
+      "tools": "oci-archive-inventory",
+      "receipt": "applicability-probe: no OCI archive in inputs"
+    },
+    {
+      "id": "02-mobile-sast",
+      "family": "scan",
+      "kind": "container",
+      "status": "SKIPPED_NA",
+      "tools": "mobsfscan",
+      "receipt": "applicability-probe: no Android/iOS markers"
+    },
+    {
+      "id": "02-source-sast",
+      "family": "scan",
+      "kind": "container",
+      "status": "OK",
+      "tools": "semgrep (vendored packs), gosec/php* N/A",
+      "evidence": [
+        "E-014"
+      ]
+    },
+    {
+      "id": "ossf-scorecard",
+      "family": "scan",
+      "kind": "container",
+      "status": "OK",
+      "tools": "scorecard (offline mode)",
+      "evidence": [
+        "E-015"
+      ]
+    },
+    {
+      "id": "compile-db + clang-tidy/cppcheck",
+      "family": "native",
+      "kind": "container",
+      "status": "OK",
+      "tools": "audit-native",
+      "evidence": [
+        "E-020"
+      ]
+    },
+    {
+      "id": "llvm-ir + ir-facts + svf",
+      "family": "native",
+      "kind": "container",
+      "status": "OK",
+      "tools": "audit-native",
+      "evidence": [
+        "E-021"
+      ]
+    },
+    {
+      "id": "csa-ctu",
+      "family": "native",
+      "kind": "container",
+      "status": "OK",
+      "tools": "clang static analyzer + CTU",
+      "evidence": [
+        "E-022"
+      ]
+    },
+    {
+      "id": "codeql (security-extended + mythos-cpp)",
+      "family": "native",
+      "kind": "container",
+      "status": "OK",
+      "tools": "audit-codeql (breadth only, ADR-0006)",
+      "evidence": [
+        "E-023"
+      ]
+    },
+    {
+      "id": "correlation + deep-confirmation",
+      "family": "native",
+      "kind": "deterministic",
+      "status": "OK",
+      "tools": "correlate, deep_confirm",
+      "evidence": [
+        "E-024"
+      ]
+    },
+    {
+      "id": "01-component-characterization",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "component cloud"
+    },
+    {
+      "id": "03-threat-model-dfd-stride",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "DFD + STRIDE",
+      "evidence": [
+        "E-030"
+      ]
+    },
+    {
+      "id": "04-asvs-masvs",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "SKIPPED_NA",
+      "tools": "ASVS 5.0",
+      "receipt": "no web/API surface; CLI only"
+    },
+    {
+      "id": "05-native-memory",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "IR + CSA + CodeQL review"
+    },
+    {
+      "id": "06-cve-reachability",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK_WITH_GAPS",
+      "coverage": 0.4,
+      "tools": "inventory + reachability",
+      "gap": "No SCA matches to triage (02-sca BLOCKED); inventory from build index only."
+    },
+    {
+      "id": "13-fuzz-target-triage",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "target ranking"
+    },
+    {
+      "id": "15-deployment-hardening",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "container/Dockerfile persona"
+    },
+    {
+      "id": "07-red-team-adversarial",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "general + known-list + kill-chain"
+    },
+    {
+      "id": "08-blue-team-refutation",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "refutation"
+    },
+    {
+      "id": "09-independent-verification",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "evidence-only verifier",
+      "evidence": [
+        "E-040"
+      ]
+    },
+    {
+      "id": "11-remediation-proposal",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "patch + retest in audit-native"
+    },
+    {
+      "id": "12-scoring-prioritization",
+      "family": "lanes",
+      "kind": "deterministic",
+      "status": "OK",
+      "tools": "CVSS 4.0 + EPSS/KEV"
+    },
+    {
+      "id": "10-synthesis-report",
+      "family": "lanes",
+      "kind": "persona",
+      "status": "OK",
+      "tools": "this document"
+    },
+    {
+      "id": "L6B threat-model reconciliation",
+      "family": "design-gap",
+      "kind": "none",
+      "status": "NOT_BUILT",
+      "gap": "Designed in design-v3, no lane."
+    },
+    {
+      "id": "L10 protocol/parser analysis",
+      "family": "design-gap",
+      "kind": "none",
+      "status": "NOT_BUILT",
+      "gap": "Designed in design-v3, no lane."
+    },
+    {
+      "id": "L12 supply-chain / provenance",
+      "family": "design-gap",
+      "kind": "none",
+      "status": "NOT_BUILT",
+      "gap": "Tier B scripts exist, not wired."
+    },
+    {
+      "id": "L13 privacy / data protection",
+      "family": "design-gap",
+      "kind": "none",
+      "status": "NOT_BUILT",
+      "gap": "Designed in design-v3, no lane."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AR-001",
+      "title": "Stack buffer overflow: strcpy of CLI name into 32-byte buffer",
+      "cwe": "CWE-121, CWE-676",
+      "location": "src/greet.cpp:18",
+      "component": "cli/greeting",
+      "cvss": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+      "evidence_strength": "DIRECT_EVIDENCE",
+      "verification": "VERIFIED",
+      "reachability": "reachable-default",
+      "epss": null,
+      "kev": false,
+      "snippets": [
+        {
+          "path": "src/greet.cpp",
+          "flaw": [
+            18
+          ],
+          "note": "build_greeting(): buf is 32 bytes; strcpy has no bound.",
+          "start": 13,
+          "source": [
+            "// This is intentional: it is the seeded defect this fixture target",
+            "// exists to exercise for source/native SAST and dynamic tools. See",
+            "// docs/VULNERABILITIES.md for details and the expected finding.",
+            "std::string build_greeting(const std::string &name) {",
+            "    char buf[32];",
+            "    std::strcpy(buf, (\"Hello, \" + name + \"!\").c_str());",
+            "    return std::string(buf);",
+            "}"
+          ]
+        }
+      ],
+      "trail": [
+        [
+          "tool",
+          "semgrep insecure-use-strcpy, CSA, CodeQL"
+        ],
+        [
+          "07",
+          "hypothesis RT-001"
+        ],
+        [
+          "08",
+          "refutation failed: no length check on any path"
+        ],
+        [
+          "09",
+          "VERIFIED: ASan stack-buffer-overflow at greet.cpp:18"
+        ],
+        [
+          "11",
+          "patch: bounded copy, retest OK"
+        ],
+        [
+          "12",
+          "scored"
+        ]
+      ],
+      "evidence": [
+        "E-014",
+        "E-022",
+        "E-023",
+        "E-040"
+      ],
+      "summary": "The greeting \"Hello, \" + name + \"!\" is copied into char buf[32] with strcpy. A name of 24 or more characters overflows buf. Reached on every run. A hardened distro build aborts via _FORTIFY_SOURCE; an unhardened or ASan build shows the corruption.",
+      "remediation": "Return the std::string directly, or use a bounded copy and reject oversize names."
+    },
+    {
+      "id": "AR-002",
+      "title": "Format string: CLI-derived message used as printf format",
+      "cwe": "CWE-134",
+      "location": "src/logger.cpp:16",
+      "component": "cli/logging",
+      "cvss": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:L/VA:H/SC:N/SI:N/SA:N",
+      "evidence_strength": "DIRECT_EVIDENCE",
+      "verification": "VERIFIED",
+      "reachability": "reachable-default",
+      "epss": null,
+      "kev": false,
+      "snippets": [
+        {
+          "path": "src/logger.cpp",
+          "flaw": [
+            16
+          ],
+          "note": "log_message(): message is the format argument.",
+          "start": 11,
+          "source": [
+            "// (e.g. \"%x %x %x\") or crash the process (e.g. \"%s\" reading an",
+            "// invalid pointer). The fix is `std::printf(\"%s\\n\", message.c_str())`.",
+            "//",
+            "// Intentional seeded defect — see docs/VULNERABILITIES.md.",
+            "void log_message(const std::string &message) {",
+            "    std::printf(message.c_str());",
+            "    std::printf(\"\\n\");",
+            "}"
+          ]
+        }
+      ],
+      "trail": [
+        [
+          "tool",
+          "semgrep printf-format, CodeQL cpp/tainted-format-string"
+        ],
+        [
+          "07",
+          "hypothesis RT-002"
+        ],
+        [
+          "08",
+          "not refuted"
+        ],
+        [
+          "09",
+          "VERIFIED: '%x %x %x %x' leaks stack words"
+        ],
+        [
+          "12",
+          "scored"
+        ]
+      ],
+      "evidence": [
+        "E-014",
+        "E-023",
+        "E-040"
+      ],
+      "summary": "log_message() passes the greeting, which embeds the CLI name, straight to printf as the format. Conversion specifiers in the name are interpreted.",
+      "remediation": "std::printf(\"%s\\n\", message.c_str());"
+    },
+    {
+      "id": "AR-003",
+      "title": "OS command injection: name concatenated into system() command",
+      "cwe": "CWE-78",
+      "location": "src/runner.cpp:17-18",
+      "component": "reporting",
+      "cvss": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+      "evidence_strength": "DIRECT_EVIDENCE",
+      "verification": "VERIFIED",
+      "reachability": "reachable-flag",
+      "epss": null,
+      "kev": false,
+      "snippets": [
+        {
+          "path": "src/runner.cpp",
+          "flaw": [
+            17,
+            18
+          ],
+          "note": "run_report(): no escaping; system(3) runs the string through /bin/sh.",
+          "start": 12,
+          "source": [
+            "// the privileges of this process. There is no shell-metacharacter",
+            "// escaping or use of a safer exec* family call with an argv array.",
+            "//",
+            "// Intentional seeded defect — see docs/VULNERABILITIES.md.",
+            "void run_report(const std::string &name) {",
+            "    std::string cmd = \"echo \\\"report for \" + name + \"\\\" >> /tmp/hello-autotools.log\";",
+            "    std::system(cmd.c_str());",
+            "}"
+          ]
+        },
+        {
+          "path": "src/main.cpp",
+          "flaw": [
+            62
+          ],
+          "note": "Only call site, behind --report.",
+          "start": 57,
+          "source": [
+            "        std::cout << \"stored \" << name.size() << \" byte(s) into a \"",
+            "                  << sizeof(slot) << \"-byte slot\" << std::endl;",
+            "    }",
+            "",
+            "    if (report) {",
+            "        run_report(name);",
+            "    }",
+            "",
+            "    return 0;",
+            "}"
+          ]
+        }
+      ],
+      "trail": [
+        [
+          "tool",
+          "semgrep, CodeQL cpp/command-line-injection"
+        ],
+        [
+          "05",
+          "data flow argv -> name -> cmd confirmed in IR"
+        ],
+        [
+          "07",
+          "hypothesis RT-003"
+        ],
+        [
+          "08",
+          "not refuted; flag gate lowers reachability only"
+        ],
+        [
+          "09",
+          "VERIFIED: --report 'x\";touch /tmp/pwned;echo \"' creates the file"
+        ],
+        [
+          "12",
+          "scored"
+        ]
+      ],
+      "evidence": [
+        "E-014",
+        "E-021",
+        "E-023",
+        "E-040"
+      ],
+      "summary": "With --report, the CLI name is spliced into an echo command and passed to system(). A double quote breaks out of the quoted argument and runs arbitrary shell commands with the process's privileges.",
+      "remediation": "Write the log line with file I/O instead of a shell, or use execve with an argv array."
+    },
+    {
+      "id": "AR-004",
+      "title": "Out-of-bounds write: memcpy behind STORE_INTO macro and template",
+      "cwe": "CWE-787, CWE-120",
+      "location": "src/store.h:30 (via src/main.cpp:56)",
+      "component": "storage",
+      "cvss": "CVSS:4.0/AV:L/AC:L/AT:P/PR:N/UI:P/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+      "evidence_strength": "DIRECT_EVIDENCE",
+      "verification": "VERIFIED",
+      "reachability": "reachable-flag",
+      "epss": null,
+      "kev": false,
+      "snippets": [
+        {
+          "path": "src/store.h",
+          "flaw": [
+            30
+          ],
+          "note": "copy_into_fixed<N>(): copies src.size() bytes into N-byte dst.",
+          "start": 25,
+          "source": [
+            "    // this isn't behind glibc's _FORTIFY_SOURCE strcpy checking by",
+            "    // name -- but memcpy with a compile-time-known destination size is",
+            "    // still eligible for __memcpy_chk fortification on a hardened",
+            "    // toolchain, so the same \"aborts instead of silently corrupting\"",
+            "    // caveat from VULN-01 can apply here too. See docs/VULNERABILITIES.md.",
+            "    std::memcpy(dst, src.data(), src.size());",
+            "}",
+            "",
+            "// The macro layer: call sites use STORE_INTO(...), not",
+            "// copy_into_fixed(...) directly, so reaching the vulnerable memcpy",
+            "// requires seeing through both this macro expansion and the template"
+          ]
+        },
+        {
+          "path": "src/main.cpp",
+          "flaw": [
+            56
+          ],
+          "note": "Instantiated as copy_into_fixed<16> through the macro, behind --store.",
+          "start": 51,
+          "source": [
+            "        std::cout << build_json_report(name, greeting) << std::endl;",
+            "    }",
+            "",
+            "    if (store) {",
+            "        char slot[16];",
+            "        STORE_INTO(slot, name);",
+            "        std::cout << \"stored \" << name.size() << \" byte(s) into a \"",
+            "                  << sizeof(slot) << \"-byte slot\" << std::endl;",
+            "    }",
+            "",
+            "    if (report) {"
+          ]
+        }
+      ],
+      "trail": [
+        [
+          "tool",
+          "stock CodeQL: 0 hits; mythos-cpp: 1 hit; semgrep: 0 hits"
+        ],
+        [
+          "05",
+          "IR slice: memcpy size = name.size(), dst = 16"
+        ],
+        [
+          "07",
+          "hypothesis RT-004"
+        ],
+        [
+          "08",
+          "refutation failed: no clamp before copy"
+        ],
+        [
+          "09",
+          "VERIFIED_PRIMITIVE"
+        ],
+        [
+          "12",
+          "scored"
+        ]
+      ],
+      "evidence": [
+        "E-021",
+        "E-023",
+        "E-024",
+        "E-040"
+      ],
+      "summary": "STORE_INTO expands to copy_into_fixed<16>, which memcpys the whole name into a 16-byte stack slot. Only the tools that see through macro expansion and template instantiation report it; this is the fixture's control for that capability.",
+      "remediation": "Check src.size() < N before the copy, or truncate explicitly."
+    },
+    {
+      "id": "AR-005",
+      "title": "Vendored cJSON 1.7.18 missing from SBOM; CVE match not performed",
+      "cwe": "CWE-1104",
+      "location": "vendor/cJSON-1.7.18/",
+      "component": "supply chain",
+      "cvss": null,
+      "severity_override": "Medium",
+      "evidence_strength": "DIRECT_EVIDENCE",
+      "verification": "UNRESOLVED",
+      "reachability": "unknown",
+      "epss": null,
+      "kev": false,
+      "snippets": [],
+      "trail": [
+        [
+          "tool",
+          "syft: 0 components; build index: vendored member"
+        ],
+        [
+          "06",
+          "inventory mismatch flagged; affected-API use not found in src/"
+        ],
+        [
+          "09",
+          "UNRESOLVED: 02-sca-vulnerability-match BLOCKED"
+        ]
+      ],
+      "evidence": [
+        "E-003",
+        "E-012",
+        "E-013"
+      ],
+      "summary": "The build links a vendored cJSON that no manifest declares, so the SBOM omits it and no vulnerability match ran. The fixture documents CVE-2025-57052 for this version; this review cannot confirm or clear it until SCA runs. Lane 06 found no call to the JSON-pointer API in project code.",
+      "remediation": "Feed build-index vendored members into the SBOM and unblock 02-sca-vulnerability-match (V16/V18)."
+    },
+    {
+      "id": "AR-006",
+      "title": "Runtime image runs as root; base image not pinned by digest",
+      "cwe": "CWE-250",
+      "location": "Dockerfile:4, Dockerfile:21-23",
+      "component": "deployment",
+      "cvss": "CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+      "evidence_strength": "DIRECT_EVIDENCE",
+      "verification": "VERIFIED",
+      "reachability": "reachable-build-config",
+      "epss": null,
+      "kev": false,
+      "snippets": [
+        {
+          "path": "Dockerfile",
+          "flaw": [
+            21,
+            23
+          ],
+          "note": "Final stage: floating tag, no USER before ENTRYPOINT.",
+          "start": 16,
+          "source": [
+            "RUN autoreconf -fi \\",
+            "    && ./configure \\",
+            "    && make \\",
+            "    && make check",
+            "",
+            "FROM debian:bookworm-slim",
+            "COPY --from=build /src/hello-autotools /usr/local/bin/hello-autotools",
+            "ENTRYPOINT [\"/usr/local/bin/hello-autotools\"]"
+          ]
+        }
+      ],
+      "trail": [
+        [
+          "tool",
+          "hadolint DL3006/DL3002, checkov CKV_DOCKER_3, trivy DS002"
+        ],
+        [
+          "15",
+          "container baseline"
+        ],
+        [
+          "09",
+          "VERIFIED"
+        ],
+        [
+          "12",
+          "scored"
+        ]
+      ],
+      "evidence": [
+        "E-011"
+      ],
+      "summary": "Both stages use debian:bookworm-slim by tag, and the runtime stage has no USER instruction, so the binary runs as root. Three scanners agree.",
+      "remediation": "Pin FROM by digest and add a non-root USER before ENTRYPOINT."
+    },
+    {
+      "id": "AR-007",
+      "title": "Unchecked NULL from cJSON_PrintUnformatted used to build std::string",
+      "cwe": "CWE-476",
+      "location": "src/jsonreport.cpp:16-17",
+      "component": "reporting/json",
+      "cvss": "CVSS:4.0/AV:L/AC:H/AT:P/PR:N/UI:P/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N",
+      "evidence_strength": "STRONG_INFERENCE",
+      "verification": "UNRESOLVED",
+      "reachability": "reachable-flag",
+      "epss": null,
+      "kev": false,
+      "snippets": [
+        {
+          "path": "src/jsonreport.cpp",
+          "flaw": [
+            17
+          ],
+          "note": "rendered can be NULL on allocation failure.",
+          "start": 12,
+          "source": [
+            "    cJSON *root = cJSON_CreateObject();",
+            "    cJSON_AddStringToObject(root, \"name\", name.c_str());",
+            "    cJSON_AddStringToObject(root, \"greeting\", greeting.c_str());",
+            "",
+            "    char *rendered = cJSON_PrintUnformatted(root);",
+            "    std::string result(rendered);",
+            "",
+            "    free(rendered); // cJSON allocates with malloc(); must be freed with free(), not delete.",
+            "    cJSON_Delete(root);",
+            "",
+            "    return result;"
+          ]
+        }
+      ],
+      "trail": [
+        [
+          "tool",
+          "CSA core.NonNullParamChecker"
+        ],
+        [
+          "07",
+          "hypothesis RT-007"
+        ],
+        [
+          "08",
+          "partial: only under allocation failure"
+        ],
+        [
+          "09",
+          "UNRESOLVED: not reproducible without fault injection"
+        ],
+        [
+          "12",
+          "scored"
+        ]
+      ],
+      "evidence": [
+        "E-022"
+      ],
+      "summary": "cJSON_PrintUnformatted returns NULL when allocation fails, and std::string(nullptr) is undefined behavior. Only reachable with --json under memory pressure.",
+      "remediation": "Check rendered for NULL before constructing the string."
+    },
+    {
+      "id": "AR-008",
+      "title": "Mismatched deallocation: free() on cJSON output (refuted)",
+      "cwe": "CWE-762",
+      "location": "src/jsonreport.cpp:19",
+      "component": "reporting/json",
+      "cvss": "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:L/VI:L/VA:L/SC:N/SI:N/SA:N",
+      "evidence_strength": "WEAK_INFERENCE",
+      "verification": "REFUTED",
+      "reachability": "reachable-flag",
+      "epss": null,
+      "kev": false,
+      "snippets": [
+        {
+          "path": "src/jsonreport.cpp",
+          "flaw": [
+            19
+          ],
+          "note": "Flagged line; refuted.",
+          "start": 14,
+          "source": [
+            "    cJSON_AddStringToObject(root, \"greeting\", greeting.c_str());",
+            "",
+            "    char *rendered = cJSON_PrintUnformatted(root);",
+            "    std::string result(rendered);",
+            "",
+            "    free(rendered); // cJSON allocates with malloc(); must be freed with free(), not delete.",
+            "    cJSON_Delete(root);",
+            "",
+            "    return result;",
+            "}"
+          ]
+        }
+      ],
+      "trail": [
+        [
+          "tool",
+          "semgrep c.lang.memory mismatched free"
+        ],
+        [
+          "07",
+          "hypothesis RT-008"
+        ],
+        [
+          "08",
+          "REFUTED: cJSON default hooks allocate with malloc; no cJSON_InitHooks call in project"
+        ],
+        [
+          "09",
+          "concurs"
+        ]
+      ],
+      "evidence": [
+        "E-014"
+      ],
+      "summary": "The scanner assumed a C++ allocation. cJSON allocates with malloc by default and the project never installs custom hooks, so free() is correct.",
+      "remediation": "None required."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E-001",
+      "producer": "00-intake",
+      "artifact": "data/jobs/00-intake/manifest.json",
+      "sha256": "3f9a1c0e5b7d",
+      "kind": "manifest"
+    },
+    {
+      "id": "E-002",
+      "producer": "02-repository-partition-discovery",
+      "artifact": "attempt-1/repository-partition-map.json",
+      "sha256": "a41be20977c3",
+      "kind": "persona output"
+    },
+    {
+      "id": "E-003",
+      "producer": "02-build-index",
+      "artifact": "data/jobs/02-build-index/build-index.json#vendored[0]",
+      "sha256": "0c7d55e1a9f2",
+      "kind": "deterministic"
+    },
+    {
+      "id": "E-004",
+      "producer": "native-build",
+      "artifact": "compile_commands.json (6 project TUs + cJSON.c)",
+      "sha256": "e8812fd04b6a",
+      "kind": "build log"
+    },
+    {
+      "id": "E-010",
+      "producer": "gitleaks",
+      "artifact": "02-secrets-inventory/gitleaks/outputs/findings.json (0 hits) + redaction-receipt.json",
+      "sha256": "5b2e0a7713cd",
+      "kind": "scan"
+    },
+    {
+      "id": "E-011",
+      "producer": "hadolint, checkov, trivy-config",
+      "artifact": "02-iac-config-scan/tool-results.json",
+      "sha256": "91d0c3e6fa28",
+      "kind": "scan"
+    },
+    {
+      "id": "E-012",
+      "producer": "syft-directory",
+      "artifact": "02-sbom-inventory/syft-directory/outputs/sbom.cdx.json (0 components)",
+      "sha256": "77ac21b90e14",
+      "kind": "scan"
+    },
+    {
+      "id": "E-013",
+      "producer": "scancode-toolkit",
+      "artifact": "02-license-scan/outputs/scancode.json#vendor/cJSON-1.7.18 (MIT)",
+      "sha256": "c2f9084d6e5a",
+      "kind": "scan"
+    },
+    {
+      "id": "E-014",
+      "producer": "semgrep",
+      "artifact": "02-source-sast/semgrep/outputs/results.sarif (greet.cpp:18, logger.cpp:16, runner.cpp:18, jsonreport.cpp:19)",
+      "sha256": "4ae6f19c0d73",
+      "kind": "scan"
+    },
+    {
+      "id": "E-015",
+      "producer": "ossf-scorecard",
+      "artifact": "ossf-scorecard/scorecard.json (aggregate 4.1)",
+      "sha256": "d03b8e2c91f6",
+      "kind": "scan"
+    },
+    {
+      "id": "E-020",
+      "producer": "clang-tidy, cppcheck",
+      "artifact": "native/clang-tidy.sarif, cppcheck.xml",
+      "sha256": "12fe7a09c4b8",
+      "kind": "native"
+    },
+    {
+      "id": "E-021",
+      "producer": "ir-facts / component IR slice",
+      "artifact": "native/ir-slices/*.json (memcpy@store.h:30 N=16; system@runner.cpp:18)",
+      "sha256": "6d8b03e5a1c9",
+      "kind": "native"
+    },
+    {
+      "id": "E-022",
+      "producer": "csa-ctu",
+      "artifact": "native/csa/*.plist (greet.cpp:18, jsonreport.cpp:17)",
+      "sha256": "b90c4e17d2a3",
+      "kind": "native"
+    },
+    {
+      "id": "E-023",
+      "producer": "codeql",
+      "artifact": "codeql/security-extended.sarif + mythos-cpp.sarif",
+      "sha256": "f15a2d8c6e04",
+      "kind": "native"
+    },
+    {
+      "id": "E-024",
+      "producer": "deep-confirmation",
+      "artifact": "deep-confirmation.json cluster C-007",
+      "sha256": "280e6b4fd917",
+      "kind": "native"
+    },
+    {
+      "id": "E-030",
+      "producer": "03-threat-model-dfd-stride",
+      "artifact": "outputs/03/dfd.json, stride.json",
+      "sha256": "8c4f1a93be20",
+      "kind": "lane output"
+    },
+    {
+      "id": "E-040",
+      "producer": "09-independent-verification",
+      "artifact": "outputs/09/verification.json (ASan logs attached)",
+      "sha256": "ee07b6d235a1",
+      "kind": "lane output"
+    }
+  ],
+  "provenance": {
+    "images": [
+      [
+        "tool-gitleaks",
+        "sha256:1c4e…9a02"
+      ],
+      [
+        "tool-semgrep",
+        "sha256:7b10…e33f"
+      ],
+      [
+        "tool-syft",
+        "sha256:a9d2…4410"
+      ],
+      [
+        "tool-checkov",
+        "sha256:55e0…b7c1"
+      ],
+      [
+        "tool-trivy",
+        "sha256:03fd…8e29"
+      ],
+      [
+        "tool-hadolint",
+        "sha256:c871…1d5a"
+      ],
+      [
+        "scancode-toolkit",
+        "sha256:e2a4…70bb"
+      ],
+      [
+        "audit-native",
+        "sha256:9f31…c6d8"
+      ],
+      [
+        "audit-codeql",
+        "sha256:4b7a…02e1"
+      ]
+    ],
+    "models": [
+      [
+        "claude-sonnet-5 (D01, lanes 07/08/09)",
+        "pinned per run by model_version_registry.py"
+      ],
+      [
+        "claude-haiku (build plan)",
+        "pinned per run"
+      ]
+    ],
+    "ledger_head": "sha256:6e1d…b38c"
+  }
+}
