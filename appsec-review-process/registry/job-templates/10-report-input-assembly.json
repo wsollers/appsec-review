@@ -1,0 +1,15 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "10-report-input-assembly",
+  "display_name": "Draft Report Input Assembly",
+  "process": "10-report-input-assembly",
+  "budget_default": "probe",
+  "composition": {"persona_id": "report-artifact-publisher", "role_id": "sarif-exporter",
+    "domain_id": "verified-findings", "tooling_profile_id": "local-sarif-transform",
+    "output_contract_id": "report-synthesis-input"},
+  "implemented": false,
+  "permissions": ["read-run-data", "write-run-data"],
+  "inputs": {"required": ["exact accepted component, threat, OWASP, ledger, verification and scoring results"], "optional": []},
+  "outputs": {"directory": "data/jobs/10-report-input-assembly/attempts/<attempt_id>", "files": ["synthesis-input.json", "status.json"]},
+  "prompt_sections": ["governing_rules", "source_lineage", "task", "output_contract"]
+}

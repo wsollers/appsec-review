@@ -1,0 +1,16 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "report-synthesis-input",
+  "display_name": "Hash-bound Draft Report Synthesis Input",
+  "required_files": ["synthesis-input.json", "status.json"],
+  "required_status_fields": ["process", "status", "inputs", "claims", "coverage_gaps", "qualification"],
+  "result_schema": {"artifact": "synthesis-input.json", "schema_file": "synthesis-input.schema.json"},
+  "validation_rules": [
+    "consume only exact newest accepted component, threat, OWASP, ledger, verification and scoring producer envelopes",
+    "revalidate every artifact and canonical permission and lineage receipt before normalization",
+    "require one source and component generation plus one exact claim-ledger head",
+    "dereference and hash-check every cited evidence identity",
+    "preserve coverage, unresolved claims, dissent and distinct OWASP denominators without producing report prose",
+    "reject circular, duplicate, stale, self-verified or unsupported promoted claims"
+  ]
+}

@@ -1,0 +1,714 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "synthesis-input.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_generation",
+    "component_generation",
+    "ledger_head_id",
+    "ledger_head_sha256",
+    "inputs",
+    "evidence_artifacts",
+    "counts",
+    "coverage",
+    "unresolved_claims",
+    "dissent_ids",
+    "owasp_denominators",
+    "integrity"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/synthesis-input/1.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_generation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "component_generation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ledger_head_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ledger_head_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "threat",
+        "owasp",
+        "ledger",
+        "verification",
+        "scoring"
+      ],
+      "properties": {
+        "component": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_id",
+            "attempt_id",
+            "contract_id",
+            "artifact_path",
+            "artifact_sha256",
+            "accepted_pointer_sha256",
+            "permission_receipt_sha256",
+            "lineage_receipt_sha256",
+            "supporting_artifacts"
+          ],
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "accepted_pointer_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "permission_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "lineage_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "supporting_artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "artifact_path",
+                  "artifact_sha256",
+                  "schema"
+                ],
+                "properties": {
+                  "artifact_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "schema": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "threat": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_id",
+            "attempt_id",
+            "contract_id",
+            "artifact_path",
+            "artifact_sha256",
+            "accepted_pointer_sha256",
+            "permission_receipt_sha256",
+            "lineage_receipt_sha256",
+            "supporting_artifacts"
+          ],
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "accepted_pointer_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "permission_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "lineage_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "supporting_artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "artifact_path",
+                  "artifact_sha256",
+                  "schema"
+                ],
+                "properties": {
+                  "artifact_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "schema": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "owasp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_id",
+            "attempt_id",
+            "contract_id",
+            "artifact_path",
+            "artifact_sha256",
+            "accepted_pointer_sha256",
+            "permission_receipt_sha256",
+            "lineage_receipt_sha256",
+            "supporting_artifacts"
+          ],
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "accepted_pointer_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "permission_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "lineage_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "supporting_artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "artifact_path",
+                  "artifact_sha256",
+                  "schema"
+                ],
+                "properties": {
+                  "artifact_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "schema": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "ledger": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_id",
+            "attempt_id",
+            "contract_id",
+            "artifact_path",
+            "artifact_sha256",
+            "accepted_pointer_sha256",
+            "permission_receipt_sha256",
+            "lineage_receipt_sha256",
+            "supporting_artifacts"
+          ],
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "accepted_pointer_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "permission_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "lineage_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "supporting_artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "artifact_path",
+                  "artifact_sha256",
+                  "schema"
+                ],
+                "properties": {
+                  "artifact_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "schema": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_id",
+            "attempt_id",
+            "contract_id",
+            "artifact_path",
+            "artifact_sha256",
+            "accepted_pointer_sha256",
+            "permission_receipt_sha256",
+            "lineage_receipt_sha256",
+            "supporting_artifacts"
+          ],
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "accepted_pointer_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "permission_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "lineage_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "supporting_artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "artifact_path",
+                  "artifact_sha256",
+                  "schema"
+                ],
+                "properties": {
+                  "artifact_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "schema": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "job_id",
+            "attempt_id",
+            "contract_id",
+            "artifact_path",
+            "artifact_sha256",
+            "accepted_pointer_sha256",
+            "permission_receipt_sha256",
+            "lineage_receipt_sha256",
+            "supporting_artifacts"
+          ],
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "contract_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifact_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "accepted_pointer_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "permission_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "lineage_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "supporting_artifacts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "artifact_path",
+                  "artifact_sha256",
+                  "schema"
+                ],
+                "properties": {
+                  "artifact_path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "schema": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "evidence_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "producer_job_id",
+          "producer_attempt_id",
+          "artifact_path",
+          "artifact_sha256"
+        ],
+        "properties": {
+          "producer_job_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "producer_attempt_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "artifact_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "artifact_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "components",
+        "threat_hypotheses",
+        "owasp_rows",
+        "ledger_claims",
+        "verified_claims",
+        "refuted_claims",
+        "unresolved_claims",
+        "scored_claims"
+      ],
+      "properties": {
+        "components": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "threat_hypotheses": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "owasp_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ledger_claims": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verified_claims": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "refuted_claims": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unresolved_claims": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scored_claims": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component_classification_gaps",
+        "component_unknowns",
+        "threat_gaps",
+        "threat_unmodeled_components",
+        "owasp_gap_ids"
+      ],
+      "properties": {
+        "component_classification_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "component_unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "threat_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "threat_unmodeled_components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "owasp_gap_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "unresolved_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_id",
+          "status"
+        ],
+        "properties": {
+          "claim_id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "candidate",
+              "under_review",
+              "narrowed",
+              "unresolved"
+            ]
+          }
+        }
+      }
+    },
+    "dissent_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "owasp_denominators": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected",
+        "applicable",
+        "assessed",
+        "satisfied"
+      ],
+      "properties": {
+        "selected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assessed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "satisfied": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputs_sha256",
+        "evidence_artifacts_sha256",
+        "manifest_sha256"
+      ],
+      "properties": {
+        "inputs_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidence_artifacts_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}
