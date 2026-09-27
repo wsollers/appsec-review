@@ -441,11 +441,8 @@ def _claim_promotion_errors(value: Any, forbidden: set[str], path: str = "$") ->
     elif isinstance(value, list):
         for index, item in enumerate(value):
             errors.extend(_claim_promotion_errors(item, forbidden, f"{path}[{index}]"))
-    elif isinstance(value, str):
-        for category in forbidden:
-            if any(_asserted(pattern, value) for pattern in PROMOTION_TEXT[category]):
-                errors.append(
-                    f"{path}: {category} promotion is forbidden by the declared claim class")
+    # Free text is not parsed for grammar (ADR-0013): only structured promotion fields above fail.
+    # PROMOTION_TEXT / _asserted remain for diagnostics.
     return errors
 
 

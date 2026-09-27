@@ -326,8 +326,10 @@ class ContractSpecificValidatorTests(unittest.TestCase):
         self.assertIn("claim-class identity does not match", "\n".join(self.errors()))
 
     def test_finding_severity_and_runtime_promotions_fail_without_mutation(self):
+        # Structured promotion fields fail; free text is not parsed (ADR-0013).
         self.payload["findings"] = [{"severity": "high"}]
-        self.payload["coverage_gaps"] = ["live scan found a verified finding; severity: high"]
+        self.payload["runtime_state"] = "observed"
+        self.payload["coverage_gaps"] = ["not a verified finding; severity: not assessed"]
         self.write_attempt()
         before = (self.attempt / "project-inventory.json").read_bytes()
         joined = "\n".join(self.errors())

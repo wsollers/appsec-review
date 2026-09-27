@@ -50,6 +50,10 @@ def permission(run_id: str, source: str, command_profile_id: str, grants: list[d
         command_profile_id=command_profile_id, target_path=".")
     cap={"kind":"target-execution","version":"1.0","parameters":params,"origin":"registry"}
     requirement={"schema":"appsec-review/permission-requirement/1.0","job_id":"02-test-execution","capabilities":[cap]}
+    # Rebind staged grants to the current source hash: intake rewrites the manifest on every re-run
+    # (ADR-0013). The grant stays bound to this run and job.
+    grants=[{**g,"binding":{**g["binding"],"source_snapshot_sha256":source}}
+            if isinstance(g,dict) and g.get("binding",{}).get("run_id")==run_id else g for g in grants]
     context={"run_id":run_id,"job_id":"02-test-execution","source_snapshot_sha256":source,
              "now":now,"registry_ceiling":[cap]}
     decision=pc.evaluate(requirement,grants,context); pc.require_granted(

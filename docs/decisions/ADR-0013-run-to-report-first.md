@@ -41,7 +41,15 @@ front half.
    are refreshed at milestones (after each target reaches a report), not in the same change as every
    fix. `docs/processes/job_catalog.py --check` and `validate_design_parity.py` keep running because
    they are cheap and catch broken references.
-7. **Commits.** Small fixes go straight to `main` with a message naming the breakage. A larger
+7. **Conclusions are enumerated, never parsed from grammar** (William, 2026-09-27). What a job
+   concludes is carried only by enumerated values: each claim's `claim_class` (for example
+   `candidate_hypothesis`, `static-analysis-lead`, `verified_finding`, `final_severity`,
+   `remediation_status`), checked against the job's allowed classes, and structured result fields
+   (`finding`, `severity`, `cvss`, `runtime_state`, ...). Free text such as summaries, notes,
+   limitations and disclaimers is not scanned with phrase rules and cannot fail a job; "not a
+   verified finding" or "the compiler is fixed as clang" is just text. The phrase rules in
+   `persona_invocation.py` and `validate_job_output.py` remain only as diagnostics.
+8. **Commits.** Small fixes go straight to `main` with a message naming the breakage. A larger
    rework may use a short-lived branch.
 
 ## Consequences

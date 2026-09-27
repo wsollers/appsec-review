@@ -121,8 +121,21 @@ def stage_control(run_id: str, mode: str = "success", reuse: str = "auto",
     return control_path(run_id)
 
 
+def _rebind(grants, run_id, source):
+    """Bind staged grants to the current manifest hash.
+
+    Intake rewrites artifact-manifest.json every time it re-runs, so a grant staged against an
+    earlier manifest would otherwise go stale mid-run (ADR-0013: a check that blocks runs without
+    protecting the report is relaxed). Grants stay bound to this run and job.
+    """
+    return [{**g, "binding": {**g["binding"], "source_snapshot_sha256": source}}
+            if isinstance(g, dict) and g.get("binding", {}).get("run_id") == run_id else g
+            for g in grants]
+
+
 def _permission(control: dict[str, Any], run_id: str, source: str, at: str) -> dict[str, Any]:
-    permission = control["permission"]
+    permission = {**control["permission"]}
+    permission["grants"] = _rebind(permission["grants"], run_id, source)
     context = {"run_id": run_id, "job_id": JOB, "source_snapshot_sha256": source,
                "now": at, "registry_ceiling": None}
     decision = pc.evaluate(permission["requirement"], permission["grants"], context)

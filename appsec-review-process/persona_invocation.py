@@ -106,8 +106,8 @@ BASELINE_PROHIBITED: tuple[str, ...] = (
     "malicious_intent", "observed_runtime_state", "remediation_status", "verified_finding",
     "verified_security_finding",
 )
-# Lexical backstop over every published text field and output file. A class has a rule or it does
-# not; a rule applies whenever its class is prohibited for the request (the baseline always is).
+# Lexical rules per claim class. Retained for diagnostics only (`_asserts_prohibited`); since
+# ADR-0013 they never fail a job: conclusions are carried by the enumerated claim_class.
 CLAIM_TEXT_RULES: Mapping[str, tuple[str, ...]] = MappingProxyType({
     "verified_finding": (r"\b(?:finding|vulnerability)\s+(?:is\s+)?(?:exists|confirmed|established|verified)\b",
                          r"\b(?:is|are|was|were)\s+(?:a\s+)?vulnerab"),
@@ -1123,8 +1123,9 @@ def derive_output(resolved: ResolvedRequest, state: str, tree: list[dict[str, An
     names += identifiers
     if not all(text_form_ok(text) for text in (*texts, *names)):
         return "MALFORMED_RESULT", empty
-    if _asserts_prohibited(texts, set(request["prohibited_claim_classes"]), names):
-        return "PROHIBITED_CLAIM", empty
+    # Conclusions are carried only by the enumerated claim_class of each claim (checked above
+    # against allowed_claim_classes). Free text is not parsed for grammar: a disclaimer such as
+    # "not a verified finding" or "the compiler is fixed as clang" must never fail a job (ADR-0013).
     return None, {"output_manifest_sha256": _bytes_sha(raw), "outputs": tree, "usage": usage,
                   "claim_classes": sorted({claim["claim_class"] for claim in claims}),
                   "claim_count": len(claims), "verified_invocations": verified}
