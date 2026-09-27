@@ -55,7 +55,7 @@ CONTROL_JOBS = {
     'remediation_retest_feedback':'remediation_retest_feedback_work',
 }
 FINAL_PUBLICATION_JOBS = {'final_publication_gate':'final_publication_gate_work'}
-ASSEMBLY_JOBS = {'full_review_input_assembly': 'full_review_input_assembly_work'}
+ASSEMBLY_JOBS = {'full_review_input_assembly': 'full_review_input_assembly_standalone_work'}
 FACTS_FILE_JOBS = {'owasp_join_report': 'owasp_join_report_standalone_work'}
 
 
