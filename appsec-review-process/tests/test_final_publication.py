@@ -18,7 +18,13 @@ class FinalPublicationTests(unittest.TestCase):
     def fixture(self, root: Path):
         draft = root / "draft"; draft.mkdir()
         atomic_json(draft / "report.json", {"schema": "fixture", "status": "DRAFT_EVIDENCE_BACKED"})
-        atomic_json(draft / "evidence-trace-index.json", {"schema": "fixture"})
+        atomic_json(draft / "evidence-trace-index.json", {"schema": "fixture", "citations": [
+            {"claim_id": "claim-1", "citation_id": "citation-1"}]})
+        atomic_json(draft / "report.json", {"schema": "fixture", "status": "DRAFT_EVIDENCE_BACKED",
+            "claim_limits": {"final": False}, "verified_findings": [{"claim_id": "claim-1",
+                "title": "Verified fixture claim", "severity": "HIGH", "priority": "P1", "score": 12,
+                "confidence": "high", "component_ids": ["component-1"], "verification_citations": [{
+                    "artifact_path": "evidence.json", "locator_json": "line:7", "citation_id": "citation-1"}]}]})
         artifacts = [{"path": name, "sha256": "sha256:" + file_hash(draft / name)}
                      for name in ("report.json", "evidence-trace-index.json")]
         atomic_json(draft / "publication-manifest.json", {"schema": "appsec-review/report-publication-manifest/1.0",
@@ -37,6 +43,8 @@ class FinalPublicationTests(unittest.TestCase):
             self.assertTrue(manifest["final"]); self.assertTrue(manifest["human_signoff"])
             self.assertEqual(json.loads((output / "final-publication.json").read_text()), manifest)
             self.assertTrue((output / "human-signoff-ledger.json").is_file())
+            sarif = json.loads((output / "critical-findings.sarif").read_text())
+            self.assertEqual(sarif["runs"][0]["results"][0]["ruleId"], "claim-1")
             with self.assertRaisesRegex(Blocked, "already exists"):
                 final.publish(draft, ledger, output)
 

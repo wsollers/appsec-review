@@ -16,6 +16,7 @@ from typing import Any
 
 from execution_state import Blocked, atomic_json, digest, file_hash, read_json
 from schema_validate import validate_document
+import synthesis_sarif
 
 SIGNOFF_SCHEMA = "appsec-review/human-signoff-ledger/1.0"
 FINAL_SCHEMA = "appsec-review/final-publication/1.0"
@@ -128,6 +129,9 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
         for relative, source, _hash in verified:
             destination = staging.joinpath(*Path(relative).parts); destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
+        sarif_path = staging / "critical-findings.sarif"
+        synthesis_sarif.convert(staging / "report.json", staging / "evidence-trace-index.json", sarif_path)
+        verified.append(("critical-findings.sarif", sarif_path, "sha256:" + file_hash(sarif_path)))
         atomic_json(staging / "human-signoff-ledger.json", signoff_ledger)
         manifest = {"schema": FINAL_SCHEMA, "run_id": publication["run_id"],
             "status": "FINAL_APPROVED", "draft_publication_sha256": "sha256:" + file_hash(publication_path),
