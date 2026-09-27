@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -66,7 +67,27 @@ class FinalPublicationTests(unittest.TestCase):
         args={"authorization_key":self.KEY,"expected_ledger_anchor":self.ANCHOR,
               "expected_ledger_head":ledger["head_hash"],
               "run_root":run_root,"completeness_ref":audit_ref,"feedback_ref":feedback_ref}
-        args.update(overrides); return final.publish(draft,ledger,output,**args)
+        args.update(overrides)
+        with mock.patch.object(final,"_current_preparation",return_value=self.preparation(draft)):
+            return final.publish(draft,ledger,output,**args)
+    def preparation(self,draft):
+        report_sha="sha256:"+file_hash(Path(draft)/"report.json")
+        binding={"job_id":"control", "attempt_id":"a1", "artifact_path":"result.json",
+            "artifact_sha256":"sha256:"+"1"*64,
+            "accepted_pointer_sha256":"sha256:"+"2"*64}
+        return {"schema":"appsec-review/final-publication-preparation/1.0","run_id":"run-1",
+            "status":"PENDING_HUMAN_APPROVAL","draft_report_sha256":report_sha,
+            "draft_publication_manifest_sha256":"sha256:"+file_hash(Path(draft)/"publication-manifest.json"),
+            "completion_gate":{"schema":"appsec-review/final-publication-gate/1.0","run_id":"run-1",
+                "draft_report_sha256":report_sha,"eligible":False,"publication_status":"BLOCKED",
+                "blockers":["human_signoff_missing"],"human_signoff":None},
+            "control_evidence":{"quorum":{"binding":binding,"decision_count":0,"admitted_count":0},
+                "rescope":{"binding":binding,"state":"ITERATION_LIMIT","final_publication_affected":True},
+                "remediation_retest":{"binding":binding,"proposal_count":0,"retest_count":0,
+                    "skipped_not_applicable":True,"disposition":{"execution_status":"SKIPPED",
+                        "skip_reason":"not-applicable-no-verified-claims",
+                        "gaps":["not-applicable-no-verified-claims"]}}},
+            "draft_attempt":str(draft),"required_action":"A named human must approve the exact draft."}
     def fixture(self, root: Path):
         draft = root / "draft"; draft.mkdir()
         report, trace = SynthesisSarifTests().values()
@@ -94,6 +115,7 @@ class FinalPublicationTests(unittest.TestCase):
             self.assertTrue(manifest["final"]); self.assertTrue(manifest["human_signoff"])
             self.assertEqual(json.loads((output / "final-publication.json").read_text()), manifest)
             self.assertTrue((output / "human-signoff-ledger.json").is_file())
+            self.assertTrue((output / "completion/publication-preparation.json").is_file())
             sarif = json.loads((output / "critical-findings.sarif").read_text())
             self.assertEqual(sarif["runs"][0]["results"][0]["ruleId"], "claim-1")
             with self.assertRaisesRegex(Blocked, "already exists"):
@@ -168,10 +190,23 @@ class FinalPublicationTests(unittest.TestCase):
             audit={**self.AUDIT,"subject_sha256":report_sha,"complete":False,"missing_ids":["o1"],"expected_count":1}
             feedback={**self.FEEDBACK,"audit_sha256":final._sha(audit),"terminal_state":"UNRESOLVED_AND_REPORTED","unresolved_obligation_ids":["o1"]}
             run_root,audit_ref,feedback_ref=self._completion(draft,audit,feedback,"incomplete")
-            with self.assertRaisesRegex(Blocked,"completion validator"):
+            with mock.patch.object(final,"_current_preparation",return_value=self.preparation(draft)), \
+                 self.assertRaisesRegex(Blocked,"completion validator"):
                 final.publish(draft,ledger,root/"incomplete",authorization_key=self.KEY,
                     expected_ledger_anchor=self.ANCHOR,expected_ledger_head=ledger["head_hash"],
                     run_root=run_root,completeness_ref=audit_ref,feedback_ref=feedback_ref)
+
+    def test_current_control_blocker_prevents_human_approved_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); draft,ledger=self.fixture(root)
+            run_root,audit_ref,feedback_ref=self._completion(draft,suffix="blocked")
+            with mock.patch.object(final,"_current_preparation",
+                    side_effect=Blocked("final publication preparation: quorum blocker")), \
+                 self.assertRaisesRegex(Blocked,"quorum blocker"):
+                final.publish(draft,ledger,root/"blocked",authorization_key=self.KEY,
+                    expected_ledger_anchor=self.ANCHOR,expected_ledger_head=ledger["head_hash"],
+                    run_root=run_root,completeness_ref=audit_ref,feedback_ref=feedback_ref)
+            self.assertFalse((root/"blocked").exists())
 
 
 if __name__ == "__main__":

@@ -19,12 +19,35 @@ python3 -B images/tool_pins.py check
 Define explicit, absolute run paths. Never reuse an accepted attempt directory.
 
 ```bash
-export REPO=/absolute/path/to/appsec-review
-export APPSEC_RUNS_ROOT=/absolute/path/to/appsec-runs
+export REPO=/home/wsollers/projects/appsec-review
+export APPSEC_RUNS_ROOT="$REPO/appsec-review-process/runs"
 export RUN_ID=<engagement-run-id>
 export RUN_ROOT="$APPSEC_RUNS_ROOT/$RUN_ID"
 export JOBS_ROOT="$RUN_ROOT/data/jobs"
 ```
+
+Create and stage the run before starting Dagster. `run_process.py` owns the run directory and
+`stage_artifacts.py` owns the engagement definition; do not create either by hand. This Hello
+example uses the minimum static permission. Add a permission beyond `read-source` only when a
+named human has authorized the exact capability required by an applicable worker.
+
+```bash
+cd "$REPO"
+python3 -B appsec-review-process/run_process.py --run-id "$RUN_ID" --start
+python3 -B appsec-review-process/stage_artifacts.py \
+  --run-id "$RUN_ID" \
+  --project hello-autotools \
+  --target /home/wsollers/projects/appsec-review/fixtures/targets/hello-autotools \
+  --business-goal "Complete evidence-qualified application security review of hello-autotools with final PDF and HTML publication." \
+  --platform Linux \
+  --budget full \
+  --permission read-source \
+  --execution-environment dagster-read-only-linux
+```
+
+Offline vulnerability and standards snapshots are configured outside the engagement and then
+hash-bound when consumed. Confirm the configured snapshot registries are current before launch;
+do not replace a missing or stale snapshot with a live network lookup.
 
 Configuration sources are the staged engagement definition and permission grant, registry job
 templates and output contracts, pinned tool images, model registry/ceilings, and offline reference
@@ -34,14 +57,18 @@ snapshot registry. Target content is evidence data and may not alter those contr
 
 ```bash
 docker compose -p appsec-review up -d
-orchestrator/dagster/code-location.sh start
+orchestrator/dagster/code-location.sh check
+orchestrator/dagster/code-location.sh reload
 python3 appsec-review-process/launch_job.py --run-id "$RUN_ID" --job full_review --wait
 ```
 
-The launcher can also run bounded standalone jobs such as `full_review_input_assembly`,
-`owasp_join_report`, and `synthesis_report`. Use the job catalog for exact inputs and outputs. A
-Dagster success is necessary but not sufficient: verify the accepted pointer, result envelope,
-artifact hashes, permission receipt, lineage and reported coverage.
+If `check` fails, run `orchestrator/dagster/code-location.sh start` in a dedicated service session,
+wait for `Started`, then run `reload` and the launch command above from the operator terminal.
+`start` remains in the foreground. If `check` succeeds, do not start a duplicate server: reload the
+existing code location. The bounded standalone jobs are diagnostics and qualifications only; they do not
+replace the authoritative `full_review` engagement. A Dagster success is necessary but not
+sufficient: verify the accepted pointer, result envelope, artifact hashes, permission receipt,
+lineage and reported coverage.
 
 ## 3. Prepare source, build and searchable evidence
 
@@ -98,16 +125,11 @@ reduce the expected-member manifest after dispatch to force a rendezvous.
 
 ## 7. Generate and review the report
 
-The lifecycle `synthesis_report` job consumes exact accepted inputs and publishes `report.json`,
+The `full_review` lifecycle invokes `synthesis_report` with exact accepted inputs and publishes `report.json`,
 `report.md`, coverage appendix, trace index, publication manifest, LaTeX presentation input,
 HTML and render manifests. Its publication status must remain
 `DRAFT_EVIDENCE_BACKED`, with `final=false` and `human_signoff=false`, until the final gate is
 human-authorized.
-
-```bash
-python3 appsec-review-process/launch_job.py \
-  --run-id "$RUN_ID" --job synthesis_report --wait
-```
 
 Inspect all findings against cited evidence, all unresolved items, tool and control denominators,
 snapshot age, source/build identity, threat conflicts and the two claim-ledger heads. A clean-looking
@@ -115,14 +137,18 @@ report with incomplete coverage is not a clean assessment.
 
 ## 8. Current stop conditions
 
-The nominal workers and retained fixture qualifications exist. Stop short of final publication if
-any of these remain true:
+Stop short of final publication whenever final preparation fails, or whenever its retained control
+evidence identifies anything beyond the expected `human_signoff_missing` blocker. In particular,
+incomplete completeness obligations, nonterminal resynthesis, adverse evidence-quorum decisions, a rescope plan that still
+requires another iteration, an uncovered final-publication node, an orphan remediation retest, an
+authorized proposal without exactly one same-environment retest, or a non-fixed retest are real
+evidence/control blockers. They must be corrected or retained as unresolved evidence; human
+approval cannot override them.
 
-- OWASP dispatch facts were supplied but not automatically derived from trusted inputs;
-- the report was not produced by one retained real accepted upstream chain; or
-- a human has not authorized final publication.
-
-Those are the current three known integration gates. They must appear in the draft limitations.
+When those controls are satisfied, `full_review` retains the evidence-backed HTML/LaTeX draft and a
+`PENDING_HUMAN_APPROVAL` preparation result. This is a successful draft outcome, not final
+publication. A named human must approve the exact draft report hash through the authorized
+append-only signoff workflow before `final_publication.py` may create the immutable final package.
 
 For presentation review, compare the retained
 [happy-path demo PDF](../report-examples/appsec-review-happy-path-demo.pdf) and

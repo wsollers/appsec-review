@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": [
     "schema", "run_id", "status", "draft_report_sha256",
-    "draft_publication_manifest_sha256", "completion_gate", "draft_attempt", "required_action"
+    "draft_publication_manifest_sha256", "completion_gate", "control_evidence", "draft_attempt", "required_action"
   ],
   "properties": {
     "schema": {"const": "appsec-review/final-publication-preparation/1.0"},
@@ -25,6 +25,50 @@
         "publication_status": {"const": "BLOCKED"},
         "blockers": {"const": ["human_signoff_missing"]},
         "human_signoff": {"type": "null"}
+      }
+    },
+    "control_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quorum", "rescope", "remediation_retest"],
+      "properties": {
+        "quorum": {
+          "type": "object", "additionalProperties": false,
+          "required": ["binding", "decision_count", "admitted_count"],
+          "properties": {
+            "binding": {"$ref": "control-publication-binding.schema.json"},
+            "decision_count": {"type": "integer", "minimum": 0},
+            "admitted_count": {"type": "integer", "minimum": 0}
+          }
+        },
+        "rescope": {
+          "type": "object", "additionalProperties": false,
+          "required": ["binding", "state", "final_publication_affected"],
+          "properties": {
+            "binding": {"$ref": "control-publication-binding.schema.json"},
+            "state": {"enum": ["NO_PROGRESS", "ITERATION_LIMIT"]},
+            "final_publication_affected": {"const": true}
+          }
+        },
+        "remediation_retest": {
+          "type": "object", "additionalProperties": false,
+          "required": ["binding", "proposal_count", "retest_count", "skipped_not_applicable", "disposition"],
+          "properties": {
+            "binding": {"$ref": "control-publication-binding.schema.json"},
+            "proposal_count": {"type": "integer", "minimum": 0},
+            "retest_count": {"type": "integer", "minimum": 0},
+            "skipped_not_applicable": {"type": "boolean"},
+            "disposition": {
+              "type": "object", "additionalProperties": false,
+              "required": ["execution_status", "skip_reason", "gaps"],
+              "properties": {
+                "execution_status": {"enum": ["OK", "OK_WITH_GAPS", "SKIPPED"]},
+                "skip_reason": {"type": ["string", "null"]},
+                "gaps": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        }
       }
     },
     "draft_attempt": {"type": "string", "minLength": 1},

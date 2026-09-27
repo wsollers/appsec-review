@@ -282,8 +282,11 @@ def same_environment_retest(run_id: str, proposal: dict[str, Any], original_envi
 
 
 def completion_gate(run_id: str, draft_report: dict[str, Any], audit: dict[str, Any],
-                    feedback: dict[str, Any], signoff: dict[str, Any] | None) -> dict[str, Any]:
-    report_sha = _sha(draft_report)
+                    feedback: dict[str, Any], signoff: dict[str, Any] | None, *,
+                    draft_report_sha256: str | None = None) -> dict[str, Any]:
+    report_sha = draft_report_sha256 or _sha(draft_report)
+    if not SHA_RE.fullmatch(report_sha):
+        raise Blocked("review controls: draft report byte hash is invalid")
     blockers = []
     if draft_report.get("status") != "DRAFT_EVIDENCE_BACKED": blockers.append("draft_status_invalid")
     if not audit.get("complete"): blockers.append("coverage_incomplete")

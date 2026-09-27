@@ -114,6 +114,16 @@ class ReviewControlLoopTests(unittest.TestCase):
         forged = deepcopy(signoff); forged["report_sha256"] = "sha256:" + "0" * 64
         self.assertFalse(controls.completion_gate("run-1", draft, audit, feedback, forged)["eligible"])
 
+    def test_final_gate_can_bind_the_exact_serialized_report_hash(self):
+        draft = {"status":"DRAFT_EVIDENCE_BACKED"}
+        report_sha = "sha256:" + "7" * 64
+        gate = controls.completion_gate("run-1", draft, {"complete":True},
+            {"terminal_state":"COMPLETE"}, None, draft_report_sha256=report_sha)
+        self.assertEqual(gate["draft_report_sha256"], report_sha)
+        with self.assertRaises(Blocked):
+            controls.completion_gate("run-1", draft, {"complete":True},
+                {"terminal_state":"COMPLETE"}, None, draft_report_sha256="not-a-hash")
+
 
 if __name__ == "__main__":
     unittest.main()

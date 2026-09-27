@@ -10,12 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import control_feature_lifecycle as life  # noqa: E402
-from execution_state import Blocked, atomic_json  # noqa: E402
+from execution_state import Blocked, atomic_json, file_hash, tree_hashes  # noqa: E402
 from schema_validate import validate_document  # noqa: E402
+from worker_result import artifact_records, terminal_envelope  # noqa: E402
 
 SHA = "sha256:" + "1" * 64
 BINDING = {"job_id":"upstream", "attempt_id":"a1", "artifact_path":"result.json",
            "artifact_sha256":SHA, "accepted_pointer_sha256":"sha256:" + "2" * 64}
+NA_DISPOSITION = {"execution_status":"SKIPPED", "skip_reason":"not-applicable-no-verified-claims",
+                  "gaps":["not-applicable-no-verified-claims"]}
 
 
 class ControlFeatureLifecycleTests(unittest.TestCase):
@@ -81,19 +84,62 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
         report = {"status":"DRAFT_EVIDENCE_BACKED"}
         audit = {"complete":True, "subject_sha256":life._sha(report)}
         feedback = {"terminal_state":"COMPLETE", "audit_sha256":life._sha(audit)}
+        quorum = {"run_id":"run", "decisions":[{"candidate_id":"c1", "decision":"ADMITTED"}]}
+        rescope = {"run_id":"run", "state":"ITERATION_LIMIT",
+                   "affected_nodes":["final-publication-gate"]}
+        remediation = {"run_id":"run", "proposals":[], "retests":[]}
         inputs = {"run_id":"run", "job_id":"final-publication-preparation", "source_generation":SHA,
             "code":{}, "report":BINDING, "audit":BINDING, "feedback":BINDING,
+            "quorum":BINDING, "rescope":BINDING, "remediation_retest":BINDING,
+            "remediation_retest_disposition":NA_DISPOSITION,
             "report_sha256":life._sha(report), "publication_manifest_sha256":SHA,
             "draft_attempt":"/run/data/jobs/10-synthesis-report/attempts/a1"}
         rows = [(report,BINDING,Path("draft")), (audit,BINDING,Path("audit")),
-                (feedback,BINDING,Path("feedback"))]
+                (feedback,BINDING,Path("feedback")), (quorum,BINDING,Path("quorum")),
+                (rescope,BINDING,Path("rescope")), (remediation,BINDING,Path("remediation"))]
         with mock.patch.object(life, "_current", side_effect=rows):
             result, status, gaps, skip = life._produce("run", "final-publication-preparation", inputs)
         self.assertEqual(status, "OK_WITH_GAPS")
         self.assertEqual(gaps, ["human-signoff-required"])
         self.assertIsNone(skip)
         self.assertEqual(result["status"], "PENDING_HUMAN_APPROVAL")
+        self.assertEqual(result["completion_gate"]["draft_report_sha256"], inputs["report_sha256"])
+        self.assertEqual(result["control_evidence"]["quorum"]["admitted_count"], 1)
+        self.assertTrue(result["control_evidence"]["remediation_retest"]["skipped_not_applicable"])
         self.assertEqual(validate_document(result, "final-publication-preparation.schema.json"), [])
+
+    def test_final_preparation_rejects_real_control_blockers(self):
+        report = {"status":"DRAFT_EVIDENCE_BACKED"}
+        audit = {"complete":True, "subject_sha256":life._sha(report)}
+        feedback = {"terminal_state":"COMPLETE", "audit_sha256":life._sha(audit)}
+        quorum = {"run_id":"run", "decisions":[{
+            "candidate_id":"c1", "decision":"INSUFFICIENT_DIVERSITY"}]}
+        rescope = {"run_id":"run", "state":"ITERATION_LIMIT",
+                   "affected_nodes":["final-publication-gate"]}
+        remediation = {"run_id":"run", "proposals":[], "retests":[]}
+        inputs = {"run_id":"run", "job_id":"final-publication-preparation", "source_generation":SHA,
+            "code":{}, "report":BINDING, "audit":BINDING, "feedback":BINDING,
+            "quorum":BINDING, "rescope":BINDING, "remediation_retest":BINDING,
+            "remediation_retest_disposition":NA_DISPOSITION,
+            "report_sha256":life._sha(report), "publication_manifest_sha256":SHA,
+            "draft_attempt":"/run/data/jobs/10-synthesis-report/attempts/a1"}
+        rows = [(report,BINDING,Path("draft")), (audit,BINDING,Path("audit")),
+                (feedback,BINDING,Path("feedback")), (quorum,BINDING,Path("quorum")),
+                (rescope,BINDING,Path("rescope")), (remediation,BINDING,Path("remediation"))]
+        with mock.patch.object(life, "_current", side_effect=rows):
+            with self.assertRaisesRegex(Blocked, "quorum:c1:INSUFFICIENT_DIVERSITY"):
+                life._produce("run", "final-publication-preparation", inputs)
+
+    def test_remediation_gap_cannot_masquerade_as_non_applicable(self):
+        evidence, blockers = life._publication_controls("run",
+            {"run_id":"run", "decisions":[]}, BINDING,
+            {"run_id":"run", "state":"ITERATION_LIMIT",
+             "affected_nodes":["final-publication-gate"]}, BINDING,
+            {"run_id":"run", "proposals":[], "retests":[]}, BINDING,
+            {"execution_status":"OK_WITH_GAPS", "skip_reason":None,
+             "gaps":["verified-claims-have-no-retained-remediation-proposal"]})
+        self.assertFalse(evidence["remediation_retest"]["skipped_not_applicable"])
+        self.assertIn("remediation:empty-result-is-not-an-accepted-na-skip", blockers)
 
     def test_pending_preparation_publishes_a_real_common_envelope(self):
         inputs = {"run_id":"run", "job_id":"final-publication-preparation",
@@ -104,6 +150,12 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
         result = {"schema":"appsec-review/final-publication-preparation/1.0", "run_id":"run",
             "status":"PENDING_HUMAN_APPROVAL", "draft_report_sha256":SHA,
             "draft_publication_manifest_sha256":SHA, "completion_gate":gate,
+            "control_evidence":{"quorum":{"binding":BINDING,"decision_count":0,"admitted_count":0},
+                "rescope":{"binding":BINDING,"state":"ITERATION_LIMIT",
+                           "final_publication_affected":True},
+                "remediation_retest":{"binding":BINDING,"proposal_count":0,"retest_count":0,
+                                      "skipped_not_applicable":True,
+                                      "disposition":NA_DISPOSITION}},
             "draft_attempt":"/run/draft", "required_action":"A named human must approve the exact draft."}
         with tempfile.TemporaryDirectory() as folder, \
              mock.patch.object(life, "current_inputs", return_value=inputs), \
@@ -129,6 +181,35 @@ class ControlFeatureLifecycleTests(unittest.TestCase):
              mock.patch.object(life, "_accepted_base", return_value=Path("job")):
             with self.assertRaisesRegex(Blocked, "stale"):
                 life._current("run", "10-synthesis-report")
+
+    def test_evidence_supported_remediation_skip_is_a_current_control_input(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder); attempt = base / "attempts" / "skip-1"; attempt.mkdir(parents=True)
+            result = {"schema":"appsec-review/remediation-retest-feedback/1.0",
+                      "run_id":"run", "proposals":[], "retests":[]}
+            atomic_json(attempt / "remediation-retest.json", result)
+            atomic_json(attempt / "status.json", {"status":"SKIPPED"})
+            envelope = terminal_envelope(run_id="run", job_id="remediation-retest-feedback",
+                attempt_id="skip-1", worker_kind="deterministic_python", execution_status="SKIPPED",
+                acceptance_status="CURRENT", input_fingerprint=SHA,
+                output_contract="remediation-retest-feedback", started_at="2026-09-27T00:00:00Z",
+                finished_at="2026-09-27T00:00:01Z", summary="No verified claims.",
+                artifacts=artifact_records(attempt, ["remediation-retest.json", "status.json"]),
+                gaps=["not-applicable-no-verified-claims"],
+                skip_reason="not-applicable-no-verified-claims")
+            atomic_json(attempt / "result.json", envelope)
+            pointer = {"schema":"appsec-review/accepted-worker-result/1.0", "status":"SKIPPED",
+                "run_id":"run", "job":"remediation-retest-feedback", "attempt_id":"skip-1",
+                "fingerprint":SHA, "envelope_path":"result.json",
+                "envelope_sha256":file_hash(attempt / "result.json"), "hashes":tree_hashes(attempt),
+                "accepted_at":"2026-09-27T00:00:02Z", "reason":"not-applicable-no-verified-claims"}
+            atomic_json(base / "accepted.json", pointer)
+            atomic_json(base / "latest.json", {"attempt_id":"skip-1"})
+            with mock.patch.object(life, "_accepted_base", return_value=base):
+                value, binding, retained = life._current("run", "remediation-retest-feedback")
+            self.assertEqual(value, result)
+            self.assertEqual(binding["attempt_id"], "skip-1")
+            self.assertEqual(retained, attempt)
 
 
 if __name__ == "__main__":

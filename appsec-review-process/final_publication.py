@@ -16,7 +16,7 @@ import shutil
 import tempfile
 from typing import Any
 
-from execution_state import Blocked, atomic_json, digest, file_hash, read_json
+from execution_state import Blocked, atomic_json, digest, file_hash, read_json, run_path
 from schema_validate import validate_document
 import synthesis_sarif
 
@@ -151,7 +151,7 @@ def _publish_documents(draft_attempt: Path, signoff_ledger: dict[str, Any], fina
             authorization_key: bytes, expected_ledger_anchor: str,
             expected_ledger_head: str,
             completeness_audit: dict[str, Any], terminal_feedback: dict[str, Any],
-            completion_bindings: dict[str, Any]) -> dict[str, Any]:
+            completion_bindings: dict[str, Any], publication_preparation: dict[str, Any]) -> dict[str, Any]:
     draft_attempt, final_root = Path(draft_attempt), Path(final_root)
     if final_root.exists():
         raise Blocked("final publication: immutable final package already exists")
@@ -164,7 +164,8 @@ def _publish_documents(draft_attempt: Path, signoff_ledger: dict[str, Any], fina
         raise Blocked("final publication: source package is not a non-final evidence-backed draft")
     audit_errors=validate_document(completeness_audit,"completeness-audit.schema.json")
     feedback_errors=validate_document(terminal_feedback,"synthetic-hypothesis-resynthesis.schema.json")
-    if audit_errors or feedback_errors:
+    preparation_errors=validate_document(publication_preparation,"final-publication-preparation.schema.json")
+    if audit_errors or feedback_errors or preparation_errors:
         raise Blocked("final publication: completion evidence schema is invalid")
     if (completeness_audit.get("run_id")!=publication.get("run_id") or
             terminal_feedback.get("run_id")!=publication.get("run_id") or
@@ -192,6 +193,11 @@ def _publish_documents(draft_attempt: Path, signoff_ledger: dict[str, Any], fina
         raise Blocked("final publication: draft report.json is absent")
     if completeness_audit.get("subject_sha256") != report_record[2]:
         raise Blocked("final publication: completeness audit is not bound to the exact report")
+    if (publication_preparation.get("draft_report_sha256") != report_record[2] or
+            publication_preparation.get("draft_publication_manifest_sha256") !=
+            "sha256:" + file_hash(publication_path) or
+            publication_preparation.get("completion_gate", {}).get("blockers") != ["human_signoff_missing"]):
+        raise Blocked("final publication: preparation is not bound to the exact publishable draft")
     signoff = validate_signoff(signoff_ledger, run_id=publication["run_id"],
                                report_sha256=report_record[2], authorization_key=authorization_key,
                                expected_anchor=expected_ledger_anchor,
@@ -210,6 +216,7 @@ def _publish_documents(draft_attempt: Path, signoff_ledger: dict[str, Any], fina
                          "sha256:" + file_hash(staging / "human-signoff-ledger.json")))
         for name,value in (("completion/completeness-audit.json",completeness_audit),
                            ("completion/synthetic-hypothesis-resynthesis.json",terminal_feedback),
+                           ("completion/publication-preparation.json",publication_preparation),
                            ("completion/accepted-bindings.json",completion_bindings)):
             atomic_json(staging/name,value)
             verified.append((name,staging/name,"sha256:"+file_hash(staging/name)))
@@ -262,10 +269,31 @@ def publish(draft_attempt: Path, signoff_ledger: dict[str, Any], final_root: Pat
     import synthesis_report
     audit,audit_binding=synthesis_report.load_reference(Path(run_root),run_id,completeness_ref)
     feedback,feedback_binding=synthesis_report.load_reference(Path(run_root),run_id,feedback_ref)
+    preparation=_current_preparation(Path(run_root),run_id,Path(draft_attempt))
     return _publish_documents(draft_attempt,signoff_ledger,final_root,
         authorization_key=authorization_key,expected_ledger_anchor=expected_ledger_anchor,
         expected_ledger_head=expected_ledger_head,completeness_audit=audit,
-        terminal_feedback=feedback,completion_bindings={"audit":audit_binding,"feedback":feedback_binding})
+        terminal_feedback=feedback,publication_preparation=preparation,
+        completion_bindings={"audit":audit_binding,"feedback":feedback_binding})
+
+
+def _current_preparation(run_root: Path, run_id: str, draft_attempt: Path) -> dict[str, Any]:
+    """Re-derive the publication preparation so human approval cannot bypass newer blockers."""
+    import control_feature_lifecycle
+    if Path(run_root).absolute()!=run_path(run_id).absolute():
+        raise Blocked("final publication: run root is not the canonical engagement root")
+    inputs=control_feature_lifecycle.current_inputs(run_id,"final-publication-preparation")
+    try:
+        if Path(inputs["draft_attempt"]).resolve(strict=True)!=Path(draft_attempt).resolve(strict=True):
+            raise Blocked("final publication: preparation names a different draft attempt")
+    except OSError as exc:
+        raise Blocked("final publication: preparation draft attempt is unavailable") from exc
+    result,status,gaps,skip=control_feature_lifecycle._produce(
+        run_id,"final-publication-preparation",inputs)
+    if (status!="OK_WITH_GAPS" or gaps!=["human-signoff-required"] or skip is not None or
+            validate_document(result,"final-publication-preparation.schema.json")):
+        raise Blocked("final publication: current preparation is not approval-ready")
+    return result
 
 
 if __name__ == "__main__":

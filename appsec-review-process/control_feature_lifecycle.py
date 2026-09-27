@@ -6,7 +6,7 @@ preparation receipt and never manufactures a signoff.
 """
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import bounded_analysis_workers as bounded
@@ -15,7 +15,8 @@ import control_lane_orchestration
 import deterministic_pool_merge
 import dynamic_rescope
 import evidence_quorum
-from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json, run_path
+from execution_state import (Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json,
+                             identifier, run_path, tree_hashes)
 import pool_rendezvous
 import persona_tool_pool_lifecycle
 import remediation_retest
@@ -23,6 +24,7 @@ from publish_job_output import coordinate_worker_lifecycle, record_terminal_curr
 from review_control_loops import completion_gate
 from schema_validate import validate_document
 import synthetic_hypothesis_resynthesis
+from worker_result import validate_worker_result
 
 HASH = "sha256:"
 JOBS = {
@@ -43,6 +45,9 @@ UPSTREAM = {
     "09-independent-verification": ("09-independent-verification", "independent-verification.json", "09-independent-verification.schema.json"),
     "11-remediation-proposal": ("11-remediation-proposal", "remediation-proposal.json", "remediation-proposal.schema.json"),
     "00-intake": ("intake", "outputs/intake.json", "intake.schema.json"),
+    "evidence-qualified-quorum": JOBS["evidence-qualified-quorum"],
+    "dynamic-rescope": JOBS["dynamic-rescope"],
+    "remediation-retest-feedback": JOBS["remediation-retest-feedback"],
 }
 
 
@@ -68,9 +73,69 @@ def _accepted_base(run_id: str, job_id: str) -> Path:
 def _current(run_id: str, job_id: str) -> tuple[dict[str, Any], dict[str, Any], Path]:
     contract, artifact, schema = UPSTREAM[job_id]
     base = _accepted_base(run_id, job_id)
+    pointer_path = base / "accepted.json"
+    pointer = read_json(pointer_path) if pointer_path.is_file() else {}
+    if pointer.get("status") == "SKIPPED":
+        return _skipped_current(base, pointer, run_id=run_id, job_id=job_id,
+            contract=contract, artifact=artifact, schema=schema)
     value, binding = bounded.load_accepted(base / "accepted.json", run_id=run_id, job_id=job_id,
         contract=contract, artifact=artifact, schema=schema)
     return value, binding, base / "attempts" / binding["attempt_id"]
+
+
+def _skipped_current(base: Path, pointer: dict[str, Any], *, run_id: str, job_id: str,
+                     contract: str, artifact: str, schema: str) -> tuple[dict[str, Any], dict[str, Any], Path]:
+    """Admit the one graph-authorized evidence-supported skip without weakening normal inputs."""
+    if job_id != "remediation-retest-feedback":
+        raise Blocked(f"{job_id}: an accepted skip is not an allowed publication input")
+    expected = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint",
+                "envelope_path", "envelope_sha256", "hashes", "accepted_at", "reason"}
+    if (not isinstance(pointer, dict) or set(pointer) != expected or
+            pointer.get("schema") != "appsec-review/accepted-worker-result/1.0" or
+            pointer.get("run_id") != run_id or pointer.get("job") != job_id or
+            pointer.get("envelope_path") != "result.json" or
+            pointer.get("reason") != "not-applicable-no-verified-claims"):
+        raise Blocked(f"{job_id}: accepted skip identity is invalid")
+    latest = read_json(base / "latest.json")
+    try:
+        attempt_id = identifier(pointer["attempt_id"])
+    except ValueError as exc:
+        raise Blocked(f"{job_id}: accepted skip attempt identity is invalid") from exc
+    attempt = base / "attempts" / attempt_id
+    if (latest.get("attempt_id") != pointer["attempt_id"] or attempt.is_symlink() or
+            not attempt.is_dir() or tree_hashes(attempt) != pointer["hashes"]):
+        raise Blocked(f"{job_id}: accepted skip attempt is stale or changed")
+    envelope_path = attempt / "result.json"; envelope = read_json(envelope_path)
+    if (file_hash(envelope_path) != pointer["envelope_sha256"] or validate_worker_result(envelope) or
+            envelope.get("run_id") != run_id or envelope.get("job_id") != job_id or
+            envelope.get("attempt_id") != pointer["attempt_id"] or
+            envelope.get("input_fingerprint") != pointer["fingerprint"] or
+            envelope.get("execution_status") != "SKIPPED" or
+            envelope.get("acceptance_status") != "CURRENT" or
+            envelope.get("output_contract") != contract or
+            envelope.get("skip_reason") != pointer["reason"]):
+        raise Blocked(f"{job_id}: accepted skip envelope is invalid")
+    artifacts = {row.get("path"): row for row in envelope.get("artifacts", [])}
+    if len(artifacts) != len(envelope.get("artifacts", [])) or artifact not in artifacts:
+        raise Blocked(f"{job_id}: accepted skip artifact is absent or duplicated")
+    for relative, row in artifacts.items():
+        rel = PurePosixPath(relative)
+        if rel.is_absolute() or any(part in {"", ".", ".."} for part in rel.parts):
+            raise Blocked(f"{job_id}: accepted skip artifact path is unsafe")
+        path = attempt.joinpath(*rel.parts)
+        try:
+            path.resolve(strict=True).relative_to(attempt.resolve(strict=True))
+        except (OSError, ValueError) as exc:
+            raise Blocked(f"{job_id}: accepted skip artifact escapes its attempt") from exc
+        if path.is_symlink() or not path.is_file() or file_hash(path) != row.get("sha256"):
+            raise Blocked(f"{job_id}: accepted skip artifact hash is invalid")
+    value = read_json(attempt / artifact)
+    if validate_document(value, schema):
+        raise Blocked(f"{job_id}: accepted skip artifact schema is invalid")
+    binding = {"job_id":job_id, "attempt_id":pointer["attempt_id"], "artifact_path":artifact,
+        "artifact_sha256":HASH + file_hash(attempt / artifact),
+        "accepted_pointer_sha256":HASH + file_hash(base / "accepted.json")}
+    return value, binding, attempt
 
 
 def _optional_current(run_id: str, job_id: str) -> tuple[dict[str, Any], dict[str, Any], Path] | None:
@@ -80,12 +145,23 @@ def _optional_current(run_id: str, job_id: str) -> tuple[dict[str, Any], dict[st
     return _current(run_id, job_id)
 
 
+def _disposition(run_id: str, job_id: str) -> dict[str, Any]:
+    base = _accepted_base(run_id, job_id); pointer = read_json(base / "accepted.json")
+    attempt = base / "attempts" / pointer["attempt_id"]
+    envelope = read_json(attempt / "result.json")
+    return {"execution_status":pointer["status"], "skip_reason":pointer.get("reason"),
+            "gaps":envelope["gaps"]}
+
+
 def _code(job_id: str) -> dict[str, str]:
     contract, _artifact, schema = JOBS[job_id]
     paths = ["control_feature_lifecycle.py", "review_control_loops.py", "publish_job_output.py",
              f"registry/output-contracts/{contract}.json"]
     values = {path: file_hash(ROOT / path) for path in paths}
     values[f"schemas/{schema}"] = file_hash(ROOT.parent / "schemas" / schema)
+    if job_id == "final-publication-preparation":
+        values["schemas/control-publication-binding.schema.json"] = file_hash(
+            ROOT.parent / "schemas" / "control-publication-binding.schema.json")
     return values
 
 
@@ -145,6 +221,53 @@ def _completeness_inputs(report: dict[str, Any], report_sha256: str | None = Non
     return expected, observed, gaps
 
 
+def _publication_controls(run_id: str, quorum: dict[str, Any], quorum_binding: dict[str, Any],
+                          rescope: dict[str, Any], rescope_binding: dict[str, Any],
+                          remediation: dict[str, Any], remediation_binding: dict[str, Any],
+                          remediation_disposition: dict[str, Any]
+                          ) -> tuple[dict[str, Any], list[str]]:
+    """Project exact control evidence and identify states that cannot truthfully be published."""
+    if any(value.get("run_id") != run_id for value in (quorum, rescope, remediation)):
+        raise Blocked("final publication preparation: control evidence has mixed run identity")
+    decisions = quorum.get("decisions", [])
+    adverse = sorted(row["candidate_id"] + ":" + row["decision"] for row in decisions
+                     if row["decision"] != "ADMITTED")
+    blockers = ["quorum:" + value for value in adverse]
+    affected = rescope.get("affected_nodes", [])
+    final_affected = "final-publication-gate" in affected
+    if rescope.get("state") == "RESCOPE_REQUIRED":
+        blockers.append("rescope:additional-iteration-required")
+    if not final_affected:
+        blockers.append("rescope:final-publication-not-covered")
+    proposals = {row["proposal_id"]: row for row in remediation.get("proposals", [])}
+    retests = remediation.get("retests", [])
+    skipped_na = remediation_disposition == {"execution_status":"SKIPPED",
+        "skip_reason":"not-applicable-no-verified-claims",
+        "gaps":["not-applicable-no-verified-claims"]}
+    if not proposals and not retests and not skipped_na:
+        blockers.append("remediation:empty-result-is-not-an-accepted-na-skip")
+    by_proposal: dict[str, list[dict[str, Any]]] = {}
+    for row in retests:
+        by_proposal.setdefault(row["proposal_id"], []).append(row)
+        proposal = proposals.get(row["proposal_id"])
+        if proposal is None or proposal["claim_id"] != row["claim_id"]:
+            blockers.append("remediation:orphan-retest:" + row["proposal_id"])
+    for proposal_id, proposal in sorted(proposals.items()):
+        matches = by_proposal.get(proposal_id, [])
+        if proposal["state"] == "AUTHORIZED" and len(matches) != 1:
+            blockers.append("remediation:authorized-without-one-retest:" + proposal_id)
+        if any(row["state"] != "FIXED" for row in matches):
+            blockers.append("remediation:retest-not-fixed:" + proposal_id)
+    evidence = {"quorum": {"binding": quorum_binding, "decision_count": len(decisions),
+            "admitted_count": sum(row["decision"] == "ADMITTED" for row in decisions)},
+        "rescope": {"binding": rescope_binding, "state": rescope["state"],
+            "final_publication_affected": final_affected},
+        "remediation_retest": {"binding": remediation_binding,
+            "proposal_count": len(proposals), "retest_count": len(retests),
+            "skipped_not_applicable": skipped_na, "disposition":remediation_disposition}}
+    return evidence, sorted(set(blockers))
+
+
 def current_inputs(run_id: str, job_id: str) -> dict[str, Any]:
     if job_id not in JOBS:
         raise Blocked("control lifecycle: unsupported job")
@@ -200,6 +323,7 @@ def current_inputs(run_id: str, job_id: str) -> dict[str, Any]:
     return {**base, "report": report_binding, "audit": audit_binding, "feedback": feedback_binding,
             "quorum": quorum_binding, "rescope": rescope_binding,
             "remediation_retest": remediation_binding,
+            "remediation_retest_disposition": _disposition(run_id, "remediation-retest-feedback"),
             "report_sha256": report_binding["artifact_sha256"], "publication_manifest_sha256": HASH + file_hash(publication),
             "draft_attempt": str(report_attempt)}
 
@@ -254,15 +378,29 @@ def _produce(run_id: str, job_id: str, inputs: dict[str, Any]) -> tuple[dict[str
     report, _report_binding, _report_attempt = _current(run_id, "10-synthesis-report")
     audit, _audit_binding, _ = _current(run_id, "completeness-audit")
     feedback, _feedback_binding, _ = _current(run_id, "synthetic-hypothesis-resynthesis")
+    quorum, quorum_binding, _ = _current(run_id, "evidence-qualified-quorum")
+    rescope, rescope_binding, _ = _current(run_id, "dynamic-rescope")
+    remediation, remediation_binding, _ = _current(run_id, "remediation-retest-feedback")
     if (audit.get("subject_sha256") != inputs["report_sha256"] or feedback.get("audit_sha256") != _sha(audit)):
         raise Blocked("final publication preparation: accepted completion evidence has mixed lineage")
-    gate = completion_gate(run_id, report, audit, feedback, None)
+    controls, control_blockers = _publication_controls(run_id, quorum, quorum_binding,
+        rescope, rescope_binding, remediation, remediation_binding,
+        inputs["remediation_retest_disposition"])
+    if any(inputs[name] != binding for name, binding in
+           (("quorum",quorum_binding), ("rescope",rescope_binding),
+            ("remediation_retest",remediation_binding))):
+        raise Blocked("final publication preparation: accepted control bindings changed")
+    if control_blockers:
+        raise Blocked("final publication preparation: control evidence has unresolved blockers (" +
+                      ", ".join(control_blockers) + ")")
+    gate = completion_gate(run_id, report, audit, feedback, None,
+                           draft_report_sha256=inputs["report_sha256"])
     if gate["blockers"] != ["human_signoff_missing"]:
         raise Blocked("final publication preparation: completion evidence has unresolved blockers")
     result = {"schema":"appsec-review/final-publication-preparation/1.0", "run_id":run_id,
         "status":"PENDING_HUMAN_APPROVAL", "draft_report_sha256":inputs["report_sha256"],
         "draft_publication_manifest_sha256":inputs["publication_manifest_sha256"],
-        "completion_gate":gate, "draft_attempt":inputs["draft_attempt"],
+        "completion_gate":gate, "control_evidence":controls, "draft_attempt":inputs["draft_attempt"],
         "required_action":"A named human reviewer must approve the exact draft report hash using the authorized append-only signoff workflow."}
     return result, "OK_WITH_GAPS", ["human-signoff-required"], None
 
