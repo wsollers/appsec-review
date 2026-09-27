@@ -2,7 +2,7 @@
   "schema": "appsec-review/output-contract/0.1",
   "contract_id": "binary-intelligence",
   "display_name": "Binary Intelligence",
-  "required_files": ["binary-intelligence.json", "status.json", "permission.json", "lineage.json"],
+  "required_files": ["binary-intelligence.json", "status.json", "permission.json", "lineage.json", "applicability-receipt.json"],
   "required_status_fields": [
     "process",
     "status",

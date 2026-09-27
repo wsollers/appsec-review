@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "analysis-applicability-receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "job_id", "decision", "reason", "rationale", "source_generation", "evidence"],
+  "properties": {
+    "schema": {"const": "appsec-review/analysis-applicability-receipt/1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "job_id": {"type": "string", "minLength": 1},
+    "decision": {"enum": ["APPLICABLE", "SKIPPED_NA"]},
+    "reason": {"type": ["string", "null"]},
+    "rationale": {"type": "string", "minLength": 1},
+    "source_generation": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producer_job_id", "producer_attempt_id", "artifact_sha256", "accepted_pointer_sha256"],
+      "properties": {
+        "producer_job_id": {"type": "string", "minLength": 1},
+        "producer_attempt_id": {"type": "string", "minLength": 1},
+        "artifact_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "accepted_pointer_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"decision": {"const": "APPLICABLE"}}}, "then": {"properties": {"reason": {"type": "null"}}}},
+    {"if": {"properties": {"decision": {"const": "SKIPPED_NA"}}}, "then": {"properties": {"reason": {"type": "string", "minLength": 1}}}}
+  ]
+}

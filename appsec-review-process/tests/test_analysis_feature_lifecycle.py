@@ -33,11 +33,16 @@ class LifecycleTests(unittest.TestCase):
             base=Path(folder)
             native={"run_id":"run","job_id":"05-native-memory","source_generation":SHA,
                 "assembly":BIND,"mode":"EXECUTE","reason":None,"bindings":[BIND],
+                "applicability":{"source_status":"REQUESTED","source_reason":"accepted native unit",
+                                 "source_sha256":SHA},
                 "payload":[{"unit_id":"u","language":"cpp","path":"x.cpp","source_sha256":SHA,
                     "signals":[],"coverage":["static"],"citations":[{"citation_id":"c","artifact_path":"x.cpp",
                     "artifact_sha256":SHA,"locator":"x.cpp:1","observed_fact":"native source"}]}],"code":{}}
             fuzz={"run_id":"run","job_id":"13-fuzz-target-triage","source_generation":SHA,
                 "assembly":BIND,"mode":"SKIPPED_NA","reason":life.SKIPS["13-fuzz-target-triage"],
+                "applicability":{"source_status":"SKIPPED_NA",
+                                 "source_reason":"component map routes no fuzz target",
+                                 "source_sha256":SHA},
                 "bindings":[BIND],"payload":[],"code":{}}
             records={"05-native-memory":native,"13-fuzz-target-triage":fuzz}
             with mock.patch.object(life,"current_inputs",side_effect=lambda _run,job:records[job]), \
@@ -50,8 +55,9 @@ class LifecycleTests(unittest.TestCase):
 
     def test_cve_constructs_empty_run_owned_assessments_without_hand_input(self):
         with tempfile.TemporaryDirectory() as folder:
-            base=Path(folder); inputs={"run_id":"run","job_id":"06-cve-reachability",
-                "source_generation":SHA,"sca":{"attempt_id":"s1","path":"x","sha256":SHA,"accepted_path":"p"},
+            base=Path(folder); pointer=base/"sca-accepted.json"; pointer.write_text("{}\n")
+            inputs={"run_id":"run","job_id":"06-cve-reachability",
+                "source_generation":SHA,"sca":{"attempt_id":"s1","path":"x","sha256":SHA,"accepted_path":str(pointer)},
                 "sca_matches_sha256":SHA,"source_binding":{},"ir":None,
                 "generated_at":"2026-09-27T00:00:00Z","code":{}}
             result={"schema":"appsec-review/cve-reachability/1.0","run_id":"run","job_id":"06-cve-reachability",
@@ -70,6 +76,18 @@ class LifecycleTests(unittest.TestCase):
                  mock.patch.object(life,"record_terminal_current",side_effect=self.fake_record), \
                  mock.patch.object(life.dependency_workers,"build_reachability",side_effect=build):
                 self.assertEqual(life.run("run","dag","06-cve-reachability")["status"],"OK")
+
+    def test_skip_receipt_retains_canonical_reason_and_assembly_evidence(self):
+        inputs={"run_id":"run","job_id":"13-fuzz-target-triage","source_generation":SHA,
+            "assembly":BIND,"mode":"SKIPPED_NA","reason":life.SKIPS["13-fuzz-target-triage"],
+            "applicability":{"source_status":"SKIPPED_NA",
+                "source_reason":"component map routes no component to fuzz-target triage",
+                "source_sha256":SHA},"bindings":[BIND],"payload":[],"code":{}}
+        receipt=life._applicability("run","13-fuzz-target-triage",inputs)
+        self.assertEqual(receipt["decision"],"SKIPPED_NA")
+        self.assertEqual(receipt["reason"],"not-applicable-no-fuzz-target")
+        self.assertEqual(receipt["evidence"]["artifact_sha256"],BIND["artifact_sha256"])
+        self.assertEqual(life.validate_document(receipt,"analysis-applicability-receipt.schema.json"),[])
 
     def test_stale_assembly_request_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

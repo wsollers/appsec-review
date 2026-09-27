@@ -30,7 +30,8 @@
       "binary-intelligence.json",
       "status.json",
       "permission.json",
-      "lineage.json"
+      "lineage.json",
+      "applicability-receipt.json"
     ]
   },
   "prompt_sections": [

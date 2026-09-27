@@ -26,6 +26,7 @@ SKIPS = {"05-native-memory": "not-applicable-no-routed-native-unit",
 CONSUMER = {"05-native-memory": "07-red-team-adversarial",
             "06-cve-reachability": "07-red-team-adversarial",
             "13-fuzz-target-triage": "07-red-team-adversarial"}
+APPLICABILITY = "applicability-receipt.json"
 
 
 def _sha(value: Any) -> str: return "sha256:" + digest(value)
@@ -39,6 +40,8 @@ def _code(job: str) -> dict[str, str]:
              f"registry/job-templates/{job}.json", f"registry/output-contracts/{JOBS[job][0]}.json"]
     values = {path: file_hash(ROOT / path) for path in paths}
     values["schemas/" + JOBS[job][2]] = file_hash(ROOT.parent / "schemas" / JOBS[job][2])
+    values["schemas/analysis-applicability-receipt.schema.json"] = file_hash(
+        ROOT.parent / "schemas/analysis-applicability-receipt.schema.json")
     return values
 
 
@@ -60,8 +63,13 @@ def _bounded_inputs(run_id: str, job: str) -> dict[str, Any]:
     if len(requests) + len(skipped) != 1:
         raise Blocked(f"{job}: accepted assembly must account for the feature exactly once")
     if skipped:
+        source = skipped[0]
+        if source.get("status") != "SKIPPED_NA" or not isinstance(source.get("reason"), str) or not source["reason"]:
+            raise Blocked(f"{job}: assembly skip decision is not evidence-supported")
         return {"run_id": run_id, "job_id": job, "source_generation": assembly["source_generation"],
             "assembly": assembly_binding, "mode": "SKIPPED_NA", "reason": SKIPS[job],
+            "applicability": {"source_status": source["status"], "source_reason": source["reason"],
+                              "source_sha256": _sha(source)},
             "bindings": [assembly_binding], "payload": [], "code": _code(job)}
     row = requests[0]; request_path = attempt.joinpath(*PurePosixPath(row["path"]).parts)
     if (not request_path.is_file() or request_path.is_symlink() or
@@ -81,7 +89,30 @@ def _bounded_inputs(run_id: str, job: str) -> dict[str, Any]:
         bindings.append(binding)
     return {"run_id": run_id, "job_id": job, "source_generation": assembly["source_generation"],
         "assembly": assembly_binding, "mode": "EXECUTE", "reason": None,
+        "applicability": {"source_status": "REQUESTED",
+                          "source_reason": f"accepted assembly routed {len(request['payload'][payload_name])} item(s)",
+                          "source_sha256": row["sha256"]},
         "bindings": bindings, "payload": request["payload"][payload_name], "code": _code(job)}
+
+
+def _applicability(run_id: str, job: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    if job == "06-cve-reachability":
+        binding = inputs["sca"]
+        evidence = {"producer_job_id":"02-sca-vulnerability-match",
+            "producer_attempt_id":binding["attempt_id"], "artifact_sha256":binding["sha256"],
+            "accepted_pointer_sha256":"sha256:" + file_hash(Path(binding["accepted_path"]))}
+        return {"schema":"appsec-review/analysis-applicability-receipt/1.0", "run_id":run_id,
+            "job_id":job, "decision":"APPLICABLE", "reason":None,
+            "rationale":"Accepted SCA evidence is present; an empty match set remains an executed analysis result.",
+            "source_generation":inputs["source_generation"], "evidence":evidence}
+    binding = inputs["assembly"]
+    decision = "SKIPPED_NA" if inputs["mode"] == "SKIPPED_NA" else "APPLICABLE"
+    return {"schema":"appsec-review/analysis-applicability-receipt/1.0", "run_id":run_id,
+        "job_id":job, "decision":decision, "reason":inputs["reason"] if decision == "SKIPPED_NA" else None,
+        "rationale":inputs["applicability"]["source_reason"], "source_generation":inputs["source_generation"],
+        "evidence":{"producer_job_id":ASSEMBLY[0], "producer_attempt_id":binding["attempt_id"],
+            "artifact_sha256":binding["artifact_sha256"],
+            "accepted_pointer_sha256":binding["accepted_pointer_sha256"]}}
 
 
 def _sca(run_id: str) -> tuple[dict[str, Any], dict[str, str], str]:
@@ -153,6 +184,10 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
                 raise Blocked(f"{job}: retained result differs from automatic accepted inputs")
     if (read_json(attempt/"permission-receipt.json"),read_json(attempt/"lineage-receipt.json"))!=_receipts(run_id,job,inputs):
         raise Blocked(f"{job}: permission or lineage receipt changed")
+    receipt = read_json(attempt / APPLICABILITY)
+    if receipt != _applicability(run_id, job, inputs) or validate_document(
+            receipt, "analysis-applicability-receipt.schema.json"):
+        raise Blocked(f"{job}: applicability receipt changed")
 
 
 def run(run_id: str, dagster_run_id: str, job_id: str, force: bool=False) -> dict[str, Any]:
@@ -180,13 +215,14 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool=False) -> dic
                 result["status"]="SKIPPED"; result["gaps"]=[SKIPS[job_id]]
             atomic_json(attempt/result_name,result)
         permission,lineage=_receipts(run_id,job_id,inputs); atomic_json(attempt/"permission-receipt.json",permission); atomic_json(attempt/"lineage-receipt.json",lineage)
+        atomic_json(attempt/APPLICABILITY, _applicability(run_id,job_id,inputs))
         status=result.get("status") or ("OK_WITH_GAPS" if result.get("coverage_gaps") else "OK")
         record_count=len(result.get("candidates",result.get("targets",result.get("assessments",[]))))
         status_doc={"process":job_id,"status":status,"records":record_count,"qualification":"implemented_not_qualified",
             "execution_status":status,"acceptance_status":"CURRENT","run_id":run_id,"job_id":job_id,
             "attempt_id":allocation["attempt_id"]}
         atomic_json(attempt/"status.json",status_doc)
-        paths=[result_name,"permission-receipt.json","lineage-receipt.json","status.json"]
+        paths=[result_name,"permission-receipt.json","lineage-receipt.json","status.json",APPLICABILITY]
         if job_id=="06-cve-reachability": paths += ["outputs/reachability-evidence-identity.json","automatic-reachability-evidence.json"]
         if job_id=="06-cve-reachability": paths += ["inputs.json"]
         skip=SKIPS.get(job_id) if status=="SKIPPED" else None

@@ -115,6 +115,7 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
 
     def test_stale_native_build_binding_and_m02_claim_are_rejected(self):
         value = raw("02-binary-triage", self.fixture["triage"])
+        value["job_id"] = "02-binary-intelligence-ingest"
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder, "raw.json"); atomic_json(path, value)
             stale = copy.deepcopy(NATIVE); stale["result_sha256"] = "sha256:" + "9" * 64
@@ -122,7 +123,8 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
                  mock.patch.object(core, "_native", return_value=(Path(folder), stale)), \
                  mock.patch.object(core, "_upstream", return_value={}), \
                  mock.patch.object(core, "_code_hashes", return_value={}):
-                with self.assertRaises(Blocked): core.current_inputs("run-binary", "02-binary-triage")
+                with self.assertRaises(Blocked):
+                    core.current_inputs("run-binary", "02-binary-intelligence-ingest")
         claimed = copy.deepcopy(value)
         claimed["image"] = {"image_id": "audit-binary-analysis", "image_digest": None,
                             "status": "M02_UNRESOLVED"}
@@ -194,6 +196,11 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
         self.assertEqual(result["status"], "SKIPPED")
         self.assertEqual(result["records"], [])
         self.assertEqual(validate_document(result, "binary-triage.schema.json"), [])
+        receipt = core._applicability("run-binary", "02-binary-triage", inp)
+        self.assertEqual(receipt["decision"], "SKIPPED_NA")
+        self.assertEqual(receipt["reason"], "not-applicable-no-native-binaries")
+        self.assertEqual(receipt["evidence"]["artifact_sha256"], NATIVE["result_sha256"])
+        self.assertEqual(validate_document(receipt, "analysis-applicability-receipt.schema.json"), [])
 
     def test_missing_accepted_native_build_blocks_before_container_execution(self):
         with tempfile.TemporaryDirectory() as folder, mock.patch.object(core, "root", return_value=Path(folder)):

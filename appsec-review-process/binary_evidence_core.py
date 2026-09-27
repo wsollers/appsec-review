@@ -31,6 +31,7 @@ PRIMARY_CONSUMER = {
 RAW_SCHEMA = "appsec-review/binary-static-evidence-input/1"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
+APPLICABILITY = "applicability-receipt.json"
 
 
 def root(run_id: str, job: str) -> Path:
@@ -144,6 +145,8 @@ def _code_hashes(job: str) -> dict[str, str]:
                  "binary-evidence-image.schema.json", "binary-evidence-tool.schema.json",
                  "binary-evidence-upstream.schema.json"):
         values["schemas/" + name] = file_hash(ROOT.parent / "schemas" / name)
+    values["schemas/analysis-applicability-receipt.schema.json"] = file_hash(
+        ROOT.parent / "schemas/analysis-applicability-receipt.schema.json")
     if job in adapter.SUPPORTED:
         values["binary_evidence_adapter.py"] = file_hash(ROOT / "binary_evidence_adapter.py")
         for name in ("binary-static-evidence-input.schema.json",
@@ -201,6 +204,19 @@ def _binary_map(inputs: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if len(values) != len(inputs["native_build"]["binaries"]):
         raise Blocked("binary evidence: accepted native build repeats a binary identity")
     return values
+
+
+def _applicability(run_id: str, job: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    native = inputs["native_build"]
+    skipped = not native["binaries"]
+    return {"schema":"appsec-review/analysis-applicability-receipt/1.0", "run_id":run_id,
+        "job_id":job, "decision":"SKIPPED_NA" if skipped else "APPLICABLE",
+        "reason":"not-applicable-no-native-binaries" if skipped else None,
+        "rationale":("The exact accepted native build contains zero binary artifacts."
+                     if skipped else f"The exact accepted native build contains {len(native['binaries'])} binary artifact(s)."),
+        "source_generation":native["source_snapshot_sha256"],
+        "evidence":{"producer_job_id":native["job_id"], "producer_attempt_id":native["attempt_id"],
+            "artifact_sha256":native["result_sha256"], "accepted_pointer_sha256":native["pointer_sha256"]}}
 
 
 def normalize(job: str, inputs: dict[str, Any], attempt_id: str) -> dict[str, Any]:
@@ -385,6 +401,10 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
         "build_lineage_sha256": _hash(native_lineage)}
     if read_json(attempt / "permission.json") != permission or read_json(attempt / "lineage.json") != lineage:
         raise Blocked(f"{job}: evidence-assembly receipts changed")
+    applicability = read_json(attempt / APPLICABILITY)
+    if (applicability != _applicability(run_id, job, inputs) or
+            validate_document(applicability, "analysis-applicability-receipt.schema.json")):
+        raise Blocked(f"{job}: applicability receipt changed")
 
 
 def run(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> dict[str, Any]:
@@ -413,12 +433,13 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> d
         atomic_json(attempt / "lineage.json", {"schema": LINEAGE_SCHEMA, "run_id": run_id,
             "job_id": job, "source_snapshot_sha256": inputs["native_build"]["source_snapshot_sha256"],
             "build_lineage_sha256": _hash(native_lineage)})
+        atomic_json(attempt / APPLICABILITY, _applicability(run_id, job, inputs))
         status = {"process": job, "status": result["status"], "run_id": run_id,
                   "dagster_run_id": dagster_run_id, "attempt_id": allocation["attempt_id"],
                   "records": len(result["records"]), "static_only": True,
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
-        artifact_paths = [result_name, "status.json", "permission.json", "lineage.json"]
+        artifact_paths = [result_name, "status.json", "permission.json", "lineage.json", APPLICABILITY]
         if job in adapter.SUPPORTED:
             artifact_paths += [adapter.RAW_FILE, adapter.RECEIPT_FILE]
         skip_reason = "not-applicable-no-native-binaries" if result["status"] == "SKIPPED" else None

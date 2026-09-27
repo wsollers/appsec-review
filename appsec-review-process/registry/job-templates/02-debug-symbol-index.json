@@ -31,6 +31,7 @@
             "status.json",
             "permission.json",
             "lineage.json",
+            "applicability-receipt.json",
             "binary-static-raw.json",
             "binary-b13-receipts.json"
         ]
