@@ -67,6 +67,8 @@ class HappyPathDagsterIntegrationTests(unittest.TestCase):
                 self.assertIn(op_name, resolved["ops"])
         resolved = validate_run_config(jobs["synthesis_report"], self.resource_config())
         self.assertIn("synthesis_report_standalone_work", resolved["ops"])
+        resolved = validate_run_config(jobs["full_review_input_assembly"], self.resource_config())
+        self.assertTrue(resolved["ops"]["full_review_input_assembly_standalone_work"]["config"]["dispatch"])
 
     def test_launcher_generates_configs_for_the_actual_standalone_ops(self):
         launches = []
@@ -106,6 +108,11 @@ class HappyPathDagsterIntegrationTests(unittest.TestCase):
             config = launches[-1]["runConfigData"]
             self.assertNotIn("ops", config)
             validate_run_config(self.repository.get_job("synthesis_report"), config)
+            launch_job.launch(self.run_id, launch_id="launch-4", job="full_review_input_assembly")
+            config = launches[-1]["runConfigData"]
+            self.assertNotIn("ops", config)
+            resolved = validate_run_config(self.repository.get_job("full_review_input_assembly"), config)
+            self.assertTrue(resolved["ops"]["full_review_input_assembly_standalone_work"]["config"]["dispatch"])
 
     def test_authoritative_templates_and_contracts_are_closed_and_schema_valid(self):
         registry = PROCESS / "registry"

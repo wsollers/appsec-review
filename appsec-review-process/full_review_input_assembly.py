@@ -520,8 +520,8 @@ def assemble(plan_path: Path, run_root: Path, output_root: Path, *, attempt_id: 
     sources = _load_sources(plan, run_root)
     attempt = output_root / "attempts" / attempt_id
     fingerprint = HASH + digest({"plan": plan, "source_bindings": {key: row["binding"] for key, row in sources.items()}})
-    if attempt.exists() or (output_root / "accepted.json").exists():
-        raise Blocked("full review input assembly: immutable output already exists")
+    if attempt.exists():
+        raise Blocked("full review input assembly: immutable attempt already exists")
     (attempt / "requests").mkdir(parents=True)
     builders = {"bounded": _bounded, "vendor": _vendor, "dependency": _dependency}
     request_rows, paths, seen = [], [], set()
@@ -632,11 +632,11 @@ def dispatch(assembly_root: Path, run_root: Path, dispatch_root: Path, *, attemp
         dispatch_root.resolve(strict=False).relative_to(run_root.resolve(strict=True))
     except (OSError, ValueError) as exc:
         raise Blocked("full review dispatch: paths must be run-owned") from exc
-    if dispatch_root.exists() or dispatch_root.is_symlink():
-        raise Blocked("full review dispatch: immutable output already exists")
+    attempt = dispatch_root / "attempts" / attempt_id
+    if dispatch_root.is_symlink() or attempt.exists():
+        raise Blocked("full review dispatch: immutable attempt already exists")
     assembly = validate(assembly_root)
     assembly_attempt = assembly_root / "attempts" / assembly["attempt_id"]
-    attempt = dispatch_root / "attempts" / attempt_id
     (attempt / "results").mkdir(parents=True)
     runner = executor or _dispatch_one
     rows, paths = [], []

@@ -11,11 +11,11 @@
     "tooling_profile_id": "local-evidence-retrieval",
     "output_contract_id": "full-review-input-assembly"
   },
-  "inputs": {"required": ["run artifact manifest", "current accepted producer pointers", "closed launch plan"], "optional": []},
+  "inputs": {"required": ["run artifact manifest", "current accepted component map"], "optional": ["operator-supplied closed launch plan", "current accepted SBOM/license/SCA producers for later waves"]},
   "outputs": {"directory": "data/jobs/02-full-review-input-assembly/attempts/<attempt_id>", "files": ["full-review-input-assembly.json", "requests/*.json", "status.json"]},
   "prompt_sections": ["governing_rules", "source_lineage", "task", "output_contract"],
   "implemented": true,
-  "execution": {"worker": "full_review_input_assembly.py", "arguments": ["--plan", "{plan}", "--run-root", "{run_root}", "--output-root", "{output_root}", "--attempt-id", "{attempt_id}", "--started-at", "{started_at}", "--finished-at", "{finished_at}"]},
+  "execution": {"worker": "full_review_input_assembly.py", "arguments": ["--component-pointer", "{component_pointer}", "--run-root", "{run_root}", "--output-root", "{output_root}", "--dispatch-root", "{dispatch_root}", "--dagster-run-id", "{dagster_run_id}", "--attempt-id", "{attempt_id}", "--started-at", "{started_at}", "--finished-at", "{finished_at}"]},
   "permissions": ["read-run-data", "write-run-data"],
   "applicability": "full review runs launching standalone analysis families",
   "timeout_seconds": 120,

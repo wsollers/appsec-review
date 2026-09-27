@@ -109,8 +109,8 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         raise Blocked('control jobs require --input-path, --output-root and --attempt-root')
     if final_publication and not (input_path and output_root and not attempt_id and not attempt_root and not execution_root):
         raise Blocked('final publication requires --input-path and --output-root')
-    if assembly and not (input_path and output_root and attempt_id and not attempt_root and not execution_root):
-        raise Blocked('full review input assembly requires --input-path, --output-root and --attempt-id')
+    if assembly and any(supplied) and not (input_path and output_root and attempt_id and not attempt_root and not execution_root):
+        raise Blocked('explicit full review input assembly requires --input-path, --output-root and --attempt-id')
     if facts_file and not (input_path and not output_root and not attempt_id and not attempt_root and not execution_root):
         raise Blocked('OWASP join report requires --input-path naming its dispatch facts file')
     if not bounded and not dependency and not vendor and not control and not final_publication and not assembly and not facts_file and any(supplied):
@@ -128,7 +128,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         resume += ['--input-path',input_path,'--output-root',output_root,'--attempt-root',attempt_root]
     if final_publication:
         resume += ['--input-path',input_path,'--output-root',output_root]
-    if assembly:
+    if assembly and input_path:
         resume += ['--input-path', input_path, '--output-root', output_root, '--attempt-id', attempt_id]
     if facts_file:
         resume += ['--input-path', input_path]
@@ -139,7 +139,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                          'execution_root': execution_root} if vendor else
                         {'input_path':input_path,'output_root':output_root,'attempt_root':attempt_root} if control else
                         {'input_path':input_path,'output_root':output_root} if final_publication else
-                        {'plan_path':input_path,'output_root':output_root,'attempt_id':attempt_id} if assembly else
+                        {'plan_path':input_path,'output_root':output_root,'attempt_id':attempt_id} if assembly and input_path else
                         {'facts_path':input_path} if facts_file else None)
     with Lock(root/'request.lock'):
         path = root/'request.json'
@@ -152,7 +152,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
         else:
             record = {'run_id':run_id,'launch_id':request_id,'job':job,'force':force,'status':'PREPARED',
                       'created_at':now(),'resume_argv':resume}
-            if bounded or dependency or vendor or control or final_publication or assembly or facts_file:
+            if bounded or dependency or vendor or control or final_publication or (assembly and lifecycle_config) or facts_file:
                 record['lifecycle_config'] = lifecycle_config
             atomic_json(path,record)
         try:
@@ -171,7 +171,7 @@ def launch(run_id, force=False, launch_id=None, wait=False, timeout=600, job=Non
                     run_config['ops'] = {VENDOR_EVIDENCE_JOBS[job]: {'config': lifecycle_config}}
                 if control: run_config['ops']={CONTROL_JOBS[job]:{'config':lifecycle_config}}
                 if final_publication: run_config['ops']={FINAL_PUBLICATION_JOBS[job]:{'config':lifecycle_config}}
-                if assembly: run_config['ops']={ASSEMBLY_JOBS[job]:{'config':lifecycle_config}}
+                if assembly and lifecycle_config: run_config['ops']={ASSEMBLY_JOBS[job]:{'config':lifecycle_config}}
                 if facts_file: run_config['ops']={FACTS_FILE_JOBS[job]:{'config':lifecycle_config}}
                 params = {'selector':{'repositoryLocationName':'appsec_review','repositoryName':'__repository__',
                                       'jobName':job},

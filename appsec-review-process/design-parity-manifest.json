@@ -1594,10 +1594,9 @@
         ]
       },
       "gaps": [
-        "automatic_plan_derivation_from_component_map_pending",
-        "request_dispatch_not_yet_orchestrated"
+        "later_dependency_waves_require_reinvocation_after_prerequisites_publish"
       ],
-      "next_prerequisite": "Derive the closed plan automatically from the accepted component map and dispatch the emitted requests in full_review."
+      "next_prerequisite": "Reinvoke the deterministic assembler after SBOM, license, and SCA prerequisites publish so later dependency waves remain evidence-bound."
     },
     {
       "id": "03-threat-model-dfd-stride",

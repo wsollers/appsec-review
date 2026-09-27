@@ -1,6 +1,6 @@
 """Dagster multiprocessing graph. Each stateful unit owns its lock in one process."""
 from pathlib import Path
-from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, MetadataValue, RetryPolicy, In, failure_hook,
+from dagster import (DagsterRunStatus, DefaultSensorStatus, Failure, Field, MetadataValue, RetryPolicy, In, failure_hook,
                      job, multiprocess_executor, op, resource, run_failure_sensor, run_status_sensor)
 from execution_state import Blocked, Lock, atomic_json, data_path, emergency, now, read_json, run_path
 from phase1 import Session, config_for
@@ -467,18 +467,52 @@ def threat_model_reconciliation():
     threat_model_reconciliation_standalone_work(build_execution_config())
 
 
-FULL_REVIEW_INPUT_CONFIG = {'plan_path': str, 'output_root': str, 'attempt_id': str}
+FULL_REVIEW_INPUT_CONFIG = {
+    'plan_path': Field(str, is_required=False),
+    'component_pointer': Field(str, is_required=False),
+    'output_root': Field(str, is_required=False),
+    'attempt_id': Field(str, is_required=False),
+    'dispatch': Field(bool, is_required=False, default_value=True),
+    'dispatch_root': Field(str, is_required=False),
+}
 
 
 def run_full_review_input_assembly(context, configured):
     started = now()
+    root_path = run_path(configured['engagement_run_id'])
+    attempt_id = context.op_config.get('attempt_id') or context.run_id
+    output_root = Path(context.op_config.get('output_root') or
+                       root_path / 'data/jobs/02-full-review-input-assembly')
+    plan_value = context.op_config.get('plan_path')
+    component_value = context.op_config.get('component_pointer')
+    if plan_value and component_value:
+        raise Failure('full review input assembly accepts a plan or component pointer, not both')
+    if plan_value:
+        plan_path = Path(plan_value)
+    else:
+        component_pointer = Path(component_value) if component_value else (
+            root_path / 'data/jobs/01-component-characterization/accepted.json')
+        plan_path = output_root / 'plans' / (attempt_id + '.json')
+        plan_path.parent.mkdir(parents=True, exist_ok=True)
+        full_review_input_assembly_worker.derive_plan(
+            component_pointer, root_path, plan_path, run_id=configured['engagement_run_id'],
+            generated_at=started)
     result = full_review_input_assembly_worker.assemble(
-        Path(context.op_config['plan_path']), run_path(configured['engagement_run_id']),
-        Path(context.op_config['output_root']), attempt_id=context.op_config['attempt_id'],
+        plan_path, root_path, output_root, attempt_id=attempt_id,
         started_at=started, finished_at=now())
-    attempt = Path(context.op_config['output_root']) / 'attempts' / context.op_config['attempt_id']
+    attempt = output_root / 'attempts' / attempt_id
+    if context.op_config.get('dispatch', True):
+        dispatch_root = Path(context.op_config.get('dispatch_root') or
+                             root_path / 'data/jobs/02-full-review-input-dispatch')
+        dispatched = full_review_input_assembly_worker.dispatch(
+            output_root, root_path, dispatch_root, attempt_id=attempt_id,
+            dagster_run_id=context.run_id, started_at=started, finished_at=now())
+        context.add_output_metadata({
+            'dispatch': MetadataValue.path(str(dispatch_root / 'attempts' / attempt_id /
+                                                'full-review-dispatch.json')),
+            'dispatched': len(dispatched['results']), 'skipped_na': len(dispatched['skipped'])})
     context.add_output_metadata({'output': MetadataValue.path(str(attempt / full_review_input_assembly_worker.RESULT)),
-        'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': context.op_config['attempt_id']})
+        'envelope': MetadataValue.path(str(attempt / 'result.json')), 'attempt_id': attempt_id})
     return result
 
 
