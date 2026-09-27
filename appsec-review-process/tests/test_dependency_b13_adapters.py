@@ -82,6 +82,19 @@ class AdapterTests(unittest.TestCase):
                                 for mount in req["target_mounts"]))
             self.assertEqual(ce.request_errors(req, run_id="run", job_id=spec["job"], attempt_id="attempt"), [])
 
+    def test_osv_documented_finding_exit_is_retained_as_successful_tool_evidence(self):
+        result, attempt = self.execute("osv", ScriptedDocker(client_exit=1),
+            b'{"results":[{"packages":[]}]}\n')
+        self.assertTrue(Path(result["tool_output"]).is_file())
+        verified = ce.load_verified_result(attempt, run_id="run-dependency",
+            job_id="02-sca-vulnerability-match", attempt_id="tool-attempt",
+            request=result["request"], images_dir=self.images,
+            expected_result_sha256=result["expected_result_sha256"],
+            host_flavor=self.runtime().host_flavor, docker_host=None,
+            docker_executable=self.runtime().docker_executable,
+            container_user=self.runtime().container_user)
+        self.assertEqual((verified["cause"], verified["exit_code"]), ("CONTAINER_EXIT_NONZERO", 1))
+
     def test_scripted_clean_and_hit_outputs_are_reverified_and_receipted(self):
         for label, document in (("clean", {"bomFormat": "CycloneDX", "components": []}),
                                 ("hit", {"bomFormat": "CycloneDX", "components": [{"name": "lodash"}]})):
@@ -161,6 +174,33 @@ class AdapterTests(unittest.TestCase):
         license_result = workers.run("license", license_request)
         license_path = self.root / "worker-output/02-license-scan/attempts" / license_result["attempt_id"] / "outputs/license-inventory.json"
         self.assertEqual(json.loads(license_path.read_text())["records"][0]["license_expression"], "MIT")
+
+    def test_live_syft_root_relative_location_resolves_to_accepted_source(self):
+        source = {"package-lock.json": "sha256:" + "c" * 64}
+        properties = [{"name": "syft:location:0:path", "value": "/package-lock.json"}]
+        self.assertEqual(workers._location(properties, source, "02-sbom-inventory"),
+                         "package-lock.json")
+        properties[0]["value"] = "/workspace/package-lock.json"
+        self.assertEqual(workers._location(properties, source, "02-sbom-inventory"),
+                         "package-lock.json")
+
+    def test_syft_file_metadata_rows_are_not_promoted_to_dependencies(self):
+        request = {"source_files": {"package-lock.json": "sha256:" + "c" * 64}}
+        tool = {"bomFormat": "CycloneDX", "components": [
+            {"type": "file", "name": "/workspace/package-lock.json", "hashes": []},
+            {"type": "library", "name": "lodash", "version": "4.17.20",
+             "purl": "pkg:npm/lodash@4.17.20", "properties": [
+                 {"name": "syft:location:0:path", "value": "/package-lock.json"}]},
+        ]}
+        rows = workers._sbom_rows(tool, request, "02-sbom-inventory")
+        self.assertEqual([row["name"] for row in rows], ["lodash"])
+
+    def test_osv_v1_package_tuple_resolves_to_exact_purl_component(self):
+        components = {"SC-000001": {"name": "lodash", "version": "4.17.20",
+            "ecosystem": "npm", "purl": "pkg:npm/lodash@4.17.20"}}
+        located = workers._component_for(components, name="lodash", version="4.17.20",
+                                         ecosystem="npm")
+        self.assertEqual(located, ("SC-000001", "purl"))
 
     def test_registered_grype_and_osv_snapshots_drive_positive_b13_paths(self):
         registry = self.root / "snapshot-registry"

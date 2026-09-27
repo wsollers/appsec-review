@@ -181,7 +181,9 @@ def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tup
             container_user=binding["container_user"], expected_result_sha256=binding["expected_result_sha256"])
     except (ce.ContainerRequestError, TypeError, ValueError):
         raise WorkerBlocked(f"{job}: immutable B13 attempt failed independent re-verification") from None
-    if verified["execution_status"] != "OK":
+    finding_exit = (kind == "osv" and verified["execution_status"] == "FAILED" and
+                    verified.get("cause") == "CONTAINER_EXIT_NONZERO" and verified.get("exit_code") == 1)
+    if verified["execution_status"] != "OK" and not finding_exit:
         raise WorkerBlocked(f"{job}: immutable B13 attempt did not complete successfully")
     output = attempt_root / "scratch" / spec["output"]
     if not output.is_file() or output.is_symlink():
@@ -215,7 +217,12 @@ def _location(properties: Any, source_files: dict[str, str], job: str) -> str:
             if (isinstance(item, dict) and isinstance(item.get("name"), str) and
                     item["name"].startswith("syft:location:") and item["name"].endswith(":path") and
                     isinstance(item.get("value"), str)):
-                candidates.append(item["value"].removeprefix("/workspace/"))
+                # Syft's directory source reports paths relative to the scan root with a leading
+                # slash (``/package-lock.json``).  Older fixtures and some catalogers report the
+                # bind target prefix (``/workspace/package-lock.json``).  Both name the same
+                # accepted source file; the exact source-file map below remains authoritative.
+                value = item["value"]
+                candidates.append(value.removeprefix("/workspace/").removeprefix("/"))
     exact = sorted({path for path in candidates if path in source_files})
     if len(exact) == 1: return exact[0]
     expanded = sorted({path for candidate in candidates for path in source_files
@@ -244,6 +251,11 @@ def _sbom_rows(tool: dict[str, Any], request: dict[str, Any], job: str) -> list[
     for raw in rows:
         if not isinstance(raw, dict) or not isinstance(raw.get("name"), str):
             raise WorkerBlocked(f"{job}: CycloneDX component is malformed")
+        # The fixed Syft invocation enables file metadata so package locations can be bound to
+        # accepted source bytes.  CycloneDX emits those files alongside dependency packages;
+        # they are evidence locators, not dependency inventory components.
+        if raw.get("type") == "file":
+            continue
         path = _location(raw.get("properties"), source_files, job)
         purl = raw.get("purl"); ecosystem = _ecosystem(purl)
         kind = declaration_kind(ecosystem, path)
@@ -356,7 +368,8 @@ def _database_block(raw: dict[str, Any], evaluated: str, max_age: int) -> dict[s
 
 
 def _component_for(component_by_id: dict[str, dict[str, Any]], *, purl: Any = None,
-                   cpes: Any = None) -> tuple[str, str] | None:
+                   cpes: Any = None, name: Any = None, version: Any = None,
+                   ecosystem: Any = None) -> tuple[str, str] | None:
     if isinstance(purl, str):
         for identifier, component in component_by_id.items():
             if component.get("purl") == purl: return identifier, "purl"
@@ -364,6 +377,18 @@ def _component_for(component_by_id: dict[str, dict[str, Any]], *, purl: Any = No
         for cpe in cpes:
             for identifier, component in component_by_id.items():
                 if component.get("cpe") == cpe: return identifier, "cpe"
+    # osv-scanner 1.x omits purl from its result package identity even when the
+    # input CycloneDX component carried one.  Bind its exact name, version and
+    # ecosystem tuple back to one and only one purl-bearing SBOM component.
+    aliases = {"RubyGems": "gem", "Go": "golang", "PyPI": "pypi", "Maven": "maven",
+               "npm": "npm", "NuGet": "nuget", "crates.io": "cargo", "Packagist": "composer"}
+    normalized_ecosystem = aliases.get(ecosystem, str(ecosystem).lower() if isinstance(ecosystem, str) else None)
+    if isinstance(name, str) and isinstance(version, str) and normalized_ecosystem:
+        candidates = [(identifier, component) for identifier, component in component_by_id.items()
+                      if component.get("name") == name and component.get("version") == version and
+                      component.get("ecosystem") == normalized_ecosystem and component.get("purl")]
+        if len(candidates) == 1:
+            return candidates[0][0], "purl"
     return None
 
 
@@ -390,7 +415,11 @@ def _sca_rows(tool: dict[str, Any], component_by_id: dict[str, dict[str, Any]], 
         for result in tool["results"]:
             for package in result.get("packages", []) if isinstance(result, dict) else []:
                 package_id = package.get("package") if isinstance(package, dict) else None
-                located = _component_for(component_by_id, purl=package_id.get("purl") if isinstance(package_id, dict) else None)
+                located = _component_for(component_by_id,
+                    purl=package_id.get("purl") if isinstance(package_id, dict) else None,
+                    name=package_id.get("name") if isinstance(package_id, dict) else None,
+                    version=package_id.get("version") if isinstance(package_id, dict) else None,
+                    ecosystem=package_id.get("ecosystem") if isinstance(package_id, dict) else None)
                 if located is None: raise WorkerBlocked(f"{job}: OSV match does not resolve into the exact SBOM")
                 for vulnerability in package.get("vulnerabilities", []):
                     if not isinstance(vulnerability, dict): raise WorkerBlocked(f"{job}: OSV advisory is malformed")

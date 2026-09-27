@@ -138,7 +138,9 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
             expected_result_sha256=expected_result_sha256, **host)
     except ce.ContainerRequestError as exc:
         raise AdapterBlocked(f"{spec['job']}: B13 result failed independent re-verification") from exc
-    if verified["execution_status"] != "OK":
+    finding_exit = (kind == "osv" and verified["execution_status"] == "FAILED" and
+                    verified.get("cause") == "CONTAINER_EXIT_NONZERO" and verified.get("exit_code") == 1)
+    if verified["execution_status"] != "OK" and not finding_exit:
         raise AdapterBlocked(f"{spec['job']}: pinned tool ended {verified['execution_status']} ({verified['cause']})")
     output = attempt_root / "scratch" / spec["output"]
     if not output.is_file() or output.is_symlink():
