@@ -1,0 +1,24 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-evidence-producer-binding",
+  "display_name": "Evidence Producer Binding",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "model": {"model": "haiku", "effort": "low"},
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-assembler",
+    "domain_id": "evidence-assembly",
+    "tooling_profile_id": "hash-bound-evidence-assembly",
+    "output_contract_id": "evidence-producer-binding"
+  },
+  "inputs": {"required": ["accepted producer pointer", "common envelope", "permission receipt", "lineage receipt"], "optional": []},
+  "outputs": {"directory": "pool instance output", "files": ["evidence-producer-binding.json"]},
+  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
+  "implemented": true,
+  "permissions": ["read-run-data"],
+  "applicability": "each graph-required evidence-assembly producer",
+  "timeout_seconds": 300,
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "coordinator": "intake-coordinator"
+}
