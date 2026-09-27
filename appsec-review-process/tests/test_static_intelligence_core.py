@@ -18,6 +18,7 @@ class StaticIntelTests(unittest.TestCase):
     two=core.extract(job,run_id='run',attempt_id='a',target=target,source=binding,source_files=files)
     self.assertEqual(one,two); self.assertEqual(validate_document(one,schema),[])
     self.assertTrue(one['static_only']); self.assertNotIn('sk-abcdefghijklmnopqrstuvwxyz',json.dumps(one))
+    self.assertGreater(len(one['records']),0)
     self.assertTrue(all(r['semantics']=='DOCUMENTED_STATIC_INTENT' for r in one['records']))
  def test_readme_only_and_zero_input_are_honest_gaps(self):
   with tempfile.TemporaryDirectory() as d:

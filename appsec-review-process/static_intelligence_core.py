@@ -101,7 +101,9 @@ def _candidate(job: str, path: str) -> bool:
 
 
 def _redacted(path: str, data: bytes) -> tuple[str | None, str, int]:
-    outcome = redaction._process(data, path, redaction.DEFAULT_LIMITS)
+    suffix = PurePosixPath(path).suffix.lower()
+    redaction_path = path if suffix in set(redaction.RULESET["json_extensions"] + redaction.RULESET["text_extensions"]) else path + ".txt"
+    outcome = redaction._process(data, redaction_path, redaction.DEFAULT_LIMITS)
     if outcome.disposition == "withheld" or outcome.data is None:
         return None, "WITHHELD", 0
     return outcome.data.decode("utf-8", errors="replace"), outcome.disposition, sum(outcome.counts.values())
