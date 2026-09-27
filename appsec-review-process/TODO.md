@@ -1355,6 +1355,13 @@ graph change, the agent records the exact change as an integration request; the 
 serially after both coding lanes stop. The component-characterization core is complete on commit
 `ef415950` but remains staged, not executable: F03 is still `BLOCKED(F02)`.
 
+Master closeout checklist: independently review both commits; have Q16 rerun each candidate and the
+combined tree; serialize any shared-surface changes; update `engagement-start.md`, `flow-bringup.md`,
+`appsec-review-process-flow.md`, the build-discovery matrix and system-acceptance evidence; regenerate
+the job catalog and parity views from their sources; render Mermaid/BPMN only when their process
+sources change; run contract, parity, catalog and diff checks; then merge the coordination,
+implementation and evidence commits without Dependabot changes.
+
 Cross-cutting capability ownership is explicit:
 
 | Manifest capability | Owning batches |

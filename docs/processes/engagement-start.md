@@ -29,9 +29,10 @@ flowchart TD
   S6 --> S7[7. Refutation, independent verification, scoring, synthesis, report / SARIF]
 ```
 
-Built today: 1, 2, 2b, 3a, 3b, 5 and the `critical_findings_sarif` publisher. Readiness differs:
-build resolution through SAT stage 13 is live-qualified, while stages 14-16 are implemented and
-await their first live happy-path SAT; their fault/recovery qualification remains separate.
+Built today: 1, 2, 2b, 3a, 3b, the first run-owned source-SAST slice of 4, 5 and the
+`critical_findings_sarif` publisher. Readiness differs: build resolution through SAT stage 13 is
+live-qualified, and stages 14-16 completed their live happy path in SAT `20260927T005731Z`; their
+fault/recovery qualification remains separate.
 Step 3a (build resolution: how to build an unknown target, with what tools, and whether it can be
 done at all) is specified in [build-resolution.md](build-resolution.md) (ADR-0012), extended per unit
 by [build-unit-classification.md](build-unit-classification.md). The index, classify, plan and
@@ -42,8 +43,8 @@ autoconf/automake/libtool/make/Bear/pkg-config.
 Step 3b now has dedicated `02-build-configure` and `02-native-build` workers. They consume the
 accepted resolution lock and catalogued image, replay from fresh scratch copies through offline
 B13, and publish configure evidence, then the clang compile database and produced binaries. SAT
-stages 14-15 are built but have not yet run live. The older `build_execution` CMake-only path remains
-a standalone diagnostic and is no longer the lifecycle binding.
+stages 14-15 completed the live happy path in SAT `20260927T005731Z`. The older `build_execution`
+CMake-only path remains a standalone diagnostic and is no longer the lifecycle binding.
 Step 2b's four gates (partition, developer, devops and SRE operations-topology discovery) accept
 supplied, schema- and freshness-validated records (`discovery_gate.py`) by default, and all four can
 also perform the analysis themselves (automatic persona dispatch, D01-D04; SAT stages 6-9 all
@@ -64,10 +65,11 @@ devops record and the partition map as scope, and maps the declared services, po
 of what devops discovery found.
 Step 4 remains mostly on the legacy `pipeline/engagement_job.*` path into `scratch/`, followed by a
 hashed run import. Its first run-owned scanner slice, `02-source-sast`, is now implemented: pinned
-offline Semgrep with repository-owned C/C++ rules and normalized leads. SAT stage 16 is built but
-has not yet run live; Go, Java and PHP source-SAST tools and fault/recovery qualification remain
-explicit gaps. Most other `02-*` evidence nodes still have no worker. Steps 6-7 exist as the tracked
-prompt harness (`appsec-review-process/<lane>/`) dispatched by hand-off files, not as graph workers.
+offline Semgrep with repository-owned C/C++ rules and normalized leads. SAT stage 16 completed its
+live happy path in SAT `20260927T005731Z`; Go, Java and PHP source-SAST tools and fault/recovery
+qualification remain explicit gaps. Most other `02-*` evidence nodes still have no worker. Steps 6-7
+exist as the tracked prompt harness (`appsec-review-process/<lane>/`) dispatched by hand-off files,
+not as graph workers.
 
 ## 2. What the operator must supply (step 1)
 
@@ -102,7 +104,7 @@ Per-job inputs and outputs, and their rollup per process model, are in the gener
 | 2b | `repository_partition_discovery`, then `dev_project_discovery`, `devops_project_discovery` and `sre_operations_topology` | Accepted intake; a supplied `supplied/result.json` per gate (fixtures: `fixtures/supply_record.py`), **or** this run opted the gate into automatic dispatch (`discovery_gate.set_dispatch_mode`; all four gates support it); dev and devops discovery each also need the accepted partition map at the same source revision; sre topology needs the accepted devops record at the same source revision | `data/jobs/02-repository-partition-discovery/` (partition map, persona routing, review scope), `data/jobs/02-dev-project-discovery/accepted.json`, `data/jobs/02-devops-project-discovery/accepted.json` (project, manifests, build image, safe command plan) and `data/jobs/02-sre-operations-topology/accepted.json` (services, ports, dependencies, coverage gaps) | Without a supplied record (and no automatic-dispatch opt-in) a gate fails with an actionable hand-off (`handoff.md`), never a silent pass. Citations must match the target's current file hashes. |
 | 3a | `02-build-index`, `02-build-classify`, `02-build-plan`, `02-build-resolution`; fixed LLVM 21 C++ base | Accepted intake, partition map and discovery records; B16-resolved `audit-buildenv-cpp`; `target-execution` and `package-restore` grants (apt now; other ecosystems per TODO Phase 5f); `build_resolution_attempts` (3, per unit; no cap on units), `build_image_reuse` (`auto`) | Cited build index with candidate units; per-unit classification and validated plans; per-attempt image, logs and exit codes; `image_build_<id>` catalogued and a per-unit `build-lock.json` entry for each resolved unit | Implemented and qualified through SAT stage 13. Per unit `OK`, `FAILED(BUILD_UNRESOLVED)` or `BLOCKED`; job `OK`, `OK_WITH_GAPS`, `UNRESOLVED`, `BLOCKED` or `SKIPPED`. A failed unit blocks only its own native jobs; the engagement continues. Repository Dockerfiles are never built; nothing built is run (ADR-0012 revisions 1 and 3). |
 | 3b | `02-build-configure`, then `02-native-build` (E01/E02) | Accepted build-resolution lock; catalogued immutable build image; staged target; exact target-execution grants | Fresh offline B13 configure replay, then configure/build replay; `configured-build.json`, `native-build.json`, clang `compile_commands.json`, native binaries and caller-held receipts | Happy path qualified in SAT `20260927T005731Z`; fault/recovery qualification remains. A failed replay blocks only build-dependent lanes. |
-| 4 | `02-source-sast` first slice; remaining coverage via `pipeline/engagement_job.sh` / `.ps1` and hashed import | Accepted intake and staged checkout for source SAST; target checkout and images for the legacy remainder | Run-owned normalized Semgrep C/C++ leads plus explicit coverage gaps; legacy static/native pregather, assemble, correlate, deep-confirm and retrieval plan | Source-SAST SAT stage 16 is built but not live-qualified. Its leads do not substitute for `02-evidence-assembly`, `01-component-characterization`, the OWASP worklist or `04-asvs-masvs`; those downstream jobs remain non-executable. Every tool that did not run is a coverage gap, never "clean". |
+| 4 | `02-source-sast` first slice; remaining coverage via `pipeline/engagement_job.sh` / `.ps1` and hashed import | Accepted intake and staged checkout for source SAST; target checkout and images for the legacy remainder | Run-owned normalized Semgrep C/C++ leads plus explicit coverage gaps; legacy static/native pregather, assemble, correlate, deep-confirm and retrieval plan | Source-SAST stage 16 happy path qualified in SAT `20260927T005731Z`; fault/recovery and Go/Java/PHP coverage remain gaps. Its leads do not substitute for `02-evidence-assembly`, `01-component-characterization`, the OWASP worklist or `04-asvs-masvs`; those downstream jobs remain non-executable. Every tool that did not run is a coverage gap, never "clean". |
 | 5 | `evidence_index` | Accepted intake (+ imports) | `data/jobs/02-evidence-index/whole/accepted.json`; bounded CLI / read-only MCP retrieval (`docs/evidence/evidence-retrieval.md`) | Index is a locator, never evidence authority. |
 | 6 | lane hand-offs (`create_handoff.py`) | Accepted evidence; persona/registry composition; budget | Lane outputs under the run; component-purpose map first (`01`), then `03`.. per `process-manifest.json` | Each lane states read / covered / excluded / next. |
 | 7 | `07` -> `08` -> `09` -> `12` -> `10`; `critical_findings_sarif` | Verified claims only | Report inputs; accepted SARIF | High/Critical needs lane `09`; nothing promotes a tool hit to a finding. |

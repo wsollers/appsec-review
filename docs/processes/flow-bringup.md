@@ -115,7 +115,7 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE: reference run, Dagster `278df830` |
 | S5 | dev-project discovery | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery`, then `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | DONE: reference run, Dagster `68d20d4a` |
 | S6b | `02-build-configure`, `02-native-build` | `launch_job.py --run-id <run_id> --job build_configure --wait`, then `--job native_build --wait` | Configure-only replay, then configure/build replay with compile database and binaries | HAPPY PATH QUALIFIED; fault/recovery qualification remains |
-| S7 | `02-source-sast` | `launch_job.py --run-id <run_id> --job source_sast --wait` | `OK_WITH_GAPS`; normalized Semgrep C/C++ leads and explicit unintegrated-language gaps | IMPLEMENTED, NOT QUALIFIED; SAT stage 16 built |
+| S7 | `02-source-sast` | `launch_job.py --run-id <run_id> --job source_sast --wait` | `OK_WITH_GAPS`; normalized Semgrep C/C++ leads and explicit unintegrated-language gaps | HAPPY PATH QUALIFIED in SAT `20260927T005731Z`; language and fault/recovery gaps remain |
 
 ## Run it end to end
 
