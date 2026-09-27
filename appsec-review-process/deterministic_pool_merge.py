@@ -3,13 +3,59 @@
 from __future__ import annotations
 import argparse, json
 from pathlib import Path
-from execution_state import atomic_json, read_json
+from execution_state import Blocked, atomic_json, file_hash, read_json
 from review_control_loops import deterministic_merge
 import control_process_worker
+import pool_rendezvous
 
 JOB = "deterministic-pool-merge"
 RESULT = "deterministic-pool-merge.json"
 CONTRACT = "deterministic-pool-merge"
+
+def _verified_file(attempt_root: Path, relative: str, record: dict):
+    path=attempt_root.joinpath(*Path(relative).parts)
+    if path.is_symlink() or not path.is_file(): raise Blocked("deterministic merge: verified output is unsafe")
+    try: path.resolve(strict=True).relative_to(attempt_root.resolve(strict=True))
+    except (OSError,ValueError) as exc: raise Blocked("deterministic merge: verified output escapes attempt") from exc
+    if "sha256:"+file_hash(path)!=record.get("sha256"): raise Blocked("deterministic merge: verified output hash changed")
+    try: value=read_json(path)
+    except Exception as exc: raise Blocked("deterministic merge: verified output is not JSON") from exc
+    if not isinstance(value,dict) or set(value)!={"candidates"} or not isinstance(value["candidates"],list):
+        raise Blocked("deterministic merge: verified candidate document is invalid")
+    return value["candidates"]
+
+def merge_verified_manifest(verified: pool_rendezvous.VerifiedManifest, *, pool_root: Path,
+                            run_id: str) -> dict:
+    """Merge only the exact terminal population and outputs reverified by C02."""
+    if not isinstance(verified,pool_rendezvous.VerifiedManifest):
+        raise Blocked("deterministic merge: terminal manifest was not verified")
+    expected=[]; results=[]
+    for item in verified.instances:
+        worker_id=item.instance.instance_id; adapter=item.result
+        if adapter is not None and adapter.get("run_id")!=run_id:
+            raise Blocked("deterministic merge: adapter result belongs to another run")
+        if item.instance.worker_kind=="persona":
+            producer_id=adapter.get("persona_id") if adapter else f"persona:{worker_id}"
+        else:
+            producer_id=adapter.get("image_reference") if adapter else f"container:{worker_id}"
+        expected.append({"worker_id":worker_id,"producer_id":producer_id,"run_id":run_id})
+        if adapter is None: continue
+        candidates=[]
+        if item.state==pool_rendezvous.SUCCEEDED:
+            attempt=item.instance.attempt_root_path(Path(pool_root))
+            if item.instance.worker_kind=="persona":
+                matches=[entry for entry in adapter["outputs"] if entry["path"]=="candidates.json"]
+                if len(matches)!=1: raise Blocked("deterministic merge: persona candidate output is absent")
+                candidates=_verified_file(attempt,f'{adapter["output_root"]}/candidates.json',matches[0])
+            else:
+                matches=[entry for entry in adapter["files"] if entry["path"]=="stdout.log"]
+                if len(matches)!=1: raise Blocked("deterministic merge: container stdout is absent")
+                candidates=_verified_file(attempt,f'{adapter["log_path"]}/stdout.log',matches[0])
+        status={pool_rendezvous.SUCCEEDED:"OK",pool_rendezvous.BLOCKED:"BLOCKED",
+            pool_rendezvous.CANCELED:"CANCELED"}.get(item.state,"FAILED")
+        results.append({"worker_id":worker_id,"producer_id":producer_id,"run_id":run_id,
+                        "status":status,"candidates":candidates})
+    return deterministic_merge(run_id,expected,results)
 
 def run(source: Path, output: Path):
     value = read_json(source)
