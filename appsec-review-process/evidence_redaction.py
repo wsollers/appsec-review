@@ -154,15 +154,16 @@ RULESET: dict[str, Any] = {
                                    "utf8", "utf16", "x509"],
         "wordy_min_plain_words": 2,
         "wordy_counter_max_length": 8,
-        # `20260919T123919Z-0b9e70`: this repository's run-id shape (UTC stamp plus a short hex
+        # `20260919T123919Z-0b9e70`: this repository's run-id shape (UTC stamp plus a short
         # suffix). About a third of real run ids were being flagged, which mangled the header of
-        # every published document. The suffix carries at most 48 bits and is an identifier.
+        # every published document. The suffix is at most 12 characters and is an identifier; an
+        # alphanumeric suffix (`20260927T192621Z-helloautotoo`) is accepted as well as hex.
         "exempt_patterns": {
             "automatic-attempt-id": r"auto-[0-9a-f]{24}\Z",
             "automatic-tool-attempt-id": r"[a-z0-9][a-z0-9-]{0,31}-auto-[0-9a-f]{19}-[1-9][0-9]{0,2}(?:-version)?\Z",
             "native-attempt-id": r"native-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z",
             "native-tool-attempt-id": r"[a-z0-9][a-z0-9-]{0,31}-native-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{3}-[1-9][0-9]{0,2}(?:-version)?\Z",
-            "utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9a-f]{4,12})?\Z",
+            "utc-stamp-id": r"[0-9]{8}T[0-9]{6}Z(?:-[0-9A-Za-z]{4,12})?\Z",
         },
         "exempt": ["all-digits", "uuid", "hex-digest-length", "wordy-kebab-or-snake",
                    "automatic-attempt-id", "automatic-tool-attempt-id", "native-attempt-id",

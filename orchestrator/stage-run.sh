@@ -22,7 +22,8 @@ TARGET="$REPO/fixtures/targets/$TARGET_NAME"
 [[ -d "$TARGET/.git" ]] || { echo "no target clone at $TARGET; run fixtures/populate-targets.sh $TARGET_NAME" >&2; exit 2; }
 
 export APPSEC_RUNS_ROOT="$REPO/appsec-review-process/runs"
-RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(echo "$TARGET_NAME" | tr -cd 'a-z0-9' | cut -c1-12)"
+# Canonical run-id shape: UTC stamp plus a short hex suffix (the target name is recorded in the manifest).
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
 
 echo "== run $RUN_ID for $TARGET_NAME"
 python3 -B appsec-review-process/run_process.py --run-id "$RUN_ID" --start >/dev/null

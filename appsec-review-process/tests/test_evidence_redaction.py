@@ -1329,11 +1329,11 @@ class VerificationProbeTests(unittest.TestCase):
 
 # Produced by running the redactor over fixtures/evidence-redaction/sarif-snippets, then pinned.
 GOLDEN = {
-    "ruleset_sha256": "f92300607398d85ae92ae5af21411f810786551c819b26d532a94ca13e6c5c06",
+    "ruleset_sha256": "52d00d9dd8c79462f5c84a4defff57248d5e24f6af5a23ac94f52239add699a6",
     "sarif_published_sha256": "bbf1eac71274b50cd3e39a71ff1d0979803ab1ad4d60329a153be848a253e93b",
     "sarif_redactions": {"private-key-block": 0, "named-secret": 8, "url-credential": 0, "bearer-token": 0,
                          "provider-token": 1, "jwt": 0, "high-entropy": 1, "fingerprint": 2},
-    "sarif_receipt_sha256": "b4782898d2c86c6a1fa8056013dca4b2098c69d4f5f5d4761b7c5cb63ca29d34",
+    "sarif_receipt_sha256": "25580736aee557e5ea21f48752903978aa785932b66feeb1b14ea9dbe36f9518",
 }
 
 
