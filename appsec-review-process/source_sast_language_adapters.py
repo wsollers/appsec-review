@@ -13,6 +13,7 @@ TOOL_IMAGES = {"gosec":"tool-gosec","spotbugs":"tool-spotbugs","phpstan":"tool-p
 LANGUAGES = {"gosec":"go","spotbugs":"java","phpstan":"php","psalm":"php","phpcs":"php"}
 OUTPUTS = {"gosec":"scratch/gosec.json","spotbugs":"scratch/spotbugs.xml","phpstan":"logs/container/stdout.log",
            "psalm":"scratch/psalm.json","phpcs":"scratch/phpcs.json"}
+PSALM_CONFIG_CONTAINER = "/inputs/source-sast-php/psalm.xml"
 HIT_EXIT_CODES = {"gosec":[],"spotbugs":[],"phpstan":[1],"psalm":[2],"phpcs":[1,2]}
 SUFFIXES={".go":"go",".java":"java",".php":"php"}
 
@@ -30,7 +31,7 @@ def _argv(tool_id:str, executable:str)->list[str]:
  if tool_id=="gosec": return [executable,"-fmt","json","-out","/scratch/gosec.json","-no-fail","/workspace/..."]
  if tool_id=="spotbugs": return [executable,"-textui","-effort:min","-xml:withMessages","-output","/scratch/spotbugs.xml","/workspace"]
  if tool_id=="phpstan": return [executable,"analyse","--no-progress","--no-interaction","--level","5","--error-format","json","--memory-limit","1G","/workspace"]
- if tool_id=="psalm": return [executable,"--no-cache","--no-progress","--threads=1","--report=/scratch/psalm.json","/workspace"]
+ if tool_id=="psalm": return [executable,"--config="+PSALM_CONFIG_CONTAINER,"--no-cache","--no-progress","--threads=1","--report=/scratch/psalm.json","/workspace"]
  if tool_id=="phpcs": return [executable,"--report=json","--report-file=/scratch/phpcs.json","/workspace"]
  raise ValueError("unknown language SAST tool")
 
@@ -105,7 +106,7 @@ def normalize(tool_id:str, content:bytes, target:Path)->list[dict[str,Any]]:
    for item in data.get("messages",[]): rows.append(_lead(tool_id,str(item.get("identifier") or "phpstan"),path,int(item.get("line",0)),target))
  elif tool_id=="psalm":
   if not isinstance(raw,list): raise ValueError("Psalm output must be an array")
-  for item in raw: rows.append(_lead(tool_id,str(item.get("type") or item.get("shortcode")),item.get("file_name"),int(item.get("line_from",0)),target))
+  for item in raw: rows.append(_lead(tool_id,str(item.get("type") or item.get("shortcode")),item.get("file_path") or item.get("file_name"),int(item.get("line_from",0)),target))
  elif tool_id=="phpcs":
   for path,data in raw.get("files",{}).items():
    for item in data.get("messages",[]): rows.append(_lead(tool_id,str(item.get("source")),path,int(item.get("line",0)),target))

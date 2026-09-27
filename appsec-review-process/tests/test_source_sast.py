@@ -43,7 +43,9 @@ class SourceSastTests(unittest.TestCase):
                 tool=plan["tool_id"]
                 request=worker._language_request("run","attempt",inputs,plan)
                 self.assertEqual(request["network"],{"mode":"none","destinations":[]})
-                self.assertEqual(request["target_mounts"],[{"host_path":str(target),"container_path":"/workspace"}])
+                expected=[{"host_path":str(target),"container_path":"/workspace"}]
+                if tool=="psalm": expected.append({"host_path":str(worker.PSALM_CONFIG.parent),"container_path":"/inputs/source-sast-php"})
+                self.assertEqual(request["target_mounts"],expected)
                 self.assertEqual(request["argv"],plan["argv"])
                 self.assertEqual(validate_document(request,"pinned-container-request.schema.json"),[])
 
@@ -124,7 +126,16 @@ class SourceSastTests(unittest.TestCase):
         self.assertEqual(values["psalm"]["version"],"6.18.1")
         self.assertEqual(values["phpcs"]["version"],"4.0.4")
         self.assertEqual(values["spotbugs"]["argv"][0],"/opt/spotbugs/bin/spotbugs")
+        self.assertIn("--config=/inputs/source-sast-php/psalm.xml",values["psalm"]["argv"])
         self.assertTrue(all(item["tool_metadata_sha256"].startswith("sha256:") for item in plan))
+
+    def test_psalm_prefers_canonical_file_path_over_display_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target=Path(folder).resolve(); source=target/"index.php"; source.write_text("<?php\nreturn 1;\n")
+            raw=[{"type":"InvalidReturnType","file_name":"../../workspace/index.php",
+                  "file_path":"/workspace/index.php","line_from":2}]
+            leads=worker.language_adapters.normalize("psalm",json.dumps(raw).encode(),target)
+        self.assertEqual(leads[0]["path"],"index.php")
 
     def test_contract_registry_records_are_explicitly_not_fully_qualified(self):
         template = json.loads((ROOT / "registry/job-templates/02-source-sast.json").read_text())

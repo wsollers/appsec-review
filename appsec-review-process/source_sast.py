@@ -35,6 +35,7 @@ SUMMARY = "source-sast-summary.md"
 IMAGE_ID = "tool-semgrep"
 TOOL_ID = "semgrep-repository-rules-v1"
 RULES = ROOT.parent / "data" / "source-sast" / "rules-v1.yml"
+PSALM_CONFIG = ROOT.parent / "data" / "source-sast" / "psalm.xml"
 SCHEMA = "appsec-review/source-sast/1"
 RULE_CATEGORIES = {
     "appsec.c.strcpy": "unsafe-copy",
@@ -77,6 +78,7 @@ def _target(run_id: str) -> Path:
 def _code_hashes() -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
     values["data/source-sast/rules-v1.yml"] = file_hash(RULES)
+    values["data/source-sast/psalm.xml"] = file_hash(PSALM_CONFIG)
     values["schemas/source-sast.schema.json"] = file_hash(ROOT.parent / "schemas" / "source-sast.schema.json")
     return values
 
@@ -167,11 +169,14 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any]) -> dict[str, 
 def _language_request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
     if plan.get("status") != "READY" or plan.get("executed") is not False:
         raise Blocked(f"{JOB}: language tool is not ready for execution")
+    mounts = [{"host_path": inputs["target_path"], "container_path": "/workspace"}]
+    if plan["tool_id"] == "psalm":
+        mounts.append({"host_path": str(PSALM_CONFIG.parent), "container_path": "/inputs/source-sast-php"})
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": JOB, "attempt_id": adapter_id,
         "image": {"image_id": plan["image_id"], "digest": plan["image_digest"]},
         "argv": plan["argv"], "environment": [{"name":"LANG","value":"C"},{"name":"LC_ALL","value":"C"},
             {"name":"NO_COLOR","value":"1"}],
-        "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
+        "target_mounts": mounts,
         "scratch_path":"scratch", "log_path":"logs/container", "network":{"mode":"none","destinations":[]},
         "permission":_permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
         "limits":{"timeout_seconds":900,"memory_bytes":2*1024*1024*1024,"cpu_millis":2000,"pids":256,
