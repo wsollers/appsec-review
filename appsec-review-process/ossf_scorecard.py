@@ -380,10 +380,20 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                     "results_sha256": file_hash(results_path), "tool": record["tool"],
                     "target_execution": False}
         atomic_json(attempt / "manifest.json", manifest)
+        # Producer permission and lineage receipts, which 02-evidence-assembly requires from every
+        # producer, including a skipped one.
+        source_snapshot = "sha256:" + file_hash(run_path(run_id) / "inputs" / "artifact-manifest.json")
+        permissions = read_json(ROOT / "registry" / "job-templates" / "02-ossf-scorecard.json")["permissions"]
+        atomic_json(attempt / "permission.json", {
+            "schema": "appsec-review/producer-permission-receipt/1.0", "run_id": run_id,
+            "job_id": JOB_ID, "source_snapshot_sha256": source_snapshot, "permissions": permissions})
+        atomic_json(attempt / "lineage.json", {
+            "schema": "appsec-review/producer-lineage-receipt/1.0", "run_id": run_id,
+            "job_id": JOB_ID, "source_snapshot_sha256": source_snapshot, "build_lineage_sha256": None})
         atomic_json(attempt / "post.json", {"status": "OK", "schema_validation": "PASS",
                                              "freshness": "PASS", "hash_validation": "PASS"})
-        declared = ["manifest.json", "outputs/scorecard-results.json",
-                    "outputs/summary.md", "status.json"]
+        declared = ["lineage.json", "manifest.json", "outputs/scorecard-results.json",
+                    "outputs/summary.md", "permission.json", "status.json"]
         declared += sorted(path.relative_to(attempt).as_posix()
                            for path in (attempt / "outputs").glob("response-*.json"))
         gaps = (["One or more requested repositories have no published Scorecard result."]
