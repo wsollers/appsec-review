@@ -1,0 +1,70 @@
+from __future__ import annotations
+from copy import deepcopy
+from pathlib import Path
+import sys,tempfile,unittest
+
+ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
+import container_execution as ce
+import test_evidence as te
+from schema_validate import validate_document
+
+class TestEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(); self.owner=Path(self.tmp.name); self.target=self.owner/"target"
+        (self.target/"src").mkdir(parents=True); (self.target/"src/math.c").write_text("int add(int a,int b){return a+b;}\n")
+        self.native={"source_revision":"rev1"}; self.unit={"unit_id":"root","image_id":"image_build_aaaaaaaaaaaa",
+          "image_digest":"sha256:"+"1"*64,"compile_database":{"path":"compile_commands.json","sha256":"sha256:"+"2"*64,"entries":1},
+          "binaries":[{"artifact_path":"bin/test","sha256":"sha256:"+"3"*64}]}
+        self.source="sha256:"+"4"*64; self.lineage={"job_id":"02-native-build","attempt_id":"n1",
+          "accepted_pointer_sha256":"sha256:"+"5"*64,"envelope_sha256":"sha256:"+"6"*64,
+          "result_sha256":"sha256:"+"7"*64,"input_fingerprint":"sha256:"+"8"*64}
+        params={name:None for name in te.pc.PARAMETER_NAMES}; params.update(command_profile_id="fixture-tests-v1",target_path=".",mutation_mode="run-owned-copy")
+        cap={"kind":"target-execution","version":"1.0","parameters":params,"origin":"staged-run-config"}
+        self.grant={"schema":"appsec-review/permission-grant/1.0","grant_id":"fixture-test-grant","effect":"ALLOW",
+          "authority":{"name":"Fixture Owner","role":"engagement-owner"},"issued_at":"2026-01-01T00:00:00Z",
+          "expires_at":"2027-01-01T00:00:00Z","binding":{"run_id":"run1","source_snapshot_sha256":self.source,"job_id":"02-test-execution"},
+          "justification":"Run the bounded tracked fixture test plan.","capabilities":[cap]}
+        self.permit=te.permission("run1",self.source,"fixture-tests-v1",[self.grant],"2026-06-01T00:00:00Z")
+    def tearDown(self): self.tmp.cleanup()
+
+    def execution(self,raw=None,exit_code=0):
+        raw=raw or {}
+        return te.execution_record(run_id="run1",source=self.source,native_lineage=self.lineage,native=self.native,
+          unit=self.unit,argv=["python3","tests/run.py"],environment=[{"name":"LANG","value":"C"}],timeout_seconds=30,
+          permission_record=self.permit,exit_code=exit_code,raw_results=raw,artifact_root=self.owner)
+
+    def test_permission_and_safe_boundary_request_are_exact(self):
+        inputs={"source_snapshot_sha256":self.source,"target_path":str(self.target),"native_attempt_path":str(self.owner),
+          "unit":self.unit,"control":{"command_profile_id":"fixture-tests-v1","argv":["python3","tests/run.py"],
+          "environment":[{"name":"LANG","value":"C"}],"timeout_seconds":30,"result_path":"results.xml","coverage_path":"coverage.info","grants":[self.grant]}}
+        req=te.request("run1","attempt1",inputs)
+        self.assertEqual(ce.request_errors(req,run_id="run1",job_id="02-test-execution",attempt_id="attempt1"),[])
+        self.assertEqual(req["network"],{"mode":"none","destinations":[]}); self.assertEqual(req["permission"]["decision"]["decision"],"GRANTED")
+        self.assertEqual(req["target_mounts"][0]["container_path"],"/workspace")
+
+    def test_result_and_coverage_normalization_are_deterministic_evidence(self):
+        result_path=ROOT/"tests/fixtures/test-evidence/results.xml"; coverage_path=ROOT/"tests/fixtures/test-evidence/coverage.info"
+        execution=self.execution({"test-results":result_path,"coverage":coverage_path},exit_code=1)
+        self.assertEqual(execution["execution_status"],"FAIL")
+        self.assertEqual(validate_document(execution,"test-execution.schema.json"),[])
+        first=te.junit(execution,result_path); second=te.junit(execution,result_path)
+        self.assertEqual(first,second); self.assertEqual(first["counts"],{"passed":1,"failed":1,"skipped":1})
+        coverage=te.lcov(execution,coverage_path,self.target)
+        self.assertEqual(coverage["files"][0]["source_sha256"],te.sha(self.target/"src/math.c"))
+        self.assertEqual(validate_document(coverage,"test-coverage.schema.json"),[])
+        encoded=str(first).lower()+str(coverage).lower(); self.assertNotIn("severity",encoded); self.assertNotIn("finding",encoded)
+
+    def test_malformed_duplicate_stale_and_missing_inputs_fail_or_gap(self):
+        duplicate=self.owner/"duplicate.xml"; duplicate.write_text("<testsuite><testcase classname='a' name='x'/><testcase classname='a' name='x'/></testsuite>")
+        with self.assertRaisesRegex(te.Blocked,"duplicate"): te.junit(self.execution(),duplicate)
+        escaping=self.owner/"escape.info"; escaping.write_text("SF:/etc/passwd\nDA:1,1\nend_of_record\n")
+        with self.assertRaisesRegex(te.Blocked,"escapes"): te.lcov(self.execution(),escaping,self.target)
+        no_raw={"execution":self.execution(),"raw_path":None,"target_path":str(self.target)}
+        result=te.derive_ingest(no_raw,te.RESULT_JOB); coverage=te.derive_ingest(no_raw,te.COVERAGE_JOB)
+        self.assertTrue(result["coverage_gaps"]); self.assertTrue(coverage["coverage_gaps"])
+        denied=deepcopy(self.permit); denied["decision"]["decision"]="DENIED"
+        with self.assertRaisesRegex(te.Blocked,"permission denied"):
+            te.execution_record(run_id="run1",source=self.source,native_lineage=self.lineage,native=self.native,unit=self.unit,
+              argv=["x"],environment=[],timeout_seconds=1,permission_record=denied,exit_code=0,raw_results={})
+
+if __name__=="__main__": unittest.main()
