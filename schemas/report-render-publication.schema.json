@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "report-render-publication.schema.json",
+  "title": "Bounded draft report render publication",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "status", "report_sha256", "trace_sha256", "render_input_sha256", "generator_sha256", "artifacts", "final", "human_signoff"],
+  "properties": {
+    "schema": {"const": "appsec-review/report-render-publication/1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"const": "DRAFT_EVIDENCE_BACKED"},
+    "report_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "trace_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "render_input_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generator_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "artifacts": {
+      "type": "array", "minItems": 5, "maxItems": 5,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^presentation/(report\\.(tex|html|fragment\\.html)|workbench\\.(html|fragment\\.html))$"},
+          "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "final": {"const": false},
+    "human_signoff": {"const": false}
+  }
+}

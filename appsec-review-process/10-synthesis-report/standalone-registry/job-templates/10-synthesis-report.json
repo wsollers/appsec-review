@@ -1,0 +1,20 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "10-synthesis-report",
+  "display_name": "Standalone Evidence-backed Draft Report Publisher",
+  "process": "10-synthesis-report",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "synthesis-report-drafter",
+    "role_id": "synthesis-report-drafter",
+    "domain_id": "synthesis-report-core",
+    "tooling_profile_id": "synthesis-report-static",
+    "output_contract_id": "synthesis-report-publication"
+  },
+  "inputs": {"required": ["six exact accepted synthesis producers"], "optional": []},
+  "outputs": {"directory": "data/jobs/10-synthesis-report/attempts/<attempt_id>", "files": ["report.json", "presentation/report.tex", "presentation/report.html"]},
+  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
+  "implemented": true,
+  "execution": {"worker": "synthesis_report_worker.py", "arguments": []},
+  "permissions": ["read-run-data", "write-run-data"]
+}

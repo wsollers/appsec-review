@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "jobs": {
+    "10-synthesis-report": {
+      "lane": "10-synthesis-report",
+      "contract": "synthesis-report-publication",
+      "template": "10-synthesis-report",
+      "implemented": true,
+      "namespace": "10-synthesis-report",
+      "dependencies": []
+    }
+  }
+}
