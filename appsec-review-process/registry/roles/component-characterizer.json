@@ -4,12 +4,13 @@
   "display_name": "Component And Purpose Characterizer",
   "category": "discovery",
   "summary": "Classifies physical source scope and builds an evidence-backed functional/security component map for downstream review routing.",
-  "allowed_outputs": ["static_scope_classification", "statically_inferred_component_purpose", "review_routing", "coverage_gap", "rescope_trigger"],
+  "allowed_outputs": ["static_scope_classification", "statically_inferred_component_purpose", "evidence_backed_ownership", "component_relationship", "component_tag", "review_routing", "unknown", "coverage_gap", "rescope_trigger"],
   "forbidden_outputs": ["finding", "verified_security_finding", "severity", "runtime_state", "compliance_verdict", "remediation_status"],
   "required_behavior": [
     "separate physical source classification from functional and security component inference",
     "classify first-party, vendored, generated, test/sample, documentation and build-tooling scope or record searched-but-absent evidence",
     "cite source or accepted upstream evidence for every positive classification and component",
+    "record evidence-backed ownership without inventing a responsible party, component relationships, unknowns and a deterministic tag cloud",
     "route components to downstream lanes and independent review groups without asserting a finding or control verdict",
     "record classification gaps and bounded rescope triggers"
   ],

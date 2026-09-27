@@ -5,8 +5,9 @@
   "type": "object",
   "required": [
     "schema", "target", "source_revision", "source_snapshot_sha256",
-    "characterization_basis", "code_scope_classification", "analysis_exclusions",
-    "functional_components", "parallel_review_groups", "negative_evidence",
+    "evidence_manifest_lineage", "characterization_basis", "code_scope_classification",
+    "analysis_exclusions", "functional_components", "component_relationships",
+    "parallel_review_groups", "tag_cloud", "negative_evidence", "unknowns",
     "classification_gaps", "rescope_triggers"
   ],
   "additionalProperties": false,
@@ -15,6 +16,30 @@
     "target": {"type": "string"},
     "source_revision": {"type": ["string", "null"]},
     "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_manifest_lineage": {
+      "type": "object",
+      "required": [
+        "producer_job_id", "producer_attempt_id", "artifact_path", "manifest_sha256",
+        "manifest_self_sha256", "envelope_sha256", "accepted_pointer_sha256",
+        "input_fingerprint", "generation", "terminal_instances_sha256",
+        "producers_sha256", "artifact_set_sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "producer_job_id": {"const": "02-evidence-assembly"},
+        "producer_attempt_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$"},
+        "artifact_path": {"const": "intel-manifest.json"},
+        "manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "manifest_self_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "envelope_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "accepted_pointer_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "generation": {"type": ["string", "integer"]},
+        "terminal_instances_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "producers_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "artifact_set_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
     "characterization_basis": {"const": "static-evidence-and-review-routing"},
     "code_scope_classification": {
       "type": "array",
@@ -54,8 +79,8 @@
         "type": "object",
         "required": [
           "component_id", "name", "coarse_group", "component_type", "aliases",
-          "search_terms", "representative_locations", "observed_purpose", "confidence",
-          "evidence_citations", "trust_boundary_relevance", "data_classes",
+          "search_terms", "path_patterns", "representative_locations", "observed_purpose",
+          "ownership", "confidence", "evidence_citations", "trust_boundary_relevance", "data_classes",
           "security_control_relevance", "deployability", "downstream_lanes",
           "parallel_review_group"
         ],
@@ -67,8 +92,21 @@
           "component_type": {"type": "string"},
           "aliases": {"type": "array", "items": {"type": "string"}},
           "search_terms": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "path_patterns": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "representative_locations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "observed_purpose": {"type": "string"},
+          "ownership": {
+            "type": "object",
+            "required": ["kind", "responsible_party", "basis", "confidence", "evidence_citations"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {"enum": ["repository-owned", "vendored-third-party", "generated", "shared", "unknown"]},
+              "responsible_party": {"type": ["string", "null"]},
+              "basis": {"type": "string"},
+              "confidence": {"enum": ["high", "medium", "low"]},
+              "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
+            }
+          },
           "confidence": {"enum": ["high", "medium", "low"]},
           "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}},
           "trust_boundary_relevance": {"type": "string"},
@@ -77,6 +115,23 @@
           "deployability": {"enum": ["deployable", "linked-runtime", "build-time", "non-runtime", "unknown"]},
           "downstream_lanes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "parallel_review_group": {"type": "string"}
+        }
+      }
+    },
+    "component_relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["relationship_id", "from_component_id", "to_component_id", "relationship_type", "basis", "confidence", "evidence_citations"],
+        "additionalProperties": false,
+        "properties": {
+          "relationship_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "from_component_id": {"type": "string"},
+          "to_component_id": {"type": "string"},
+          "relationship_type": {"enum": ["builds", "calls", "contains", "depends-on", "reads-from", "writes-to", "configures", "deploys", "shares-data-with", "unknown"]},
+          "basis": {"type": "string"},
+          "confidence": {"enum": ["high", "medium", "low"]},
+          "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
         }
       }
     },
@@ -95,6 +150,22 @@
         }
       }
     },
+    "tag_cloud": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["tag", "weight", "component_ids", "confidence", "evidence_citations"],
+        "additionalProperties": false,
+        "properties": {
+          "tag": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "weight": {"type": "integer", "minimum": 1, "maximum": 100},
+          "component_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "confidence": {"enum": ["high", "medium", "low"]},
+          "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
+        }
+      }
+    },
     "negative_evidence": {
       "type": "array",
       "items": {
@@ -106,6 +177,23 @@
           "search_terms": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "search_scope": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "confidence": {"enum": ["high", "medium", "low"]},
+          "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
+        }
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unknown_id", "subject", "question", "impact", "affected_component_ids", "resolution_action", "evidence_citations"],
+        "additionalProperties": false,
+        "properties": {
+          "unknown_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "subject": {"type": "string"},
+          "question": {"type": "string"},
+          "impact": {"type": "string"},
+          "affected_component_ids": {"type": "array", "items": {"type": "string"}},
+          "resolution_action": {"type": "string"},
           "evidence_citations": {"type": "array", "minItems": 1, "items": {"$ref": "evidence-citation.schema.json"}}
         }
       }
@@ -129,13 +217,16 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["trigger_id", "condition", "affected_scope_ids", "affected_component_ids", "actions"],
+        "required": ["trigger_id", "condition", "affected_scope_ids", "affected_component_ids", "invalidation_scope", "max_reentry_rounds", "required_evidence", "actions"],
         "additionalProperties": false,
         "properties": {
           "trigger_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
           "condition": {"type": "string"},
           "affected_scope_ids": {"type": "array", "items": {"type": "string"}},
           "affected_component_ids": {"type": "array", "items": {"type": "string"}},
+          "invalidation_scope": {"enum": ["affected-only", "full-map"]},
+          "max_reentry_rounds": {"type": "integer", "minimum": 1, "maximum": 3},
+          "required_evidence": {"type": "array", "minItems": 1, "items": {"type": "string"}},
           "actions": {"type": "array", "minItems": 1, "items": {"type": "string"}}
         }
       }

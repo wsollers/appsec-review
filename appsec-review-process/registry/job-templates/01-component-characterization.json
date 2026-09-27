@@ -13,7 +13,7 @@
     "output_contract_id": "component-map"
   },
   "inputs": {
-    "required": ["target repository path", "accepted 02-evidence-assembly attempt"],
+    "required": ["target repository path", "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts"],
     "optional": ["repository partition map", "symbol and semantic indexes", "build, source-SAST and operations evidence"]
   },
   "outputs": {"directory": "outputs/01-component-characterization", "files": ["component-purpose-map.json", "component-purpose-map.md", "status.json"]},

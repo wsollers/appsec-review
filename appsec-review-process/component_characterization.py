@@ -46,6 +46,7 @@ PROHIBITED_KEYS = {
     "vulnerabilities", "severity", "cvss", "cvss_score", "runtime_state",
     "runtime_observation", "observed_runtime", "compliance_verdict", "remediation_status",
 }
+SHA256_RE = re.compile(r"[0-9a-f]{64}")
 CODE_FILES = (
     "component_characterization.py", "persona_dispatch.py", "persona_invocation.py",
     "persona_prompt_assembly.py", "claude_cli_invoker.py", "publish_job_output.py",
@@ -87,7 +88,142 @@ def _code_hashes() -> dict[str, str]:
     return values
 
 
-def _accepted_evidence(run_id: str) -> tuple[Path, dict[str, Any]]:
+def _manifest_self_sha256(manifest: dict[str, Any]) -> str:
+    return "sha256:" + digest({key: value for key, value in manifest.items()
+                               if key != "manifest_sha256"})
+
+
+def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256: str,
+                           attempt: Path, envelope_artifacts: dict[str, str]) -> tuple[list[str], dict[str, str]]:
+    """Validate only the provisional F02/F03 boundary needed by this consumer.
+
+    F03 treats producer payloads as opaque evidence.  It verifies the COMPLETE rendezvous,
+    generation/source identity, ordered producer receipts, and every assembly-relative artifact
+    against both the manifest and the accepted F02 envelope before exposing those files.
+    """
+    errors: list[str] = []
+    readable: dict[str, str] = {}
+    top_keys = {"schema", "run_id", "source_snapshot_sha256", "assembly_status", "generation",
+                "terminal_instances", "producers", "coverage_gaps", "manifest_sha256"}
+    if not isinstance(manifest, dict) or set(manifest) != top_keys:
+        return ["intel manifest does not match the closed provisional F02 interface"], readable
+    if manifest.get("schema") != "appsec-review/intel-manifest/1.0":
+        errors.append("intel manifest schema is not appsec-review/intel-manifest/1.0")
+    if manifest.get("run_id") != run_id:
+        errors.append("intel manifest run identity differs from the engagement")
+    if manifest.get("source_snapshot_sha256") != source_snapshot_sha256:
+        errors.append("intel manifest source snapshot differs from the staged target")
+    if manifest.get("assembly_status") != "COMPLETE":
+        errors.append("intel manifest is not a COMPLETE evidence assembly")
+    generation = manifest.get("generation")
+    if not ((isinstance(generation, int) and not isinstance(generation, bool) and generation >= 1) or
+            (isinstance(generation, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}", generation))):
+        errors.append("intel manifest generation is invalid")
+    terminal_instances = manifest.get("terminal_instances")
+    if (not isinstance(terminal_instances, list) or
+            any(not isinstance(item, str) or not item for item in terminal_instances) or
+            terminal_instances != sorted(set(terminal_instances))):
+        errors.append("intel manifest terminal instance ids are not unique and ordered")
+        terminal_ids: set[str] = set()
+    else:
+        terminal_ids = set(terminal_instances)
+    gaps = manifest.get("coverage_gaps")
+    if (not isinstance(gaps, list) or any(not isinstance(item, str) or not item for item in gaps) or
+            gaps != sorted(set(gaps))):
+        errors.append("intel manifest coverage gaps are not unique and ordered")
+    manifest_sha = manifest.get("manifest_sha256")
+    if not isinstance(manifest_sha, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest_sha):
+        errors.append("intel manifest self hash is malformed")
+    elif manifest_sha != _manifest_self_sha256(manifest):
+        errors.append("intel manifest self hash does not match its canonical record")
+
+    producer_keys = {"job_id", "expected_contract", "disposition", "attempt_id",
+                     "input_fingerprint", "execution_status", "envelope_sha256",
+                     "source_snapshot_sha256", "build_lineage_sha256", "terminal_instance_ids",
+                     "coverage_gaps", "skip_reason", "artifacts"}
+    artifact_keys = {"producer_job_id", "producer_attempt_id", "producer_path", "assembly_path",
+                     "sha256", "media_type"}
+    producers = manifest.get("producers")
+    if not isinstance(producers, list):
+        return [*errors, "intel manifest producers is not an array"], readable
+    job_ids = [item.get("job_id") for item in producers if isinstance(item, dict)]
+    if len(job_ids) != len(producers) or job_ids != sorted(set(job_ids)):
+        errors.append("intel manifest producers are not unique and ordered by job id")
+    seen_paths: set[str] = set()
+    for index, producer in enumerate(producers):
+        label = f"producer[{index}]"
+        if not isinstance(producer, dict) or set(producer) != producer_keys:
+            errors.append(f"{label} does not match the closed producer receipt")
+            continue
+        job_id, attempt_id = producer["job_id"], producer["attempt_id"]
+        if not isinstance(job_id, str) or not job_id:
+            errors.append(f"{label} has an invalid job id")
+        if not isinstance(producer["expected_contract"], str) or not producer["expected_contract"]:
+            errors.append(f"{label} has no expected contract")
+        if not isinstance(attempt_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,119}", attempt_id):
+            errors.append(f"{label} has an invalid attempt id")
+        for field in ("input_fingerprint", "source_snapshot_sha256"):
+            if not isinstance(producer[field], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", producer[field]):
+                errors.append(f"{label} has an invalid {field}")
+        if producer["source_snapshot_sha256"] != source_snapshot_sha256:
+            errors.append(f"{label} has mixed source lineage")
+        if not isinstance(producer["envelope_sha256"], str) or not SHA256_RE.fullmatch(producer["envelope_sha256"]):
+            errors.append(f"{label} has an invalid envelope hash")
+        build_sha = producer["build_lineage_sha256"]
+        if build_sha is not None and (not isinstance(build_sha, str) or not SHA256_RE.fullmatch(build_sha)):
+            errors.append(f"{label} has an invalid build lineage hash")
+        instance_ids = producer["terminal_instance_ids"]
+        if (not isinstance(instance_ids, list) or
+                any(not isinstance(item, str) or item not in terminal_ids for item in instance_ids) or
+                instance_ids != sorted(set(instance_ids))):
+            errors.append(f"{label} has invalid terminal instance ids")
+        producer_gaps = producer["coverage_gaps"]
+        if (not isinstance(producer_gaps, list) or
+                any(not isinstance(item, str) or not item for item in producer_gaps) or
+                producer_gaps != sorted(set(producer_gaps))):
+            errors.append(f"{label} has unordered coverage gaps")
+        disposition = producer["disposition"]
+        if disposition == "accepted":
+            if producer["execution_status"] not in {"OK", "OK_WITH_GAPS"} or producer["skip_reason"] is not None:
+                errors.append(f"{label} accepted disposition conflicts with terminal state")
+        elif disposition == "authorized-skip":
+            if producer["execution_status"] != "SKIPPED" or not isinstance(producer["skip_reason"], str):
+                errors.append(f"{label} authorized skip has no evidenced skip reason")
+        else:
+            errors.append(f"{label} is missing or has an unsupported disposition")
+        artifacts = producer["artifacts"]
+        if not isinstance(artifacts, list):
+            errors.append(f"{label} artifacts is not an array")
+            continue
+        for artifact_index, artifact in enumerate(artifacts):
+            artifact_label = f"{label}.artifacts[{artifact_index}]"
+            if not isinstance(artifact, dict) or set(artifact) != artifact_keys:
+                errors.append(f"{artifact_label} does not match the closed artifact identity")
+                continue
+            path, expected = artifact["assembly_path"], artifact["sha256"]
+            if artifact["producer_job_id"] != job_id or artifact["producer_attempt_id"] != attempt_id:
+                errors.append(f"{artifact_label} producer identity mismatch")
+            if not _pattern_ok(artifact["producer_path"]) or not _pattern_ok(path):
+                errors.append(f"{artifact_label} path is not normalized and relative")
+                continue
+            if path in seen_paths:
+                errors.append(f"{artifact_label} duplicates an assembly path")
+            seen_paths.add(path)
+            if not isinstance(expected, str) or not SHA256_RE.fullmatch(expected):
+                errors.append(f"{artifact_label} sha256 is invalid")
+                continue
+            if not isinstance(artifact["media_type"], str) or not artifact["media_type"]:
+                errors.append(f"{artifact_label} media type is empty")
+            candidate = _beneath(attempt, path)
+            if (candidate is None or not candidate.is_file() or candidate.is_symlink() or
+                    file_hash(candidate) != expected or envelope_artifacts.get(path) != expected):
+                errors.append(f"{artifact_label} is not the hash-bound accepted assembly artifact")
+            else:
+                readable[path] = expected
+    return errors, readable
+
+
+def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, dict[str, Any]]:
     base = data_path(run_id, "jobs", UPSTREAM_JOB)
     pointer_path = base / "accepted.json"
     if not pointer_path.is_file() or pointer_path.is_symlink():
@@ -115,20 +251,34 @@ def _accepted_evidence(run_id: str) -> tuple[Path, dict[str, Any]]:
             envelope.get("output_contract") != "pregather"):
         raise Blocked(f"{JOB}: accepted {UPSTREAM_JOB} envelope is invalid")
     artifacts = envelope.get("artifacts", [])
+    envelope_artifacts: dict[str, str] = {}
     for record in artifacts:
         relative = record.get("path") if isinstance(record, dict) else None
         path = _beneath(attempt, relative)
         if path is None or not path.is_file() or path.is_symlink() or file_hash(path) != record.get("sha256"):
             raise Blocked(f"{JOB}: accepted {UPSTREAM_JOB} artifact set changed")
+        envelope_artifacts[relative] = record["sha256"]
     manifest = attempt / UPSTREAM_MANIFEST
     if (UPSTREAM_MANIFEST not in {item.get("path") for item in artifacts if isinstance(item, dict)} or
             not manifest.is_file() or manifest.is_symlink()):
         raise Blocked(f"{JOB}: accepted {UPSTREAM_JOB} has no {UPSTREAM_MANIFEST}")
+    manifest_value = read_json(manifest)
+    manifest_errors, readable = _intel_manifest_errors(
+        manifest_value, run_id=run_id, source_snapshot_sha256=source_snapshot_sha256,
+        attempt=attempt, envelope_artifacts=envelope_artifacts)
+    if manifest_errors:
+        raise Blocked(f"{JOB}: accepted {UPSTREAM_MANIFEST} is invalid ({len(manifest_errors)} errors)")
+    readable[UPSTREAM_MANIFEST] = file_hash(manifest)
     return attempt, {
         "job": UPSTREAM_JOB, "attempt_id": attempt_id,
         "pointer_sha256": file_hash(pointer_path), "envelope_sha256": file_hash(envelope_path),
         "manifest_sha256": file_hash(manifest),
-        "artifacts": sorted({item["path"]: item["sha256"] for item in artifacts}.items()),
+        "manifest_self_sha256": manifest_value["manifest_sha256"],
+        "input_fingerprint": pointer["fingerprint"], "generation": manifest_value["generation"],
+        "terminal_instances_sha256": digest(manifest_value["terminal_instances"]),
+        "producers_sha256": digest(manifest_value["producers"]),
+        "artifact_set_sha256": digest(sorted(readable.items())),
+        "artifacts": sorted(readable.items()),
     }
 
 
@@ -161,12 +311,13 @@ def _stage_evidence(run_id: str, source: Path, evidence: dict[str, Any]) -> Path
 
 def current_inputs(run_id: str) -> dict[str, Any]:
     target, identity = _target(run_id)
-    evidence_attempt, evidence = _accepted_evidence(run_id)
+    source_snapshot_sha256 = "sha256:" + identity["fingerprint"]
+    evidence_attempt, evidence = _accepted_evidence(run_id, source_snapshot_sha256)
     evidence_root = _stage_evidence(run_id, evidence_attempt, evidence)
     return {
         "job": JOB, "run_id": run_id, "target_root": str(target),
         "target_name": target.name, "source_revision": identity.get("revision"),
-        "source_snapshot_sha256": "sha256:" + identity["fingerprint"],
+        "source_snapshot_sha256": source_snapshot_sha256,
         "evidence_root": str(evidence_root), "evidence": evidence, "code": _code_hashes(),
     }
 
@@ -238,6 +389,35 @@ def _backfill_citations(value: Any, target_hashes: dict[str, str], evidence_hash
             citation["content_hash"] = expected.split(":", 1)[-1]
 
 
+def _manifest_lineage(inputs: dict[str, Any]) -> dict[str, Any]:
+    evidence = inputs["evidence"]
+    return {
+        "producer_job_id": UPSTREAM_JOB, "producer_attempt_id": evidence["attempt_id"],
+        "artifact_path": UPSTREAM_MANIFEST,
+        "manifest_sha256": "sha256:" + evidence["manifest_sha256"],
+        "manifest_self_sha256": evidence["manifest_self_sha256"],
+        "envelope_sha256": "sha256:" + evidence["envelope_sha256"],
+        "accepted_pointer_sha256": "sha256:" + evidence["pointer_sha256"],
+        "input_fingerprint": evidence["input_fingerprint"], "generation": evidence["generation"],
+        "terminal_instances_sha256": "sha256:" + evidence["terminal_instances_sha256"],
+        "producers_sha256": "sha256:" + evidence["producers_sha256"],
+        "artifact_set_sha256": "sha256:" + evidence["artifact_set_sha256"],
+    }
+
+
+def _slug(value: str) -> str:
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", value.lower())).strip("-")
+
+
+def _target_files(target_root: Path) -> set[str]:
+    return {path.relative_to(target_root).as_posix() for path in target_root.rglob("*")
+            if path.is_file() and not path.is_symlink() and ".git" not in path.relative_to(target_root).parts}
+
+
+def _matches(relative: str, pattern: str) -> bool:
+    return PurePosixPath(relative).match(pattern)
+
+
 def validate_payload(value: dict[str, Any], *, target_root: Path,
                      evidence_root: Path | None = None) -> list[str]:
     errors = list(validate_document(value, "component-purpose-map.schema.json"))
@@ -261,8 +441,10 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
 
     scopes = unique(value["code_scope_classification"], "scope_id", "scope")
     components = unique(value["functional_components"], "component_id", "component")
+    relationships = unique(value["component_relationships"], "relationship_id", "relationship")
     groups = unique(value["parallel_review_groups"], "group_id", "parallel review group")
     triggers = unique(value["rescope_triggers"], "trigger_id", "rescope trigger")
+    unique(value["unknowns"], "unknown_id", "unknown")
     unique(value["classification_gaps"], "gap_id", "classification gap")
     covered = {item["classification"] for item in value["code_scope_classification"]}
     covered |= {item["category"] for item in value["negative_evidence"]}
@@ -270,21 +452,60 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
     if missing:
         errors.append("expected categories are neither classified nor recorded as negative evidence: " +
                       ", ".join(sorted(missing)))
+    target_files = _target_files(target_root)
+    assignments: dict[str, list[str]] = {path: [] for path in target_files}
     for item in value["code_scope_classification"]:
+        matched: set[str] = set()
         for pattern in item["path_patterns"]:
             if not _pattern_ok(pattern):
                 errors.append(f"scope {item['scope_id']} has a non-relative path pattern")
+                continue
+            matched |= {path for path in target_files if _matches(path, pattern)}
+        if not matched:
+            errors.append(f"scope {item['scope_id']} does not resolve to a target file")
+        for path in matched:
+            assignments[path].append(item["scope_id"])
+    overlapping = sorted(path for path, owners in assignments.items() if len(owners) > 1)
+    unassigned = sorted(path for path, owners in assignments.items() if not owners)
+    if overlapping:
+        errors.append("target files have overlapping scope classifications: " + ", ".join(overlapping))
+    if unassigned:
+        errors.append("target files are not assigned to a physical scope: " + ", ".join(unassigned))
     for item in value["analysis_exclusions"]:
         if item["scope_id"] not in scopes:
             errors.append(f"exclusion scope does not resolve: {item['scope_id']}")
         if item["rescope_trigger_id"] not in triggers:
             errors.append(f"exclusion rescope trigger does not resolve: {item['rescope_trigger_id']}")
     for item in value["functional_components"]:
+        if item["component_id"] != _slug(item["name"]):
+            errors.append(f"component {item['component_id']} is not the deterministic slug of its name")
         if item["parallel_review_group"] not in groups:
             errors.append(f"component group does not resolve: {item['parallel_review_group']}")
+        component_paths: set[str] = set()
+        for pattern in item["path_patterns"]:
+            if not _pattern_ok(pattern):
+                errors.append(f"component {item['component_id']} has a non-relative path pattern")
+                continue
+            component_paths |= {path for path in target_files if _matches(path, pattern)}
+        if not component_paths:
+            errors.append(f"component {item['component_id']} has no resolved target paths")
         for location in item["representative_locations"]:
             if not _pattern_ok(location):
                 errors.append(f"component {item['component_id']} has a non-relative location")
+            elif location not in component_paths:
+                errors.append(f"component {item['component_id']} representative location is outside its paths")
+        ownership = item["ownership"]
+        if ownership["kind"] == "unknown" and ownership["responsible_party"] is not None:
+            errors.append(f"component {item['component_id']} unknown ownership names a responsible party")
+        if ownership["kind"] != "unknown" and not ownership["basis"].strip():
+            errors.append(f"component {item['component_id']} ownership has no evidence basis")
+    for item in value["component_relationships"]:
+        if item["from_component_id"] not in components or item["to_component_id"] not in components:
+            errors.append(f"relationship {item['relationship_id']} has an unresolved component")
+        expected_id = (f"{item['from_component_id']}--{item['relationship_type']}--"
+                       f"{item['to_component_id']}")
+        if item["relationship_id"] != expected_id:
+            errors.append(f"relationship {item['relationship_id']} does not have its deterministic id")
     for item in value["parallel_review_groups"]:
         missing_components = set(item["component_ids"]) - components
         if missing_components:
@@ -294,6 +515,25 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
             errors.append(f"rescope trigger {item['trigger_id']} has unresolved scope ids")
         if set(item["affected_component_ids"]) - components:
             errors.append(f"rescope trigger {item['trigger_id']} has unresolved component ids")
+        if (item["invalidation_scope"] == "affected-only" and
+                not item["affected_scope_ids"] and not item["affected_component_ids"]):
+            errors.append(f"rescope trigger {item['trigger_id']} has an empty affected-only boundary")
+    for item in value["unknowns"]:
+        if set(item["affected_component_ids"]) - components:
+            errors.append(f"unknown {item['unknown_id']} has unresolved component ids")
+    tags = [item["tag"] for item in value["tag_cloud"]]
+    if tags != sorted(set(tags)):
+        errors.append("tag cloud must have unique tags in deterministic lexical order")
+    tagged_components: set[str] = set()
+    for item in value["tag_cloud"]:
+        if item["component_ids"] != sorted(set(item["component_ids"])):
+            errors.append(f"tag {item['tag']} component ids are not unique and ordered")
+        unresolved = set(item["component_ids"]) - components
+        if unresolved:
+            errors.append(f"tag {item['tag']} has unresolved component ids")
+        tagged_components.update(item["component_ids"])
+    if components - tagged_components:
+        errors.append("every component must appear in the tag cloud")
     for citation in _citations(value):
         if not isinstance(citation, dict):
             continue
@@ -341,6 +581,7 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
     value["target"] = record["target_name"]
     value["source_revision"] = record["source_revision"]
     value["source_snapshot_sha256"] = record["source_snapshot_sha256"]
+    value["evidence_manifest_lineage"] = _manifest_lineage(record)
     target_hashes = {item["path"]: item["sha256"] for item in request["readable_inputs"]
                      if item["root"] == pd.DEFAULT_READABLE_ROOT}
     evidence_hashes = {item["path"]: item["sha256"] for item in request["readable_inputs"]
@@ -361,6 +602,7 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         "target": inputs["target_name"],
         "source_revision": inputs["source_revision"],
         "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+        "evidence_manifest_lineage": _manifest_lineage(inputs),
     }
     if any(value.get(key) != expected for key, expected in expected_identity.items()):
         raise Blocked(f"{JOB}: result identity does not match its immutable inputs")

@@ -12,10 +12,14 @@
   },
   "validation_rules": [
     "every expected source category is represented by a scope classification or explicit negative evidence",
+    "every regular target file has exactly one physical scope; overlap and unassigned paths fail closed",
     "scope, component, review-group, exclusion and rescope identifiers are unique and all references resolve",
+    "component and relationship identifiers and tag ordering are deterministic",
+    "the exact COMPLETE F02 intel-manifest producer attempt, generation, source snapshot and hashes are bound in evidence_manifest_lineage",
+    "only hash-verified assembly-relative artifacts declared by intel-manifest.json are readable upstream evidence",
     "all repository paths are normalized and repository-relative",
-    "every positive scope and component claim has fresh source or accepted upstream evidence",
-    "excluded vendored, generated, test/sample and documentation scope has a bounded rescope trigger",
+    "every positive scope, component, ownership, relationship, tag and unknown claim has fresh source or accepted upstream evidence",
+    "excluded vendored, generated, test/sample and documentation scope has an explicit affected boundary, required evidence and at most three re-entry rounds",
     "downstream routing is evidence prioritization and does not assert applicability or a security conclusion",
     "the map cannot publish findings, severity, runtime state, remediation status or compliance verdicts",
     "latest failed attempt blocks reuse of an older accepted map"

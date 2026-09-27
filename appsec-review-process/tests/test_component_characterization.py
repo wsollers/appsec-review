@@ -57,7 +57,8 @@ class ComponentCharacterizationTests(unittest.TestCase):
         ceiling = pi.claim_ceiling(records["role"], records["tooling_profile"])
         self.assertEqual(set(ceiling["allowed"]), {
             "static_scope_classification", "statically_inferred_component_purpose",
-            "review_routing", "coverage_gap", "rescope_trigger",
+            "evidence_backed_ownership", "component_relationship", "component_tag",
+            "review_routing", "unknown", "coverage_gap", "rescope_trigger",
         })
         self.assertTrue({"finding", "severity", "runtime_state"} <= set(ceiling["prohibited"]))
 
@@ -88,6 +89,89 @@ class ComponentCharacterizationTests(unittest.TestCase):
         self.assertTrue(any("does not resolve" in error for error in cc.validate_payload(
             broken, target_root=self.target, evidence_root=self.evidence)))
 
+        missing = deepcopy(self.value)
+        missing["functional_components"][0]["evidence_citations"] = []
+        self.assertTrue(cc.validate_payload(missing, target_root=self.target,
+                                            evidence_root=self.evidence))
+
+    def test_overlapping_and_unassigned_physical_paths_fail_closed(self):
+        overlapping = deepcopy(self.value)
+        overlapping["code_scope_classification"][1]["path_patterns"].append("src/**")
+        errors = cc.validate_payload(overlapping, target_root=self.target,
+                                     evidence_root=self.evidence)
+        self.assertTrue(any("overlapping" in error and "src/main.c" in error for error in errors))
+
+        unassigned = deepcopy(self.value)
+        unassigned["code_scope_classification"][2]["path_patterns"] = ["docs/**"]
+        errors = cc.validate_payload(unassigned, target_root=self.target,
+                                     evidence_root=self.evidence)
+        self.assertTrue(any("not assigned" in error and "README.md" in error for error in errors))
+
+    def test_component_relationship_and_tag_ids_are_deterministic(self):
+        bad_component = deepcopy(self.value)
+        bad_component["functional_components"][0]["component_id"] = "model-chosen-id"
+        self.assertTrue(any("deterministic slug" in error for error in cc.validate_payload(
+            bad_component, target_root=self.target, evidence_root=self.evidence)))
+
+        bad_relationship = deepcopy(self.value)
+        bad_relationship["component_relationships"][0]["relationship_id"] = "arbitrary"
+        self.assertTrue(any("deterministic id" in error for error in cc.validate_payload(
+            bad_relationship, target_root=self.target, evidence_root=self.evidence)))
+
+        bad_tags = deepcopy(self.value)
+        bad_tags["tag_cloud"] = list(reversed(bad_tags["tag_cloud"]))
+        self.assertTrue(any("deterministic lexical order" in error for error in cc.validate_payload(
+            bad_tags, target_root=self.target, evidence_root=self.evidence)))
+
+    def test_provisional_intel_manifest_requires_complete_exact_hash_bound_lineage(self):
+        attempt = self.owner / "assembly"
+        artifact = attempt / "assembled/evidence.json"
+        artifact.parent.mkdir(parents=True)
+        state.atomic_json(artifact, {"schema": "fixture/evidence/1"})
+        source = self.value["source_snapshot_sha256"]
+        manifest = {
+            "schema": "appsec-review/intel-manifest/1.0", "run_id": "fixture-run",
+            "source_snapshot_sha256": source, "assembly_status": "COMPLETE", "generation": 7,
+            "terminal_instances": ["02-evidence-index/whole/one"],
+            "producers": [{
+                "job_id": "02-evidence-index", "expected_contract": "evidence-index",
+                "disposition": "accepted", "attempt_id": "evidence-1",
+                "input_fingerprint": "sha256:" + "a" * 64, "execution_status": "OK",
+                "envelope_sha256": "b" * 64, "source_snapshot_sha256": source,
+                "build_lineage_sha256": None,
+                "terminal_instance_ids": ["02-evidence-index/whole/one"],
+                "coverage_gaps": [], "skip_reason": None,
+                "artifacts": [{
+                    "producer_job_id": "02-evidence-index", "producer_attempt_id": "evidence-1",
+                    "producer_path": "evidence.json", "assembly_path": "assembled/evidence.json",
+                    "sha256": state.file_hash(artifact), "media_type": "application/json",
+                }],
+            }],
+            "coverage_gaps": [], "manifest_sha256": "sha256:" + "0" * 64,
+        }
+        manifest["manifest_sha256"] = cc._manifest_self_sha256(manifest)
+        envelope_artifacts = {"assembled/evidence.json": state.file_hash(artifact)}
+        errors, readable = cc._intel_manifest_errors(
+            manifest, run_id="fixture-run", source_snapshot_sha256=source,
+            attempt=attempt, envelope_artifacts=envelope_artifacts)
+        self.assertEqual(errors, [])
+        self.assertEqual(readable, envelope_artifacts)
+
+        for mutate, expected in (
+                (lambda value: value.__setitem__("assembly_status", "INCOMPLETE"), "not a COMPLETE"),
+                (lambda value: value.__setitem__("source_snapshot_sha256", "sha256:" + "9" * 64),
+                 "source snapshot"),
+                (lambda value: value.__setitem__("manifest_sha256", "sha256:" + "9" * 64),
+                 "self hash"),
+                (lambda value: value["producers"][0]["artifacts"][0].__setitem__("sha256", "9" * 64),
+                 "hash-bound")):
+            changed = deepcopy(manifest)
+            mutate(changed)
+            errors, _ = cc._intel_manifest_errors(
+                changed, run_id="fixture-run", source_snapshot_sha256=source,
+                attempt=attempt, envelope_artifacts=envelope_artifacts)
+            self.assertTrue(any(expected in error for error in errors), errors)
+
 
 class ComponentCharacterizationLifecycleTests(unittest.TestCase):
     def setUp(self):
@@ -113,7 +197,14 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
             "job": cc.JOB, "run_id": self.run_id, "target_root": str(self.target),
             "target_name": "hello-autotools", "source_revision": None,
             "source_snapshot_sha256": self.value["source_snapshot_sha256"],
-            "evidence_root": str(self.evidence), "evidence": {"fixture": True},
+            "evidence_root": str(self.evidence), "evidence": {
+                "job": cc.UPSTREAM_JOB, "attempt_id": "assembly-1",
+                "pointer_sha256": "e" * 64, "envelope_sha256": "d" * 64,
+                "manifest_sha256": "b" * 64, "manifest_self_sha256": "sha256:" + "c" * 64,
+                "input_fingerprint": "sha256:" + "f" * 64, "generation": 1,
+                "terminal_instances_sha256": "1" * 64, "producers_sha256": "2" * 64,
+                "artifact_set_sha256": "3" * 64, "artifacts": [],
+            },
             "code": cc._code_hashes(),
         }
 
@@ -140,7 +231,33 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
         base = run / "data/jobs" / cc.UPSTREAM_JOB
         attempt = base / "attempts/assembly-1"
         attempt.mkdir(parents=True)
-        state.atomic_json(attempt / cc.UPSTREAM_MANIFEST, {"schema": "fixture", "entries": []})
+        assembled = attempt / "assembled/evidence-index.json"
+        assembled.parent.mkdir()
+        state.atomic_json(assembled, {"schema": "fixture/evidence-index/1", "entries": []})
+        source_snapshot = "sha256:" + cc.intake.source_identity(str(self.target))["fingerprint"]
+        manifest = {
+            "schema": "appsec-review/intel-manifest/1.0", "run_id": self.run_id,
+            "source_snapshot_sha256": source_snapshot, "assembly_status": "COMPLETE",
+            "generation": 1, "terminal_instances": ["02-evidence-index/whole/one"],
+            "producers": [{
+                "job_id": "02-evidence-index", "expected_contract": "evidence-index",
+                "disposition": "accepted", "attempt_id": "evidence-1",
+                "input_fingerprint": "sha256:" + "a" * 64, "execution_status": "OK",
+                "envelope_sha256": "b" * 64, "source_snapshot_sha256": source_snapshot,
+                "build_lineage_sha256": None,
+                "terminal_instance_ids": ["02-evidence-index/whole/one"],
+                "coverage_gaps": [], "skip_reason": None,
+                "artifacts": [{
+                    "producer_job_id": "02-evidence-index", "producer_attempt_id": "evidence-1",
+                    "producer_path": "evidence-index.json",
+                    "assembly_path": "assembled/evidence-index.json",
+                    "sha256": state.file_hash(assembled), "media_type": "application/json",
+                }],
+            }],
+            "coverage_gaps": [], "manifest_sha256": "0" * 64,
+        }
+        manifest["manifest_sha256"] = cc._manifest_self_sha256(manifest)
+        state.atomic_json(attempt / cc.UPSTREAM_MANIFEST, manifest)
         state.atomic_json(attempt / "status.json", {"status": "OK"})
         (attempt / "raw-tool-output.log").write_text("must not become a readable input\n",
                                                        encoding="utf-8")
@@ -151,7 +268,8 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
             acceptance_status="CURRENT", input_fingerprint=fingerprint,
             output_contract="pregather", started_at="2026-01-01T00:00:00Z",
             finished_at="2026-01-01T00:00:01Z", summary="fixture",
-            artifacts=artifact_records(attempt, [cc.UPSTREAM_MANIFEST, "status.json"]))
+            artifacts=artifact_records(attempt, [cc.UPSTREAM_MANIFEST, "status.json",
+                                                  "assembled/evidence-index.json"]))
         state.atomic_json(attempt / "result.json", envelope)
         state.atomic_json(base / "accepted.json", {
             "schema": "appsec-review/accepted-worker-result/1.0", "status": "OK",
@@ -162,7 +280,8 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
         inputs = cc.current_inputs(self.run_id)
         staged = Path(inputs["evidence_root"])
         self.assertTrue((staged / cc.UPSTREAM_MANIFEST).is_file())
-        self.assertTrue((staged / "status.json").is_file())
+        self.assertTrue((staged / "assembled/evidence-index.json").is_file())
+        self.assertFalse((staged / "status.json").exists())
         self.assertFalse((staged / "raw-tool-output.log").exists())
 
     def test_common_lifecycle_publishes_and_reuses_valid_map(self):
@@ -189,6 +308,17 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
         pointer = state.read_json(cc.root(self.run_id) / "accepted.json")
         self.assertEqual(pointer["status"], "FAILED")
         self.assertNotEqual(pointer["attempt_id"], accepted["attempt_id"])
+
+    def test_published_map_is_bound_to_exact_manifest_lineage(self):
+        with patch.object(cc, "current_inputs", return_value=self.inputs), patch.object(
+                cc, "_dispatch_persona", side_effect=self.dispatch):
+            accepted = cc.run(self.run_id, "dagster-a")
+        attempt = cc.root(self.run_id) / "attempts" / accepted["attempt_id"]
+        value = state.read_json(attempt / cc.RESULT)
+        value["evidence_manifest_lineage"]["generation"] = 2
+        state.atomic_json(attempt / cc.RESULT, value)
+        with self.assertRaisesRegex(state.Blocked, "identity"):
+            cc._validate_attempt(self.run_id, attempt, self.inputs)
 
 
 if __name__ == "__main__":
