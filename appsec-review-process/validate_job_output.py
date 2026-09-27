@@ -60,6 +60,13 @@ CLAIM_CLASS_POLICIES = {
             "declared-project-structure", "statically-inferred-build-plan", "coverage-gap",
         },
     },
+    "operations-topology": {
+        "claim_class_id": "supplied_operations_topology",
+        "allowed_assertions": {
+            "declared-operations-topology", "statically-inferred-service-dependency",
+            "coverage-gap",
+        },
+    },
     "build-classification": {
         "claim_class_id": "build_unit_classification",
         "allowed_assertions": {
