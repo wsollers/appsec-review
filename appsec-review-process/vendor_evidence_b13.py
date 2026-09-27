@@ -190,3 +190,29 @@ def execute(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: 
     data = output.read_bytes()
     normalize(tool_id, data)
     return terminal, data
+
+
+def collect(job_id: str, tool_ids: list[str], *, run_id: str, node_attempt_id: str, source_root: Path,
+            source_sha: str, attempt_root: Path, now: str,
+            runtime_factory: Callable[[str, Callable[[], str]], ce.ContainerRuntime] = _runtime,
+            run_container: Callable[..., dict] = ce.run_container,
+            verify: Callable[..., list[str]] = ce.verify_container_result) -> dict[str, dict[str, Any]]:
+    """Run every applicable declared tool independently; one failure cannot erase sibling evidence."""
+    runtime = runtime_factory(source_sha, lambda: now)
+    results = {}
+    for position, tool_id in enumerate(tool_ids, 1):
+        tool_attempt = f"{tool_id}-{node_attempt_id[:24]}-{position}"
+        root = attempt_root / "tools" / tool_id
+        try:
+            req = request(tool_id, run_id=run_id, job_id=job_id, attempt_id=tool_attempt,
+                          source_root=source_root, scratch_name="scratch", source_sha=source_sha, now=now)
+            terminal, data = execute(tool_id, runtime=runtime, run_id=run_id, job_id=job_id,
+                                     attempt_id=tool_attempt, attempt_root=root, request_document=req,
+                                     run_container=run_container, verify=verify)
+            results[tool_id] = {"status": "OK", "attempt_id": tool_attempt, "request": req,
+                                "terminal": terminal, "raw": data, "records": normalize(tool_id, data)}
+        except VendorToolBlocked as exc:
+            results[tool_id] = {"status": "BLOCKED", "cause": str(exc)}
+        except VendorToolFailed as exc:
+            results[tool_id] = {"status": "FAILED", "cause": str(exc)}
+    return results

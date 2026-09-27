@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys, tempfile, unittest
+from unittest import mock
 ROOT=Path(__file__).resolve().parents[1]; sys.path.insert(0,str(ROOT))
 import vendor_evidence_b13 as b
 
@@ -38,5 +39,18 @@ class B13Tests(unittest.TestCase):
         self.assertNotIn('never',repr(b.normalize('gitleaks',raw)))
         with self.assertRaisesRegex(b.VendorToolFailed,'path'):
             b.normalize('gitleaks',b'[{"RuleID":"x","File":"../escape","StartLine":1,"EndLine":1}]')
+
+    def test_collect_runs_each_tool_and_preserves_sibling_failure(self):
+        td=tempfile.TemporaryDirectory(); self.addCleanup(td.cleanup); root=Path(td.name); source=root/'source'; source.mkdir()
+        def fake_request(tool_id,**kw):
+            if tool_id=='checkov': raise b.VendorToolBlocked('missing')
+            return {'tool':tool_id}
+        def fake_execute(tool_id,**kw): return ({'execution_status':'OK'},b'[]')
+        with mock.patch.object(b,'request',fake_request), mock.patch.object(b,'execute',fake_execute):
+            result=b.collect('02-iac-config-scan',['checkov','hadolint'],run_id='r',node_attempt_id='node',
+                             source_root=source,source_sha='sha256:'+'a'*64,attempt_root=root/'attempt',
+                             now='2026-09-27T12:00:00Z',runtime_factory=lambda *a: Runtime())
+        self.assertEqual(result['checkov']['status'],'BLOCKED')
+        self.assertEqual(result['hadolint']['status'],'OK')
 
 if __name__=='__main__': unittest.main()
