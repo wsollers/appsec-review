@@ -11,6 +11,8 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any
 
+import yaml
+
 import evidence_redaction as redaction
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json
 import phase1
@@ -30,6 +32,9 @@ MAX_FILES = 200
 MAX_RECORDS = 1000
 TEXT_SUFFIXES = {".md", ".markdown", ".rst", ".txt", ".adoc"}
 TEST_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".py", ".js", ".ts", ".java", ".go", ".rs", ".cs", ".sh"}
+HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}
+MAX_PARSE_NODES = 10000
+MAX_PARSE_DEPTH = 40
 
 
 def root(run_id: str, job: str) -> Path:
@@ -83,8 +88,12 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
     target = Path(source["target"])
     if not target.is_absolute() or not target.is_dir() or target.is_symlink():
         raise Blocked(f"{job}: intake target is not a real absolute directory")
-    return {"run_id": run_id, "job_id": job, "target_path": str(target.resolve()),
-            "source": binding, "source_files": source["files"], "code": _code_hashes(job)}
+    result = {"run_id": run_id, "job_id": job, "target_path": str(target.resolve()),
+              "source": binding, "source_files": source["files"], "code": _code_hashes(job)}
+    if job == "02-api-collection-intelligence-ingest":
+        result["parser_versions"] = {"json": "python-stdlib", "yaml": f"PyYAML-{yaml.__version__}",
+                                     "bruno": "bounded-static-v1"}
+    return result
 
 
 def _candidate(job: str, path: str) -> bool:
@@ -111,6 +120,71 @@ def _redacted(path: str, data: bytes) -> tuple[str | None, str, int]:
     return outcome.data.decode("utf-8", errors="replace"), outcome.disposition, sum(outcome.counts.values())
 
 
+def _bounded_tree(value: Any) -> bool:
+    count = 0
+    def visit(item: Any, depth: int) -> bool:
+        nonlocal count
+        count += 1
+        if count > MAX_PARSE_NODES or depth > MAX_PARSE_DEPTH:
+            return False
+        if isinstance(item, dict):
+            return all(isinstance(key, (str, int, float, bool, type(None))) and
+                       visit(child, depth + 1) for key, child in item.items())
+        if isinstance(item, list):
+            return all(visit(child, depth + 1) for child in item)
+        return isinstance(item, (str, int, float, bool, type(None)))
+    return visit(value, 0)
+
+
+def _structured_api(path: str, text: str) -> Any | None:
+    suffix = PurePosixPath(path).suffix.lower()
+    try:
+        if suffix == ".json":
+            value = json.loads(text)
+        elif suffix in {".yaml", ".yml"}:
+            # Snapshot inputs do not need YAML aliases.  Refusing them keeps expansion bounded and
+            # makes one source spelling map to one deterministic object graph.
+            if re.search(r"(?m)(?:^|\s)[&*][A-Za-z0-9_-]+(?:\s|$)", text):
+                return None
+            value = yaml.safe_load(text)
+        else:
+            return None
+    except (ValueError, RecursionError, yaml.YAMLError):
+        return None
+    return value if _bounded_tree(value) else None
+
+
+def _bruno_summaries(text: str) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    matches = list(re.finditer(r"(?im)^\s*(get|put|post|delete|patch|head|options|trace)\s*\{\s*$", text))
+    for match in matches:
+        depth = 1
+        end = None
+        cursor = match.end()
+        while cursor < len(text):
+            newline = text.find("\n", cursor)
+            newline = len(text) if newline < 0 else newline
+            line = text[cursor:newline]
+            depth += line.count("{") - line.count("}")
+            if depth == 0:
+                end = cursor
+                break
+            if depth < 0 or depth > MAX_PARSE_DEPTH:
+                return []
+            cursor = newline + 1
+        if end is None:
+            return []
+        block = text[match.end():end]
+        url = re.search(r"(?im)^\s*url\s*:\s*(\S.*?)\s*$", block)
+        if url is None:
+            return []
+        method = match.group(1).lower()
+        line_number = text.count("\n", 0, match.start()) + 1
+        records.append({"kind": "api-endpoint", "locator": f"bruno:line:{line_number}:{method}",
+                        "text": f"{method.upper()} {url.group(1).strip()}"[:500]})
+    return records
+
+
 def _summaries(job: str, path: str, text: str) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     if job in {"02-doc-intelligence-ingest", "02-operations-doc-ingest"}:
@@ -129,15 +203,16 @@ def _summaries(job: str, path: str, text: str) -> list[dict[str, str]]:
                     records.append({"kind": "documented-test", "locator": f"line:{number}",
                                     "text": "/".join(part.strip() for part in match.groups() if part)[:500]})
     else:
-        try:
-            value = json.loads(text)
-        except (ValueError, RecursionError):
+        if PurePosixPath(path).suffix.lower() == ".bru":
+            return _bruno_summaries(text)
+        value = _structured_api(path, text)
+        if value is None:
             return []
         if isinstance(value, dict) and isinstance(value.get("paths"), dict):
             for route, methods in value["paths"].items():
-                if not isinstance(methods, dict): continue
+                if not isinstance(route, str) or not isinstance(methods, dict): continue
                 for method in methods:
-                    if method.lower() in {"get", "put", "post", "delete", "patch", "head", "options", "trace"}:
+                    if isinstance(method, str) and method.lower() in HTTP_METHODS:
                         records.append({"kind": "api-endpoint", "locator": f"paths:{route}:{method.lower()}",
                                         "text": f"{method.upper()} {route}"})
         elif isinstance(value, dict):

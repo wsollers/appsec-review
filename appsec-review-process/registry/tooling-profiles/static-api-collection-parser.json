@@ -13,8 +13,14 @@
     "component map",
     "route inventory"
   ],
+  "supported_formats": [
+    "OpenAPI JSON",
+    "OpenAPI YAML without anchors or aliases",
+    "Postman JSON",
+    "Bruno .bru HTTP request blocks"
+  ],
   "allowed_actions": [
-    "parse collection files",
+    "parse bounded JSON, YAML, and Bruno collection files",
     "scrub environment values",
     "extract route and assertion inventory",
     "emit candidate verification requests",
