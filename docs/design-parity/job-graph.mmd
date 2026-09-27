@@ -42,7 +42,7 @@ flowchart TD
   02_doc_intelligence_ingest -->|required| 02_evidence_assembly
   02_standards_source_ingest -->|required| 02_evidence_assembly
   02_test_intelligence_ingest -->|required| 02_evidence_assembly
-  02_source_sast -->|required| 02_evidence_assembly
+  02_source_sast_post -->|required| 02_evidence_assembly
   02_native_sast -->|required| 02_evidence_assembly
   02_ir_facts -->|required| 02_evidence_assembly
   02_test_result_ingest -->|required| 02_evidence_assembly
@@ -123,29 +123,35 @@ flowchart TD
   01_component_characterization -->|required| 04_owasp_validation_worklist
   15_stig_srg_validation_worklist["15-stig-srg-validation-worklist (planned; not dispatched)"]
   01_component_characterization -->|required| 15_stig_srg_validation_worklist
-  02_build_configure["02-build-configure (planned; not dispatched)"]
-  02_dev_project_discovery -->|required| 02_build_configure
-  02_native_build["02-native-build (planned; not dispatched)"]
-  02_build_configure -->|required| 02_native_build
-  02_source_sast["02-source-sast (planned; not dispatched)"]
-  00_intake_post -->|required| 02_source_sast
+  02_build_configure_config["02-build-configure: resolve job configuration"] --> 02_build_configure_pre["02-build-configure: pre-validation"]
+  02_build_configure_pre --> 02_build_configure["02-build-configure: work or reuse"]
+  02_build_configure --> 02_build_configure_post["02-build-configure: post-validation and publish"]
+  02_build_resolution_post -->|required| 02_build_configure_config
+  02_native_build_config["02-native-build: resolve job configuration"] --> 02_native_build_pre["02-native-build: pre-validation"]
+  02_native_build_pre --> 02_native_build["02-native-build: work or reuse"]
+  02_native_build --> 02_native_build_post["02-native-build: post-validation and publish"]
+  02_build_configure_post -->|required| 02_native_build_config
+  02_source_sast_config["02-source-sast: resolve job configuration"] --> 02_source_sast_pre["02-source-sast: pre-validation"]
+  02_source_sast_pre --> 02_source_sast["02-source-sast: work or reuse"]
+  02_source_sast --> 02_source_sast_post["02-source-sast: post-validation and publish"]
+  00_intake_post -->|required| 02_source_sast_config
   02_native_sast["02-native-sast (planned; not dispatched)"]
-  02_native_build -->|required| 02_native_sast
+  02_native_build_post -->|required| 02_native_sast
   02_ir_capture["02-ir-capture (planned; not dispatched)"]
-  02_native_build -->|required| 02_ir_capture
+  02_native_build_post -->|required| 02_ir_capture
   02_ir_link["02-ir-link (planned; not dispatched)"]
   02_ir_capture -->|required| 02_ir_link
   02_ir_facts["02-ir-facts (planned; not dispatched)"]
   02_ir_link -->|required| 02_ir_facts
   02_debug_symbol_index["02-debug-symbol-index (planned; not dispatched)"]
-  02_native_build -->|required| 02_debug_symbol_index
+  02_native_build_post -->|required| 02_debug_symbol_index
   02_binary_triage["02-binary-triage (planned; not dispatched)"]
-  02_native_build -->|required| 02_binary_triage
+  02_native_build_post -->|required| 02_binary_triage
   02_binary_cfg["02-binary-cfg (planned; not dispatched)"]
   02_binary_triage -->|required| 02_binary_cfg
   02_debug_symbol_index -->|required| 02_binary_cfg
   02_test_execution["02-test-execution (planned; not dispatched)"]
-  02_native_build -->|required| 02_test_execution
+  02_native_build_post -->|required| 02_test_execution
   02_test_result_ingest["02-test-result-ingest (planned; not dispatched)"]
   02_test_execution -->|required| 02_test_result_ingest
   02_test_coverage_ingest["02-test-coverage-ingest (planned; not dispatched)"]

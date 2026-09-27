@@ -78,6 +78,20 @@ CLAIM_CLASS_POLICIES = {
             "sandboxed-build-succeeded", "compile-database-produced", "coverage-gap",
         },
     },
+    "configured-build": {
+        "claim_class_id": "build_replay",
+        "allowed_assertions": {"configure-succeeded"},
+    },
+    "native-build": {
+        "claim_class_id": "build_replay",
+        "allowed_assertions": {
+            "native-build-succeeded", "compile-database-produced", "binary-produced",
+        },
+    },
+    "source-sast": {
+        "claim_class_id": "source_static_evidence",
+        "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
+    },
 }
 PROMOTION_FIELDS = {
     "finding": {

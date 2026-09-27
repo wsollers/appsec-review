@@ -36,6 +36,7 @@ SUPPORTED_KEYWORDS = {"$schema", "$id", "title", "description", "type", "require
 EXECUTOR_CAPS = {"engagement_workflow": "plan", "build_discovery": 3, "build_execution": 2, "evidence_index": 2,
                  "critical_findings_sarif": 1, "ossf_scorecard": 1, "repository_partition_discovery": 1, "dev_project_discovery": 1,
                  "devops_project_discovery": 1, "sre_operations_topology": 1, "build_index": 1, "build_classify": 1, "build_plan": 1,
+                 "build_resolution": 1, "build_configure": 1, "native_build": 1, "source_sast": 1,
                  "b13_harmless_container": 1, "full_review": 3}
 
 

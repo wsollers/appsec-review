@@ -20,7 +20,7 @@ flowchart TD
   S2[2. engagement_workflow: config -> intake -> 3 preparation branches -> validated join] --> S2b
   S2b[2b. Discovery gates: repository partition map, then developer, devops and SRE operations-topology discovery - each a supplied, validated record or an automatic persona dispatch, D01-D04] --> G1{native code in scope?}
   G1 -- yes --> S3a[3a. Build resolution: index, classify, plan, image + offline trial build, bounded retries, catalog image_build_id - resolution worker designed; fixed LLVM 21 C++ base built]
-  S3a -- resolved --> S3[3b. 02-build-configure / 02-native-build: replay the build lock in the catalogued image, compile database]
+  S3a -- resolved --> S3[3b. 02-build-configure / 02-native-build: replay the build lock in the catalogued image, compile database; implemented, qualification pending]
   S3a -- FAILED BUILD_UNRESOLVED --> S4
   G1 -- no --> S4
   S3 --> S4[4. Evidence collection: deterministic scanners, no judgment]
@@ -29,19 +29,21 @@ flowchart TD
   S6 --> S7[7. Refutation, independent verification, scoring, synthesis, report / SARIF]
 ```
 
-Built today: 1, 2, 2b, 5 and the `critical_findings_sarif` publisher, all run-owned and validated.
+Built today: 1, 2, 2b, 3a, 3b, 5 and the `critical_findings_sarif` publisher. Readiness differs:
+build resolution through SAT stage 13 is live-qualified, while stages 14-16 are implemented and
+await their first live happy-path SAT; their fault/recovery qualification remains separate.
 Step 3a (build resolution: how to build an unknown target, with what tools, and whether it can be
-done at all) is designed in [build-resolution.md](build-resolution.md) (ADR-0012), extended per unit
-by [build-unit-classification.md](build-unit-classification.md). Its first job, the deterministic
-`02-build-index`, is built (2026-09-25; SAT stage 10); `02-build-plan` is built but not live-qualified,
-and `02-build-resolution` is not built. Its C++ image prerequisite is complete (2026-09-26):
+done at all) is specified in [build-resolution.md](build-resolution.md) (ADR-0012), extended per unit
+by [build-unit-classification.md](build-unit-classification.md). The index, classify, plan and
+resolution jobs are implemented; SAT stage 13 and its fault/recovery qualification passed on
+2026-09-27. Its C++ image prerequisite is complete (2026-09-26):
 `audit-buildenv-cpp` extends `audit-native`, fixes LLVM 21.1.0 `CC`/`CXX`, and supplies
 autoconf/automake/libtool/make/Bear/pkg-config.
-Step 3b is built only partially: `build_execution` configures a single CMake root from the older
-`build_discovery` branch, through the `buildenv-common` wrapper. It refuses other build systems (the
-`hello-autotools` fixture among them), does not consume step 2b's developer project discovery, and
-does not go through the B13 pinned-container adapter. The lifecycle configure worker that does
-(`02-build-configure`, batch E01) is planned: B13 into service, then the C++ build environment, then E01.
+Step 3b now has dedicated `02-build-configure` and `02-native-build` workers. They consume the
+accepted resolution lock and catalogued image, replay from fresh scratch copies through offline
+B13, and publish configure evidence, then the clang compile database and produced binaries. SAT
+stages 14-15 are built but have not yet run live. The older `build_execution` CMake-only path remains
+a standalone diagnostic and is no longer the lifecycle binding.
 Step 2b's four gates (partition, developer, devops and SRE operations-topology discovery) accept
 supplied, schema- and freshness-validated records (`discovery_gate.py`) by default, and all four can
 also perform the analysis themselves (automatic persona dispatch, D01-D04; SAT stages 6-9 all
@@ -60,10 +62,12 @@ with its own schema and claim builder. SRE topology chains after the accepted de
 of the partition map directly (2026-09-24): in automatic mode its persona receives both the accepted
 devops record and the partition map as scope, and maps the declared services, ports and dependencies
 of what devops discovery found.
-Step 4 runs only through the legacy `pipeline/engagement_job.*` path into `scratch/` and is then
-imported into the run; its run-owned replacement (the `02-*` graph nodes) is declared but 45 of the
-51 graph jobs have no worker. Steps 6-7 exist as the tracked prompt harness (`appsec-review-process/
-<lane>/`) dispatched by hand-off files, not as graph workers.
+Step 4 remains mostly on the legacy `pipeline/engagement_job.*` path into `scratch/`, followed by a
+hashed run import. Its first run-owned scanner slice, `02-source-sast`, is now implemented: pinned
+offline Semgrep with repository-owned C/C++ rules and normalized leads. SAT stage 16 is built but
+has not yet run live; Go, Java and PHP source-SAST tools and fault/recovery qualification remain
+explicit gaps. Most other `02-*` evidence nodes still have no worker. Steps 6-7 exist as the tracked
+prompt harness (`appsec-review-process/<lane>/`) dispatched by hand-off files, not as graph workers.
 
 ## 2. What the operator must supply (step 1)
 
@@ -96,9 +100,9 @@ Per-job inputs and outputs, and their rollup per process model, are in the gener
 | 1 | `run_process.py --start`, `stage_artifacts.py` | Running stack and host code location; target checkout on the host | `inputs/artifact-manifest.json` | Manifest validates. |
 | 2 | `engagement_workflow` (`launch_job.py --run-id <id> --wait`) | Manifest; `engagement_run_id` tag | `data/jobs/00-intake/whole/accepted.json`: source revision + dirty/untracked fingerprints, language/workspace/build/deployment families, native compile/link-recipe plan, specialist routing; `data/workflows/engagement/accepted.json` after the join | Workflow `OK`. `QUEUED`/`STARTED` are not completion. Intake passing says nothing about native build coverage. |
 | 2b | `repository_partition_discovery`, then `dev_project_discovery`, `devops_project_discovery` and `sre_operations_topology` | Accepted intake; a supplied `supplied/result.json` per gate (fixtures: `fixtures/supply_record.py`), **or** this run opted the gate into automatic dispatch (`discovery_gate.set_dispatch_mode`; all four gates support it); dev and devops discovery each also need the accepted partition map at the same source revision; sre topology needs the accepted devops record at the same source revision | `data/jobs/02-repository-partition-discovery/` (partition map, persona routing, review scope), `data/jobs/02-dev-project-discovery/accepted.json`, `data/jobs/02-devops-project-discovery/accepted.json` (project, manifests, build image, safe command plan) and `data/jobs/02-sre-operations-topology/accepted.json` (services, ports, dependencies, coverage gaps) | Without a supplied record (and no automatic-dispatch opt-in) a gate fails with an actionable hand-off (`handoff.md`), never a silent pass. Citations must match the target's current file hashes. |
-| 3a | `02-build-index`, `02-build-classify`, `02-build-plan` (built); `02-build-resolution` (designed, [build-resolution.md](build-resolution.md)); fixed LLVM 21 C++ base (built) | Accepted intake, partition map and discovery records; B16-resolved `audit-buildenv-cpp`; `target-execution` and `package-restore` grants (apt now; other ecosystems per TODO Phase 5f); `build_resolution_attempts` (3, per unit; no cap on units), `build_image_reuse` (`auto`) | Cited build index with candidate units; per-unit classification and validated plans; per-attempt image, logs and exit codes; `image_build_<id>` catalogued and a per-unit `build-lock.json` entry for each resolved unit | Per unit `OK`, `FAILED(BUILD_UNRESOLVED)` or `BLOCKED`; job `OK`, `OK_WITH_GAPS`, `UNRESOLVED`, `BLOCKED` or `SKIPPED`. A failed unit blocks only its own native jobs; the engagement continues. Repository Dockerfiles are never built; nothing built is run (ADR-0012 revisions 1 and 3). |
-| 3b | `build_discovery` then `build_execution` (today; replaced by 3a + E01/E02) | Accepted intake; native families present; no current `build-discovery.md` for this exact target | Cited build requirements and command arrays (no execution); then one sandboxed configure inside the hostile-build boundary (`docs/architecture/design-v3.md` §2.2) and `compile_commands.json` when produced | Feasibility gate (ADR-0001 Tier A/B/C) recorded; a missing compile database blocks native lanes, not the engagement. |
-| 4 | today: `pipeline/engagement_job.sh` / `.ps1` outside Dagster; target: `02-*` nodes | Target checkout; images; (today) manual import afterwards | Static prepass, native pregather, `assemble`, `correlate`, `deep_confirm`, retrieval plan, `job-status.json` with explicit degraded status | Every tool records exit/duration/log; a tool that did not run is a coverage gap, never "clean". |
+| 3a | `02-build-index`, `02-build-classify`, `02-build-plan`, `02-build-resolution`; fixed LLVM 21 C++ base | Accepted intake, partition map and discovery records; B16-resolved `audit-buildenv-cpp`; `target-execution` and `package-restore` grants (apt now; other ecosystems per TODO Phase 5f); `build_resolution_attempts` (3, per unit; no cap on units), `build_image_reuse` (`auto`) | Cited build index with candidate units; per-unit classification and validated plans; per-attempt image, logs and exit codes; `image_build_<id>` catalogued and a per-unit `build-lock.json` entry for each resolved unit | Implemented and qualified through SAT stage 13. Per unit `OK`, `FAILED(BUILD_UNRESOLVED)` or `BLOCKED`; job `OK`, `OK_WITH_GAPS`, `UNRESOLVED`, `BLOCKED` or `SKIPPED`. A failed unit blocks only its own native jobs; the engagement continues. Repository Dockerfiles are never built; nothing built is run (ADR-0012 revisions 1 and 3). |
+| 3b | `02-build-configure`, then `02-native-build` (E01/E02) | Accepted build-resolution lock; catalogued immutable build image; staged target; exact target-execution grants | Fresh offline B13 configure replay, then configure/build replay; `configured-build.json`, `native-build.json`, clang `compile_commands.json`, native binaries and caller-held receipts | Implemented; SAT stages 14-15 and live happy-path qualification pending. A failed replay blocks only build-dependent lanes. |
+| 4 | `02-source-sast` first slice; remaining coverage via `pipeline/engagement_job.sh` / `.ps1` and hashed import | Accepted intake and staged checkout for source SAST; target checkout and images for the legacy remainder | Run-owned normalized Semgrep C/C++ leads plus explicit coverage gaps; legacy static/native pregather, assemble, correlate, deep-confirm and retrieval plan | Source-SAST SAT stage 16 is built but not live-qualified. Every tool records exit/duration/log; a tool that did not run is a coverage gap, never "clean". |
 | 5 | `evidence_index` | Accepted intake (+ imports) | `data/jobs/02-evidence-index/whole/accepted.json`; bounded CLI / read-only MCP retrieval (`docs/evidence/evidence-retrieval.md`) | Index is a locator, never evidence authority. |
 | 6 | lane hand-offs (`create_handoff.py`) | Accepted evidence; persona/registry composition; budget | Lane outputs under the run; component-purpose map first (`01`), then `03`.. per `process-manifest.json` | Each lane states read / covered / excluded / next. |
 | 7 | `07` -> `08` -> `09` -> `12` -> `10`; `critical_findings_sarif` | Verified claims only | Report inputs; accepted SARIF | High/Critical needs lane `09`; nothing promotes a tool hit to a finding. |
@@ -141,6 +145,6 @@ Per-job inputs and outputs, and their rollup per process model, are in the gener
 Sources: `docs/dagster/dagster-launching.md`, `docs/dagster/run-data-and-job-execution.md`,
 `docs/dagster/operations.md`, `docs/build-discovery/build-discovery-integration.md`,
 `appsec-review-process/00-intake-recovery/config.md`, `pipeline/README.md`,
-`appsec-review-process/job-graph.json` (3 of 51 jobs have workers: `00-intake`,
-`02-ossf-scorecard`, `02-evidence-index`; plus 4 supplied-result gates: partition, developer,
-devops and SRE operations-topology discovery).
+`appsec-review-process/job-graph.json` and the generated
+[`design-parity-readiness.md`](../design-parity/design-parity-readiness.md), which is authoritative
+for current per-job worker and qualification status.

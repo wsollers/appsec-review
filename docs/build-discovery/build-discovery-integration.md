@@ -72,13 +72,14 @@ python -B appsec-review-process/launch_job.py --run-id <run_id> --job full_revie
 ```
 
 This currently reaches the repository-partition supplied-artifact gate and issues an actionable
-handoff when no schema-valid result has been supplied. Build discovery remains preserved. The
-`02-build-configure` lifecycle node is wired to the same worker as standalone `build_execution`,
-but it is not qualified through a real `full_review`: both supplied discovery gates must first
-publish accepted results, and the worker still reads the accepted build-discovery plan from disk.
-A successful discovery or configure result never claims a successful target build or completed
-security review. Use the standalone job for bounded diagnostics while the lifecycle chain remains
-unqualified.
+handoff when no schema-valid result has been supplied. Build discovery remains preserved.
+`build_execution` remains a standalone CMake-only diagnostic. The `02-build-configure` lifecycle
+node now uses its dedicated build-lock replay worker: it consumes accepted `02-build-resolution`,
+runs only the lock's configure argv through offline B13 and publishes the common envelope.
+`02-native-build` separately replays configure/build and publishes the clang compile database and
+binaries. Both are implemented but not yet live-qualified; use their standalone `build_configure`
+and `native_build` jobs for bounded happy-path qualification. A successful configure result never
+claims a successful target build or completed security review.
 
 ## Submit build execution
 
@@ -198,9 +199,9 @@ graph job.
 | `02-test-intelligence-ingest` | Worker blocked | Present |
 | `04-owasp-validation-worklist` | Worker blocked | Present |
 | `15-stig-srg-validation-worklist` | Worker blocked | Present |
-| `02-build-configure` | Wired to `build_execution.py` (2026-09-19) | Present, unrun in `full_review` |
-| `02-native-build` | Worker blocked | Missing |
-| `02-source-sast` | Worker blocked | Missing |
+| `02-build-configure` | Dedicated offline B13 lock-replay worker; implemented, happy-path and fault/recovery qualification pending | Present |
+| `02-native-build` | Dedicated offline B13 configure/build replay; implemented, happy-path and fault/recovery qualification pending | Present |
+| `02-source-sast` | Pinned offline Semgrep C/C++ slice; implemented, happy-path and fault/recovery qualification pending; Go/Java/PHP gaps remain | Present |
 | `02-native-sast` | Worker blocked | Missing |
 | `02-ir-capture` | Worker blocked | Missing |
 | `02-ir-link` | Worker blocked | Missing |

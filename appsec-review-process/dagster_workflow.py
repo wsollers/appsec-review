@@ -8,6 +8,9 @@ import build_execution as build_execution_worker
 import build_classify as build_classify_worker
 import build_plan as build_plan_worker
 import build_resolution as build_resolution_worker
+import build_configure as build_configure_worker
+import native_build as native_build_worker
+import source_sast as source_sast_worker
 import build_index as build_index_worker
 import b13_harmless as b13_harmless_worker
 import discovery_gate
@@ -312,33 +315,85 @@ def blocked_op(name, node):
     return unavailable
 
 
+def run_build_configure(context, configured):
+    result = build_configure_worker.run(configured['engagement_run_id'], context.run_id,
+                                        configured['force'])
+    path = build_configure_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(path / build_configure_worker.RESULT)),
+                                 'envelope': MetadataValue.path(str(path / 'result.json')),
+                                 'attempt_id': result['attempt_id']})
+    return result
+
+
 @op(name='job_02_build_configure',ins={'configured':In(dict),'upstream':In(list)},pool=DOCKER_POOL)
 def build_configure_work(context, configured, upstream):
-    # Bridges job-graph.json's '02-build-configure' lifecycle node (planned_scope: "Isolated
-    # configure and validated compile database") to build_execution.py's real, sandboxed
-    # CMake+Ninja configure worker -- added 2026-09-19 after reconciling against the repo owner's
-    # automated-pipeline ask. Before this, build_execution existed only as a separate, standalone
-    # job that full_review's graph never called, so this exact lifecycle node fell through to
-    # blocked_op above every time, identically to every other unimplemented worker.
-    #
-    # KNOWN, DELIBERATE GAP (documented in claude project TODO, 2026-09-19, not hidden here):
-    # this node's real declared dependency per job-graph.json is '02-dev-project-discovery', not
-    # build_discovery -- but '02-dev-project-discovery' (and its own dependency,
-    # '02-repository-partition-discovery') are themselves unimplemented blocked_op stubs. Until
-    # those are built, `upstream` (that lifecycle chain's output) can never actually arrive here in
-    # a real full_review run -- reaching either of those still-blocked nodes first raises Failure
-    # and halts the whole run before this op is ever invoked. This op is wired correctly for when
-    # that upstream chain exists, but it does not yet make configure execute automatically inside
-    # full_review. For now, exactly like the standalone `build_execution` job before it,
-    # `discovered_plan()` reads build_discovery's accepted branch directly from disk (the only real
-    # discovery evidence that currently exists) rather than from `upstream` -- `upstream` is
-    # accepted per the shared blocked_op-compatible signature but intentionally unused here.
-    result = build_execution_worker.run(configured['engagement_run_id'], context.run_id, configured['force'])
-    path = build_execution_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
-    context.add_output_metadata({'output': MetadataValue.path(str(path / 'output.json')),
-                                 'stdout': MetadataValue.path(str(path / 'logs/stdout.log')),
-                                 'stderr': MetadataValue.path(str(path / 'logs/stderr.log'))})
+    return run_build_configure(context, configured)
+
+
+@op(pool=DOCKER_POOL)
+def build_configure_standalone_work(context, configured):
+    return run_build_configure(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def build_configure():
+    build_configure_standalone_work(build_execution_config())
+
+
+def run_native_build(context, configured):
+    result = native_build_worker.run(configured['engagement_run_id'], context.run_id,
+                                     configured['force'])
+    path = native_build_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(path / native_build_worker.RESULT)),
+                                 'envelope': MetadataValue.path(str(path / 'result.json')),
+                                 'attempt_id': result['attempt_id']})
     return result
+
+
+@op(name='job_02_native_build',ins={'configured':In(dict),'upstream':In(list)},pool=DOCKER_POOL)
+def native_build_work(context, configured, upstream):
+    return run_native_build(context, configured)
+
+
+@op(pool=DOCKER_POOL)
+def native_build_standalone_work(context, configured):
+    return run_native_build(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def native_build():
+    native_build_standalone_work(build_execution_config())
+
+
+def run_source_sast(context, configured):
+    result = source_sast_worker.run(configured['engagement_run_id'], context.run_id,
+                                    configured['force'])
+    path = source_sast_worker.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+    context.add_output_metadata({'output': MetadataValue.path(str(path / source_sast_worker.RESULT)),
+                                 'envelope': MetadataValue.path(str(path / 'result.json')),
+                                 'attempt_id': result['attempt_id']})
+    return result
+
+
+@op(name='job_02_source_sast',ins={'configured':In(dict),'upstream':In(list)},pool=DOCKER_POOL)
+def source_sast_work(context, configured, upstream):
+    return run_source_sast(context, configured)
+
+
+@op(pool=DOCKER_POOL)
+def source_sast_standalone_work(context, configured):
+    return run_source_sast(context, configured)
+
+
+@job(resource_defs={'workflow_settings': workflow_settings},
+     executor_def=multiprocess_executor.configured({'max_concurrent': 1}),
+     op_retry_policy=RetryPolicy(max_retries=0))
+def source_sast():
+    source_sast_standalone_work(build_execution_config())
 
 
 def run_repository_partition_discovery(context, configured):
@@ -604,12 +659,14 @@ def b13_harmless_container():
 from job_graph import load_graph
 LIFECYCLE=load_graph()['jobs']
 LIFECYCLE_OPS={name:blocked_op(name,node) for name,node in LIFECYCLE.items()
-                if name not in ('00-intake','02-evidence-index','02-build-configure',
+                if name not in ('00-intake','02-evidence-index','02-build-configure','02-native-build','02-source-sast',
                                  '02-repository-partition-discovery','02-dev-project-discovery',
                                  '02-devops-project-discovery','02-sre-operations-topology',
                                  '02-build-index','02-build-classify','02-build-plan',
                                  '02-build-resolution','02-ossf-scorecard')}
 LIFECYCLE_OPS['02-build-configure']=build_configure_work
+LIFECYCLE_OPS['02-native-build']=native_build_work
+LIFECYCLE_OPS['02-source-sast']=source_sast_work
 LIFECYCLE_OPS['02-repository-partition-discovery']=repository_partition_discovery_work
 LIFECYCLE_OPS['02-dev-project-discovery']=dev_project_discovery_work
 LIFECYCLE_OPS['02-devops-project-discovery']=devops_project_discovery_work
@@ -640,7 +697,7 @@ def full_review():
 
 
 
-@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
+@run_failure_sensor(monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,b13_harmless_container,full_review],default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_failure(context):
     # Op hooks cannot run after abrupt worker loss. Dagster's durable terminal state wins.
     run=context.dagster_run
@@ -650,7 +707,7 @@ def reconcile_workflow_failure(context):
         fail_workflow(settings['engagement_run_id'],run.run_id,'Dagster run failed; inspect event log and resume with a new launch')
 
 
-@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,b13_harmless_container,full_review],
+@run_status_sensor(run_status=DagsterRunStatus.CANCELED,monitored_jobs=[engagement_workflow,build_discovery,build_execution,evidence_index,critical_findings_sarif,ossf_scorecard,repository_partition_discovery,dev_project_discovery,devops_project_discovery,sre_operations_topology,build_index,build_classify,build_plan,build_resolution,build_configure,native_build,source_sast,b13_harmless_container,full_review],
                    default_status=DefaultSensorStatus.RUNNING)
 def reconcile_workflow_cancellation(context):
     run=context.dagster_run

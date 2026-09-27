@@ -5,6 +5,8 @@
   "required_files": ["source-sast.json", "b13-receipts.json", "source-sast-summary.md", "status.json"],
   "required_status_fields": ["process", "status", "tools_run", "leads", "network", "qualification"],
   "result_schema": {"artifact": "source-sast.json", "schema_file": "source-sast.schema.json"},
+  "claim_class": {"claim_class_id": "source_static_evidence", "allowed_assertions": ["static-analysis-lead", "coverage-gap"],
+    "forbidden_promotions": ["finding", "severity", "runtime-state"]},
   "validation_rules": [
     "the pinned Semgrep image runs through B13 with network none, a read-only target and one writable scratch mount",
     "the repository-owned ruleset and B16 image identity are part of the input fingerprint",

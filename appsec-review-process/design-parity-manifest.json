@@ -52,6 +52,9 @@
       "build_classify",
       "build_plan",
       "build_resolution",
+      "build_configure",
+      "native_build",
+      "source_sast",
       "b13_harmless_container"
     ],
     "standalone_relationships": [
@@ -74,10 +77,8 @@
       },
       {
         "job": "build_execution",
-        "lifecycle_jobs": [
-          "02-build-configure"
-        ],
-        "relationship": "standalone diagnostic for the lifecycle configure worker"
+        "lifecycle_jobs": [],
+        "relationship": "legacy CMake-only diagnostic retained during migration; not a lifecycle binding"
       },
       {
         "job": "evidence_index",
@@ -160,6 +161,21 @@
           "02-build-resolution"
         ],
         "relationship": "standalone and lifecycle-wired per-unit image provisioning and offline B13 trial; requires an accepted build plan and explicit apt/target-execution grants"
+      },
+      {
+        "job": "build_configure",
+        "lifecycle_jobs": ["02-build-configure"],
+        "relationship": "standalone and lifecycle-wired happy-path replay of the accepted lock's configure argv through B13"
+      },
+      {
+        "job": "native_build",
+        "lifecycle_jobs": ["02-native-build"],
+        "relationship": "standalone and lifecycle-wired happy-path replay of configure/build with Bear through B13"
+      },
+      {
+        "job": "source_sast",
+        "lifecycle_jobs": ["02-source-sast"],
+        "relationship": "standalone and lifecycle-wired offline Semgrep happy path through B13"
       },
       {
         "job": "b13_harmless_container",
@@ -245,6 +261,9 @@
       "build_classify",
       "build_plan",
       "build_resolution",
+      "build_configure",
+      "native_build",
+      "source_sast",
       "b13_harmless_container"
     ],
     "failure_sensor_jobs": [
@@ -262,6 +281,9 @@
       "build_classify",
       "build_plan",
       "build_resolution",
+      "build_configure",
+      "native_build",
+      "source_sast",
       "b13_harmless_container",
       "full_review"
     ],
@@ -280,6 +302,9 @@
       "build_classify",
       "build_plan",
       "build_resolution",
+      "build_configure",
+      "native_build",
+      "source_sast",
       "b13_harmless_container",
       "full_review"
     ],
@@ -2223,42 +2248,167 @@
       ],
       "graph": {
         "node": "02-build-configure",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
-          "02-dev-project-discovery"
+          "02-build-resolution"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "02-build-configure",
+        "persona": "evidence-custodian",
+        "role": "build-resolver",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-build-resolver",
+        "output_contract": "configured-build"
+      },
       "execution": {
         "mode": "pinned_container",
-        "worker": "appsec-review-process/build_execution.py:run",
-        "validator": "appsec-review-process/build_execution.py:validate"
+        "worker": "appsec-review-process/build_configure.py:run",
+        "validator": "appsec-review-process/build_configure.py:validate"
       },
       "output": {
         "contract": "configured-build",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "configure_evidence"
+        "contract_file": "appsec-review-process/registry/output-contracts/configured-build.json",
+        "schema_file": "schemas/configured-build.schema.json",
+        "claim_class": "build_replay"
       },
       "permissions": [
         "read-source",
-        "target-execution:configure",
+        "target-execution:build-configure-v1@.",
         "write-run-data"
       ],
       "dagster": {
         "standalone_jobs": [
-          "build_execution"
+          "build_configure"
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
           "entrypoint": "appsec-review-process/dagster_workflow.py:build_configure_work"
         },
         "launcher_jobs": [
-          "build_execution"
+          "build_configure"
         ],
         "sensor_jobs": [
           "full_review",
-          "build_execution"
+          "build_configure"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": ["happy_path_not_yet_live", "fault_recovery_not_qualified"],
+      "next_prerequisite": "Run SAT stage 14 happy path; retain fault-recovery qualification as follow-up."
+    },
+    {
+      "id": "02-native-build",
+      "design_refs": [
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-native-build",
+        "implemented": true,
+        "dependencies": [
+          "02-build-configure"
+        ]
+      },
+      "registry": {
+        "template": "02-native-build",
+        "persona": "evidence-custodian",
+        "role": "build-resolver",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-build-resolver",
+        "output_contract": "native-build"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/native_build.py:run",
+        "validator": "appsec-review-process/native_build.py:validate"
+      },
+      "output": {
+        "contract": "native-build",
+        "contract_file": "appsec-review-process/registry/output-contracts/native-build.json",
+        "schema_file": "schemas/native-build.schema.json",
+        "claim_class": "build_replay"
+      },
+      "permissions": ["read-source", "target-execution:native-build-v1@.", "write-run-data"],
+      "dagster": {
+        "standalone_jobs": ["native_build"],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:native_build_work"
+        },
+        "launcher_jobs": ["native_build"],
+        "sensor_jobs": [
+          "full_review", "native_build"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "none"
+        ],
+        "references": []
+      },
+      "gaps": ["happy_path_not_yet_live", "fault_recovery_not_qualified"],
+      "next_prerequisite": "Run SAT stage 15 happy path; retain fault-recovery qualification as follow-up."
+    },
+    {
+      "id": "02-source-sast",
+      "design_refs": [
+        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
+        "docs/evidence/parallel-intelligence.md#dependency-flow"
+      ],
+      "graph": {
+        "node": "02-source-sast",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-source-sast",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "source-sast"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/source_sast.py:run",
+        "validator": "appsec-review-process/source_sast.py:validate"
+      },
+      "output": {
+        "contract": "source-sast",
+        "contract_file": "appsec-review-process/registry/output-contracts/source-sast.json",
+        "schema_file": "schemas/source-sast.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "source_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:source_sast_work"
+        },
+        "launcher_jobs": [
+          "source_sast"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "source_sast"
         ]
       },
       "resource_pool": "docker",
@@ -2270,125 +2420,11 @@
         "references": []
       },
       "gaps": [
-        "graph_implemented_flag_false",
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "no_live_full_review_qualification"
+        "happy_path_not_yet_live",
+        "go_java_php_tools_not_integrated",
+        "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Add registry composition and output contract, then run live full_review qualification."
-    },
-    {
-      "id": "02-native-build",
-      "design_refs": [
-        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/evidence/parallel-intelligence.md#dependency-flow"
-      ],
-      "graph": {
-        "node": "02-native-build",
-        "implemented": false,
-        "dependencies": [
-          "02-build-configure"
-        ]
-      },
-      "registry": null,
-      "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
-      },
-      "output": {
-        "contract": "native-build",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
-      },
-      "permissions": [],
-      "dagster": {
-        "standalone_jobs": [],
-        "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
-        },
-        "launcher_jobs": [],
-        "sensor_jobs": [
-          "full_review"
-        ]
-      },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
-      "qualification": {
-        "levels": [
-          "none"
-        ],
-        "references": []
-      },
-      "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
-      ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
-    },
-    {
-      "id": "02-source-sast",
-      "design_refs": [
-        "docs/architecture/design-v3.md#9-canonical-evidence-and-state-artifacts",
-        "docs/evidence/parallel-intelligence.md#dependency-flow"
-      ],
-      "graph": {
-        "node": "02-source-sast",
-        "implemented": false,
-        "dependencies": [
-          "00-intake"
-        ]
-      },
-      "registry": null,
-      "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
-      },
-      "output": {
-        "contract": "source-sast",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
-      },
-      "permissions": [],
-      "dagster": {
-        "standalone_jobs": [],
-        "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
-        },
-        "launcher_jobs": [],
-        "sensor_jobs": [
-          "full_review"
-        ]
-      },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
-      "qualification": {
-        "levels": [
-          "none"
-        ],
-        "references": []
-      },
-      "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
-      ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Run the source-SAST SAT happy path, then add the remaining declared language tools and fault-recovery qualification."
     },
     {
       "id": "02-native-sast",

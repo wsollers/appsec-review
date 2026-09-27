@@ -1,0 +1,11 @@
+{
+  "schema": "appsec-review/job-template/0.1", "job_template_id": "02-native-build",
+  "display_name": "Native Build", "process": "02-evidence-pregather", "budget_default": "probe",
+  "composition": {"persona_id": "evidence-custodian", "role_id": "build-resolver", "domain_id": "repo-project-discovery", "tooling_profile_id": "pinned-build-resolver", "output_contract_id": "native-build"},
+  "inputs": {"required": ["accepted build lock", "accepted configured build", "catalogued build image", "staged target checkout", "target-execution grant"], "optional": []},
+  "outputs": {"directory": "data/jobs/02-native-build/attempts/<attempt_id>", "files": ["native-build.json", "b13-receipts.json", "native-build-summary.md", "status.json"]},
+  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"], "implemented": true,
+  "timeout_seconds": 3600, "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": false},
+  "applicability": "each OK native unit in the accepted build lock after configure",
+  "permissions": ["read-source", "target-execution:native-build-v1@.", "write-run-data"], "coordinator": "intake-coordinator"
+}

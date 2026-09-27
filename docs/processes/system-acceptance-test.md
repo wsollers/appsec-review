@@ -70,9 +70,9 @@ unbuilt stage stops it with `NOT_IMPLEMENTED` (exit 3).
 | 11 | `build-classify` (live persona: one class per unit from the checkout and the index; classes equal the answer key) | yes |
 | 12 | `build-plan` (live Haiku plan per build-set unit from the checkout, index and classification; clang fixed; structure equals the fixture answer key) | yes |
 | 13 | `build-resolution` (image + trial build via B13, `build_resolution_attempts`; `image_build_<id>` catalogued) | yes |
-| 14 | `build-configure` (E01: replay the lock) | |
-| 15 | `native-build` (E02: compile database, binaries) | |
-| 16 | `evidence` (legacy pipeline + hashed import; every tool ran or is a recorded gap) | |
+| 14 | `build-configure` (E01: replay the lock's configure argv through offline B13) | yes |
+| 15 | `native-build` (E02: replay configure/build; publish compile database and binaries) | yes |
+| 16 | `source-sast` (pinned offline Semgrep; normalized C/C++ leads and explicit language gaps) | yes |
 | 17 | `ossf-scorecard` (needs a network permission grant) | |
 | 18 | `evidence-index` | |
 | 19 | `review-lanes` | |
@@ -89,7 +89,14 @@ Stage 13 was live-confirmed on 2026-09-27 by fresh SAT `20260926T235610Z`, engag
 `20260926T235619Z-cfd753`, Dagster `b9bfe716-b25c-4a83-a289-81981a689431`: one autotools unit,
 image `image_build_a453dcd7c961`, six clang compile commands, and an externally held B13 receipt.
 The follow-up qualification proved immutable reuse, tamper rejection, a newer non-zero container
-failure, recovery without fallback and recovered reuse. Stage 14 / E01 is now the first open stage.
+failure, recovery without fallback and recovered reuse.
+
+Stages 14-16 are implemented in the SAT but have not yet completed a live SAT. Passing their unit,
+contract and syntax checks is not qualification. Stage 14 must prove configure-only lock replay;
+stage 15 must prove build replay plus a non-empty clang compile database and produced binary; stage
+16 must prove the pinned Semgrep happy path and retain `OK_WITH_GAPS` for the Go, Java and PHP tool
+families not integrated by this first slice. Immutable reuse, tamper/newer-failure handling and
+recovery for these three stages remain a separate qualification gap even after the happy path runs.
 
 Phase 3 prerequisite status (2026-09-27): **complete.** B13's three result-verification entry points
 require the caller-retained `result_sha256`, including C02 handoff and cancellation; B16 generates
@@ -105,6 +112,12 @@ the engagement; the SAT fixture must resolve. The fixture's supplied discovery r
 keys: the build stages' pre-contracts check they are not in the run or the model's inputs, and
 `build-plan` compares the plan with them afterwards. A second SAT with `build_image_reuse=auto`
 must reuse the catalogued image; one with `rebuild` must infer again.
+
+Stage 16 starts run-owned evidence collection with the independent source-only branch. It consumes
+accepted intake, not the native build. The first implementation runs the B16-resolved
+`tool-semgrep` image through B13 with no network, a read-only target and repository-owned hashed
+C/C++ rules. Its normalized records are static-analysis leads, not findings or severity claims;
+raw messages and snippets remain in the immutable tool attempt.
 
 ### 1. `sut-checkout`
 

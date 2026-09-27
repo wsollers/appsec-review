@@ -245,6 +245,14 @@ On `OK`:
   replay this lock from a clean copy: if the replay does not reproduce the trial, that is a failure
   of those jobs, not a silent pass.
 
+The replay workers are now implemented but not yet live-qualified. `02-build-configure` executes
+only the lock's configure argv and publishes `configured-build.json` plus the B13 receipts.
+`02-native-build` starts from another clean scratch copy, executes configure then build, and
+publishes `native-build.json`, the clang compile database and produced native binaries. Both use
+the catalogued immutable image, an exact run/job/source-bound target-execution grant, no network,
+a read-only target and caller-held B13 result hashes. SAT stages 14 and 15 exercise their happy
+paths; fault/recovery qualification remains after that.
+
 A catalogued image is deleted only by an operator (`image_build.py` prune, later); the catalog
 entry is never rewritten, only appended to.
 
@@ -311,8 +319,8 @@ build plan are cross-checked (build system, project root); a disagreement is rec
 ## System acceptance test
 
 The SAT walks these in flow order after the discovery gates and before evidence collection
-(`docs/processes/system-acceptance-test.md`): `build-index`, `build-plan`, `build-resolution`,
-`build-configure`, `native-build`. Beyond the usual pre/post contracts:
+(`docs/processes/system-acceptance-test.md`): `build-index`, `build-classify`, `build-plan`,
+`build-resolution`, `build-configure`, `native-build`. Beyond the usual pre/post contracts:
 
 - pre-contracts check the fixture answer keys are **not** in the run and are not among the
   invocation's inputs;
@@ -323,6 +331,9 @@ The SAT walks these in flow order after the discovery gates and before evidence 
   `autoreconf`/`configure`/`make` in that order), reporting differences;
 - `build-resolution` must end `OK` for the root unit within the attempt budget, catalog an image and
   write its lock entry; no image is built from the repository's `Dockerfile`;
+- `build-configure` must replay exactly the configure commands and retain the caller-held B13
+  receipt; `native-build` must replay configure/build and publish a non-empty clang compile database
+  plus at least one native binary;
 - a second SAT run with `auto` must reuse the catalogued image (no inference call), and a run with
   `rebuild` must infer again.
 

@@ -908,6 +908,11 @@ class ExistingContractRegressionTests(unittest.TestCase):
             "statically-inferred-build-plan", "coverage-gap"}),
         "build-resolution": ("build_resolution", {
             "sandboxed-build-succeeded", "compile-database-produced", "coverage-gap"}),
+        "configured-build": ("build_replay", {
+            "configure-succeeded"}),
+        "native-build": ("build_replay", {
+            "native-build-succeeded", "compile-database-produced", "binary-produced"}),
+        "source-sast": ("source_static_evidence", {"static-analysis-lead", "coverage-gap"}),
     }
 
     def test_their_trusted_policies_are_unchanged_and_they_are_not_vendor_prepass_contracts(self):

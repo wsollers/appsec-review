@@ -32,8 +32,8 @@ flowchart TD
   j_04_owasp_validation_worklist["04-owasp-validation-worklist<br/>registered_planned_not_executable"]
   j_15_stig_srg_validation_worklist["15-stig-srg-validation-worklist<br/>registered_planned_not_executable"]
   j_02_build_configure["02-build-configure<br/>implemented_not_qualified"]
-  j_02_native_build["02-native-build<br/>missing_prerequisites"]
-  j_02_source_sast["02-source-sast<br/>missing_prerequisites"]
+  j_02_native_build["02-native-build<br/>implemented_not_qualified"]
+  j_02_source_sast["02-source-sast<br/>implemented_not_qualified"]
   j_02_native_sast["02-native-sast<br/>missing_prerequisites"]
   j_02_ir_capture["02-ir-capture<br/>missing_prerequisites"]
   j_02_ir_link["02-ir-link<br/>missing_prerequisites"]
@@ -136,7 +136,7 @@ flowchart TD
   j_00_intake --> j_02_test_intelligence_ingest
   j_01_component_characterization --> j_04_owasp_validation_worklist
   j_01_component_characterization --> j_15_stig_srg_validation_worklist
-  j_02_dev_project_discovery --> j_02_build_configure
+  j_02_build_resolution --> j_02_build_configure
   j_02_build_configure --> j_02_native_build
   j_00_intake --> j_02_source_sast
   j_02_native_build --> j_02_native_sast

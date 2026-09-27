@@ -93,7 +93,7 @@ flowchart LR
   subgraph S["Source-only, no build needed"]
     SC[02-ossf-scorecard]:::built
     EI[02-evidence-index<br/>+ cloc/scc metrics, V15]:::built
-    SS[02-source-sast<br/>D09 / V13]:::todo
+    SS[02-source-sast<br/>Semgrep C/C++ slice implemented<br/>happy-path qualification pending]:::found
     DOC[02-doc-intelligence-ingest]:::todo
     API[02-api-collection-intelligence-ingest]:::todo
     TI[02-test-intelligence-ingest]:::todo
@@ -115,8 +115,9 @@ flowchart LR
   INT --> S
   INT --> V
 
-  DEV --> BC[02-build-configure<br/>build discovery is runnable, E01]:::found
-  BC --> NB[02-native-build<br/>E02, needs B13]:::todo
+  DEV --> BRES[02-build-index/classify/plan/resolution<br/>stage 13 qualified]:::built
+  BRES --> BC[02-build-configure<br/>implemented; stage 14 qualification pending]:::found
+  BC --> NB[02-native-build<br/>implemented; stage 15 qualification pending]:::found
   NB --> NS[02-native-sast E03]:::todo
   NB --> IRC[02-ir-capture E04]:::todo --> IRL[02-ir-link]:::todo --> IRF[02-ir-facts E05]:::todo
   NB --> DSI[02-debug-symbol-index E06]:::todo

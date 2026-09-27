@@ -832,29 +832,28 @@
     "02-build-configure": {
       "lane": "02-evidence-pregather",
       "contract": "configured-build",
-      "template": null,
-      "implemented": false,
+      "template": "02-build-configure",
+      "implemented": true,
       "namespace": "02-build-configure",
       "dependencies": [
         {
-          "job": "02-dev-project-discovery",
+          "job": "02-build-resolution",
           "kind": "required",
-          "contract": "project-discovery",
+          "contract": "build-resolution",
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Isolated configure and validated compile database; configure success is not build success.",
+      "planned_scope": "Replay only the accepted lock's configure argv from a fresh B13 scratch copy; configure success is not build success.",
       "required_artifacts": [
-        "compile_commands.json",
-        "configuration.json",
-        "toolchain.json"
+        "configured-build.json",
+        "configuration.json"
       ]
     },
     "02-native-build": {
       "lane": "02-evidence-pregather",
       "contract": "native-build",
-      "template": null,
-      "implemented": false,
+      "template": "02-native-build",
+      "implemented": true,
       "namespace": "02-native-build",
       "dependencies": [
         {
@@ -866,19 +865,18 @@
           ]
         }
       ],
-      "planned_scope": "Isolated compile/link. Preserve actual flags, generated inputs, build variant, binaries and matching symbols.",
+      "planned_scope": "Replay the accepted lock's configure and build argv from a fresh B13 scratch copy; preserve the fixed-clang compile database and produced binaries.",
       "required_artifacts": [
-        "build-manifest.json",
+        "native-build.json",
         "compile_commands.json",
-        "binary-manifest.json",
-        "debug-symbol-manifest.json"
+        "binary artifacts"
       ]
     },
     "02-source-sast": {
       "lane": "02-evidence-pregather",
       "contract": "source-sast",
-      "template": null,
-      "implemented": false,
+      "template": "02-source-sast",
+      "implemented": true,
       "namespace": "02-source-sast",
       "dependencies": [
         {
@@ -888,10 +886,10 @@
           "allowed_skip_reasons": []
         }
       ],
-      "planned_scope": "Source-only scanners; no build, binary or IR dependency.",
+      "planned_scope": "Pinned offline Semgrep with repository-owned C/C++ rules publishes normalized evidence leads; no build, binary or IR dependency.",
       "required_artifacts": [
-        "tool-results.json",
-        "coverage.json"
+        "source-sast.json",
+        "b13-receipts.json"
       ]
     },
     "02-native-sast": {

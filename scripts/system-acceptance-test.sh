@@ -57,16 +57,16 @@ STAGES=(
   "build-classify|1|02-build-classify: live persona classifies every unit from the checkout + index; validated; classes equal the answer key"
   "build-plan|1|02-build-plan: live Haiku plan per build-set unit from the checkout, index and classification; clang fixed; validated; structure equals the answer key"
   "build-resolution|1|02-build-resolution: image + trial configure/build via B13, <= build_resolution_attempts; image_build_<id> catalogued, lock written"
-  "build-configure|0|02-build-configure (E01): replay the lock's configure in the catalogued image"
-  "native-build|0|02-native-build (E02): compile database and build outputs"
-  "evidence|0|Evidence collection (legacy pipeline + hashed import), every tool ran or is a recorded gap"
+  "build-configure|1|02-build-configure (E01): replay the lock's configure in the catalogued image"
+  "native-build|1|02-native-build (E02): compile database and build outputs"
+  "source-sast|1|02-source-sast (D09 happy path): pinned offline Semgrep publishes normalized C/C++ evidence leads and explicit coverage gaps"
   "ossf-scorecard|0|02-ossf-scorecard published results ingested (needs a network permission grant)"
   "evidence-index|0|evidence_index: accepted searchable evidence"
   "review-lanes|0|01 characterization through 09 verification, 11, 12"
   "sarif|0|critical_findings_sarif: accepted SARIF from verified findings"
   "report|0|10-synthesis-report: report generated"
 )
-SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index build_classify build_plan build_resolution full_review"
+SAT_REQUIRED_JOBS="engagement_workflow repository_partition_discovery dev_project_discovery devops_project_discovery sre_operations_topology build_index build_classify build_plan build_resolution build_configure native_build source_sast full_review"
 SAT_JOB_TIMEOUT="${SAT_JOB_TIMEOUT:-900}"
 SAT_BUSINESS_GOAL="${SAT_BUSINESS_GOAL:-System acceptance test: full review cycle on the fixture}"
 SAT_PLATFORM="${SAT_PLATFORM:-Linux}"
@@ -80,6 +80,9 @@ BUILD_INDEX_JOB=02-build-index
 BUILD_CLASSIFY_JOB=02-build-classify
 BUILD_PLAN_JOB=02-build-plan
 BUILD_RESOLUTION_JOB=02-build-resolution
+BUILD_CONFIGURE_JOB=02-build-configure
+NATIVE_BUILD_JOB=02-native-build
+SOURCE_SAST_JOB=02-source-sast
 
 die() { echo "SAT: $*" >&2; exit 1; }
 stage_ids() { for s in "${STAGES[@]}"; do echo "${s%%|*}"; done; }
@@ -1582,6 +1585,131 @@ PY
   checkout_unchanged build-resolution
   record PASS build-resolution "$summary"
   printf '%s' "$summary" | python3 -c 'import json,sys; s=json.load(sys.stdin); print("build-resolution: PASS  %s: %s, %d clang compile commands; image %s; B13 %s" % (s["dagster_run_id"][:8],s["unit_id"],s["compile_commands"],s["image_id"],s["b13_result_sha256"]))'
+}
+
+# ---- stage: build-configure ----------------------------------------------------------------------
+stage_build_configure() {
+  require_run build-configure
+  if [[ ! -f "$RUN_DIR/data/controls/build-replay.json" ]]; then
+    run_step build-configure grant "$(contract build-configure grant <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_RESOLUTION_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_RESOLUTION_JOB"}},
+            {"path": "{run}/data/controls/build-replay.json", "kind": "absent"}],
+ "writes": {"required": ["{run}/data/controls/build-replay.json"], "allowed": [], "deletes": []},
+ "outputs": [{"path": "{run}/data/controls/build-replay.json", "schema": "build-replay-input.schema.json", "equals": {"mode": "success"}}]}
+JSON
+)" "$CL" run -B "$REPO/appsec-review-process/build_configure.py" stage-control "$RUN_ID"
+    [[ $STEP_RC == 0 ]] || die "build-configure: grant staging failed"
+  fi
+  run_step build-configure accept "$(contract build-configure accept <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_RESOLUTION_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_RESOLUTION_JOB"}},
+            {"path": "{run}/data/controls/build-replay.json", "kind": "file", "schema": "build-replay-input.schema.json"}],
+ "writes": {"required": ["{run}/data/jobs/$BUILD_CONFIGURE_JOB/accepted.json", "{run}/data/jobs/$BUILD_CONFIGURE_JOB/latest.json",
+                         "{run}/data/jobs/$BUILD_CONFIGURE_JOB/attempts/*/configured-build.json",
+                         "{run}/data/jobs/$BUILD_CONFIGURE_JOB/attempts/*/b13-receipts.json",
+                         "{run}/data/jobs/$BUILD_CONFIGURE_JOB/attempts/*/outputs/*/configuration.json",
+                         "{run}/data/jobs/$BUILD_CONFIGURE_JOB/attempts/*/result.json"],
+            "allowed": ["{run}/data/jobs/$BUILD_CONFIGURE_JOB/**", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$BUILD_CONFIGURE_JOB/attempts/*/configured-build.json", "schema": "configured-build.schema.json", "equals": {"status": "OK", "source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$BUILD_CONFIGURE_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "pinned_container", "job_id": "$BUILD_CONFIGURE_JOB"}}]}
+JSON
+)" launch build_configure
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "build-configure: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import build_configure; print(build_configure.validate(sys.argv[2]))' "$REPO/appsec-review-process" "$RUN_ID" || die "build-configure: validator rejected result"
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" <<'PY'
+import json,pathlib,sys
+r=pathlib.Path(sys.argv[1]); dagster=sys.argv[2]; d=r/'data/jobs/02-build-configure'; p=json.loads((d/'accepted.json').read_text()); a=d/'attempts'/p['attempt_id']
+v=json.loads((a/'configured-build.json').read_text()); receipts=json.loads((a/'b13-receipts.json').read_text()); s=json.loads((a/'status.json').read_text())
+bad=[]
+if s.get('dagster_run_id') != dagster: bad.append('Dagster id mismatch')
+if len(v['units']) != 1 or [c['phase'] for c in v['units'][0]['commands']] != ['configure','configure']: bad.append('did not replay exactly two configure commands')
+if not receipts: bad.append('missing B13 receipt')
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id':dagster,'attempt_id':p['attempt_id'],'unit_id':v['units'][0]['unit_id'],'commands':len(v['units'][0]['commands']),'b13_result_sha256':receipts[0]['expected_result_sha256']}))
+PY
+)" || die "build-configure: $summary"
+  checkout_unchanged build-configure; record PASS build-configure "$summary"
+  printf '%s' "$summary" | python3 -c 'import json,sys;s=json.load(sys.stdin);print("build-configure: PASS  %s: %d configure commands; B13 %s"%(s["dagster_run_id"][:8],s["commands"],s["b13_result_sha256"]))'
+}
+
+# ---- stage: native-build -------------------------------------------------------------------------
+stage_native_build() {
+  require_run native-build
+  run_step native-build accept "$(contract native-build accept <<JSON
+{"inputs": [{"path": "{run}/data/jobs/$BUILD_CONFIGURE_JOB/accepted.json", "kind": "file", "equals": {"job": "$BUILD_CONFIGURE_JOB"}},
+            {"path": "{run}/data/controls/build-replay.json", "kind": "file", "schema": "build-replay-input.schema.json"}],
+ "writes": {"required": ["{run}/data/jobs/$NATIVE_BUILD_JOB/accepted.json", "{run}/data/jobs/$NATIVE_BUILD_JOB/latest.json",
+                         "{run}/data/jobs/$NATIVE_BUILD_JOB/attempts/*/native-build.json",
+                         "{run}/data/jobs/$NATIVE_BUILD_JOB/attempts/*/b13-receipts.json",
+                         "{run}/data/jobs/$NATIVE_BUILD_JOB/attempts/*/outputs/*/compile_commands.json",
+                         "{run}/data/jobs/$NATIVE_BUILD_JOB/attempts/*/outputs/*/binaries/*",
+                         "{run}/data/jobs/$NATIVE_BUILD_JOB/attempts/*/result.json"],
+            "allowed": ["{run}/data/jobs/$NATIVE_BUILD_JOB/**", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$NATIVE_BUILD_JOB/attempts/*/native-build.json", "schema": "native-build.schema.json", "equals": {"status": "OK", "source_revision": "{pin}"}},
+             {"path": "{run}/data/jobs/$NATIVE_BUILD_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "pinned_container", "job_id": "$NATIVE_BUILD_JOB"}}]}
+JSON
+)" launch native_build
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "native-build: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import native_build; print(native_build.validate(sys.argv[2]))' "$REPO/appsec-review-process" "$RUN_ID" || die "native-build: validator rejected result"
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" <<'PY'
+import json,pathlib,sys
+r=pathlib.Path(sys.argv[1]); dagster=sys.argv[2]; d=r/'data/jobs/02-native-build'; p=json.loads((d/'accepted.json').read_text()); a=d/'attempts'/p['attempt_id']
+v=json.loads((a/'native-build.json').read_text()); receipts=json.loads((a/'b13-receipts.json').read_text()); s=json.loads((a/'status.json').read_text()); u=v['units'][0]
+rd=r/'data/jobs/02-build-resolution'; rp=json.loads((rd/'accepted.json').read_text()); lock=json.loads((rd/'attempts'/rp['attempt_id']/'build-lock.json').read_text())['locks'][0]
+bad=[]
+if s.get('dagster_run_id') != dagster: bad.append('Dagster id mismatch')
+if [c['phase'] for c in u['commands']] != ['configure','configure','build']: bad.append('locked configure/build order mismatch')
+if u['compile_database']['entries'] != lock['compile_database']['entries']: bad.append('compile database does not match the accepted lock')
+if [b['source_path'] for b in u['binaries']] != ['hello-autotools']: bad.append('did not publish exactly the fixture ELF')
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id':dagster,'attempt_id':p['attempt_id'],'unit_id':u['unit_id'],'commands':len(u['commands']),'compile_commands':u['compile_database']['entries'],'binaries':[b['source_path'] for b in u['binaries']],'b13_result_sha256':receipts[0]['expected_result_sha256']}))
+PY
+)" || die "native-build: $summary"
+  checkout_unchanged native-build; record PASS native-build "$summary"
+  printf '%s' "$summary" | python3 -c 'import json,sys;s=json.load(sys.stdin);print("native-build: PASS  %s: %d compile commands, binaries %s; B13 %s"%(s["dagster_run_id"][:8],s["compile_commands"],",".join(s["binaries"]),s["b13_result_sha256"]))'
+}
+
+# ---- stage: source-sast -------------------------------------------------------------------------
+stage_source_sast() {
+  require_run source-sast
+  run_step source-sast accept "$(contract source-sast accept <<JSON
+{"inputs": [{"path": "{run}/inputs/artifact-manifest.json", "kind": "file", "schema": "artifact-manifest.schema.json"}],
+ "writes": {"required": ["{run}/data/jobs/$SOURCE_SAST_JOB/accepted.json", "{run}/data/jobs/$SOURCE_SAST_JOB/latest.json",
+                         "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/source-sast.json",
+                         "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/b13-receipts.json",
+                         "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/result.json"],
+            "allowed": ["{run}/data/jobs/$SOURCE_SAST_JOB/**", $LAUNCH_WRITES], "deletes": []},
+ "outputs": [{"path": "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/source-sast.json", "schema": "source-sast.schema.json", "equals": {"status": "OK_WITH_GAPS"}},
+             {"path": "{run}/data/jobs/$SOURCE_SAST_JOB/attempts/*/result.json", "schema": "worker-result-envelope.schema.json", "equals": {"worker_kind": "pinned_container", "job_id": "$SOURCE_SAST_JOB", "execution_status": "OK_WITH_GAPS"}}]}
+JSON
+)" launch source_sast
+  launch_status
+  [[ $STEP_RC == 0 && "$LAUNCH_STATUS" == SUCCESS ]] || die "source-sast: status ${LAUNCH_STATUS:-unknown}. Dagster run: $(dagster_url)"
+  "$CL" run -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import source_sast; print(source_sast.validate(sys.argv[2]))' "$REPO/appsec-review-process" "$RUN_ID" || die "source-sast: validator rejected result"
+  local summary
+  summary="$(python3 - "$RUN_DIR" "$LAUNCH_DAGSTER" <<'PY'
+import json,pathlib,sys
+r=pathlib.Path(sys.argv[1]); dagster=sys.argv[2]; d=r/'data/jobs/02-source-sast'; p=json.loads((d/'accepted.json').read_text()); a=d/'attempts'/p['attempt_id']
+v=json.loads((a/'source-sast.json').read_text()); receipt=json.loads((a/'b13-receipts.json').read_text()); s=json.loads((a/'status.json').read_text())
+bad=[]
+if s.get('dagster_run_id') != dagster: bad.append('Dagster id mismatch')
+if v.get('status') != 'OK_WITH_GAPS': bad.append('honest partial status missing')
+if len(v.get('tools',[])) != 1 or v['tools'][0].get('tool') != 'semgrep': bad.append('pinned Semgrep execution missing')
+expected={'appsec.c.strcpy','appsec.c.printf-nonliteral','appsec.c.memcpy','appsec.c.system'}
+if len(v.get('leads',[])) != 4 or {x['rule_id'] for x in v.get('leads',[])} != expected: bad.append('fixture did not produce exactly the four declared rule leads')
+if v.get('tools',[{}])[0].get('records') != len(v.get('leads',[])): bad.append('tool record count differs from normalized leads')
+if len(v.get('coverage_gaps',[])) != 1: bad.append('remaining language coverage gap is not explicit and singular')
+if not receipt.get('expected_result_sha256'): bad.append('caller-held B13 receipt missing')
+if any(set(lead)-{'lead_id','tool_id','rule_id','path','start_line','end_line','source_sha256','category'} for lead in v.get('leads',[])): bad.append('lead contains fields outside the normalized schema')
+if bad: sys.exit('; '.join(bad))
+print(json.dumps({'dagster_run_id':dagster,'attempt_id':p['attempt_id'],'tool':v['tools'][0]['tool'],'rules':len({x['rule_id'] for x in v['leads']}),'leads':len(v['leads']),'coverage_gaps':len(v['coverage_gaps']),'b13_result_sha256':receipt['expected_result_sha256']}))
+PY
+)" || die "source-sast: $summary"
+  checkout_unchanged source-sast; record PASS source-sast "$summary"
+  printf '%s' "$summary" | python3 -c 'import json,sys;s=json.load(sys.stdin);print("source-sast: PASS  %s: %d rules, %d normalized leads, %d explicit gap(s); B13 %s"%(s["dagster_run_id"][:8],s["rules"],s["leads"],s["coverage_gaps"],s["b13_result_sha256"]))'
 }
 
 # ---- driver --------------------------------------------------------------------------------------

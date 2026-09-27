@@ -34,11 +34,12 @@ flowchart TD
   S6p["S6a-3 02-build-plan: per-unit Haiku plan, clang fixed<br/>built 2026-09-26; SAT stage 12 PASS 2026-09-26"]:::done
   S6a["S6a-4 02-build-resolution: image + offline B13 trial + lock<br/>SAT stage 13 and fault recovery PASS 2026-09-27"]:::done
   CPP["C++ buildenv prerequisite<br/>audit-native + LLVM 21.1.0 + autotools/Bear<br/>built and boundary-smoke PASS 2026-09-26"]:::done
-  S6["S6b 02-build-configure / 02-native-build<br/>replay the accepted lock; next: E01 / SAT stage 14"]:::next
+  S6["S6b 02-build-configure / 02-native-build<br/>implemented; SAT stages 14-15 await live happy-path qualification"]:::next
+  S7["S7 02-source-sast first slice<br/>offline Semgrep C/C++; SAT stage 16 awaits live happy-path qualification"]:::next
   B13["Phase 3: B13 verifier binding + B16 registry + live harmless Dagster job<br/>complete 2026-09-27"]:::done
-  E01["E01/E02: replay the lock through B13"]:::todo
+  E01["E01/E02: replay the lock through B13<br/>implemented; fault/recovery qualification remains"]:::next
 
-  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6p --> S6a --> S6
+  P0 --> P1 --> S1 --> S2 --> S3 --> S4a --> S4b --> S5 --> S5b --> S6i --> S6c --> S6p --> S6a --> S6 --> S7
   AD -.-> S4b
   AD -.-> S5
   AD -.-> S5b
@@ -112,7 +113,8 @@ All commands run in WSL from `~/projects/appsec-review` with the code location r
 | S4a | Dagster: partition discovery gate | `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `FAILURE`, `HANDOFF_ISSUED`; `data/jobs/02-repository-partition-discovery/handoff.md` + `handoff.json` name the expected `supplied/result.json` and its schema | DONE 2026-09-22 (one-time proof): run `20260922T193334Z-7074be`, Dagster `9565c126` |
 | S4b | supply the partition map | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-repository-partition-discovery`, then `launch_job.py --run-id <run_id> --job repository_partition_discovery --wait` | `SUCCESS`; accepted `repository-partition-map.json` under the job's `attempts/` | DONE: reference run, Dagster `278df830` |
 | S5 | dev-project discovery | `$PY -B fixtures/supply_record.py --run-id <run_id> --job 02-dev-project-discovery`, then `launch_job.py --run-id <run_id> --job dev_project_discovery --wait` | `SUCCESS`; `data/jobs/02-dev-project-discovery/accepted.json` | DONE: reference run, Dagster `68d20d4a` |
-| S6 | `02-build-configure` | -- | C++ buildenv complete; needs the resolution lock (S6a) and an autotools-capable configure worker (E01) | BLOCKED |
+| S6b | `02-build-configure`, `02-native-build` | `launch_job.py --run-id <run_id> --job build_configure --wait`, then `--job native_build --wait` | Configure-only replay, then configure/build replay with compile database and binaries | IMPLEMENTED, NOT QUALIFIED; SAT stages 14-15 built |
+| S7 | `02-source-sast` | `launch_job.py --run-id <run_id> --job source_sast --wait` | `OK_WITH_GAPS`; normalized Semgrep C/C++ leads and explicit unintegrated-language gaps | IMPLEMENTED, NOT QUALIFIED; SAT stage 16 built |
 
 ## Run it end to end
 
