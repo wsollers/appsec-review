@@ -23,6 +23,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
+import container_execution as ce
 import dependency_snapshot_registry as snapshots
 import permission_capabilities as pc
 
@@ -172,6 +173,49 @@ def _extract(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
         raise SyncBlocked("snapshot archive lacks required database content")
 
 
+def _activate_grype(archive: Path, destination: Path, spec: dict[str, Any]) -> None:
+    """Activate a verified vendor archive with the pinned Grype image, entirely offline."""
+    try:
+        defaults = ce.host_defaults()
+        executable = defaults["docker_executable"]
+        image = ce.load_image_registry(ce.IMAGES_DIR)["tool-grype"]["digest"]
+    except (KeyError, OSError, ce.ContainerRequestError) as exc:
+        raise SyncBlocked("pinned Grype image identity is unavailable") from exc
+    if executable is None:
+        raise SyncBlocked("Docker is unavailable for pinned Grype database activation")
+    destination.chmod(0o777)
+    common = [str(executable), "run", "--rm", "--network", "none", "--read-only",
+              "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--pids-limit", "128",
+              "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=64m",
+              "-e", "GRYPE_DB_CACHE_DIR=/scratch/grype/db",
+              "-v", f"{archive.resolve()}:/input/db.tar.zst:ro",
+              "-v", f"{destination.resolve()}:/scratch:rw",
+              "--entrypoint", "/opt/tool/bin/grype", image]
+    try:
+        imported = subprocess.run([*common, "db", "import", "/input/db.tar.zst"],
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, timeout=900, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise SyncBlocked("pinned Grype database activation failed") from exc
+    if imported.returncode != 0:
+        raise SyncBlocked("pinned Grype database activation failed")
+    try:
+        checked = subprocess.run([*common, "db", "status", "-o", "json"],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, timeout=120, check=False)
+        status = json.loads(checked.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+        raise SyncBlocked("pinned Grype database status validation failed") from exc
+    expected_schema = "v" + spec["metadata"]["schema_version"]
+    if (checked.returncode != 0 or not isinstance(status, dict) or status.get("valid") is not True or
+            status.get("schemaVersion") != expected_schema or
+            status.get("built") != spec["metadata"]["data_timestamp"]):
+        raise SyncBlocked("activated Grype database identity differs from the pinned declaration")
+    present = {item["path"] for item in snapshots.inventory(destination)}
+    if not set(spec["required_paths"]).issubset(present):
+        raise SyncBlocked("activated Grype database lacks required cache content")
+
+
 def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str, now: str,
              registry_root: Path, opener: Callable[..., Any] | None = None) -> dict[str, Any]:
     spec = _spec(spec); _authorize(spec["url"], grants, run_id=run_id, source=source_snapshot_sha256, now=now)
@@ -199,7 +243,11 @@ def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str
         except (OSError, urllib.error.URLError) as exc: raise SyncBlocked("snapshot archive download failed") from exc
         if size != spec["bytes"] or "sha256:" + digest.hexdigest() != spec["sha256"]:
             raise SyncBlocked("snapshot archive bytes differ from the pinned declaration")
-        mirror = staging / "mirror"; mirror.mkdir(); _extract(archive, mirror, spec)
+        mirror = staging / "mirror"; mirror.mkdir()
+        if spec["database_kind"] == "grype-db" and spec["archive"] == "tar.zst":
+            _activate_grype(archive, mirror, spec)
+        else:
+            _extract(archive, mirror, spec)
         metadata = staging / "metadata.json"; metadata.write_text(json.dumps(spec["metadata"], sort_keys=True) + "\n")
         # register() re-inventories the extracted bytes, stages a new immutable generation and
         # atomically replaces only the small current pointer after full validation.
