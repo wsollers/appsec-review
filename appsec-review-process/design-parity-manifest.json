@@ -261,22 +261,30 @@
       },
       {
         "job": "code_property_graph",
-        "lifecycle_jobs": ["02-code-property-graph"],
+        "lifecycle_jobs": [
+          "02-code-property-graph"
+        ],
         "relationship": "standalone and lifecycle-wired pinned offline Joern AST/CPG projection with source-locator authority"
       },
       {
         "job": "ir_capture",
-        "lifecycle_jobs": ["02-ir-capture"],
+        "lifecycle_jobs": [
+          "02-ir-capture"
+        ],
         "relationship": "standalone and lifecycle-wired pinned B13 LLVM bitcode capture from the accepted native build"
       },
       {
         "job": "ir_link",
-        "lifecycle_jobs": ["02-ir-link"],
+        "lifecycle_jobs": [
+          "02-ir-link"
+        ],
         "relationship": "standalone and lifecycle-wired pinned B13 linking of the accepted capture generation"
       },
       {
         "job": "ir_facts",
-        "lifecycle_jobs": ["02-ir-facts"],
+        "lifecycle_jobs": [
+          "02-ir-facts"
+        ],
         "relationship": "standalone and lifecycle-wired pinned B13 IR fact projection with source locations"
       },
       {
@@ -470,42 +478,58 @@
       },
       {
         "job": "persona_tool_pool_dispatch",
-        "lifecycle_jobs": ["persona-tool-pool-dispatch"],
+        "lifecycle_jobs": [
+          "persona-tool-pool-dispatch"
+        ],
         "relationship": "config-driven standalone C01 expansion and C02 rendezvous; full-review pool specification assembly remains blocked"
       },
       {
         "job": "deterministic_pool_merge",
-        "lifecycle_jobs": ["deterministic-pool-merge"],
+        "lifecycle_jobs": [
+          "deterministic-pool-merge"
+        ],
         "relationship": "config-driven standalone deterministic merge of a verified C02 manifest; full-review input assembly remains blocked"
       },
       {
         "job": "evidence_qualified_quorum",
-        "lifecycle_jobs": ["evidence-qualified-quorum"],
+        "lifecycle_jobs": [
+          "evidence-qualified-quorum"
+        ],
         "relationship": "config-driven standalone quorum decision from an accepted merge reference; full-review input assembly remains blocked"
       },
       {
         "job": "dynamic_rescope",
-        "lifecycle_jobs": ["dynamic-rescope"],
+        "lifecycle_jobs": [
+          "dynamic-rescope"
+        ],
         "relationship": "config-driven standalone bounded rescope transform; full-review input assembly remains blocked"
       },
       {
         "job": "completeness_audit",
-        "lifecycle_jobs": ["completeness-audit"],
+        "lifecycle_jobs": [
+          "completeness-audit"
+        ],
         "relationship": "config-driven standalone completeness audit; full-review input assembly remains blocked"
       },
       {
         "job": "synthetic_hypothesis_resynthesis",
-        "lifecycle_jobs": ["synthetic-hypothesis-resynthesis"],
+        "lifecycle_jobs": [
+          "synthetic-hypothesis-resynthesis"
+        ],
         "relationship": "config-driven standalone resynthesis transform; full-review input assembly remains blocked"
       },
       {
         "job": "remediation_retest_feedback",
-        "lifecycle_jobs": ["remediation-retest-feedback"],
+        "lifecycle_jobs": [
+          "remediation-retest-feedback"
+        ],
         "relationship": "config-driven standalone remediation retest feedback transform; full-review input assembly remains blocked"
       },
       {
         "job": "final_publication_gate",
-        "lifecycle_jobs": ["final-publication-gate"],
+        "lifecycle_jobs": [
+          "final-publication-gate"
+        ],
         "relationship": "config-driven standalone final publication gate requiring exact accepted controls and human authorization; full-review input assembly remains blocked"
       }
     ],
@@ -717,7 +741,7 @@
       "output": {
         "contract": "intake",
         "contract_file": "appsec-review-process/registry/output-contracts/intake.json",
-        "schema_file": "schemas/intake.schema.json",
+        "schema_file": null,
         "claim_class": "intake_inventory"
       },
       "permissions": [
@@ -728,10 +752,11 @@
           "phase1_intake"
         ],
         "lifecycle_binding": {
-          "kind": "controller",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:workflow_intake"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "phase1_intake"
         ],
         "sensor_jobs": [
@@ -753,7 +778,7 @@
         ]
       },
       "gaps": [],
-      "next_prerequisite": "Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/pools/resource-pools.md step 8)."
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-ossf-scorecard",
@@ -798,9 +823,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:ossf_scorecard_lifecycle_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "ossf_scorecard"
         ],
         "sensor_jobs": [
@@ -808,7 +834,7 @@
           "ossf_scorecard"
         ]
       },
-      "resource_pool": "network",
+      "resource_pool": "cpu",
       "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
@@ -825,7 +851,7 @@
         ]
       },
       "gaps": [],
-      "next_prerequisite": "Pool assigned (network, B15); the network pool has not been observed under contention."
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-repository-partition-discovery",
@@ -835,7 +861,7 @@
       ],
       "graph": {
         "node": "02-repository-partition-discovery",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
@@ -849,9 +875,9 @@
         "output_contract": "repository-partition-map"
       },
       "execution": {
-        "mode": "supplied_artifact",
-        "worker": "appsec-review-process/discovery_gate.py:run",
-        "validator": "appsec-review-process/discovery_gate.py:validate"
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/automatic_discovery.py:run",
+        "validator": "appsec-review-process/automatic_discovery.py:validate"
       },
       "output": {
         "contract": "repository-partition-map",
@@ -865,10 +891,11 @@
           "repository_partition_discovery"
         ],
         "lifecycle_binding": {
-          "kind": "supplied_gate",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:repository_partition_discovery_work"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "repository_partition_discovery"
         ],
         "sensor_jobs": [
@@ -877,7 +904,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "supplied_artifact_gate",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -891,11 +918,8 @@
           "appsec-review-process/qualify_worker_adoption.py"
         ]
       },
-      "gaps": [
-        "not_automatic_analysis_dispatch",
-        "supplied_result_required"
-      ],
-      "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-dev-project-discovery",
@@ -905,7 +929,7 @@
       ],
       "graph": {
         "node": "02-dev-project-discovery",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-repository-partition-discovery"
         ]
@@ -919,9 +943,9 @@
         "output_contract": "project-discovery"
       },
       "execution": {
-        "mode": "supplied_artifact",
-        "worker": "appsec-review-process/discovery_gate.py:run",
-        "validator": "appsec-review-process/discovery_gate.py:validate"
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/automatic_discovery.py:run",
+        "validator": "appsec-review-process/automatic_discovery.py:validate"
       },
       "output": {
         "contract": "project-discovery",
@@ -935,11 +959,12 @@
           "dev_project_discovery"
         ],
         "lifecycle_binding": {
-          "kind": "supplied_gate",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:dev_project_discovery_work"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "dev_project_discovery"
+          "dev_project_discovery",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -947,18 +972,15 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "supplied_artifact_gate",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "none"
         ],
         "references": []
       },
-      "gaps": [
-        "not_automatic_analysis_dispatch",
-        "supplied_result_required"
-      ],
-      "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-devops-project-discovery",
@@ -968,7 +990,7 @@
       ],
       "graph": {
         "node": "02-devops-project-discovery",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-repository-partition-discovery"
         ]
@@ -982,9 +1004,9 @@
         "output_contract": "project-discovery"
       },
       "execution": {
-        "mode": "supplied_artifact",
-        "worker": "appsec-review-process/discovery_gate.py:run",
-        "validator": "appsec-review-process/discovery_gate.py:validate"
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/automatic_discovery.py:run",
+        "validator": "appsec-review-process/automatic_discovery.py:validate"
       },
       "output": {
         "contract": "project-discovery",
@@ -998,11 +1020,12 @@
           "devops_project_discovery"
         ],
         "lifecycle_binding": {
-          "kind": "supplied_gate",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:devops_project_discovery_work"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "devops_project_discovery"
+          "devops_project_discovery",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -1010,18 +1033,15 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "supplied_artifact_gate",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "none"
         ],
         "references": []
       },
-      "gaps": [
-        "not_automatic_analysis_dispatch",
-        "supplied_result_required"
-      ],
-      "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-sre-operations-topology",
@@ -1031,7 +1051,7 @@
       ],
       "graph": {
         "node": "02-sre-operations-topology",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-devops-project-discovery"
         ]
@@ -1045,9 +1065,9 @@
         "output_contract": "operations-topology"
       },
       "execution": {
-        "mode": "supplied_artifact",
-        "worker": "appsec-review-process/discovery_gate.py:run",
-        "validator": "appsec-review-process/discovery_gate.py:validate"
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/automatic_discovery.py:run",
+        "validator": "appsec-review-process/automatic_discovery.py:validate"
       },
       "output": {
         "contract": "operations-topology",
@@ -1061,10 +1081,11 @@
           "sre_operations_topology"
         ],
         "lifecycle_binding": {
-          "kind": "supplied_gate",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:sre_operations_topology_work"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "sre_operations_topology"
         ],
         "sensor_jobs": [
@@ -1073,18 +1094,15 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "supplied_artifact_gate",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "none"
         ],
         "references": []
       },
-      "gaps": [
-        "not_automatic_analysis_dispatch",
-        "supplied_result_required"
-      ],
-      "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-build-index",
@@ -1131,10 +1149,11 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:build_index_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "build_index"
+          "build_index",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -1142,7 +1161,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "implemented_not_qualified",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -1156,7 +1175,7 @@
       "gaps": [
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-build-classify",
@@ -1200,10 +1219,11 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:build_classify_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "build_classify"
+          "build_classify",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -1211,7 +1231,7 @@
         ]
       },
       "resource_pool": "persona_llm",
-      "readiness": "implemented_not_qualified",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -1225,7 +1245,7 @@
       "gaps": [
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-build-plan",
@@ -1269,10 +1289,11 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:build_plan_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "build_plan"
+          "build_plan",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -1280,7 +1301,7 @@
         ]
       },
       "resource_pool": "persona_llm",
-      "readiness": "implemented_not_qualified",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -1294,7 +1315,7 @@
       "gaps": [
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-build-resolution",
@@ -1340,10 +1361,11 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:build_resolution_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "build_resolution"
+          "build_resolution",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -1369,7 +1391,7 @@
         ]
       },
       "gaps": [],
-      "next_prerequisite": "Run fault-recovery qualification for stages 14-16 and integrate the remaining source-language tools."
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-evidence-assembly",
@@ -1379,7 +1401,7 @@
       ],
       "graph": {
         "node": "02-evidence-assembly",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-dev-project-discovery",
           "02-devops-project-discovery",
@@ -1435,16 +1457,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -1454,12 +1478,9 @@
         ]
       },
       "gaps": [
-        "required_producers_and_c01_c02_runtime_binding_missing",
-        "dagster_lifecycle_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Implement the remaining required producers, bind the trusted C01/C02 pool context, then add the Dagster lifecycle and live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "01-component-characterization",
@@ -1503,10 +1524,11 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:component_characterization_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "component_characterization"
+          "component_characterization",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -1527,7 +1549,7 @@
         "blocked_on_02-evidence-assembly",
         "no_live_qualification"
       ],
-      "next_prerequisite": "Publish an accepted COMPLETE 02-evidence-assembly envelope, then run live persona qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-full-review-input-assembly",
@@ -1571,9 +1593,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review_input_assembly_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "full_review_input_assembly"
         ],
         "sensor_jobs": [
@@ -1582,7 +1605,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "implemented_and_qualified",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -1596,7 +1619,7 @@
       "gaps": [
         "later_dependency_waves_require_reinvocation_after_prerequisites_publish"
       ],
-      "next_prerequisite": "Reinvoke the deterministic assembler after SBOM, license, and SCA prerequisites publish so later dependency waves remain evidence-bound."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "03-threat-model-dfd-stride",
@@ -1641,9 +1664,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:threat_model_dfd_stride_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "threat_model_dfd_stride"
         ],
         "sensor_jobs": [
@@ -1652,7 +1676,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "implemented_and_qualified",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -1665,10 +1689,9 @@
         ]
       },
       "gaps": [
-        "claim_ledger_routing_not_integrated",
         "freeciv_live_qualification_pending"
       ],
-      "next_prerequisite": "Run the accepted L6A/L6B path against a real Freeciv F03/F02 generation and route candidate hypotheses to the claim ledger."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "03-threat-model-reconciliation",
@@ -1715,9 +1738,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:threat_model_reconciliation_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "threat_model_reconciliation"
         ],
         "sensor_jobs": [
@@ -1726,7 +1750,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "implemented_and_qualified",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -1738,10 +1762,9 @@
         ]
       },
       "gaps": [
-        "claim_ledger_routing_not_integrated",
         "freeciv_live_qualification_pending"
       ],
-      "next_prerequisite": "Run against a real accepted Freeciv generation and route reconciliation actions into the review control loop."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "04-asvs-masvs",
@@ -1788,9 +1811,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:owasp_join_report_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "owasp_join_report"
         ],
         "sensor_jobs": [
@@ -1798,8 +1822,8 @@
           "owasp_join_report"
         ]
       },
-      "resource_pool": "cpu",
-      "readiness": "implemented_and_qualified",
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -1812,10 +1836,8 @@
           "docs/evidence/owasp-chain-qualification.md"
         ]
       },
-      "gaps": [
-        "automatic_dispatch_facts_derivation_pending"
-      ],
-      "next_prerequisite": "Derive dispatch facts automatically from the accepted OWASP lane instead of requiring the explicit qualified facts file."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "05-native-memory",
@@ -1859,10 +1881,11 @@
           "native_memory_analysis"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "native_memory_analysis"
         ],
         "sensor_jobs": [
@@ -1871,7 +1894,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -1882,10 +1905,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_qualification"
       ],
-      "next_prerequisite": "Build the lifecycle input assembler from accepted native evidence, replace the blocked full-review op, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "06-cve-reachability",
@@ -1927,11 +1949,12 @@
           "cve_reachability"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "cve_reachability"
+          "cve_reachability",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -1939,7 +1962,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -1951,10 +1974,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_qualification"
       ],
-      "next_prerequisite": "Build the full-review input assembler and complete live static-evidence qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "13-fuzz-target-triage",
@@ -2000,10 +2022,11 @@
           "fuzz_target_triage"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "fuzz_target_triage"
         ],
         "sensor_jobs": [
@@ -2012,7 +2035,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2023,10 +2046,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_qualification"
       ],
-      "next_prerequisite": "Build the lifecycle input assembler from accepted component, threat, native-memory and reachability evidence, then complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "15-deployment-hardening",
@@ -2071,11 +2093,12 @@
           "deployment_hardening"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "deployment_hardening"
+          "deployment_hardening",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -2083,7 +2106,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2094,10 +2117,74 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_qualification"
       ],
-      "next_prerequisite": "Build the lifecycle input assembler from accepted deployment configuration and STIG/SRG worklist evidence, then complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "claim-ledger-routing",
+      "design_refs": [
+        "docs/architecture/design-v3.md#82-append-only-review-event-ledger",
+        "docs/design-parity/design-parity-completion-plan.md#workstream-f-claim-ledger-and-feedback-loops"
+      ],
+      "graph": {
+        "node": "claim-ledger-routing",
+        "implemented": true,
+        "dependencies": [
+          "03-threat-model-reconciliation",
+          "04-asvs-masvs"
+        ]
+      },
+      "registry": {
+        "template": "claim-ledger-routing",
+        "persona": "developer-engineer",
+        "role": "claim-ledger-custodian",
+        "domain": "claim-ledger-lifecycle",
+        "tooling_profile": "hash-linked-claim-ledger",
+        "output_contract": "claim-ledger-core"
+      },
+      "execution": {
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/claim_ledger.py:run",
+        "validator": "appsec-review-process/claim_ledger.py:validate_ledger"
+      },
+      "output": {
+        "contract": "claim-ledger-core",
+        "contract_file": "appsec-review-process/registry/output-contracts/claim-ledger-core.json",
+        "schema_file": "schemas/claim-decision-ledger.schema.json",
+        "claim_class": "candidate_claim_ledger"
+      },
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review"
+        ]
+      },
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_claim_ledger.py"
+        ]
+      },
+      "gaps": [
+        "no_live_qualification"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "07-red-team-adversarial",
@@ -2106,8 +2193,9 @@
       ],
       "graph": {
         "node": "07-red-team-adversarial",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
+          "claim-ledger-routing",
           "01-component-characterization",
           "03-threat-model-dfd-stride",
           "04-asvs-masvs",
@@ -2143,16 +2231,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2162,12 +2252,9 @@
         ]
       },
       "gaps": [
-        "common_lifecycle_publication_not_integrated",
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "08-blue-team-refutation",
@@ -2176,7 +2263,7 @@
       ],
       "graph": {
         "node": "08-blue-team-refutation",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "07-red-team-adversarial",
           "01-component-characterization"
@@ -2208,16 +2295,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2227,12 +2316,9 @@
         ]
       },
       "gaps": [
-        "common_lifecycle_publication_not_integrated",
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "09-independent-verification",
@@ -2241,7 +2327,7 @@
       ],
       "graph": {
         "node": "09-independent-verification",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "07-red-team-adversarial",
           "08-blue-team-refutation"
@@ -2273,16 +2359,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2292,12 +2380,9 @@
         ]
       },
       "gaps": [
-        "common_lifecycle_publication_not_integrated",
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "11-remediation-proposal",
@@ -2306,53 +2391,57 @@
       ],
       "graph": {
         "node": "11-remediation-proposal",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "09-independent-verification"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "11-remediation-proposal",
+        "persona": "evidence-custodian",
+        "role": "evidence-assembler",
+        "domain": "evidence-assembly",
+        "tooling_profile": "hash-bound-evidence-assembly",
+        "output_contract": "11-remediation-proposal"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/remediation_proposal.py:run",
+        "validator": "appsec-review-process/remediation_proposal.py:_validate_attempt"
       },
       "output": {
         "contract": "11-remediation-proposal",
-        "contract_file": null,
-        "schema_file": null,
+        "contract_file": "appsec-review-process/registry/output-contracts/11-remediation-proposal.json",
+        "schema_file": "schemas/remediation-proposal.schema.json",
         "claim_class": "planned_contract_output"
       },
-      "permissions": [],
+      "permissions": [
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "none"
         ],
         "references": []
       },
-      "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
-        "unassigned_resource_pool"
-      ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "12-scoring-prioritization",
@@ -2361,7 +2450,7 @@
       ],
       "graph": {
         "node": "12-scoring-prioritization",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "09-independent-verification",
           "15-deployment-hardening",
@@ -2394,16 +2483,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "persona_llm",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2413,12 +2504,9 @@
         ]
       },
       "gaps": [
-        "common_lifecycle_publication_not_integrated",
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "10-synthesis-report",
@@ -2470,9 +2558,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:synthesis_report_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "synthesis_report"
         ],
         "sensor_jobs": [
@@ -2481,7 +2570,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "implemented_and_qualified",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -2496,7 +2585,7 @@
         "real_accepted_upstream_chain_pending",
         "final_human_approval_and_publication_remain_separate"
       ],
-      "next_prerequisite": "Run the qualified publisher against the real accepted upstream chain, then pass its draft to the separate final publication gate."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-api-collection-intelligence-ingest",
@@ -2506,7 +2595,7 @@
       ],
       "graph": {
         "node": "02-api-collection-intelligence-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
@@ -2538,16 +2627,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2557,11 +2648,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-binary-intelligence-ingest",
@@ -2571,7 +2660,7 @@
       ],
       "graph": {
         "node": "02-binary-intelligence-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-binary-triage",
           "02-binary-cfg"
@@ -2603,16 +2692,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2622,12 +2713,10 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
         "m02_pinned_binary_tool_unavailable",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-doc-intelligence-ingest",
@@ -2637,7 +2726,7 @@
       ],
       "graph": {
         "node": "02-doc-intelligence-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
@@ -2669,16 +2758,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2688,11 +2779,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-standards-source-ingest",
@@ -2702,7 +2791,7 @@
       ],
       "graph": {
         "node": "02-standards-source-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
@@ -2734,16 +2823,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2753,11 +2844,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified offline core into the shared Dagster lifecycle and complete live fixture qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-test-intelligence-ingest",
@@ -2767,7 +2856,7 @@
       ],
       "graph": {
         "node": "02-test-intelligence-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
@@ -2799,16 +2888,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2818,11 +2909,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "04-owasp-validation-worklist",
@@ -2866,10 +2955,11 @@
           "owasp_validation_worklist"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "owasp_validation_worklist"
         ],
         "sensor_jobs": [
@@ -2878,7 +2968,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2889,10 +2979,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_qualification"
       ],
-      "next_prerequisite": "Build the lifecycle input assembler from accepted OWASP source and applicability evidence, replace the blocked full-review op, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "15-stig-srg-validation-worklist",
@@ -2936,10 +3025,11 @@
           "stig_srg_validation_worklist"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "stig_srg_validation_worklist"
         ],
         "sensor_jobs": [
@@ -2948,7 +3038,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -2959,10 +3049,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_qualification"
       ],
-      "next_prerequisite": "Build the lifecycle input assembler from accepted STIG/SRG source and platform evidence, replace the blocked full-review op, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-build-configure",
@@ -3007,10 +3096,11 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:build_configure_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "build_configure"
+          "build_configure",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -3018,7 +3108,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "implemented_not_qualified",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -3034,7 +3124,7 @@
       "gaps": [
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-native-build",
@@ -3079,9 +3169,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:native_build_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "native_build"
         ],
         "sensor_jobs": [
@@ -3090,7 +3181,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "implemented_not_qualified",
+      "readiness": "implemented_and_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -3106,7 +3197,7 @@
       "gaps": [
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-source-sast",
@@ -3150,9 +3241,10 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:source_sast_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "source_sast"
         ],
         "sensor_jobs": [
@@ -3179,7 +3271,7 @@
       "gaps": [
         "fault_recovery_not_qualified"
       ],
-      "next_prerequisite": "Run live fault-recovery qualification; retain the explicit C/C++ rule-family coverage limitation."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-code-property-graph",
@@ -3190,7 +3282,9 @@
       "graph": {
         "node": "02-code-property-graph",
         "implemented": true,
-        "dependencies": ["00-intake"]
+        "dependencies": [
+          "00-intake"
+        ]
       },
       "registry": {
         "template": "02-code-property-graph",
@@ -3211,27 +3305,44 @@
         "schema_file": "schemas/code-property-graph.schema.json",
         "claim_class": "structural_source_evidence"
       },
-      "permissions": ["read-source", "write-run-data"],
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
       "dagster": {
-        "standalone_jobs": ["code_property_graph"],
+        "standalone_jobs": [
+          "code_property_graph"
+        ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:code_property_graph_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": ["code_property_graph"],
-        "sensor_jobs": ["full_review", "code_property_graph"]
+        "launcher_jobs": [
+          "code_property_graph",
+          "full_review"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "code_property_graph"
+        ]
       },
       "resource_pool": "docker",
       "readiness": "implemented_not_qualified",
       "qualification": {
-        "levels": ["unit", "host_integration", "linux_integration"],
+        "levels": [
+          "unit",
+          "host_integration",
+          "linux_integration"
+        ],
         "references": [
           "appsec-review-process/tests/test_code_graph_evidence.py",
           "docs/evidence/semantic-recall-lifecycle-plan.md"
         ]
       },
-      "gaps": ["live_dagster_qualification_missing"],
-      "next_prerequisite": "Qualify the registered Dagster lifecycle op and full-review handoff."
+      "gaps": [
+        "live_dagster_qualification_missing"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-native-sast",
@@ -3241,7 +3352,7 @@
       ],
       "graph": {
         "node": "02-native-sast",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-native-build"
         ]
@@ -3273,16 +3384,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3292,12 +3405,10 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
         "pinned_image_live_qualification_missing",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-ir-capture",
@@ -3336,21 +3447,29 @@
         "write-run-data"
       ],
       "dagster": {
-        "standalone_jobs": ["ir_capture"],
+        "standalone_jobs": [
+          "ir_capture"
+        ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:ir_capture_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": ["ir_capture"],
+        "launcher_jobs": [
+          "full_review",
+          "ir_capture"
+        ],
         "sensor_jobs": [
-          "full_review", "ir_capture"
+          "full_review",
+          "ir_capture"
         ]
       },
       "resource_pool": "docker",
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "unit", "host_integration", "linux_integration"
+          "unit",
+          "host_integration",
+          "linux_integration"
         ],
         "references": [
           "appsec-review-process/tests/test_ir_evidence.py",
@@ -3361,7 +3480,7 @@
       "gaps": [
         "live_dagster_qualification_missing"
       ],
-      "next_prerequisite": "Qualify the registered Dagster lifecycle op against an accepted native build."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-ir-link",
@@ -3400,21 +3519,29 @@
         "write-run-data"
       ],
       "dagster": {
-        "standalone_jobs": ["ir_link"],
+        "standalone_jobs": [
+          "ir_link"
+        ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:ir_link_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": ["ir_link"],
+        "launcher_jobs": [
+          "full_review",
+          "ir_link"
+        ],
         "sensor_jobs": [
-          "full_review", "ir_link"
+          "full_review",
+          "ir_link"
         ]
       },
       "resource_pool": "docker",
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "unit", "host_integration", "linux_integration"
+          "unit",
+          "host_integration",
+          "linux_integration"
         ],
         "references": [
           "appsec-review-process/tests/test_ir_evidence.py",
@@ -3425,7 +3552,7 @@
       "gaps": [
         "live_dagster_qualification_missing"
       ],
-      "next_prerequisite": "Qualify the registered Dagster lifecycle op against accepted capture evidence."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-ir-facts",
@@ -3464,21 +3591,29 @@
         "write-run-data"
       ],
       "dagster": {
-        "standalone_jobs": ["ir_facts"],
+        "standalone_jobs": [
+          "ir_facts"
+        ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:ir_facts_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": ["ir_facts"],
+        "launcher_jobs": [
+          "full_review",
+          "ir_facts"
+        ],
         "sensor_jobs": [
-          "full_review", "ir_facts"
+          "full_review",
+          "ir_facts"
         ]
       },
       "resource_pool": "docker",
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "unit", "host_integration", "linux_integration"
+          "unit",
+          "host_integration",
+          "linux_integration"
         ],
         "references": [
           "appsec-review-process/tests/test_ir_evidence.py",
@@ -3489,7 +3624,7 @@
       "gaps": [
         "live_dagster_qualification_missing"
       ],
-      "next_prerequisite": "Qualify the registered Dagster lifecycle op against accepted linked IR."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-debug-symbol-index",
@@ -3499,7 +3634,7 @@
       ],
       "graph": {
         "node": "02-debug-symbol-index",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-native-build"
         ]
@@ -3530,16 +3665,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3549,12 +3686,10 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
         "m02_pinned_binary_tool_unavailable",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-binary-triage",
@@ -3564,7 +3699,7 @@
       ],
       "graph": {
         "node": "02-binary-triage",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-native-build"
         ]
@@ -3595,16 +3730,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3614,12 +3751,10 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
         "m02_pinned_binary_tool_unavailable",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-binary-cfg",
@@ -3629,7 +3764,7 @@
       ],
       "graph": {
         "node": "02-binary-cfg",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-binary-triage",
           "02-debug-symbol-index"
@@ -3661,16 +3796,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3680,12 +3817,10 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
         "m02_pinned_binary_tool_unavailable",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-test-execution",
@@ -3695,7 +3830,7 @@
       ],
       "graph": {
         "node": "02-test-execution",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-native-build"
         ]
@@ -3726,16 +3861,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3745,12 +3882,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "operator_test_control_staging_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-test-result-ingest",
@@ -3760,7 +3894,7 @@
       ],
       "graph": {
         "node": "02-test-result-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-test-execution"
         ]
@@ -3791,16 +3925,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3810,12 +3946,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "accepted_test_execution_lifecycle_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-test-coverage-ingest",
@@ -3825,7 +3958,7 @@
       ],
       "graph": {
         "node": "02-test-coverage-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "02-test-execution"
         ]
@@ -3856,16 +3989,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3875,12 +4010,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "accepted_test_execution_lifecycle_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-operations-doc-ingest",
@@ -3890,7 +4022,7 @@
       ],
       "graph": {
         "node": "02-operations-doc-ingest",
-        "implemented": false,
+        "implemented": true,
         "dependencies": [
           "00-intake"
         ]
@@ -3922,16 +4054,18 @@
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
-        "launcher_jobs": [],
+        "launcher_jobs": [
+          "full_review"
+        ],
         "sensor_jobs": [
           "full_review"
         ]
       },
-      "resource_pool": "unassigned",
-      "readiness": "standalone_only",
+      "resource_pool": "cpu",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -3941,11 +4075,9 @@
         ]
       },
       "gaps": [
-        "shared_dagster_graph_not_integrated",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
-      "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-evidence-index",
@@ -3988,17 +4120,18 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:evidence_index_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "evidence_index"
+          "evidence_index",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
           "evidence_index"
         ]
       },
-      "resource_pool": "memory",
+      "resource_pool": "cpu",
       "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
@@ -4014,7 +4147,7 @@
         "common_worker_envelope_migration_missing",
         "live_enrichment_requalification_missing"
       ],
-      "next_prerequisite": "Stage accepted derived-producer selections, migrate the legacy publication to the common envelope, and requalify the enriched lifecycle live."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-secrets-inventory",
@@ -4058,10 +4191,11 @@
           "secrets_inventory"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "secrets_inventory"
         ],
         "sensor_jobs": [
@@ -4070,7 +4204,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4082,10 +4216,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification"
       ],
-      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-iac-config-scan",
@@ -4129,10 +4262,11 @@
           "iac_config_scan"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "iac_config_scan"
         ],
         "sensor_jobs": [
@@ -4141,7 +4275,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4153,10 +4287,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification"
       ],
-      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-container-image-inventory",
@@ -4200,11 +4333,12 @@
           "container_image_inventory"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "container_image_inventory"
+          "container_image_inventory",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -4212,7 +4346,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4224,10 +4358,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification"
       ],
-      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-sbom-inventory",
@@ -4271,10 +4404,11 @@
           "sbom_inventory"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "sbom_inventory"
         ],
         "sensor_jobs": [
@@ -4283,7 +4417,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4295,11 +4429,10 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification",
         "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-sca-vulnerability-match",
@@ -4344,10 +4477,11 @@
           "sca_vulnerability_match"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "sca_vulnerability_match"
         ],
         "sensor_jobs": [
@@ -4356,7 +4490,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4368,11 +4502,10 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification",
         "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify both supplied offline snapshot consumers live."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-license-scan",
@@ -4418,10 +4551,11 @@
           "license_scan"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "license_scan"
         ],
         "sensor_jobs": [
@@ -4430,7 +4564,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4442,11 +4576,10 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification",
         "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-dependency-lifecycle",
@@ -4491,19 +4624,20 @@
           "dependency_lifecycle"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "dependency_lifecycle"
+          "dependency_lifecycle",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
           "dependency_lifecycle"
         ]
       },
-      "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4515,11 +4649,10 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_qualification",
         "legacy_vendor_prepass_attempt_packaging_not_published"
       ],
-      "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify a supplied current reference table live."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "02-binary-hardening",
@@ -4564,10 +4697,11 @@
         ],
         "lifecycle_binding": {
           "kind": "actual_worker",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:binary_hardening_lifecycle_work"
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "binary_hardening"
+          "binary_hardening",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -4575,7 +4709,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "implemented_and_qualified",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit",
@@ -4592,7 +4726,7 @@
         ]
       },
       "gaps": [],
-      "next_prerequisite": "Exercise this accepted path in the next complete retained full-review run."
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "02-mobile-sast",
@@ -4636,10 +4770,11 @@
           "mobile_sast"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "mobile_sast"
         ],
         "sensor_jobs": [
@@ -4648,7 +4783,7 @@
         ]
       },
       "resource_pool": "docker",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4660,10 +4795,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_docker_qualification"
       ],
-      "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "persona-tool-pool-dispatch",
@@ -4705,10 +4839,11 @@
           "persona_tool_pool_dispatch"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "persona_tool_pool_dispatch"
         ],
         "sensor_jobs": [
@@ -4717,7 +4852,7 @@
         ]
       },
       "resource_pool": "persona_llm",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4728,10 +4863,9 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
         "no_live_persona_pool_qualification"
       ],
-      "next_prerequisite": "Build the full-review pool specification assembler and complete live persona qualification."
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },
     {
       "id": "deterministic-pool-merge",
@@ -4773,11 +4907,12 @@
           "deterministic_pool_merge"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "deterministic_pool_merge"
+          "deterministic_pool_merge",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -4785,7 +4920,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4794,10 +4929,8 @@
           "appsec-review-process/tests/test_review_control_processes.py"
         ]
       },
-      "gaps": [
-        "full_review_input_assembler_not_implemented"
-      ],
-      "next_prerequisite": "Bind the verified C02 pool from full-review orchestration."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "evidence-qualified-quorum",
@@ -4839,11 +4972,12 @@
           "evidence_qualified_quorum"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "evidence_qualified_quorum"
+          "evidence_qualified_quorum",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -4851,7 +4985,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4860,10 +4994,8 @@
           "appsec-review-process/tests/test_review_control_processes.py"
         ]
       },
-      "gaps": [
-        "full_review_input_assembler_not_implemented"
-      ],
-      "next_prerequisite": "Bind the accepted deterministic merge reference in full review."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "dynamic-rescope",
@@ -4905,11 +5037,12 @@
           "dynamic_rescope"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "dynamic_rescope"
+          "dynamic_rescope",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -4917,7 +5050,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4926,10 +5059,8 @@
           "appsec-review-process/tests/test_review_control_processes.py"
         ]
       },
-      "gaps": [
-        "full_review_input_assembler_not_implemented"
-      ],
-      "next_prerequisite": "Bind classification changes in full review."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "completeness-audit",
@@ -4971,11 +5102,12 @@
           "completeness_audit"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "completeness_audit"
+          "completeness_audit",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -4983,7 +5115,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -4992,10 +5124,8 @@
           "appsec-review-process/tests/test_separate_completeness_resynthesis.py"
         ]
       },
-      "gaps": [
-        "full_review_input_assembler_not_implemented"
-      ],
-      "next_prerequisite": "Bind the draft report obligation inventory in full review."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "synthetic-hypothesis-resynthesis",
@@ -5037,10 +5167,11 @@
           "synthetic_hypothesis_resynthesis"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "synthetic_hypothesis_resynthesis"
         ],
         "sensor_jobs": [
@@ -5049,7 +5180,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -5058,10 +5189,8 @@
           "appsec-review-process/tests/test_separate_completeness_resynthesis.py"
         ]
       },
-      "gaps": [
-        "full_review_input_assembler_not_implemented"
-      ],
-      "next_prerequisite": "Bind accepted completeness audit input in full review."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "remediation-retest-feedback",
@@ -5072,7 +5201,8 @@
         "node": "remediation-retest-feedback",
         "implemented": true,
         "dependencies": [
-          "09-independent-verification"
+          "09-independent-verification",
+          "11-remediation-proposal"
         ]
       },
       "registry": {
@@ -5103,10 +5233,11 @@
           "remediation_retest_feedback"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
+          "full_review",
           "remediation_retest_feedback"
         ],
         "sensor_jobs": [
@@ -5115,7 +5246,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -5124,10 +5255,8 @@
           "appsec-review-process/tests/test_review_control_processes.py"
         ]
       },
-      "gaps": [
-        "full_review_input_assembler_not_implemented"
-      ],
-      "next_prerequisite": "Bind verified claims and retest evidence in full review."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     },
     {
       "id": "final-publication-gate",
@@ -5140,7 +5269,10 @@
         "dependencies": [
           "10-synthesis-report",
           "completeness-audit",
-          "synthetic-hypothesis-resynthesis"
+          "synthetic-hypothesis-resynthesis",
+          "evidence-qualified-quorum",
+          "dynamic-rescope",
+          "remediation-retest-feedback"
         ]
       },
       "registry": {
@@ -5171,11 +5303,12 @@
           "final_publication_gate"
         ],
         "lifecycle_binding": {
-          "kind": "blocked_op",
-          "entrypoint": "appsec-review-process/dagster_workflow.py:blocked_op"
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
         },
         "launcher_jobs": [
-          "final_publication_gate"
+          "final_publication_gate",
+          "full_review"
         ],
         "sensor_jobs": [
           "full_review",
@@ -5183,7 +5316,7 @@
         ]
       },
       "resource_pool": "cpu",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
           "unit"
@@ -5192,10 +5325,8 @@
           "appsec-review-process/tests/test_final_publication.py"
         ]
       },
-      "gaps": [
-        "full_review_input_assembler_not_implemented"
-      ],
-      "next_prerequisite": "Bind exact accepted completion references and operator signoff in full review."
+      "gaps": [],
+      "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run."
     }
   ],
   "capabilities": [
@@ -5303,7 +5434,7 @@
         "persona-tool-pool-dispatch"
       ],
       "execution_mode": "pool_coordinator",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "persona_llm",
       "qualification": {
         "levels": [
@@ -5316,11 +5447,11 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
-        "no_live_persona_pool_qualification"
+        "no_live_persona_pool_qualification",
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Build the full-review pool specification assembler and complete live persona qualification."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "wait-all-rendezvous",
@@ -5331,7 +5462,7 @@
         "persona-tool-pool-dispatch"
       ],
       "execution_mode": "pool_coordinator",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "persona_llm",
       "qualification": {
         "levels": [
@@ -5344,11 +5475,11 @@
         ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented",
-        "no_live_persona_pool_qualification"
+        "no_live_persona_pool_qualification",
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind full-review pool specifications and qualify the launcher live."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "deterministic-pool-merge",
@@ -5359,19 +5490,21 @@
         "deterministic-pool-merge"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind the verified C02 pool from full-review orchestration."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "evidence-qualified-quorum",
@@ -5382,19 +5515,21 @@
         "evidence-qualified-quorum"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind the accepted deterministic merge reference in full review."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "claim-ledger-routing",
@@ -5408,8 +5543,8 @@
         "09-independent-verification"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
-      "resource_pool": "unassigned",
+      "readiness": "implemented_not_qualified",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
@@ -5419,13 +5554,10 @@
         ]
       },
       "gaps": [
-        "owasp_common_lifecycle_wrapper_missing",
-        "downstream_decision_append_wiring_missing",
-        "no_live_qualification",
-        "unassigned_resource_pool"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind accepted OWASP and decision-stage publications to the qualified ledger core, then add shared lifecycle and live qualification."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "remediation-retest-feedback",
@@ -5436,19 +5568,21 @@
         "remediation-retest-feedback"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind verified claims and retest evidence in full review."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "dynamic-rescope",
@@ -5459,19 +5593,21 @@
         "dynamic-rescope"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_review_control_processes.py"]
+        "references": [
+          "appsec-review-process/tests/test_review_control_processes.py"
+        ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind classification changes in full review."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "completeness-audit-control",
@@ -5482,19 +5618,21 @@
         "completeness-audit"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_separate_completeness_resynthesis.py"]
+        "references": [
+          "appsec-review-process/tests/test_separate_completeness_resynthesis.py"
+        ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind the draft report obligation inventory in full review."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "synthetic-hypothesis-resynthesis",
@@ -5505,19 +5643,21 @@
         "synthetic-hypothesis-resynthesis"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_separate_completeness_resynthesis.py"]
+        "references": [
+          "appsec-review-process/tests/test_separate_completeness_resynthesis.py"
+        ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind accepted completeness audit input in full review."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "threat-model-standard",
@@ -5528,8 +5668,8 @@
         "03-threat-model-dfd-stride"
       ],
       "execution_mode": "persona",
-      "readiness": "decision_blocked",
-      "resource_pool": "unassigned",
+      "readiness": "implemented_not_qualified",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "none"
@@ -5537,12 +5677,12 @@
         "references": []
       },
       "gaps": [
-        "threat_model_schema_and_scope_undecided"
+        "no_live_qualification"
       ],
       "blocking_decisions": [
         "Workstream G1 threat-model decisions and ADR"
       ],
-      "next_prerequisite": "Resolve Workstream G1; do not infer DFD/STRIDE versus composed overlays."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "owasp-checklist-model",
@@ -5554,8 +5694,8 @@
         "04-asvs-masvs"
       ],
       "execution_mode": "persona",
-      "readiness": "decision_blocked",
-      "resource_pool": "unassigned",
+      "readiness": "implemented_not_qualified",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "none"
@@ -5563,12 +5703,12 @@
         "references": []
       },
       "gaps": [
-        "owasp_versions_profiles_applicability_and_promotion_rules_undecided"
+        "no_live_qualification"
       ],
       "blocking_decisions": [
         "Workstream G2 OWASP decisions and ADR"
       ],
-      "next_prerequisite": "Resolve Workstream G2 and pin licensed sources."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "disa-nsa-hardening-model",
@@ -5580,8 +5720,8 @@
         "15-deployment-hardening"
       ],
       "execution_mode": "persona",
-      "readiness": "decision_blocked",
-      "resource_pool": "unassigned",
+      "readiness": "implemented_not_qualified",
+      "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "none"
@@ -5589,12 +5729,12 @@
         "references": []
       },
       "gaps": [
-        "platform_applicability_precedence_tailoring_and_reference_storage_undecided"
+        "no_live_qualification"
       ],
       "blocking_decisions": [
         "Workstream G3 DISA/NSA decisions and ADR"
       ],
-      "next_prerequisite": "Resolve Workstream G3 and pin authoritative references."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     },
     {
       "id": "final-publication-gate",
@@ -5605,19 +5745,21 @@
         "final-publication-gate"
       ],
       "execution_mode": "join_controller",
-      "readiness": "standalone_only",
+      "readiness": "implemented_not_qualified",
       "resource_pool": "cpu",
       "qualification": {
         "levels": [
           "unit"
         ],
-        "references": ["appsec-review-process/tests/test_final_publication.py"]
+        "references": [
+          "appsec-review-process/tests/test_final_publication.py"
+        ]
       },
       "gaps": [
-        "full_review_input_assembler_not_implemented"
+        "no_live_qualification"
       ],
       "blocking_decisions": [],
-      "next_prerequisite": "Bind exact accepted completion references and operator signoff in full review."
+      "next_prerequisite": "Execute and retain this capability in the fresh Hello full_review run."
     }
   ]
 }

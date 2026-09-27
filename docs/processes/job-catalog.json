@@ -2,7 +2,7 @@
  "schema": "appsec-review/job-catalog/1",
  "generated_by": "docs/processes/job_catalog.py",
  "counts": {
-  "lifecycle_jobs": 66,
+  "lifecycle_jobs": 67,
   "steps": 66,
   "artifacts": 69,
   "models": 5
@@ -1404,7 +1404,7 @@
        ],
        "declared_inputs": [
         "accepted native-build binary lineage",
-        "run-owned static symbol evidence"
+        "registered audit-binary-analysis image"
        ]
       },
       {
@@ -1420,7 +1420,7 @@
        ],
        "declared_inputs": [
         "accepted native-build binary lineage",
-        "run-owned static triage evidence"
+        "registered audit-binary-analysis image"
        ]
       },
       {
@@ -1439,7 +1439,7 @@
         "accepted native-build binary lineage",
         "accepted debug-symbol-index",
         "accepted binary-triage",
-        "run-owned static CFG evidence"
+        "registered audit-binary-analysis image"
        ]
       },
       {
@@ -1759,11 +1759,9 @@
        "clang compile database",
        "accepted IR capture",
        "accepted linked LLVM module",
-       "run-owned static symbol evidence",
-       "run-owned static triage evidence",
+       "registered audit-binary-analysis image",
        "accepted debug-symbol-index",
        "accepted binary-triage",
-       "run-owned static CFG evidence",
        "trusted bounded test plan",
        "target-execution grant",
        "accepted test execution",
@@ -1986,7 +1984,7 @@
        ],
        "declared_inputs": [
         "accepted SCA match evidence",
-        "hash-bound run-owned static reachability evidence"
+        "accepted source projection"
        ]
       },
       {
@@ -2090,7 +2088,7 @@
        "accepted native SAST/IR evidence",
        "hash-bound citations",
        "accepted SCA match evidence",
-       "hash-bound run-owned static reachability evidence",
+       "accepted source projection",
        "accepted component/native evidence",
        "candidate entrypoints",
        "accepted deployment configuration evidence",
@@ -2134,11 +2132,28 @@
      "name": "7. Refutation, verification, scoring, synthesis, report",
      "entries": [
       {
-       "ref": "job:07-red-team-adversarial",
-       "id": "07-red-team-adversarial",
-       "name": "Red-team Adversarial Hypothesis Core",
+       "ref": "job:claim-ledger-routing",
+       "id": "claim-ledger-routing",
+       "name": "Append-Only Candidate Claim Ledger",
        "kind": "lifecycle",
        "consumes": [
+        "job:03-threat-model-reconciliation",
+        "job:04-asvs-masvs"
+       ],
+       "produces": [
+        "job:claim-ledger-routing"
+       ],
+       "declared_inputs": [
+        "current accepted S02 and/or OWASP candidate-route artifacts"
+       ]
+      },
+      {
+       "ref": "job:07-red-team-adversarial",
+       "id": "07-red-team-adversarial",
+       "name": "Red-team Adversarial Hypothesis Lifecycle",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:claim-ledger-routing",
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
         "job:04-asvs-masvs",
@@ -2151,8 +2166,8 @@
         "job:07-red-team-adversarial"
        ],
        "declared_inputs": [
-        "exact accepted claim ledger",
-        "bounded reviewer decisions"
+        "accepted claim-ledger routing",
+        "accepted complete red-team persona/tool-pool merge when candidates exist"
        ]
       },
       {
@@ -2167,9 +2182,7 @@
         "job:persona-tool-pool-dispatch"
        ],
        "declared_inputs": [
-        "run-owned pool specification",
-        "trusted pool context",
-        "explicit runtime limits"
+        "newest accepted intake and run artifact-manifest context"
        ]
       },
       {
@@ -2190,7 +2203,7 @@
       {
        "ref": "job:08-blue-team-refutation",
        "id": "08-blue-team-refutation",
-       "name": "Blue-team Refutation Core",
+       "name": "Blue-team Refutation Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -2200,14 +2213,14 @@
         "job:08-blue-team-refutation"
        ],
        "declared_inputs": [
-        "exact accepted adversarial hypotheses",
-        "bounded independent refutation decisions"
+        "accepted red-team result",
+        "accepted complete blue-team persona/tool-pool merge when hypotheses exist"
        ]
       },
       {
        "ref": "job:09-independent-verification",
        "id": "09-independent-verification",
-       "name": "Independent Verification Core",
+       "name": "Independent Verification Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -2217,8 +2230,8 @@
         "job:09-independent-verification"
        ],
        "declared_inputs": [
-        "exact accepted blue-team dispositions",
-        "bounded independent verification decisions"
+        "accepted blue-team result",
+        "accepted complete verifier persona/tool-pool merge when reviews exist"
        ]
       },
       {
@@ -2239,7 +2252,7 @@
       {
        "ref": "job:11-remediation-proposal",
        "id": "11-remediation-proposal",
-       "name": "11-remediation-proposal",
+       "name": "Evidence-bounded Remediation Proposals",
        "kind": "lifecycle",
        "consumes": [
         "job:09-independent-verification"
@@ -2248,11 +2261,8 @@
         "job:11-remediation-proposal"
        ],
        "declared_inputs": [
-        "independently verified finding or error",
-        "verifier output and testcase artifacts",
-        "target source paths and exact tested environment",
-        "compile database or build command used by verification",
-        "coverage and retrieval artifacts needed to understand callers/impact"
+        "current accepted independent verification",
+        "current accepted native build environment"
        ]
       },
       {
@@ -2261,7 +2271,8 @@
        "name": "Remediation Retest Feedback",
        "kind": "lifecycle",
        "consumes": [
-        "job:09-independent-verification"
+        "job:09-independent-verification",
+        "job:11-remediation-proposal"
        ],
        "produces": [
         "job:remediation-retest-feedback"
@@ -2273,7 +2284,7 @@
       {
        "ref": "job:12-scoring-prioritization",
        "id": "12-scoring-prioritization",
-       "name": "Verified Claim Scoring Core",
+       "name": "Verified Claim Scoring Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:09-independent-verification",
@@ -2284,8 +2295,8 @@
         "job:12-scoring-prioritization"
        ],
        "declared_inputs": [
-        "exact accepted independent verification",
-        "bounded scoring factors"
+        "accepted independent-verification result",
+        "accepted complete scoring persona/tool-pool merge when verifications exist"
        ]
       },
       {
@@ -2354,7 +2365,10 @@
        "consumes": [
         "job:10-synthesis-report",
         "job:completeness-audit",
-        "job:synthetic-hypothesis-resynthesis"
+        "job:synthetic-hypothesis-resynthesis",
+        "job:evidence-qualified-quorum",
+        "job:dynamic-rescope",
+        "job:remediation-retest-feedback"
        ],
        "produces": [
         "job:final-publication-gate"
@@ -2382,54 +2396,52 @@
      ],
      "rollup": {
       "enters": [
+       "job:03-threat-model-reconciliation",
+       "job:04-asvs-masvs",
        "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
-       "job:04-asvs-masvs",
        "job:05-native-memory",
        "job:06-cve-reachability",
        "job:15-deployment-hardening",
        "job:13-fuzz-target-triage",
        "job:00-intake",
-       "job:03-threat-model-reconciliation",
+       "job:dynamic-rescope",
        "critical-findings-md"
       ],
       "leaves": [
-       "job:evidence-qualified-quorum",
-       "job:remediation-retest-feedback",
        "job:final-publication-gate"
       ],
       "passes": [
+       "job:claim-ledger-routing",
        "job:07-red-team-adversarial",
        "job:persona-tool-pool-dispatch",
        "job:deterministic-pool-merge",
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
+       "job:evidence-qualified-quorum",
        "job:11-remediation-proposal",
+       "job:remediation-retest-feedback",
        "job:12-scoring-prioritization",
        "job:10-synthesis-report",
        "job:completeness-audit",
        "job:synthetic-hypothesis-resynthesis"
       ],
       "declared_inputs": [
-       "exact accepted claim ledger",
-       "bounded reviewer decisions",
-       "run-owned pool specification",
-       "trusted pool context",
-       "explicit runtime limits",
+       "current accepted S02 and/or OWASP candidate-route artifacts",
+       "accepted claim-ledger routing",
+       "accepted complete red-team persona/tool-pool merge when candidates exist",
+       "newest accepted intake and run artifact-manifest context",
        "reverified C02 terminal manifest",
-       "exact accepted adversarial hypotheses",
-       "bounded independent refutation decisions",
-       "exact accepted blue-team dispositions",
-       "bounded independent verification decisions",
+       "accepted red-team result",
+       "accepted complete blue-team persona/tool-pool merge when hypotheses exist",
+       "accepted blue-team result",
+       "accepted complete verifier persona/tool-pool merge when reviews exist",
        "current accepted deterministic merge reference",
-       "independently verified finding or error",
-       "verifier output and testcase artifacts",
-       "target source paths and exact tested environment",
-       "compile database or build command used by verification",
-       "coverage and retrieval artifacts needed to understand callers/impact",
+       "current accepted independent verification",
+       "current accepted native build environment",
        "verified claims and remediation proposals",
-       "exact accepted independent verification",
-       "bounded scoring factors",
+       "accepted independent-verification result",
+       "accepted complete scoring persona/tool-pool merge when verifications exist",
        "exact accepted synthesis-input manifest",
        "F03 component map",
        "S02 threat model",
@@ -2471,10 +2483,7 @@
      "build-execution",
      "lane-handoff",
      "job:02-full-review-input-assembly",
-     "job:dynamic-rescope",
      "threat-model-reconciliation-planned",
-     "job:evidence-qualified-quorum",
-     "job:remediation-retest-feedback",
      "job:final-publication-gate"
     ],
     "passes": [
@@ -2533,6 +2542,7 @@
      "job:02-mobile-sast",
      "job:02-evidence-index",
      "job:01-component-characterization",
+     "job:dynamic-rescope",
      "job:03-threat-model-dfd-stride",
      "job:03-threat-model-reconciliation",
      "job:04-asvs-masvs",
@@ -2542,12 +2552,15 @@
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
      "job:15-stig-srg-validation-worklist",
+     "job:claim-ledger-routing",
      "job:07-red-team-adversarial",
      "job:persona-tool-pool-dispatch",
      "job:deterministic-pool-merge",
      "job:08-blue-team-refutation",
      "job:09-independent-verification",
+     "job:evidence-qualified-quorum",
      "job:11-remediation-proposal",
+     "job:remediation-retest-feedback",
      "job:12-scoring-prioritization",
      "job:10-synthesis-report",
      "job:completeness-audit",
@@ -2607,11 +2620,9 @@
      "clang compile database",
      "accepted IR capture",
      "accepted linked LLVM module",
-     "run-owned static symbol evidence",
-     "run-owned static triage evidence",
+     "registered audit-binary-analysis image",
      "accepted debug-symbol-index",
      "accepted binary-triage",
-     "run-owned static CFG evidence",
      "trusted bounded test plan",
      "accepted test execution",
      "exact accepted intake source inventory",
@@ -2647,32 +2658,28 @@
      "accepted native SAST/IR evidence",
      "hash-bound citations",
      "accepted SCA match evidence",
-     "hash-bound run-owned static reachability evidence",
+     "accepted source projection",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
      "accepted STIG/SRG worklist",
      "accepted STIG/SRG source records",
      "accepted platform inventory",
-     "exact accepted claim ledger",
-     "bounded reviewer decisions",
-     "run-owned pool specification",
-     "trusted pool context",
-     "explicit runtime limits",
+     "current accepted S02 and/or OWASP candidate-route artifacts",
+     "accepted claim-ledger routing",
+     "accepted complete red-team persona/tool-pool merge when candidates exist",
+     "newest accepted intake and run artifact-manifest context",
      "reverified C02 terminal manifest",
-     "exact accepted adversarial hypotheses",
-     "bounded independent refutation decisions",
-     "exact accepted blue-team dispositions",
-     "bounded independent verification decisions",
+     "accepted red-team result",
+     "accepted complete blue-team persona/tool-pool merge when hypotheses exist",
+     "accepted blue-team result",
+     "accepted complete verifier persona/tool-pool merge when reviews exist",
      "current accepted deterministic merge reference",
-     "independently verified finding or error",
-     "verifier output and testcase artifacts",
-     "target source paths and exact tested environment",
-     "compile database or build command used by verification",
-     "coverage and retrieval artifacts needed to understand callers/impact",
+     "current accepted independent verification",
+     "current accepted native build environment",
      "verified claims and remediation proposals",
-     "exact accepted independent verification",
-     "bounded scoring factors",
+     "accepted independent-verification result",
+     "accepted complete scoring persona/tool-pool merge when verifications exist",
      "exact accepted synthesis-input manifest",
      "F03 component map",
      "S02 threat model",
@@ -3942,7 +3949,7 @@
        ],
        "declared_inputs": [
         "accepted native-build binary lineage",
-        "run-owned static symbol evidence"
+        "registered audit-binary-analysis image"
        ]
       },
       {
@@ -3958,7 +3965,7 @@
        ],
        "declared_inputs": [
         "accepted native-build binary lineage",
-        "run-owned static triage evidence"
+        "registered audit-binary-analysis image"
        ]
       },
       {
@@ -3977,7 +3984,7 @@
         "accepted native-build binary lineage",
         "accepted debug-symbol-index",
         "accepted binary-triage",
-        "run-owned static CFG evidence"
+        "registered audit-binary-analysis image"
        ]
       },
       {
@@ -4318,11 +4325,9 @@
        "clang compile database",
        "accepted IR capture",
        "accepted linked LLVM module",
-       "run-owned static symbol evidence",
-       "run-owned static triage evidence",
+       "registered audit-binary-analysis image",
        "accepted debug-symbol-index",
        "accepted binary-triage",
-       "run-owned static CFG evidence",
        "trusted bounded test plan",
        "accepted test execution",
        "exact accepted intake source inventory",
@@ -4590,7 +4595,7 @@
        ],
        "declared_inputs": [
         "accepted SCA match evidence",
-        "hash-bound run-owned static reachability evidence"
+        "accepted source projection"
        ]
       }
      ],
@@ -4604,7 +4609,7 @@
       "passes": [],
       "declared_inputs": [
        "accepted SCA match evidence",
-       "hash-bound run-owned static reachability evidence"
+       "accepted source projection"
       ]
      }
     },
@@ -4711,11 +4716,28 @@
      "name": "07-red-team-adversarial",
      "entries": [
       {
-       "ref": "job:07-red-team-adversarial",
-       "id": "07-red-team-adversarial",
-       "name": "Red-team Adversarial Hypothesis Core",
+       "ref": "job:claim-ledger-routing",
+       "id": "claim-ledger-routing",
+       "name": "Append-Only Candidate Claim Ledger",
        "kind": "lifecycle",
        "consumes": [
+        "job:03-threat-model-reconciliation",
+        "job:04-asvs-masvs"
+       ],
+       "produces": [
+        "job:claim-ledger-routing"
+       ],
+       "declared_inputs": [
+        "current accepted S02 and/or OWASP candidate-route artifacts"
+       ]
+      },
+      {
+       "ref": "job:07-red-team-adversarial",
+       "id": "07-red-team-adversarial",
+       "name": "Red-team Adversarial Hypothesis Lifecycle",
+       "kind": "lifecycle",
+       "consumes": [
+        "job:claim-ledger-routing",
         "job:01-component-characterization",
         "job:03-threat-model-dfd-stride",
         "job:04-asvs-masvs",
@@ -4728,8 +4750,8 @@
         "job:07-red-team-adversarial"
        ],
        "declared_inputs": [
-        "exact accepted claim ledger",
-        "bounded reviewer decisions"
+        "accepted claim-ledger routing",
+        "accepted complete red-team persona/tool-pool merge when candidates exist"
        ]
       },
       {
@@ -4744,9 +4766,7 @@
         "job:persona-tool-pool-dispatch"
        ],
        "declared_inputs": [
-        "run-owned pool specification",
-        "trusted pool context",
-        "explicit runtime limits"
+        "newest accepted intake and run artifact-manifest context"
        ]
       },
       {
@@ -4767,9 +4787,10 @@
      ],
      "rollup": {
       "enters": [
+       "job:03-threat-model-reconciliation",
+       "job:04-asvs-masvs",
        "job:01-component-characterization",
        "job:03-threat-model-dfd-stride",
-       "job:04-asvs-masvs",
        "job:05-native-memory",
        "job:06-cve-reachability",
        "job:15-deployment-hardening",
@@ -4781,14 +4802,14 @@
        "job:deterministic-pool-merge"
       ],
       "passes": [
+       "job:claim-ledger-routing",
        "job:persona-tool-pool-dispatch"
       ],
       "declared_inputs": [
-       "exact accepted claim ledger",
-       "bounded reviewer decisions",
-       "run-owned pool specification",
-       "trusted pool context",
-       "explicit runtime limits",
+       "current accepted S02 and/or OWASP candidate-route artifacts",
+       "accepted claim-ledger routing",
+       "accepted complete red-team persona/tool-pool merge when candidates exist",
+       "newest accepted intake and run artifact-manifest context",
        "reverified C02 terminal manifest"
       ]
      }
@@ -4799,7 +4820,7 @@
       {
        "ref": "job:08-blue-team-refutation",
        "id": "08-blue-team-refutation",
-       "name": "Blue-team Refutation Core",
+       "name": "Blue-team Refutation Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -4809,8 +4830,8 @@
         "job:08-blue-team-refutation"
        ],
        "declared_inputs": [
-        "exact accepted adversarial hypotheses",
-        "bounded independent refutation decisions"
+        "accepted red-team result",
+        "accepted complete blue-team persona/tool-pool merge when hypotheses exist"
        ]
       }
      ],
@@ -4824,8 +4845,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "exact accepted adversarial hypotheses",
-       "bounded independent refutation decisions"
+       "accepted red-team result",
+       "accepted complete blue-team persona/tool-pool merge when hypotheses exist"
       ]
      }
     },
@@ -4835,7 +4856,7 @@
       {
        "ref": "job:09-independent-verification",
        "id": "09-independent-verification",
-       "name": "Independent Verification Core",
+       "name": "Independent Verification Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:07-red-team-adversarial",
@@ -4845,8 +4866,8 @@
         "job:09-independent-verification"
        ],
        "declared_inputs": [
-        "exact accepted blue-team dispositions",
-        "bounded independent verification decisions"
+        "accepted blue-team result",
+        "accepted complete verifier persona/tool-pool merge when reviews exist"
        ]
       },
       {
@@ -4877,8 +4898,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "exact accepted blue-team dispositions",
-       "bounded independent verification decisions",
+       "accepted blue-team result",
+       "accepted complete verifier persona/tool-pool merge when reviews exist",
        "current accepted deterministic merge reference"
       ]
      }
@@ -4889,7 +4910,7 @@
       {
        "ref": "job:11-remediation-proposal",
        "id": "11-remediation-proposal",
-       "name": "11-remediation-proposal",
+       "name": "Evidence-bounded Remediation Proposals",
        "kind": "lifecycle",
        "consumes": [
         "job:09-independent-verification"
@@ -4898,11 +4919,8 @@
         "job:11-remediation-proposal"
        ],
        "declared_inputs": [
-        "independently verified finding or error",
-        "verifier output and testcase artifacts",
-        "target source paths and exact tested environment",
-        "compile database or build command used by verification",
-        "coverage and retrieval artifacts needed to understand callers/impact"
+        "current accepted independent verification",
+        "current accepted native build environment"
        ]
       },
       {
@@ -4911,7 +4929,8 @@
        "name": "Remediation Retest Feedback",
        "kind": "lifecycle",
        "consumes": [
-        "job:09-independent-verification"
+        "job:09-independent-verification",
+        "job:11-remediation-proposal"
        ],
        "produces": [
         "job:remediation-retest-feedback"
@@ -4926,16 +4945,14 @@
        "job:09-independent-verification"
       ],
       "leaves": [
-       "job:11-remediation-proposal",
        "job:remediation-retest-feedback"
       ],
-      "passes": [],
+      "passes": [
+       "job:11-remediation-proposal"
+      ],
       "declared_inputs": [
-       "independently verified finding or error",
-       "verifier output and testcase artifacts",
-       "target source paths and exact tested environment",
-       "compile database or build command used by verification",
-       "coverage and retrieval artifacts needed to understand callers/impact",
+       "current accepted independent verification",
+       "current accepted native build environment",
        "verified claims and remediation proposals"
       ]
      }
@@ -4946,7 +4963,7 @@
       {
        "ref": "job:12-scoring-prioritization",
        "id": "12-scoring-prioritization",
-       "name": "Verified Claim Scoring Core",
+       "name": "Verified Claim Scoring Lifecycle",
        "kind": "lifecycle",
        "consumes": [
         "job:09-independent-verification",
@@ -4957,8 +4974,8 @@
         "job:12-scoring-prioritization"
        ],
        "declared_inputs": [
-        "exact accepted independent verification",
-        "bounded scoring factors"
+        "accepted independent-verification result",
+        "accepted complete scoring persona/tool-pool merge when verifications exist"
        ]
       }
      ],
@@ -4973,8 +4990,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "exact accepted independent verification",
-       "bounded scoring factors"
+       "accepted independent-verification result",
+       "accepted complete scoring persona/tool-pool merge when verifications exist"
       ]
      }
     },
@@ -5047,7 +5064,10 @@
        "consumes": [
         "job:10-synthesis-report",
         "job:completeness-audit",
-        "job:synthetic-hypothesis-resynthesis"
+        "job:synthetic-hypothesis-resynthesis",
+        "job:evidence-qualified-quorum",
+        "job:dynamic-rescope",
+        "job:remediation-retest-feedback"
        ],
        "produces": [
         "job:final-publication-gate"
@@ -5070,7 +5090,10 @@
        "job:08-blue-team-refutation",
        "job:09-independent-verification",
        "job:12-scoring-prioritization",
-       "job:11-remediation-proposal"
+       "job:11-remediation-proposal",
+       "job:evidence-qualified-quorum",
+       "job:dynamic-rescope",
+       "job:remediation-retest-feedback"
       ],
       "leaves": [
        "job:final-publication-gate"
@@ -5103,9 +5126,6 @@
     ],
     "leaves": [
      "job:02-full-review-input-assembly",
-     "job:dynamic-rescope",
-     "job:evidence-qualified-quorum",
-     "job:remediation-retest-feedback",
      "job:final-publication-gate"
     ],
     "passes": [
@@ -5151,6 +5171,7 @@
      "job:02-binary-hardening",
      "job:02-mobile-sast",
      "job:01-component-characterization",
+     "job:dynamic-rescope",
      "job:03-threat-model-dfd-stride",
      "job:03-threat-model-reconciliation",
      "job:04-asvs-masvs",
@@ -5160,12 +5181,15 @@
      "job:13-fuzz-target-triage",
      "job:15-deployment-hardening",
      "job:15-stig-srg-validation-worklist",
+     "job:claim-ledger-routing",
      "job:07-red-team-adversarial",
      "job:persona-tool-pool-dispatch",
      "job:deterministic-pool-merge",
      "job:08-blue-team-refutation",
      "job:09-independent-verification",
+     "job:evidence-qualified-quorum",
      "job:11-remediation-proposal",
+     "job:remediation-retest-feedback",
      "job:12-scoring-prioritization",
      "job:10-synthesis-report",
      "job:completeness-audit",
@@ -5229,11 +5253,9 @@
      "clang compile database",
      "accepted IR capture",
      "accepted linked LLVM module",
-     "run-owned static symbol evidence",
-     "run-owned static triage evidence",
+     "registered audit-binary-analysis image",
      "accepted debug-symbol-index",
      "accepted binary-triage",
-     "run-owned static CFG evidence",
      "trusted bounded test plan",
      "accepted test execution",
      "exact accepted intake source inventory",
@@ -5269,32 +5291,28 @@
      "accepted native SAST/IR evidence",
      "hash-bound citations",
      "accepted SCA match evidence",
-     "hash-bound run-owned static reachability evidence",
+     "accepted source projection",
      "accepted component/native evidence",
      "candidate entrypoints",
      "accepted deployment configuration evidence",
      "accepted STIG/SRG worklist",
      "accepted STIG/SRG source records",
      "accepted platform inventory",
-     "exact accepted claim ledger",
-     "bounded reviewer decisions",
-     "run-owned pool specification",
-     "trusted pool context",
-     "explicit runtime limits",
+     "current accepted S02 and/or OWASP candidate-route artifacts",
+     "accepted claim-ledger routing",
+     "accepted complete red-team persona/tool-pool merge when candidates exist",
+     "newest accepted intake and run artifact-manifest context",
      "reverified C02 terminal manifest",
-     "exact accepted adversarial hypotheses",
-     "bounded independent refutation decisions",
-     "exact accepted blue-team dispositions",
-     "bounded independent verification decisions",
+     "accepted red-team result",
+     "accepted complete blue-team persona/tool-pool merge when hypotheses exist",
+     "accepted blue-team result",
+     "accepted complete verifier persona/tool-pool merge when reviews exist",
      "current accepted deterministic merge reference",
-     "independently verified finding or error",
-     "verifier output and testcase artifacts",
-     "target source paths and exact tested environment",
-     "compile database or build command used by verification",
-     "coverage and retrieval artifacts needed to understand callers/impact",
+     "current accepted independent verification",
+     "current accepted native build environment",
      "verified claims and remediation proposals",
-     "exact accepted independent verification",
-     "bounded scoring factors",
+     "accepted independent-verification result",
+     "accepted complete scoring persona/tool-pool merge when verifications exist",
      "exact accepted synthesis-input manifest",
      "F03 component map",
      "S02 threat model",
@@ -6508,7 +6526,7 @@
    "dagster_jobs": [
     "phase1_intake"
    ],
-   "lifecycle_binding": "controller",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "intake-coordinator",
     "role_id": "intake-coordinator",
@@ -6549,7 +6567,7 @@
    "outputs_source": "registry/output-contracts/intake.json",
    "claim_class": null,
    "gaps": [],
-   "next_prerequisite": "Pool assigned (cpu, B15). Re-run the live pool qualification's worker-loss step (docs/pools/resource-pools.md step 8).",
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "artifact-manifest"
    ],
@@ -6566,7 +6584,7 @@
    "readiness": "implemented_and_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/ossf_scorecard.py:run",
-   "resource_pool": "network",
+   "resource_pool": "cpu",
    "dagster_jobs": [
     "ossf_scorecard"
    ],
@@ -6610,7 +6628,7 @@
    "outputs_source": "registry/output-contracts/ossf-scorecard-results.json",
    "claim_class": "supply_chain_posture_evidence",
    "gaps": [],
-   "next_prerequisite": "Pool assigned (network, B15); the network pool has not been observed under contention.",
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:00-intake"
    ],
@@ -6623,15 +6641,15 @@
    "lane": "02-evidence-pregather",
    "name": "Repository Partition Discovery And Specialist Routing",
    "contract": "repository-partition-map",
-   "implemented": false,
-   "readiness": "supplied_artifact_gate",
-   "execution_mode": "supplied_artifact",
-   "worker": "appsec-review-process/discovery_gate.py:run",
+   "implemented": true,
+   "readiness": "implemented_and_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/automatic_discovery.py:run",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "repository_partition_discovery"
    ],
-   "lifecycle_binding": "supplied_gate",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "developer-engineer",
     "role_id": "repository-partition-mapper",
@@ -6697,11 +6715,8 @@
    ],
    "outputs_source": "registry/output-contracts/repository-partition-map.json",
    "claim_class": "supplied_partition_map",
-   "gaps": [
-    "not_automatic_analysis_dispatch",
-    "supplied_result_required"
-   ],
-   "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:00-intake"
    ],
@@ -6714,15 +6729,15 @@
    "lane": "02-evidence-pregather",
    "name": "Developer Project Discovery",
    "contract": "project-discovery",
-   "implemented": false,
-   "readiness": "supplied_artifact_gate",
-   "execution_mode": "supplied_artifact",
-   "worker": "appsec-review-process/discovery_gate.py:run",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/automatic_discovery.py:run",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "dev_project_discovery"
    ],
-   "lifecycle_binding": "supplied_gate",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "developer-engineer",
     "role_id": "repo-project-discoverer",
@@ -6772,11 +6787,8 @@
    ],
    "outputs_source": "registry/output-contracts/project-discovery.json",
    "claim_class": "supplied_project_discovery",
-   "gaps": [
-    "not_automatic_analysis_dispatch",
-    "supplied_result_required"
-   ],
-   "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:02-repository-partition-discovery"
    ],
@@ -6789,15 +6801,15 @@
    "lane": "02-evidence-pregather",
    "name": "DevOps Project And Pipeline Discovery",
    "contract": "project-discovery",
-   "implemented": false,
-   "readiness": "supplied_artifact_gate",
-   "execution_mode": "supplied_artifact",
-   "worker": "appsec-review-process/discovery_gate.py:run",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/automatic_discovery.py:run",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "devops_project_discovery"
    ],
-   "lifecycle_binding": "supplied_gate",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "devops-engineer",
     "role_id": "repo-project-discoverer",
@@ -6851,11 +6863,8 @@
    ],
    "outputs_source": "registry/output-contracts/project-discovery.json",
    "claim_class": "supplied_project_discovery",
-   "gaps": [
-    "not_automatic_analysis_dispatch",
-    "supplied_result_required"
-   ],
-   "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:02-repository-partition-discovery"
    ],
@@ -6868,15 +6877,15 @@
    "lane": "02-evidence-pregather",
    "name": "SRE Operations Topology Discovery",
    "contract": "operations-topology",
-   "implemented": false,
-   "readiness": "supplied_artifact_gate",
-   "execution_mode": "supplied_artifact",
-   "worker": "appsec-review-process/discovery_gate.py:run",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/automatic_discovery.py:run",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "sre_operations_topology"
    ],
-   "lifecycle_binding": "supplied_gate",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "sre-engineer",
     "role_id": "operations-topology-mapper",
@@ -6930,11 +6939,8 @@
    ],
    "outputs_source": "registry/output-contracts/operations-topology.json",
    "claim_class": "supplied_operations_topology",
-   "gaps": [
-    "not_automatic_analysis_dispatch",
-    "supplied_result_required"
-   ],
-   "next_prerequisite": "Implement the shared persona dispatch runtime while retaining supplied-artifact mode.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:02-devops-project-discovery"
    ],
@@ -6948,7 +6954,7 @@
    "name": "Build Index",
    "contract": "build-index",
    "implemented": true,
-   "readiness": "implemented_not_qualified",
+   "readiness": "implemented_and_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/build_index.py:run",
    "resource_pool": "cpu",
@@ -7019,7 +7025,7 @@
    "gaps": [
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake",
     "job:02-repository-partition-discovery",
@@ -7036,7 +7042,7 @@
    "name": "Build Unit Classification",
    "contract": "build-classification",
    "implemented": true,
-   "readiness": "implemented_not_qualified",
+   "readiness": "implemented_and_qualified",
    "execution_mode": "persona",
    "worker": "appsec-review-process/build_classify.py:run",
    "resource_pool": "persona_llm",
@@ -7080,7 +7086,7 @@
    "gaps": [
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-build-index"
    ],
@@ -7094,7 +7100,7 @@
    "name": "Build Plan",
    "contract": "build-plan",
    "implemented": true,
-   "readiness": "implemented_not_qualified",
+   "readiness": "implemented_and_qualified",
    "execution_mode": "persona",
    "worker": "appsec-review-process/build_plan.py:run",
    "resource_pool": "persona_llm",
@@ -7150,7 +7156,7 @@
    "gaps": [
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-build-classify"
    ],
@@ -7216,7 +7222,7 @@
    "outputs_source": "registry/output-contracts/build-resolution.json",
    "claim_class": "build_resolution",
    "gaps": [],
-   "next_prerequisite": "Run fault-recovery qualification for stages 14-16 and integrate the remaining source-language tools.",
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:02-build-plan"
    ],
@@ -7229,13 +7235,13 @@
    "lane": "02-evidence-pregather",
    "name": "Evidence Assembly",
    "contract": "pregather",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "join_controller",
    "worker": "appsec-review-process/evidence_assembly.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "persona_llm",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "evidence-assembler",
@@ -7398,12 +7404,9 @@
    "outputs_source": "registry/output-contracts/pregather.json",
    "claim_class": null,
    "gaps": [
-    "required_producers_and_c01_c02_runtime_binding_missing",
-    "dagster_lifecycle_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Implement the remaining required producers, bind the trusted C01/C02 pool context, then add the Dagster lifecycle and live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-dev-project-discovery",
     "job:02-devops-project-discovery",
@@ -7499,7 +7502,7 @@
     "blocked_on_02-evidence-assembly",
     "no_live_qualification"
    ],
-   "next_prerequisite": "Publish an accepted COMPLETE 02-evidence-assembly envelope, then run live persona qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-evidence-assembly"
    ],
@@ -7513,7 +7516,7 @@
    "name": "Full Review Input Assembly",
    "contract": "full-review-input-assembly",
    "implemented": true,
-   "readiness": "implemented_and_qualified",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/full_review_input_assembly.py:assemble",
    "resource_pool": "cpu",
@@ -7564,7 +7567,7 @@
    "gaps": [
     "later_dependency_waves_require_reinvocation_after_prerequisites_publish"
    ],
-   "next_prerequisite": "Reinvoke the deterministic assembler after SBOM, license, and SCA prerequisites publish so later dependency waves remain evidence-bound.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization"
    ],
@@ -7578,7 +7581,7 @@
    "name": "Deterministic DFD And STRIDE Core",
    "contract": "threat-model-core",
    "implemented": true,
-   "readiness": "implemented_and_qualified",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/threat_model_core.py:run",
    "resource_pool": "cpu",
@@ -7622,10 +7625,9 @@
    "outputs_source": "registry/output-contracts/threat-model-core.json",
    "claim_class": "threat_model_candidate",
    "gaps": [
-    "claim_ledger_routing_not_integrated",
     "freeciv_live_qualification_pending"
    ],
-   "next_prerequisite": "Run the accepted L6A/L6B path against a real Freeciv F03/F02 generation and route candidate hypotheses to the claim ledger.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization"
    ],
@@ -7639,7 +7641,7 @@
    "name": "Threat Model Evidence Reconciliation",
    "contract": "threat-model-reconciliation",
    "implemented": true,
-   "readiness": "implemented_and_qualified",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/threat_model_reconciliation.py:run",
    "resource_pool": "cpu",
@@ -7697,10 +7699,9 @@
    "outputs_source": "registry/output-contracts/threat-model-reconciliation.json",
    "claim_class": "threat_model_reconciliation",
    "gaps": [
-    "claim_ledger_routing_not_integrated",
     "freeciv_live_qualification_pending"
    ],
-   "next_prerequisite": "Run against a real accepted Freeciv generation and route reconciliation actions into the review control loop.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:03-threat-model-dfd-stride",
     "job:01-component-characterization",
@@ -7716,10 +7717,10 @@
    "name": "OWASP Control Accounting And Candidate Routing",
    "contract": "owasp-join-report",
    "implemented": true,
-   "readiness": "implemented_and_qualified",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/owasp_join_publisher.py:run",
-   "resource_pool": "cpu",
+   "resource_pool": "persona_llm",
    "dagster_jobs": [
     "owasp_join_report"
    ],
@@ -7775,10 +7776,8 @@
    ],
    "outputs_source": "registry/output-contracts/owasp-join-report.json",
    "claim_class": null,
-   "gaps": [
-    "automatic_dispatch_facts_derivation_pending"
-   ],
-   "next_prerequisite": "Derive dispatch facts automatically from the accepted OWASP lane instead of requiring the explicit qualified facts file.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
@@ -7795,14 +7794,14 @@
    "name": "Native Memory Analysis",
    "contract": "native-memory-analysis",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/bounded_analysis_workers.py:native_memory",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "native_memory_analysis"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "native-sast-curator",
@@ -7848,10 +7847,9 @@
    "outputs_source": "registry/output-contracts/native-memory-analysis.json",
    "claim_class": "candidate_only",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_qualification"
    ],
-   "next_prerequisite": "Build the lifecycle input assembler from accepted native evidence, replace the blocked full-review op, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
     "job:02-native-sast",
@@ -7867,14 +7865,14 @@
    "name": "CVE Reachability Evidence",
    "contract": "cve-reachability",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/dependency_workers.py:run",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "cve_reachability"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "supply-chain-evidence-curator",
     "role_id": "dependency-evidence-curator",
@@ -7896,13 +7894,16 @@
     },
     {
      "need": "required",
-     "input": "hash-bound run-owned static reachability evidence"
+     "input": "accepted source projection"
+    },
+    {
+     "need": "optional",
+     "input": "accepted LLVM IR facts"
     }
    ],
    "inputs_source": "registry/job-templates/06-cve-reachability.json",
    "output_dir": "runs/<run_id>/data/jobs/06-cve-reachability/",
    "output_files": [
-    "result.json",
     "inputs.json",
     "outputs/cve-reachability.json",
     "outputs/reachability-evidence-identity.json"
@@ -7910,10 +7911,9 @@
    "outputs_source": "registry/output-contracts/cve-reachability.json",
    "claim_class": "cve_reachability_evidence_lead",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_qualification"
    ],
-   "next_prerequisite": "Build the full-review input assembler and complete live static-evidence qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-sca-vulnerability-match"
    ],
@@ -7927,14 +7927,14 @@
    "name": "Fuzz Target Triage",
    "contract": "fuzz-target-triage",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/bounded_analysis_workers.py:fuzz_triage",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "fuzz_target_triage"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "native-sast-curator",
@@ -7985,10 +7985,9 @@
    "outputs_source": "registry/output-contracts/fuzz-target-triage.json",
    "claim_class": "planning_evidence",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_qualification"
    ],
-   "next_prerequisite": "Build the lifecycle input assembler from accepted component, threat, native-memory and reachability evidence, then complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
@@ -8005,14 +8004,14 @@
    "name": "Deployment Hardening",
    "contract": "deployment-hardening",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/bounded_analysis_workers.py:deployment_hardening",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "deployment_hardening"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "sre-engineer",
     "role_id": "platform-hardening-validator",
@@ -8058,10 +8057,9 @@
    "outputs_source": "registry/output-contracts/deployment-hardening.json",
    "claim_class": "static_configuration_evidence",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_qualification"
    ],
-   "next_prerequisite": "Build the lifecycle input assembler from accepted deployment configuration and STIG/SRG worklist evidence, then complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
     "job:02-iac-config-scan",
@@ -8072,17 +8070,86 @@
    ]
   },
   {
+   "id": "claim-ledger-routing",
+   "lane": "07-red-team-adversarial",
+   "name": "Append-Only Candidate Claim Ledger",
+   "contract": "claim-ledger-core",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/claim_ledger.py:run",
+   "resource_pool": "cpu",
+   "dagster_jobs": [],
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "claim-ledger-custodian",
+    "domain_id": "claim-ledger-lifecycle",
+    "tooling_profile_id": "hash-linked-claim-ledger",
+    "output_contract_id": "claim-ledger-core"
+   },
+   "depends_on": [
+    {
+     "job": "03-threat-model-reconciliation",
+     "kind": "required",
+     "contract": "threat-model-reconciliation"
+    },
+    {
+     "job": "04-asvs-masvs",
+     "kind": "required",
+     "contract": "owasp-join-report"
+    }
+   ],
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "current accepted S02 and/or OWASP candidate-route artifacts"
+    },
+    {
+     "need": "optional",
+     "input": "accepted prior ledger"
+    },
+    {
+     "need": "optional",
+     "input": "authorized decision events"
+    }
+   ],
+   "inputs_source": "registry/job-templates/claim-ledger-routing.json",
+   "output_dir": "runs/<run_id>/data/jobs/claim-ledger-routing/",
+   "output_files": [
+    "claim-decision-ledger.json",
+    "claim-ledger-work-routing.json",
+    "claim-ledger-summary.md",
+    "permission.json",
+    "lineage.json",
+    "status.json"
+   ],
+   "outputs_source": "registry/output-contracts/claim-ledger-core.json",
+   "claim_class": "candidate_claim_ledger",
+   "gaps": [
+    "no_live_qualification"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
+   "consumes": [
+    "job:03-threat-model-reconciliation",
+    "job:04-asvs-masvs"
+   ],
+   "produces": [
+    "job:claim-ledger-routing"
+   ]
+  },
+  {
    "id": "07-red-team-adversarial",
    "lane": "07-red-team-adversarial",
-   "name": "Red-team Adversarial Hypothesis Core",
+   "name": "Red-team Adversarial Hypothesis Lifecycle",
    "contract": "07-red-team-adversarial",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
-   "resource_pool": "unassigned",
+   "resource_pool": "persona_llm",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "evidence-assembler",
@@ -8091,6 +8158,11 @@
     "output_contract_id": "07-red-team-adversarial"
    },
    "depends_on": [
+    {
+     "job": "claim-ledger-routing",
+     "kind": "required",
+     "contract": "claim-ledger-core"
+    },
     {
      "job": "01-component-characterization",
      "kind": "required",
@@ -8130,11 +8202,11 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "exact accepted claim ledger"
+     "input": "accepted claim-ledger routing"
     },
     {
      "need": "required",
-     "input": "bounded reviewer decisions"
+     "input": "accepted complete red-team persona/tool-pool merge when candidates exist"
     }
    ],
    "inputs_source": "registry/job-templates/07-red-team-adversarial.json",
@@ -8142,18 +8214,17 @@
    "output_files": [
     "red-team-adversarial.json",
     "permission.json",
+    "lineage.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/07-red-team-adversarial.json",
    "claim_class": null,
    "gaps": [
-    "common_lifecycle_publication_not_integrated",
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
+    "job:claim-ledger-routing",
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
     "job:04-asvs-masvs",
@@ -8169,15 +8240,15 @@
   {
    "id": "08-blue-team-refutation",
    "lane": "08-blue-team-refutation",
-   "name": "Blue-team Refutation Core",
+   "name": "Blue-team Refutation Lifecycle",
    "contract": "08-blue-team-refutation",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
-   "resource_pool": "unassigned",
+   "resource_pool": "persona_llm",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "evidence-assembler",
@@ -8200,11 +8271,11 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "exact accepted adversarial hypotheses"
+     "input": "accepted red-team result"
     },
     {
      "need": "required",
-     "input": "bounded independent refutation decisions"
+     "input": "accepted complete blue-team persona/tool-pool merge when hypotheses exist"
     }
    ],
    "inputs_source": "registry/job-templates/08-blue-team-refutation.json",
@@ -8212,17 +8283,15 @@
    "output_files": [
     "blue-team-refutation.json",
     "permission.json",
+    "lineage.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/08-blue-team-refutation.json",
    "claim_class": null,
    "gaps": [
-    "common_lifecycle_publication_not_integrated",
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:07-red-team-adversarial",
     "job:01-component-characterization"
@@ -8234,15 +8303,15 @@
   {
    "id": "09-independent-verification",
    "lane": "09-independent-verification",
-   "name": "Independent Verification Core",
+   "name": "Independent Verification Lifecycle",
    "contract": "09-independent-verification",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
-   "resource_pool": "unassigned",
+   "resource_pool": "persona_llm",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "evidence-assembler",
@@ -8265,11 +8334,11 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "exact accepted blue-team dispositions"
+     "input": "accepted blue-team result"
     },
     {
      "need": "required",
-     "input": "bounded independent verification decisions"
+     "input": "accepted complete verifier persona/tool-pool merge when reviews exist"
     }
    ],
    "inputs_source": "registry/job-templates/09-independent-verification.json",
@@ -8277,17 +8346,15 @@
    "output_files": [
     "independent-verification.json",
     "permission.json",
+    "lineage.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/09-independent-verification.json",
    "claim_class": null,
    "gaps": [
-    "common_lifecycle_publication_not_integrated",
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:07-red-team-adversarial",
     "job:08-blue-team-refutation"
@@ -8299,16 +8366,22 @@
   {
    "id": "11-remediation-proposal",
    "lane": "11-remediation-proposal",
-   "name": "11-remediation-proposal",
+   "name": "Evidence-bounded Remediation Proposals",
    "contract": "11-remediation-proposal",
-   "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
-   "resource_pool": "unassigned",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/remediation_proposal.py:run",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "lifecycle_binding": "actual_worker",
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "evidence-assembler",
+    "domain_id": "evidence-assembly",
+    "tooling_profile_id": "hash-bound-evidence-assembly",
+    "output_contract_id": "11-remediation-proposal"
+   },
    "depends_on": [
     {
      "job": "09-independent-verification",
@@ -8319,47 +8392,26 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "independently verified finding or error"
+     "input": "current accepted independent verification"
     },
     {
      "need": "required",
-     "input": "verifier output and testcase artifacts"
-    },
-    {
-     "need": "required",
-     "input": "target source paths and exact tested environment"
-    },
-    {
-     "need": "required",
-     "input": "compile database or build command used by verification"
-    },
-    {
-     "need": "required",
-     "input": "coverage and retrieval artifacts needed to understand callers/impact"
+     "input": "current accepted native build environment"
     }
    ],
-   "inputs_source": "11-remediation-proposal/config.md",
+   "inputs_source": "registry/job-templates/11-remediation-proposal.json",
    "output_dir": "runs/<run_id>/data/jobs/11-remediation-proposal/",
    "output_files": [
-    "proposed minimal fix with rationale",
-    "unified diff or patch file",
-    "before/after test evidence from the same environment as verification",
-    "regression test recommendation or test patch",
-    "risk assessment for behavior compatibility",
-    "explicit status: proposed, verified-locally, blocked, or not-recommended"
+    "remediation-proposal.json",
+    "remediation-proposal-summary.md",
+    "permission.json",
+    "lineage.json",
+    "status.json"
    ],
-   "outputs_source": "11-remediation-proposal/config.md",
+   "outputs_source": "registry/output-contracts/11-remediation-proposal.json",
    "claim_class": null,
-   "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
-    "unassigned_resource_pool"
-   ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:09-independent-verification"
    ],
@@ -8370,15 +8422,15 @@
   {
    "id": "12-scoring-prioritization",
    "lane": "12-scoring-prioritization",
-   "name": "Verified Claim Scoring Core",
+   "name": "Verified Claim Scoring Lifecycle",
    "contract": "12-scoring-prioritization",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/claim_lifecycle_core.py:run_stage",
-   "resource_pool": "unassigned",
+   "resource_pool": "persona_llm",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "evidence-assembler",
@@ -8406,11 +8458,11 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "exact accepted independent verification"
+     "input": "accepted independent-verification result"
     },
     {
      "need": "required",
-     "input": "bounded scoring factors"
+     "input": "accepted complete scoring persona/tool-pool merge when verifications exist"
     }
    ],
    "inputs_source": "registry/job-templates/12-scoring-prioritization.json",
@@ -8418,17 +8470,15 @@
    "output_files": [
     "scoring-prioritization.json",
     "permission.json",
+    "lineage.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/12-scoring-prioritization.json",
    "claim_class": null,
    "gaps": [
-    "common_lifecycle_publication_not_integrated",
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Add common-envelope lifecycle publication, bind the qualified core to shared Dagster execution, assign its resource pool, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:09-independent-verification",
     "job:15-deployment-hardening",
@@ -8444,7 +8494,7 @@
    "name": "Accepted Evidence-backed Draft Report Publisher",
    "contract": "synthesis-report-publication",
    "implemented": true,
-   "readiness": "implemented_and_qualified",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/synthesis_report_worker.py:run",
    "resource_pool": "cpu",
@@ -8558,7 +8608,7 @@
     "real_accepted_upstream_chain_pending",
     "final_human_approval_and_publication_remain_separate"
    ],
-   "next_prerequisite": "Run the qualified publisher against the real accepted upstream chain, then pass its draft to the separate final publication gate.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
     "job:03-threat-model-dfd-stride",
@@ -8579,13 +8629,13 @@
    "lane": "02-evidence-pregather",
    "name": "QA/API Collection Intelligence Ingestion",
    "contract": "api-collection-intelligence",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/api_collection_intelligence_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "qa-test-validator",
     "role_id": "api-collection-intelligence-extractor",
@@ -8637,11 +8687,9 @@
    "outputs_source": "registry/output-contracts/api-collection-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -8654,13 +8702,13 @@
    "lane": "02-evidence-pregather",
    "name": "Binary Intelligence Ingest",
    "contract": "binary-intelligence",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/binary_intelligence_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "binary-intelligence-extractor",
@@ -8713,12 +8761,10 @@
    "outputs_source": "registry/output-contracts/binary-intelligence.json",
    "claim_class": "binary_lead_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
     "m02_pinned_binary_tool_unavailable",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-binary-triage",
     "job:02-binary-cfg"
@@ -8732,13 +8778,13 @@
    "lane": "02-evidence-pregather",
    "name": "Document Intelligence Ingestion",
    "contract": "doc-intelligence",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/doc_intelligence_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "functional-design-doc-consumer",
     "role_id": "doc-intelligence-extractor",
@@ -8790,11 +8836,9 @@
    "outputs_source": "registry/output-contracts/doc-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -8807,13 +8851,13 @@
    "lane": "02-evidence-pregather",
    "name": "Standards Source Ingestion",
    "contract": "standards-source-extract",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/standards_source_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "standards-reference-curator",
     "role_id": "standards-source-ingestor",
@@ -8853,11 +8897,9 @@
    "outputs_source": "registry/output-contracts/standards-source-extract.json",
    "claim_class": null,
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified offline core into the shared Dagster lifecycle and complete live fixture qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -8870,13 +8912,13 @@
    "lane": "02-evidence-pregather",
    "name": "Test Intelligence Ingestion",
    "contract": "test-intelligence",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/test_intelligence_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "test-coverage-indexer",
     "role_id": "test-intelligence-extractor",
@@ -8928,11 +8970,9 @@
    "outputs_source": "registry/output-contracts/test-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -8946,14 +8986,14 @@
    "name": "OWASP Validation Worklist Core",
    "contract": "owasp-validation-worklist",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/owasp_validation_worklist.py:build",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "owasp_validation_worklist"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "owasp-validator",
     "role_id": "standards-control-validator",
@@ -8994,10 +9034,9 @@
    "outputs_source": "registry/output-contracts/owasp-validation-worklist.json",
    "claim_class": "control_worklist",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_qualification"
    ],
-   "next_prerequisite": "Build the lifecycle input assembler from accepted OWASP source and applicability evidence, replace the blocked full-review op, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
     "job:02-standards-source-ingest"
@@ -9012,14 +9051,14 @@
    "name": "STIG/SRG Validation Worklist Core",
    "contract": "stig-srg-validation-worklist",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/stig_srg_validation_worklist.py:build",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "stig_srg_validation_worklist"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "nsa-stig-platform-engineer",
     "role_id": "platform-hardening-validator",
@@ -9060,10 +9099,9 @@
    "outputs_source": "registry/output-contracts/stig-srg-validation-worklist.json",
    "claim_class": "control_worklist",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_qualification"
    ],
-   "next_prerequisite": "Build the lifecycle input assembler from accepted STIG/SRG source and platform evidence, replace the blocked full-review op, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:01-component-characterization",
     "job:02-standards-source-ingest"
@@ -9078,7 +9116,7 @@
    "name": "Build Configure",
    "contract": "configured-build",
    "implemented": true,
-   "readiness": "implemented_not_qualified",
+   "readiness": "implemented_and_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/build_configure.py:run",
    "resource_pool": "docker",
@@ -9131,7 +9169,7 @@
    "gaps": [
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-build-resolution"
    ],
@@ -9145,7 +9183,7 @@
    "name": "Native Build",
    "contract": "native-build",
    "implemented": true,
-   "readiness": "implemented_not_qualified",
+   "readiness": "implemented_and_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/native_build.py:run",
    "resource_pool": "docker",
@@ -9202,7 +9240,7 @@
    "gaps": [
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run live fault-recovery qualification for reuse, tamper rejection, and newer-failure blocking.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-build-configure"
    ],
@@ -9269,7 +9307,7 @@
    "gaps": [
     "fault_recovery_not_qualified"
    ],
-   "next_prerequisite": "Run live fault-recovery qualification; retain the explicit C/C++ rule-family coverage limitation.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9332,7 +9370,7 @@
    "gaps": [
     "live_dagster_qualification_missing"
    ],
-   "next_prerequisite": "Qualify the registered Dagster lifecycle op and full-review handoff.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9345,13 +9383,13 @@
    "lane": "02-evidence-pregather",
    "name": "Native SAST",
    "contract": "native-sast",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/native_sast.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "docker",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "native-sast-curator",
@@ -9397,12 +9435,10 @@
    "outputs_source": "registry/output-contracts/native-sast.json",
    "claim_class": "native_static_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
     "pinned_image_live_qualification_missing",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -9461,7 +9497,7 @@
    "gaps": [
     "live_dagster_qualification_missing"
    ],
-   "next_prerequisite": "Qualify the registered Dagster lifecycle op against an accepted native build.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -9516,7 +9552,7 @@
    "gaps": [
     "live_dagster_qualification_missing"
    ],
-   "next_prerequisite": "Qualify the registered Dagster lifecycle op against accepted capture evidence.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-ir-capture"
    ],
@@ -9571,7 +9607,7 @@
    "gaps": [
     "live_dagster_qualification_missing"
    ],
-   "next_prerequisite": "Qualify the registered Dagster lifecycle op against accepted linked IR.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-ir-link"
    ],
@@ -9584,13 +9620,13 @@
    "lane": "02-evidence-pregather",
    "name": "Debug Symbol Index",
    "contract": "debug-symbol-index",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/debug_symbol_index.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "docker",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "binary-intelligence-extractor",
@@ -9612,7 +9648,7 @@
     },
     {
      "need": "required",
-     "input": "run-owned static symbol evidence"
+     "input": "registered audit-binary-analysis image"
     }
    ],
    "inputs_source": "registry/job-templates/02-debug-symbol-index.json",
@@ -9621,17 +9657,17 @@
     "debug-symbol-index.json",
     "status.json",
     "permission.json",
-    "lineage.json"
+    "lineage.json",
+    "binary-static-raw.json",
+    "binary-b13-receipts.json"
    ],
    "outputs_source": "registry/output-contracts/debug-symbol-index.json",
    "claim_class": "debug_symbol_static_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
     "m02_pinned_binary_tool_unavailable",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -9644,13 +9680,13 @@
    "lane": "02-evidence-pregather",
    "name": "Static Binary Triage",
    "contract": "binary-triage",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/binary_triage.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "docker",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "binary-intelligence-extractor",
@@ -9672,7 +9708,7 @@
     },
     {
      "need": "required",
-     "input": "run-owned static triage evidence"
+     "input": "registered audit-binary-analysis image"
     }
    ],
    "inputs_source": "registry/job-templates/02-binary-triage.json",
@@ -9681,17 +9717,17 @@
     "binary-triage-manifest.json",
     "status.json",
     "permission.json",
-    "lineage.json"
+    "lineage.json",
+    "binary-static-raw.json",
+    "binary-b13-receipts.json"
    ],
    "outputs_source": "registry/output-contracts/binary-triage.json",
    "claim_class": "binary_inventory_static_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
     "m02_pinned_binary_tool_unavailable",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -9704,13 +9740,13 @@
    "lane": "02-evidence-pregather",
    "name": "Static Binary CFG",
    "contract": "binary-cfg",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/binary_cfg.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "docker",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "binary-intelligence-extractor",
@@ -9745,7 +9781,7 @@
     },
     {
      "need": "required",
-     "input": "run-owned static CFG evidence"
+     "input": "registered audit-binary-analysis image"
     }
    ],
    "inputs_source": "registry/job-templates/02-binary-cfg.json",
@@ -9754,17 +9790,17 @@
     "cfg-manifest.json",
     "status.json",
     "permission.json",
-    "lineage.json"
+    "lineage.json",
+    "binary-static-raw.json",
+    "binary-b13-receipts.json"
    ],
    "outputs_source": "registry/output-contracts/binary-cfg.json",
    "claim_class": "binary_cfg_static_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
     "m02_pinned_binary_tool_unavailable",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-binary-triage",
     "job:02-debug-symbol-index"
@@ -9778,13 +9814,13 @@
    "lane": "02-evidence-pregather",
    "name": "Test Execution",
    "contract": "test-execution",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/test_execution.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "docker",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "qa-test-validator",
     "role_id": "test-evidence-producer",
@@ -9826,12 +9862,9 @@
    "outputs_source": "registry/output-contracts/test-execution.json",
    "claim_class": "test_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "operator_test_control_staging_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -9844,13 +9877,13 @@
    "lane": "02-evidence-pregather",
    "name": "Test Result Ingest",
    "contract": "test-result-intelligence",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/test_result_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "qa-test-validator",
     "role_id": "test-evidence-producer",
@@ -9883,12 +9916,9 @@
    "outputs_source": "registry/output-contracts/test-result-intelligence.json",
    "claim_class": "test_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "accepted_test_execution_lifecycle_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-test-execution"
    ],
@@ -9901,13 +9931,13 @@
    "lane": "02-evidence-pregather",
    "name": "Test Coverage Ingest",
    "contract": "test-coverage-intelligence",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/test_coverage_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "test-coverage-indexer",
     "role_id": "test-evidence-producer",
@@ -9940,12 +9970,9 @@
    "outputs_source": "registry/output-contracts/test-coverage-intelligence.json",
    "claim_class": "test_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "accepted_test_execution_lifecycle_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-test-execution"
    ],
@@ -9958,13 +9985,13 @@
    "lane": "02-evidence-pregather",
    "name": "Operations Document Ingest",
    "contract": "operations-doc-intelligence",
-   "implemented": false,
-   "readiness": "standalone_only",
+   "implemented": true,
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/operations_doc_ingest.py:run",
-   "resource_pool": "unassigned",
+   "resource_pool": "cpu",
    "dagster_jobs": [],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "functional-design-doc-consumer",
     "role_id": "doc-intelligence-extractor",
@@ -9996,11 +10023,9 @@
    "outputs_source": "registry/output-contracts/operations-doc-intelligence.json",
    "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "shared_dagster_graph_not_integrated",
-    "no_live_qualification",
-    "unassigned_resource_pool"
+    "no_live_qualification"
    ],
-   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10017,7 +10042,7 @@
    "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/evidence_store.py:run",
-   "resource_pool": "memory",
+   "resource_pool": "cpu",
    "dagster_jobs": [
     "evidence_index"
    ],
@@ -10064,7 +10089,7 @@
     "common_worker_envelope_migration_missing",
     "live_enrichment_requalification_missing"
    ],
-   "next_prerequisite": "Stage accepted derived-producer selections, migrate the legacy publication to the common envelope, and requalify the enriched lifecycle live.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10078,14 +10103,14 @@
    "name": "Secrets Inventory",
    "contract": "secrets-inventory",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/secrets_inventory.py:build",
    "resource_pool": "docker",
    "dagster_jobs": [
     "secrets_inventory"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "vendor-static-evidence-curator",
@@ -10127,10 +10152,9 @@
    "outputs_source": "registry/output-contracts/secrets-inventory.json",
    "claim_class": "secret_exposure_lead",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_docker_qualification"
    ],
-   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10144,14 +10168,14 @@
    "name": "IaC Config Scan",
    "contract": "iac-config-evidence",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/iac_config_scan.py:build",
    "resource_pool": "docker",
    "dagster_jobs": [
     "iac_config_scan"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "vendor-static-evidence-curator",
@@ -10195,10 +10219,9 @@
    "outputs_source": "registry/output-contracts/iac-config-evidence.json",
    "claim_class": "declared_configuration_evidence",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_docker_qualification"
    ],
-   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10212,14 +10235,14 @@
    "name": "Container Image Inventory",
    "contract": "container-image-inventory",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/container_image_inventory.py:build",
    "resource_pool": "docker",
    "dagster_jobs": [
     "container_image_inventory"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "vendor-static-evidence-curator",
@@ -10262,10 +10285,9 @@
    "outputs_source": "registry/output-contracts/container-image-inventory.json",
    "claim_class": "supplied_image_static_evidence",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_docker_qualification"
    ],
-   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10279,14 +10301,14 @@
    "name": "SBOM Inventory",
    "contract": "sbom-inventory",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/dependency_workers.py:run",
    "resource_pool": "docker",
    "dagster_jobs": [
     "sbom_inventory"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "supply-chain-evidence-curator",
     "role_id": "dependency-evidence-curator",
@@ -10329,11 +10351,10 @@
    "outputs_source": "registry/output-contracts/sbom-inventory.json",
    "claim_class": "dependency_inventory_evidence",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_docker_qualification",
     "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10347,14 +10368,14 @@
    "name": "Offline SCA Vulnerability Match",
    "contract": "sca-vulnerability-match",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/dependency_workers.py:run",
    "resource_pool": "docker",
    "dagster_jobs": [
     "sca_vulnerability_match"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "supply-chain-evidence-curator",
     "role_id": "dependency-evidence-curator",
@@ -10403,11 +10424,10 @@
    "outputs_source": "registry/output-contracts/sca-vulnerability-match.json",
    "claim_class": "known_vulnerability_match_lead",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_docker_qualification",
     "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify both supplied offline snapshot consumers live.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-sbom-inventory"
    ],
@@ -10421,14 +10441,14 @@
    "name": "License Inventory",
    "contract": "license-inventory",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/dependency_workers.py:run",
    "resource_pool": "docker",
    "dagster_jobs": [
     "license_scan"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "supply-chain-evidence-curator",
     "role_id": "dependency-evidence-curator",
@@ -10475,11 +10495,10 @@
    "outputs_source": "registry/output-contracts/license-inventory.json",
    "claim_class": "license_detection_evidence",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_docker_qualification",
     "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and complete live Docker qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake",
     "job:02-sbom-inventory"
@@ -10494,14 +10513,14 @@
    "name": "Dependency Lifecycle",
    "contract": "dependency-lifecycle",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/dependency_workers.py:run",
-   "resource_pool": "cpu",
+   "resource_pool": "docker",
    "dagster_jobs": [
     "dependency_lifecycle"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "supply-chain-evidence-curator",
     "role_id": "dependency-evidence-curator",
@@ -10553,11 +10572,10 @@
    "outputs_source": "registry/output-contracts/dependency-lifecycle.json",
    "claim_class": "dependency_lifecycle_evidence",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_qualification",
     "legacy_vendor_prepass_attempt_packaging_not_published"
    ],
-   "next_prerequisite": "Bind the common-envelope publication to the legacy vendor-prepass full-attempt validator, build the full-review input assembler, and qualify a supplied current reference table live.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:02-sbom-inventory",
     "job:02-license-scan"
@@ -10572,7 +10590,7 @@
    "name": "Binary Hardening",
    "contract": "binary-hardening",
    "implemented": true,
-   "readiness": "implemented_and_qualified",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/vendor_evidence_orchestration.py:execute_binary_from_native",
    "resource_pool": "docker",
@@ -10622,7 +10640,7 @@
    "outputs_source": "registry/output-contracts/binary-hardening.json",
    "claim_class": "binary_hardening_property_evidence",
    "gaps": [],
-   "next_prerequisite": "Exercise this accepted path in the next complete retained full-review run.",
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -10636,14 +10654,14 @@
    "name": "Mobile SAST",
    "contract": "mobile-sast",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pinned_container",
    "worker": "appsec-review-process/mobile_sast.py:build",
    "resource_pool": "docker",
    "dagster_jobs": [
     "mobile_sast"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "vendor-static-evidence-curator",
@@ -10686,10 +10704,9 @@
    "outputs_source": "registry/output-contracts/mobile-sast.json",
    "claim_class": "mobile_static_lead",
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_docker_qualification"
    ],
-   "next_prerequisite": "Build the full-review input assembler and complete live Docker qualification; standalone execution is available with explicit run-owned paths.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10703,14 +10720,14 @@
    "name": "Persona Tool Pool Dispatch",
    "contract": "persona-tool-pool-dispatch",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "pool_coordinator",
    "worker": "appsec-review-process/pool_launcher.py:launch",
    "resource_pool": "persona_llm",
    "dagster_jobs": [
     "persona_tool_pool_dispatch"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "control-lifecycle-coordinator",
@@ -10728,32 +10745,26 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "run-owned pool specification"
-    },
-    {
-     "need": "required",
-     "input": "trusted pool context"
-    },
-    {
-     "need": "required",
-     "input": "explicit runtime limits"
+     "input": "newest accepted intake and run artifact-manifest context"
     }
    ],
    "inputs_source": "registry/job-templates/persona-tool-pool-dispatch.json",
    "output_dir": "runs/<run_id>/data/jobs/persona-tool-pool-dispatch/",
    "output_files": [
     "persona-tool-pool-dispatch.json",
+    "pool-context.json",
+    "deterministic-merge-request.json",
     "permission.json",
     "lineage.json",
+    "applicability.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/persona-tool-pool-dispatch.json",
    "claim_class": null,
    "gaps": [
-    "full_review_input_assembler_not_implemented",
     "no_live_persona_pool_qualification"
    ],
-   "next_prerequisite": "Build the full-review pool specification assembler and complete live persona qualification.",
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10767,14 +10778,14 @@
    "name": "Deterministic Pool Merge",
    "contract": "deterministic-pool-merge",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/deterministic_pool_merge.py:run_verified_attempt",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "deterministic_pool_merge"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "control-lifecycle-coordinator",
@@ -10805,10 +10816,8 @@
    ],
    "outputs_source": "registry/output-contracts/deterministic-pool-merge.json",
    "claim_class": null,
-   "gaps": [
-    "full_review_input_assembler_not_implemented"
-   ],
-   "next_prerequisite": "Bind the verified C02 pool from full-review orchestration.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:persona-tool-pool-dispatch"
    ],
@@ -10822,14 +10831,14 @@
    "name": "Evidence Qualified Quorum",
    "contract": "evidence-qualified-quorum",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/evidence_quorum.py:run_verified_attempt",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "evidence_qualified_quorum"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "control-lifecycle-coordinator",
@@ -10860,10 +10869,8 @@
    ],
    "outputs_source": "registry/output-contracts/evidence-qualified-quorum.json",
    "claim_class": null,
-   "gaps": [
-    "full_review_input_assembler_not_implemented"
-   ],
-   "next_prerequisite": "Bind the accepted deterministic merge reference in full review.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:deterministic-pool-merge"
    ],
@@ -10877,14 +10884,14 @@
    "name": "Dynamic Rescope",
    "contract": "bounded-rescope-plan",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/dynamic_rescope.py:run_attempt",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "dynamic_rescope"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "control-lifecycle-coordinator",
@@ -10919,10 +10926,8 @@
    ],
    "outputs_source": "registry/output-contracts/bounded-rescope-plan.json",
    "claim_class": null,
-   "gaps": [
-    "full_review_input_assembler_not_implemented"
-   ],
-   "next_prerequisite": "Bind classification changes in full review.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10936,14 +10941,14 @@
    "name": "Completeness Audit",
    "contract": "completeness-audit",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/completeness_audit.py:run_attempt",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "completeness_audit"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "control-lifecycle-coordinator",
@@ -10974,10 +10979,8 @@
    ],
    "outputs_source": "registry/output-contracts/completeness-audit.json",
    "claim_class": null,
-   "gaps": [
-    "full_review_input_assembler_not_implemented"
-   ],
-   "next_prerequisite": "Bind the draft report obligation inventory in full review.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:10-synthesis-report"
    ],
@@ -10991,14 +10994,14 @@
    "name": "Synthetic Hypothesis Resynthesis",
    "contract": "synthetic-hypothesis-resynthesis",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/synthetic_hypothesis_resynthesis.py:run_attempt",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "synthetic_hypothesis_resynthesis"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "control-lifecycle-coordinator",
@@ -11033,10 +11036,8 @@
    ],
    "outputs_source": "registry/output-contracts/synthetic-hypothesis-resynthesis.json",
    "claim_class": null,
-   "gaps": [
-    "full_review_input_assembler_not_implemented"
-   ],
-   "next_prerequisite": "Bind accepted completeness audit input in full review.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:completeness-audit"
    ],
@@ -11050,14 +11051,14 @@
    "name": "Remediation Retest Feedback",
    "contract": "remediation-retest-feedback",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/remediation_retest.py:run_attempt",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "remediation_retest_feedback"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "control-lifecycle-coordinator",
@@ -11070,6 +11071,11 @@
      "job": "09-independent-verification",
      "kind": "required",
      "contract": "09-independent-verification"
+    },
+    {
+     "job": "11-remediation-proposal",
+     "kind": "required",
+     "contract": "11-remediation-proposal"
     }
    ],
    "declared_inputs": [
@@ -11092,12 +11098,11 @@
    ],
    "outputs_source": "registry/output-contracts/remediation-retest-feedback.json",
    "claim_class": null,
-   "gaps": [
-    "full_review_input_assembler_not_implemented"
-   ],
-   "next_prerequisite": "Bind verified claims and retest evidence in full review.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
-    "job:09-independent-verification"
+    "job:09-independent-verification",
+    "job:11-remediation-proposal"
    ],
    "produces": [
     "job:remediation-retest-feedback"
@@ -11109,14 +11114,14 @@
    "name": "Final Publication Gate",
    "contract": "final-publication-package",
    "implemented": true,
-   "readiness": "standalone_only",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/final_publication.py:publish",
    "resource_pool": "cpu",
    "dagster_jobs": [
     "final_publication_gate"
    ],
-   "lifecycle_binding": "blocked_op",
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "report-artifact-publisher",
     "role_id": "control-lifecycle-coordinator",
@@ -11139,6 +11144,21 @@
      "job": "synthetic-hypothesis-resynthesis",
      "kind": "required",
      "contract": "synthetic-hypothesis-resynthesis"
+    },
+    {
+     "job": "evidence-qualified-quorum",
+     "kind": "required",
+     "contract": "evidence-qualified-quorum"
+    },
+    {
+     "job": "dynamic-rescope",
+     "kind": "required",
+     "contract": "bounded-rescope-plan"
+    },
+    {
+     "job": "remediation-retest-feedback",
+     "kind": "required",
+     "contract": "remediation-retest-feedback"
     }
    ],
    "declared_inputs": [
@@ -11170,14 +11190,15 @@
    ],
    "outputs_source": "registry/output-contracts/final-publication-package.json",
    "claim_class": null,
-   "gaps": [
-    "full_review_input_assembler_not_implemented"
-   ],
-   "next_prerequisite": "Bind exact accepted completion references and operator signoff in full review.",
+   "gaps": [],
+   "next_prerequisite": "Execute and retain this worker in the fresh Hello full_review run.",
    "consumes": [
     "job:10-synthesis-report",
     "job:completeness-audit",
-    "job:synthetic-hypothesis-resynthesis"
+    "job:synthetic-hypothesis-resynthesis",
+    "job:evidence-qualified-quorum",
+    "job:dynamic-rescope",
+    "job:remediation-retest-feedback"
    ],
    "produces": [
     "job:final-publication-gate"
@@ -12297,6 +12318,7 @@
    ],
    "consumed_by": [
     "job:04-asvs-masvs",
+    "job:claim-ledger-routing",
     "job:10-synthesis-report"
    ]
   },
@@ -12309,6 +12331,7 @@
     "job:04-asvs-masvs"
    ],
    "consumed_by": [
+    "job:claim-ledger-routing",
     "job:07-red-team-adversarial",
     "job:10-synthesis-report"
    ]
@@ -12370,6 +12393,18 @@
     "job:12-scoring-prioritization"
    ]
   },
+  "job:claim-ledger-routing": {
+   "id": "job:claim-ledger-routing",
+   "kind": "job output",
+   "path": "runs/<run_id>/data/jobs/claim-ledger-routing/",
+   "about": "Accepted claim-ledger-core output of claim-ledger-routing.",
+   "produced_by": [
+    "job:claim-ledger-routing"
+   ],
+   "consumed_by": [
+    "job:07-red-team-adversarial"
+   ]
+  },
   "job:07-red-team-adversarial": {
    "id": "job:07-red-team-adversarial",
    "kind": "job output",
@@ -12421,7 +12456,8 @@
     "job:11-remediation-proposal"
    ],
    "consumed_by": [
-    "job:10-synthesis-report"
+    "job:10-synthesis-report",
+    "job:remediation-retest-feedback"
    ]
   },
   "job:12-scoring-prioritization": {
@@ -12902,7 +12938,9 @@
    "produced_by": [
     "job:evidence-qualified-quorum"
    ],
-   "consumed_by": []
+   "consumed_by": [
+    "job:final-publication-gate"
+   ]
   },
   "job:dynamic-rescope": {
    "id": "job:dynamic-rescope",
@@ -12912,7 +12950,9 @@
    "produced_by": [
     "job:dynamic-rescope"
    ],
-   "consumed_by": []
+   "consumed_by": [
+    "job:final-publication-gate"
+   ]
   },
   "job:completeness-audit": {
    "id": "job:completeness-audit",
@@ -12947,7 +12987,9 @@
    "produced_by": [
     "job:remediation-retest-feedback"
    ],
-   "consumed_by": []
+   "consumed_by": [
+    "job:final-publication-gate"
+   ]
   },
   "job:final-publication-gate": {
    "id": "job:final-publication-gate",
