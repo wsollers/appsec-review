@@ -1362,6 +1362,14 @@ the job catalog and parity views from their sources; render Mermaid/BPMN only wh
 sources change; run contract, parity, catalog and diff checks; then merge the coordination,
 implementation and evidence commits without Dependabot changes.
 
+Q16 baseline on `main` `23851c04`: 10/10 focused build-replay/source-SAST tests and 1/1 catalog
+test pass; contracts, parity, generated catalog, Python/shell syntax and diff checks pass. The
+recorded stage 14-16 SAT envelopes validate, including six clang compile entries, one ELF and four
+deterministic source-SAST leads. The baseline does **not** prove stage 14-16 tamper, newest-failure,
+forced-recovery, B13-receipt, runtime permission, negative network/read-only or timeout behavior.
+Component core `ef415950` passes 7/7 focused tests but remains `BLOCKED(F02)` and its generated
+catalog is stale until serialized shared-surface integration.
+
 Cross-cutting capability ownership is explicit:
 
 | Manifest capability | Owning batches |
