@@ -1,6 +1,6 @@
 {
   "schema":"appsec-review/output-contract/0.1","contract_id":"binary-triage","display_name":"Static Binary Triage",
-  "required_files":["binary-triage-manifest.json","status.json"],
+  "required_files":["binary-triage-manifest.json","status.json","permission.json","lineage.json"],
   "required_status_fields":["process","status","records","static_only","qualification"],
   "result_schema":{"artifact":"binary-triage-manifest.json","schema_file":"binary-triage.schema.json"},
   "validation_rules":["bind exact accepted native-build and binary/build identities","publish deterministic format, architecture and hardening inventory only","bind config and raw evidence hashes","never execute target binaries or promote inventory to a finding","keep packed, stripped, unknown, unsupported and M02 states explicit"]

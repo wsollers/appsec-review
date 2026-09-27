@@ -1,1 +1,41 @@
-{"schema":"appsec-review/job-template/0.1","job_template_id":"02-binary-triage","display_name":"Static Binary Triage","process":"02-evidence-pregather","budget_default":"standard","implemented":false,"composition":{"persona_id":"reverse-engineer","role_id":"binary-intelligence-extractor","domain_id":"binary-artifact-analysis","tooling_profile_id":"binary-intel-static-analysis","output_contract_id":"binary-triage"},"inputs":{"required":["accepted native-build binary lineage","run-owned static triage evidence"],"optional":[]},"outputs":{"directory":"runs/<run_id>/data/jobs/02-binary-triage","files":["binary-triage-manifest.json","status.json"]},"prompt_sections":["governing_rules","persona","role","domain","tooling_profile","task","output_contract"]}
+{
+    "schema": "appsec-review/job-template/0.1",
+    "job_template_id": "02-binary-triage",
+    "display_name": "Static Binary Triage",
+    "process": "02-evidence-pregather",
+    "budget_default": "standard",
+    "implemented": false,
+    "permissions": ["read-run-data", "write-run-data"],
+    "composition": {
+        "persona_id": "reverse-engineer",
+        "role_id": "binary-intelligence-extractor",
+        "domain_id": "binary-artifact-analysis",
+        "tooling_profile_id": "binary-intel-static-analysis",
+        "output_contract_id": "binary-triage"
+    },
+    "inputs": {
+        "required": [
+            "accepted native-build binary lineage",
+            "run-owned static triage evidence"
+        ],
+        "optional": []
+    },
+    "outputs": {
+        "directory": "runs/<run_id>/data/jobs/02-binary-triage",
+        "files": [
+            "binary-triage-manifest.json",
+            "status.json",
+            "permission.json",
+            "lineage.json"
+        ]
+    },
+    "prompt_sections": [
+        "governing_rules",
+        "persona",
+        "role",
+        "domain",
+        "tooling_profile",
+        "task",
+        "output_contract"
+    ]
+}

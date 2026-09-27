@@ -5,6 +5,7 @@
   "process": "02-evidence-pregather",
   "budget_default": "standard",
   "implemented": false,
+  "permissions": ["read-run-data", "write-run-data"],
   "composition": {
     "persona_id": "reverse-engineer",
     "role_id": "binary-intelligence-extractor",
@@ -27,7 +28,9 @@
     "directory": "runs/<run_id>/data/jobs/02-binary-intelligence-ingest",
     "files": [
       "binary-intelligence.json",
-      "status.json"
+      "status.json",
+      "permission.json",
+      "lineage.json"
     ]
   },
   "prompt_sections": [
