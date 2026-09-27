@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "native-sast-lead.schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["lead_id", "tool_id", "unit_id", "rule_id", "path", "start_line", "start_column", "source_sha256", "category"],
+  "properties": {
+    "lead_id": {"type": "string", "pattern": "^lead_[0-9a-f]{16}$"},
+    "tool_id": {"enum": ["clang-tidy", "cppcheck", "clang-static-analyzer"]},
+    "unit_id": {"type": "string", "minLength": 1}, "rule_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "path": {"type": "string", "pattern": "^[^/\\\\][^\\r\\n]{0,1023}$"},
+    "start_line": {"type": "integer", "minimum": 1}, "start_column": {"type": "integer", "minimum": 1},
+    "source_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "category": {"enum": ["buffer-safety", "null-dereference", "resource-lifetime", "undefined-behavior", "api-misuse", "portability", "maintainability", "other-static-analysis"]}
+  }
+}

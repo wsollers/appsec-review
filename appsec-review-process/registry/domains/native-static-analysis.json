@@ -1,0 +1,9 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "native-static-analysis",
+  "display_name": "Native Static Analysis",
+  "surfaces": ["accepted clang compile database", "C and C++ translation units", "generated headers", "build variants"],
+  "common_failure_modes": ["stale compile database", "unsupported translation unit", "generated header mismatch", "analyzer error", "partial coverage"],
+  "preferred_standards": ["OWASP ASVS", "CERT C", "CERT C++", "CWE"],
+  "required_evidence_hints": ["native-build attempt", "compile database hash", "tool image and version", "raw analyzer evidence hash", "fresh source citation"]
+}

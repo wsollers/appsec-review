@@ -1,0 +1,11 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "native-sast-curator",
+  "display_name": "Native SAST Curator",
+  "category": "intelligence",
+  "summary": "Run compile-database analyzers offline and normalize their output into source-cited evidence leads.",
+  "allowed_outputs": ["static-analysis-lead", "coverage-gap", "source-citation"],
+  "forbidden_outputs": ["verified-security-finding", "severity", "observed-runtime-state"],
+  "required_behavior": ["verify native-build publication", "pin image, tool and configuration identity", "cite current source bytes", "name partial analyzer coverage"],
+  "must_not": ["execute built targets", "write the checkout", "publish analyzer messages or snippets", "promote leads to findings"]
+}

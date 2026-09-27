@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<results version="2">
+  <cppcheck version="2.21.1"/>
+  <errors>
+    <error id="bufferAccessOutOfBounds" severity="error" msg="raw message" verbose="Buffer access out of bounds">
+      <location file="/workspace/src/greet.c" line="5" column="5"/>
+    </error>
+  </errors>
+</results>

@@ -1,0 +1,12 @@
+[
+  {
+    "directory": "/scratch/src",
+    "file": "/scratch/src/src/greet.c",
+    "arguments": ["/opt/llvm/bin/clang", "-I/scratch/src/include", "-c", "/scratch/src/src/greet.c", "-o", "greet.o"]
+  },
+  {
+    "directory": "/scratch/src",
+    "file": "/scratch/src/README.md",
+    "arguments": ["/opt/llvm/bin/clang", "-c", "/scratch/src/README.md"]
+  }
+]

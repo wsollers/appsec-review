@@ -1,0 +1,12 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "pinned-native-sast",
+  "display_name": "Pinned Offline Native SAST",
+  "mode": "static-only",
+  "required_inputs": ["accepted native-build publication", "clang compile database", "B16 audit-native image record", "tracked analyzer configuration"],
+  "optional_inputs": [],
+  "allowed_actions": ["read source", "run pinned clang-tidy, cppcheck and CSA through B13", "write run-owned immutable evidence"],
+  "isolation": "B13 container with network none, read-only source and compile-database mounts, and one run-owned writable scratch mount.",
+  "disallowed_actions": ["network access", "write target", "execute target programs", "link or run built binaries", "model calls"],
+  "claim_limits": {"allowed": ["static-analysis-lead", "coverage-gap", "source-citation"], "forbidden": ["verified-security-finding", "severity", "runtime-state"]}
+}

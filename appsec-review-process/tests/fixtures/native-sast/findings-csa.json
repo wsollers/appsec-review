@@ -1,0 +1,15 @@
+[
+  {
+    "checker": "security.insecureAPI.strcpy",
+    "category": "Security",
+    "type": "Potential insecure memory buffer bounds restriction in call 'strcpy'",
+    "file": "/workspace/src/greet.c",
+    "line": 5,
+    "col": 5,
+    "message": "raw CSA message must not be normalized",
+    "path_length": 1,
+    "issue_hash": "fixture",
+    "tu": "/workspace/src/greet.c",
+    "project": "default"
+  }
+]

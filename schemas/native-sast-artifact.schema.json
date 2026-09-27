@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "native-sast-artifact.schema.json",
+  "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+  "properties": {
+    "path": {"type": "string", "pattern": "^[^/\\\\][^\\r\\n]{0,1023}$"},
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

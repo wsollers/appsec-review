@@ -1,0 +1,23 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-native-sast",
+  "display_name": "Native SAST",
+  "process": "02-evidence-pregather",
+  "budget_default": "standard",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "native-sast-curator",
+    "domain_id": "native-static-analysis",
+    "tooling_profile_id": "pinned-native-sast",
+    "output_contract_id": "native-sast"
+  },
+  "inputs": {"required": ["exact accepted 02-native-build publication", "caller-held native-build fingerprint", "B16 audit-native record", "tracked native-SAST configuration"], "optional": []},
+  "outputs": {"directory": "data/jobs/02-native-sast/attempts/<attempt_id>", "files": ["native-sast.json", "b13-receipts.json", "native-sast-summary.md", "status.json"]},
+  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
+  "implemented": false,
+  "timeout_seconds": 3600,
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "applicability": "accepted native builds with at least one supported C/C++ compile-database translation unit",
+  "permissions": ["read-source", "read-run-data", "write-run-data"],
+  "coordinator": "intake-coordinator"
+}

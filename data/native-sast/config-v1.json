@@ -1,0 +1,12 @@
+{
+  "schema": "appsec-review/native-sast-config/1",
+  "image_id": "audit-native",
+  "tools": {
+    "clang-tidy": "21.1.0",
+    "cppcheck": "2.21.1",
+    "clang-static-analyzer": "21.1.0"
+  },
+  "clang_tidy_checks": "bugprone-*,cert-*,clang-analyzer-*,cppcoreguidelines-*,-cppcoreguidelines-avoid-magic-numbers,performance-*,portability-*",
+  "timeout_seconds": 120,
+  "container_timeout_seconds": 1800
+}

@@ -1,0 +1,291 @@
+"""Focused nominal tests for the isolated E03 native-SAST core."""
+from __future__ import annotations
+
+import copy
+import json
+from pathlib import Path
+import shutil
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[1]
+REPO = ROOT.parent
+FIXTURE = ROOT / "tests/fixtures/native-sast"
+sys.path.insert(0, str(ROOT))
+
+import native_sast as worker  # noqa: E402
+import native_sast_adapters as adapters  # noqa: E402
+from execution_state import Blocked, atomic_json, file_hash, tree_hashes  # noqa: E402
+from publish_job_output import ACCEPTED_SCHEMA  # noqa: E402
+from schema_validate import validate_document  # noqa: E402
+from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output  # noqa: E402
+from worker_result import artifact_records, terminal_envelope  # noqa: E402
+
+VARIANT = {"variant_id": "locked-0123456789abcdef", "source": "accepted-native-build-unit",
+           "image_id": "image_build_123456789abc", "image_digest": "sha256:" + "5" * 64,
+           "commands_sha256": "sha256:" + "6" * 64}
+
+
+def sha(path: Path) -> str:
+    return "sha256:" + file_hash(path)
+
+
+def accepted_native_build(folder: Path, *, source_revision="a" * 40,
+                          result_revision=None, db_hash_override=None):
+    run_id, attempt_id = "run-e03", "native-attempt"
+    base = folder / "native-build"; attempt = base / "attempts" / attempt_id
+    output = attempt / "outputs/u/compile_commands.json"; output.parent.mkdir(parents=True)
+    shutil.copyfile(FIXTURE / "compile_commands.json", output)
+    binary = attempt / "outputs/u/binaries/hello"; binary.parent.mkdir(parents=True)
+    binary.write_bytes(b"\x7fELFfixture")
+    target = folder / "target"; shutil.copytree(FIXTURE / "target", target)
+    inputs = {"run_id": run_id, "job": worker.UPSTREAM_JOB,
+              "source_snapshot_sha256": "sha256:" + "1" * 64,
+              "source_revision": source_revision, "target_path": str(target.resolve())}
+    atomic_json(attempt / "inputs.json", inputs)
+    result = {"schema": "appsec-review/native-build/1", "run_id": run_id,
+        "source_revision": result_revision or source_revision,
+        "upstream": {"resolution": {"job": "02-build-resolution", "attempt_id": "r1",
+                                     "lock_sha256": "sha256:" + "2" * 64},
+                     "configured": {"job": "02-build-configure", "attempt_id": "c1",
+                                    "result_sha256": "sha256:" + "3" * 64,
+                                    "envelope_sha256": "sha256:" + "4" * 64}},
+        "status": "OK", "units": [{"unit_id": "dir:.", "status": "OK",
+            "image_id": "image_build_123456789abc", "image_digest": "sha256:" + "5" * 64,
+            "commands": [{"phase": "configure"}, {"phase": "build"}],
+            "compile_database": {"path": "outputs/u/compile_commands.json",
+                "sha256": db_hash_override or sha(output), "entries": 2},
+            "binaries": [{"source_path": "hello", "artifact_path": "outputs/u/binaries/hello",
+                          "sha256": sha(binary), "size_bytes": binary.stat().st_size}]}],
+        "coverage_gaps": []}
+    atomic_json(attempt / "native-build.json", result)
+    atomic_json(attempt / "b13-receipts.json", [])
+    (attempt / "native-build-summary.md").write_text("# Native build\n")
+    status = {"process": worker.UPSTREAM_JOB, "status": "OK", "source_revision": source_revision,
+              "units": 1, "permissions": ["target-execution:native-build-v1@."], "network": "none"}
+    atomic_json(attempt / "status.json", status)
+    fingerprint = "sha256:" + "6" * 64
+    artifacts = artifact_records(attempt, ["native-build.json", "b13-receipts.json",
+        "native-build-summary.md", "status.json", "outputs/u/compile_commands.json",
+        "outputs/u/binaries/hello"])
+    envelope = terminal_envelope(run_id=run_id, job_id=worker.UPSTREAM_JOB,
+        attempt_id=attempt_id, worker_kind="pinned_container",
+        input_fingerprint=fingerprint, output_contract="native-build",
+        started_at="2026-09-27T00:00:00Z", finished_at="2026-09-27T00:00:01Z",
+        summary="native build complete", artifacts=artifacts, execution_status="OK",
+        acceptance_status="CURRENT")
+    atomic_json(attempt / "result.json", envelope)
+    atomic_json(base / "latest.json", {"attempt_id": attempt_id})
+    pointer = {"schema": ACCEPTED_SCHEMA, "status": "OK", "run_id": run_id,
+        "job": worker.UPSTREAM_JOB, "attempt_id": attempt_id, "fingerprint": fingerprint,
+        "envelope_path": "result.json", "envelope_sha256": file_hash(attempt / "result.json"),
+        "hashes": tree_hashes(attempt), "accepted_at": "2026-09-27T00:00:02Z"}
+    atomic_json(base / "accepted.json", pointer)
+    return base, attempt, target, fingerprint
+
+
+def trial_tree(attempt: Path):
+    clang = attempt / "tools/u/clang-cppcheck/scratch/native-sast"; clang.mkdir(parents=True)
+    csa = attempt / "tools/u/csa/scratch/csa"; csa.mkdir(parents=True)
+    for name in ("findings-clang-tidy.json", "native-sast-manifest.json", "cppcheck.xml"):
+        shutil.copyfile(FIXTURE / name, clang / name)
+    (clang / "clang-tidy.log").write_text("raw diagnostic\n")
+    for name in ("findings-csa.json", "csa-summary.json"):
+        shutil.copyfile(FIXTURE / name, csa / name)
+    return clang.parents[1], csa.parents[1]
+
+
+class NativeSastTests(unittest.TestCase):
+    IMAGE = {"image_id": "audit-native", "digest": "sha256:" + "7" * 64}
+
+    def test_compile_database_adapter_is_deterministic_and_names_unsupported_units(self):
+        raw = json.loads((FIXTURE / "compile_commands.json").read_text())
+        first, unsupported = adapters.adapt_compile_database(raw)
+        second, _ = adapters.adapt_compile_database(raw)
+        self.assertEqual(first, second)
+        self.assertEqual(unsupported, ["README.md"])
+        self.assertEqual(first[0]["file"], "/workspace/src/greet.c")
+        self.assertIn("-I/workspace/include", first[0]["arguments"])
+        self.assertNotIn("/scratch/src", json.dumps(first))
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder, "compile_commands.json"); atomic_json(path, first)
+            self.assertEqual(adapters.canonical_sha(first), sha(path))
+
+    def test_compile_database_rejects_escape_duplicate_and_no_supported_unit(self):
+        raw = json.loads((FIXTURE / "compile_commands.json").read_text())
+        hostile = copy.deepcopy(raw[0]); hostile["arguments"].extend(["-Xclang", "-load", "/workspace/plugin.so"])
+        response = copy.deepcopy(raw[0]); response["arguments"].append("@/workspace/flags.rsp")
+        command_only = copy.deepcopy(raw[0]); command_only["command"] = " ".join(command_only.pop("arguments"))
+        for value in ([{**raw[0], "file": "/host/greet.c"}], [raw[0], copy.deepcopy(raw[0])],
+                      [raw[1]], [hostile], [response], [command_only]):
+            with self.subTest(value=value), self.assertRaises(adapters.AdapterError):
+                adapters.adapt_compile_database(value)
+
+    def test_exact_accepted_native_build_and_lineage_are_revalidated(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, _target, fingerprint = accepted_native_build(Path(folder))
+            loaded = worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        self.assertEqual(loaded["binding"]["attempt_id"], "native-attempt")
+        self.assertEqual(loaded["units"][0]["unsupported"], ["README.md"])
+        self.assertRegex(loaded["units"][0]["build_variant"]["variant_id"], r"^locked-[0-9a-f]{16}$")
+
+    def test_wrong_open_stale_or_mismatched_native_build_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, _target, fingerprint = accepted_native_build(Path(folder))
+            pointer = json.loads((base / "accepted.json").read_text()); pointer["extra"] = "open"
+            atomic_json(base / "accepted.json", pointer)
+            with self.assertRaises(Blocked):
+                worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, _target, fingerprint = accepted_native_build(Path(folder))
+            with self.assertRaises(Blocked):
+                worker.load_native_build(base, run_id="run-e03",
+                                         expected_fingerprint="sha256:" + "8" * 64)
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, _target, fingerprint = accepted_native_build(
+                Path(folder), result_revision="b" * 40)
+            with self.assertRaises(Blocked):
+                worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, _target, fingerprint = accepted_native_build(
+                Path(folder), db_hash_override="sha256:" + "9" * 64)
+            with self.assertRaises(Blocked):
+                worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        with tempfile.TemporaryDirectory() as folder:
+            base, attempt, _target, fingerprint = accepted_native_build(Path(folder))
+            (attempt / "outputs/u/compile_commands.json").write_text("[]\n")
+            with self.assertRaises(Blocked):
+                worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+
+    def test_normalized_three_tool_output_is_deterministic_hash_bound_and_has_no_promotion(self):
+        with tempfile.TemporaryDirectory() as folder:
+            attempt = Path(folder, "attempt"); attempt.mkdir()
+            target = Path(folder, "target"); shutil.copytree(FIXTURE / "target", target)
+            clang, csa = trial_tree(attempt)
+            adapted, unsupported = adapters.adapt_compile_database(
+                json.loads((FIXTURE / "compile_commands.json").read_text()))
+            unit = {"unit_id": "dir:.", "build_variant": VARIANT,
+                    "compile_database": {"path": "outputs/u/compile_commands.json",
+                        "sha256": "sha256:" + "1" * 64, "entries": 2,
+                        "adapted_path": "adapted-inputs/0123456789abcdef/compile_commands.json",
+                        "adapted_sha256": adapters.canonical_sha(adapted)},
+                    "adapted": adapted, "unsupported": unsupported}
+            inputs = {"image": self.IMAGE, "config": json.loads(worker.CONFIG.read_text()),
+                      "config_sha256": sha(worker.CONFIG)}
+            first = worker.normalize_unit(unit, target=target, attempt=attempt,
+                clang_trial=clang, csa_trial=csa, inputs=inputs)
+            second = worker.normalize_unit(unit, target=target, attempt=attempt,
+                clang_trial=clang, csa_trial=csa, inputs=inputs)
+        self.assertEqual(first, second)
+        self.assertEqual([tool["tool_id"] for tool in first["tools"]], list(worker.TOOLS))
+        self.assertEqual(len(first["leads"]), 3)
+        encoded = json.dumps(first).lower()
+        self.assertNotIn("raw analyzer message", encoded)
+        self.assertNotIn("severity", encoded)
+        self.assertNotIn("raw csa message", encoded)
+        self.assertEqual(first["coverage_gaps"], ["unsupported-translation-unit:README.md"])
+
+    def test_analyzer_errors_are_explicit_partial_coverage_gaps(self):
+        with tempfile.TemporaryDirectory() as folder:
+            attempt = Path(folder, "attempt"); attempt.mkdir()
+            target = Path(folder, "target"); shutil.copytree(FIXTURE / "target", target)
+            clang, csa = trial_tree(attempt)
+            manifest_path = clang / "scratch/native-sast/native-sast-manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["clang_tidy"]["files_nonzero_exit"] = 1
+            manifest["cppcheck"]["exit_code"] = 2
+            atomic_json(manifest_path, manifest)
+            summary_path = csa / "scratch/csa/csa-summary.json"
+            summary = json.loads(summary_path.read_text()); summary["tu_error"] = 1
+            atomic_json(summary_path, summary)
+            adapted, unsupported = adapters.adapt_compile_database(
+                json.loads((FIXTURE / "compile_commands.json").read_text()))
+            unit = {"unit_id": "dir:.", "build_variant": VARIANT,
+                    "compile_database": {"path": "db", "sha256": "sha256:" + "1" * 64,
+                        "entries": 2, "adapted_path": "adapted-inputs/0123456789abcdef/compile_commands.json",
+                        "adapted_sha256": adapters.canonical_sha(adapted)},
+                    "adapted": adapted, "unsupported": unsupported}
+            inputs = {"image": self.IMAGE, "config": json.loads(worker.CONFIG.read_text()),
+                      "config_sha256": sha(worker.CONFIG)}
+            result = worker.normalize_unit(unit, target=target, attempt=attempt,
+                clang_trial=clang, csa_trial=csa, inputs=inputs)
+        self.assertEqual([tool["status"] for tool in result["tools"]], ["PARTIAL", "ERROR", "PARTIAL"])
+        self.assertTrue(any(gap.startswith("clang-tidy-tool-error") for gap in result["coverage_gaps"]))
+        self.assertTrue(any(gap.startswith("cppcheck-tool-error") for gap in result["coverage_gaps"]))
+        self.assertTrue(any(gap.startswith("clang-static-analyzer-tool-error") for gap in result["coverage_gaps"]))
+
+    def test_requests_are_offline_read_only_pinned_and_never_execute_targets(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder, "target"); target.mkdir()
+            db = Path(folder, "db"); db.mkdir()
+            inputs = {"target_path": str(target), "source_snapshot_sha256": "sha256:" + "1" * 64,
+                      "image": self.IMAGE, "config": json.loads(worker.CONFIG.read_text())}
+            unit = {"unit_id": "dir:."}
+            with mock.patch.object(worker, "_permission", return_value={"requirement": {}, "grants": [], "decision": {}}):
+                requests = [worker._request("run", "a", inputs, unit, db, group)
+                            for group in ("clang-cppcheck", "csa")]
+        for request in requests:
+            self.assertEqual(request["network"], {"mode": "none", "destinations": []})
+            self.assertEqual(request["image"], self.IMAGE)
+            self.assertEqual(request["target_mounts"][0]["container_path"], "/workspace")
+            command = " ".join(request["argv"])
+            self.assertNotIn("/workspace/src/greet", command)
+            self.assertNotIn("make", command)
+
+    def test_result_schema_and_registry_are_nominal_not_executable_or_qualified(self):
+        template = json.loads((ROOT / "registry/job-templates/02-native-sast.json").read_text())
+        contract = json.loads((ROOT / "registry/output-contracts/native-sast.json").read_text())
+        self.assertFalse(template["implemented"])
+        self.assertEqual(template["composition"]["output_contract_id"], contract["contract_id"])
+        self.assertIn("implemented_not_qualified", (ROOT / "native_sast.py").read_text())
+        with tempfile.TemporaryDirectory() as folder:
+            attempt = Path(folder, "attempt"); attempt.mkdir()
+            target = Path(folder, "target"); shutil.copytree(FIXTURE / "target", target)
+            clang, csa = trial_tree(attempt)
+            adapted, unsupported = adapters.adapt_compile_database(
+                json.loads((FIXTURE / "compile_commands.json").read_text()))
+            unit = {"unit_id": "dir:.", "build_variant": VARIANT,
+                    "compile_database": {"path": "outputs/u/compile_commands.json",
+                        "sha256": "sha256:" + "1" * 64, "entries": 2,
+                        "adapted_path": "adapted-inputs/0123456789abcdef/compile_commands.json",
+                        "adapted_sha256": adapters.canonical_sha(adapted)},
+                    "adapted": adapted, "unsupported": unsupported}
+            inputs = {"image": self.IMAGE, "config": json.loads(worker.CONFIG.read_text()),
+                      "config_sha256": sha(worker.CONFIG)}
+            normalized = worker.normalize_unit(unit, target=target, attempt=attempt,
+                clang_trial=clang, csa_trial=csa, inputs=inputs)
+            result = {"schema": worker.SCHEMA, "run_id": "run-e03", "job_id": worker.JOB,
+                "attempt_id": "attempt", "source_snapshot_sha256": "sha256:" + "1" * 64,
+                "native_build": {"job_id": worker.UPSTREAM_JOB, "attempt_id": "native-attempt",
+                    "fingerprint": "sha256:" + "2" * 64, "pointer_sha256": "sha256:" + "3" * 64,
+                    "envelope_sha256": "sha256:" + "4" * 64, "result_sha256": "sha256:" + "5" * 64,
+                    "source_revision": "a" * 40},
+                "status": "OK_WITH_GAPS", "units": [normalized],
+                "coverage_gaps": normalized["coverage_gaps"]}
+            atomic_json(attempt / worker.RESULT, result)
+            atomic_json(attempt / worker.RECEIPTS, [])
+            (attempt / worker.SUMMARY).write_text("# Native SAST\n")
+            status = {"process": worker.JOB, "status": "OK_WITH_GAPS",
+                "source_snapshot_sha256": result["source_snapshot_sha256"],
+                "native_build_attempt_id": "native-attempt", "build_variants": [VARIANT["variant_id"]],
+                "tools_run": list(worker.TOOLS), "leads": 3, "network": "none",
+                "qualification": "implemented_not_qualified"}
+            atomic_json(attempt / "status.json", status)
+            fingerprint = "sha256:" + "f" * 64
+            envelope = terminal_envelope(run_id="run-e03", job_id=worker.JOB,
+                attempt_id="attempt", worker_kind="pinned_container", execution_status="OK_WITH_GAPS",
+                acceptance_status="CURRENT", input_fingerprint=fingerprint,
+                output_contract=worker.CONTRACT, started_at="2026-09-27T00:00:00Z",
+                finished_at="2026-09-27T00:00:01Z", summary="three analyzer leads",
+                artifacts=artifact_records(attempt, [worker.RESULT, worker.RECEIPTS,
+                    worker.SUMMARY, "status.json"]), gaps=result["coverage_gaps"])
+            self.assertEqual(validate_document(result, "native-sast.schema.json"), [])
+            self.assertEqual(validate_job_output(attempt, envelope, fingerprint,
+                expected_run_id="run-e03", expected_job_id=worker.JOB,
+                orchestration=NO_ORCHESTRATION_FACTS), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
