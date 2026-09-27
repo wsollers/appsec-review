@@ -53,6 +53,7 @@ import test_intelligence_ingest as test_intelligence_worker
 import test_result_ingest as test_result_worker
 import remediation_proposal as remediation_proposal_worker
 import claim_review_lifecycle as claim_review_worker
+import claim_reviewer_pool
 import resource_pools
 import json
 import os
@@ -661,8 +662,11 @@ remediation_proposal_lifecycle_work = automatic_common_lifecycle_op(
 
 def claim_review_lifecycle_op(stage):
     @op(name='job_' + stage.replace('-', '_'),
-        ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
     def review_stage(context, configured, upstream):
+        pool_result = claim_reviewer_pool.run(
+            configured['engagement_run_id'], context.run_id, stage,
+            configured['force'])
         result = claim_review_worker.run(
             configured['engagement_run_id'], context.run_id, stage,
             configured['force'])
@@ -671,6 +675,7 @@ def claim_review_lifecycle_op(stage):
         context.add_output_metadata({
             'output': MetadataValue.path(str(attempt / claim_review_worker.core.STAGES[stage][4])),
             'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'reviewer_pool_attempt_id': pool_result['attempt_id'],
             'attempt_id': result['attempt_id']})
         return result
     return review_stage
