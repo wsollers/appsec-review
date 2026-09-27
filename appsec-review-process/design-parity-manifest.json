@@ -1156,19 +1156,30 @@
           "01-component-characterization"
         ]
       },
-      "registry": null,
+      "registry": {
+        "template": "03-threat-model-dfd-stride",
+        "persona": "developer-engineer",
+        "role": "threat-model-core",
+        "domain": "threat-model-core",
+        "tooling_profile": "threat-model-static-evidence",
+        "output_contract": "threat-model-core"
+      },
       "execution": {
-        "mode": "none",
-        "worker": null,
-        "validator": null
+        "mode": "deterministic_python",
+        "worker": "appsec-review-process/threat_model_core.py:run",
+        "validator": "appsec-review-process/threat_model_core.py:validate"
       },
       "output": {
-        "contract": "03-threat-model-dfd-stride",
-        "contract_file": null,
-        "schema_file": null,
-        "claim_class": "planned_contract_output"
+        "contract": "threat-model-core",
+        "contract_file": "appsec-review-process/registry/output-contracts/threat-model-core.json",
+        "schema_file": "schemas/integrated-threat-model.schema.json",
+        "claim_class": "threat_model_candidate"
       },
-      "permissions": [],
+      "permissions": [
+        "read-source",
+        "read-run-data",
+        "write-run-data"
+      ],
       "dagster": {
         "standalone_jobs": [],
         "lifecycle_binding": {
@@ -1181,23 +1192,22 @@
         ]
       },
       "resource_pool": "unassigned",
-      "readiness": "missing_prerequisites",
+      "readiness": "standalone_only",
       "qualification": {
         "levels": [
-          "none"
+          "unit"
         ],
-        "references": []
+        "references": [
+          "appsec-review-process/tests/test_threat_model_core.py"
+        ]
       },
       "gaps": [
-        "missing_dedicated_output_schema",
-        "missing_output_contract",
-        "missing_registry_composition",
-        "missing_validator",
-        "missing_worker",
-        "no_qualification",
+        "shared_dagster_graph_not_integrated",
+        "claim_ledger_routing_not_integrated",
+        "no_live_qualification",
         "unassigned_resource_pool"
       ],
-      "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification."
+      "next_prerequisite": "Bind the qualified core to accepted F03/F02 lifecycle outputs, candidate claim-ledger routing, and live qualification."
     },
     {
       "id": "04-asvs-masvs",
