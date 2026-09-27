@@ -1,0 +1,43 @@
+{
+  "schema": "appsec-review/qualification-evidence/0.1",
+  "qualification": "happy-path-dagster-integration",
+  "qualified_at": "2026-09-27T10:20:00Z",
+  "scope": [
+    "02-full-review-input-assembly standalone Dagster job",
+    "04-asvs-masvs OWASP join/report standalone Dagster job",
+    "10-synthesis-report standalone Dagster job",
+    "launch_job standalone run-config generation",
+    "authoritative job-template and output-contract bindings"
+  ],
+  "result": "PASS",
+  "assertions": [
+    "the Definitions repository loads all three public jobs",
+    "Dagster validates each generated standalone run configuration",
+    "full_review_input_assembly routes config to full_review_input_assembly_standalone_work",
+    "owasp_join_report routes config to owasp_join_report_standalone_work",
+    "synthesis_report requires no op-specific launch configuration",
+    "each implemented template references its schema-valid authoritative output contract",
+    "the full-review lifecycle graph uses every authoritative LIFECYCLE_OPS definition"
+  ],
+  "commands": [
+    {
+      "command": "orchestrator/dagster/code-location.sh run -B -m unittest appsec-review-process/tests/test_happy_path_integration.py appsec-review-process/tests/test_dagster.py",
+      "tests": 10,
+      "result": "PASS"
+    },
+    {
+      "command": "orchestrator/dagster/code-location.sh run -B -m unittest appsec-review-process/tests/test_happy_path_integration.py appsec-review-process/tests/test_synthesis_report_worker.py appsec-review-process/tests/test_owasp_join_report.py appsec-review-process/tests/test_owasp_join_publisher.py",
+      "tests": 23,
+      "result": "PASS"
+    }
+  ],
+  "owasp_live_chain": {
+    "rerun": false,
+    "reason": "the retained long-running qualification was used as instructed",
+    "evidence": "docs/evidence/owasp-chain-qualification.md"
+  },
+  "limitations": [
+    "this qualification stops at Dagster's validated run-config boundary and does not require a live daemon",
+    "it does not repeat the approximately seven-minute OWASP live chain"
+  ]
+}

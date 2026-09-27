@@ -35,7 +35,8 @@ class DagsterTests(unittest.TestCase):
         self.assertIn('critical_findings_sarif',{job.name for job in repository.get_all_jobs()})
         self.assertIn('ossf_scorecard',{job.name for job in repository.get_all_jobs()})
         self.assertIn('repository_partition_discovery',{job.name for job in repository.get_all_jobs()})
-        for job in ('native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist',
+        for job in ('full_review_input_assembly','synthesis_report','owasp_join_report',
+                    'native_memory_analysis','fuzz_target_triage','owasp_component_routing','owasp_validation_worklist',
                     'stig_srg_validation_worklist','deployment_hardening','sbom_inventory',
                     'sca_vulnerability_match','license_scan','dependency_lifecycle','cve_reachability',
                     'persona_tool_pool_dispatch','deterministic_pool_merge','evidence_qualified_quorum',
@@ -45,8 +46,11 @@ class DagsterTests(unittest.TestCase):
         self.assertIn('nvd_reference_sync',{job.name for job in repository.get_all_jobs()})
         self.assertIn('nvd_reference_schedule',{schedule.name for schedule in repository.schedule_defs})
         names={node.name for node in full_review.graph.node_defs}
-        for name in LIFECYCLE:
-            if name not in ('00-intake','02-evidence-index'): self.assertIn('job_'+name.replace('-','_'),names)
+        # LIFECYCLE_OPS is authoritative: several accepted producers retain a stable public
+        # worker name which intentionally differs from the mechanically derived graph name.
+        from dagster_workflow import LIFECYCLE_OPS
+        for name, op_def in LIFECYCLE_OPS.items():
+            self.assertIn(op_def.name, names, name)
         self.assertIn('build_discovery_work',names)
         self.assertIn('evidence_index_work',names)
         self.assertIn('job_02_ossf_scorecard',names)
