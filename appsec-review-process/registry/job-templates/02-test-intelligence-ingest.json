@@ -9,8 +9,10 @@
     "role_id": "test-intelligence-extractor",
     "domain_id": "qa-test-artifacts",
     "tooling_profile_id": "static-test-doc-parser",
-    "output_contract_id": "intelligence-extract"
+    "output_contract_id": "test-intelligence"
   },
+  "implemented": false,
+  "permissions": ["read-source", "read-run-data", "write-run-data"],
   "inputs": {
     "required": [
       "tests path",
@@ -42,6 +44,7 @@
       "acceptance-flow-inventory.json",
       "smoke-release-gates.json",
       "load-abuse-capacity-notes.json"
+      ,"test-intelligence.json","permission.json","lineage.json"
     ]
   },
   "prompt_sections": [

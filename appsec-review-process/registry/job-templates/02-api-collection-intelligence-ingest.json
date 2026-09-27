@@ -9,8 +9,10 @@
     "role_id": "api-collection-intelligence-extractor",
     "domain_id": "api-collection-artifacts",
     "tooling_profile_id": "static-api-collection-parser",
-    "output_contract_id": "intelligence-extract"
+    "output_contract_id": "api-collection-intelligence"
   },
+  "implemented": false,
+  "permissions": ["read-source", "read-run-data", "write-run-data"],
   "inputs": {
     "required": [
       "collection path",
@@ -34,6 +36,7 @@
       "api-collection-summary.md",
       "security-test-coverage.json",
       "candidate-verification-requests.json"
+      ,"api-collection-intelligence.json","permission.json","lineage.json"
     ]
   },
   "prompt_sections": [

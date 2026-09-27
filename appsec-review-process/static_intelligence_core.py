@@ -56,6 +56,8 @@ def _code_hashes(job: str) -> dict[str, str]:
     values["schemas/" + schema] = file_hash(ROOT.parent / "schemas" / schema)
     values["schemas/static-intelligence-record.schema.json"] = file_hash(
         ROOT.parent / "schemas/static-intelligence-record.schema.json")
+    values["schemas/static-intelligence-source.schema.json"] = file_hash(
+        ROOT.parent / "schemas/static-intelligence-source.schema.json")
     return values
 
 
@@ -101,7 +103,7 @@ def _candidate(job: str, path: str) -> bool:
 def _redacted(path: str, data: bytes) -> tuple[str | None, str, int]:
     outcome = redaction._process(data, path, redaction.DEFAULT_LIMITS)
     if outcome.disposition == "withheld" or outcome.data is None:
-        return None, outcome.reason or "withheld", 0
+        return None, "WITHHELD", 0
     return outcome.data.decode("utf-8", errors="replace"), outcome.disposition, sum(outcome.counts.values())
 
 
@@ -240,14 +242,14 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
             "static_only": True, "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
-            dagster_run_id=dagster_id, worker_kind="deterministic", output_contract=contract,
+            dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=result["status"], summary=f"Published {len(result['records'])} redacted static intelligence record(s).",
             status_record=status, artifact_paths=[result_name, "status.json", "permission.json", "lineage.json"],
             gaps=result["coverage_gaps"] or None,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,
-        worker_kind="deterministic", output_contract=contract,
+        worker_kind="deterministic_python", output_contract=contract,
         resume_command=f"python -B appsec-review-process/{job[3:].replace('-', '_')}.py {run_id}",
         derive_inputs=lambda: current_inputs(run_id, job), fingerprint_inputs=lambda value: _hash(value),
         execute_attempt=execute, preflight_failure_inputs=lambda exc: {"run_id": run_id, "job": job,

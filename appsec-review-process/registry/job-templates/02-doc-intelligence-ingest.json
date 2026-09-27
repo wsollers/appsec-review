@@ -9,8 +9,10 @@
     "role_id": "doc-intelligence-extractor",
     "domain_id": "functional-design-docs",
     "tooling_profile_id": "static-doc-parser",
-    "output_contract_id": "intelligence-extract"
+    "output_contract_id": "doc-intelligence"
   },
+  "implemented": false,
+  "permissions": ["read-source", "read-run-data", "write-run-data"],
   "inputs": {
     "required": [
       "document source path",
@@ -37,6 +39,7 @@
       "dfd-seeds.json",
       "network-topology-seeds.json",
       "product-abuse-seeds.json"
+      ,"doc-intelligence.json","permission.json","lineage.json"
     ]
   },
   "prompt_sections": [
