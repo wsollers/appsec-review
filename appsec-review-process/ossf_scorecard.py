@@ -224,12 +224,6 @@ def current_inputs(run_id: str, persist_handoff: bool = True) -> dict[str, Any]:
                        "executable": str(Path(sys.executable).resolve()),
                        "image": os.environ.get("APPSEC_WORKER_IMAGE", "appsec-review-dagster:local")},
               "code": {"ossf_scorecard.py": file_hash(Path(__file__)),
-                       "deterministic_child.py": file_hash(ROOT / "deterministic_child.py"),
-                       "execution_state.py": file_hash(ROOT / "execution_state.py"),
-                       "process_gate.py": file_hash(ROOT / "process_gate.py"),
-                       "create_job_handoff.py": file_hash(ROOT / "create_job_handoff.py"),
-                       "publish_job_output.py": file_hash(ROOT / "publish_job_output.py"),
-                       "validate_job_output.py": file_hash(ROOT / "validate_job_output.py"),
                        f"registry/job-templates/{JOB_ID}.json": file_hash(
                            ROOT / "registry" / "job-templates" / f"{JOB_ID}.json")},
               "child_execution": {"contract": CHILD_CONTRACT, "argv_only": True,

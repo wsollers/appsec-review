@@ -588,3 +588,12 @@ if __name__ == '__main__':
     import sys
     attempt = validate(sys.argv[1])  # usage: build_plan.py <run_id>
     print(json.dumps({'status': 'PASS', 'attempt': str(attempt)}))
+
+
+# ADR-0013: drop shared runtime modules from this job's code fingerprint.
+_code_hashes_all = _code_hashes
+
+
+def _code_hashes(*args, **kwargs):
+    from execution_state import drop_shared_runtime
+    return drop_shared_runtime(_code_hashes_all(*args, **kwargs))

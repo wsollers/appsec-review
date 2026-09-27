@@ -227,12 +227,6 @@ def current_inputs(run_id: str) -> dict[str, Any]:
                      "executable": str(Path(sys.executable).resolve()),
                      "image": os.environ.get("APPSEC_WORKER_IMAGE", "appsec-review-dagster:local")},
             "code": {"critical_findings_sarif.py": file_hash(Path(__file__)),
-                     "deterministic_child.py": file_hash(ROOT / "deterministic_child.py"),
-                     "execution_state.py": file_hash(ROOT / "execution_state.py"),
-                     "process_gate.py": file_hash(ROOT / "process_gate.py"),
-                     "publish_job_output.py": file_hash(ROOT / "publish_job_output.py"),
-                     "validate_job_output.py": file_hash(ROOT / "validate_job_output.py"),
-                     "worker_result.py": file_hash(ROOT / "worker_result.py"),
                      f"registry/job-templates/{JOB_ID}.json": file_hash(
                          ROOT / "registry" / "job-templates" / f"{JOB_ID}.json"),
                      f"registry/output-contracts/{OUTPUT_CONTRACT}.json": file_hash(

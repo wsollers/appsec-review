@@ -325,10 +325,7 @@ def _partition_inputs(run_id, handoff, handoff_file, supplied):
                     'input_fingerprint': handoff['input_fingerprint']},
         'supplied': ({'path': str(supplied), 'sha256': file_hash(supplied)}
                      if supplied.is_file() else None),
-        'code': {'discovery_gate.py': file_hash(Path(__file__)),
-                 'create_job_handoff.py': file_hash(ROOT / 'create_job_handoff.py'),
-                 'publish_job_output.py': file_hash(ROOT / 'publish_job_output.py'),
-                 'validate_job_output.py': file_hash(ROOT / 'validate_job_output.py')},
+        'code': {'discovery_gate.py': file_hash(Path(__file__)),},
     }
 
 
@@ -428,8 +425,7 @@ def _run_partition(run_id, dagster_id, force=False):
             'preflight_error': f'{type(exc).__name__}: {exc}',
             'supplied': ({'path': str(supplied), 'sha256': file_hash(supplied)}
                          if supplied.is_file() and not supplied.is_symlink() else None),
-            'code': {'discovery_gate.py': file_hash(Path(__file__)),
-                     'publish_job_output.py': file_hash(ROOT / 'publish_job_output.py')},
+            'code': {'discovery_gate.py': file_hash(Path(__file__)),},
         }
 
     def preflight_validate(_record):
@@ -545,12 +541,6 @@ def _automatic_partition_inputs(run_id):
         'source_revision': identity.get('revision'),
         'code': {
             'discovery_gate.py': file_hash(Path(__file__)),
-            'persona_dispatch.py': file_hash(ROOT / 'persona_dispatch.py'),
-            'claude_cli_invoker.py': file_hash(ROOT / 'claude_cli_invoker.py'),
-            'persona_invocation.py': file_hash(ROOT / 'persona_invocation.py'),
-            'persona_prompt_assembly.py': file_hash(ROOT / 'persona_prompt_assembly.py'),
-            'publish_job_output.py': file_hash(ROOT / 'publish_job_output.py'),
-            'validate_job_output.py': file_hash(ROOT / 'validate_job_output.py'),
             'automatic_discovery.py': file_hash(ROOT / 'automatic_discovery.py'),
         },
     }
@@ -815,11 +805,6 @@ def _automatic_project_inputs(run_id, job):
         'upstream': _upstream_record(run_id, job),
         'code': {
             'discovery_gate.py': file_hash(Path(__file__)),
-            'persona_dispatch.py': file_hash(ROOT / 'persona_dispatch.py'),
-            'claude_cli_invoker.py': file_hash(ROOT / 'claude_cli_invoker.py'),
-            'persona_invocation.py': file_hash(ROOT / 'persona_invocation.py'),
-            'persona_prompt_assembly.py': file_hash(ROOT / 'persona_prompt_assembly.py'),
-            'validate_job_output.py': file_hash(ROOT / 'validate_job_output.py'),
             'automatic_discovery.py': file_hash(ROOT / 'automatic_discovery.py'),
         },
     }

@@ -652,3 +652,12 @@ if __name__ == "__main__":
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
     print(json.dumps(run(args.run_id, args.dagster_run_id, args.force), indent=2))
+
+
+# ADR-0013: drop shared runtime modules from this job's code fingerprint.
+_code_hashes_all = _code_hashes
+
+
+def _code_hashes(*args, **kwargs):
+    from execution_state import drop_shared_runtime
+    return drop_shared_runtime(_code_hashes_all(*args, **kwargs))

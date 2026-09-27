@@ -522,3 +522,12 @@ def validate(run_id: str, *, native_build_root: Path, native_build_fingerprint: 
         expected_run_id=run_id, expected_job_id=JOB)
     _validate_attempt(run_id, attempt, inputs)
     return attempt
+
+
+# ADR-0013: drop shared runtime modules from this job's code fingerprint.
+_code_hashes_all = _code_hashes
+
+
+def _code_hashes(*args, **kwargs):
+    from execution_state import drop_shared_runtime
+    return drop_shared_runtime(_code_hashes_all(*args, **kwargs))

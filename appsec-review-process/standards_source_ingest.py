@@ -385,3 +385,12 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ADR-0013: drop shared runtime modules from this job's code fingerprint.
+_code_hashes_all = _code_hashes
+
+
+def _code_hashes(*args, **kwargs):
+    from execution_state import drop_shared_runtime
+    return drop_shared_runtime(_code_hashes_all(*args, **kwargs))

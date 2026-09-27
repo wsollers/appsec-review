@@ -558,3 +558,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.command == "stage-control": print(stage_control(args.run_id, args.mode, args.reuse))
     else: print(validate(args.run_id))
+
+
+# ADR-0013: drop shared runtime modules from this job's code fingerprint.
+_code_hashes_all = _code_hashes
+
+
+def _code_hashes(*args, **kwargs):
+    from execution_state import drop_shared_runtime
+    return drop_shared_runtime(_code_hashes_all(*args, **kwargs))

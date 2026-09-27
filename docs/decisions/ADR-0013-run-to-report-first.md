@@ -49,7 +49,13 @@ front half.
    limitations and disclaimers is not scanned with phrase rules and cannot fail a job; "not a
    verified finding" or "the compiler is fixed as clang" is just text. The phrase rules in
    `persona_invocation.py` and `validate_job_output.py` remain only as diagnostics.
-8. **Commits.** Small fixes go straight to `main` with a message naming the breakage. A larger
+8. **Job fingerprints cover a job's own code and inputs, not shared runtime** (William,
+   2026-09-27). `execution_state.SHARED_RUNTIME` lists the shared runtime and validator modules
+   (container adapter, permission model, publication and validation, persona adapter and CLI
+   invoker, redactor, pools, schema/graph helpers); every job's code fingerprint drops them, so a
+   fix there does not re-run accepted jobs. A job still re-runs when its own module, contract,
+   schema or inputs change.
+9. **Commits.** Small fixes go straight to `main` with a message naming the breakage. A larger
    rework may use a short-lived branch.
 
 ## Consequences

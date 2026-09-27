@@ -236,3 +236,12 @@ if __name__=="__main__":
     facts=dispatch.DispatchFacts(args.registry_dir,tuple(json.loads(item) for item in args.allowed_model_json),
         args.invoker_id,args.source_snapshot_sha256,json.loads(args.registry_ceiling_json))
     print(json.dumps(run(args.run_id,args.dagster_run_id,facts,args.force),indent=2))
+
+
+# ADR-0013: drop shared runtime modules from this job's code fingerprint.
+_code_hashes_all = _code_hashes
+
+
+def _code_hashes(*args, **kwargs):
+    from execution_state import drop_shared_runtime
+    return drop_shared_runtime(_code_hashes_all(*args, **kwargs))
