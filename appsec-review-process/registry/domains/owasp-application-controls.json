@@ -28,5 +28,9 @@
     "component tag cloud",
     "source/config evidence",
     "QA/doc intelligence where available"
-  ]
+  ],
+  "reference_ingest_boundary": {
+    "allowed": ["pinned OWASP controls/tests/context", "pinned OpenCRE navigation crosswalks"],
+    "forbidden": ["compliance proof", "finding promotion", "severity", "runtime state", "unapproved standard-family selection"]
+  }
 }

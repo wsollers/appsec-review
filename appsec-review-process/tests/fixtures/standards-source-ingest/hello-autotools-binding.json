@@ -1,0 +1,15 @@
+{
+  "schema": "appsec-review/standards-source-binding/1.0",
+  "run_id": "hello-autotools-s01",
+  "selected_snapshots": [
+    {"family": "opencre", "edition": "snapshot-2026-09-19", "snapshot_id": "sha256-42bf4175932a5a36", "manifest_sha256": "sha256:920b9fed4234e5ed245fe84697b602990ce0a1c6e6d276fce4de755ed711ad50", "selection_basis": "approved navigation metadata for the first fixture report"},
+    {"family": "owasp_asvs", "edition": "5.0.0", "snapshot_id": "sha256-e48ca4caa6619973", "manifest_sha256": "sha256:dc1202b0cb6de410f6c7f99732b33fbd0c00f0d80ccbe79b8e07fe21ba4321cc", "selection_basis": "approved ASVS 5.0.0 L2 source for the first fixture report"},
+    {"family": "owasp_top_10", "edition": "2025", "snapshot_id": "sha256-6c64c51786992d37", "manifest_sha256": "sha256:0c2fa6ac651263ef704cc289d11944193f9a09eb69501574bda2f74f01fec71e", "selection_basis": "approved awareness and routing context for the first fixture report"}
+  ],
+  "unselected_families": [
+    {"family": "owasp_api_security_top_10", "reason": "not selected for the first fixture report"},
+    {"family": "owasp_llm_top_10", "reason": "not selected for the first fixture report"},
+    {"family": "owasp_mastg", "reason": "not selected for the first fixture report"},
+    {"family": "owasp_masvs", "reason": "not selected for the first fixture report"}
+  ]
+}

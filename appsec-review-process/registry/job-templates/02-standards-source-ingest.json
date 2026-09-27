@@ -4,44 +4,14 @@
   "display_name": "Standards Source Ingestion",
   "process": "02-evidence-pregather",
   "budget_default": "standard",
-  "composition": {
-    "persona_id": "standards-reference-curator",
-    "role_id": "standards-source-ingestor",
-    "domain_id": "owasp-application-controls",
-    "tooling_profile_id": "standards-source-static-ingest",
-    "output_contract_id": "standards-source-extract"
-  },
-  "inputs": {
-    "required": [
-      "upstream standards source path or curated local reference",
-      "standard family and version/ref",
-      "license or usage notes"
-    ],
-    "optional": [
-      "existing appsec-review-process/standards/indexes/*",
-      "OpenCRE crosswalk records",
-      "DISA/STIG reference metadata"
-    ]
-  },
-  "outputs": {
-    "directory": "appsec-review-process/standards/catalog/<standard-family>/<version-or-ref>",
-    "files": [
-      "source-manifest.json",
-      "extraction-log.jsonl",
-      "controls/",
-      "tests/",
-      "indexes/",
-      "status.json"
-    ]
-  },
-  "prompt_sections": [
-    "governing_rules",
-    "persona",
-    "role",
-    "domain",
-    "tooling_profile",
-    "source_lineage",
-    "task",
-    "output_contract"
-  ]
+  "composition": {"persona_id": "standards-reference-curator", "role_id": "standards-source-ingestor", "domain_id": "owasp-application-controls", "tooling_profile_id": "standards-source-static-ingest", "output_contract_id": "standards-source-extract"},
+  "inputs": {"required": ["exact accepted intake source identity", "run-owned standards-source-binding.json", "repository-pinned data/reference/source-lock.json and selected snapshots"], "optional": []},
+  "outputs": {"directory": "data/jobs/02-standards-source-ingest/attempts/<attempt_id>", "files": ["standards-source.json", "standards/", "status.json", "permission.json", "lineage.json"]},
+  "prompt_sections": ["governing_rules", "role", "domain", "tooling_profile", "source_lineage", "output_contract"],
+  "implemented": false,
+  "timeout_seconds": 600,
+  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
+  "applicability": "explicitly selected repository-pinned OWASP/OpenCRE snapshots",
+  "permissions": ["read-run-inputs", "read-run-data", "write-run-data"],
+  "coordinator": "intake-coordinator"
 }
