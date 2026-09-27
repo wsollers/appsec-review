@@ -3261,23 +3261,22 @@
         ]
       },
       "resource_pool": "memory",
-      "readiness": "implemented_and_qualified",
+      "readiness": "implemented_not_qualified",
       "qualification": {
         "levels": [
-          "unit",
-          "host_integration",
-          "linux_integration",
-          "live_dagster",
-          "fault_recovery"
+          "unit"
         ],
         "references": [
-          "appsec-review-process/qualify_evidence_index.py"
+          "appsec-review-process/tests/test_evidence_index_enrichment.py",
+          "appsec-review-process/tests/test_evidence_index_metrics.py"
         ]
       },
       "gaps": [
-        "missing_dedicated_output_schema"
+        "derived_producer_selection_not_orchestrated",
+        "common_worker_envelope_migration_missing",
+        "live_enrichment_requalification_missing"
       ],
-      "next_prerequisite": "Pool assigned (memory, B15). Add a dedicated output schema."
+      "next_prerequisite": "Stage accepted derived-producer selections, migrate the legacy publication to the common envelope, and requalify the enriched lifecycle live."
     },
     {
       "id": "02-secrets-inventory",
