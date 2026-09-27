@@ -1013,17 +1013,20 @@ class JobContractBindingTests(unittest.TestCase):
         import validate_job_output as validator
         graph = json.loads((ROOT / "job-graph.json").read_text(encoding="utf-8"))
         checked = 0
-        for template in sorted((REGISTRY / "job-templates").glob("*.json")):
+        for job_id, node_record in sorted(graph["jobs"].items()):
+            template_id = node_record.get("template")
+            if not template_id:
+                continue
+            template = REGISTRY / "job-templates" / f"{template_id}.json"
             record = json.loads(template.read_text(encoding="utf-8"))
-            job_id, contract_id = record["job_template_id"], record["composition"]["output_contract_id"]
+            contract_id = record["composition"]["output_contract_id"]
             with self.subTest(job=job_id):
                 self.assertEqual(validator._job_contract_errors(job_id, contract_id, graph, REGISTRY), [])
                 self.assertTrue(validator._job_contract_errors(job_id, "evidence-index" if contract_id != "evidence-index"
                                                                else "intake", graph, REGISTRY))
                 checked += 1
         self.assertGreaterEqual(checked, 16)
-        planned = next(job for job, item in graph["jobs"].items()
-                       if not (REGISTRY / "job-templates" / f"{job}.json").is_file())
+        planned = next(job for job, item in graph["jobs"].items() if not item.get("template"))
         self.assertTrue(validator._job_contract_errors(planned, "evidence-index", graph, REGISTRY))
         self.assertEqual(validator._job_contract_errors(planned, graph["jobs"][planned]["contract"], graph, REGISTRY), [])
 

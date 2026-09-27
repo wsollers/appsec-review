@@ -1202,15 +1202,17 @@ def _job_contract_errors(job_id: Any, contract_id: Any, graph: dict[str, Any], r
     if not isinstance(job_id, str) or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._-]*", job_id):
         return []  # reported as a job identity error elsewhere
     expected: set[str] = set()
-    template = Path(registry_root) / "job-templates" / f"{job_id}.json"
-    if template.is_file():
+    node = graph.get("jobs", {}).get(job_id) if isinstance(graph, dict) else None
+    template_id = node.get("template") if isinstance(node, dict) else job_id
+    template = (Path(registry_root) / "job-templates" / f"{template_id}.json"
+                if isinstance(template_id, str) and template_id else None)
+    if template is not None and template.is_file():
         try:
             declared = read_json(template).get("composition", {}).get("output_contract_id")
         except (OSError, ValueError, AttributeError):
             return ["job template cannot be read to determine the job's output contract"]
         if isinstance(declared, str):
             expected.add(declared)
-    node = graph.get("jobs", {}).get(job_id) if isinstance(graph, dict) else None
     if isinstance(node, dict) and isinstance(node.get("contract"), str):
         expected.add(node["contract"])
     expected.update(contract for contract, vendor in VENDOR_PREPASS_NODES.items() if vendor["job_id"] == job_id)
