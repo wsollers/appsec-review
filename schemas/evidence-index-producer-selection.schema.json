@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence-index-producer-selection.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "producer_jobs"],
+  "properties": {
+    "schema": {"const": "appsec-review/evidence-index-producer-selection/1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "producer_jobs": {
+      "type": "array", "maxItems": 32, "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

@@ -17,10 +17,12 @@ import sqlite3
 import sys
 import uuid
 
+import evidence_index_enrichment as enrichment
 from execution_state import (ROOT, Blocked, Lock, atomic_bytes, atomic_json, beneath,
                              data_path, digest, execute, file_hash, identifier, now,
                              read_json, tree_hashes)
 import phase1
+from schema_validate import validate_document
 
 LIMITS = {'max_files': 20000, 'max_file_bytes': 8 * 1024 * 1024,
           'max_total_bytes': 512 * 1024 * 1024, 'max_text_bytes': 2 * 1024 * 1024,
@@ -292,6 +294,14 @@ def root(run_id):
     return data_path(run_id, 'jobs', JOB, 'whole')
 
 
+def canonical_permissions(plan):
+    expected = read_json(ROOT / 'registry/job-templates/02-evidence-index.json').get('permissions')
+    supplied = plan.get('template', {}).get('permissions') if 'template' in plan else expected
+    if not isinstance(expected, list) or len(expected) != len(set(expected)) or supplied != expected:
+        raise Blocked('evidence index permissions differ from the canonical job template')
+    return expected
+
+
 def inputs(run_id):
     if file_hash(ROOT / 'evidence_store.py') != LOADED_WORKER_SHA256:
         raise Blocked('index implementation changed in a running worker; start a new launch')
@@ -312,8 +322,10 @@ def inputs(run_id):
         if pointer['upstream'] != upstream['fingerprint']:
             raise Blocked('build discovery belongs to another intake generation')
         producers.append({'kind': 'build_discovery', 'pointer': pointer})
-    return {'producers': producers, 'limits': LIMITS, 'format': 1, 'template': template, 'composition': records,
+    return {'producers': producers, 'derived': enrichment.selected_inputs(run_id),
+            'limits': LIMITS, 'format': 2, 'template': template, 'composition': records,
             'worker_sha256': file_hash(ROOT / 'evidence_store.py'),
+            'enrichment_sha256': file_hash(ROOT / 'evidence_index_enrichment.py'),
             'python': sys.version, 'sqlite': sqlite3.sqlite_version,
             'libfuzzy_sha256': file_hash(Path('/usr/lib/x86_64-linux-gnu/libfuzzy.so.2').resolve())}
 
@@ -325,6 +337,9 @@ def collect(run_id, attempt):
     upstream = plan['producers'][0]['pointer']
     intake = phase1.job_root(run_id) / 'attempts' / upstream['attempt_id']
     source = read_json(intake / 'evidence/source.json')
+    source_snapshot_sha256 = 'sha256:' + source['fingerprint']
+    derived = enrichment.build(run_id, plan.get('derived', {'selection_sha256': None, 'producers': []}),
+                               source_snapshot_sha256)
     scope = read_json(intake / 'outputs/intake.json')['scope']
     excluded = set(scope['excluded_paths'])
     target = Path(source['target'])
@@ -359,7 +374,14 @@ def collect(run_id, attempt):
       CREATE TABLE files(path TEXT PRIMARY KEY, sha256 TEXT NOT NULL, bytes INTEGER NOT NULL,
                          ssdeep TEXT NOT NULL, text_status TEXT NOT NULL);
       CREATE VIRTUAL TABLE chunks USING fts5(path UNINDEXED, sha256 UNINDEXED,
-        start_line UNINDEXED, end_line UNINDEXED, content, tokenize='unicode61');''')
+        start_line UNINDEXED, end_line UNINDEXED, content, tokenize='unicode61');
+      CREATE TABLE derived_records(record_id TEXT PRIMARY KEY, producer_job_id TEXT NOT NULL,
+        producer_attempt_id TEXT NOT NULL, producer_contract TEXT NOT NULL,
+        artifact_path TEXT NOT NULL, artifact_sha256 TEXT NOT NULL,
+        record_path TEXT NOT NULL, record_sha256 TEXT NOT NULL, type_label TEXT NOT NULL,
+        authority TEXT NOT NULL, redaction TEXT NOT NULL, source_snapshot_sha256 TEXT NOT NULL,
+        build_lineage_sha256 TEXT, partition_ids TEXT NOT NULL, component_ids TEXT NOT NULL,
+        search_text TEXT NOT NULL);''')
     total = chunks = 0
     signatures = io.StringIO()
     signatures.write('ssdeep,1.1--blocksize:hash:hash,filename\n')
@@ -404,6 +426,15 @@ def collect(run_id, attempt):
                                                                         '\n'.join(lines[start:end])))
                     chunks += 1
         db.commit()
+        for record in derived['records']:
+            db.execute('INSERT INTO derived_records VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (
+                record['record_id'], record['producer_job_id'], record['producer_attempt_id'],
+                record['producer_contract'], record['artifact_path'], record['artifact_sha256'], record['record_path'],
+                record['record_sha256'], record['type_label'], record['authority'], record['redaction'],
+                record['source_snapshot_sha256'], record['build_lineage_sha256'],
+                json.dumps(record['partition_ids'], separators=(',', ':')),
+                json.dumps(record['component_ids'], separators=(',', ':')), record['search_text']))
+        db.commit()
         db.execute("INSERT INTO chunks(chunks) VALUES ('integrity-check')")
         db.commit()
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
@@ -411,16 +442,71 @@ def collect(run_id, attempt):
         counts = dict(db.execute('SELECT text_status, count(*) FROM files GROUP BY text_status'))
         metrics = tally.document(source['fingerprint'], len(skipped))
         atomic_bytes(attempt / 'ssdeep.csv', signatures.getvalue().encode('utf-8'))
+        atomic_json(attempt / enrichment.RESULT, derived)
+        permissions = canonical_permissions(plan)
+        atomic_json(attempt / 'permission.json', {'schema': enrichment.PERMISSION_SCHEMA, 'run_id': run_id,
+                    'job_id': JOB, 'source_snapshot_sha256': source_snapshot_sha256,
+                    'permissions': permissions})
+        atomic_json(attempt / 'lineage.json', {'schema': enrichment.LINEAGE_SCHEMA, 'run_id': run_id,
+                    'job_id': JOB, 'source_snapshot_sha256': source_snapshot_sha256,
+                    'build_lineage_sha256': derived['build_lineage_sha256']})
         atomic_json(attempt / 'manifest.json', {'status': 'OK', 'source_fingerprint': source['fingerprint'],
                     'source_revision': source['revision'], 'files': sum(counts.values()), 'chunks': chunks,
                     'snapshot_bytes': total, 'text_status_counts': counts, 'excluded': skipped,
                     'untrusted_content': True, 'scope': 'source + accepted intake/build discovery outputs',
                     'producers': plan['producers'], 'limits': LIMITS, 'metrics': metrics,
-                    'metrics_sha256': hashlib.sha256(metrics_bytes(metrics)).hexdigest()})
+                    'metrics_sha256': hashlib.sha256(metrics_bytes(metrics)).hexdigest(),
+                    'enrichment': {'artifact': enrichment.RESULT,
+                                   'sha256': file_hash(attempt / enrichment.RESULT),
+                                   'producer_count': derived['producer_count'],
+                                   'record_count': derived['record_count'],
+                                   'coverage_gaps': derived['coverage_gaps']}})
         print(json.dumps({'files': sum(counts.values()), 'chunks': chunks, 'excluded': len(skipped)}))
         print('ssdeep hashes binary and text; full-text exclusions are recorded in files/manifest.', file=sys.stderr)
     finally:
         db.close()
+
+
+def check_enrichment(run_id, attempt, plan):
+    """Re-derive the bounded derived-record index without writing to the immutable attempt."""
+    source = read_json(phase1.job_root(run_id) / 'attempts' /
+                       plan['producers'][0]['pointer']['attempt_id'] / 'evidence/source.json')
+    source_snapshot_sha256 = 'sha256:' + source['fingerprint']
+    expected = enrichment.build(run_id, plan.get('derived', {'selection_sha256': None, 'producers': []}),
+                                source_snapshot_sha256)
+    found = read_json(attempt / enrichment.RESULT)
+    if found != expected or validate_document(found, 'evidence-index-enrichment.schema.json'):
+        raise Blocked('derived evidence enrichment differs from its accepted producer set')
+    manifest = read_json(attempt / 'manifest.json')
+    summary = manifest.get('enrichment')
+    if summary != {'artifact': enrichment.RESULT, 'sha256': file_hash(attempt / enrichment.RESULT),
+                   'producer_count': found['producer_count'], 'record_count': found['record_count'],
+                   'coverage_gaps': found['coverage_gaps']}:
+        raise Blocked('manifest derived enrichment identity is invalid')
+    db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
+    try:
+        rows = db.execute('SELECT record_id,producer_job_id,producer_attempt_id,producer_contract,artifact_path,artifact_sha256,'
+                          'record_path,record_sha256,type_label,authority,redaction,source_snapshot_sha256,'
+                          'build_lineage_sha256,partition_ids,component_ids,search_text '
+                          'FROM derived_records ORDER BY record_id').fetchall()
+    finally:
+        db.close()
+    expected_rows = sorted((r['record_id'], r['producer_job_id'], r['producer_attempt_id'], r['producer_contract'], r['artifact_path'],
+        r['artifact_sha256'], r['record_path'], r['record_sha256'], r['type_label'], r['authority'],
+        r['redaction'], r['source_snapshot_sha256'], r['build_lineage_sha256'],
+        json.dumps(r['partition_ids'], separators=(',', ':')),
+        json.dumps(r['component_ids'], separators=(',', ':')), r['search_text']) for r in found['records'])
+    if rows != expected_rows:
+        raise Blocked('SQLite derived records differ from the hash-bound enrichment artifact')
+    permission = {'schema': enrichment.PERMISSION_SCHEMA, 'run_id': run_id, 'job_id': JOB,
+                  'source_snapshot_sha256': source_snapshot_sha256,
+                  'permissions': canonical_permissions(plan)}
+    lineage = {'schema': enrichment.LINEAGE_SCHEMA, 'run_id': run_id, 'job_id': JOB,
+               'source_snapshot_sha256': source_snapshot_sha256,
+               'build_lineage_sha256': found['build_lineage_sha256']}
+    if read_json(attempt / 'permission.json') != permission or read_json(attempt / 'lineage.json') != lineage:
+        raise Blocked('evidence index F02 permission or lineage receipt is invalid')
+    return found
 
 
 def validate(run_id, pointer=None, fresh=True):
@@ -435,6 +521,8 @@ def validate(run_id, pointer=None, fresh=True):
         raise Blocked('index attempt is not successful')
     if fresh and digest(inputs(run_id)) != pointer['fingerprint']:
         raise Blocked('index is stale; rerun evidence_index')
+    if (attempt / enrichment.RESULT).is_file():
+        check_enrichment(run_id, attempt, read_json(attempt / 'inputs.json'))
     return pointer, attempt
 
 
@@ -493,6 +581,7 @@ def run(run_id, dagster_id, force=False):
             if manifest['files'] == 0 or manifest['chunks'] == 0:
                 raise Blocked('empty searchable corpus')
             check_metrics(attempt, False)
+            check_enrichment(run_id, attempt, plan)
             atomic_json(attempt / 'validation/post.json', {'status': 'OK', 'files': manifest['files'],
                                                         'chunks': manifest['chunks']})
             atomic_bytes(attempt / 'validation/post/stdout.log', b'Fresh producers and nonempty integrity-checked corpus validated.\n')
@@ -516,6 +605,16 @@ def run(run_id, dagster_id, force=False):
 def query(run_id, action, text='', path='', limit=10, start=1, fresh=True):
     with Lock(root(run_id) / 'job.lock'):
         return _query(run_id, action, text, path, limit, start, fresh)
+
+
+def query_derived(run_id, text='', partition_id='', component_id='', limit=10, fresh=True):
+    with Lock(root(run_id) / 'job.lock'):
+        _pointer, attempt = validate(run_id, fresh=fresh)
+        document = read_json(attempt / enrichment.RESULT)
+        return {'run_id': run_id, 'attempt_id': attempt.name, 'freshness_checked': fresh,
+                'untrusted_content': True,
+                'results': enrichment.query(document, text=text, partition_id=partition_id,
+                                            component_id=component_id, limit=limit)}
 
 
 def _query(run_id, action, text='', path='', limit=10, start=1, fresh=True):

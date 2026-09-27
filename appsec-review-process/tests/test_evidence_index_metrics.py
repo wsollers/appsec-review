@@ -236,7 +236,9 @@ class SchemaConventionTests(unittest.TestCase):
                 self.assertTrue(validate_document(document, store.METRICS_SCHEMA_FILE))
 
     def test_contract_declares_the_member_additively_and_descriptively(self):
-        self.assertEqual(CONTRACT['required_files'], ['manifest.json', 'index.sqlite', 'ssdeep.csv', 'status.json'])
+        self.assertEqual(CONTRACT['required_files'], [
+            'manifest.json', 'index.sqlite', 'ssdeep.csv', 'evidence-index-enrichment.json',
+            'permission.json', 'lineage.json', 'status.json'])
         self.assertEqual(CONTRACT['claim_types'], ['evidence_index'])
         self.assertNotIn('claim_class', CONTRACT)
         self.assertNotIn('result_schema', CONTRACT)  # parity manifest still says schema_file: null

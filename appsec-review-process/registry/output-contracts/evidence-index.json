@@ -6,6 +6,9 @@
     "manifest.json",
     "index.sqlite",
     "ssdeep.csv",
+    "evidence-index-enrichment.json",
+    "permission.json",
+    "lineage.json",
     "status.json"
   ],
   "member_schemas": [
@@ -27,6 +30,11 @@
   ],
   "validation_rules": [
     "fresh accepted upstream producers",
+    "an explicit run-owned producer selection admits only exact common accepted pointers and envelopes; stale, corrupt, duplicate, mixed-generation, wrong-contract or schema-invalid producers fail closed",
+    "evidence-index-enrichment.json validates against its closed schema and binds every derived record to producer job, attempt, contract, artifact path/hash, JSON record path/hash, type, redaction, source generation and optional build generation",
+    "derived query text is bounded and redacted, target-controlled documentation remains untrusted documented intent, and raw producer records or secret values are never copied into the enrichment",
+    "partition/component exposure is deterministic and bounded; it is an index locator, never review authority or observed runtime proof",
+    "permission.json and lineage.json use the canonical F02 receipt shapes and template permissions",
     "immutable snapshots and index hash validation",
     "explicit text and binary exclusions",
     "separate stdout/stderr",

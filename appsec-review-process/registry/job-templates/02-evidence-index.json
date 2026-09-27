@@ -24,6 +24,9 @@
       "manifest.json",
       "index.sqlite",
       "ssdeep.csv",
+      "evidence-index-enrichment.json",
+      "permission.json",
+      "lineage.json",
       "status.json"
     ]
   },
