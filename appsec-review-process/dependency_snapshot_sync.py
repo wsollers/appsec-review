@@ -182,7 +182,10 @@ def sync_one(spec: Any, grants: Any, *, run_id: str, source_snapshot_sha256: str
     opener = opener or urllib.request.build_opener(NoRedirect()).open
     try:
         archive = staging / "archive"; digest = hashlib.sha256(); size = 0
-        request = urllib.request.Request(spec["url"], headers={"Accept": "application/octet-stream"})
+        request = urllib.request.Request(spec["url"], headers={
+            "Accept": "application/octet-stream",
+            "User-Agent": "appsec-review-snapshot-sync/1.0",
+        })
         try:
             with opener(request, timeout=300) as response, archive.open("xb") as output:
                 if getattr(response, "status", 200) != 200: raise SyncBlocked("snapshot server did not return HTTP 200")
