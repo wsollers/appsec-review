@@ -7,7 +7,7 @@
   "result_schema": {"artifact": "component-purpose-map.json", "schema_file": "component-purpose-map.schema.json"},
   "claim_class": {
     "claim_class_id": "component_characterization",
-    "allowed_assertions": ["static-scope-classification", "statically-inferred-component-purpose", "review-routing", "coverage-gap", "rescope-trigger"],
+    "allowed_assertions": ["static-scope-classification", "statically-inferred-component-purpose", "evidence-backed-ownership", "component-relationship", "component-tag", "review-routing", "unknown", "coverage-gap", "rescope-trigger"],
     "forbidden_promotions": ["finding", "severity", "runtime-state"]
   },
   "validation_rules": [

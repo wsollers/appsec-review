@@ -96,7 +96,8 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "component_characterization",
         "allowed_assertions": {
             "static-scope-classification", "statically-inferred-component-purpose",
-            "review-routing", "coverage-gap", "rescope-trigger",
+            "evidence-backed-ownership", "component-relationship", "component-tag",
+            "review-routing", "unknown", "coverage-gap", "rescope-trigger",
         },
     },
 }

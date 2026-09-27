@@ -15,6 +15,7 @@ import component_characterization as cc
 import execution_state as state
 import persona_invocation as pi
 import persona_prompt_assembly as ppa
+import validate_job_output as output_validator
 from schema_validate import SchemaStore, validate_document
 from worker_result import artifact_records, terminal_envelope
 
@@ -55,11 +56,25 @@ class ComponentCharacterizationTests(unittest.TestCase):
                for name, directory, _schema, _field in pi.COMPOSITION_KINDS if name != "job_template"},
         }, store)
         ceiling = pi.claim_ceiling(records["role"], records["tooling_profile"])
-        self.assertEqual(set(ceiling["allowed"]), {
+        expected_ceiling = {
             "static_scope_classification", "statically_inferred_component_purpose",
             "evidence_backed_ownership", "component_relationship", "component_tag",
             "review_routing", "unknown", "coverage_gap", "rescope_trigger",
-        })
+        }
+        expected_contract = {
+            "static-scope-classification", "statically-inferred-component-purpose",
+            "evidence-backed-ownership", "component-relationship", "component-tag",
+            "review-routing", "unknown", "coverage-gap", "rescope-trigger",
+        }
+        self.assertEqual(set(ceiling["allowed"]), expected_ceiling)
+        contract = json.loads((ROOT / "registry/output-contracts/component-map.json").read_text(
+            encoding="utf-8"))
+        policy = output_validator.CLAIM_CLASS_POLICIES["component-map"]
+        contract_allowed = set(contract["claim_class"]["allowed_assertions"])
+        self.assertEqual(contract_allowed, expected_contract)
+        self.assertEqual(policy["allowed_assertions"], expected_contract)
+        self.assertEqual({item.replace("_", "-") for item in ceiling["allowed"]}, contract_allowed)
+        self.assertEqual(policy["claim_class_id"], contract["claim_class"]["claim_class_id"])
         self.assertTrue({"finding", "severity", "runtime_state"} <= set(ceiling["prohibited"]))
 
     def test_fixture_passes_deterministic_semantic_validation(self):
