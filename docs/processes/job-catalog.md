@@ -177,17 +177,17 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 | [Standards Source Ingestion](#job-02-standards-source-ingest) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-standards-source-ingest`](#a-job-02-standards-source-ingest) |
 | [Test Intelligence Ingestion](#job-02-test-intelligence-ingest) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-test-intelligence-ingest`](#a-job-02-test-intelligence-ingest) |
 | [Source SAST](#job-02-source-sast) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-source-sast`](#a-job-02-source-sast) |
-| [02-native-sast](#job-02-native-sast) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-native-sast`](#a-job-02-native-sast) |
-| [02-ir-capture](#job-02-ir-capture) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-ir-capture`](#a-job-02-ir-capture) |
-| [02-ir-link](#job-02-ir-link) | lifecycle job | [`02-ir-capture`](#a-job-02-ir-capture) | [`02-ir-link`](#a-job-02-ir-link) |
-| [02-ir-facts](#job-02-ir-facts) | lifecycle job | [`02-ir-link`](#a-job-02-ir-link) | [`02-ir-facts`](#a-job-02-ir-facts) |
-| [02-debug-symbol-index](#job-02-debug-symbol-index) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-debug-symbol-index`](#a-job-02-debug-symbol-index) |
-| [02-binary-triage](#job-02-binary-triage) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-binary-triage`](#a-job-02-binary-triage) |
-| [02-binary-cfg](#job-02-binary-cfg) | lifecycle job | [`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index) | [`02-binary-cfg`](#a-job-02-binary-cfg) |
-| [02-test-execution](#job-02-test-execution) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-test-execution`](#a-job-02-test-execution) |
-| [02-test-result-ingest](#job-02-test-result-ingest) | lifecycle job | [`02-test-execution`](#a-job-02-test-execution) | [`02-test-result-ingest`](#a-job-02-test-result-ingest) |
-| [02-test-coverage-ingest](#job-02-test-coverage-ingest) | lifecycle job | [`02-test-execution`](#a-job-02-test-execution) | [`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest) |
-| [02-operations-doc-ingest](#job-02-operations-doc-ingest) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest) |
+| [Native SAST](#job-02-native-sast) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-native-sast`](#a-job-02-native-sast) |
+| [IR Capture](#job-02-ir-capture) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-ir-capture`](#a-job-02-ir-capture) |
+| [IR Link](#job-02-ir-link) | lifecycle job | [`02-ir-capture`](#a-job-02-ir-capture) | [`02-ir-link`](#a-job-02-ir-link) |
+| [IR Facts](#job-02-ir-facts) | lifecycle job | [`02-ir-link`](#a-job-02-ir-link) | [`02-ir-facts`](#a-job-02-ir-facts) |
+| [Debug Symbol Index](#job-02-debug-symbol-index) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-debug-symbol-index`](#a-job-02-debug-symbol-index) |
+| [Static Binary Triage](#job-02-binary-triage) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-binary-triage`](#a-job-02-binary-triage) |
+| [Static Binary CFG](#job-02-binary-cfg) | lifecycle job | [`02-binary-triage`](#a-job-02-binary-triage)<br>[`02-debug-symbol-index`](#a-job-02-debug-symbol-index) | [`02-binary-cfg`](#a-job-02-binary-cfg) |
+| [Test Execution](#job-02-test-execution) | lifecycle job | [`02-native-build`](#a-job-02-native-build) | [`02-test-execution`](#a-job-02-test-execution) |
+| [Test Result Ingest](#job-02-test-result-ingest) | lifecycle job | [`02-test-execution`](#a-job-02-test-execution) | [`02-test-result-ingest`](#a-job-02-test-result-ingest) |
+| [Test Coverage Ingest](#job-02-test-coverage-ingest) | lifecycle job | [`02-test-execution`](#a-job-02-test-execution) | [`02-test-coverage-ingest`](#a-job-02-test-coverage-ingest) |
+| [Operations Document Ingest](#job-02-operations-doc-ingest) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-operations-doc-ingest`](#a-job-02-operations-doc-ingest) |
 | [Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-secrets-inventory`](#a-job-02-secrets-inventory) |
 | [Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-iac-config-scan`](#a-job-02-iac-config-scan) |
 | [Supplied Container Image Archive Inventory](#job-02-container-image-inventory) | lifecycle job | [`00-intake`](#a-job-00-intake) | [`02-container-image-inventory`](#a-job-02-container-image-inventory) |
@@ -212,7 +212,7 @@ The whole engagement at step level, from preconditions to report and SARIF. Sour
 |---|---|---|---|
 | [Dispatch LLM lanes](#step-lane-handoffs) | operator script | [`02-evidence-index`](#a-job-02-evidence-index)<br>[`legacy-pregather`](#a-legacy-pregather) | [`lane-handoff`](#a-lane-handoff) |
 | [Component Purpose And Review Routing](#job-01-component-characterization) | lifecycle job | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
-| [03-threat-model-dfd-stride](#job-03-threat-model-dfd-stride) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
+| [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
 | [04-asvs-masvs](#job-04-asvs-masvs) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride)<br>[`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
 | [OWASP Validation Worklist Generation](#job-04-owasp-validation-worklist) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`04-owasp-validation-worklist`](#a-job-04-owasp-validation-worklist) |
 | [05-native-memory](#job-05-native-memory) | lifecycle job | [`01-component-characterization`](#a-job-01-component-characterization) | [`05-native-memory`](#a-job-05-native-memory) |
@@ -386,9 +386,9 @@ Per lane (each job's full inputs and outputs are in Appendix B):
 | Lane | Jobs | Enters | Leaves |
 |---|---|---|---|
 | `00-intake-recovery` | [00-intake](#job-00-intake) | [`artifact-manifest`](#a-artifact-manifest) | [`00-intake`](#a-job-00-intake) |
-| `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[02-native-sast](#job-02-native-sast)<br>[02-ir-capture](#job-02-ir-capture)<br>[02-ir-link](#job-02-ir-link)<br>[02-ir-facts](#job-02-ir-facts)<br>[02-debug-symbol-index](#job-02-debug-symbol-index)<br>[02-binary-triage](#job-02-binary-triage)<br>[02-binary-cfg](#job-02-binary-cfg)<br>[02-test-execution](#job-02-test-execution)<br>[02-test-result-ingest](#job-02-test-result-ingest)<br>[02-test-coverage-ingest](#job-02-test-coverage-ingest)<br>[02-operations-doc-ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory)<br>[Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan)<br>[Supplied Container Image Archive Inventory](#job-02-container-image-inventory)<br>[SBOM Component Inventory (Manifests And Lockfiles Only)](#job-02-sbom-inventory)<br>[Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)](#job-02-sca-vulnerability-match)<br>[Licence Detection Inventory](#job-02-license-scan)<br>[Dependency Lifecycle Against An Offline Reference Table](#job-02-dependency-lifecycle)<br>[Supplied Binary Hardening Properties](#job-02-binary-hardening)<br>[Mobile SAST Static Leads](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
+| `02-evidence-pregather` | [OpenSSF Scorecard Published Results](#job-02-ossf-scorecard)<br>[Repository Partition Discovery And Specialist Routing](#job-02-repository-partition-discovery)<br>[Developer Project Discovery](#job-02-dev-project-discovery)<br>[DevOps Project And Pipeline Discovery](#job-02-devops-project-discovery)<br>[SRE Operations Topology Discovery](#job-02-sre-operations-topology)<br>[Build Index](#job-02-build-index)<br>[Build Unit Classification](#job-02-build-classify)<br>[Build Plan](#job-02-build-plan)<br>[Build Resolution](#job-02-build-resolution)<br>[Evidence Assembly](#job-02-evidence-assembly)<br>[QA/API Collection Intelligence Ingestion](#job-02-api-collection-intelligence-ingest)<br>[Binary Intelligence Ingest](#job-02-binary-intelligence-ingest)<br>[Document Intelligence Ingestion](#job-02-doc-intelligence-ingest)<br>[Standards Source Ingestion](#job-02-standards-source-ingest)<br>[Test Intelligence Ingestion](#job-02-test-intelligence-ingest)<br>[Build Configure](#job-02-build-configure)<br>[Native Build](#job-02-native-build)<br>[Source SAST](#job-02-source-sast)<br>[Native SAST](#job-02-native-sast)<br>[IR Capture](#job-02-ir-capture)<br>[IR Link](#job-02-ir-link)<br>[IR Facts](#job-02-ir-facts)<br>[Debug Symbol Index](#job-02-debug-symbol-index)<br>[Static Binary Triage](#job-02-binary-triage)<br>[Static Binary CFG](#job-02-binary-cfg)<br>[Test Execution](#job-02-test-execution)<br>[Test Result Ingest](#job-02-test-result-ingest)<br>[Test Coverage Ingest](#job-02-test-coverage-ingest)<br>[Operations Document Ingest](#job-02-operations-doc-ingest)<br>[Evidence Index](#job-02-evidence-index)<br>[Redacted Secrets And Key-Material Inventory](#job-02-secrets-inventory)<br>[Declared IaC, Kubernetes And Dockerfile Configuration Evidence](#job-02-iac-config-scan)<br>[Supplied Container Image Archive Inventory](#job-02-container-image-inventory)<br>[SBOM Component Inventory (Manifests And Lockfiles Only)](#job-02-sbom-inventory)<br>[Known-Vulnerability Match Leads (Grype DB Mirror Plus OSV Snapshot)](#job-02-sca-vulnerability-match)<br>[Licence Detection Inventory](#job-02-license-scan)<br>[Dependency Lifecycle Against An Offline Reference Table](#job-02-dependency-lifecycle)<br>[Supplied Binary Hardening Properties](#job-02-binary-hardening)<br>[Mobile SAST Static Leads](#job-02-mobile-sast) | [`00-intake`](#a-job-00-intake) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) |
 | `01-component-characterization` | [Component Purpose And Review Routing](#job-01-component-characterization) | [`02-evidence-assembly`](#a-job-02-evidence-assembly) | [`01-component-characterization`](#a-job-01-component-characterization) |
-| `03-threat-model-dfd-stride` | [03-threat-model-dfd-stride](#job-03-threat-model-dfd-stride) | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
+| `03-threat-model-dfd-stride` | [Deterministic DFD And STRIDE Core](#job-03-threat-model-dfd-stride) | [`01-component-characterization`](#a-job-01-component-characterization) | [`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) |
 | `04-asvs-masvs` | [04-asvs-masvs](#job-04-asvs-masvs)<br>[OWASP Validation Worklist Generation](#job-04-owasp-validation-worklist) | [`01-component-characterization`](#a-job-01-component-characterization)<br>[`03-threat-model-dfd-stride`](#a-job-03-threat-model-dfd-stride) | [`04-asvs-masvs`](#a-job-04-asvs-masvs) |
 | `05-native-memory` | [05-native-memory](#job-05-native-memory) | [`01-component-characterization`](#a-job-01-component-characterization) | [`05-native-memory`](#a-job-05-native-memory) |
 | `06-cve-reachability` | [06-cve-reachability](#job-06-cve-reachability) | [`01-component-characterization`](#a-job-01-component-characterization) | [`06-cve-reachability`](#a-job-06-cve-reachability) |
@@ -1131,26 +1131,26 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-build-plan`](#job-02-build-plan) | `build-plan` | implemented_not_qualified | `02-build-classify` |
 | `02-evidence-pregather` | [`02-build-resolution`](#job-02-build-resolution) | `build-resolution` | implemented_and_qualified | `02-build-plan` |
 | `02-evidence-pregather` | [`02-evidence-assembly`](#job-02-evidence-assembly) | `pregather` | standalone_only | `02-dev-project-discovery`, `02-devops-project-discovery`, `02-sre-operations-topology`, `02-api-collection-intelligence-ingest`, `02-binary-intelligence-ingest`, `02-doc-intelligence-ingest`, `02-standards-source-ingest`, `02-test-intelligence-ingest`, `02-source-sast`, `02-native-sast`, `02-ir-facts`, `02-test-result-ingest`, `02-test-coverage-ingest`, `02-operations-doc-ingest`, `02-evidence-index`, `02-ossf-scorecard`, `02-secrets-inventory`, `02-iac-config-scan`, `02-container-image-inventory`, `02-sbom-inventory`, `02-sca-vulnerability-match`, `02-license-scan`, `02-dependency-lifecycle`, `02-binary-hardening`, `02-mobile-sast` |
-| `02-evidence-pregather` | [`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) | `intelligence-extract` | registered_planned_not_executable | `00-intake` |
-| `02-evidence-pregather` | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) | `binary-intelligence` | registered_planned_not_executable | `02-binary-triage`, `02-binary-cfg` |
-| `02-evidence-pregather` | [`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest) | `intelligence-extract` | registered_planned_not_executable | `00-intake` |
-| `02-evidence-pregather` | [`02-standards-source-ingest`](#job-02-standards-source-ingest) | `standards-source-extract` | registered_planned_not_executable | `00-intake` |
-| `02-evidence-pregather` | [`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest) | `intelligence-extract` | registered_planned_not_executable | `00-intake` |
+| `02-evidence-pregather` | [`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) | `api-collection-intelligence` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) | `binary-intelligence` | standalone_only | `02-binary-triage`, `02-binary-cfg` |
+| `02-evidence-pregather` | [`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest) | `doc-intelligence` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-standards-source-ingest`](#job-02-standards-source-ingest) | `standards-source-extract` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest) | `test-intelligence` | standalone_only | `00-intake` |
 | `02-evidence-pregather` | [`02-build-configure`](#job-02-build-configure) | `configured-build` | implemented_not_qualified | `02-build-resolution` |
 | `02-evidence-pregather` | [`02-native-build`](#job-02-native-build) | `native-build` | implemented_not_qualified | `02-build-configure` |
 | `02-evidence-pregather` | [`02-source-sast`](#job-02-source-sast) | `source-sast` | implemented_not_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-native-sast`](#job-02-native-sast) | `native-sast` | missing_prerequisites | `02-native-build` |
-| `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `llvm-ir` | missing_prerequisites | `02-native-build` |
-| `02-evidence-pregather` | [`02-ir-link`](#job-02-ir-link) | `linked-llvm-ir` | missing_prerequisites | `02-ir-capture` |
-| `02-evidence-pregather` | [`02-ir-facts`](#job-02-ir-facts) | `ir-facts` | missing_prerequisites | `02-ir-link` |
-| `02-evidence-pregather` | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | `debug-symbol-index` | missing_prerequisites | `02-native-build` |
-| `02-evidence-pregather` | [`02-binary-triage`](#job-02-binary-triage) | `binary-triage` | missing_prerequisites | `02-native-build` |
-| `02-evidence-pregather` | [`02-binary-cfg`](#job-02-binary-cfg) | `binary-cfg` | missing_prerequisites | `02-binary-triage`, `02-debug-symbol-index` |
-| `02-evidence-pregather` | [`02-test-execution`](#job-02-test-execution) | `test-execution` | missing_prerequisites | `02-native-build` |
-| `02-evidence-pregather` | [`02-test-result-ingest`](#job-02-test-result-ingest) | `test-result-intelligence` | missing_prerequisites | `02-test-execution` |
-| `02-evidence-pregather` | [`02-test-coverage-ingest`](#job-02-test-coverage-ingest) | `test-coverage-intelligence` | missing_prerequisites | `02-test-execution` |
-| `02-evidence-pregather` | [`02-operations-doc-ingest`](#job-02-operations-doc-ingest) | `operations-doc-intelligence` | missing_prerequisites | `00-intake` |
-| `02-evidence-pregather` | [`02-evidence-index`](#job-02-evidence-index) | `evidence-index` | implemented_and_qualified | `00-intake` |
+| `02-evidence-pregather` | [`02-native-sast`](#job-02-native-sast) | `native-sast` | standalone_only | `02-native-build` |
+| `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `ir-capture` | standalone_only | `02-native-build` |
+| `02-evidence-pregather` | [`02-ir-link`](#job-02-ir-link) | `ir-link` | standalone_only | `02-ir-capture` |
+| `02-evidence-pregather` | [`02-ir-facts`](#job-02-ir-facts) | `ir-facts` | standalone_only | `02-ir-link` |
+| `02-evidence-pregather` | [`02-debug-symbol-index`](#job-02-debug-symbol-index) | `debug-symbol-index` | standalone_only | `02-native-build` |
+| `02-evidence-pregather` | [`02-binary-triage`](#job-02-binary-triage) | `binary-triage` | standalone_only | `02-native-build` |
+| `02-evidence-pregather` | [`02-binary-cfg`](#job-02-binary-cfg) | `binary-cfg` | standalone_only | `02-binary-triage`, `02-debug-symbol-index` |
+| `02-evidence-pregather` | [`02-test-execution`](#job-02-test-execution) | `test-execution` | standalone_only | `02-native-build` |
+| `02-evidence-pregather` | [`02-test-result-ingest`](#job-02-test-result-ingest) | `test-result-intelligence` | standalone_only | `02-test-execution` |
+| `02-evidence-pregather` | [`02-test-coverage-ingest`](#job-02-test-coverage-ingest) | `test-coverage-intelligence` | standalone_only | `02-test-execution` |
+| `02-evidence-pregather` | [`02-operations-doc-ingest`](#job-02-operations-doc-ingest) | `operations-doc-intelligence` | standalone_only | `00-intake` |
+| `02-evidence-pregather` | [`02-evidence-index`](#job-02-evidence-index) | `evidence-index` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-secrets-inventory`](#job-02-secrets-inventory) | `secrets-inventory` | missing_prerequisites | `00-intake` |
 | `02-evidence-pregather` | [`02-iac-config-scan`](#job-02-iac-config-scan) | `iac-config-evidence` | missing_prerequisites | `00-intake` |
 | `02-evidence-pregather` | [`02-container-image-inventory`](#job-02-container-image-inventory) | `container-image-inventory` | missing_prerequisites | `00-intake` |
@@ -1161,7 +1161,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-binary-hardening`](#job-02-binary-hardening) | `binary-hardening` | missing_prerequisites | `00-intake` |
 | `02-evidence-pregather` | [`02-mobile-sast`](#job-02-mobile-sast) | `mobile-sast` | missing_prerequisites | `00-intake` |
 | `01-component-characterization` | [`01-component-characterization`](#job-01-component-characterization) | `component-map` | standalone_only | `02-evidence-assembly` |
-| `03-threat-model-dfd-stride` | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | `03-threat-model-dfd-stride` | missing_prerequisites | `01-component-characterization` |
+| `03-threat-model-dfd-stride` | [`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) | `threat-model-core` | standalone_only | `01-component-characterization` |
 | `04-asvs-masvs` | [`04-asvs-masvs`](#job-04-asvs-masvs) | `04-asvs-masvs` | missing_prerequisites | `01-component-characterization`, `03-threat-model-dfd-stride`, `04-owasp-validation-worklist` |
 | `04-asvs-masvs` | [`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) | `control-worklist` | registered_planned_not_executable | `01-component-characterization` |
 | `05-native-memory` | [`05-native-memory`](#job-05-native-memory) | `05-native-memory` | missing_prerequisites | `01-component-characterization` |
@@ -1389,7 +1389,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `evidence-custodian`, role `evidence-assembler`, tooling `hash-bound-evidence-assembly` |
-| Consumes (graph) | [`02-dev-project-discovery`](#job-02-dev-project-discovery) (required, contract `project-discovery`)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) (required, contract `project-discovery`)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology) (required, contract `operations-topology`)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) (required, contract `intelligence-extract`)<br>[`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) (required, contract `binary-intelligence`)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest) (required, contract `intelligence-extract`)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest) (required, contract `standards-source-extract`)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest) (required, contract `intelligence-extract`)<br>[`02-source-sast`](#job-02-source-sast) (required, contract `source-sast`)<br>[`02-native-sast`](#job-02-native-sast) (required, contract `native-sast`)<br>[`02-ir-facts`](#job-02-ir-facts) (required, contract `ir-facts`)<br>[`02-test-result-ingest`](#job-02-test-result-ingest) (required, contract `test-result-intelligence`)<br>[`02-test-coverage-ingest`](#job-02-test-coverage-ingest) (required, contract `test-coverage-intelligence`)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest) (required, contract `operations-doc-intelligence`)<br>[`02-evidence-index`](#job-02-evidence-index) (required, contract `evidence-index`)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) (required, contract `ossf-scorecard-results`)<br>[`02-secrets-inventory`](#job-02-secrets-inventory) (required, contract `secrets-inventory`)<br>[`02-iac-config-scan`](#job-02-iac-config-scan) (required, contract `iac-config-evidence`)<br>[`02-container-image-inventory`](#job-02-container-image-inventory) (required, contract `container-image-inventory`)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`)<br>[`02-license-scan`](#job-02-license-scan) (required, contract `license-inventory`)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) (required, contract `dependency-lifecycle`)<br>[`02-binary-hardening`](#job-02-binary-hardening) (required, contract `binary-hardening`)<br>[`02-mobile-sast`](#job-02-mobile-sast) (required, contract `mobile-sast`) |
+| Consumes (graph) | [`02-dev-project-discovery`](#job-02-dev-project-discovery) (required, contract `project-discovery`)<br>[`02-devops-project-discovery`](#job-02-devops-project-discovery) (required, contract `project-discovery`)<br>[`02-sre-operations-topology`](#job-02-sre-operations-topology) (required, contract `operations-topology`)<br>[`02-api-collection-intelligence-ingest`](#job-02-api-collection-intelligence-ingest) (required, contract `api-collection-intelligence`)<br>[`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) (required, contract `binary-intelligence`)<br>[`02-doc-intelligence-ingest`](#job-02-doc-intelligence-ingest) (required, contract `doc-intelligence`)<br>[`02-standards-source-ingest`](#job-02-standards-source-ingest) (required, contract `standards-source-extract`)<br>[`02-test-intelligence-ingest`](#job-02-test-intelligence-ingest) (required, contract `test-intelligence`)<br>[`02-source-sast`](#job-02-source-sast) (required, contract `source-sast`)<br>[`02-native-sast`](#job-02-native-sast) (required, contract `native-sast`)<br>[`02-ir-facts`](#job-02-ir-facts) (required, contract `ir-facts`)<br>[`02-test-result-ingest`](#job-02-test-result-ingest) (required, contract `test-result-intelligence`)<br>[`02-test-coverage-ingest`](#job-02-test-coverage-ingest) (required, contract `test-coverage-intelligence`)<br>[`02-operations-doc-ingest`](#job-02-operations-doc-ingest) (required, contract `operations-doc-intelligence`)<br>[`02-evidence-index`](#job-02-evidence-index) (required, contract `evidence-index`)<br>[`02-ossf-scorecard`](#job-02-ossf-scorecard) (required, contract `ossf-scorecard-results`)<br>[`02-secrets-inventory`](#job-02-secrets-inventory) (required, contract `secrets-inventory`)<br>[`02-iac-config-scan`](#job-02-iac-config-scan) (required, contract `iac-config-evidence`)<br>[`02-container-image-inventory`](#job-02-container-image-inventory) (required, contract `container-image-inventory`)<br>[`02-sbom-inventory`](#job-02-sbom-inventory) (required, contract `sbom-inventory`)<br>[`02-sca-vulnerability-match`](#job-02-sca-vulnerability-match) (required, contract `sca-vulnerability-match`)<br>[`02-license-scan`](#job-02-license-scan) (required, contract `license-inventory`)<br>[`02-dependency-lifecycle`](#job-02-dependency-lifecycle) (required, contract `dependency-lifecycle`)<br>[`02-binary-hardening`](#job-02-binary-hardening) (required, contract `binary-hardening`)<br>[`02-mobile-sast`](#job-02-mobile-sast) (required, contract `mobile-sast`) |
 | Declared inputs (registry/job-templates/02-evidence-assembly.json) | assembly-supply.json<br>terminal-instances.json<br>all graph-required producer accepted pointers and envelopes |
 | Produces | `runs/<run_id>/data/jobs/02-evidence-assembly/` |
 | Output files (registry/output-contracts/pregather.json) | intel-manifest.json<br>status.json |
@@ -1403,18 +1403,19 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 | | |
 |---|---|
-| Contract | `intelligence-extract` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
+| Contract | `api-collection-intelligence` (claim class `static_intelligence_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/api_collection_intelligence_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `qa-test-validator`, role `api-collection-intelligence-extractor`, tooling `static-api-collection-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
 | Declared inputs (registry/job-templates/02-api-collection-intelligence-ingest.json) | collection path<br>collection format<br>environment path *(optional)*<br>OpenAPI spec *(optional)*<br>route inventory *(optional)*<br>component map *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-api-collection-intelligence-ingest/` |
-| Output files (registry/output-contracts/intelligence-extract.json) | summary.md<br>facts.json<br>search-records.jsonl<br>status.json |
+| Output files (registry/output-contracts/api-collection-intelligence.json) | api-collection-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Gaps | `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification. |
 
 <a id="job-02-binary-intelligence-ingest"></a>
 
@@ -1422,18 +1423,19 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 | | |
 |---|---|
-| Contract | `binary-intelligence` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
+| Contract | `binary-intelligence` (claim class `binary_lead_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/binary_intelligence_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-binary-cfg`](#job-02-binary-cfg) (required, contract `binary-cfg`) |
-| Declared inputs (registry/job-templates/02-binary-intelligence-ingest.json) | target binary artifact path or binary artifact inventory<br>audit-binary-analysis image<br>writable scratch output directory<br>YARA rules *(optional)*<br>source component map *(optional)*<br>SBOM or package inventory *(optional)*<br>debug symbols or separate debug files *(optional)*<br>known-good or known-bad binary comparison corpus *(optional)* |
+| Declared inputs (registry/job-templates/02-binary-intelligence-ingest.json) | accepted native-build binary lineage<br>accepted binary-triage result<br>accepted binary-cfg result<br>run-owned normalized lead evidence<br>source component map *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-binary-intelligence-ingest/` |
-| Output files (registry/output-contracts/binary-intelligence.json) | binary-artifact-inventory.json<br>binary-intelligence-summary.md<br>tool-evidence-manifest.json<br>candidate-leads.json<br>verification-followups.json<br>status.json |
+| Output files (registry/output-contracts/binary-intelligence.json) | binary-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Gaps | `shared_dagster_graph_not_integrated`, `m02_pinned_binary_tool_unavailable`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-doc-intelligence-ingest"></a>
 
@@ -1441,18 +1443,19 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 | | |
 |---|---|
-| Contract | `intelligence-extract` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
+| Contract | `doc-intelligence` (claim class `static_intelligence_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/doc_intelligence_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `functional-design-doc-consumer`, role `doc-intelligence-extractor`, tooling `static-doc-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
 | Declared inputs (registry/job-templates/02-doc-intelligence-ingest.json) | document source path<br>source type<br>redaction policy<br>existing scratch/<project>-engagement/intel/INTELLIGENCE_MANIFEST.json *(optional)*<br>component map *(optional)*<br>product glossary *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-doc-intelligence-ingest/` |
-| Output files (registry/output-contracts/intelligence-extract.json) | summary.md<br>facts.json<br>search-records.jsonl<br>status.json |
+| Output files (registry/output-contracts/doc-intelligence.json) | doc-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Gaps | `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification. |
 
 <a id="job-02-standards-source-ingest"></a>
 
@@ -1461,17 +1464,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `standards-source-extract` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/standards_source_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `standards-reference-curator`, role `standards-source-ingestor`, tooling `standards-source-static-ingest` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
-| Declared inputs (registry/job-templates/02-standards-source-ingest.json) | upstream standards source path or curated local reference<br>standard family and version/ref<br>license or usage notes<br>existing appsec-review-process/standards/indexes/* *(optional)*<br>OpenCRE crosswalk records *(optional)*<br>DISA/STIG reference metadata *(optional)* |
+| Declared inputs (registry/job-templates/02-standards-source-ingest.json) | exact accepted intake source identity<br>run-owned standards-source-binding.json<br>repository-pinned data/reference/source-lock.json and selected snapshots |
 | Produces | `runs/<run_id>/data/jobs/02-standards-source-ingest/` |
-| Output files (registry/output-contracts/standards-source-extract.json) | source-manifest.json<br>extraction-log.jsonl<br>controls/<br>indexes/<br>status.json |
+| Output files (registry/output-contracts/standards-source-extract.json) | standards-source.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Gaps | `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified offline core into the shared Dagster lifecycle and complete live fixture qualification. |
 
 <a id="job-02-test-intelligence-ingest"></a>
 
@@ -1479,18 +1483,19 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 | | |
 |---|---|
-| Contract | `intelligence-extract` |
-| Status | readiness `registered_planned_not_executable`; execution `persona`; job-graph `implemented: false` |
+| Contract | `test-intelligence` (claim class `static_intelligence_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/test_intelligence_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
 | Composition | persona `test-coverage-indexer`, role `test-intelligence-extractor`, tooling `static-test-doc-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
 | Declared inputs (registry/job-templates/02-test-intelligence-ingest.json) | tests path<br>test type or auto<br>coverage report *(optional)*<br>component map *(optional)*<br>route inventory *(optional)*<br>CI test metadata *(optional)* |
 | Produces | `runs/<run_id>/data/jobs/02-test-intelligence-ingest/` |
-| Output files (registry/output-contracts/intelligence-extract.json) | summary.md<br>facts.json<br>search-records.jsonl<br>status.json |
+| Output files (registry/output-contracts/test-intelligence.json) | test-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Implement and validate a run-owned worker through the shared dispatch runtime. |
+| Gaps | `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification. |
 
 <a id="job-02-build-configure"></a>
 
@@ -1554,190 +1559,223 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-02-native-sast"></a>
 
-#### `02-native-sast` -- 02-native-sast
+#### `02-native-sast` -- Native SAST
 
 | | |
 |---|---|
-| Contract | `native-sast` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `native-sast` (claim class `native_static_evidence`) |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/native_sast.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `native-sast-curator`, tooling `pinned-native-sast` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
+| Declared inputs (registry/job-templates/02-native-sast.json) | exact accepted 02-native-build publication<br>caller-held native-build fingerprint<br>B16 audit-native record<br>tracked native-SAST configuration |
 | Produces | `runs/<run_id>/data/jobs/02-native-sast/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/native-sast.json) | native-sast.json<br>b13-receipts.json<br>native-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `pinned_image_live_qualification_missing`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-ir-capture"></a>
 
-#### `02-ir-capture` -- 02-ir-capture
+#### `02-ir-capture` -- IR Capture
 
 | | |
 |---|---|
-| Contract | `llvm-ir` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `ir-capture` (claim class `ir_static_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/ir_capture.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
+| Declared inputs (registry/job-templates/02-ir-capture.json) | accepted native build<br>clang compile database |
 | Produces | `runs/<run_id>/data/jobs/02-ir-capture/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/ir-capture.json) | ir-capture.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-ir-link`](#job-02-ir-link) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `toolchain_factory_binding_missing`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-ir-link"></a>
 
-#### `02-ir-link` -- 02-ir-link
+#### `02-ir-link` -- IR Link
 
 | | |
 |---|---|
-| Contract | `linked-llvm-ir` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `ir-link` (claim class `ir_static_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/ir_link.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`02-ir-capture`](#job-02-ir-capture) (required, contract `llvm-ir`) |
+| Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
+| Consumes (graph) | [`02-ir-capture`](#job-02-ir-capture) (required, contract `ir-capture`) |
+| Declared inputs (registry/job-templates/02-ir-link.json) | accepted IR capture |
 | Produces | `runs/<run_id>/data/jobs/02-ir-link/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/ir-link.json) | ir-link.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-ir-facts`](#job-02-ir-facts) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `toolchain_factory_binding_missing`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-ir-facts"></a>
 
-#### `02-ir-facts` -- 02-ir-facts
+#### `02-ir-facts` -- IR Facts
 
 | | |
 |---|---|
-| Contract | `ir-facts` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `ir-facts` (claim class `ir_static_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/ir_facts.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`02-ir-link`](#job-02-ir-link) (required, contract `linked-llvm-ir`) |
+| Composition | persona `evidence-custodian`, role `ir-evidence-producer`, tooling `llvm-ir-evidence` |
+| Consumes (graph) | [`02-ir-link`](#job-02-ir-link) (required, contract `ir-link`) |
+| Declared inputs (registry/job-templates/02-ir-facts.json) | accepted linked LLVM module |
 | Produces | `runs/<run_id>/data/jobs/02-ir-facts/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/ir-facts.json) | ir-facts.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `toolchain_factory_binding_missing`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-debug-symbol-index"></a>
 
-#### `02-debug-symbol-index` -- 02-debug-symbol-index
+#### `02-debug-symbol-index` -- Debug Symbol Index
 
 | | |
 |---|---|
-| Contract | `debug-symbol-index` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `debug-symbol-index` (claim class `debug_symbol_static_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/debug_symbol_index.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
+| Declared inputs (registry/job-templates/02-debug-symbol-index.json) | accepted native-build binary lineage<br>run-owned static symbol evidence |
 | Produces | `runs/<run_id>/data/jobs/02-debug-symbol-index/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/debug-symbol-index.json) | debug-symbol-index.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-binary-cfg`](#job-02-binary-cfg) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `m02_pinned_binary_tool_unavailable`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-binary-triage"></a>
 
-#### `02-binary-triage` -- 02-binary-triage
+#### `02-binary-triage` -- Static Binary Triage
 
 | | |
 |---|---|
-| Contract | `binary-triage` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `binary-triage` (claim class `binary_inventory_static_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/binary_triage.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
+| Declared inputs (registry/job-templates/02-binary-triage.json) | accepted native-build binary lineage<br>run-owned static triage evidence |
 | Produces | `runs/<run_id>/data/jobs/02-binary-triage/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/binary-triage.json) | binary-triage-manifest.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest)<br>[`02-binary-cfg`](#job-02-binary-cfg) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `m02_pinned_binary_tool_unavailable`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-binary-cfg"></a>
 
-#### `02-binary-cfg` -- 02-binary-cfg
+#### `02-binary-cfg` -- Static Binary CFG
 
 | | |
 |---|---|
-| Contract | `binary-cfg` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `binary-cfg` (claim class `binary_cfg_static_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/binary_cfg.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `reverse-engineer`, role `binary-intelligence-extractor`, tooling `binary-intel-static-analysis` |
 | Consumes (graph) | [`02-binary-triage`](#job-02-binary-triage) (required, contract `binary-triage`)<br>[`02-debug-symbol-index`](#job-02-debug-symbol-index) (required, contract `debug-symbol-index`) |
+| Declared inputs (registry/job-templates/02-binary-cfg.json) | accepted native-build binary lineage<br>accepted debug-symbol-index<br>accepted binary-triage<br>run-owned static CFG evidence |
 | Produces | `runs/<run_id>/data/jobs/02-binary-cfg/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/binary-cfg.json) | cfg-manifest.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-binary-intelligence-ingest`](#job-02-binary-intelligence-ingest) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `m02_pinned_binary_tool_unavailable`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite. |
 
 <a id="job-02-test-execution"></a>
 
-#### `02-test-execution` -- 02-test-execution
+#### `02-test-execution` -- Test Execution
 
 | | |
 |---|---|
-| Contract | `test-execution` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `test-execution` (claim class `test_evidence`) |
+| Status | readiness `standalone_only`; execution `pinned_container`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/test_execution.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `qa-test-validator`, role `test-evidence-producer`, tooling `bounded-test-evidence` |
 | Consumes (graph) | [`02-native-build`](#job-02-native-build) (required, contract `native-build`) |
+| Declared inputs (registry/job-templates/02-test-execution.json) | accepted native build<br>trusted bounded test plan<br>target-execution grant |
 | Produces | `runs/<run_id>/data/jobs/02-test-execution/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/test-execution.json) | test-execution.json<br>b13-receipt.json<br>test-execution-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-test-result-ingest`](#job-02-test-result-ingest)<br>[`02-test-coverage-ingest`](#job-02-test-coverage-ingest) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `operator_test_control_staging_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification. |
 
 <a id="job-02-test-result-ingest"></a>
 
-#### `02-test-result-ingest` -- 02-test-result-ingest
+#### `02-test-result-ingest` -- Test Result Ingest
 
 | | |
 |---|---|
-| Contract | `test-result-intelligence` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `test-result-intelligence` (claim class `test_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/test_result_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `qa-test-validator`, role `test-evidence-producer`, tooling `bounded-test-evidence` |
 | Consumes (graph) | [`02-test-execution`](#job-02-test-execution) (required, contract `test-execution`) |
+| Declared inputs (registry/job-templates/02-test-result-ingest.json) | accepted test execution |
 | Produces | `runs/<run_id>/data/jobs/02-test-result-ingest/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/test-result-intelligence.json) | test-results.json<br>test-result-intelligence-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `accepted_test_execution_lifecycle_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification. |
 
 <a id="job-02-test-coverage-ingest"></a>
 
-#### `02-test-coverage-ingest` -- 02-test-coverage-ingest
+#### `02-test-coverage-ingest` -- Test Coverage Ingest
 
 | | |
 |---|---|
-| Contract | `test-coverage-intelligence` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `test-coverage-intelligence` (claim class `test_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/test_coverage_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `test-coverage-indexer`, role `test-evidence-producer`, tooling `bounded-test-evidence` |
 | Consumes (graph) | [`02-test-execution`](#job-02-test-execution) (required, contract `test-execution`) |
+| Declared inputs (registry/job-templates/02-test-coverage-ingest.json) | accepted test execution |
 | Produces | `runs/<run_id>/data/jobs/02-test-coverage-ingest/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/test-coverage-intelligence.json) | test-coverage.json<br>test-coverage-intelligence-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `accepted_test_execution_lifecycle_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification. |
 
 <a id="job-02-operations-doc-ingest"></a>
 
-#### `02-operations-doc-ingest` -- 02-operations-doc-ingest
+#### `02-operations-doc-ingest` -- Operations Document Ingest
 
 | | |
 |---|---|
-| Contract | `operations-doc-intelligence` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `operations-doc-intelligence` (claim class `static_intelligence_evidence`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/operations_doc_ingest.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `functional-design-doc-consumer`, role `doc-intelligence-extractor`, tooling `static-doc-parser` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
+| Declared inputs (registry/job-templates/02-operations-doc-ingest.json) | exact accepted intake source inventory |
 | Produces | `runs/<run_id>/data/jobs/02-operations-doc-ingest/` |
-| Output files | not yet defined (no output contract, template or lane config) |
+| Output files (registry/output-contracts/operations-doc-intelligence.json) | operations-doc-intelligence.json<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification. |
 
 <a id="job-02-evidence-index"></a>
 
@@ -1746,7 +1784,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `evidence-index` |
-| Status | readiness `implemented_and_qualified`; execution `deterministic_python`; job-graph `implemented: true` |
+| Status | readiness `implemented_not_qualified`; execution `deterministic_python`; job-graph `implemented: true` |
 | Worker | `appsec-review-process/evidence_store.py:run` |
 | Resource pool | `memory` |
 | Dagster | standalone: `evidence_index`; lifecycle binding: `actual_worker` |
@@ -1754,10 +1792,10 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
 | Declared inputs (registry/job-templates/02-evidence-index.json) | fresh accepted intake<br>accepted build discovery |
 | Produces | `runs/<run_id>/data/jobs/02-evidence-index/` |
-| Output files (registry/output-contracts/evidence-index.json) | manifest.json<br>index.sqlite<br>ssdeep.csv<br>status.json |
+| Output files (registry/output-contracts/evidence-index.json) | manifest.json<br>index.sqlite<br>ssdeep.csv<br>evidence-index-enrichment.json<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`lane-handoffs`](#step-lane-handoffs)<br>[`02-evidence-assembly`](#job-02-evidence-assembly) |
-| Gaps | `missing_dedicated_output_schema` |
-| Next prerequisite | Pool assigned (memory, B15). Add a dedicated output schema. |
+| Gaps | `derived_producer_selection_not_orchestrated`, `common_worker_envelope_migration_missing`, `live_enrichment_requalification_missing` |
+| Next prerequisite | Stage accepted derived-producer selections, migrate the legacy publication to the common envelope, and requalify the enriched lifecycle live. |
 
 <a id="job-02-secrets-inventory"></a>
 
@@ -1938,21 +1976,23 @@ the source is named in each entry. Output paths are under `appsec-review-process
 
 <a id="job-03-threat-model-dfd-stride"></a>
 
-#### `03-threat-model-dfd-stride` -- 03-threat-model-dfd-stride
+#### `03-threat-model-dfd-stride` -- Deterministic DFD And STRIDE Core
 
 | | |
 |---|---|
-| Contract | `03-threat-model-dfd-stride` |
-| Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
+| Contract | `threat-model-core` (claim class `threat_model_candidate`) |
+| Status | readiness `standalone_only`; execution `deterministic_python`; job-graph `implemented: false` |
+| Worker | `appsec-review-process/threat_model_core.py:run` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
+| Composition | persona `developer-engineer`, role `threat-model-core`, tooling `threat-model-static-evidence` |
 | Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`) |
-| Declared inputs (03-threat-model-dfd-stride/config.md) | component-purpose map<br>evidence package<br>deployment/IaC artifacts<br>symbol/semantic indexes<br>known external actors and data classes |
+| Declared inputs (registry/job-templates/03-threat-model-dfd-stride.json) | current accepted F03 component map<br>exact F02 evidence assembly and dereferenced artifact cited through F03 |
 | Produces | `runs/<run_id>/data/jobs/03-threat-model-dfd-stride/` |
-| Output files (03-threat-model-dfd-stride/config.md) | corrected component map notes<br>trust boundary list<br>data-flow table<br>Mermaid DFD<br>STRIDE hypothesis list<br>verification worklist |
+| Output files (registry/output-contracts/threat-model-core.json) | integrated-threat-model.json<br>threat-model-summary.md<br>permission.json<br>lineage.json<br>status.json |
 | Consumed by | [`04-asvs-masvs`](#job-04-asvs-masvs)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization)<br>[`10-synthesis-report`](#job-10-synthesis-report) |
-| Gaps | `missing_dedicated_output_schema`, `missing_output_contract`, `missing_registry_composition`, `missing_validator`, `missing_worker`, `no_qualification`, `unassigned_resource_pool` |
-| Next prerequisite | Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification. |
+| Gaps | `shared_dagster_graph_not_integrated`, `claim_ledger_routing_not_integrated`, `no_live_qualification`, `unassigned_resource_pool` |
+| Next prerequisite | Bind the qualified core to accepted F03/F02 lifecycle outputs, candidate claim-ledger routing, and live qualification. |
 
 ### Lane `04-asvs-masvs`
 
@@ -1966,7 +2006,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `03-threat-model-dfd-stride`)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) (required, contract `control-worklist`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-owasp-validation-worklist`](#job-04-owasp-validation-worklist) (required, contract `control-worklist`) |
 | Declared inputs (04-asvs-masvs/config.md) | component-purpose map<br>DFD/trust boundaries if available<br>coverage ledger<br>evidence package<br>ASVS version<br>MASVS/MASTG version |
 | Produces | `runs/<run_id>/data/jobs/04-asvs-masvs/` |
 | Output files (04-asvs-masvs/config.md) | applicability matrix<br>component-to-control worklist<br>per-control assessment notes<br>not-applicable rationale with evidence |
@@ -2045,7 +2085,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `03-threat-model-dfd-stride`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `05-native-memory`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `05-native-memory`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`) |
 | Declared inputs (13-fuzz-target-triage/config.md) | component-purpose map (from `01-component-characterization`)<br>DFD / trust boundaries (from `03-threat-model-dfd-stride`), if available<br>native memory-safety findings and native bundle coverage (from `05-native-memory`)<br>dependency/CVE/EOL evidence (from `06-cve-reachability`)<br>native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available<br>existing test suite locations and any existing fuzz harnesses already in the target repo<br>symbol/semantic indexes |
 | Produces | `runs/<run_id>/data/jobs/13-fuzz-target-triage/` |
 | Output files (13-fuzz-target-triage/config.md) | **Target**: component id, specific function(s)/entry point(s), and the untrusted-input path that reaches them (cite the DFD trust boundary it crosses, if one exists)<br>**Benefit case** (why fuzzing here would likely find real bugs), grounded in evidence, not generic "parsing code is risky" reasoning -- e.g.: handles attacker-controlled byte-level input directly (decoders, deserializers, parsers, codec/compression code); has known-CWE-adjacent patterns (manual pointer arithmetic, manual length/bounds tracking, custom allocators); is in Tier B/C native-analysis coverage (i.e., IR/CSA/CodeQL substrate is weaker or absent here, per ADR-0001) so static tools are least likely to have already caught what fuzzing would find; has no or thin existing unit-test coverage of malformed/adversarial inputs; has a CVE history in this library or a structurally similar one (from 06's evidence)<br>**Cost case** (what it would take to actually fuzz this), concretely: whether a harness can reuse an existing test/example entry point or needs new scaffolding; whether the function is reachable standalone or needs heavy setup/state to call meaningfully; build integration effort (does it fit the existing compile database, or does it need new build wiring); realistic seed-corpus availability (existing test vectors, sample files, structured-input needed); expected iteration speed (µs-scale pure-function fuzzing vs. slow end-to-end harnesses)<br>**Recommendation**: `fuzz now` / `fuzz later` / `not worth it`, with the stated reasoning comparing benefit to cost -- not a bare label<br>a "known coverage gaps" summary section, in the format `07-red-team-adversarial` expects to consume directly: the areas with the weakest current analysis coverage (static + dynamic + manual review combined), independent of whether they end up recommended for fuzzing -- this is the required-input handoff to lane 07, not just this lane's own fuzzing opinion |
@@ -2104,7 +2144,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `03-threat-model-dfd-stride`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `04-asvs-masvs`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `05-native-memory`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `15-deployment-hardening`)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) (required, contract `13-fuzz-target-triage`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `04-asvs-masvs`)<br>[`05-native-memory`](#job-05-native-memory) (required, contract `05-native-memory`)<br>[`06-cve-reachability`](#job-06-cve-reachability) (required, contract `06-cve-reachability`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `15-deployment-hardening`)<br>[`13-fuzz-target-triage`](#job-13-fuzz-target-triage) (required, contract `13-fuzz-target-triage`) |
 | Declared inputs (07-red-team-adversarial/config.md) | stated business goal<br>component-purpose map<br>component taxonomy / component cloud<br>known issue catalog<br>evidence package<br>current findings<br>known coverage gaps |
 | Produces | `runs/<run_id>/data/jobs/07-red-team-adversarial/` |
 | Output files (07-red-team-adversarial/config.md) | general adversarial scenarios from open-ended inference, tagged `L4` or `L5`<br>known-list adversarial scenarios from `known-issue-catalog.md`, tagged `L4` or `L5`<br>kill-chain scenarios (added 2026-09-18): each one must enumerate its individual steps (per step: component id, weakness/gap exploited, evidence), identify the taint source and sink explicitly for tainted-data chains, and state why the composed chain survives currently deployed mitigations end-to-end -- not just why each step looks plausible alone<br>strongest exploitability arguments<br>hostile-vendor placement hypotheses (`L5`)<br>component-mapped known-issue hypotheses<br>minimum checks required to defeat each scenario<br>known coverage gaps used as scenario input, and their source (see "Known Coverage Gaps" below)<br>design lane used: `L4`, `L5`, or `both` (with the note above)<br>red-team mode used: `general`, `known-list`, `kill-chain`, or `combined` |
@@ -2184,7 +2224,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `15-deployment-hardening`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `03-threat-model-dfd-stride`) |
+| Consumes (graph) | [`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`15-deployment-hardening`](#job-15-deployment-hardening) (required, contract `15-deployment-hardening`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`) |
 | Declared inputs (12-scoring-prioritization/config.md) | verified findings (from `09-independent-verification`)<br>the CVSS 4.0 deterministic-derivation mapping (design-v3.md §14): which verified-fact attributes map directly to which CVSS 4.0 metrics (trust boundary crossed → Attack Vector, authentication evidence → Privileges Required/User Interaction, blast-radius evidence → Vulnerable/Subsequent System impact metrics, etc.)<br>EPSS/KEV data, where applicable<br>exposure and deployment context (from `15-deployment-hardening` and `03-threat-model-dfd-stride`, where available) |
 | Produces | `runs/<run_id>/data/jobs/12-scoring-prioritization/` |
 | Output files (12-scoring-prioritization/config.md) | per-finding CVSS 4.0 vector, with each metric marked either "derived" (cite the verified-fact attribute it came from) or "LLM-assigned" (only for metrics with no direct verified-fact mapping)<br>per-finding confidence classification (carried from the verifying lane's disposition, not re-derived here)<br>per-finding trust classification<br>EPSS/KEV annotation where applicable, with a note when neither applies<br>a priority ranking of verified findings, with the ranking rationale stated (not just the score)<br>exact JSON/table shape `10-synthesis-report` consumes, so synthesis does not need to re-score |
@@ -2204,7 +2244,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | Status | readiness `missing_prerequisites`; execution `none`; job-graph `implemented: false` |
 | Resource pool | `unassigned` |
 | Dagster | standalone: --; lifecycle binding: `blocked_op` |
-| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `03-threat-model-dfd-stride`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `04-asvs-masvs`)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) (required, contract `07-red-team-adversarial`)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation) (required, contract `08-blue-team-refutation`)<br>[`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) (required, contract `12-scoring-prioritization`)<br>[`11-remediation-proposal`](#job-11-remediation-proposal) (optional, contract `11-remediation-proposal`) |
+| Consumes (graph) | [`01-component-characterization`](#job-01-component-characterization) (required, contract `component-map`)<br>[`03-threat-model-dfd-stride`](#job-03-threat-model-dfd-stride) (required, contract `threat-model-core`)<br>[`04-asvs-masvs`](#job-04-asvs-masvs) (required, contract `04-asvs-masvs`)<br>[`07-red-team-adversarial`](#job-07-red-team-adversarial) (required, contract `07-red-team-adversarial`)<br>[`08-blue-team-refutation`](#job-08-blue-team-refutation) (required, contract `08-blue-team-refutation`)<br>[`09-independent-verification`](#job-09-independent-verification) (required, contract `09-independent-verification`)<br>[`12-scoring-prioritization`](#job-12-scoring-prioritization) (required, contract `12-scoring-prioritization`)<br>[`11-remediation-proposal`](#job-11-remediation-proposal) (optional, contract `11-remediation-proposal`) |
 | Declared inputs (10-synthesis-report/config.md) | verified findings<br>unresolved risks<br>coverage ledger<br>component map<br>threat model<br>ASVS/MASVS assessment<br>red/blue/verifier outputs<br>scoring and priority ranking (from `12-scoring-prioritization`) |
 | Produces | `runs/<run_id>/data/jobs/10-synthesis-report/` |
 | Output files (10-synthesis-report/config.md) | final findings table<br>merged/deduplicated finding set<br>limitations<br>go/no-go recommendation<br>remediation plan<br>report draft |

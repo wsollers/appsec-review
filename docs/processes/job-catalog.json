@@ -1235,9 +1235,10 @@
         "job:02-binary-intelligence-ingest"
        ],
        "declared_inputs": [
-        "target binary artifact path or binary artifact inventory",
-        "audit-binary-analysis image",
-        "writable scratch output directory"
+        "accepted native-build binary lineage",
+        "accepted binary-triage result",
+        "accepted binary-cfg result",
+        "run-owned normalized lead evidence"
        ]
       },
       {
@@ -1269,9 +1270,9 @@
         "job:02-standards-source-ingest"
        ],
        "declared_inputs": [
-        "upstream standards source path or curated local reference",
-        "standard family and version/ref",
-        "license or usage notes"
+        "exact accepted intake source identity",
+        "run-owned standards-source-binding.json",
+        "repository-pinned data/reference/source-lock.json and selected snapshots"
        ]
       },
       {
@@ -1311,7 +1312,7 @@
       {
        "ref": "job:02-native-sast",
        "id": "02-native-sast",
-       "name": "02-native-sast",
+       "name": "Native SAST",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -1319,12 +1320,17 @@
        "produces": [
         "job:02-native-sast"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "exact accepted 02-native-build publication",
+        "caller-held native-build fingerprint",
+        "B16 audit-native record",
+        "tracked native-SAST configuration"
+       ]
       },
       {
        "ref": "job:02-ir-capture",
        "id": "02-ir-capture",
-       "name": "02-ir-capture",
+       "name": "IR Capture",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -1332,12 +1338,15 @@
        "produces": [
         "job:02-ir-capture"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native build",
+        "clang compile database"
+       ]
       },
       {
        "ref": "job:02-ir-link",
        "id": "02-ir-link",
-       "name": "02-ir-link",
+       "name": "IR Link",
        "kind": "lifecycle",
        "consumes": [
         "job:02-ir-capture"
@@ -1345,12 +1354,14 @@
        "produces": [
         "job:02-ir-link"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted IR capture"
+       ]
       },
       {
        "ref": "job:02-ir-facts",
        "id": "02-ir-facts",
-       "name": "02-ir-facts",
+       "name": "IR Facts",
        "kind": "lifecycle",
        "consumes": [
         "job:02-ir-link"
@@ -1358,12 +1369,14 @@
        "produces": [
         "job:02-ir-facts"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted linked LLVM module"
+       ]
       },
       {
        "ref": "job:02-debug-symbol-index",
        "id": "02-debug-symbol-index",
-       "name": "02-debug-symbol-index",
+       "name": "Debug Symbol Index",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -1371,12 +1384,15 @@
        "produces": [
         "job:02-debug-symbol-index"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native-build binary lineage",
+        "run-owned static symbol evidence"
+       ]
       },
       {
        "ref": "job:02-binary-triage",
        "id": "02-binary-triage",
-       "name": "02-binary-triage",
+       "name": "Static Binary Triage",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -1384,12 +1400,15 @@
        "produces": [
         "job:02-binary-triage"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native-build binary lineage",
+        "run-owned static triage evidence"
+       ]
       },
       {
        "ref": "job:02-binary-cfg",
        "id": "02-binary-cfg",
-       "name": "02-binary-cfg",
+       "name": "Static Binary CFG",
        "kind": "lifecycle",
        "consumes": [
         "job:02-binary-triage",
@@ -1398,12 +1417,17 @@
        "produces": [
         "job:02-binary-cfg"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native-build binary lineage",
+        "accepted debug-symbol-index",
+        "accepted binary-triage",
+        "run-owned static CFG evidence"
+       ]
       },
       {
        "ref": "job:02-test-execution",
        "id": "02-test-execution",
-       "name": "02-test-execution",
+       "name": "Test Execution",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -1411,12 +1435,16 @@
        "produces": [
         "job:02-test-execution"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native build",
+        "trusted bounded test plan",
+        "target-execution grant"
+       ]
       },
       {
        "ref": "job:02-test-result-ingest",
        "id": "02-test-result-ingest",
-       "name": "02-test-result-ingest",
+       "name": "Test Result Ingest",
        "kind": "lifecycle",
        "consumes": [
         "job:02-test-execution"
@@ -1424,12 +1452,14 @@
        "produces": [
         "job:02-test-result-ingest"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted test execution"
+       ]
       },
       {
        "ref": "job:02-test-coverage-ingest",
        "id": "02-test-coverage-ingest",
-       "name": "02-test-coverage-ingest",
+       "name": "Test Coverage Ingest",
        "kind": "lifecycle",
        "consumes": [
         "job:02-test-execution"
@@ -1437,12 +1467,14 @@
        "produces": [
         "job:02-test-coverage-ingest"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted test execution"
+       ]
       },
       {
        "ref": "job:02-operations-doc-ingest",
        "id": "02-operations-doc-ingest",
-       "name": "02-operations-doc-ingest",
+       "name": "Operations Document Ingest",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -1450,7 +1482,9 @@
        "produces": [
         "job:02-operations-doc-ingest"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "exact accepted intake source inventory"
+       ]
       },
       {
        "ref": "job:02-secrets-inventory",
@@ -1643,19 +1677,37 @@
        "all graph-required producer accepted pointers and envelopes",
        "collection path",
        "collection format",
-       "target binary artifact path or binary artifact inventory",
-       "audit-binary-analysis image",
-       "writable scratch output directory",
+       "accepted native-build binary lineage",
+       "accepted binary-triage result",
+       "accepted binary-cfg result",
+       "run-owned normalized lead evidence",
        "document source path",
        "source type",
        "redaction policy",
-       "upstream standards source path or curated local reference",
-       "standard family and version/ref",
-       "license or usage notes",
+       "exact accepted intake source identity",
+       "run-owned standards-source-binding.json",
+       "repository-pinned data/reference/source-lock.json and selected snapshots",
        "tests path",
        "test type or auto",
        "B16 tool-semgrep record",
-       "repository-owned hashed ruleset"
+       "repository-owned hashed ruleset",
+       "exact accepted 02-native-build publication",
+       "caller-held native-build fingerprint",
+       "B16 audit-native record",
+       "tracked native-SAST configuration",
+       "accepted native build",
+       "clang compile database",
+       "accepted IR capture",
+       "accepted linked LLVM module",
+       "run-owned static symbol evidence",
+       "run-owned static triage evidence",
+       "accepted debug-symbol-index",
+       "accepted binary-triage",
+       "run-owned static CFG evidence",
+       "trusted bounded test plan",
+       "target-execution grant",
+       "accepted test execution",
+       "exact accepted intake source inventory"
       ]
      }
     },
@@ -1729,7 +1781,7 @@
       {
        "ref": "job:03-threat-model-dfd-stride",
        "id": "03-threat-model-dfd-stride",
-       "name": "03-threat-model-dfd-stride",
+       "name": "Deterministic DFD And STRIDE Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization"
@@ -1738,11 +1790,8 @@
         "job:03-threat-model-dfd-stride"
        ],
        "declared_inputs": [
-        "component-purpose map",
-        "evidence package",
-        "deployment/IaC artifacts",
-        "symbol/semantic indexes",
-        "known external actors and data classes"
+        "current accepted F03 component map",
+        "exact F02 evidence assembly and dereferenced artifact cited through F03"
        ]
       },
       {
@@ -1913,13 +1962,12 @@
       "declared_inputs": [
        "target repository path",
        "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+       "current accepted F03 component map",
+       "exact F02 evidence assembly and dereferenced artifact cited through F03",
        "component-purpose map",
-       "evidence package",
-       "deployment/IaC artifacts",
-       "symbol/semantic indexes",
-       "known external actors and data classes",
        "DFD/trust boundaries if available",
        "coverage ledger",
+       "evidence package",
        "ASVS version",
        "MASVS/MASTG version",
        "appsec-review-process/standards/catalog/owasp-*",
@@ -1944,6 +1992,7 @@
        "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
        "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
        "existing test suite locations and any existing fuzz harnesses already in the target repo",
+       "symbol/semantic indexes",
        "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
        "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
        "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
@@ -2294,28 +2343,44 @@
      "all graph-required producer accepted pointers and envelopes",
      "collection path",
      "collection format",
-     "target binary artifact path or binary artifact inventory",
-     "audit-binary-analysis image",
-     "writable scratch output directory",
+     "accepted native-build binary lineage",
+     "accepted binary-triage result",
+     "accepted binary-cfg result",
+     "run-owned normalized lead evidence",
      "document source path",
      "source type",
      "redaction policy",
-     "upstream standards source path or curated local reference",
-     "standard family and version/ref",
-     "license or usage notes",
+     "exact accepted intake source identity",
+     "run-owned standards-source-binding.json",
+     "repository-pinned data/reference/source-lock.json and selected snapshots",
      "tests path",
      "test type or auto",
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
+     "exact accepted 02-native-build publication",
+     "caller-held native-build fingerprint",
+     "B16 audit-native record",
+     "tracked native-SAST configuration",
+     "accepted native build",
+     "clang compile database",
+     "accepted IR capture",
+     "accepted linked LLVM module",
+     "run-owned static symbol evidence",
+     "run-owned static triage evidence",
+     "accepted debug-symbol-index",
+     "accepted binary-triage",
+     "run-owned static CFG evidence",
+     "trusted bounded test plan",
+     "accepted test execution",
+     "exact accepted intake source inventory",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "current accepted F03 component map",
+     "exact F02 evidence assembly and dereferenced artifact cited through F03",
      "component-purpose map",
-     "evidence package",
-     "deployment/IaC artifacts",
-     "symbol/semantic indexes",
-     "known external actors and data classes",
      "DFD/trust boundaries if available",
      "coverage ledger",
+     "evidence package",
      "ASVS version",
      "MASVS/MASTG version",
      "appsec-review-process/standards/catalog/owasp-*",
@@ -2340,6 +2405,7 @@
      "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
      "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
      "existing test suite locations and any existing fuzz harnesses already in the target repo",
+     "symbol/semantic indexes",
      "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
      "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
      "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
@@ -3432,9 +3498,10 @@
         "job:02-binary-intelligence-ingest"
        ],
        "declared_inputs": [
-        "target binary artifact path or binary artifact inventory",
-        "audit-binary-analysis image",
-        "writable scratch output directory"
+        "accepted native-build binary lineage",
+        "accepted binary-triage result",
+        "accepted binary-cfg result",
+        "run-owned normalized lead evidence"
        ]
       },
       {
@@ -3466,9 +3533,9 @@
         "job:02-standards-source-ingest"
        ],
        "declared_inputs": [
-        "upstream standards source path or curated local reference",
-        "standard family and version/ref",
-        "license or usage notes"
+        "exact accepted intake source identity",
+        "run-owned standards-source-binding.json",
+        "repository-pinned data/reference/source-lock.json and selected snapshots"
        ]
       },
       {
@@ -3545,7 +3612,7 @@
       {
        "ref": "job:02-native-sast",
        "id": "02-native-sast",
-       "name": "02-native-sast",
+       "name": "Native SAST",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -3553,12 +3620,17 @@
        "produces": [
         "job:02-native-sast"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "exact accepted 02-native-build publication",
+        "caller-held native-build fingerprint",
+        "B16 audit-native record",
+        "tracked native-SAST configuration"
+       ]
       },
       {
        "ref": "job:02-ir-capture",
        "id": "02-ir-capture",
-       "name": "02-ir-capture",
+       "name": "IR Capture",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -3566,12 +3638,15 @@
        "produces": [
         "job:02-ir-capture"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native build",
+        "clang compile database"
+       ]
       },
       {
        "ref": "job:02-ir-link",
        "id": "02-ir-link",
-       "name": "02-ir-link",
+       "name": "IR Link",
        "kind": "lifecycle",
        "consumes": [
         "job:02-ir-capture"
@@ -3579,12 +3654,14 @@
        "produces": [
         "job:02-ir-link"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted IR capture"
+       ]
       },
       {
        "ref": "job:02-ir-facts",
        "id": "02-ir-facts",
-       "name": "02-ir-facts",
+       "name": "IR Facts",
        "kind": "lifecycle",
        "consumes": [
         "job:02-ir-link"
@@ -3592,12 +3669,14 @@
        "produces": [
         "job:02-ir-facts"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted linked LLVM module"
+       ]
       },
       {
        "ref": "job:02-debug-symbol-index",
        "id": "02-debug-symbol-index",
-       "name": "02-debug-symbol-index",
+       "name": "Debug Symbol Index",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -3605,12 +3684,15 @@
        "produces": [
         "job:02-debug-symbol-index"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native-build binary lineage",
+        "run-owned static symbol evidence"
+       ]
       },
       {
        "ref": "job:02-binary-triage",
        "id": "02-binary-triage",
-       "name": "02-binary-triage",
+       "name": "Static Binary Triage",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -3618,12 +3700,15 @@
        "produces": [
         "job:02-binary-triage"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native-build binary lineage",
+        "run-owned static triage evidence"
+       ]
       },
       {
        "ref": "job:02-binary-cfg",
        "id": "02-binary-cfg",
-       "name": "02-binary-cfg",
+       "name": "Static Binary CFG",
        "kind": "lifecycle",
        "consumes": [
         "job:02-binary-triage",
@@ -3632,12 +3717,17 @@
        "produces": [
         "job:02-binary-cfg"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native-build binary lineage",
+        "accepted debug-symbol-index",
+        "accepted binary-triage",
+        "run-owned static CFG evidence"
+       ]
       },
       {
        "ref": "job:02-test-execution",
        "id": "02-test-execution",
-       "name": "02-test-execution",
+       "name": "Test Execution",
        "kind": "lifecycle",
        "consumes": [
         "job:02-native-build"
@@ -3645,12 +3735,16 @@
        "produces": [
         "job:02-test-execution"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted native build",
+        "trusted bounded test plan",
+        "target-execution grant"
+       ]
       },
       {
        "ref": "job:02-test-result-ingest",
        "id": "02-test-result-ingest",
-       "name": "02-test-result-ingest",
+       "name": "Test Result Ingest",
        "kind": "lifecycle",
        "consumes": [
         "job:02-test-execution"
@@ -3658,12 +3752,14 @@
        "produces": [
         "job:02-test-result-ingest"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted test execution"
+       ]
       },
       {
        "ref": "job:02-test-coverage-ingest",
        "id": "02-test-coverage-ingest",
-       "name": "02-test-coverage-ingest",
+       "name": "Test Coverage Ingest",
        "kind": "lifecycle",
        "consumes": [
         "job:02-test-execution"
@@ -3671,12 +3767,14 @@
        "produces": [
         "job:02-test-coverage-ingest"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "accepted test execution"
+       ]
       },
       {
        "ref": "job:02-operations-doc-ingest",
        "id": "02-operations-doc-ingest",
-       "name": "02-operations-doc-ingest",
+       "name": "Operations Document Ingest",
        "kind": "lifecycle",
        "consumes": [
         "job:00-intake"
@@ -3684,7 +3782,9 @@
        "produces": [
         "job:02-operations-doc-ingest"
        ],
-       "declared_inputs": []
+       "declared_inputs": [
+        "exact accepted intake source inventory"
+       ]
       },
       {
        "ref": "job:02-evidence-index",
@@ -3894,15 +3994,16 @@
        "all graph-required producer accepted pointers and envelopes",
        "collection path",
        "collection format",
-       "target binary artifact path or binary artifact inventory",
-       "audit-binary-analysis image",
-       "writable scratch output directory",
+       "accepted native-build binary lineage",
+       "accepted binary-triage result",
+       "accepted binary-cfg result",
+       "run-owned normalized lead evidence",
        "document source path",
        "source type",
        "redaction policy",
-       "upstream standards source path or curated local reference",
-       "standard family and version/ref",
-       "license or usage notes",
+       "exact accepted intake source identity",
+       "run-owned standards-source-binding.json",
+       "repository-pinned data/reference/source-lock.json and selected snapshots",
        "tests path",
        "test type or auto",
        "accepted build lock",
@@ -3911,6 +4012,22 @@
        "accepted configured build",
        "B16 tool-semgrep record",
        "repository-owned hashed ruleset",
+       "exact accepted 02-native-build publication",
+       "caller-held native-build fingerprint",
+       "B16 audit-native record",
+       "tracked native-SAST configuration",
+       "accepted native build",
+       "clang compile database",
+       "accepted IR capture",
+       "accepted linked LLVM module",
+       "run-owned static symbol evidence",
+       "run-owned static triage evidence",
+       "accepted debug-symbol-index",
+       "accepted binary-triage",
+       "run-owned static CFG evidence",
+       "trusted bounded test plan",
+       "accepted test execution",
+       "exact accepted intake source inventory",
        "accepted build discovery"
       ]
      }
@@ -3955,7 +4072,7 @@
       {
        "ref": "job:03-threat-model-dfd-stride",
        "id": "03-threat-model-dfd-stride",
-       "name": "03-threat-model-dfd-stride",
+       "name": "Deterministic DFD And STRIDE Core",
        "kind": "lifecycle",
        "consumes": [
         "job:01-component-characterization"
@@ -3964,11 +4081,8 @@
         "job:03-threat-model-dfd-stride"
        ],
        "declared_inputs": [
-        "component-purpose map",
-        "evidence package",
-        "deployment/IaC artifacts",
-        "symbol/semantic indexes",
-        "known external actors and data classes"
+        "current accepted F03 component map",
+        "exact F02 evidence assembly and dereferenced artifact cited through F03"
        ]
       }
      ],
@@ -3981,11 +4095,8 @@
       ],
       "passes": [],
       "declared_inputs": [
-       "component-purpose map",
-       "evidence package",
-       "deployment/IaC artifacts",
-       "symbol/semantic indexes",
-       "known external actors and data classes"
+       "current accepted F03 component map",
+       "exact F02 evidence assembly and dereferenced artifact cited through F03"
       ]
      }
     },
@@ -4638,15 +4749,16 @@
      "all graph-required producer accepted pointers and envelopes",
      "collection path",
      "collection format",
-     "target binary artifact path or binary artifact inventory",
-     "audit-binary-analysis image",
-     "writable scratch output directory",
+     "accepted native-build binary lineage",
+     "accepted binary-triage result",
+     "accepted binary-cfg result",
+     "run-owned normalized lead evidence",
      "document source path",
      "source type",
      "redaction policy",
-     "upstream standards source path or curated local reference",
-     "standard family and version/ref",
-     "license or usage notes",
+     "exact accepted intake source identity",
+     "run-owned standards-source-binding.json",
+     "repository-pinned data/reference/source-lock.json and selected snapshots",
      "tests path",
      "test type or auto",
      "accepted build lock",
@@ -4655,15 +4767,30 @@
      "accepted configured build",
      "B16 tool-semgrep record",
      "repository-owned hashed ruleset",
+     "exact accepted 02-native-build publication",
+     "caller-held native-build fingerprint",
+     "B16 audit-native record",
+     "tracked native-SAST configuration",
+     "accepted native build",
+     "clang compile database",
+     "accepted IR capture",
+     "accepted linked LLVM module",
+     "run-owned static symbol evidence",
+     "run-owned static triage evidence",
+     "accepted debug-symbol-index",
+     "accepted binary-triage",
+     "run-owned static CFG evidence",
+     "trusted bounded test plan",
+     "accepted test execution",
+     "exact accepted intake source inventory",
      "accepted build discovery",
      "accepted COMPLETE 02-evidence-assembly intel-manifest.json with hash-bound assembly-relative artifacts",
+     "current accepted F03 component map",
+     "exact F02 evidence assembly and dereferenced artifact cited through F03",
      "component-purpose map",
-     "evidence package",
-     "deployment/IaC artifacts",
-     "symbol/semantic indexes",
-     "known external actors and data classes",
      "DFD/trust boundaries if available",
      "coverage ledger",
+     "evidence package",
      "ASVS version",
      "MASVS/MASTG version",
      "appsec-review-process/standards/catalog/owasp-*",
@@ -4688,6 +4815,7 @@
      "dependency/CVE/EOL evidence (from `06-cve-reachability`)",
      "native compile-feasibility tier (Tier A/B/C, ADR-0001) and per-TU `control-coverage.json`, if available",
      "existing test suite locations and any existing fuzz harnesses already in the target repo",
+     "symbol/semantic indexes",
      "IaC scan evidence: `static-evidence/iac/{trivy-config.json,tfsec.json,results_json.json}` (Trivy config, tfsec, Checkov)",
      "Terraform-specific SAST evidence: `static-evidence/sast-multi/semgrep-terraform.json` (Semgrep `p/terraform`, added 2026-09-19)",
      "Kubernetes/Helm lint evidence: `static-evidence/iac-k8s/kube-linter.json`",
@@ -6484,7 +6612,7 @@
     {
      "job": "02-api-collection-intelligence-ingest",
      "kind": "required",
-     "contract": "intelligence-extract"
+     "contract": "api-collection-intelligence"
     },
     {
      "job": "02-binary-intelligence-ingest",
@@ -6494,7 +6622,7 @@
     {
      "job": "02-doc-intelligence-ingest",
      "kind": "required",
-     "contract": "intelligence-extract"
+     "contract": "doc-intelligence"
     },
     {
      "job": "02-standards-source-ingest",
@@ -6504,7 +6632,7 @@
     {
      "job": "02-test-intelligence-ingest",
      "kind": "required",
-     "contract": "intelligence-extract"
+     "contract": "test-intelligence"
     },
     {
      "job": "02-source-sast",
@@ -6726,16 +6854,22 @@
   {
    "id": "03-threat-model-dfd-stride",
    "lane": "03-threat-model-dfd-stride",
-   "name": "03-threat-model-dfd-stride",
-   "contract": "03-threat-model-dfd-stride",
+   "name": "Deterministic DFD And STRIDE Core",
+   "contract": "threat-model-core",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/threat_model_core.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "developer-engineer",
+    "role_id": "threat-model-core",
+    "domain_id": "threat-model-core",
+    "tooling_profile_id": "threat-model-static-evidence",
+    "output_contract_id": "threat-model-core"
+   },
    "depends_on": [
     {
      "job": "01-component-characterization",
@@ -6746,47 +6880,31 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "component-purpose map"
+     "input": "current accepted F03 component map"
     },
     {
      "need": "required",
-     "input": "evidence package"
-    },
-    {
-     "need": "required",
-     "input": "deployment/IaC artifacts"
-    },
-    {
-     "need": "required",
-     "input": "symbol/semantic indexes"
-    },
-    {
-     "need": "required",
-     "input": "known external actors and data classes"
+     "input": "exact F02 evidence assembly and dereferenced artifact cited through F03"
     }
    ],
-   "inputs_source": "03-threat-model-dfd-stride/config.md",
+   "inputs_source": "registry/job-templates/03-threat-model-dfd-stride.json",
    "output_dir": "runs/<run_id>/data/jobs/03-threat-model-dfd-stride/",
    "output_files": [
-    "corrected component map notes",
-    "trust boundary list",
-    "data-flow table",
-    "Mermaid DFD",
-    "STRIDE hypothesis list",
-    "verification worklist"
+    "integrated-threat-model.json",
+    "threat-model-summary.md",
+    "permission.json",
+    "lineage.json",
+    "status.json"
    ],
-   "outputs_source": "03-threat-model-dfd-stride/config.md",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/threat-model-core.json",
+   "claim_class": "threat_model_candidate",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "claim_ledger_routing_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core to accepted F03/F02 lifecycle outputs, candidate claim-ledger routing, and live qualification.",
    "consumes": [
     "job:01-component-characterization"
    ],
@@ -6816,7 +6934,7 @@
     {
      "job": "03-threat-model-dfd-stride",
      "kind": "required",
-     "contract": "03-threat-model-dfd-stride"
+     "contract": "threat-model-core"
     },
     {
      "job": "04-owasp-validation-worklist",
@@ -7057,7 +7175,7 @@
     {
      "job": "03-threat-model-dfd-stride",
      "kind": "required",
-     "contract": "03-threat-model-dfd-stride"
+     "contract": "threat-model-core"
     },
     {
      "job": "05-native-memory",
@@ -7238,7 +7356,7 @@
     {
      "job": "03-threat-model-dfd-stride",
      "kind": "required",
-     "contract": "03-threat-model-dfd-stride"
+     "contract": "threat-model-core"
     },
     {
      "job": "04-asvs-masvs",
@@ -7589,7 +7707,7 @@
     {
      "job": "03-threat-model-dfd-stride",
      "kind": "required",
-     "contract": "03-threat-model-dfd-stride"
+     "contract": "threat-model-core"
     }
    ],
    "declared_inputs": [
@@ -7663,7 +7781,7 @@
     {
      "job": "03-threat-model-dfd-stride",
      "kind": "required",
-     "contract": "03-threat-model-dfd-stride"
+     "contract": "threat-model-core"
     },
     {
      "job": "04-asvs-masvs",
@@ -7770,11 +7888,11 @@
    "id": "02-api-collection-intelligence-ingest",
    "lane": "02-evidence-pregather",
    "name": "QA/API Collection Intelligence Ingestion",
-   "contract": "intelligence-extract",
+   "contract": "api-collection-intelligence",
    "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/api_collection_intelligence_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
@@ -7783,7 +7901,7 @@
     "role_id": "api-collection-intelligence-extractor",
     "domain_id": "api-collection-artifacts",
     "tooling_profile_id": "static-api-collection-parser",
-    "output_contract_id": "intelligence-extract"
+    "output_contract_id": "api-collection-intelligence"
    },
    "depends_on": [
     {
@@ -7821,21 +7939,19 @@
    "inputs_source": "registry/job-templates/02-api-collection-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-api-collection-intelligence-ingest/",
    "output_files": [
-    "summary.md",
-    "facts.json",
-    "search-records.jsonl",
-    "status.json"
+    "api-collection-intelligence.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/intelligence-extract.json",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/api-collection-intelligence.json",
+   "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
    "consumes": [
     "job:00-intake"
    ],
@@ -7849,9 +7965,9 @@
    "name": "Binary Intelligence Ingest",
    "contract": "binary-intelligence",
    "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/binary_intelligence_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
@@ -7877,57 +7993,42 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "target binary artifact path or binary artifact inventory"
+     "input": "accepted native-build binary lineage"
     },
     {
      "need": "required",
-     "input": "audit-binary-analysis image"
+     "input": "accepted binary-triage result"
     },
     {
      "need": "required",
-     "input": "writable scratch output directory"
+     "input": "accepted binary-cfg result"
     },
     {
-     "need": "optional",
-     "input": "YARA rules"
+     "need": "required",
+     "input": "run-owned normalized lead evidence"
     },
     {
      "need": "optional",
      "input": "source component map"
-    },
-    {
-     "need": "optional",
-     "input": "SBOM or package inventory"
-    },
-    {
-     "need": "optional",
-     "input": "debug symbols or separate debug files"
-    },
-    {
-     "need": "optional",
-     "input": "known-good or known-bad binary comparison corpus"
     }
    ],
    "inputs_source": "registry/job-templates/02-binary-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-intelligence-ingest/",
    "output_files": [
-    "binary-artifact-inventory.json",
-    "binary-intelligence-summary.md",
-    "tool-evidence-manifest.json",
-    "candidate-leads.json",
-    "verification-followups.json",
-    "status.json"
+    "binary-intelligence.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
    ],
    "outputs_source": "registry/output-contracts/binary-intelligence.json",
-   "claim_class": null,
+   "claim_class": "binary_lead_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "m02_pinned_binary_tool_unavailable",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-binary-triage",
     "job:02-binary-cfg"
@@ -7940,11 +8041,11 @@
    "id": "02-doc-intelligence-ingest",
    "lane": "02-evidence-pregather",
    "name": "Document Intelligence Ingestion",
-   "contract": "intelligence-extract",
+   "contract": "doc-intelligence",
    "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/doc_intelligence_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
@@ -7953,7 +8054,7 @@
     "role_id": "doc-intelligence-extractor",
     "domain_id": "functional-design-docs",
     "tooling_profile_id": "static-doc-parser",
-    "output_contract_id": "intelligence-extract"
+    "output_contract_id": "doc-intelligence"
    },
    "depends_on": [
     {
@@ -7991,21 +8092,19 @@
    "inputs_source": "registry/job-templates/02-doc-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-doc-intelligence-ingest/",
    "output_files": [
-    "summary.md",
-    "facts.json",
-    "search-records.jsonl",
-    "status.json"
+    "doc-intelligence.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/intelligence-extract.json",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/doc-intelligence.json",
+   "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
    "consumes": [
     "job:00-intake"
    ],
@@ -8019,9 +8118,9 @@
    "name": "Standards Source Ingestion",
    "contract": "standards-source-extract",
    "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/standards_source_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
@@ -8042,48 +8141,33 @@
    "declared_inputs": [
     {
      "need": "required",
-     "input": "upstream standards source path or curated local reference"
+     "input": "exact accepted intake source identity"
     },
     {
      "need": "required",
-     "input": "standard family and version/ref"
+     "input": "run-owned standards-source-binding.json"
     },
     {
      "need": "required",
-     "input": "license or usage notes"
-    },
-    {
-     "need": "optional",
-     "input": "existing appsec-review-process/standards/indexes/*"
-    },
-    {
-     "need": "optional",
-     "input": "OpenCRE crosswalk records"
-    },
-    {
-     "need": "optional",
-     "input": "DISA/STIG reference metadata"
+     "input": "repository-pinned data/reference/source-lock.json and selected snapshots"
     }
    ],
    "inputs_source": "registry/job-templates/02-standards-source-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-standards-source-ingest/",
    "output_files": [
-    "source-manifest.json",
-    "extraction-log.jsonl",
-    "controls/",
-    "indexes/",
-    "status.json"
+    "standards-source.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
    ],
    "outputs_source": "registry/output-contracts/standards-source-extract.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Bind the qualified offline core into the shared Dagster lifecycle and complete live fixture qualification.",
    "consumes": [
     "job:00-intake"
    ],
@@ -8095,11 +8179,11 @@
    "id": "02-test-intelligence-ingest",
    "lane": "02-evidence-pregather",
    "name": "Test Intelligence Ingestion",
-   "contract": "intelligence-extract",
+   "contract": "test-intelligence",
    "implemented": false,
-   "readiness": "registered_planned_not_executable",
-   "execution_mode": "persona",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/test_intelligence_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
@@ -8108,7 +8192,7 @@
     "role_id": "test-intelligence-extractor",
     "domain_id": "qa-test-artifacts",
     "tooling_profile_id": "static-test-doc-parser",
-    "output_contract_id": "intelligence-extract"
+    "output_contract_id": "test-intelligence"
    },
    "depends_on": [
     {
@@ -8146,21 +8230,19 @@
    "inputs_source": "registry/job-templates/02-test-intelligence-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-intelligence-ingest/",
    "output_files": [
-    "summary.md",
-    "facts.json",
-    "search-records.jsonl",
-    "status.json"
+    "test-intelligence.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
    ],
-   "outputs_source": "registry/output-contracts/intelligence-extract.json",
-   "claim_class": null,
+   "outputs_source": "registry/output-contracts/test-intelligence.json",
+   "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Implement and validate a run-owned worker through the shared dispatch runtime.",
+   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
    "consumes": [
     "job:00-intake"
    ],
@@ -8537,16 +8619,22 @@
   {
    "id": "02-native-sast",
    "lane": "02-evidence-pregather",
-   "name": "02-native-sast",
+   "name": "Native SAST",
    "contract": "native-sast",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/native_sast.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "native-sast-curator",
+    "domain_id": "native-static-analysis",
+    "tooling_profile_id": "pinned-native-sast",
+    "output_contract_id": "native-sast"
+   },
    "depends_on": [
     {
      "job": "02-native-build",
@@ -8554,22 +8642,43 @@
      "contract": "native-build"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "exact accepted 02-native-build publication"
+    },
+    {
+     "need": "required",
+     "input": "caller-held native-build fingerprint"
+    },
+    {
+     "need": "required",
+     "input": "B16 audit-native record"
+    },
+    {
+     "need": "required",
+     "input": "tracked native-SAST configuration"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-native-sast.json",
    "output_dir": "runs/<run_id>/data/jobs/02-native-sast/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "native-sast.json",
+    "b13-receipts.json",
+    "native-sast-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/native-sast.json",
+   "claim_class": "native_static_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "pinned_image_live_qualification_missing",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -8580,16 +8689,22 @@
   {
    "id": "02-ir-capture",
    "lane": "02-evidence-pregather",
-   "name": "02-ir-capture",
-   "contract": "llvm-ir",
+   "name": "IR Capture",
+   "contract": "ir-capture",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/ir_capture.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "ir-evidence-producer",
+    "domain_id": "llvm-ir-evidence",
+    "tooling_profile_id": "llvm-ir-evidence",
+    "output_contract_id": "ir-capture"
+   },
    "depends_on": [
     {
      "job": "02-native-build",
@@ -8597,22 +8712,32 @@
      "contract": "native-build"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted native build"
+    },
+    {
+     "need": "required",
+     "input": "clang compile database"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-ir-capture.json",
    "output_dir": "runs/<run_id>/data/jobs/02-ir-capture/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "ir-capture.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/ir-capture.json",
+   "claim_class": "ir_static_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "toolchain_factory_binding_missing",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -8623,39 +8748,51 @@
   {
    "id": "02-ir-link",
    "lane": "02-evidence-pregather",
-   "name": "02-ir-link",
-   "contract": "linked-llvm-ir",
+   "name": "IR Link",
+   "contract": "ir-link",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/ir_link.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "ir-evidence-producer",
+    "domain_id": "llvm-ir-evidence",
+    "tooling_profile_id": "llvm-ir-evidence",
+    "output_contract_id": "ir-link"
+   },
    "depends_on": [
     {
      "job": "02-ir-capture",
      "kind": "required",
-     "contract": "llvm-ir"
+     "contract": "ir-capture"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted IR capture"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-ir-link.json",
    "output_dir": "runs/<run_id>/data/jobs/02-ir-link/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "ir-link.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/ir-link.json",
+   "claim_class": "ir_static_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "toolchain_factory_binding_missing",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-ir-capture"
    ],
@@ -8666,39 +8803,51 @@
   {
    "id": "02-ir-facts",
    "lane": "02-evidence-pregather",
-   "name": "02-ir-facts",
+   "name": "IR Facts",
    "contract": "ir-facts",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/ir_facts.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "ir-evidence-producer",
+    "domain_id": "llvm-ir-evidence",
+    "tooling_profile_id": "llvm-ir-evidence",
+    "output_contract_id": "ir-facts"
+   },
    "depends_on": [
     {
      "job": "02-ir-link",
      "kind": "required",
-     "contract": "linked-llvm-ir"
+     "contract": "ir-link"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted linked LLVM module"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-ir-facts.json",
    "output_dir": "runs/<run_id>/data/jobs/02-ir-facts/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "ir-facts.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/ir-facts.json",
+   "claim_class": "ir_static_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "toolchain_factory_binding_missing",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-ir-link"
    ],
@@ -8709,16 +8858,22 @@
   {
    "id": "02-debug-symbol-index",
    "lane": "02-evidence-pregather",
-   "name": "02-debug-symbol-index",
+   "name": "Debug Symbol Index",
    "contract": "debug-symbol-index",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/debug_symbol_index.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "reverse-engineer",
+    "role_id": "binary-intelligence-extractor",
+    "domain_id": "binary-artifact-analysis",
+    "tooling_profile_id": "binary-intel-static-analysis",
+    "output_contract_id": "debug-symbol-index"
+   },
    "depends_on": [
     {
      "job": "02-native-build",
@@ -8726,22 +8881,33 @@
      "contract": "native-build"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted native-build binary lineage"
+    },
+    {
+     "need": "required",
+     "input": "run-owned static symbol evidence"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-debug-symbol-index.json",
    "output_dir": "runs/<run_id>/data/jobs/02-debug-symbol-index/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "debug-symbol-index.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/debug-symbol-index.json",
+   "claim_class": "debug_symbol_static_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "m02_pinned_binary_tool_unavailable",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -8752,16 +8918,22 @@
   {
    "id": "02-binary-triage",
    "lane": "02-evidence-pregather",
-   "name": "02-binary-triage",
+   "name": "Static Binary Triage",
    "contract": "binary-triage",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/binary_triage.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "reverse-engineer",
+    "role_id": "binary-intelligence-extractor",
+    "domain_id": "binary-artifact-analysis",
+    "tooling_profile_id": "binary-intel-static-analysis",
+    "output_contract_id": "binary-triage"
+   },
    "depends_on": [
     {
      "job": "02-native-build",
@@ -8769,22 +8941,33 @@
      "contract": "native-build"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted native-build binary lineage"
+    },
+    {
+     "need": "required",
+     "input": "run-owned static triage evidence"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-binary-triage.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-triage/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "binary-triage-manifest.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/binary-triage.json",
+   "claim_class": "binary_inventory_static_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "m02_pinned_binary_tool_unavailable",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -8795,16 +8978,22 @@
   {
    "id": "02-binary-cfg",
    "lane": "02-evidence-pregather",
-   "name": "02-binary-cfg",
+   "name": "Static Binary CFG",
    "contract": "binary-cfg",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/binary_cfg.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "reverse-engineer",
+    "role_id": "binary-intelligence-extractor",
+    "domain_id": "binary-artifact-analysis",
+    "tooling_profile_id": "binary-intel-static-analysis",
+    "output_contract_id": "binary-cfg"
+   },
    "depends_on": [
     {
      "job": "02-binary-triage",
@@ -8817,22 +9006,41 @@
      "contract": "debug-symbol-index"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted native-build binary lineage"
+    },
+    {
+     "need": "required",
+     "input": "accepted debug-symbol-index"
+    },
+    {
+     "need": "required",
+     "input": "accepted binary-triage"
+    },
+    {
+     "need": "required",
+     "input": "run-owned static CFG evidence"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-binary-cfg.json",
    "output_dir": "runs/<run_id>/data/jobs/02-binary-cfg/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "cfg-manifest.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/binary-cfg.json",
+   "claim_class": "binary_cfg_static_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "m02_pinned_binary_tool_unavailable",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle and complete its declared live prerequisite.",
    "consumes": [
     "job:02-binary-triage",
     "job:02-debug-symbol-index"
@@ -8844,16 +9052,22 @@
   {
    "id": "02-test-execution",
    "lane": "02-evidence-pregather",
-   "name": "02-test-execution",
+   "name": "Test Execution",
    "contract": "test-execution",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/test_execution.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "qa-test-validator",
+    "role_id": "test-evidence-producer",
+    "domain_id": "qa-test-artifacts",
+    "tooling_profile_id": "bounded-test-evidence",
+    "output_contract_id": "test-execution"
+   },
    "depends_on": [
     {
      "job": "02-native-build",
@@ -8861,22 +9075,39 @@
      "contract": "native-build"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted native build"
+    },
+    {
+     "need": "required",
+     "input": "trusted bounded test plan"
+    },
+    {
+     "need": "required",
+     "input": "target-execution grant"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-test-execution.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-execution/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "test-execution.json",
+    "b13-receipt.json",
+    "test-execution-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/test-execution.json",
+   "claim_class": "test_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "operator_test_control_staging_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification.",
    "consumes": [
     "job:02-native-build"
    ],
@@ -8887,16 +9118,22 @@
   {
    "id": "02-test-result-ingest",
    "lane": "02-evidence-pregather",
-   "name": "02-test-result-ingest",
+   "name": "Test Result Ingest",
    "contract": "test-result-intelligence",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/test_result_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "qa-test-validator",
+    "role_id": "test-evidence-producer",
+    "domain_id": "qa-test-artifacts",
+    "tooling_profile_id": "bounded-test-evidence",
+    "output_contract_id": "test-result-intelligence"
+   },
    "depends_on": [
     {
      "job": "02-test-execution",
@@ -8904,22 +9141,30 @@
      "contract": "test-execution"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted test execution"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-test-result-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-result-ingest/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "test-results.json",
+    "test-result-intelligence-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/test-result-intelligence.json",
+   "claim_class": "test_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "accepted_test_execution_lifecycle_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification.",
    "consumes": [
     "job:02-test-execution"
    ],
@@ -8930,16 +9175,22 @@
   {
    "id": "02-test-coverage-ingest",
    "lane": "02-evidence-pregather",
-   "name": "02-test-coverage-ingest",
+   "name": "Test Coverage Ingest",
    "contract": "test-coverage-intelligence",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/test_coverage_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "test-coverage-indexer",
+    "role_id": "test-evidence-producer",
+    "domain_id": "qa-test-artifacts",
+    "tooling_profile_id": "bounded-test-evidence",
+    "output_contract_id": "test-coverage-intelligence"
+   },
    "depends_on": [
     {
      "job": "02-test-execution",
@@ -8947,22 +9198,30 @@
      "contract": "test-execution"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "accepted test execution"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-test-coverage-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-test-coverage-ingest/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "test-coverage.json",
+    "test-coverage-intelligence-summary.md",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/test-coverage-intelligence.json",
+   "claim_class": "test_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "accepted_test_execution_lifecycle_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified core into the shared Dagster lifecycle, stage the authorized test control, and complete live qualification.",
    "consumes": [
     "job:02-test-execution"
    ],
@@ -8973,16 +9232,22 @@
   {
    "id": "02-operations-doc-ingest",
    "lane": "02-evidence-pregather",
-   "name": "02-operations-doc-ingest",
+   "name": "Operations Document Ingest",
    "contract": "operations-doc-intelligence",
    "implemented": false,
-   "readiness": "missing_prerequisites",
-   "execution_mode": "none",
-   "worker": null,
+   "readiness": "standalone_only",
+   "execution_mode": "deterministic_python",
+   "worker": "appsec-review-process/operations_doc_ingest.py:run",
    "resource_pool": "unassigned",
    "dagster_jobs": [],
    "lifecycle_binding": "blocked_op",
-   "composition": null,
+   "composition": {
+    "persona_id": "functional-design-doc-consumer",
+    "role_id": "doc-intelligence-extractor",
+    "domain_id": "functional-design-docs",
+    "tooling_profile_id": "static-doc-parser",
+    "output_contract_id": "operations-doc-intelligence"
+   },
    "depends_on": [
     {
      "job": "00-intake",
@@ -8990,22 +9255,28 @@
      "contract": "intake"
     }
    ],
-   "declared_inputs": [],
-   "inputs_source": null,
+   "declared_inputs": [
+    {
+     "need": "required",
+     "input": "exact accepted intake source inventory"
+    }
+   ],
+   "inputs_source": "registry/job-templates/02-operations-doc-ingest.json",
    "output_dir": "runs/<run_id>/data/jobs/02-operations-doc-ingest/",
-   "output_files": [],
-   "outputs_source": null,
-   "claim_class": null,
+   "output_files": [
+    "operations-doc-intelligence.json",
+    "status.json",
+    "permission.json",
+    "lineage.json"
+   ],
+   "outputs_source": "registry/output-contracts/operations-doc-intelligence.json",
+   "claim_class": "static_intelligence_evidence",
    "gaps": [
-    "missing_dedicated_output_schema",
-    "missing_output_contract",
-    "missing_registry_composition",
-    "missing_validator",
-    "missing_worker",
-    "no_qualification",
+    "shared_dagster_graph_not_integrated",
+    "no_live_qualification",
     "unassigned_resource_pool"
    ],
-   "next_prerequisite": "Add registry composition, worker, validator, contract, lifecycle binding, pool, and qualification.",
+   "next_prerequisite": "Bind the qualified source-only core into the shared Dagster lifecycle and complete live fixture qualification.",
    "consumes": [
     "job:00-intake"
    ],
@@ -9019,7 +9290,7 @@
    "name": "Evidence Index",
    "contract": "evidence-index",
    "implemented": true,
-   "readiness": "implemented_and_qualified",
+   "readiness": "implemented_not_qualified",
    "execution_mode": "deterministic_python",
    "worker": "appsec-review-process/evidence_store.py:run",
    "resource_pool": "memory",
@@ -9057,14 +9328,19 @@
     "manifest.json",
     "index.sqlite",
     "ssdeep.csv",
+    "evidence-index-enrichment.json",
+    "permission.json",
+    "lineage.json",
     "status.json"
    ],
    "outputs_source": "registry/output-contracts/evidence-index.json",
    "claim_class": null,
    "gaps": [
-    "missing_dedicated_output_schema"
+    "derived_producer_selection_not_orchestrated",
+    "common_worker_envelope_migration_missing",
+    "live_enrichment_requalification_missing"
    ],
-   "next_prerequisite": "Pool assigned (memory, B15). Add a dedicated output schema.",
+   "next_prerequisite": "Stage accepted derived-producer selections, migrate the legacy publication to the common envelope, and requalify the enriched lifecycle live.",
    "consumes": [
     "job:00-intake"
    ],
@@ -10502,7 +10778,7 @@
    "id": "job:03-threat-model-dfd-stride",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/03-threat-model-dfd-stride/",
-   "about": "Accepted 03-threat-model-dfd-stride output of 03-threat-model-dfd-stride.",
+   "about": "Accepted threat-model-core output of 03-threat-model-dfd-stride.",
    "produced_by": [
     "job:03-threat-model-dfd-stride"
    ],
@@ -10659,7 +10935,7 @@
    "id": "job:02-api-collection-intelligence-ingest",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/02-api-collection-intelligence-ingest/",
-   "about": "Accepted intelligence-extract output of 02-api-collection-intelligence-ingest.",
+   "about": "Accepted api-collection-intelligence output of 02-api-collection-intelligence-ingest.",
    "produced_by": [
     "job:02-api-collection-intelligence-ingest"
    ],
@@ -10683,7 +10959,7 @@
    "id": "job:02-doc-intelligence-ingest",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/02-doc-intelligence-ingest/",
-   "about": "Accepted intelligence-extract output of 02-doc-intelligence-ingest.",
+   "about": "Accepted doc-intelligence output of 02-doc-intelligence-ingest.",
    "produced_by": [
     "job:02-doc-intelligence-ingest"
    ],
@@ -10707,7 +10983,7 @@
    "id": "job:02-test-intelligence-ingest",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/02-test-intelligence-ingest/",
-   "about": "Accepted intelligence-extract output of 02-test-intelligence-ingest.",
+   "about": "Accepted test-intelligence output of 02-test-intelligence-ingest.",
    "produced_by": [
     "job:02-test-intelligence-ingest"
    ],
@@ -10799,7 +11075,7 @@
    "id": "job:02-ir-capture",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/02-ir-capture/",
-   "about": "Accepted llvm-ir output of 02-ir-capture.",
+   "about": "Accepted ir-capture output of 02-ir-capture.",
    "produced_by": [
     "job:02-ir-capture"
    ],
@@ -10811,7 +11087,7 @@
    "id": "job:02-ir-link",
    "kind": "job output",
    "path": "runs/<run_id>/data/jobs/02-ir-link/",
-   "about": "Accepted linked-llvm-ir output of 02-ir-link.",
+   "about": "Accepted ir-link output of 02-ir-link.",
    "produced_by": [
     "job:02-ir-link"
    ],
