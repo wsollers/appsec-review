@@ -1,0 +1,14 @@
+{
+  "schema": "appsec-review/tooling-profile/0.1",
+  "tooling_profile_id": "component-evidence-router",
+  "display_name": "Static Component Evidence Router",
+  "mode": "static-only",
+  "required_inputs": ["target repository mounted read-only", "accepted evidence-assembly attempt"],
+  "optional_inputs": ["symbol index", "semantic index", "repository partition map", "build and scanner summaries"],
+  "allowed_actions": ["search source and manifests", "inspect accepted static evidence", "classify repository-relative scope", "infer component purpose with citations", "prepare downstream review routing", "record negative evidence and rescope triggers"],
+  "disallowed_actions": ["execute target code", "modify the target", "access the network", "publish findings", "assign severity", "assert runtime state", "declare compliance"],
+  "claim_limits": {
+    "allowed": ["static_scope_classification", "statically_inferred_component_purpose", "review_routing", "coverage_gap", "rescope_trigger"],
+    "forbidden": ["finding", "verified_security_finding", "severity", "runtime_state", "compliance_verdict", "remediation_status"]
+  }
+}

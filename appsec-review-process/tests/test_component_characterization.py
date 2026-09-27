@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+from copy import deepcopy
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import component_characterization as cc
+import execution_state as state
+import persona_invocation as pi
+import persona_prompt_assembly as ppa
+from schema_validate import SchemaStore, validate_document
+from worker_result import artifact_records, terminal_envelope
+
+
+class ComponentCharacterizationTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.owner = Path(self.temporary.name)
+        self.target = self.owner / "hello-autotools"
+        (self.target / "src").mkdir(parents=True)
+        (self.target / "src/main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+        (self.target / "Makefile.am").write_text("bin_PROGRAMS = hello\nhello_SOURCES = src/main.c\n", encoding="utf-8")
+        (self.target / "README.md").write_text("# hello-autotools\n", encoding="utf-8")
+        self.evidence = self.owner / "evidence"
+        self.evidence.mkdir()
+        fixture = ROOT / "tests/fixtures/component-characterization/hello-autotools.json"
+        text = fixture.read_text(encoding="utf-8")
+        text = text.replace("MAIN_HASH", state.file_hash(self.target / "src/main.c"))
+        text = text.replace("MAKE_HASH", state.file_hash(self.target / "Makefile.am"))
+        text = text.replace("README_HASH", state.file_hash(self.target / "README.md"))
+        self.value = json.loads(text)
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_schema_registry_composition_and_claim_ceiling_are_closed(self):
+        self.assertEqual(validate_document(self.value, "component-purpose-map.schema.json"), [])
+        store = SchemaStore()
+        prompt, template = ppa.assemble_prompt_text(cc.TEMPLATE, store)
+        self.assertIn("This job produces evidence organization and routing only", prompt)
+        records = pi.load_composition(ROOT / "registry", {
+            "job_template_id": cc.TEMPLATE,
+            "job_template_sha256": pi._sha(template),
+            **{name + "_id": template["composition"][name + "_id"]
+               for name, *_rest in pi.COMPOSITION_KINDS if name != "job_template"},
+            **{name + "_sha256": pi._sha(json.loads((ROOT / "registry" / directory /
+                (template["composition"][name + "_id"] + ".json")).read_text(encoding="utf-8")))
+               for name, directory, _schema, _field in pi.COMPOSITION_KINDS if name != "job_template"},
+        }, store)
+        ceiling = pi.claim_ceiling(records["role"], records["tooling_profile"])
+        self.assertEqual(set(ceiling["allowed"]), {
+            "static_scope_classification", "statically_inferred_component_purpose",
+            "review_routing", "coverage_gap", "rescope_trigger",
+        })
+        self.assertTrue({"finding", "severity", "runtime_state"} <= set(ceiling["prohibited"]))
+
+    def test_fixture_passes_deterministic_semantic_validation(self):
+        self.assertEqual(cc.validate_payload(self.value, target_root=self.target,
+                                             evidence_root=self.evidence), [])
+
+    def test_expected_category_must_be_mapped_or_explicitly_absent(self):
+        invalid = deepcopy(self.value)
+        invalid["negative_evidence"] = [item for item in invalid["negative_evidence"]
+                                         if item["category"] != "generated"]
+        errors = cc.validate_payload(invalid, target_root=self.target, evidence_root=self.evidence)
+        self.assertTrue(any("generated" in error for error in errors))
+
+    def test_rejects_stale_citations_prohibited_conclusions_and_broken_references(self):
+        stale = deepcopy(self.value)
+        stale["functional_components"][0]["evidence_citations"][0]["content_hash"] = "0" * 64
+        self.assertTrue(any("stale" in error for error in cc.validate_payload(
+            stale, target_root=self.target, evidence_root=self.evidence)))
+
+        conclusion = deepcopy(self.value)
+        conclusion["functional_components"][0]["severity"] = "high"
+        errors = cc.validate_payload(conclusion, target_root=self.target, evidence_root=self.evidence)
+        self.assertTrue(errors)
+
+        broken = deepcopy(self.value)
+        broken["analysis_exclusions"][0]["rescope_trigger_id"] = "missing"
+        self.assertTrue(any("does not resolve" in error for error in cc.validate_payload(
+            broken, target_root=self.target, evidence_root=self.evidence)))
+
+
+class ComponentCharacterizationLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.owner = Path(self.temporary.name)
+        self.old_runs = state.RUNS
+        state.RUNS = self.owner / "runs"
+        self.run_id = "component-fixture"
+        self.target = self.owner / "target"
+        (self.target / "src").mkdir(parents=True)
+        (self.target / "src/main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+        (self.target / "Makefile.am").write_text("bin_PROGRAMS = hello\nhello_SOURCES = src/main.c\n", encoding="utf-8")
+        (self.target / "README.md").write_text("# hello-autotools\n", encoding="utf-8")
+        self.evidence = self.owner / "evidence"
+        self.evidence.mkdir()
+        fixture = ROOT / "tests/fixtures/component-characterization/hello-autotools.json"
+        text = fixture.read_text(encoding="utf-8")
+        text = text.replace("MAIN_HASH", state.file_hash(self.target / "src/main.c"))
+        text = text.replace("MAKE_HASH", state.file_hash(self.target / "Makefile.am"))
+        text = text.replace("README_HASH", state.file_hash(self.target / "README.md"))
+        self.value = json.loads(text)
+        self.inputs = {
+            "job": cc.JOB, "run_id": self.run_id, "target_root": str(self.target),
+            "target_name": "hello-autotools", "source_revision": None,
+            "source_snapshot_sha256": self.value["source_snapshot_sha256"],
+            "evidence_root": str(self.evidence), "evidence": {"fixture": True},
+            "code": cc._code_hashes(),
+        }
+
+    def tearDown(self):
+        state.RUNS = self.old_runs
+        self.temporary.cleanup()
+
+    def dispatch(self, *_args):
+        return deepcopy(self.value), "# Component map\n", {
+            "budget": "standard",
+            "persona": {"persona_id": "developer-engineer", "role_id": "component-characterizer",
+                        "domain_id": "component-characterization",
+                        "tooling_profile_id": "component-evidence-router"},
+            "model": {"alias": "fixture", "provider": "fixture", "version": "fixture"},
+            "persona_result_sha256": "sha256:" + "b" * 64,
+            "artifacts_read": ["src/main.c", "Makefile.am", "README.md"],
+        }
+
+    def test_current_inputs_exposes_only_published_assembly_artifacts(self):
+        run = state.RUNS / self.run_id
+        (run / "inputs").mkdir(parents=True)
+        state.atomic_json(run / "inputs/artifact-manifest.json", {
+            "schema": "fixture", "target": {"repo_path": str(self.target)}})
+        base = run / "data/jobs" / cc.UPSTREAM_JOB
+        attempt = base / "attempts/assembly-1"
+        attempt.mkdir(parents=True)
+        state.atomic_json(attempt / cc.UPSTREAM_MANIFEST, {"schema": "fixture", "entries": []})
+        state.atomic_json(attempt / "status.json", {"status": "OK"})
+        (attempt / "raw-tool-output.log").write_text("must not become a readable input\n",
+                                                       encoding="utf-8")
+        fingerprint = "sha256:" + "c" * 64
+        envelope = terminal_envelope(
+            run_id=self.run_id, job_id=cc.UPSTREAM_JOB, attempt_id="assembly-1",
+            worker_kind="deterministic_python", execution_status="OK",
+            acceptance_status="CURRENT", input_fingerprint=fingerprint,
+            output_contract="pregather", started_at="2026-01-01T00:00:00Z",
+            finished_at="2026-01-01T00:00:01Z", summary="fixture",
+            artifacts=artifact_records(attempt, [cc.UPSTREAM_MANIFEST, "status.json"]))
+        state.atomic_json(attempt / "result.json", envelope)
+        state.atomic_json(base / "accepted.json", {
+            "schema": "appsec-review/accepted-worker-result/1.0", "status": "OK",
+            "run_id": self.run_id, "job": cc.UPSTREAM_JOB, "attempt_id": "assembly-1",
+            "fingerprint": fingerprint, "envelope_path": "result.json",
+            "envelope_sha256": state.file_hash(attempt / "result.json"), "hashes": {},
+        })
+        inputs = cc.current_inputs(self.run_id)
+        staged = Path(inputs["evidence_root"])
+        self.assertTrue((staged / cc.UPSTREAM_MANIFEST).is_file())
+        self.assertTrue((staged / "status.json").is_file())
+        self.assertFalse((staged / "raw-tool-output.log").exists())
+
+    def test_common_lifecycle_publishes_and_reuses_valid_map(self):
+        with patch.object(cc, "current_inputs", return_value=self.inputs), patch.object(
+                cc, "_dispatch_persona", side_effect=self.dispatch) as dispatched:
+            first = cc.run(self.run_id, "dagster-a")
+            second = cc.run(self.run_id, "dagster-b")
+        self.assertEqual(first["schema"], "appsec-review/accepted-worker-result/1.0")
+        self.assertEqual(first["attempt_id"], second["attempt_id"])
+        self.assertEqual(dispatched.call_count, 1)
+        attempt = cc.root(self.run_id) / "attempts" / first["attempt_id"]
+        self.assertEqual(state.read_json(attempt / cc.RESULT), self.value)
+
+    def test_invalid_new_attempt_blocks_older_success(self):
+        with patch.object(cc, "current_inputs", return_value=self.inputs), patch.object(
+                cc, "_dispatch_persona", side_effect=self.dispatch):
+            accepted = cc.run(self.run_id, "dagster-a")
+        invalid = deepcopy(self.value)
+        invalid["parallel_review_groups"][0]["component_ids"] = ["missing"]
+        with patch.object(cc, "current_inputs", return_value=self.inputs), patch.object(
+                cc, "_dispatch_persona", return_value=(invalid, "# invalid\n", self.dispatch()[2])):
+            with self.assertRaises(ValueError):
+                cc.run(self.run_id, "dagster-b", force=True)
+        pointer = state.read_json(cc.root(self.run_id) / "accepted.json")
+        self.assertEqual(pointer["status"], "FAILED")
+        self.assertNotEqual(pointer["attempt_id"], accepted["attempt_id"])
+
+
+if __name__ == "__main__":
+    unittest.main()

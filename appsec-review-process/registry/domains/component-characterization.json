@@ -1,0 +1,9 @@
+{
+  "schema": "appsec-review/domain/0.1",
+  "domain_id": "component-characterization",
+  "display_name": "Source Scope And Functional Component Characterization",
+  "surfaces": ["first-party source", "vendored dependencies", "generated code", "tests and samples", "documentation", "build tooling", "functional components", "security-control surfaces"],
+  "common_failure_modes": ["directory tree repeated without semantic components", "vendored or generated code treated as first party", "test utility shipped but excluded", "absent category silently omitted", "review route mistaken for a security conclusion", "unresolved scope hidden by high-level grouping"],
+  "preferred_standards": [],
+  "required_evidence_hints": ["accepted evidence manifest", "repository partition map", "source paths and symbols", "build targets", "API and protocol definitions", "deployment and test artifacts"]
+}

@@ -92,6 +92,13 @@ CLAIM_CLASS_POLICIES = {
         "claim_class_id": "source_static_evidence",
         "allowed_assertions": {"static-analysis-lead", "coverage-gap"},
     },
+    "component-map": {
+        "claim_class_id": "component_characterization",
+        "allowed_assertions": {
+            "static-scope-classification", "statically-inferred-component-purpose",
+            "review-routing", "coverage-gap", "rescope-trigger",
+        },
+    },
 }
 PROMOTION_FIELDS = {
     "finding": {

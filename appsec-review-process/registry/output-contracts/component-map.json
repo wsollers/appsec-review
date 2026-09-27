@@ -1,0 +1,23 @@
+{
+  "schema": "appsec-review/output-contract/0.1",
+  "contract_id": "component-map",
+  "display_name": "Component Purpose And Review Routing Map",
+  "required_files": ["component-purpose-map.json", "component-purpose-map.md", "status.json"],
+  "required_status_fields": ["process", "status", "budget", "persona_id", "role_id", "domain_id", "tooling_profile_id", "artifacts_read", "classification_gaps"],
+  "result_schema": {"artifact": "component-purpose-map.json", "schema_file": "component-purpose-map.schema.json"},
+  "claim_class": {
+    "claim_class_id": "component_characterization",
+    "allowed_assertions": ["static-scope-classification", "statically-inferred-component-purpose", "review-routing", "coverage-gap", "rescope-trigger"],
+    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+  },
+  "validation_rules": [
+    "every expected source category is represented by a scope classification or explicit negative evidence",
+    "scope, component, review-group, exclusion and rescope identifiers are unique and all references resolve",
+    "all repository paths are normalized and repository-relative",
+    "every positive scope and component claim has fresh source or accepted upstream evidence",
+    "excluded vendored, generated, test/sample and documentation scope has a bounded rescope trigger",
+    "downstream routing is evidence prioritization and does not assert applicability or a security conclusion",
+    "the map cannot publish findings, severity, runtime state, remediation status or compliance verdicts",
+    "latest failed attempt blocks reuse of an older accepted map"
+  ]
+}

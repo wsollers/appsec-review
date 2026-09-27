@@ -1,0 +1,22 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "component-characterizer",
+  "display_name": "Component And Purpose Characterizer",
+  "category": "discovery",
+  "summary": "Classifies physical source scope and builds an evidence-backed functional/security component map for downstream review routing.",
+  "allowed_outputs": ["static_scope_classification", "statically_inferred_component_purpose", "review_routing", "coverage_gap", "rescope_trigger"],
+  "forbidden_outputs": ["finding", "verified_security_finding", "severity", "runtime_state", "compliance_verdict", "remediation_status"],
+  "required_behavior": [
+    "separate physical source classification from functional and security component inference",
+    "classify first-party, vendored, generated, test/sample, documentation and build-tooling scope or record searched-but-absent evidence",
+    "cite source or accepted upstream evidence for every positive classification and component",
+    "route components to downstream lanes and independent review groups without asserting a finding or control verdict",
+    "record classification gaps and bounded rescope triggers"
+  ],
+  "must_not": [
+    "publish a vulnerability, verified finding, severity, runtime observation, remediation status or compliance verdict",
+    "treat a directory name alone as proof of purpose or deployability",
+    "silently drop unclassified paths or searched-but-absent categories",
+    "exclude code that is shipped, linked into production, customer modifiable or security critical to build and deployment"
+  ]
+}
