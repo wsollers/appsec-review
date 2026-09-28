@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -161,10 +162,20 @@ class ClaimReviewerInvoker:
         def dispatch(argv: list[str], prompt: str, timeout: int, transcript: Path) -> dict[str, Any]:
             return self.dispatch_fn(argv, prompt + instructions, timeout, transcript)
 
-        cli.ClaudeCliInvoker(effort=self.effort, budget_usd=self.budget_usd,
-            timeout_seconds=self.timeout_seconds, dispatch_fn=dispatch,
-            fill_result=_derive_fill(package), persona_schema=derive.PERSONA_SCHEMA).invoke(
-                package, output_root=output_root, cancel=cancel)
+        # persona_invocation records only "the invoker raised" and drops the text by design, so print
+        # the traceback to the step log (stderr) here, then re-raise unchanged.
+        try:
+            cli.ClaudeCliInvoker(effort=self.effort, budget_usd=self.budget_usd,
+                timeout_seconds=self.timeout_seconds, dispatch_fn=dispatch,
+                fill_result=_derive_fill(package), persona_schema=derive.PERSONA_SCHEMA).invoke(
+                    package, output_root=output_root, cancel=cancel)
+        except BaseException as exc:
+            import traceback
+            print(f"[reviewer-diag] invocation raised {type(exc).__name__}: {str(exc)[:2000]} "
+                  f"(job={package.request.get('job_id')} attempt={package.request.get('attempt_id')})",
+                  file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
+            raise
 
 
 def _code_hashes() -> dict[str, str]:
