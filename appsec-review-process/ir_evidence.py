@@ -117,6 +117,8 @@ def _accepted(run_id: str, job: str, artifact: str, schema: str,
                         "envelope_path", "envelope_sha256", "hashes", "accepted_at"}
     latest_path = base / "latest.json"
     latest = read_json(latest_path) if latest_path.is_file() and not latest_path.is_symlink() else {}
+    if pointer.get("status") == "SKIPPED":
+        expected_pointer = expected_pointer | {"reason"}   # a SKIPPED pointer carries its reason
     if (set(pointer) != expected_pointer or
             pointer.get("schema") != "appsec-review/accepted-worker-result/1.0" or
             pointer.get("run_id") != run_id or pointer.get("job") != job or

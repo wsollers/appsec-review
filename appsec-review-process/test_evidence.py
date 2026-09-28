@@ -201,6 +201,7 @@ def accepted(run_id:str,job:str,artifact:str,schema:str,contract:str)->tuple[Pat
     pointer=read_json(pp); attempt=base/"attempts"/str(pointer.get("attempt_id","")); envelope=attempt/str(pointer.get("envelope_path",""))
     required={"schema","status","run_id","job","attempt_id","fingerprint","envelope_path","envelope_sha256","hashes","accepted_at"}
     latest=read_json(base/"latest.json") if (base/"latest.json").is_file() else {}
+    if pointer.get("status")=="SKIPPED": required=required|{"reason"}  # a SKIPPED pointer carries its reason
     if (set(pointer)!=required or pointer.get("schema")!="appsec-review/accepted-worker-result/1.0" or pointer.get("run_id")!=run_id or
         pointer.get("job")!=job or pointer.get("status") not in {"OK","OK_WITH_GAPS","SKIPPED"} or
         pointer.get("envelope_path")!="result.json" or latest.get("attempt_id")!=pointer.get("attempt_id") or
