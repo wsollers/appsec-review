@@ -48,7 +48,7 @@ python3 -B appsec-review-process/offline_evidence_control.py stage-control "$RUN
 # the build grants are bound to that manifest's hash. Run intake first, then stage the build controls,
 # or 02-build-resolution blocks with STALE_GRANT.
 echo "== intake (phase1_intake) before the build controls"
-python3 -B appsec-review-process/launch_job.py --run-id "$RUN_ID" --job phase1_intake --wait --timeout 1800 >/dev/null
+python3 -B appsec-review-process/launch_job.py --run-id "$RUN_ID" --job phase1_intake --wait --timeout 21600 >/dev/null  # includes time queued behind other runs
 python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
 echo "staged: launch with"
