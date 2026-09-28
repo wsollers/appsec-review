@@ -1052,11 +1052,11 @@ def persona_cache_key(package: Any, prompt_text: str, model_alias: str, effort: 
     request = package.request or {}
     body = {"version": PERSONA_CACHE_VERSION, "model": model_alias, "effort": effort,
             # the persona job and persona keep independent cells (quorum, red/blue) from sharing
-            "job_id": request.get("job_id"), "persona": request.get("persona"),
+            "job_id": request.get("job_id"), "persona": pi.thaw(request.get("persona")),
             "prompt_sha256": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
             "inputs": sorted([str(item.root), str(item.path), hashlib.sha256(item.data).hexdigest()]
                              for item in package.inputs)}
-    return hashlib.sha256(json.dumps(body, sort_keys=True).encode("utf-8")).hexdigest()
+    return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
 def _persona_cache_path(package: Any, key: str) -> Path | None:
@@ -1172,8 +1172,12 @@ class ClaudeCliInvoker:
                 raise InvokerOutputError(str(exc), [f"{result_field}: {exc}"]) from None
             return envelope, claims
 
-        cache_key = persona_cache_key(package, prompt_text, model_alias, self.effort)
-        cache_path = _persona_cache_path(package, cache_key) if _persona_cache_enabled() else None
+        # The cache is an optimisation: any failure computing it means a normal live call.
+        try:
+            cache_key = persona_cache_key(package, prompt_text, model_alias, self.effort)
+            cache_path = _persona_cache_path(package, cache_key) if _persona_cache_enabled() else None
+        except Exception:
+            cache_key, cache_path = "", None
         reused = None
         if cache_path is not None and cache_path.is_file() and not cache_path.is_symlink():
             # Relaunch tax: the same question to the same model over the same pinned bytes was
@@ -1200,13 +1204,16 @@ class ClaudeCliInvoker:
             duration_seconds = time.time() - started
             envelope, claims = rounds["envelope"], rounds["claims"]
             if cache_path is not None and reused is None and rounds.get("accepted_text"):
+              try:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 atomic_bytes(cache_path, (json.dumps({
                     "version": PERSONA_CACHE_VERSION, "key": cache_key,
                     "job_id": package.request.get("job_id"), "attempt": package.request.get("attempt_id"),
                     "model": model_alias, "effort": self.effort,
                     "stored_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "accepted_text": rounds["accepted_text"]}, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+                    "accepted_text": rounds["accepted_text"]}, indent=2, sort_keys=True, default=str) + "\n").encode("utf-8"))
+              except Exception:
+                pass   # never fail an accepted answer because the cache could not be written
 
             written_files: list[str] = []
             for filename, key, kind in fields:

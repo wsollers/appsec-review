@@ -253,8 +253,9 @@ class PersonaResultCacheTests(unittest.TestCase):
         def package(attempt):
             return SimpleNamespace(
                 composition={"output_contract": contract}, prompt=b"OUTER", inputs=(item("configure.ac"), item("Makefile.am")),
-                request={"model": {"family": "claude-sonnet-5"}, "run_id": "cache-run", "attempt_id": attempt,
-                         "job_id": "d02", "budget": {"input_unit_limit": 10 ** 9}},
+                request=invoker.pi.freeze({"model": {"family": "claude-sonnet-5"}, "run_id": "cache-run",
+                         "attempt_id": attempt, "job_id": "d02", "persona": {"persona_id": "p"},
+                         "budget": {"input_unit_limit": 10 ** 9}}),
                 allowed_claim_classes=("project_inventory", "safe_command_plan"))
         written = []
         with tempfile.TemporaryDirectory() as runs, \
