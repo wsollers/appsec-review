@@ -172,6 +172,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | appsec-multi-vuln | 005628c6 | 02-native-build | (milestone) 9 units built, 25 binaries; result rejected: a direct-compile unit has one command and the schema required two (configure + build) | native-build `commands` minItems 1 |
 | 2026-09-28 | hello-autotools, doom3-bfg | 832f8d4e, 9c2411a2 | 02-evidence-assembly | All 26 producer-binding model cells failed INVOKER_EXCEPTION: the new persona cache key json-dumped the frozen persona mapping (mappingproxy) and raised before any call. My bug; the unit test used plain dicts | Key thaws the persona (default=str); key and cache write are wrapped so a cache failure is always a live call; test uses a frozen request |
 | 2026-09-28 | hello-autotools | ff976ec6 | 02-binary-cfg | accepted pointer input fingerprint mismatch: build_replay.py (native-build code) was merged at 12:15 while the run was past native build, so re-derived upstream inputs changed. Third time today | Process: merge job code only when no run is past that job (or accept a hello relaunch, ~3 min); shared-runtime merges are safe |
 | 2026-09-28 | appsec-multi-vuln | 49e3637e | 02-build-configure | (milestone) 9 C/C++ units built after the cwd and -cc1 fixes; configure replay then failed on a unit with no configure step (empty locked phase read as a failed sequence) | Replay compares against the locked command count; configured-build `commands` may be empty |
