@@ -6,6 +6,7 @@ evidence.  Target binaries are statically parsed and are never executed.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -33,6 +34,65 @@ RAW_SCHEMA = "appsec-review/binary-static-evidence-input/1"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
 APPLICABILITY = "applicability-receipt.json"
+# Scale audit B (docs/scale-audit-unreal-engine.md): a producer whose records grow with the target
+# publishes a small summary plus a JSONL records file bound by hash and count.  freeciv21 run
+# 20260928T005228Z-5b0fac: the debug-symbol index was 77 MB against a 32 MiB result limit.
+RECORDS_FILES = {"02-debug-symbol-index": "debug-symbol-index.records.jsonl"}
+
+
+def split_records(job: str, result: dict[str, Any], destination: Path | None = None) -> dict[str, Any]:
+    """Return the published summary for ``result``; optionally stream its records to JSONL."""
+    name = RECORDS_FILES.get(job)
+    if name is None:
+        return result
+    summary = {key: value for key, value in result.items() if key != "records"}
+    hasher = hashlib.sha256()
+    stream = destination.open("wb") if destination is not None else None
+    try:
+        for record in result["records"]:
+            line = (json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    + "\n").encode("utf-8")
+            hasher.update(line)
+            if stream is not None:
+                stream.write(line)
+    finally:
+        if stream is not None:
+            stream.close()
+    summary["records_file"] = {"path": name, "sha256": "sha256:" + hasher.hexdigest(),
+                               "count": len(result["records"])}
+    return summary
+
+
+def load_records(job: str, attempt: Path, result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Records of an accepted result, streamed from its hash-bound records file when split."""
+    declared = result.get("records_file")
+    if declared is None:
+        return result["records"]
+    if not isinstance(declared, dict) or declared.get("path") != RECORDS_FILES.get(job):
+        raise Blocked(f"{job}: records file declaration is not the job's closed records file")
+    path = attempt / declared["path"]
+    if not path.is_file() or path.is_symlink() or "sha256:" + file_hash(path) != declared.get("sha256"):
+        raise Blocked(f"{job}: published records file is missing, linked or changed")
+    with path.open("r", encoding="utf-8") as stream:
+        records = [json.loads(line) for line in stream if line.strip()]
+    if len(records) != declared.get("count"):
+        raise Blocked(f"{job}: published records file count differs from its declaration")
+    return records
+
+
+def _hydrate(run_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    """Attach split upstream records in memory only; inputs.json keeps the hash-bound summary."""
+    upstream = inputs.get("upstream") or {}
+    if not any("records_file" in value.get("result", {}) for value in upstream.values()):
+        return inputs
+    hydrated = {}
+    for dep, value in upstream.items():
+        result = value["result"]
+        if "records_file" in result:
+            attempt = root(run_id, dep) / "attempts" / value["attempt_id"]
+            value = {**value, "result": {**result, "records": load_records(dep, attempt, result)}}
+        hydrated[dep] = value
+    return {**inputs, "upstream": hydrated}
 
 
 def root(run_id: str, job: str) -> Path:
@@ -452,6 +512,7 @@ def _normalize_record(job: str, item: dict[str, Any], binary: dict[str, Any], in
 
 def _materialized_inputs(run_id: str, job: str, attempt: Path,
                          inputs: dict[str, Any]) -> dict[str, Any]:
+    inputs = _hydrate(run_id, inputs)
     if job not in adapter.SUPPORTED:
         return inputs
     native_attempt, current = _native(run_id)
@@ -471,8 +532,13 @@ def _validate_attempt(run_id: str, job: str, attempt: Path, inputs: dict[str, An
     result = read_json(attempt / result_name)
     if validate_document(result, schema):
         raise Blocked(f"{job}: result schema validation failed")
-    if result != normalize(job, effective, attempt.name):
+    expected = normalize(job, effective, attempt.name)
+    if job in RECORDS_FILES and validate_document(expected, schema):
+        raise Blocked(f"{job}: normalized records fail schema validation")
+    if result != split_records(job, expected):
         raise Blocked(f"{job}: normalized result no longer matches hash-bound raw evidence")
+    if job in RECORDS_FILES:
+        load_records(job, attempt, result)  # the on-disk records file matches the declared hash
     lineage_keys = ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "envelope_sha256", "result_sha256", "source_revision")
     native_lineage = {key: inputs["native_build"][key] for key in lineage_keys}
     permission = {"schema": PERMISSION_SCHEMA, "run_id": run_id, "job_id": job,
@@ -496,17 +562,19 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> d
     def execute(allocation, inputs, fingerprint):
         attempt = allocation["attempt"]
         if inputs["code"] != _code_hashes(job): raise Blocked(f"{job}: implementation changed")
-        effective = inputs
+        effective = _hydrate(run_id, inputs)
         if job in adapter.SUPPORTED:
             native_attempt, current = _native(run_id)
             if current != inputs["native_build"]:
                 raise Blocked(f"{job}: accepted native build changed after input allocation")
-            raw = adapter.materialize(run_id, job, attempt, native_attempt, inputs)
-            effective = {**inputs, "raw": raw,
+            raw = adapter.materialize(run_id, job, attempt, native_attempt, effective)
+            effective = {**effective, "raw": raw,
                 "raw_evidence_sha256": "sha256:" + file_hash(attempt / adapter.RAW_FILE),
                 "config_sha256": _hash(raw["config"])}
         result = normalize(job, effective, allocation["attempt_id"])
-        atomic_json(attempt / result_name, result)
+        records_name = RECORDS_FILES.get(job)
+        atomic_json(attempt / result_name, split_records(
+            job, result, attempt / records_name if records_name else None))
         lineage_keys = ("job_id", "attempt_id", "fingerprint", "pointer_sha256", "envelope_sha256", "result_sha256", "source_revision")
         native_lineage = {key: inputs["native_build"][key] for key in lineage_keys}
         atomic_json(attempt / "permission.json", {"schema": PERMISSION_SCHEMA, "run_id": run_id,
@@ -522,6 +590,8 @@ def run(run_id: str, dagster_run_id: str, job_id: str, force: bool = False) -> d
                   "qualification": "implemented_not_qualified", "ended_at": now()}
         atomic_json(attempt / "status.json", status)
         artifact_paths = [result_name, "status.json", "permission.json", "lineage.json", APPLICABILITY]
+        if records_name:
+            artifact_paths.append(records_name)
         if job in adapter.SUPPORTED:
             artifact_paths += [adapter.RAW_FILE, adapter.RECEIPT_FILE]
         skip_reason = "not-applicable-no-native-binaries" if result["status"] == "SKIPPED" else None

@@ -14,7 +14,6 @@
         "authority",
         "image",
         "tool",
-        "records",
         "coverage_gaps"
     ],
     "properties": {
@@ -40,6 +39,12 @@
         "authority": {"$ref": "binary-evidence-authority.schema.json"},
         "image": {"$ref": "binary-evidence-image.schema.json"},
         "tool": {"$ref": "binary-evidence-tool.schema.json"},
+        "records_file": {
+            "type": "object", "additionalProperties": false, "required": ["path", "sha256", "count"],
+            "properties": {"path": {"const": "debug-symbol-index.records.jsonl"},
+                           "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                           "count": {"type": "integer", "minimum": 0}}
+        },
         "records": {
             "type": "array",
             "items": {
