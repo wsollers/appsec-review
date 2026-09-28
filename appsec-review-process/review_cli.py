@@ -28,6 +28,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pipeline_log
+
 ROOT = Path(__file__).resolve().parent
 RUNS = ROOT / "runs"
 
@@ -647,9 +649,11 @@ def lane_tools(lane: str) -> list[str]:
 
 
 def _progress(message: str) -> None:
-    """One timestamped line on stderr (Dagster's step log) so a long model call is visibly alive."""
+    """One timestamped line on stderr (Dagster's step log) so a long model call is visibly alive,
+    and on the central pipeline log (pipeline_log.py: buffered, capped, never blocks)."""
     stamp = datetime.now(timezone.utc).strftime("%H:%M:%SZ")
     print(f"[progress {stamp}] {message}", file=sys.stderr, flush=True)
+    pipeline_log.log(message)
 
 
 def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcript_path: Path) -> dict[str, Any]:

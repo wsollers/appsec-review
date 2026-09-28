@@ -25,6 +25,7 @@ import deterministic_pool_merge
 import model_version_registry as model_versions
 import persona_dispatch
 import persona_invocation
+import pipeline_log
 import persona_prompt_assembly
 import permission_capabilities
 import pool_launcher
@@ -175,6 +176,8 @@ class ClaimReviewerInvoker:
                   f"(job={package.request.get('job_id')} attempt={package.request.get('attempt_id')})",
                   file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
+            pipeline_log.log(f"[reviewer-diag] invocation raised {type(exc).__name__}: {str(exc)[:600]}",
+                             run_id=package.request.get("run_id"), job=package.request.get("job_id"))
             raise
 
 
