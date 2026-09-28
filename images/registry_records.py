@@ -39,7 +39,7 @@ TOOL_IMAGE_IDS = (
     "tool-sbomasm", "tool-spotbugs", "tool-syft", "tool-trivy", "tool-osv-scanner",
 )
 BUILDENV_IMAGE_IDS = (
-    "audit-buildenv-cpp", "audit-buildenv-dotnet", "audit-buildenv-go", "audit-buildenv-java",
+    "audit-buildenv-cpp", "audit-buildenv-cpp-resolute", "audit-buildenv-dotnet", "audit-buildenv-go", "audit-buildenv-java",
     "audit-buildenv-php", "audit-buildenv-python", "audit-buildenv-rust", "audit-buildenv-typescript",
 )
 STEP4_IMAGE_IDS = (

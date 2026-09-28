@@ -32,9 +32,10 @@ LABEL_DISPOSABLE = "appsec.review.disposable"
 LABEL_RUN = "appsec.review.run_id"
 LABEL_ROLE = "appsec.review.role"
 RESOLVER_MAX_AGE_SECONDS = tunables.shared("cow_resolver_max_age_days") * 86400
-APT_SOURCES = ("rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
-               "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: noble noble-updates\\n"
+APT_SOURCES = (". /etc/os-release && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
+               "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: %s %s-updates\\n"
                "Components: main universe\\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\\n' "
+               '"$VERSION_CODENAME" "$VERSION_CODENAME" ' 
                "> /etc/apt/sources.list.d/ubuntu.sources")
 
 

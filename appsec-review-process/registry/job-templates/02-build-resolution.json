@@ -69,6 +69,13 @@
       "kind": "resource",
       "description": "Captured stderr; beyond this the log is truncated (build trial).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "base_fallback_audit_buildenv_cpp": {
+      "value": "audit-buildenv-cpp-resolute",
+      "unit": "id",
+      "kind": "resource",
+      "description": "When a C/C++ unit's copy-on-write rounds end in a version conflict (a dependency newer than the base's Ubuntu release provides), retry the unit once on this newer sealed base (Ubuntu 26.04: Qt 6.10, KF6).",
+      "scale": "One extra build attempt per conflicting unit."
     }
   }
 }

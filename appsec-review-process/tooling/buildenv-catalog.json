@@ -29,6 +29,20 @@
       ]
     },
     {
+      "language": "cpp",
+      "image": "audit-buildenv-cpp-resolute:local",
+      "dockerfile": "images/audit-buildenv-cpp-resolute/Dockerfile",
+      "extends": "ubuntu:26.04 + /opt/llvm from audit-native:local",
+      "project_markers": [
+        "compile_commands.json",
+        "CMakeLists.txt",
+        "*.vcxproj",
+        "Makefile",
+        "*.sln"
+      ],
+      "notes": "Ubuntu 26.04 LTS userland (Qt 6.10, KDE Frameworks 6 6.24, newer libraries) with the same clang 21.1.0. Choose it when a C/C++ project needs dependencies newer than Ubuntu 24.04 packages (e.g. Qt >= 6.5, KF6). Build resolution also falls back to it automatically on a version conflict."
+    },
+    {
       "language": "java",
       "image": "audit-buildenv-java:local",
       "dockerfile": "images/audit-buildenv-java/Dockerfile",

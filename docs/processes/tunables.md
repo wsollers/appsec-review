@@ -174,6 +174,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
+| `base_fallback_audit_buildenv_cpp` | audit-buildenv-cpp-resolute id | resource | When a C/C++ unit's copy-on-write rounds end in a version conflict (a dependency newer than the base's Ubuntu release provides), retry the unit once on this newer sealed base (Ubuntu 26.04: Qt 6.10, KF6). | One extra build attempt per conflicting unit. |
 | `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_memory_bytes` | 2 GiB | resource | Memory limit for the container (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_pids` | 512 count | resource | Process/thread limit (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |

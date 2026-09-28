@@ -196,6 +196,11 @@ def current_inputs(run_id: str) -> dict[str, Any]:
         bases[base] = {"digest": registry[base]["digest"], "build_reference": build_reference,
                        "reference": ce.image_reference(registry[base]),
                        "record_sha256": "sha256:" + digest(registry[base])}
+        fallback = _fallback_name(base)
+        if fallback and fallback in registry and _inspect(fallback + ":local") == registry[fallback]["digest"]:
+            bases[fallback] = {"digest": registry[fallback]["digest"], "build_reference": fallback + ":local",
+                               "reference": ce.image_reference(registry[fallback]),
+                               "record_sha256": "sha256:" + digest(registry[fallback])}
     return {
         "job": JOB, "run_id": run_id, "source_snapshot_sha256": source,
         "source_revision": plan["source_revision"], "target_path": str(target),
@@ -214,9 +219,10 @@ def _render(plan: dict[str, Any], base_ref: str, mirror: dict[str, Any]) -> str:
     return "\n".join([
         f"# {RENDERER_VERSION}", f"FROM {base_ref}", "USER root",
         "ARG DEBIAN_FRONTEND=noninteractive",
-        "RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
-        "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: noble noble-updates\\n"
+        "RUN . /etc/os-release && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
+        "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: %s %s-updates\\n"
         "Components: main universe\\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\\n' "
+        '"$VERSION_CODENAME" "$VERSION_CODENAME" ' 
         "> /etc/apt/sources.list.d/ubuntu.sources && apt-get update && "
         + (f"apt-get install -y --no-install-recommends {install} && " if install else "")
         + "rm -rf /var/lib/apt/lists/*",
@@ -430,7 +436,15 @@ def _trial_text(trial: Path) -> str:
     return "\n".join(parts)
 
 
-def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps):
+def _fallback_name(base: str) -> str | None:
+    try:
+        return tunables.value(JOB, "base_fallback_" + base.replace("-", "_"))
+    except tunables.TunableMissing:
+        return None
+
+
+def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps,
+                      defer_conflict=False, label=""):
     """Build one unit in copy-on-write install rounds over its sealed base (see cow_install).
 
     Round 0 installs the plan's apt names that exist. Each trial failure is read for missing
@@ -438,7 +452,7 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
     packages, which go into another thin layer over the last one. Stops on success, when a round
     finds nothing new, or after build_resolution_attempts rounds (all logged). Returns the success
     tuple, or None after recording a gap."""
-    unit_root = attempt / "units" / unit_key
+    unit_root = attempt / "units" / (unit_key + label)
     unit_root.mkdir(parents=True, exist_ok=True)
     log = unit_root / "install.log"
     base_info = inputs["base_images"][plan["image"]["base"]]
@@ -518,7 +532,9 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
         installs["packages"] = sorted(set(installs["packages"]) | set(new))
         installs["rounds"][-1]["image"] = image
     atomic_json(unit_root / "installs.json", installs)
-    gaps.append(f"{plan['unit_id']}: build did not succeed after {len(installs['rounds']) - 1} trial round(s): "
+    if defer_conflict and installs.get("version_conflicts"):
+        return "VERSION_CONFLICT"   # the caller retries once on the newer sealed base
+    gaps.append(f"{plan['unit_id']}: build on {installs['base']} did not succeed after {len(installs['rounds']) - 1} trial round(s): "
                 f"{last_failure}"
                 + (f"; dropped unknown apt names: {', '.join(installs['dropped_unknown'])}" if installs["dropped_unknown"] else "")
                 + (f"; unresolved: {', '.join(installs['unresolved'])}" if installs["unresolved"] else "")
@@ -581,7 +597,13 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                 gaps.append(f"{plan['unit_id']}: not buildable in this environment (tier {feasibility.get('tier')}): {reason}")
                 continue
             unit_key = digest(plan["unit_id"])[:12]
-            outcome = _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps)
+            fallback = _fallback_name(plan["image"]["base"])
+            outcome = _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps,
+                                        defer_conflict=bool(fallback and fallback in inputs["base_images"]))
+            if outcome == "VERSION_CONFLICT":
+                plan = {**plan, "image": {**plan["image"], "base": fallback}}
+                outcome = _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, gaps,
+                                            label="-" + fallback)
             if outcome is None:
                 continue
             (unit_attempt, record, image_id, spec_fingerprint, dockerfile, trial, registry, adapter_id,
