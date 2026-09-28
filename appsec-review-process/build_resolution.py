@@ -496,7 +496,11 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
         if failed is None and commands and not db_source.is_file():
             last_failure = "build succeeded but produced no compile_commands.json"
             break
-        needs = cow.missing_from_logs(_trial_text(trial))
+        trial_text = _trial_text(trial)
+        conflicts = cow.version_conflicts(trial_text)
+        if conflicts:
+            installs["version_conflicts"] = conflicts
+        needs = cow.missing_from_logs(trial_text)
         mapped = cow.packages_for(resolver, needs, log=log, prefer=set(planned)) if needs else {}
         new = sorted({pkg for pkg in mapped.values() if pkg} - set(installs["packages"]))
         installs["unresolved"] = sorted(key for key, pkg in mapped.items() if not pkg)
@@ -518,6 +522,8 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
                 f"{last_failure}"
                 + (f"; dropped unknown apt names: {', '.join(installs['dropped_unknown'])}" if installs["dropped_unknown"] else "")
                 + (f"; unresolved: {', '.join(installs['unresolved'])}" if installs["unresolved"] else "")
+                + (f"; version conflicts (not fixable from the pinned apt mirror): {'; '.join(installs['version_conflicts'])}"
+                   if installs.get("version_conflicts") else "")
                 + f"; installs: {(unit_root / 'installs.json').relative_to(attempt).as_posix()}")
     return None
 

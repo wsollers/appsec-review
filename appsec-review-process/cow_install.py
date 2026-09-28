@@ -169,6 +169,22 @@ def missing_from_logs(text: str) -> list[dict]:
     return needs
 
 
+_VERSION_CONFLICT = re.compile(
+    r'Could not find a configuration file for package "([^"]+)" that is compatible\s+with requested version\s+"([^"]+)"(.*?)(?:Call Stack|\n\s*\n\S|\Z)', re.S)
+
+
+def version_conflicts(text: str) -> list[str]:
+    """Dependencies that are installed but too old (freeciv21: Qt 6.6 required, noble has 6.4.2).
+    apt cannot fix these from the pinned mirror; they become a named coverage gap."""
+    out = []
+    for name, wanted, rest in _VERSION_CONFLICT.findall(text):
+        found = sorted(set(re.findall(r"version: ([0-9][\w.+-]*)", rest)))
+        entry = f"{name} >= {wanted} required; available: {', '.join(found) or 'none'}"
+        if entry not in out:
+            out.append(entry)
+    return out
+
+
 def packages_for(resolver: str, needs: list[dict], *, log: Path, prefer: set[str] | None = None) -> dict[str, str | None]:
     """Map each need to one apt package with apt-file, all lookups in one resolver container.
 
