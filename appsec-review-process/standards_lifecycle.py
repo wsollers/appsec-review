@@ -184,8 +184,16 @@ def prepare_deployment(run_id: str) -> dict[str, Any]:
     stig, stig_binding = _load(run_id, (stig_srg_validation_worklist.JOB,
         "stig-srg-validation-worklist", stig_srg_validation_worklist.RESULT,
         "stig-srg-validation-worklist.schema.json"))
-    iac, iac_binding = _load(run_id, IAC)
-    hits = iac["rule_hits"]
+    # ADR-0014: an evidence-supported IaC skip (doom3-bfg: no IaC inputs) leaves nothing to assess;
+    # record it as a gap instead of refusing the skipped pointer.
+    iac_pointer_path = _base(run_id, IAC[0]) / "accepted.json"
+    iac_pointer = read_json(iac_pointer_path) if iac_pointer_path.is_file() else {}
+    if iac_pointer.get("status") == "SKIPPED":
+        hits, iac_binding = [], None
+        iac_gap = f"IaC config scan was skipped ({iac_pointer.get('reason') or 'no reason recorded'}); no declared deployment state was assessed."
+    else:
+        iac, iac_binding = _load(run_id, IAC)
+        hits, iac_gap = iac["rule_hits"], None
     targets = []
     for work in stig["work_items"]:
         matching = [hit for hit in hits if work["target_id"] in str(hit)]
@@ -197,12 +205,13 @@ def prepare_deployment(run_id: str) -> dict[str, Any]:
             "tailoring": work["tailoring"], "static_state": "present",
             "citation_ids": list(work["citation_ids"]),
             "runtime_gaps": ["runtime deployment state was not observed"]})
-    generation = _generation(run_id); bindings = [component_binding, iac_binding, stig_binding]
+    generation = _generation(run_id)
+    bindings = [b for b in (component_binding, iac_binding, stig_binding) if b is not None]
     attempt_id = _attempt_id(deployment_hardening.JOB, generation, targets)
     result = deployment_hardening.analyze(run_id=run_id, attempt_id=attempt_id,
         source_generation=generation, bindings=bindings, targets=targets)
     if not targets:
-        result["gaps"] = ["Accepted IaC and STIG/SRG evidence produced no matching deployment assessment target."]
+        result["gaps"] = [iac_gap or "Accepted IaC and STIG/SRG evidence produced no matching deployment assessment target."]
     return {"result": result, "attempt_id": attempt_id, "generation": generation}
 
 
