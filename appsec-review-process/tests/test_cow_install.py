@@ -64,3 +64,13 @@ class RankingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OfflineDownloads(unittest.TestCase):
+    def test_download_failures_are_named(self):
+        text = ("CMake Error at Libertinus-stamp/download-Libertinus.cmake:163 (message):\n  Each download failed!\n"
+                "    error: downloading 'https://example.org/f.zip' failed\n"
+                "          error: downloading 'https://example.org/f.zip' failed\n")
+        self.assertEqual(cow.offline_downloads(text), ["https://example.org/f.zip"])
+        self.assertEqual(cow.offline_downloads("all good"), [])
+

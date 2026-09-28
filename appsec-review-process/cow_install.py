@@ -170,6 +170,15 @@ def missing_from_logs(text: str) -> list[dict]:
     return needs
 
 
+_DOWNLOAD_FAILED = re.compile(r"(?:error: )?downloading '([^']+)' failed")
+
+
+def offline_downloads(text: str) -> list[str]:
+    """URLs the build tried to fetch (CMake ExternalProject/FetchContent). The trial is offline, so
+    no package fixes these (freeciv21: the Libertinus font zip, guarded by FREECIV_DOWNLOAD_FONTS)."""
+    return sorted(set(_DOWNLOAD_FAILED.findall(text)))
+
+
 _VERSION_CONFLICT = re.compile(
     r'Could not find a configuration file for package "([^"]+)" that is compatible\s+with requested version\s+"([^"]+)"(.*?)(?:Call Stack|\n\s*\n\S|\Z)', re.S)
 

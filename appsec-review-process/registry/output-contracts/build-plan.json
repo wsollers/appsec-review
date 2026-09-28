@@ -28,7 +28,11 @@
       "statically-inferred-build-plan",
       "coverage-gap"
     ],
-    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
   },
   "validation_rules": [
     "build-plan.json must satisfy build-plan.schema.json",
@@ -41,6 +45,7 @@
     "a tier C plan has no commands and is named in coverage_gaps",
     "every signal_ids entry exists in the accepted index; every evidence citation is a repository-relative source_file citation whose content_hash matches the checkout",
     "status OK_WITH_GAPS when any plan is tier C or coverage_gaps is non-empty",
-    "a plan is a static inference; it asserts no successful build and cannot be promoted to a finding, severity or runtime state"
+    "a plan is a static inference; it asserts no successful build and cannot be promoted to a finding, severity or runtime state",
+    "the trial build has no network: configure with the project's options that turn off build-time downloads (CMake ExternalProject/FetchContent, e.g. FREECIV_DOWNLOAD_FONTS=OFF, *_DOWNLOAD_*=OFF, FETCHCONTENT_FULLY_DISCONNECTED=ON) when the build files show them"
   ]
 }

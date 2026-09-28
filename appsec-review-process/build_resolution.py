@@ -514,6 +514,13 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
         conflicts = cow.version_conflicts(trial_text)
         if conflicts:
             installs["version_conflicts"] = conflicts
+        downloads = cow.offline_downloads(trial_text)
+        if downloads:
+            installs["offline_downloads"] = downloads
+            installs["rounds"].append({"round": round_no, "trial": "FAILED", "failure": last_failure,
+                                       "needs": [], "resolved": {}, "installing": [],
+                                       "offline_downloads": downloads})
+            break   # no package fixes a build-time download; configure's optional misses are noise
         needs = cow.missing_from_logs(trial_text)
         mapped = cow.packages_for(resolver, needs, log=log, prefer=set(planned)) if needs else {}
         new = sorted({pkg for pkg in mapped.values() if pkg} - set(installs["packages"]))
@@ -532,11 +539,15 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
         installs["packages"] = sorted(set(installs["packages"]) | set(new))
         installs["rounds"][-1]["image"] = image
     atomic_json(unit_root / "installs.json", installs)
-    if defer_conflict and installs.get("version_conflicts"):
-        return "VERSION_CONFLICT"   # the caller retries once on the newer sealed base
+    if defer_conflict and (installs.get("version_conflicts") or installs["dropped_unknown"]):
+        # too-old versions, or apt names this release does not have (freeciv21/ai on noble:
+        # libkf6archive-dev): the caller retries once on the newer sealed base
+        return "VERSION_CONFLICT"
     gaps.append(f"{plan['unit_id']}: build on {installs['base']} did not succeed after {len(installs['rounds']) - 1} trial round(s): "
                 f"{last_failure}"
                 + (f"; dropped unknown apt names: {', '.join(installs['dropped_unknown'])}" if installs["dropped_unknown"] else "")
+                + (f"; the build downloads at build time and the trial is offline: {', '.join(installs['offline_downloads'])} "
+                   "(the plan should turn the download off with a project option)" if installs.get("offline_downloads") else "")
                 + (f"; unresolved: {', '.join(installs['unresolved'])}" if installs["unresolved"] else "")
                 + (f"; version conflicts (not fixable from the pinned apt mirror): {'; '.join(installs['version_conflicts'])}"
                    if installs.get("version_conflicts") else "")
