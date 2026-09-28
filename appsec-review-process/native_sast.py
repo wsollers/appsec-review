@@ -297,10 +297,11 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
     cpp_path = clang_trial / "scratch/native-sast/cppcheck.xml"
     csa_raw = read_json(csa_trial / "scratch/csa/findings-csa.json")
     csa_summary = read_json(csa_trial / "scratch/csa/csa-summary.json")
-    raw_leads = (adapters.clang_tidy_leads(clang_raw, unit_id=unit["unit_id"], target=target) +
+    dropped: list[str] = []
+    raw_leads = (adapters.clang_tidy_leads(clang_raw, unit_id=unit["unit_id"], target=target, dropped=dropped) +
                  adapters.cppcheck_leads(cpp_path.read_text(encoding="utf-8"),
-                                         unit_id=unit["unit_id"], target=target) +
-                 adapters.csa_leads(csa_raw, unit_id=unit["unit_id"], target=target))
+                                         unit_id=unit["unit_id"], target=target, dropped=dropped) +
+                 adapters.csa_leads(csa_raw, unit_id=unit["unit_id"], target=target, dropped=dropped))
     by_id: dict[str, dict[str, Any]] = {}
     for lead in raw_leads:
         prior = by_id.setdefault(lead["lead_id"], lead)
@@ -310,6 +311,8 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
     leads.sort(key=lambda item: (item["path"], item["start_line"], item["tool_id"], item["rule_id"]))
     supported = len(unit["adapted"])
     gaps = [f"unsupported-translation-unit:{path}" for path in unit["unsupported"]]
+    if dropped:
+        gaps.append(f"analyzer-records-outside-checkout:{len(dropped)}")
     tidy_failed = int(native_manifest["clang_tidy"]["files_nonzero_exit"])
     cpp_exit = int(native_manifest["cppcheck"]["exit_code"])
     csa_failed = int(csa_summary["tu_error"]) + int(csa_summary["tu_timeout"])

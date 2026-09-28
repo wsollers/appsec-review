@@ -27,6 +27,7 @@ PRIMARY_CONSUMER = {
     "02-debug-symbol-index": "02-binary-cfg",
     "02-binary-triage": "02-binary-cfg",
     "02-binary-cfg": "02-binary-intelligence-ingest",
+    "02-binary-intelligence-ingest": "02-evidence-assembly",
 }
 RAW_SCHEMA = "appsec-review/binary-static-evidence-input/1"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"

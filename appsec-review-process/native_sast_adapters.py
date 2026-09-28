@@ -157,16 +157,30 @@ def _lead(tool_id: str, unit_id: str, rule: Any, raw_path: Any, line: Any, colum
     return record
 
 
-def clang_tidy_leads(raw: Any, *, unit_id: str, target: Path) -> list[dict[str, Any]]:
+def _kept(build, dropped: list[str] | None):
+    """ADR-0013: a record that cites a file outside the checkout (a generated header in the build
+    tree, a system header) or past its end is dropped and counted, not fatal to the unit."""
+    try:
+        return build()
+    except AdapterError as exc:
+        if dropped is None or "citation" not in str(exc) and "source path" not in str(exc):
+            raise
+        dropped.append(str(exc))
+        return None
+
+
+def clang_tidy_leads(raw: Any, *, unit_id: str, target: Path,
+                     dropped: list[str] | None = None) -> list[dict[str, Any]]:
     if not isinstance(raw, dict) or not isinstance(raw.get("findings"), list):
         raise AdapterError("clang-tidy output has no findings array")
-    result = [_lead("clang-tidy", unit_id, item.get("check"), item.get("file"),
-                    item.get("line"), item.get("col"), target)
-              for item in raw["findings"] if isinstance(item, dict)]
+    result = [x for x in (_kept(lambda item=item: _lead("clang-tidy", unit_id, item.get("check"), item.get("file"),
+                                                          item.get("line"), item.get("col"), target), dropped)
+                          for item in raw["findings"] if isinstance(item, dict)) if x is not None]
     return sorted(result, key=_sort_key)
 
 
-def cppcheck_leads(raw_xml: str, *, unit_id: str, target: Path) -> list[dict[str, Any]]:
+def cppcheck_leads(raw_xml: str, *, unit_id: str, target: Path,
+                   dropped: list[str] | None = None) -> list[dict[str, Any]]:
     try:
         root = ET.fromstring(raw_xml)
     except ET.ParseError as exc:
@@ -182,19 +196,22 @@ def cppcheck_leads(raw_xml: str, *, unit_id: str, target: Path) -> list[dict[str
             column = int(location.attrib.get("column", "1"))
         except ValueError as exc:
             raise AdapterError("cppcheck location is invalid") from exc
-        result.append(_lead("cppcheck", unit_id, error.attrib.get("id"),
-                            location.attrib.get("file"), line, column, target,
-                            error.attrib.get("verbose", "")))
+        lead = _kept(lambda: _lead("cppcheck", unit_id, error.attrib.get("id"),
+                                   location.attrib.get("file"), line, column, target,
+                                   error.attrib.get("verbose", "")), dropped)
+        if lead is not None:
+            result.append(lead)
     return sorted(result, key=_sort_key)
 
 
-def csa_leads(raw: Any, *, unit_id: str, target: Path) -> list[dict[str, Any]]:
+def csa_leads(raw: Any, *, unit_id: str, target: Path,
+              dropped: list[str] | None = None) -> list[dict[str, Any]]:
     if not isinstance(raw, list):
         raise AdapterError("CSA output is not an array")
-    result = [_lead("clang-static-analyzer", unit_id, item.get("checker"), item.get("file"),
-                    item.get("line"), item.get("col"), target,
-                    str(item.get("category", "")))
-              for item in raw if isinstance(item, dict)]
+    result = [x for x in (_kept(lambda item=item: _lead("clang-static-analyzer", unit_id, item.get("checker"),
+                                                          item.get("file"), item.get("line"), item.get("col"), target,
+                                                          str(item.get("category", ""))), dropped)
+                          for item in raw if isinstance(item, dict)) if x is not None]
     return sorted(result, key=_sort_key)
 
 
