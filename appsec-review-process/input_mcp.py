@@ -21,6 +21,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -122,6 +123,26 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
     return query(run_id, name.removeprefix("evidence_"), fresh=False, **args)
 
 
+CONTEXT: dict = {}   # job_id, attempt_id, output_root of the invocation this server serves
+
+
+def _summary(name: str, result: object) -> dict:
+    """What a lookup returned, for the retrieval audit: hit count and the refs/paths it surfaced."""
+    if not isinstance(result, dict):
+        return {"hits": 0, "refs": []}
+    if name == "input_read":
+        return {"hits": 1 if result.get("text") else 0, "refs": [result.get("ref")],
+                "lines": [result.get("start"), result.get("total_lines")]}
+    rows = result.get("hits") or result.get("results") or result.get("inputs") or []
+    refs = []
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict):
+            ref = row.get("ref") or row.get("path") or row.get("record_id")
+            if ref and ref not in refs:
+                refs.append(ref)
+    return {"hits": len(rows) if isinstance(rows, list) else 0, "refs": refs}
+
+
 def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
     method = request.get("method")
     params = request.get("params") or {}
@@ -140,15 +161,20 @@ def handle(run_id: str, inputs: Inputs | None, request: dict) -> dict:
         raise ValueError("unknown tool")
     args = params.get("arguments") or {}
     audit = data_path(run_id, "retrieval", uuid.uuid4().hex)
-    atomic_json(audit / "request.json", {"time": now(), "server": SERVER_NAME, "tool": tool["name"], "arguments": args})
+    started = time.monotonic()
+    atomic_json(audit / "request.json", {"time": now(), "server": SERVER_NAME, "tool": tool["name"],
+                                         "arguments": args, **CONTEXT})
     try:
         _check(tool["inputSchema"], args)
         result = call(run_id, inputs, tool["name"], args)
         text = json.dumps(result)
-        atomic_json(audit / "result.json", {"time": now(), "bytes": len(text)})
+        atomic_json(audit / "result.json", {"time": now(), "bytes": len(text),
+                                            "duration_ms": int((time.monotonic() - started) * 1000),
+                                            **_summary(tool["name"], result)})
         return {"content": [{"type": "text", "text": text}], "isError": False}
     except Exception as exc:
-        atomic_json(audit / "error.json", {"error": str(exc), "time": now()})
+        atomic_json(audit / "error.json", {"error": str(exc), "time": now(),
+                                           "duration_ms": int((time.monotonic() - started) * 1000)})
         return {"content": [{"type": "text", "text": str(exc)}], "isError": True}
 
 
@@ -156,8 +182,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--inputs", help="folder holding manifest.json and files/")
+    parser.add_argument("--job-id"); parser.add_argument("--attempt-id"); parser.add_argument("--output-root")
     args = parser.parse_args()
     data_path(args.run_id)
+    CONTEXT.update({key: value for key, value in (
+        ("job_id", args.job_id), ("attempt_id", args.attempt_id), ("output_root", args.output_root)) if value})
     inputs = Inputs(Path(args.inputs)) if args.inputs else None
     for line in sys.stdin:
         request: object = {}

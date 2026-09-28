@@ -208,7 +208,7 @@ def _input_tool_names() -> list[str]:
     return [f"mcp__{INPUT_MCP_SERVER}__{tool['name']}" for tool in input_mcp.TOOLS]
 
 
-def _stage_inputs_for_mcp(package: Any, scratch: Path) -> Path:
+def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None = None) -> Path:
     """Write the package's pinned bytes to a private folder for ``input_mcp.py`` and return the
     MCP config path. Outside the attempt tree, like the other diagnostics."""
     folder = scratch / "inputs"
@@ -222,7 +222,10 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path) -> Path:
     (folder / "manifest.json").write_text(json.dumps({"inputs": entries}), encoding="utf-8")
     server = {"command": sys.executable,
               "args": [str(Path(__file__).resolve().parent / "input_mcp.py"),
-                       "--run-id", package.request["run_id"], "--inputs", str(folder)]}
+                       "--run-id", package.request["run_id"], "--inputs", str(folder),
+                       "--job-id", str(package.request.get("job_id")),
+                       "--attempt-id", str(package.request.get("attempt_id")),
+                       *(["--output-root", str(output_root)] if output_root else [])]}
     config = scratch / "mcp-config.json"
     config.write_text(json.dumps({"mcpServers": {INPUT_MCP_SERVER: server}}), encoding="utf-8")
     return config
@@ -985,7 +988,7 @@ class ClaudeCliInvoker:
         # structurally testing this module: the first draft wrote them under
         # output_root/diagnostics/, which is exactly the mistake this paragraph now documents.
         diagnostics_dir = Path(tempfile.mkdtemp(prefix="claude-cli-invoker-"))
-        mcp_config = _stage_inputs_for_mcp(package, diagnostics_dir) if indexed else None
+        mcp_config = _stage_inputs_for_mcp(package, diagnostics_dir, Path(output_root)) if indexed else None
         size_log.observe(package.request.get("run_id"), package.request.get("job_id"), "prompt_input_mode",
                          inline_bytes, _inline_input_limit(cfg), mode="indexed" if indexed else "inline",
                          inputs=len(package.inputs), prompt_chars=len(prompt_text))
