@@ -386,6 +386,9 @@ def _verify_citation(jobs_root: Path, identity: tuple[str, str, str, str]) -> di
         relative = "/".join(parts[5:])
     jobs_root = jobs_root.resolve(strict=True)
     producer_root = _plain_directory(jobs_root, jobs_root / job)
+    if not (producer_root / "attempts").is_dir() and (producer_root / "whole" / "attempts").is_dir():
+        # Scope-partitioned producers (e.g. 02-secrets-inventory) publish under <job>/whole.
+        producer_root = _plain_directory(jobs_root, producer_root / "whole")
     attempts_root = _plain_directory(producer_root, producer_root / "attempts")
     attempt_root = _plain_directory(attempts_root, attempts_root / attempt_id)
     actual = "sha256:" + file_hash(_owned(attempt_root, relative))

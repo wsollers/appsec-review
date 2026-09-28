@@ -178,7 +178,10 @@ def load_inputs(run_root: Path, manifest_path: Path) -> dict[str, Any]:
     for ref in manifest["evidence_artifacts"]:
         normalized = {"job_id": ref["producer_job_id"], "attempt_id": ref["producer_attempt_id"],
                       "artifact_path": ref["artifact_path"], "artifact_sha256": ref["artifact_sha256"]}
-        attempt = Path(run_root) / "data" / "jobs" / normalized["job_id"] / "attempts" / normalized["attempt_id"]
+        producer = Path(run_root) / "data" / "jobs" / normalized["job_id"]
+        if not (producer / "attempts").is_dir() and (producer / "whole" / "attempts").is_dir():
+            producer = producer / "whole"  # scope-partitioned tool-lead producer
+        attempt = producer / "attempts" / normalized["attempt_id"]
         if attempt.is_symlink() or not attempt.is_dir():
             raise Blocked(f"{JOB}: cited evidence attempt is unsafe")
         path = _owned(attempt, _attempt_relative(normalized))
@@ -371,6 +374,19 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
     return report, trace
 
 
+TOOL_LEAD_PREFIX = "Tool lead ("  # claim_ledger.LEAD_HYPOTHESIS_PREFIX (deterministic, not model text)
+
+
+def tool_lead_candidates(unresolved: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Unverified ledger claims admitted from static-tool leads, P1 first (visibility, not promotion)."""
+    rows = []
+    for item in unresolved:
+        text = item["hypothesis"]
+        if text.startswith(TOOL_LEAD_PREFIX) and text[len(TOOL_LEAD_PREFIX):len(TOOL_LEAD_PREFIX) + 2] in {"P1", "P2", "P3"}:
+            rows.append({**item, "tier": text[len(TOOL_LEAD_PREFIX):len(TOOL_LEAD_PREFIX) + 2]})
+    return sorted(rows, key=lambda row: (row["tier"], row["claim_id"]))
+
+
 def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
     findings = report["verified_findings"]
     ship_posture = [item for item in findings if item["severity"] in {"CRITICAL","HIGH"}]
@@ -387,14 +403,24 @@ def render_markdown(report: dict[str, Any]) -> tuple[str, str]:
     else: lines.append("No High/Critical claim satisfied the independent-verification and scoring join.")
     lower = len(findings) - len(ship_posture)
     lines += ["", f"{lower} verified Medium/Low finding(s) remain in `report.json` for technical review."]
+    tool_leads = tool_lead_candidates(report["unresolved_candidates"])
     lines += ["", "## Unresolved decision items", "",
-              f"{len(report['unresolved_candidates'])} candidate(s) remain unresolved or unverified.", "",
-              "## Major limitations", ""]
+              f"{len(report['unresolved_candidates'])} candidate(s) remain unresolved or unverified.", ""]
+    if tool_leads:
+        tiers = {tier: sum(item["tier"] == tier for item in tool_leads) for tier in ("P1", "P2", "P3")}
+        lines += [f"{len(tool_leads)} of them are static-tool leads not independently verified "
+                  f"(P1 {tiers['P1']}, P2 {tiers['P2']}, P3 {tiers['P3']}); see the appendix.", ""]
+    lines += ["## Major limitations", ""]
     lines += [f"- {value}" for value in report["limitations"]] or ["- No additional limitation was supplied."]
     appendix = ["# Coverage and unresolved appendix", "", f"Status: `{STATUS}`", "",
         "## OWASP denominators", "", json.dumps(report["owasp_coverage"], sort_keys=True, indent=2), "",
         "## Unresolved candidates", ""]
     appendix += [f"- `{item['claim_id']}` ({item['status']}): {item['hypothesis']}" for item in report["unresolved_candidates"]]
+    if tool_leads:
+        appendix += ["", "## Tool leads not independently verified", "",
+                     "| Tier | Claim | Status | Lead |", "|---|---|---|---|"]
+        appendix += [f"| {item['tier']} | `{item['claim_id']}` | {item['status']} | "
+                     f"{item['hypothesis'].replace('|', '/')} |" for item in tool_leads]
     appendix += ["", "## Dissent", ""] + ([f"- {item}" for item in report["dissent_ids"]] or ["- None recorded."])
     appendix += ["", "## Limitations", ""] + [f"- {item}" for item in report["limitations"]]
     for text in ("\n".join(lines) + "\n", "\n".join(appendix) + "\n"):
