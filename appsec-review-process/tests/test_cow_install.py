@@ -74,3 +74,19 @@ class OfflineDownloads(unittest.TestCase):
         self.assertEqual(cow.offline_downloads(text), ["https://example.org/f.zip"])
         self.assertEqual(cow.offline_downloads("all good"), [])
 
+
+class DownloadGuards(unittest.TestCase):
+    def test_guards_are_found_and_turned_off(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); (root / "cmake").mkdir()
+            (root / "CMakeLists.txt").write_text("option(FREECIV_DOWNLOAD_FONTS \"x\" ON)\n")
+            (root / "cmake/Install.cmake").write_text("if(FREECIV_ENABLE_CLIENT AND FREECIV_DOWNLOAD_FONTS)\n  ExternalProject_Add(x)\nendif()\n")
+            self.assertEqual(cow.download_guards(root), ["FREECIV_DOWNLOAD_FONTS"])
+        commands = [{"phase": "configure", "argv": ["cmake", ".", "-B", "build"]},
+                    {"phase": "build", "argv": ["cmake", "--build", "build"]}]
+        out = cow.with_options_off(commands, ["FREECIV_DOWNLOAD_FONTS"])
+        self.assertEqual(out[0]["argv"][-1], "-DFREECIV_DOWNLOAD_FONTS=OFF")
+        self.assertEqual(out[1], commands[1])
+        self.assertEqual(cow.with_options_off(out, ["FREECIV_DOWNLOAD_FONTS"]), out)
+

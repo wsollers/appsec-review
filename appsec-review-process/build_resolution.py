@@ -517,9 +517,22 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
         downloads = cow.offline_downloads(trial_text)
         if downloads:
             installs["offline_downloads"] = downloads
-            installs["rounds"].append({"round": round_no, "trial": "FAILED", "failure": last_failure,
-                                       "needs": [], "resolved": {}, "installing": [],
-                                       "offline_downloads": downloads})
+            round_record = {"round": round_no, "trial": "FAILED", "failure": last_failure,
+                            "needs": [], "resolved": {}, "installing": [], "offline_downloads": downloads}
+            installs["rounds"].append(round_record)
+            if "adapted_commands" not in installs:
+                # The build fetches at build time and the trial is offline. Turn the project's
+                # download switches off (the plan should have) and try again; the lock records the
+                # adapted commands.
+                source = Path(inputs["target_path"]) / plan.get("root", ".")
+                guards = cow.download_guards(source)
+                adapted = cow.with_options_off(plan["commands"], guards) if guards else plan["commands"]
+                if adapted != plan["commands"]:
+                    installs["adapted_commands"] = adapted
+                    installs["adapted_options"] = [f"-D{g}=OFF" for g in guards]
+                    round_record["adapting"] = installs["adapted_options"]
+                    plan = {**plan, "commands": adapted}
+                    continue
             break   # no package fixes a build-time download; configure's optional misses are noise
         needs = cow.missing_from_logs(trial_text)
         mapped = cow.packages_for(resolver, needs, log=log, prefer=set(planned)) if needs else {}
@@ -547,7 +560,8 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
                 f"{last_failure}"
                 + (f"; dropped unknown apt names: {', '.join(installs['dropped_unknown'])}" if installs["dropped_unknown"] else "")
                 + (f"; the build downloads at build time and the trial is offline: {', '.join(installs['offline_downloads'])} "
-                   "(the plan should turn the download off with a project option)" if installs.get("offline_downloads") else "")
+                   + (f"(retried with {' '.join(installs['adapted_options'])})" if installs.get("adapted_options")
+                      else "(no CMake download switch found)") if installs.get("offline_downloads") else "")
                 + (f"; unresolved: {', '.join(installs['unresolved'])}" if installs["unresolved"] else "")
                 + (f"; version conflicts (not fixable from the pinned apt mirror): {'; '.join(installs['version_conflicts'])}"
                    if installs.get("version_conflicts") else "")
@@ -619,6 +633,8 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                 continue
             (unit_attempt, record, image_id, spec_fingerprint, dockerfile, trial, registry, adapter_id,
              expected, commands, db_source, installs) = outcome
+            if installs.get("adapted_commands"):
+                plan = {**plan, "commands": installs["adapted_commands"]}   # the lock replays what built
             reused = False
             installs_path = attempt / "outputs" / unit_key / "installs.json"
             installs_path.parent.mkdir(parents=True, exist_ok=True)

@@ -179,6 +179,41 @@ def offline_downloads(text: str) -> list[str]:
     return sorted(set(_DOWNLOAD_FAILED.findall(text)))
 
 
+_DOWNLOAD_GUARD = re.compile(r"\b([A-Z][A-Z0-9_]*DOWNLOAD[A-Z0-9_]*)\b")
+
+
+def download_guards(source_root: Path, limit: int = 2000) -> list[str]:
+    """CMake options that gate build-time downloads (freeciv21: FREECIV_DOWNLOAD_FONTS guards the
+    Libertinus ExternalProject). Read from if()/option() lines of the unit's CMake files."""
+    names: set[str] = set()
+    files = [p for p in [source_root / "CMakeLists.txt", *sorted(source_root.rglob("*.cmake"))]
+             if p.is_file() and not p.is_symlink()][:limit]
+    for path in files:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            stripped = line.strip().lower()
+            if stripped.startswith(("if(", "if (", "elseif(", "option(", "option (", "cmake_dependent_option(")):
+                names.update(_DOWNLOAD_GUARD.findall(line))
+    return sorted(names)
+
+
+def with_options_off(commands: list[dict], names: list[str]) -> list[dict]:
+    """The plan's configure commands with -D<name>=OFF added where the name is not already set."""
+    out = []
+    for command in commands:
+        argv = list(command.get("argv") or [])
+        if command.get("phase") == "configure" and argv and argv[0].rsplit("/", 1)[-1] == "cmake" \
+                and "--build" not in argv:
+            for name in names:
+                if not any(a.startswith(f"-D{name}=") or a.startswith(f"-D{name}:") for a in argv):
+                    argv.append(f"-D{name}=OFF")
+        out.append({**command, "argv": argv})
+    return out
+
+
 _VERSION_CONFLICT = re.compile(
     r'Could not find a configuration file for package "([^"]+)" that is compatible\s+with requested version\s+"([^"]+)"(.*?)(?:Call Stack|\n\s*\n\S|\Z)', re.S)
 
