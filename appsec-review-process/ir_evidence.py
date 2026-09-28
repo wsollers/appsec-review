@@ -31,6 +31,7 @@ PERMISSIONS = {"02-ir-capture": ["read-source", "write-run-data"],
 PROHIBITED = {"finding", "findings", "severity", "vulnerability", "verdict", "runtime_state"}
 SKIP_REASON = "not-applicable-no-native-binaries"
 UPSTREAM_KEY = {"02-ir-capture": "native_build", "02-ir-link": "capture", "02-ir-facts": "link"}
+CONSUMER = {"02-ir-capture": "02-ir-link", "02-ir-link": "02-ir-facts", "02-ir-facts": "02-evidence-assembly"}
 LINK_GAP = "not-linked-one-link-target-per-run"
 
 
@@ -721,7 +722,11 @@ def _publish_skip(run_id, dagster_id, job, base, allocation, inputs, fingerprint
     atomic_json(attempt / "lineage.json", lineage_receipt)
     (attempt / f"{contract}-summary.md").write_text(
         f"# {job}\n\n- status: SKIPPED ({SKIP_REASON}): no built native units upstream\n", encoding="utf-8")
-    status = {"process": job, "status": "SKIPPED", "reason": SKIP_REASON, "run_id": run_id,
+    atomic_json(attempt / "b13-receipts.json", {"schema": "appsec-review/ir-b13-receipts/1.0",
+        "run_id": run_id, "job_id": job, "skipped": SKIP_REASON, "operations": []})
+    count_key = "facts" if job == "02-ir-facts" else "modules"
+    status = {"process": job, "status": "SKIPPED", "reason": SKIP_REASON, count_key: 0, "coverage_gaps": 0,
+              "qualification": "implemented_not_qualified", "run_id": run_id,
               "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"], "ended_at": now()}
     atomic_json(attempt / "status.json", status)
     return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
@@ -729,8 +734,8 @@ def _publish_skip(run_id, dagster_id, job, base, allocation, inputs, fingerprint
         input_fingerprint=fingerprint, started_at=allocation["started_at"],
         execution_status="SKIPPED", summary=f"{job} skipped: no built native units upstream.",
         status_record=status, artifact_paths=[result_name, f"{contract}-summary.md", "status.json",
-                                              "permission.json", "lineage.json"],
-        skip_reason=SKIP_REASON,
+                                              "permission.json", "lineage.json", "b13-receipts.json"],
+        skip_reason=SKIP_REASON, consumer_job_id=CONSUMER[job],
         pre_envelope_validate=lambda path, _status: _validate_attempt(job, path, inputs, require_b13=True))
 
 

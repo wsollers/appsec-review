@@ -137,6 +137,8 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | doom3-bfg | 22d32a79 | 02-ir-capture, 02-native-sast, 02-test-execution | The new SKIPPED results failed publication: no named consumer edge; contract files/status fields (b13 receipts, modules, records, qualification) absent; test execution's evidence-skip document checked against the test-execution schema | Skips name their consumer edge and write the contract files/fields; the validator checks an `appsec-review/evidence-skip/1` document against evidence-skip.schema.json |
+| 2026-09-28 | hello-autotools | e3c8fca2 | 01-component-characterization | Model output valid at last; publication stopped at "immutable attempt inputs changed": `evidence.artifacts` held tuples, inputs.json lists | Inputs built JSON-equal (lists) |
 | 2026-09-28 | hello-autotools, doom3-bfg | e3c8fca2, 22d32a79 | (pool) | doom3-bfg scancode held the only `docker` pool slot for an hour; hello-autotools sat idle with nothing in progress (not a failure, pure contention) | `docker` pool slots are the shared tunable `pool_docker_slots` = 2 |
 | 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-native-sast | One analyzer record cited a file that is not a regular file in the checkout; the whole job failed | Such records are dropped and counted: `analyzer-records-outside-checkout:<n>` gap per unit |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-binary-intelligence-ingest | SKIPPED with `not-applicable-no-native-binaries` but no named consumer edge | Primary consumer 02-evidence-assembly (its edge already allows the reason) |

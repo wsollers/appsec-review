@@ -454,17 +454,22 @@ def run_job(run_id:str,dagster_id:str,job:str,force:bool=False)->dict:
             atomic_json(attempt/result_name,result)
             permission_receipt,lineage_receipt=producer_receipts(run_id,job,inputs)
             atomic_json(attempt/"permission.json",permission_receipt); atomic_json(attempt/"lineage.json",lineage_receipt)
-            status={"process":job,"status":"SKIPPED","reason":inputs["skip"]["reason"],"run_id":run_id,
+            status={"process":job,"status":"SKIPPED","reason":inputs["skip"]["reason"],"records":0,
+                    "qualification":"implemented_not_qualified","run_id":run_id,
                     "dagster_run_id":dagster_id,"attempt_id":allocation["attempt_id"],"ended_at":state_now()}
             atomic_json(attempt/"status.json",status)
+            extra=[]
+            if job==EXECUTION_JOB:
+                atomic_json(attempt/"b13-receipt.json",{"skipped":inputs["skip"]["reason"]}); extra=["b13-receipt.json"]
             (attempt/f"{contract}-summary.md").write_text(
                 f"# {job}\n\n- SKIPPED ({inputs['skip']['reason']}): {inputs['skip']['why']}\n",encoding="utf-8")
             return record_terminal_current(base,attempt,run_id=run_id,job_id=job,dagster_run_id=dagster_id,
               worker_kind="pinned_container" if job==EXECUTION_JOB else "deterministic_python",output_contract=contract,
               input_fingerprint=fingerprint,started_at=allocation["started_at"],execution_status="SKIPPED",
               summary=f"{job} skipped: {inputs['skip']['why']}"[:1000],status_record=status,
-              artifact_paths=[result_name,"status.json",f"{contract}-summary.md","permission.json","lineage.json"],
+              artifact_paths=[result_name,"status.json",f"{contract}-summary.md","permission.json","lineage.json",*extra],
               skip_reason=inputs["skip"]["reason"],
+              consumer_job_id=RESULT_JOB if job==EXECUTION_JOB else "02-evidence-assembly",
               pre_envelope_validate=lambda path,_status:validate_attempt(run_id,job,path,inputs))
         if job==EXECUTION_JOB:
             adapter="test-"+allocation["attempt_id"][:12]; trial=attempt/"tools"/"declared-test"; trial.mkdir(parents=True)

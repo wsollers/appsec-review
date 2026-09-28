@@ -255,7 +255,7 @@ def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, 
         "terminal_instances_manifest_sha256": manifest_value["terminal_instances"]["manifest_sha256"],
         "producers_sha256": digest(manifest_value["producers"]),
         "artifact_set_sha256": digest(sorted(readable.items())),
-        "artifacts": sorted(readable.items()),
+        "artifacts": [list(item) for item in sorted(readable.items())],  # JSON-equal to inputs.json
     }
 
 

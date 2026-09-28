@@ -1193,6 +1193,10 @@ def validate_contract_result(attempt_root: Path, contract: dict[str, Any], *,
         return [f"declared result artifact exceeds {MAX_RESULT_BYTES} bytes"]
     try:
         value = read_json(path)
+        # ADR-0014: a job with nothing to do may publish the generic skip document in place of
+        # its result; it is checked against that schema (the envelope says SKIPPED separately).
+        if isinstance(value, dict) and value.get("schema") == "appsec-review/evidence-skip/1":
+            schema_name = "evidence-skip.schema.json"
         schema_errors = validate_document(value, schema_name, SchemaStore(Path(schemas_root)))
     except (OSError, ValueError, json.JSONDecodeError, FileNotFoundError) as exc:
         return [f"declared result artifact/schema cannot be read: {type(exc).__name__}"]

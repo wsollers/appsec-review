@@ -505,6 +505,7 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             summary=f"Three pinned native analyzers produced {status['leads']} evidence lead(s).",
             status_record=status, artifact_paths=artifacts, gaps=gaps or None,
             skip_reason="not-applicable-no-native-binaries" if result["status"] == "SKIPPED" else None,
+            consumer_job_id="02-evidence-assembly" if result["status"] == "SKIPPED" else None,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB,
