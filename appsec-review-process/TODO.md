@@ -108,6 +108,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | hello-autotools | 20260927T192621Z-helloautotoo | 01-component-characterization | Real cause of every failure of this job: the claude CLI invoker had no claim builder for `component-purpose-map.schema.json` and raised before dispatch (the 9.3 MB prompt was a second problem, not the first) | Generic fallback claim builder: one claim per result object whose `evidence_citations` resolve to a pinned input |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-build-resolution | Model planned CMake/Qt6 (tier A) but named apt packages that do not exist on noble (`libqt6core6-dev`, `libkf6archive-dev`); image build exited 100 | Image-build failure is a coverage gap naming the missing packages. Follow-up: give build-plan an offline apt package lookup, or feed the apt error back for one repair round |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-code-property-graph | Joern records name files not in the checkout (`client/luascript/tolua.h`) | Skipped and counted as `source-unavailable` |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-secrets-inventory | Reconciling tool-results after redaction left the redaction receipt unsealed | Receipt re-sealed after the update |

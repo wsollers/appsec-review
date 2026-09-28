@@ -784,6 +784,48 @@ def _one_line(text: Any) -> str:
     return _CONTROL.sub(" ", str(text)).strip()[:2000]
 
 
+_STATEMENT_KEYS = ("statement", "summary", "description", "purpose", "title", "name", "rationale")
+_ID_KEYS = ("claim_id", "finding_id", "component_id", "partition_id", "id", "name")
+
+
+def _claims_generic(value: dict[str, Any], inputs: tuple, allowed_claim_classes: tuple[str, ...],
+                    result_filename: str) -> list[dict[str, Any]]:
+    """Fallback claim builder for result schemas without a dedicated one (component map, threat
+    model, OWASP, red/blue team, verification, remediation...). One claim per object in the result
+    that carries ``evidence_citations`` resolving to a pinned target input; its class is the
+    object's own ``claim_class`` when allowed, else the request's first allowed class. Objects whose
+    citations do not resolve stay in the artifact without a claim (the job's own validation decides
+    what that means). Before this, such jobs raised before the model was ever called
+    (01-component-characterization on hello-autotools)."""
+    by_path = {item.path: item for item in inputs}
+    if not allowed_claim_classes:
+        return []
+    claims: list[dict[str, Any]] = []
+
+    def walk(node: Any, where: str) -> None:
+        if isinstance(node, dict):
+            raw = node.get("evidence_citations")
+            if isinstance(raw, list):
+                citations = _resolved_citations(raw, by_path)
+                if citations:
+                    klass = node.get("claim_class")
+                    klass = klass if klass in allowed_claim_classes else allowed_claim_classes[0]
+                    ident = next((str(node[k]) for k in _ID_KEYS if isinstance(node.get(k), (str, int))), where)
+                    text = next((str(node[k]) for k in _STATEMENT_KEYS if isinstance(node.get(k), str) and node[k].strip()),
+                                f"{where} in {result_filename}")
+                    claims.append({"claim_id": f"{where}-{ident}"[:120], "claim_class": klass,
+                                   "statement": text[:2000], "file": result_filename, "citations": citations})
+            for key, child in node.items():
+                if key != "evidence_citations":
+                    walk(child, f"{where}.{key}" if where else key)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{where}[{index}]")
+
+    walk(value, "")
+    return claims
+
+
 def _schema_safe_claims(claims: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Every builder's claims in the shape ``persona-invoker-output.schema.json`` accepts, applied
     once for all builders. Model-chosen ids (project, service, unit ids) reach claim ids, and model
@@ -998,7 +1040,7 @@ class ClaudeCliInvoker:
         size_log.observe(package.request.get("run_id"), package.request.get("job_id"), "prompt_input_mode",
                          inline_bytes, _inline_input_limit(cfg), mode="indexed" if indexed else "inline",
                          inputs=len(package.inputs), prompt_chars=len(prompt_text))
-        builder = _CLAIM_BUILDERS.get(output_contract["result_schema"]["schema_file"])
+        builder = _CLAIM_BUILDERS.get(output_contract["result_schema"]["schema_file"], _claims_generic)
         if builder is None:
             raise InvokerOutputError(
                 f"no claim builder for result schema {output_contract['result_schema']['schema_file']!r}")
