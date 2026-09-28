@@ -26,9 +26,11 @@ RUNS = Path(__file__).resolve().parent.parent / "appsec-review-process" / "runs"
 
 def norm(ref: str) -> str:
     ref = str(ref)
-    for prefix in ("target:", "source/"):
-        if ref.startswith(prefix):
-            ref = ref[len(prefix):]
+    head, sep, rest = ref.partition(":")
+    if sep and head in ("target", "target-repository", "upstream-artifacts"):
+        ref = rest if head != "upstream-artifacts" else "upstream:" + rest
+    if ref.startswith("source/"):
+        ref = ref[len("source/"):]
     return ref
 
 
