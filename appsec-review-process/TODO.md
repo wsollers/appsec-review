@@ -171,6 +171,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | freeciv21 | 14420f45 | 02-build-resolution | (milestone) With -DFREECIV_DOWNLOAD_FONTS=OFF (added by the download-switch retry) freeciv21 BUILT on the 26.04 base; the unit still became a gap: "build succeeded but produced no compile_commands.json" because the cmake-export plan puts it in build/ and the trial runner only used bear for bear plans | The trial always runs the build under bear (the lock already records bear and the replay uses it) |
 | 2026-09-28 | appsec-multi-vuln | 17b564af | 02-full-review-input-assembly | "staged target must be run-owned for dispatch": every fixture target lives outside the run | Dispatch from the run-owned, hash-bound source projection (automatic_evidence_inputs.source_projection) |
 | 2026-09-28 | appsec-multi-vuln | 17b564af | 03-threat-model-dfd-stride | "F03 must cite exactly one substantive F02 assembly artifact; found 0": the component map cited only repository files | Bind the first cited upstream artifact, else the assembly's hash-bound intel-manifest.json |
 | 2026-09-28 | appsec-multi-vuln | 17b564af | 01-component-characterization | (milestone) accepted for the first time on multi-vuln | - |

@@ -357,7 +357,10 @@ def _request(run_id: str, attempt_id: str, unit_attempt: Path, record: dict[str,
     control = inputs["control"]["value"]
     permission = _permission(control, run_id, inputs["source_snapshot_sha256"], _utc_now())
     cfg = {"runner": RUNNER_VERSION, "mode": control["mode"],
-           "compile_database": plan["compile_database"]["method"], "commands": _repo_commands(plan)}
+           # Always bear: the lock (and so the replay) records the compile database as bear's
+           # src/compile_commands.json; a cmake-export plan put it in build/ and the trial
+           # reported "no compile_commands.json" for a successful build (freeciv21).
+           "compile_database": "bear", "commands": _repo_commands(plan)}
     encoded_runner = base64.b64encode(RUNNER.encode("utf-8")).decode("ascii")
     trusted_runner = "import base64;exec(base64.b64decode('" + encoded_runner + "'))"
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": JOB, "attempt_id": attempt_id,
