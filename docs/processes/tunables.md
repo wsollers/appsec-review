@@ -65,6 +65,7 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `persona_manifest_max_bytes` | 1 MiB | safety | Largest output manifest a persona invoker may write. |  |
 | `persona_producers_max` | 64 count | safety | Most producer invocations a reviewing invocation may name. |  |
 | `persona_readable_inputs_logged` | 256 count | logged | Former cap on readable inputs per model request; now only logged. | Freeciv21: 6,100; engine: ~100K. Served through the index. |
+| `persona_result_cache` | True flag | safety | Reuse an accepted model response for an identical request (same prompt, model, effort and pinned input bytes) within a run, re-running today's acceptance on it. Turn off to force fresh model calls. | Removes re-execution model cost after code-only changes: multi-vuln's 53-unit re-plan was 41 min of model calls. |
 | `persona_result_max_bytes` | 4 MiB | safety | Largest persona result/record document read back. |  |
 | `persona_tools_max` | 64 count | safety | Most tool ids one persona request may allow. |  |
 | `pool_docker_slots` | 2 count | resource | Dagster `docker` pool slots: pinned-container and target-execution ops that may run at once across all runs. Applied by the resource_pool_guard sensor. | At 1, one long scan (doom3-bfg scancode, up to an hour) held every other run's container work; each slot can take up to 4 GiB / 2 CPUs (30 GB / 16 cores on zarathustra). |

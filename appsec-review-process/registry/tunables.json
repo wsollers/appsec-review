@@ -386,6 +386,13 @@
       "unit": "count",
       "value": 256
     },
+    "persona_result_cache": {
+      "value": true,
+      "unit": "flag",
+      "kind": "safety",
+      "description": "Reuse an accepted model response for an identical request (same prompt, model, effort and pinned input bytes) within a run, re-running today's acceptance on it. Turn off to force fresh model calls.",
+      "scale": "Removes re-execution model cost after code-only changes: multi-vuln's 53-unit re-plan was 41 min of model calls."
+    },
     "persona_result_max_bytes": {
       "description": "Largest persona result/record document read back.",
       "kind": "safety",

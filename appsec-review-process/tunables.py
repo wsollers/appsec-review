@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parent
 TEMPLATES = ROOT / "registry" / "job-templates"
 SHARED = ROOT / "registry" / "tunables.json"
 DOC = ROOT.parent / "docs" / "processes" / "tunables.md"
-UNITS = {"bytes", "count", "seconds", "lines", "chars", "millicpu", "days", "id"}
+UNITS = {"bytes", "count", "seconds", "lines", "chars", "millicpu", "days", "id", "flag"}
 KINDS = {"resource", "window", "safety", "logged"}
 
 

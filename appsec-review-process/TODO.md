@@ -141,10 +141,11 @@ Measured 2026-09-28: pure reuse is cheap (hello-autotools relaunch: 46 steps in 
 re-execution after a fingerprint change: multi-vuln spent 41 min re-planning 53 units (the plan
 contract text changed) and 12.6 min re-assembling evidence; freeciv21 60 min in scancode.
 
-- [ ] Persona result cache (shared runtime): an OK persona result is keyed by the request identity
+- [x] Persona result cache (shared runtime, branch persona-cache; tunable persona_result_cache): an OK persona result is keyed by the request identity
   (outer-prompt sha, pinned readable-input hashes, model, output contract) minus attempt ids; an
   identical request in the same run reuses it with provenance instead of a new model call. A code-only
-  change to a model job then costs no model calls.
+  change to a model job then costs no model calls. Key includes job id and persona so independent
+  cells never share an answer; today's acceptance is re-run on the cached answer.
 - [ ] Per-item memo in loops (ADR-0014 item 6): build-plan units, build-resolution units (image +
   plan commands + trial inputs), IR/SAST invocations, keyed by content, reused across attempts.
 - [ ] Tool output cache: pinned-tool runs (scancode, syft, grype, semgrep...) keyed by image digest +

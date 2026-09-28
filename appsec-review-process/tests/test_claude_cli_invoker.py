@@ -234,3 +234,46 @@ class InvokeRepairEndToEndTests(unittest.TestCase):
         self.assertTrue(any("schema repair retry: 1 rejected" in text for text in written["limitations"]))
         self.assertIn("project_discovery_summary_placeholder", prompts[1])
         del store
+
+
+class PersonaResultCacheTests(unittest.TestCase):
+    def test_identical_request_reuses_the_accepted_response_without_a_model_call(self):
+        from tests.test_dev_dispatch import inventory
+        contract = json.loads((ROOT / "registry" / "output-contracts" / "project-discovery.json").read_text())
+        response = json.dumps({"project_inventory": inventory(), "project_discovery_summary": "# s"})
+        calls = []
+
+        def dispatch_fn(argv, prompt, timeout_seconds, transcript_path):
+            calls.append(prompt)
+            return {"timed_out": False, "final_result": {"result": response}}
+
+        def item(path):
+            return SimpleNamespace(root="target-repository", path=path, data=b"x\n", sha256="a" * 64)
+
+        def package(attempt):
+            return SimpleNamespace(
+                composition={"output_contract": contract}, prompt=b"OUTER", inputs=(item("configure.ac"), item("Makefile.am")),
+                request={"model": {"family": "claude-sonnet-5"}, "run_id": "cache-run", "attempt_id": attempt,
+                         "job_id": "d02", "budget": {"input_unit_limit": 10 ** 9}},
+                allowed_claim_classes=("project_inventory", "safe_command_plan"))
+        written = []
+        with tempfile.TemporaryDirectory() as runs, \
+                mock.patch.object(invoker.cbr, "resolve_claude_binary", return_value="/usr/bin/claude"), \
+                mock.patch.object(invoker.rc, "load_model_config", return_value={"invocation": {"repair_attempts": 0}}), \
+                mock.patch.object(invoker.pi, "write_invoker_output",
+                                  side_effect=lambda package, root, **kw: written.append(kw)), \
+                mock.patch.object(invoker, "data_path", side_effect=lambda run, *parts: Path(runs, run, "data", *parts)), \
+                mock.patch("execution_state.run_path", side_effect=lambda run: Path(runs, run)):
+            (Path(runs) / "cache-run" / "inputs").mkdir(parents=True)
+            for attempt in ("a1", "a2"):
+                with tempfile.TemporaryDirectory() as out:
+                    invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn).invoke(
+                        package(attempt), output_root=Path(out), cancel=threading.Event())
+            # a different input is a different question
+            other = package("a3"); other.inputs = other.inputs + (item("README"),)
+            with tempfile.TemporaryDirectory() as out:
+                invoker.ClaudeCliInvoker(effort="medium", dispatch_fn=dispatch_fn).invoke(
+                    other, output_root=Path(out), cancel=threading.Event())
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(any("persona cache" in text and "a1" in text for text in written[1]["limitations"]))
+

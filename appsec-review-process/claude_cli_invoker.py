@@ -1037,8 +1037,43 @@ def _dispatch_until_accepted(*, dispatch_fn, accept, prompt_text: str, argv_for,
             prompt = _repair_prompt(prompt_text, exc)
             continue
         return {"envelope": envelope, "claims": claims, "rejected": round_index,
-                "input_tokens": input_tokens, "output_tokens": output_tokens}
+                "input_tokens": input_tokens, "output_tokens": output_tokens,
+                "accepted_text": _extract_result_text(dispatch)}
     raise AssertionError("unreachable")  # pragma: no cover
+
+
+PERSONA_CACHE_VERSION = "persona-result-cache/1"
+
+
+def persona_cache_key(package: Any, prompt_text: str, model_alias: str, effort: str) -> str:
+    """Identity of a model request, independent of run attempt: the exact prompt, model, effort
+    and the pinned bytes of every readable input. Same key = same question to the same model."""
+    import hashlib
+    request = package.request or {}
+    body = {"version": PERSONA_CACHE_VERSION, "model": model_alias, "effort": effort,
+            # the persona job and persona keep independent cells (quorum, red/blue) from sharing
+            "job_id": request.get("job_id"), "persona": request.get("persona"),
+            "prompt_sha256": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest(),
+            "inputs": sorted([str(item.root), str(item.path), hashlib.sha256(item.data).hexdigest()]
+                             for item in package.inputs)}
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _persona_cache_path(package: Any, key: str) -> Path | None:
+    run_id = (package.request or {}).get("run_id")
+    if not isinstance(run_id, str) or not run_id:
+        return None
+    from execution_state import run_path
+    if not (run_path(run_id) / "inputs").is_dir():   # only real, staged runs (not test fixtures)
+        return None
+    return data_path(run_id, "persona-cache", key[:2], key + ".json")
+
+
+def _persona_cache_enabled() -> bool:
+    try:
+        return bool(tunables.shared("persona_result_cache"))
+    except Exception:
+        return False
 
 
 class ClaudeCliInvoker:
@@ -1137,9 +1172,24 @@ class ClaudeCliInvoker:
                 raise InvokerOutputError(str(exc), [f"{result_field}: {exc}"]) from None
             return envelope, claims
 
+        cache_key = persona_cache_key(package, prompt_text, model_alias, self.effort)
+        cache_path = _persona_cache_path(package, cache_key) if _persona_cache_enabled() else None
+        reused = None
+        if cache_path is not None and cache_path.is_file() and not cache_path.is_symlink():
+            # Relaunch tax: the same question to the same model over the same pinned bytes was
+            # already answered and accepted in this run. Re-run today's acceptance on that answer
+            # (so post-processing and validator fixes apply); fall back to a live call if it fails.
+            try:
+                cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                envelope, claims = accept({"final_result": {"result": cached["accepted_text"]}})
+                reused = {"envelope": envelope, "claims": claims, "rejected": 0, "input_tokens": 0,
+                          "output_tokens": 0, "accepted_text": cached["accepted_text"],
+                          "cached_from": cached.get("attempt"), "cached_at": cached.get("stored_at")}
+            except (InvokerOutputError, OSError, ValueError, KeyError):
+                reused = None
         try:
             started = time.time()
-            rounds = _dispatch_until_accepted(
+            rounds = reused or _dispatch_until_accepted(
                 dispatch_fn=self._dispatch_fn, accept=accept, prompt_text=prompt_text,
                 argv_for=lambda budget: _dispatch_argv(model_alias, self.effort, budget, self.timeout_seconds,
                                                        binary, mcp_config),
@@ -1149,6 +1199,14 @@ class ClaudeCliInvoker:
                 diagnostics_dir=diagnostics_dir, cancel=cancel, started=started)
             duration_seconds = time.time() - started
             envelope, claims = rounds["envelope"], rounds["claims"]
+            if cache_path is not None and reused is None and rounds.get("accepted_text"):
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                atomic_bytes(cache_path, (json.dumps({
+                    "version": PERSONA_CACHE_VERSION, "key": cache_key,
+                    "job_id": package.request.get("job_id"), "attempt": package.request.get("attempt_id"),
+                    "model": model_alias, "effort": self.effort,
+                    "stored_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "accepted_text": rounds["accepted_text"]}, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 
             written_files: list[str] = []
             for filename, key, kind in fields:
@@ -1164,6 +1222,10 @@ class ClaudeCliInvoker:
             written_bytes = sum(len((Path(output_root) / f).read_bytes()) for f in written_files)
             limitations = [f"claude-cli dispatch, {duration_seconds:.1f}s, model={model_alias}, "
                            f"effort={self.effort}"]
+            if reused is not None:
+                limitations = [f"reused the accepted {model_alias} response to the identical request "
+                               f"(persona cache {cache_key[:16]}, first answered in attempt "
+                               f"{reused.get('cached_from')} at {reused.get('cached_at')}); no model call"]
             if rounds["rejected"]:
                 limitations.append(f"schema repair retry: {rounds['rejected']} rejected response(s) before "
                                    f"this one; the rejected responses and reasons are kept in the run's "
