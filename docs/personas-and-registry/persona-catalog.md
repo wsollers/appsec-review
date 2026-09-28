@@ -41,8 +41,12 @@ The keys, taken from `owasp-validator.json`:
 ```
 
 `best_used_in_lanes` holds job-graph node IDs and is optional; `assumptions` is a free-form object
-whose keys vary by persona. The prose entries below are the human-readable source for records
-that do not exist yet in the registry.
+whose keys vary by persona. The prose entries below are the human-readable source of the registry
+records: every persona here has one. Records without a hand-authored file are generated from this
+text by `python3 -B appsec-review-process/catalog_personas.py generate` and carry a `provenance`
+block (`generated_by: catalog_personas.py`, `reviewed: false`); `catalog_personas.py check` fails when
+a record is missing or stale. Edit the prose here and regenerate, or hand-edit a record and drop its
+`provenance` to take ownership. Which jobs run as which persona: [persona-assignment.md](persona-assignment.md).
 
 ## Core Attacker And Abuse Personas
 

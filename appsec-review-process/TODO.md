@@ -166,6 +166,22 @@ All tunables are in config (`docs/processes/tunables.md`, `tunables.py check`). 
 plan: the scale audit's "Indexing coverage" table (source/native SAST findings, vendor tools, SBOM/SCA,
 build index/plan, discovery, standards corpus, review-stage claims).
 
+## Personas and reviewer pools (ADR-0021, branch `ws-personas`)
+
+- [x] Registry records for the 48 catalog personas that had none (`catalog_personas.py generate`,
+      `provenance.reviewed: false`); `check` guards missing/stale records.
+- [x] `persona_variants` on job templates; `claim-review-pool-cell.stage_personas` gives 07/08/09/12
+      attacker / defender / verifier / scorer persona pools, disjoint across stages.
+- [x] 07/08/09/12 claims sharded across `claim_review_pool_instances` (default 3) reviewer instances,
+      one review per claim per stage, each instance its own persona; `shard-coverage.json` per attempt.
+- [x] Persona/role audit of model-calling jobs: `docs/personas-and-registry/persona-assignment.md`.
+- [ ] William: review/own the generated persona records (start with the stage reviewer pools).
+- [ ] William: partial stage publication with explicit `UNREVIEWED` decisions when one shard fails
+      (today the pool attempt fails naming the claims; rerun reuses cached shards).
+- [ ] Decide persona variants for OWASP validator cells (by chapter) and the intake review pool.
+- [ ] Per-stage registry roles (red-team-adversary, blue-team-refuter, independent-verifier, scorer)
+      instead of the generic `claim-reviewer` role.
+
 ## Breakage log
 
 Newest first. One line per breakage: date, target, run id, job, what broke, fix (commit).

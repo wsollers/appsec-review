@@ -417,3 +417,29 @@ ADR-0008 T05 names `cells/<wave>/<instance_id>/`; with `pool_parent = cells/<wav
   from accepted pointers in `prepare()`. Every pinned file is a `readable_inputs` entry with role
   `evidence`, and `_context` writes the menu bytes whose sha256 the request pins before launch.
   See [ADR-0015](../decisions/ADR-0015-tool-leads-are-ledger-candidates.md).
+
+## Claim-review sharding (ADR-0021)
+
+`claim_reviewer_pool.prepare` builds one persona worker group per claim shard (`reviewer-00`,
+`reviewer-01`, ..., count 1 each) instead of one `reviewers` group:
+
+- **Instances.** `claim_review_pool_instances` (tunable in
+  `registry/job-templates/claim-review-pool-cell.json`, default 3). Fewer instances when there are
+  fewer independent claim groups; more (up to `pool_groups_max`) when a shard's estimated input
+  (claim JSON bytes / 4) exceeds `claim_review_shard_input_units_max`. An empty population keeps the
+  single zero-count `reviewers` group.
+- **Shard only.** Every claim is in exactly one shard, so it is reviewed once per stage.
+  `claim_review_sharding.plan_shards` keeps causally linked/superseding claims together, groups claims
+  by cited file then component set, splits a group only above the balanced share, and assigns
+  largest-first to the lightest shard. The plan is a pure function of the accepted population.
+- **Inputs.** Instance *n* reads `stage-upstream:shard-NN.json` (the accepted upstream document with
+  only its claims; written into the attempt's `stage-shards/` and hash-pinned in the request) and the
+  shared supporting-evidence menu.
+- **Persona.** Each group's `persona_request.persona` names the shard's persona from
+  `stage_personas` (a `persona_variants` entry of the template) with its own outer prompt.
+- **Budget.** `pool_budget` is instances x the per-instance persona budget; each request keeps the
+  standard per-instance limits. `claim_review_pool_max_parallel` (default 3) instances run at once.
+- **Merge.** `deterministic_pool_merge` merges the shard outputs unchanged; the lifecycle rules then
+  check the whole population. `shard-coverage.json` records persona, claims and unreviewed claims per
+  shard. A failed instance fails the pool attempt with its claim ids named (the stage contract has no
+  partial form); the rerun re-asks only that shard, the persona result cache answers the others.

@@ -51,6 +51,13 @@ the map; component characterization subsequently refines it into functional/secu
 The prompt is `../02-evidence-pregather/task-repository-partition-discovery.md`. Automatic dispatch is
 still pending the shared job renderer and validator.
 
+A job template may list `persona_variants`: registry personas one of its instances may run as
+instead of the composed persona (ADR-0021). `persona_invocation.load_composition` accepts only a
+listed id and still pins that persona record's hash. `claim-review-pool-cell` uses this with
+`stage_personas` to give each 07/08/09/12 reviewer shard its own persona. Catalog personas are
+generated into `personas/` by `../catalog_personas.py` (see
+[persona-catalog.md](../../docs/personas-and-registry/persona-catalog.md)).
+
 Design rules:
 
 - Treat target repos, evidence, scanner output, docs, and tests as untrusted data.
