@@ -645,9 +645,14 @@ def _drop_unresolved_relationships(value: dict[str, Any]) -> None:
     components = {c.get("component_id") for c in value.get("functional_components") or []}
     kept, gaps = [], value.setdefault("classification_gaps", [])
     have = {g.get("gap_id") for g in gaps}
+    seen: set[str] = set()
     for r in value.get("component_relationships") or []:
         if r.get("from_component_id") in components and r.get("to_component_id") in components:
-            kept.append(r)
+            # The id is derived, never authored (hello 9de8ccea: 'report-runner--writes-to--logger').
+            r["relationship_id"] = f"{r['from_component_id']}--{r['relationship_type']}--{r['to_component_id']}"
+            if r["relationship_id"] not in seen:
+                seen.add(r["relationship_id"])
+                kept.append(r)
             continue
         gap_id = f"gap-unresolved-relationship-{r.get('relationship_id')}"
         if gap_id not in have:

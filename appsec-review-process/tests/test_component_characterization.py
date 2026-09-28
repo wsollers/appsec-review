@@ -430,8 +430,9 @@ class UnresolvedRelationshipTest(unittest.TestCase):
     def test_edge_to_a_non_component_becomes_a_gap(self) -> None:
         value = {"functional_components": [{"component_id": "a"}, {"component_id": "b"}],
                  "component_relationships": [
-                     {"relationship_id": "a--calls--b", "from_component_id": "a", "to_component_id": "b"},
-                     {"relationship_id": "a--writes-to--tmp-log", "from_component_id": "a", "to_component_id": "tmp-log"}],
+                     {"relationship_id": "a-calls-b", "relationship_type": "calls", "from_component_id": "a", "to_component_id": "b"},
+                     {"relationship_id": "dup", "relationship_type": "calls", "from_component_id": "a", "to_component_id": "b"},
+                     {"relationship_id": "a--writes-to--tmp-log", "relationship_type": "writes-to", "from_component_id": "a", "to_component_id": "tmp-log"}],
                  "classification_gaps": []}
         cc._drop_unresolved_relationships(value)
         self.assertEqual([r["relationship_id"] for r in value["component_relationships"]], ["a--calls--b"])
