@@ -191,6 +191,9 @@ def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256
     return errors, readable
 
 
+_STANDARDS_CORPUS = re.compile(r"evidence/02-standards-source-ingest/[^/]+/standards/")
+
+
 def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, dict[str, Any]]:
     base = data_path(run_id, "jobs", UPSTREAM_JOB)
     pointer_path = base / "accepted.json"
@@ -237,6 +240,9 @@ def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, 
     if manifest_errors:
         raise Blocked(f"{JOB}: accepted {UPSTREAM_MANIFEST} is invalid ({len(manifest_errors)} errors)")
     readable[UPSTREAM_MANIFEST] = file_hash(manifest)
+    # The standards corpus (OWASP/ASVS/STIG/OpenCRE text, ~1.2k files) is reference material for the
+    # standards jobs, not evidence about the target; exposing it breaks the persona input ceiling.
+    readable = {key: value for key, value in readable.items() if not _STANDARDS_CORPUS.match(key)}
     return attempt, {
         "job": UPSTREAM_JOB, "attempt_id": attempt_id,
         "pointer_sha256": file_hash(pointer_path), "envelope_sha256": file_hash(envelope_path),
