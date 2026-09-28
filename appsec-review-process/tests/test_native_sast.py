@@ -34,14 +34,18 @@ def sha(path: Path) -> str:
 
 
 def accepted_native_build(folder: Path, *, source_revision="a" * 40,
-                          result_revision=None, db_hash_override=None):
+                          result_revision=None, db_hash_override=None,
+                          extra_entries=(), mutate_target=None):
     run_id, attempt_id = "run-e03", "native-attempt"
     base = folder / "native-build"; attempt = base / "attempts" / attempt_id
     output = attempt / "outputs/u/compile_commands.json"; output.parent.mkdir(parents=True)
-    shutil.copyfile(FIXTURE / "compile_commands.json", output)
+    database = json.loads((FIXTURE / "compile_commands.json").read_text()) + list(extra_entries)
+    output.write_text(json.dumps(database, indent=2) + "\n")
     binary = attempt / "outputs/u/binaries/hello"; binary.parent.mkdir(parents=True)
     binary.write_bytes(b"\x7fELFfixture")
     target = folder / "target"; shutil.copytree(FIXTURE / "target", target)
+    if mutate_target is not None:
+        mutate_target(target)
     inputs = {"run_id": run_id, "job": worker.UPSTREAM_JOB,
               "source_snapshot_sha256": "sha256:" + "1" * 64,
               "source_revision": source_revision, "target_path": str(target.resolve()),
@@ -58,7 +62,7 @@ def accepted_native_build(folder: Path, *, source_revision="a" * 40,
             "image_id": "image_build_123456789abc", "image_digest": "sha256:" + "5" * 64,
             "commands": [{"phase": "configure"}, {"phase": "build"}],
             "compile_database": {"path": "outputs/u/compile_commands.json",
-                "sha256": db_hash_override or sha(output), "entries": 2},
+                "sha256": db_hash_override or sha(output), "entries": len(database)},
             "binaries": [{"source_path": "hello", "artifact_path": "outputs/u/binaries/hello",
                           "sha256": sha(binary), "size_bytes": binary.stat().st_size}]}],
         "coverage_gaps": []}
@@ -142,6 +146,51 @@ class NativeSastTests(unittest.TestCase):
         self.assertEqual(loaded["units"][0]["unsupported"], ["README.md"])
         self.assertRegex(loaded["units"][0]["build_variant"]["variant_id"], r"^locked-[0-9a-f]{16}$")
         self.assertRegex(loaded["source_tree_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+    GENERATED = {"directory": "/scratch/src/build",
+                 "file": "/scratch/src/build/app_autogen/mocs_compilation.cpp",
+                 "arguments": ["/opt/llvm/bin/clang++", "-c",
+                               "/scratch/src/build/app_autogen/mocs_compilation.cpp"]}
+
+    def test_generated_sources_absent_from_checkout_are_recorded_gaps(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, _target, fingerprint = accepted_native_build(
+                Path(folder), extra_entries=[self.GENERATED])
+            loaded = worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        unit = loaded["units"][0]
+        self.assertEqual(unit["generated"], ["build/app_autogen/mocs_compilation.cpp"])
+        self.assertEqual([entry["file"] for entry in unit["adapted"]], ["/workspace/src/greet.c"])
+        self.assertEqual(list(unit["sources"]), ["src/greet.c"])
+        self.assertEqual(unit["compile_database"]["adapted_sha256"], adapters.canonical_sha(unit["adapted"]))
+        self.assertEqual(loaded["excluded_units"], [])
+        self.assertEqual(worker.generated_gaps(unit["generated"]), [
+            "generated-sources-not-in-checkout:1",
+            "generated-source-not-in-checkout:build/app_autogen/mocs_compilation.cpp"])
+        many = worker.generated_gaps([f"b/{i}.cpp" for i in range(9)])
+        self.assertEqual(many[0], "generated-sources-not-in-checkout:9")
+        self.assertEqual(len(many), 1 + worker.GENERATED_SAMPLE)
+
+    def test_unit_with_only_generated_sources_is_excluded_not_failed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base, _attempt, _target, fingerprint = accepted_native_build(
+                Path(folder), extra_entries=[self.GENERATED],
+                mutate_target=lambda target: (target / "src/greet.c").unlink())
+            loaded = worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
+        self.assertEqual(loaded["units"], [])
+        self.assertEqual(loaded["excluded_units"], [{"unit_id": "dir:.", "unsupported": ["README.md"],
+            "generated": ["build/app_autogen/mocs_compilation.cpp", "src/greet.c"]}])
+        gaps = worker.excluded_unit_gaps(loaded)
+        self.assertIn("unit-without-checkout-sources:dir:.", gaps)
+        self.assertIn("generated-sources-not-in-checkout:2", gaps)
+
+    def test_generated_path_through_symlink_still_fails_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            outside = Path(folder, "outside"); outside.mkdir()
+            base, _attempt, _target, fingerprint = accepted_native_build(
+                Path(folder), extra_entries=[self.GENERATED],
+                mutate_target=lambda target: (target / "build").symlink_to(outside))
+            with self.assertRaisesRegex(Blocked, "does not resolve beneath"):
+                worker.load_native_build(base, run_id="run-e03", expected_fingerprint=fingerprint)
 
     def test_post_build_checkout_mutation_changes_bound_source_identity(self):
         with tempfile.TemporaryDirectory() as folder:

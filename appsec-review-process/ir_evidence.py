@@ -195,11 +195,34 @@ def _variant(unit: dict, entries: list[dict]) -> str:
         "entries": entries})
 
 
+class GeneratedSource(Exception):
+    """A compile entry whose source was generated in the build copy (e.g. Qt AUTOMOC)."""
+
+    def __init__(self, relative: str):
+        super().__init__(relative)
+        self.relative = relative
+
+
+def _absent_from_checkout(target: Path, relative: str) -> bool:
+    """True only when no component of the path exists and none is a symbolic link."""
+    cursor = target
+    for part in PurePosixPath(relative).parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            return False
+        if not os.path.lexists(cursor):
+            return True
+    return False
+
+
 def _source_path(target: Path, value: str) -> tuple[str, Path]:
     normalized = value.replace("\\", "/")
     prefix = "/scratch/src/"
     relative = normalized[len(prefix):] if normalized.startswith(prefix) else normalized
     path = _relative(target, relative)
+    if _absent_from_checkout(target, relative):
+        # Generated at build time inside the build copy; ADR-0013 records it as a gap.
+        raise GeneratedSource(PurePosixPath(relative).as_posix())
     if not path.is_file():
         raise Blocked(f"compile entry source is missing: {relative}")
     return PurePosixPath(relative).as_posix(), path
@@ -271,7 +294,12 @@ def capture(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
             if not words:
                 gaps.append({"unit_id": unit["unit_id"], "compile_index": index,
                              "reason": "compile-entry-has-no-argv"}); continue
-            relative, source = _source_path(target, entry.get("file", ""))
+            try:
+                relative, source = _source_path(target, entry.get("file", ""))
+            except GeneratedSource as missing:
+                gaps.append({"unit_id": unit["unit_id"], "compile_index": index,
+                    "source_path": missing.relative, "reason": "generated-source-not-in-checkout"})
+                continue
             module_id = "bc_" + digest({"unit": unit["unit_id"], "index": index,
                                          "source": relative, "variant": variant})[:16]
             destination = output / "modules" / f"{module_id}.bc"; destination.parent.mkdir(parents=True, exist_ok=True)
@@ -580,7 +608,11 @@ def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = N
                     if not words:
                         expected_empty.append({"unit_id":unit["unit_id"],"compile_index":index,
                                                "reason":"compile-entry-has-no-argv"}); continue
-                    relative,source=_source_path(target,entry.get("file",""))
+                    try:
+                        relative,source=_source_path(target,entry.get("file",""))
+                    except GeneratedSource as missing:
+                        expected_empty.append({"unit_id":unit["unit_id"],"compile_index":index,
+                            "source_path":missing.relative,"reason":"generated-source-not-in-checkout"}); continue
                     module_id="bc_"+digest({"unit":unit["unit_id"],"index":index,"source":relative,"variant":variant})[:16]
                     expected_modules[module_id]={"unit_id":unit["unit_id"],"compile_index":index,
                         "source_path":relative,"source_sha256":_sha(source),"compiler":words[0],

@@ -73,17 +73,18 @@ class IrEvidenceTests(unittest.TestCase):
         state.atomic_json(base / "latest.json", {"attempt_id":attempt_id,
                                                   "updated_at":"2026-01-01T00:00:02Z"})
 
-    def _native(self):
+    def _native(self, extra=()):
         attempt = self.run / "data/jobs/02-native-build/attempts/native-1"; attempt.mkdir(parents=True)
         db = attempt / "outputs/u/compile_commands.json"; db.parent.mkdir(parents=True)
-        state.atomic_json(db, [{"directory":"/scratch/src", "file":"/scratch/src/pointer.c",
-                                "arguments":["/usr/bin/clang","-g","-O0","-c","/scratch/src/pointer.c"]}])
+        entries = [{"directory":"/scratch/src", "file":"/scratch/src/pointer.c",
+                    "arguments":["/usr/bin/clang","-g","-O0","-c","/scratch/src/pointer.c"]}, *extra]
+        state.atomic_json(db, entries)
         binary = attempt / "outputs/u/binaries/app"; binary.parent.mkdir(parents=True); binary.write_bytes(b"\x7fELFfixture")
         native = {"schema":"appsec-review/native-build/1", "run_id":self.run_id,
           "source_revision":intake.source_identity(str(self.target))["revision"], "upstream":{"resolution":{"job":"02-build-resolution","attempt_id":"r1","lock_sha256":"sha256:"+"1"*64},
           "configured":{"job":"02-build-configure","attempt_id":"c1","result_sha256":"sha256:"+"2"*64,"envelope_sha256":"sha256:"+"3"*64}},
           "status":"OK", "units":[{"unit_id":"root","status":"OK","image_id":"image_build_aaaaaaaaaaaa",
-          "image_digest":"sha256:"+"4"*64,"commands":[{},{}],"compile_database":{"path":"outputs/u/compile_commands.json","sha256":"sha256:"+state.file_hash(db),"entries":1},
+          "image_digest":"sha256:"+"4"*64,"commands":[{},{}],"compile_database":{"path":"outputs/u/compile_commands.json","sha256":"sha256:"+state.file_hash(db),"entries":len(entries)},
           "binaries":[{"source_path":"app","artifact_path":"outputs/u/binaries/app","sha256":"sha256:"+state.file_hash(binary),"size_bytes":binary.stat().st_size}]}],"coverage_gaps":[]}
         state.atomic_json(attempt / "native-build.json", native)
         state.atomic_json(attempt / "inputs.json", {"source_snapshot_sha256":self.snapshot,
@@ -183,6 +184,36 @@ class IrEvidenceTests(unittest.TestCase):
         state.atomic_json(pointer_path,pointer)
         with self.assertRaisesRegex(state.Blocked,"source/checkout generation is stale"):
             ir.link(self.run_id,self.owner/"forged-link",toolchain=self.toolchain)
+
+    GENERATED = {"directory":"/scratch/src/build", "file":"/scratch/src/build/app_autogen/mocs_compilation.cpp",
+                 "arguments":["/usr/bin/clang++","-c","/scratch/src/build/app_autogen/mocs_compilation.cpp"]}
+
+    def _republish_native(self, extra):
+        shutil.rmtree(self.run / "data/jobs/02-native-build"); self._native(extra)
+
+    def test_generated_source_absent_from_checkout_is_a_capture_gap(self):
+        self._republish_native([self.GENERATED])
+        attempt=self.owner/"generated"; attempt.mkdir()
+        inputs=ir.current_inputs(self.run_id,"02-ir-capture")
+        captured=ir.capture(self.run_id,attempt,toolchain=self.toolchain)
+        self.assertEqual(len(captured["modules"]),1)
+        self.assertEqual(captured["status"],"OK_WITH_GAPS")
+        self.assertEqual(captured["coverage_gaps"],[{"unit_id":"root","compile_index":1,
+            "source_path":"build/app_autogen/mocs_compilation.cpp","reason":"generated-source-not-in-checkout"}])
+        state.atomic_json(attempt/"inputs.json",inputs); state.atomic_json(attempt/"ir-capture.json",captured)
+        permission,lineage=ir._producer_receipts(self.run_id,"02-ir-capture",inputs)
+        state.atomic_json(attempt/"permission.json",permission); state.atomic_json(attempt/"lineage.json",lineage)
+        ir._validate_attempt("02-ir-capture",attempt,inputs)
+        forged=deepcopy(captured); forged["coverage_gaps"]=[]
+        forged["status"]="OK"; state.atomic_json(attempt/"ir-capture.json",forged)
+        with self.assertRaises(state.Blocked):
+            ir._validate_attempt("02-ir-capture",attempt,inputs)
+
+    def test_generated_path_through_symlink_still_fails_closed(self):
+        outside=self.owner/"outside"; outside.mkdir(); (self.target/"build").symlink_to(outside)
+        self._republish_native([self.GENERATED])
+        with self.assertRaises(state.Blocked):
+            ir.capture(self.run_id,self.owner/"escape",toolchain=self.toolchain)
 
     def test_e02_attested_tree_rejects_post_acceptance_checkout_mutation(self):
         (self.target/"pointer.c").write_text("int main(void) { return 7; }\n",encoding="utf-8")

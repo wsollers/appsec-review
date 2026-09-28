@@ -110,6 +110,39 @@ def _owned(root_path: Path, relative: str, label: str) -> Path:
     return resolved
 
 
+GENERATED_SAMPLE = 5
+
+
+def _absent_from_checkout(root_path: Path, relative: str) -> bool:
+    """True only when a normalized path names nothing at all beneath the checkout.
+
+    CMake/Qt AUTOMOC (and similar) sources are generated inside the build copy and never exist
+    in the pristine checkout.  Such a path is a recorded coverage gap, not a failure.  Anything
+    that does exist, or is reached through a symbolic link, still goes through ``_owned`` so the
+    escape/regular-file/hash checks are never weakened.
+    """
+    pure = PurePosixPath(relative)
+    if pure.is_absolute() or any(part in ("", ".", "..") for part in pure.parts):
+        return False
+    cursor = root_path
+    for part in pure.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            return False
+        if not os.path.lexists(cursor):
+            return True
+    return False
+
+
+def generated_gaps(paths: list[str]) -> list[str]:
+    """One counted gap plus a bounded sample of generated sources absent from the checkout."""
+    if not paths:
+        return []
+    ordered = sorted(paths)
+    return ([f"generated-sources-not-in-checkout:{len(ordered)}"] +
+            [f"generated-source-not-in-checkout:{path}" for path in ordered[:GENERATED_SAMPLE]])
+
+
 def _code_hashes() -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
     values["data/native-sast/config-v1.json"] = file_hash(CONFIG)
@@ -167,6 +200,7 @@ def load_native_build(native_build_root: Path, *, run_id: str,
     artifact_hashes = {item.get("path"): "sha256:" + item.get("sha256", "")
                        for item in envelope["artifacts"]}
     units = []
+    excluded_units = []
     unit_ids: set[str] = set()
     for unit in result["units"]:
         if unit["unit_id"] in unit_ids:
@@ -185,10 +219,22 @@ def load_native_build(native_build_root: Path, *, run_id: str,
         except adapters.AdapterError as exc:
             raise Blocked(f"{JOB}: native-build compile database rejected ({exc})") from exc
         sources = {}
+        kept, generated = [], []
         for entry in adapted:
             relative = entry["file"][len(adapters.WORKSPACE_PREFIX):]
+            if _absent_from_checkout(target, relative):
+                generated.append(relative)  # build-time generated; never in the checkout
+                continue
             source = _owned(target, relative, f"translation unit {relative}")
             sources[relative] = _hash(source)
+            kept.append(entry)
+        adapted = kept
+        generated.sort()
+        if not adapted:
+            # ADR-0013/0014: every supported TU was generated at build time; record, do not fail.
+            excluded_units.append({"unit_id": unit["unit_id"], "unsupported": unsupported,
+                                   "generated": generated})
+            continue
         commands_sha = "sha256:" + digest(unit["commands"])
         variant_id = "locked-" + digest({"unit_id": unit["unit_id"],
             "image_id": unit["image_id"], "image_digest": unit["image_digest"],
@@ -201,9 +247,11 @@ def load_native_build(native_build_root: Path, *, run_id: str,
                           "sha256": db_record["sha256"], "entries": db_record["entries"],
                           "adapted_path": f"adapted-inputs/{digest(unit['unit_id'])[:16]}/compile_commands.json",
                           "adapted_sha256": adapters.canonical_sha(adapted)},
-                      "adapted": adapted, "unsupported": unsupported, "sources": sources})
+                      "adapted": adapted, "unsupported": unsupported, "generated": generated,
+                      "sources": sources})
     return {"attempt": attempt, "pointer": pointer, "envelope": envelope, "result": result,
             "inputs": inputs, "target": target.resolve(), "units": units,
+            "excluded_units": excluded_units,
             "binding": {"job_id": UPSTREAM_JOB, "attempt_id": pointer["attempt_id"],
                 "fingerprint": pointer["fingerprint"], "pointer_sha256": _hash(pointer_path),
                 "envelope_sha256": "sha256:" + pointer["envelope_sha256"],
@@ -227,6 +275,7 @@ def current_inputs(run_id: str, *, native_build_root: Path,
         "native_build": upstream["binding"],
         "units": [{key: value for key, value in unit.items() if key != "adapted"}
                   | {"adapted": unit["adapted"]} for unit in upstream["units"]],
+        "excluded_units": upstream["excluded_units"],
         "image": registry[IMAGE_ID], "config": config,
         "config_sha256": _hash(CONFIG), "boundary_sha256": ce.boundary_sha256(),
         "code": _code_hashes()}
@@ -312,6 +361,7 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
     leads.sort(key=lambda item: (item["path"], item["start_line"], item["tool_id"], item["rule_id"]))
     supported = len(unit["adapted"])
     gaps = [f"unsupported-translation-unit:{path}" for path in unit["unsupported"]]
+    gaps.extend(generated_gaps(unit.get("generated", [])))
     if dropped:
         gaps.append(f"analyzer-records-outside-checkout:{len(dropped)}")
     tidy_failed = int(native_manifest["clang_tidy"]["files_nonzero_exit"])
@@ -353,6 +403,16 @@ def normalize_unit(unit: dict[str, Any], *, target: Path, attempt: Path,
             "leads": leads, "coverage_gaps": sorted(gaps)}
 
 
+def excluded_unit_gaps(inputs: dict[str, Any]) -> list[str]:
+    """Gaps for units whose supported translation units were all generated at build time."""
+    gaps: list[str] = []
+    for unit in inputs.get("excluded_units", []):
+        gaps.append(f"unit-without-checkout-sources:{unit['unit_id']}")
+        gaps.extend(f"unsupported-translation-unit:{path}" for path in unit["unsupported"])
+        gaps.extend(generated_gaps(unit["generated"]))
+    return gaps
+
+
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
@@ -362,7 +422,8 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     _verify_source_tree(inputs)
     upstream = load_native_build(Path(inputs["native_build_root"]), run_id=run_id,
                                  expected_fingerprint=inputs["native_build"]["fingerprint"])
-    if upstream["binding"] != inputs["native_build"] or upstream["units"] != inputs["units"]:
+    if (upstream["binding"] != inputs["native_build"] or upstream["units"] != inputs["units"] or
+            upstream["excluded_units"] != inputs.get("excluded_units", [])):
         raise Blocked(f"{JOB}: native-build publication, compile database, or source bytes changed")
     if upstream["source_tree_sha256"] != inputs["source_tree_sha256"]:
         raise Blocked(f"{JOB}: post-build checkout bytes changed")
@@ -409,7 +470,8 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
             for unit in inputs["units"]]
     except (KeyError, OSError, ValueError) as exc:
         raise Blocked(f"{JOB}: normalized raw evidence cannot be re-derived ({exc})") from exc
-    expected_gaps = sorted(gap for unit in expected_units for gap in unit["coverage_gaps"])
+    expected_gaps = sorted([gap for unit in expected_units for gap in unit["coverage_gaps"]] +
+                           excluded_unit_gaps(inputs))
     expected = {"schema": SCHEMA, "run_id": run_id, "job_id": JOB,
         "attempt_id": attempt.name, "source_snapshot_sha256": inputs["source_snapshot_sha256"],
         "native_build": inputs["native_build"],
@@ -463,7 +525,8 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             normalized.append(normalize_unit(units_by_id[unit["unit_id"]],
                 target=Path(inputs["target_path"]), attempt=attempt,
                 clang_trial=trials["clang-cppcheck"], csa_trial=trials["csa"], inputs=inputs))
-        gaps = sorted(gap for unit in normalized for gap in unit["coverage_gaps"])
+        gaps = sorted([gap for unit in normalized for gap in unit["coverage_gaps"]] +
+                      excluded_unit_gaps(inputs))
         result = {"schema": SCHEMA, "run_id": run_id, "job_id": JOB,
             "attempt_id": allocation["attempt_id"],
             "source_snapshot_sha256": inputs["source_snapshot_sha256"],
