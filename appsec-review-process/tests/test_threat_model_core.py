@@ -140,8 +140,8 @@ class ThreatModelCoreTests(unittest.TestCase):
             state.atomic_json(manifest_path, manifest)
             component["evidence_manifest_lineage"]["manifest_sha256"] = "sha256:" + state.file_hash(manifest_path)
             state.atomic_json(component_attempt / tm.cc.RESULT, component)
-            with self.assertRaisesRegex(tm.Blocked, "exactly one substantive"):
-                tm.current_inputs("run1")
+            # ADR-0013: several cited artifacts bind the first (sorted), not a block
+            self.assertIn("/evidence/", tm.current_inputs("run1")["evidence_path"])
 
         with mock.patch.object(tm.cc, "validate", side_effect=tm.Blocked("stale F03 accepted lineage")):
             with self.assertRaisesRegex(tm.Blocked, "stale F03 accepted lineage"):

@@ -260,8 +260,15 @@ def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run
     target = Path(target_value).resolve()
     try:
         target_relative = target.relative_to(run_root.resolve()).as_posix()
-    except ValueError as exc:
-        raise Blocked("full review input assembly: staged target must be run-owned for dispatch") from exc
+    except ValueError:
+        # Fixture targets live outside the run (every target so far). Dispatch from the run-owned,
+        # hash-bound source projection instead, the same tree the automatic evidence jobs read.
+        import automatic_evidence_inputs
+        try:
+            target = automatic_evidence_inputs.source_projection(run_id)[0].resolve()
+            target_relative = target.relative_to(run_root.resolve()).as_posix()
+        except (ValueError, OSError) as exc:
+            raise Blocked("full review input assembly: staged target must be run-owned for dispatch") from exc
     source_spec = {"alias": "component-map",
         "pointer_path": component_pointer.relative_to(run_root).as_posix(), **COMPONENT_SOURCE}
     source_specs = [source_spec]

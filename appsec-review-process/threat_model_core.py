@@ -96,9 +96,13 @@ def current_inputs(run_id: str) -> dict[str, Any]:
                  if Path(item["producer_path"]).name not in administrative}
     cited_paths = sorted({citation["path"] for citation in _component_citations(component_map)
                           if citation.get("source_type") == "upstream_lane" and citation.get("path") in artifacts})
-    if len(cited_paths) != 1:
-        raise Blocked(f"{JOB}: F03 must cite exactly one substantive F02 assembly artifact; found {len(cited_paths)}")
-    evidence = artifacts[cited_paths[0]]
+    # ADR-0013: the component map may cite no upstream artifact (appsec-multi-vuln cited only
+    # repository files) or several. Bind the first cited one, or else the assembly's own
+    # hash-bound manifest; both are exact F02 evidence.
+    if cited_paths:
+        evidence = artifacts[cited_paths[0]]
+    else:
+        evidence = {"path": cc.UPSTREAM_MANIFEST, "sha256": lineage["manifest_sha256"]}
     evidence_file = evidence_attempt / evidence["path"]
     if (not evidence_file.is_file() or evidence_file.is_symlink() or
             "sha256:" + file_hash(evidence_file) != evidence["sha256"]):
