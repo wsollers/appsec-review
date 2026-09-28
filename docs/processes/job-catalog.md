@@ -1311,7 +1311,7 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | `02-evidence-pregather` | [`02-build-configure`](#job-02-build-configure) | `configured-build` | implemented_and_qualified | `02-build-resolution` |
 | `02-evidence-pregather` | [`02-native-build`](#job-02-native-build) | `native-build` | implemented_and_qualified | `02-build-configure` |
 | `02-evidence-pregather` | [`02-source-sast`](#job-02-source-sast) | `source-sast` | implemented_and_qualified | `00-intake` |
-| `02-evidence-pregather` | [`02-codeql-sast`](#job-02-codeql-sast) | `codeql-sast` | unknown | `00-intake` |
+| `02-evidence-pregather` | [`02-codeql-sast`](#job-02-codeql-sast) | `codeql-sast` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-code-property-graph`](#job-02-code-property-graph) | `code-property-graph` | implemented_not_qualified | `00-intake` |
 | `02-evidence-pregather` | [`02-native-sast`](#job-02-native-sast) | `native-sast` | implemented_not_qualified | `02-native-build` |
 | `02-evidence-pregather` | [`02-ir-capture`](#job-02-ir-capture) | `ir-capture` | implemented_not_qualified | `02-native-build` |
@@ -1745,14 +1745,18 @@ the source is named in each entry. Output paths are under `appsec-review-process
 | | |
 |---|---|
 | Contract | `codeql-sast` (claim class `source_static_evidence`) |
-| Status | readiness `unknown`; execution `unknown`; job-graph `implemented: true` |
-| Resource pool | `None` |
+| Status | readiness `implemented_not_qualified`; execution `pinned_container`; job-graph `implemented: true` |
+| Worker | `appsec-review-process/codeql_sast.py:run` |
+| Resource pool | `docker` |
+| Dagster | standalone: `codeql_sast`; lifecycle binding: `actual_worker` |
 | Composition | persona `evidence-custodian`, role `source-sast-curator`, tooling `pinned-source-sast` |
 | Consumes (graph) | [`00-intake`](#job-00-intake) (required, contract `intake`) |
 | Declared inputs (registry/job-templates/02-codeql-sast.json) | fresh accepted intake<br>staged target checkout<br>B16 audit-codeql record<br>authenticated CodeQL tool metadata (images/audit-codeql/tool.json) |
 | Produces | `runs/<run_id>/data/jobs/02-codeql-sast/` |
 | Output files (registry/output-contracts/codeql-sast.json) | codeql-sast.json<br>b13-receipts.json<br>codeql-sast-summary.md<br>status.json<br>permission.json<br>lineage.json |
 | Consumed by | [`02-evidence-assembly`](#job-02-evidence-assembly) |
+| Gaps | `live_dagster_qualification_missing` |
+| Next prerequisite | Close the retained qualification and coverage gaps listed for this job. |
 
 <a id="job-02-code-property-graph"></a>
 

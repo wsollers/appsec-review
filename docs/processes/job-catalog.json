@@ -9413,12 +9413,14 @@
    "name": "CodeQL SAST",
    "contract": "codeql-sast",
    "implemented": true,
-   "readiness": "unknown",
-   "execution_mode": "unknown",
-   "worker": null,
-   "resource_pool": null,
-   "dagster_jobs": [],
-   "lifecycle_binding": null,
+   "readiness": "implemented_not_qualified",
+   "execution_mode": "pinned_container",
+   "worker": "appsec-review-process/codeql_sast.py:run",
+   "resource_pool": "docker",
+   "dagster_jobs": [
+    "codeql_sast"
+   ],
+   "lifecycle_binding": "actual_worker",
    "composition": {
     "persona_id": "evidence-custodian",
     "role_id": "source-sast-curator",
@@ -9463,8 +9465,10 @@
    ],
    "outputs_source": "registry/output-contracts/codeql-sast.json",
    "claim_class": "source_static_evidence",
-   "gaps": [],
-   "next_prerequisite": null,
+   "gaps": [
+    "live_dagster_qualification_missing"
+   ],
+   "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job.",
    "consumes": [
     "job:00-intake"
    ],
