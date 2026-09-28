@@ -208,7 +208,8 @@
           "contract": "binary-intelligence",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -253,7 +254,8 @@
           "contract": "native-sast",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -262,7 +264,8 @@
           "contract": "ir-facts",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -271,7 +274,8 @@
           "contract": "test-result-intelligence",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -280,7 +284,8 @@
           "contract": "test-coverage-intelligence",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -289,7 +294,8 @@
           "contract": "operations-doc-intelligence",
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -522,7 +528,8 @@
           "kind": "required",
           "contract": "native-sast",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -530,7 +537,8 @@
           "kind": "required",
           "contract": "ir-facts",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -927,7 +935,8 @@
           "kind": "required",
           "contract": "binary-triage",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -935,7 +944,8 @@
           "kind": "required",
           "contract": "binary-cfg",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ]
@@ -1085,7 +1095,8 @@
           "kind": "required",
           "contract": "configured-build",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1150,7 +1161,8 @@
           "kind": "required",
           "contract": "native-build",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1175,7 +1187,8 @@
           "kind": "required",
           "contract": "native-build",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1198,7 +1211,8 @@
           "kind": "required",
           "contract": "ir-capture",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1221,7 +1235,8 @@
           "kind": "required",
           "contract": "ir-link",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1244,7 +1259,8 @@
           "kind": "required",
           "contract": "native-build",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1268,7 +1284,8 @@
           "kind": "required",
           "contract": "native-build",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1292,7 +1309,8 @@
           "kind": "required",
           "contract": "binary-triage",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         },
         {
@@ -1301,7 +1319,8 @@
           "contract": "debug-symbol-index",
           "allowed_skip_reasons": [
             "no-debug-symbols",
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1325,7 +1344,8 @@
           "kind": "required",
           "contract": "native-build",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1350,7 +1370,8 @@
           "kind": "required",
           "contract": "test-execution",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],
@@ -1374,7 +1395,8 @@
           "kind": "required",
           "contract": "test-execution",
           "allowed_skip_reasons": [
-            "not-applicable-non-native"
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
           ]
         }
       ],

@@ -51,6 +51,7 @@ echo "== intake (phase1_intake) before the build controls"
 python3 -B appsec-review-process/launch_job.py --run-id "$RUN_ID" --job phase1_intake --wait --timeout 21600 >/dev/null  # includes time queued behind other runs
 python3 -B appsec-review-process/build_resolution.py stage-control "$RUN_ID"
 python3 -B appsec-review-process/build_configure.py stage-control "$RUN_ID"
+python3 -B appsec-review-process/test_evidence.py stage-control "$RUN_ID"
 echo "staged: launch with"
 echo "  python3 appsec-review-process/launch_job.py --run-id $RUN_ID --job full_review --wait"
 echo "$RUN_ID"
