@@ -154,8 +154,9 @@ def _build(run_root: Path, run_id: str, dagster_run_id: str, *, force: bool,
     # Output units include model thinking; keep the template's probe budget for output units and
     # time (100k units, 900 s) so a long think does not fail an instance whose values are filled
     # mechanically anyway (ADR-0013).
-    budget.update({"input_byte_limit": 2 * 1024 * 1024, "input_unit_limit": 100_000,
-                   "output_byte_limit": 128 * 1024, "output_file_limit": 4})
+    # Input limits too: a producer's pinned files can exceed 100k units (an envelope listing many
+    # artifacts), so keep the probe input budget (200k units, 8 MiB).
+    budget.update({"output_byte_limit": 128 * 1024, "output_file_limit": 4})
     groups = []
     for edge, source, _binding in sources:
         producer_root = source["root"]
