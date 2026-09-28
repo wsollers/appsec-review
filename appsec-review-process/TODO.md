@@ -171,6 +171,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | appsec-multi-vuln | 49e3637e | 02-build-configure | (milestone) 9 C/C++ units built after the cwd and -cc1 fixes; configure replay then failed on a unit with no configure step (empty locked phase read as a failed sequence) | Replay compares against the locked command count; configured-build `commands` may be empty |
 | 2026-09-28 | hello-autotools, doom3-bfg | 928c1b47, d9704dea | 02-full-review-input-assembly (then 05-native-memory) | "dependency accepted pointer is invalid": the dependency jobs now publish the common pointer (hashes, accepted_at) and the assembly accepted only the older key set; native memory then found no assembly | Both pointer dialects accepted |
 | 2026-09-28 | appsec-multi-vuln | d3c7cb66 | 02-build-resolution | With bear always on, clang's internal `clang-21 -cc1` re-exec was recorded as a compile command ("compiler is not the fixed clang path"), and one unit's bad DB failed the whole job | -cc1 entries dropped (resolution and replay); an unusable DB is that unit's gap |
 | 2026-09-28 | freeciv21 | 14420f45 | 02-license-scan | scancode -n 4 finished in 30 min (6,098 files) but exited 1: three .blend files failed to scan | scancode exit 1 with "Some files failed to scan properly" and a complete output is accepted (adapter and worker share exit_accepted) |

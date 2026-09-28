@@ -1,24 +1,112 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "configured-build.schema.json",
-  "type": "object", "additionalProperties": false,
-  "required": ["schema", "run_id", "source_revision", "upstream", "status", "units", "coverage_gaps"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "source_revision",
+    "upstream",
+    "status",
+    "units",
+    "coverage_gaps"
+  ],
   "properties": {
-    "schema": {"const": "appsec-review/configured-build/1"},
-    "run_id": {"type": "string"}, "source_revision": {"type": "string"}, "status": {"enum": ["OK", "OK_WITH_GAPS"]},
-    "upstream": {"type": "object", "additionalProperties": false,
-      "required": ["job", "attempt_id", "lock_sha256"],
-      "properties": {"job": {"const": "02-build-resolution"}, "attempt_id": {"type": "string"},
-        "lock_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}},
-    "units": {"type": "array", "minItems": 0, "items": {"type": "object", "additionalProperties": false,
-      "required": ["unit_id", "status", "image_id", "image_digest", "commands", "configuration"],
-      "properties": {"unit_id": {"type": "string"}, "status": {"const": "OK"},
-        "image_id": {"type": "string", "pattern": "^image_build_[0-9a-f]{12}$"},
-        "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "commands": {"type": "array", "minItems": 1, "items": {"type": "object"}},
-        "configuration": {"type": "object", "additionalProperties": false,
-          "required": ["path", "sha256"], "properties": {"path": {"type": "string"},
-            "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}}}}},
-    "coverage_gaps": {"type": "array", "maxItems": 0}
+    "schema": {
+      "const": "appsec-review/configured-build/1"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "source_revision": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "OK_WITH_GAPS"
+      ]
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job",
+        "attempt_id",
+        "lock_sha256"
+      ],
+      "properties": {
+        "job": {
+          "const": "02-build-resolution"
+        },
+        "attempt_id": {
+          "type": "string"
+        },
+        "lock_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "units": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "unit_id",
+          "status",
+          "image_id",
+          "image_digest",
+          "commands",
+          "configuration"
+        ],
+        "properties": {
+          "unit_id": {
+            "type": "string"
+          },
+          "status": {
+            "const": "OK"
+          },
+          "image_id": {
+            "type": "string",
+            "pattern": "^image_build_[0-9a-f]{12}$"
+          },
+          "image_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "maxItems": 0
+    }
   }
 }

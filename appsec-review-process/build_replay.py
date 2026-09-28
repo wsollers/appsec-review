@@ -393,7 +393,10 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
                 raise RuntimeError(f"{job}: replay for {lock['unit_id']} ended {terminal['execution_status']}")
             replay = read_json(trial / "scratch" / "replay-result.json")
             commands = replay.get("commands", [])
-            if not commands or any(item.get("exit_code") != 0 for item in commands):
+            # A unit whose plan has no configure step (multi-vuln: a direct compile) locks an empty
+            # configure phase; replaying nothing is success, not a failed sequence.
+            locked = [item for phase in spec(job)["phases"] for item in lock[phase]]
+            if len(commands) != len(locked) or any(item.get("exit_code") != 0 for item in commands):
                 raise RuntimeError(f"{job}: locked command sequence did not succeed")
             unit = {"unit_id": lock["unit_id"], "status": "OK", "image_id": image_id,
                     "image_digest": record["digest"], "commands": commands}
