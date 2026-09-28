@@ -439,3 +439,11 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | `input_max_bytes` | 4 MiB | safety | Largest findings input converted to SARIF. | Grows with target size; see docs/scale-audit-unreal-engine.md B. |
 | `stderr_limit_bytes` | 1 MiB | resource | Captured stderr. |  |
 | `stdout_limit_bytes` | 1 MiB | resource | Captured stdout. |  |
+
+### `claim-review-pool-cell`
+
+| Tunable | Value | Kind | What it does | Scale |
+|---|---|---|---|---|
+| `claim_review_pool_instances` | 3 count | resource | Reviewer instances per claim-review stage (07/08/09/12); each gets its own shard of the claims (shard only: one review per claim per stage) and its own persona. | Raise for large ledgers; the shard input limit below raises it automatically when a shard would not fit. |
+| `claim_review_pool_max_parallel` | 3 count | resource | Reviewer instances of one stage that may call the model at once (also bounded by the Dagster persona_llm pool). |  |
+| `claim_review_shard_input_units_max` | 200000 count | safety | Largest estimated input tokens (claim JSON bytes / 4) of one reviewer shard; more instances are planned, up to pool_instances_max, until every shard fits. | Leaves room in the standard 800k-unit persona budget for the prompt, menu and evidence reads. |

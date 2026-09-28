@@ -356,6 +356,8 @@ def load_composition(registry_dir: Path, persona: Mapping[str, str], store: Sche
             raise PersonaRequestError(f"persona.{name}_sha256 is not the hash of the registered record")
     composed = records["job_template"]["composition"]
     for name, _, _, _ in COMPOSITION_KINDS[1:]:
+        if name == "persona" and persona[name + "_id"] in persona_variants(records["job_template"]):
+            continue   # a registry-declared persona variant of this template (ADR-0021)
         if composed[name + "_id"] != persona[name + "_id"]:
             raise PersonaRequestError(f"persona.{name}_id is not what the named job template composes")
     errors = composition_errors(records)
@@ -365,6 +367,16 @@ def load_composition(registry_dir: Path, persona: Mapping[str, str], store: Sche
         # Default deny, not a registry defect: role and tooling profile agree on no claim class.
         raise PersonaRequestError("the named composition allows no claim class, so it cannot be invoked")
     return records
+
+
+def persona_variants(template: Mapping[str, Any]) -> tuple[str, ...]:
+    """The personas a job template lets one of its instances run as besides its composed persona
+    (ADR-0021): ``persona_variants`` is a list of registry persona ids. The registry still decides:
+    a request may name only a listed id, and that persona record is loaded and hashed like any other."""
+    values = template.get("persona_variants") or []
+    if not isinstance(values, list) or not all(isinstance(v, str) and _REG_RE.match(v) for v in values):
+        raise PersonaRequestError("job template persona_variants must be a list of registry ids")
+    return tuple(values)
 
 
 def composition_sha256(records: Mapping[str, Mapping[str, Any]]) -> str:
@@ -414,6 +426,11 @@ def _registry_survey(registry_dir: Path) -> tuple[list[str], list[str]]:
                 if "allows no claim class" not in str(exc):
                     raise
                 denied.append(path.stem)
+            for variant in persona_variants(template):
+                try:
+                    _load_record(registry_dir, "personas", "persona.schema.json", "persona_id", variant, store)
+                except PersonaRequestError:
+                    raise PersonaRequestError("a persona_variants id does not resolve to a valid persona record") from None
         except PersonaRequestError as exc:
             errors.append(f"job-templates/{path.stem}: {exc}")
     return errors, denied

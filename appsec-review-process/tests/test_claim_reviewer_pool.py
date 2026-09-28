@@ -61,7 +61,9 @@ def prepared(stage="07-red-team-adversarial", *, empty=False):
         "upstream": upstream, "upstream_binding": binding(),
         "upstream_attempt": "unused", "upstream_artifact": "claim-decision-ledger.json",
         "accepted_at": "2026-09-27T12:00:00Z",
-        "spec": {"schema": "test-spec", "stage": stage, "empty": empty},
+        "spec": {"schema": "test-spec", "stage": stage, "empty": empty,
+                 "rendezvous_timeout_seconds": 2400},
+        "shards": [],
         "applicability": "SKIPPED_NA_NO_CANDIDATES" if empty else "APPLICABLE",
         "code": reviewer_pool._code_hashes()}
 
@@ -70,6 +72,8 @@ class ClaimReviewerPoolTests(unittest.TestCase):
     def test_prepare_derives_population_and_spec_only_from_accepted_upstream(self):
         upstream = fixture("claim-ledger.json")
         request = {name: {} for name in reviewer_pool.pool_specification.PERSONA_TEMPLATE_FIELDS}
+        request["budget"] = {"input_unit_limit": 800_000, "output_unit_limit": 200_000,
+                             "timeout_seconds": 1800}
         permission = {"permission": "fixture"}
         with mock.patch.object(reviewer_pool.lifecycle, "_load_upstream",
                 return_value=(upstream, binding(), SOURCE)), \
@@ -81,8 +85,13 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                 return_value=(request, permission)):
             value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")
         self.assertEqual(value["upstream"], upstream)
+        # the two fixture claims are causally linked, so they form one shard and one instance
+        self.assertEqual([shard["claim_ids"] for shard in value["shards"]],
+                         [sorted(item["claim_id"] for item in upstream["candidates"])])
         self.assertEqual(value["spec"]["worker_groups"][0]["count"], 1)
+        self.assertEqual(value["spec"]["worker_groups"][0]["group_id"], "reviewer-00")
         self.assertEqual(value["spec"]["worker_groups"][0]["persona_request"], request)
+        self.assertEqual(value["spec"]["pool_budget"]["max_instances"], 1)
         self.assertNotIn("decisions", value)
 
     def test_real_prepared_spec_passes_c01_planning(self):
@@ -104,24 +113,17 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                     mock.patch.object(reviewer_pool.model_versions, "model_identity_for",
                     return_value=model):
                 value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")
-            pool_parent = base / "pools"
-            pool_parent.mkdir()
-            menu = value["evidence_menu"]
-            menu_root = reviewer_pool.evidence_menu.write(base / "evidence-menu", menu)
-            roots = {reviewer_pool.ROOT_ID: accepted,
-                     **reviewer_pool.evidence_menu.readable_roots(RUN_ID, menu, menu_root)}
-            context = reviewer_pool.pool_specification.PoolContext(pool_parent=pool_parent,
-                registry_dir=reviewer_pool.persona_invocation.REGISTRY_DIR,
-                prompt_root=ROOT, readable_roots=roots,
-                allowed_models=(model,), invoker_id="claude-cli",
-                images_dir=reviewer_pool.container_execution.IMAGES_DIR,
-                host_flavor="windows" if sys.platform == "win32" else "posix",
-                docker_host=None, docker_executable=None, container_user=None, mount_roots={},
-                source_snapshot_sha256=SOURCE, registry_ceiling=None)
+            attempt = base / "attempt"
+            attempt.mkdir()
+            context = reviewer_pool._context(value, attempt)
             plan = reviewer_pool.pool_specification.plan_expansion(value["spec"], context=context)
             self.assertEqual(len(plan.instances), 1)
-            readable = plan.instances[0].request.request["readable_inputs"]
-            self.assertEqual(readable[0]["path"], artifact.name)
+            request = plan.instances[0].request.request
+            readable = request["readable_inputs"]
+            self.assertEqual(readable[0]["path"], "shard-00.json")
+            self.assertEqual(request["persona"]["persona_id"], value["shards"][0]["persona_id"])
+            self.assertIn(request["persona"]["persona_id"],
+                          reviewer_pool._stage_personas()["07-red-team-adversarial"])
             self.assertEqual((readable[1]["root"], readable[1]["path"]),
                              (reviewer_pool.evidence_menu.MENU_ROOT_ID, reviewer_pool.evidence_menu.MENU_FILE))
 
@@ -149,19 +151,9 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                     mock.patch.object(reviewer_pool.model_versions, "model_identity_for",
                     return_value=model):
                 value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")
-                pool_parent = base / "pools"
-                pool_parent.mkdir()
-                menu_root = reviewer_pool.evidence_menu.write(base / "evidence-menu", value["evidence_menu"])
-                roots = {reviewer_pool.ROOT_ID: accepted,
-                         **reviewer_pool.evidence_menu.readable_roots(RUN_ID, value["evidence_menu"], menu_root)}
-                context = reviewer_pool.pool_specification.PoolContext(pool_parent=pool_parent,
-                    registry_dir=reviewer_pool.persona_invocation.REGISTRY_DIR,
-                    prompt_root=ROOT, readable_roots=roots,
-                    allowed_models=(model,), invoker_id="claude-cli",
-                    images_dir=reviewer_pool.container_execution.IMAGES_DIR,
-                    host_flavor="windows" if sys.platform == "win32" else "posix",
-                    docker_host=None, docker_executable=None, container_user=None, mount_roots={},
-                    source_snapshot_sha256=SOURCE, registry_ceiling=None)
+                attempt = base / "attempt"
+                attempt.mkdir()
+                context = reviewer_pool._context(value, attempt)
                 plan = reviewer_pool.pool_specification.plan_expansion(value["spec"], context=context)
             readable = plan.instances[0].request.request["readable_inputs"]
             self.assertEqual([row["root"] for row in readable],
@@ -239,6 +231,115 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                 recovered = reviewer_pool.run(RUN_ID, "dagster-recovered", value["stage"])
             self.assertEqual(recovered["status"], "OK")
             self.assertNotEqual(recovered["attempt_id"], failed["attempt_id"])
+
+    def _sharded(self):
+        """The fixture ledger without its causal link: two independent claims, two shards."""
+        upstream = fixture("claim-ledger.json")
+        for record in upstream["candidates"]:
+            record["causal_claim_ids"] = []
+        value = prepared()
+        value["upstream"] = upstream
+        value["shards"] = reviewer_pool.plan("07-red-team-adversarial", upstream)
+        value["spec"]["worker_groups"] = [{"group_id": shard["group_id"]} for shard in value["shards"]]
+        return value
+
+    def _merge_from(self, value, shards):
+        """A real deterministic merge where only the named shards' instances returned decisions."""
+        from review_control_loops import deterministic_merge
+        digest = reviewer_pool.pool_specification.spec_sha256(value["spec"])
+        decisions = {item["claim_id"]: item for item in fixture("red-decisions.json")["decisions"]}
+        expected, results = [], []
+        for shard in value["shards"]:
+            worker = reviewer_pool.pool_specification.instance_id(digest, shard["group_id"], 0)
+            expected.append({"worker_id": worker, "producer_id": shard["persona_id"], "run_id": RUN_ID})
+            if shard["group_id"] not in shards:
+                results.append({"worker_id": worker, "producer_id": shard["persona_id"], "run_id": RUN_ID,
+                                "status": "FAILED", "candidates": []})
+                continue
+            rows = [{"candidate_id": f"decision-{claim_id}", "subject_id": claim_id,
+                     "assertion": json.dumps(decisions[claim_id], sort_keys=True, separators=(",", ":")),
+                     "evidence_sha256": shard["sha256"], "claim_class": "candidate_only"}
+                    for claim_id in shard["claim_ids"]]
+            results.append({"worker_id": worker, "producer_id": shard["persona_id"], "run_id": RUN_ID,
+                            "status": "OK", "candidates": rows})
+        return deterministic_merge(RUN_ID, expected, results)
+
+    def test_claims_are_sharded_across_instances_with_distinct_personas(self):
+        value = self._sharded()
+        self.assertEqual(len(value["shards"]), 2)
+        self.assertEqual(sorted(i for shard in value["shards"] for i in shard["claim_ids"]),
+                         sorted(item["claim_id"] for item in value["upstream"]["candidates"]))
+        personas = [shard["persona_id"] for shard in value["shards"]]
+        self.assertEqual(len(set(personas)), 2)
+        self.assertEqual(reviewer_pool.plan("07-red-team-adversarial", value["upstream"]), value["shards"])
+        shard = json.loads(reviewer_pool._shard_bytes("07-red-team-adversarial", value["upstream"],
+                                                      value["shards"][0]["claim_ids"]))
+        self.assertEqual([r["claim_id"] for r in shard["candidates"]], value["shards"][0]["claim_ids"])
+
+    def test_sharded_spec_passes_c01_planning_one_persona_per_instance(self):
+        upstream = fixture("claim-ledger.json")
+        for record in upstream["candidates"]:
+            record["causal_claim_ids"] = []
+        model = {"provider": "anthropic", "family": "claude-sonnet-5",
+                 "model_id": "claude-sonnet-5-20260927", "snapshot": "claude-sonnet-5-20260927"}
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder).resolve()
+            accepted = base / "accepted-attempt"
+            accepted.mkdir()
+            (accepted / "claim-decision-ledger.json").write_text(json.dumps(upstream), encoding="utf-8")
+            with mock.patch.object(reviewer_pool.lifecycle, "_load_upstream",
+                    return_value=(upstream, binding(), SOURCE)), \
+                    mock.patch.object(reviewer_pool, "_upstream_location",
+                    return_value=(accepted, "claim-decision-ledger.json")), \
+                    mock.patch.object(reviewer_pool, "read_json",
+                    return_value={"accepted_at": "2026-09-27T12:00:00.123456+00:00"}), \
+                    mock.patch.object(reviewer_pool.model_versions, "model_identity_for",
+                    return_value=model):
+                value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")
+            attempt = base / "attempt"
+            attempt.mkdir()
+            plan = reviewer_pool.pool_specification.plan_expansion(
+                value["spec"], context=reviewer_pool._context(value, attempt))
+            self.assertEqual(len(plan.instances), 2)
+            self.assertEqual(value["spec"]["pool_budget"]["max_instances"], 2)
+            requests = [item.request.request for item in plan.instances]
+            self.assertEqual(sorted(r["readable_inputs"][0]["path"] for r in requests),
+                             ["shard-00.json", "shard-01.json"])
+            self.assertEqual(len({r["persona"]["persona_id"] for r in requests}), 2)
+            self.assertEqual(len({r["outer_prompt"]["sha256"] for r in requests}), 2)
+
+    def test_sharded_merge_publishes_with_full_coverage(self):
+        value = self._sharded()
+        result = self._merge_from(value, {shard["group_id"] for shard in value["shards"]})
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder) / "merge" / value["stage"]
+            patches = self._runtime_patches(base, value, result)
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+                pointer = reviewer_pool.run(RUN_ID, "dagster-sharded", value["stage"])
+            self.assertEqual(pointer["status"], "OK")
+            coverage = read_json(base / "attempts" / pointer["attempt_id"] / reviewer_pool.COVERAGE)
+            self.assertEqual(coverage["unreviewed_claim_ids"], [])
+            self.assertEqual([row["persona_id"] for row in coverage["shards"]],
+                             [shard["persona_id"] for shard in value["shards"]])
+
+    def test_one_failed_instance_records_its_claims_as_unreviewed_gaps(self):
+        value = self._sharded()
+        failed = value["shards"][1]
+        result = self._merge_from(value, {value["shards"][0]["group_id"]})
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder) / "merge" / value["stage"]
+            patches = self._runtime_patches(base, value, result)
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+                with self.assertRaises(Blocked) as raised:
+                    reviewer_pool.run(RUN_ID, "dagster-partial", value["stage"])
+            self.assertIn("1 of 2 claims unreviewed", str(raised.exception))
+            self.assertIn(failed["group_id"], str(raised.exception))
+            pointer = read_json(base / "accepted.json")
+            self.assertEqual(pointer["status"], "FAILED")
+            coverage = read_json(base / "attempts" / pointer["attempt_id"] / reviewer_pool.COVERAGE)
+            self.assertEqual(coverage["unreviewed_claim_ids"], failed["claim_ids"])
+            self.assertEqual([row["unreviewed_claim_ids"] for row in coverage["shards"]],
+                             [[], failed["claim_ids"]])
 
     def test_runtime_identity_and_registry_contracts_are_closed(self):
         package = SimpleNamespace(request={"job_id": "09-independent-verification",

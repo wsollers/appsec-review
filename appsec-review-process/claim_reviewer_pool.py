@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
-"""Automatic C01/C02 reviewer pool and stage-scoped deterministic merge for 07/08/09/12."""
+"""Automatic C01/C02 reviewer pool and stage-scoped deterministic merge for 07/08/09/12.
+
+The stage's accepted claims are sharded across ``claim_review_pool_instances`` reviewer instances
+(claim_review_sharding, ADR-0021): each claim is reviewed exactly once per stage, each instance
+reads only its own shard of the upstream document and runs as its own registry persona chosen from
+the job template's ``stage_personas``. The shard outputs are merged by the deterministic pool merge
+and the full population is then checked by the stage's lifecycle rules exactly as before.
+"""
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any
 
 import claude_cli_invoker as cli
 import claim_review_derive as derive
+import claim_review_sharding as sharding
 import claim_review_lifecycle as lifecycle
 import container_execution
 import deterministic_pool_merge
@@ -22,6 +32,7 @@ import pool_specification
 import resource_pools
 import review_cli
 import supporting_evidence_menu as evidence_menu
+import tunables
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
@@ -31,6 +42,8 @@ TEMPLATE = "claim-review-pool-cell"
 RESULT = "deterministic-pool-merge.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 ROOT_ID = "stage-upstream"
+SHARD_DIR = "stage-shards"
+COVERAGE = "shard-coverage.json"
 CLASS = lifecycle.POOL_CLASSES
 ROLE = {"07-red-team-adversarial": "red-team-adversary",
         "08-blue-team-refutation": "blue-team-refuter",
@@ -90,6 +103,10 @@ def _runtime_instructions(package: Any) -> str:
                "09-independent-verification": "the claim's citations or refutation_citations"}
     return "\n\n## Trusted stage runtime (not target data)\n\n" + json.dumps({
         "stage": stage, "reviewer_role": ROLE.get(stage),
+        "reviewer_persona": (package.request.get("persona") or {}).get("persona_id"),
+        "scope_rule": ("your stage upstream document is one shard of the stage's claims; review exactly "
+                       "its claims. The supporting-evidence menu may list claims assigned to other "
+                       "reviewers: never decide those"),
         "reply_shape": ("the candidates envelope value is {\"decisions\": [...]} and validates "
                         f"{derive.PERSONA_SCHEMA}; one decision per upstream claim_id"),
         "decision_required_fields": sorted(required), "decision_optional_fields": sorted(optional),
@@ -154,6 +171,10 @@ def _code_hashes() -> dict[str, str]:
              "registry/tooling-profiles/claim-review-static.json", "claim-review-pool-task.md"]
     result = {path: file_hash(ROOT / path) for path in paths}
     result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
+    result["claim_review_sharding.py"] = file_hash(ROOT / "claim_review_sharding.py")
+    for persona_id in sorted({item for ids in _stage_personas().values() for item in ids}):
+        path = f"registry/personas/{persona_id}.json"
+        result[path] = file_hash(ROOT / path)
     result["schemas/claim-review-pool-candidates.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-pool-candidates.schema.json")
     result["schemas/claim-review-pool-receipt.schema.json"] = file_hash(
@@ -175,19 +196,44 @@ def _upstream_location(run_id: str, stage: str) -> tuple[Path, str]:
     return attempt, artifact
 
 
+def _template() -> dict[str, Any]:
+    return persona_prompt_assembly.load_job_template(TEMPLATE, SchemaStore())
+
+
+def _stage_personas() -> dict[str, list[str]]:
+    value = _template().get("stage_personas")
+    if not isinstance(value, dict) or set(value) != set(lifecycle.STAGES):
+        raise Blocked("claim reviewer pool: job template stage_personas must name every review stage")
+    return value
+
+
+def _persona_records(ids: list[str]) -> dict[str, dict[str, Any]]:
+    store = SchemaStore()
+    return {persona_id: persona_invocation._load_record(persona_invocation.REGISTRY_DIR, "personas",
+                "persona.schema.json", "persona_id", persona_id, store) for persona_id in ids}
+
+
 def _request_template(run_id: str, stage: str, upstream_path: Path,
-                      source: str, evaluated_at: str, menu: dict | None = None) -> tuple[dict, dict]:
+                      source: str, evaluated_at: str, menu: dict | None = None,
+                      persona_id: str | None = None, upstream_bytes: bytes | None = None
+                      ) -> tuple[dict, dict]:
+    """One reviewer instance's request. ``upstream_path`` names the shard file (its bytes given in
+    ``upstream_bytes`` when it is not on disk yet); ``persona_id`` one of the template's variants."""
     store = SchemaStore()
     template = persona_prompt_assembly.load_job_template(TEMPLATE, store)
-    outer = persona_prompt_assembly.assemble_outer_prompt(TEMPLATE, store=store)
+    outer = persona_prompt_assembly.assemble_outer_prompt(TEMPLATE, store=store, persona_id=persona_id)
     composition = persona_dispatch._composition_block(TEMPLATE, template, store)
+    if persona_id is not None and persona_id != composition["persona_id"]:
+        record = _persona_records([persona_id])[persona_id]
+        composition = {**composition, "persona_id": persona_id,
+                       "persona_sha256": persona_invocation._sha(record)}
     records = persona_invocation.load_composition(persona_invocation.REGISTRY_DIR, composition, store)
     ceiling = persona_invocation.claim_ceiling(records["role"], records["tooling_profile"])
     if CLASS[stage] not in ceiling["allowed"]:
         raise Blocked("claim reviewer pool: registry composition forbids this stage claim class")
     resolved = review_cli.resolve_model(TEMPLATE, template["budget_default"])
     model = model_versions.model_identity_for(run_id, resolved["model"])
-    data = upstream_path.read_bytes()
+    data = upstream_bytes if upstream_bytes is not None else upstream_path.read_bytes()
     readable = [{"root": ROOT_ID, "path": upstream_path.name,
                  "sha256": persona_invocation._bytes_sha(data), "bytes": len(data),
                  "role": "evidence", "producer_request_sha256": None}]
@@ -215,37 +261,96 @@ def prepare(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -
     from datetime import datetime, timezone
     evaluated_at = datetime.fromisoformat(pointer["accepted_at"].replace("Z", "+00:00")).astimezone(
         timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    menu = evidence_menu.build(run_id, stage, upstream[lifecycle.ARRAYS[stage]])
-    request, permission = _request_template(run_id, stage, attempt_root / artifact,
-                                             source, evaluated_at, menu)
-    count = len(upstream[lifecycle.ARRAYS[stage]])
-    group = {"group_id": "reviewers", "worker_kind": pool_specification.PERSONA,
-        "count": 1 if count else 0, "memory_heavy": False, "permission": permission,
-        "persona_request": request, "tool_request": None}
+    records = upstream[lifecycle.ARRAYS[stage]]
+    menu = evidence_menu.build(run_id, stage, records)
+    shards = plan(stage, upstream)
+    groups = []
+    for shard in shards:
+        request, permission = _request_template(run_id, stage, Path(shard["file"]), source,
+            evaluated_at, menu, persona_id=shard["persona_id"], upstream_bytes=_shard_bytes(
+                stage, upstream, shard["claim_ids"]))
+        groups.append({"group_id": shard["group_id"], "worker_kind": pool_specification.PERSONA,
+            "count": 1, "memory_heavy": False, "permission": permission,
+            "persona_request": request, "tool_request": None})
+    if not groups:
+        # An empty population still records one (zero-count) group so the pool is well-formed.
+        request, permission = _request_template(run_id, stage, attempt_root / artifact,
+                                                 source, evaluated_at, menu)
+        groups.append({"group_id": "reviewers", "worker_kind": pool_specification.PERSONA,
+            "count": 0, "memory_heavy": False, "permission": permission,
+            "persona_request": request, "tool_request": None})
+    count = len(shards)
+    per = groups[0]["persona_request"]["budget"]
     spec = {"schema": pool_specification.SPEC_ID,
         "pool_id": "claim-review-" + stage, "lane": stage, "run_id": run_id, "job_id": stage,
         "attempt_id": "review-" + digest({"stage": stage, "binding": binding})[:24],
         "budget_class": "standard",
-        "pool_budget": {"max_instances": 1, "max_persona_input_units": 800_000,
-                        "max_persona_output_units": 200_000, "max_total_timeout_seconds": 3600},
+        "pool_budget": {"max_instances": max(1, count),
+                        "max_persona_input_units": max(1, count) * per["input_unit_limit"],
+                        "max_persona_output_units": max(1, count) * per["output_unit_limit"],
+                        "max_total_timeout_seconds": max(1, count) * 2 * per["timeout_seconds"]},
         "resource_pool_policy": {"allowed_pools": [resource_pools.PERSONA_LLM]},
-        "wait_all": True, "rendezvous_timeout_seconds": 2400,
+        "wait_all": True, "rendezvous_timeout_seconds": 2400 * max(1, math.ceil(count / _max_parallel())),
         "empty_pool_reason": None if count else "upstream_produced_no_work",
-        "worker_groups": [group]}
+        "worker_groups": groups}
     return {"run_id": run_id, "stage": stage, "source_generation": source,
         "upstream": upstream, "upstream_binding": binding,
         "upstream_attempt": str(attempt_root), "upstream_artifact": artifact,
-        "accepted_at": evaluated_at, "spec": spec,
-        "applicability": "APPLICABLE" if count else "SKIPPED_NA_NO_CANDIDATES",
+        "accepted_at": evaluated_at, "spec": spec, "shards": shards,
+        "applicability": "APPLICABLE" if records else "SKIPPED_NA_NO_CANDIDATES",
         "evidence_menu": menu, "code": _code_hashes()}
+
+
+def _max_parallel() -> int:
+    return max(1, int(tunables.value(TEMPLATE, "claim_review_pool_max_parallel")))
+
+
+def _shard_bytes(stage: str, upstream: dict[str, Any], claim_ids: list[str]) -> bytes:
+    return sharding.shard_bytes(sharding.shard_document(lifecycle.ARRAYS[stage], upstream, claim_ids))
+
+
+def plan(stage: str, upstream: dict[str, Any]) -> list[dict[str, Any]]:
+    """The stage's shard plan: claim ids, reviewer persona and shard file per reviewer instance.
+
+    Deterministic in the accepted population and the registry (template tunables and personas)."""
+    records = upstream[lifecycle.ARRAYS[stage]]
+    if not records:
+        return []
+    try:
+        claim_sets = sharding.plan_within_limit(records,
+            int(tunables.value(TEMPLATE, "claim_review_pool_instances")),
+            units_max=int(tunables.value(TEMPLATE, "claim_review_shard_input_units_max")),
+            instances_max=min(pool_specification.MAX_INSTANCES, tunables.shared("pool_groups_max")))
+        candidates = _stage_personas()[stage]
+        assigned = sharding.assign_personas(stage, claim_sets, records, candidates,
+                                            _persona_records(candidates))
+    except ValueError as exc:
+        raise Blocked(f"claim reviewer pool: {exc}") from exc
+    shards = []
+    for row in assigned:
+        name = f"shard-{row['shard_index']:02d}.json"
+        data = _shard_bytes(stage, upstream, row["claim_ids"])
+        shards.append({**row, "group_id": f"reviewer-{row['shard_index']:02d}", "file": name,
+                       "sha256": "sha256:" + hashlib.sha256(data).hexdigest(),
+                       "estimated_input_units": sharding.shard_units(records, row["claim_ids"])})
+    return shards
 
 
 def _context(inputs: dict[str, Any], attempt: Path) -> pool_specification.PoolContext:
     pool_parent, rendezvous = attempt / "pools", attempt / "rendezvous"
     pool_parent.mkdir(); rendezvous.mkdir()
-    upstream = Path(inputs["upstream_attempt"])
     model = inputs["spec"]["worker_groups"][0]["persona_request"]["model"]
-    roots = {ROOT_ID: upstream}
+    if inputs.get("shards"):
+        shard_root = attempt / SHARD_DIR
+        shard_root.mkdir()
+        for shard in inputs["shards"]:
+            data = _shard_bytes(inputs["stage"], inputs["upstream"], shard["claim_ids"])
+            if "sha256:" + hashlib.sha256(data).hexdigest() != shard["sha256"]:
+                raise Blocked("claim reviewer pool: shard bytes differ from the prepared plan")
+            (shard_root / shard["file"]).write_bytes(data)
+        roots = {ROOT_ID: shard_root}
+    else:
+        roots = {ROOT_ID: Path(inputs["upstream_attempt"])}
     if inputs.get("evidence_menu"):
         menu_root = evidence_menu.write(attempt / "evidence-menu", inputs["evidence_menu"])
         roots.update(evidence_menu.readable_roots(inputs["run_id"], inputs["evidence_menu"], menu_root))
@@ -256,6 +361,27 @@ def _context(inputs: dict[str, Any], attempt: Path) -> pool_specification.PoolCo
         host_flavor="windows" if __import__("os").name == "nt" else "posix",
         docker_host=None, docker_executable=None, container_user=None, mount_roots={},
         source_snapshot_sha256=inputs["source_generation"], registry_ceiling=None)
+
+
+def shard_coverage(inputs: dict[str, Any], merge: dict[str, Any]) -> dict[str, Any]:
+    """Which shard's claims the merge decided, by shard, from the merged candidates' worker ids."""
+    spec_digest = pool_specification.spec_sha256(inputs["spec"])
+    decided: dict[str, set[str]] = {}
+    for candidate in merge.get("candidates", []):
+        for worker_id in candidate.get("worker_ids", []):
+            decided.setdefault(worker_id, set()).add(candidate.get("subject_id"))
+    rows, unreviewed = [], []
+    for shard in inputs.get("shards") or []:
+        worker_id = pool_specification.instance_id(spec_digest, shard["group_id"], 0)
+        missing = sorted(set(shard["claim_ids"]) - decided.get(worker_id, set()))
+        unreviewed += missing
+        rows.append({"group_id": shard["group_id"], "worker_id": worker_id,
+                     "persona_id": shard["persona_id"], "claim_ids": shard["claim_ids"],
+                     "worker_missing": worker_id in set(merge.get("missing_worker_ids", [])),
+                     "unreviewed_claim_ids": missing})
+    return {"schema": "appsec-review/claim-review-shard-coverage/1.0", "run_id": inputs["run_id"],
+            "stage": inputs["stage"], "claim_count": len(inputs["upstream"][lifecycle.ARRAYS[inputs["stage"]]]),
+            "shards": rows, "unreviewed_claim_ids": sorted(unreviewed)}
 
 
 def _validate_merge(inputs: dict[str, Any], merge: dict[str, Any]) -> None:
@@ -299,6 +425,8 @@ def _validate_attempt(run_id: str, stage: str, attempt: Path, inputs: dict[str, 
         raise Blocked("claim reviewer pool: newest accepted upstream changed")
     merge = read_json(attempt / RESULT)
     _validate_merge(inputs, merge)
+    if read_json(attempt / COVERAGE) != shard_coverage(inputs, merge):
+        raise Blocked("claim reviewer pool: shard coverage record changed")
     receipt = read_json(attempt / "pool-receipt.json")
     if (validate_document(receipt, "claim-review-pool-receipt.schema.json") or
             receipt.get("merge_sha256") != merge["merge_sha256"] or receipt.get("stage") != stage):
@@ -324,14 +452,25 @@ def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> di
         rendezvous_parent = attempt / "rendezvous"
         runtime = pool_rendezvous.RendezvousRuntime(rendezvous_parent=rendezvous_parent,
             invoker=ClaimReviewerInvoker(effort="high"), clock=lambda: inputs["accepted_at"],
-            stop_grace_seconds=5, cancel=pool_rendezvous.PoolCancel(), max_parallel=1,
-            wait_limit_seconds=2400, drain_seconds=10)
+            stop_grace_seconds=5, cancel=pool_rendezvous.PoolCancel(),
+            max_parallel=min(_max_parallel(), max(1, len(inputs.get("shards") or []))),
+            wait_limit_seconds=inputs["spec"]["rendezvous_timeout_seconds"], drain_seconds=10)
         launched = pool_launcher.launch(inputs["spec"], context=context, runtime=runtime)
         pool_root = context.pool_parent / launched.pool_directory
         verified = pool_rendezvous.load_verified_manifest(pool_root, expected_spec=inputs["spec"],
             context=context, rendezvous_parent=rendezvous_parent)
         merge = deterministic_pool_merge.merge_verified_manifest(
             verified, pool_root=pool_root, run_id=run_id)
+        coverage = shard_coverage(inputs, merge)
+        atomic_json(attempt / COVERAGE, coverage)
+        if coverage["unreviewed_claim_ids"]:
+            # The stage contract needs one decision per claim (claim_review_lifecycle), so a failed
+            # shard cannot be published as a partial stage. Its claims are recorded here as
+            # unreviewed; a rerun re-asks only that shard (the persona result cache answers the rest).
+            failed = [row["group_id"] for row in coverage["shards"] if row["unreviewed_claim_ids"]]
+            raise Blocked(f"claim reviewer pool: {len(coverage['unreviewed_claim_ids'])} of "
+                          f"{coverage['claim_count']} claims unreviewed (reviewer shard(s) "
+                          f"{', '.join(failed)} did not return decisions; see {COVERAGE})")
         _validate_merge(inputs, merge)
         atomic_json(attempt / RESULT, merge)
         permission, lineage, receipt = _receipts(inputs, merge, launched)
@@ -348,7 +487,8 @@ def run(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -> di
             started_at=allocation["started_at"], execution_status="OK_WITH_GAPS" if skipped else "OK",
             summary=("Reviewer pool was not applicable because the accepted population was empty." if skipped
                      else "Published the C02-verified stage reviewer merge."), status_record=status,
-            artifact_paths=[RESULT, "permission.json", "lineage.json", "pool-receipt.json", "status.json"],
+            artifact_paths=[RESULT, "permission.json", "lineage.json", "pool-receipt.json", COVERAGE,
+                            "status.json"],
             gaps=(["SKIPPED_NA: no accepted upstream claims; zero reviewer instances were launched."]
                   if skipped else None),
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, stage, path, inputs))
