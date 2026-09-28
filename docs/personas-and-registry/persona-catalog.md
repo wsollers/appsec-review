@@ -300,15 +300,20 @@ Looks for:
 - unsafe output handling
 - data leakage through model/tool traces
 
-### general-red-team-hunter / known-list-red-team-hunter (registry records)
+### general-red-team-hunter
 
-Code-reading hunters of `07-hypothesis-discovery` (ADR-0018): read one component shard of the target
-with its P1/P2 tool-lead menu (a menu, not a limit) and propose candidate-only vulnerability hypotheses
-(path, line range, class/CWE, attacker preconditions, evidence read, confidence). The general hunter
-uses `07-red-team-adversarial/task-hypothesis-hunt-general.md`; the known-list hunter walks
-`known-issue-catalog.md` with `task-hypothesis-hunt-known-list.md`. Role
-`vulnerability-hypothesis-hunter`, domain `vulnerability-hypothesis-discovery`, tooling profile
-`hypothesis-hunt-static`.
+Code-reading hunter of `07-hypothesis-discovery` (ADR-0018): reads one component shard of the target
+with its P1/P2 tool-lead menu (a menu, not a limit) and proposes candidate-only vulnerability hypotheses
+(path, line range, class/CWE, attacker preconditions, evidence read, confidence). Uses
+`07-red-team-adversarial/task-hypothesis-hunt-general.md`. Role `vulnerability-hypothesis-hunter`,
+domain `vulnerability-hypothesis-discovery`, tooling profile `hypothesis-hunt-static`.
+
+### known-list-red-team-hunter
+
+Code-reading hunter of `07-hypothesis-discovery` (ADR-0018): reads one component shard with its P1/P2
+tool-lead menu and walks `known-issue-catalog.md` with `07-red-team-adversarial/task-hypothesis-hunt-known-list.md`,
+proposing candidate-only hypotheses. Role `vulnerability-hypothesis-hunter`, domain
+`vulnerability-hypothesis-discovery`, tooling profile `hypothesis-hunt-static`.
 
 Must not cite a file or line it did not read, rate severity, or claim a confirmed finding.
 
