@@ -260,6 +260,64 @@ class BinaryEvidenceCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(Blocked, "repeats a binary identity"):
             core.normalize("02-debug-symbol-index", inp, "a")
 
+    def _debug_and_cfg(self):
+        debug = core.normalize("02-debug-symbol-index", inputs("02-debug-symbol-index",
+            raw("02-debug-symbol-index", self.fixture["debug"])), "a-debug")
+        triage = core.normalize("02-binary-triage", inputs("02-binary-triage",
+            raw("02-binary-triage", self.fixture["triage"])), "a-triage")
+        cfg_raw = raw("02-binary-cfg", self.fixture["cfg"])
+        symbols = {item["name"]: item["symbol_id"] for item in debug["records"][0]["symbols"]}
+        for function in cfg_raw["records"][0]["functions"]:
+            function["symbol_id"] = symbols[function["name"]]
+        return debug, triage, cfg_raw
+
+    def test_debug_symbol_records_are_published_as_a_hash_bound_records_file(self):
+        """Scale audit B; freeciv21 published a 77 MB debug-symbol-index.json over the 32 MiB limit."""
+        debug, _triage, _cfg = self._debug_and_cfg()
+        with tempfile.TemporaryDirectory() as folder:
+            attempt = Path(folder)
+            name = core.RECORDS_FILES["02-debug-symbol-index"]
+            summary = core.split_records("02-debug-symbol-index", debug, attempt / name)
+            self.assertNotIn("records", summary)
+            self.assertEqual(summary["records_file"]["count"], len(debug["records"]))
+            self.assertEqual(summary["records_file"]["sha256"], "sha256:" + file_hash(attempt / name))
+            self.assertEqual(summary, core.split_records("02-debug-symbol-index", debug))
+            self.assertEqual(validate_document(summary, "debug-symbol-index.schema.json"), [])
+            self.assertEqual(core.load_records("02-debug-symbol-index", attempt, summary), debug["records"])
+            self.assertIs(core.split_records("02-binary-triage", debug), debug)
+            forged = copy.deepcopy(summary); forged["records_file"]["path"] = "../escape.jsonl"
+            self.assertTrue(validate_document(forged, "debug-symbol-index.schema.json"))
+            with self.assertRaises(Blocked):
+                core.load_records("02-debug-symbol-index", attempt, forged)
+            miscounted = copy.deepcopy(summary); miscounted["records_file"]["count"] += 1
+            with self.assertRaises(Blocked):
+                core.load_records("02-debug-symbol-index", attempt, miscounted)
+            (attempt / name).write_bytes((attempt / name).read_bytes() + b"{}\n")
+            with self.assertRaises(Blocked):
+                core.load_records("02-debug-symbol-index", attempt, summary)
+
+    def test_cfg_consumes_split_debug_records_from_the_accepted_attempt(self):
+        debug, triage, cfg_raw = self._debug_and_cfg()
+        full_upstream = {
+            "02-debug-symbol-index": {"attempt_id": "a-debug", "contract_id": "debug-symbol-index",
+                "result_sha256": H2, "envelope_sha256": H3, "result": debug},
+            "02-binary-triage": {"attempt_id": "a-triage", "contract_id": "binary-triage",
+                "result_sha256": H3, "envelope_sha256": H2, "result": triage}}
+        with tempfile.TemporaryDirectory() as folder:
+            attempt = Path(folder, "02-debug-symbol-index", "attempts", "a-debug"); attempt.mkdir(parents=True)
+            summary = core.split_records("02-debug-symbol-index", debug,
+                                         attempt / core.RECORDS_FILES["02-debug-symbol-index"])
+            split_upstream = copy.deepcopy(full_upstream)
+            split_upstream["02-debug-symbol-index"]["result"] = summary
+            split_inputs = inputs("02-binary-cfg", cfg_raw, split_upstream)
+            with mock.patch.object(core, "root", lambda run_id, job: Path(folder, job)):
+                hydrated = core._hydrate("run-binary", split_inputs)
+            self.assertNotIn("records", split_inputs["upstream"]["02-debug-symbol-index"]["result"])
+            self.assertEqual(core.normalize("02-binary-cfg", hydrated, "a-cfg"),
+                             core.normalize("02-binary-cfg", inputs("02-binary-cfg", cfg_raw, full_upstream), "a-cfg"))
+            self.assertIs(core._hydrate("run-binary", inputs("02-binary-cfg", cfg_raw, full_upstream))["upstream"],
+                          full_upstream)
+
     def test_f02_consumes_all_four_canonical_receipts(self):
         with tempfile.TemporaryDirectory() as folder:
             supply = Path(folder); source = "sha256:" + "a" * 64; build = "sha256:" + "b" * 64

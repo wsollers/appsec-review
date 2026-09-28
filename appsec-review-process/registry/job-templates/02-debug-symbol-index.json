@@ -33,7 +33,8 @@
             "lineage.json",
             "applicability-receipt.json",
             "binary-static-raw.json",
-            "binary-b13-receipts.json"
+            "binary-b13-receipts.json",
+            "debug-symbol-index.records.jsonl"
         ]
     },
     "prompt_sections": [
