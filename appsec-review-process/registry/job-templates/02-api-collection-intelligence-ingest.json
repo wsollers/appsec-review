@@ -49,5 +49,28 @@
     "redaction",
     "task",
     "output_contract"
-  ]
+  ],
+  "tunables": {
+    "files_logged": {
+      "value": 200,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on applicable input files; now logged.",
+      "scale": ""
+    },
+    "records_logged": {
+      "value": 1000,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on extracted records; now logged.",
+      "scale": "freeciv21 doc ingest: 1,220."
+    },
+    "file_max_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "window",
+      "description": "Bytes read per input file.",
+      "scale": ""
+    }
+  }
 }

@@ -51,5 +51,14 @@
   "permissions": [
     "read-source"
   ],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "source_fingerprint_max_bytes": {
+      "value": 4294967296,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Largest total checkout intake will fingerprint; more stops intake.",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md A: an engine checkout with dependencies is ~50 GB; scope out binary content."
+    }
+  }
 }

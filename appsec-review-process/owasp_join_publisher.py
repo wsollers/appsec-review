@@ -2,6 +2,7 @@
 """T14 nominal common-envelope publisher for qualified OWASP T11--T13 outputs."""
 from __future__ import annotations
 
+import tunables
 import argparse
 from copy import deepcopy
 import hashlib
@@ -21,7 +22,7 @@ CONTRACT = "owasp-join-report"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 MATRIX_MANIFEST = "owasp-control-status-matrix-manifest.json"
 PAGE_DIRECTORY = "owasp-control-status-matrix-pages"
-PAGE_BYTE_LIMIT = 7 * 1024 * 1024
+PAGE_BYTE_LIMIT = tunables.shared("owasp_join_page_max_bytes")
 PUBLISHED = (MATRIX_MANIFEST, join.GAPS, join.ROUTES)
 SCHEMAS = {MATRIX_MANIFEST:"owasp-control-status-matrix-manifest.schema.json",
            "matrix_page":"owasp-control-status-matrix-page.schema.json",

@@ -29,5 +29,42 @@
   "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
   "applicability": "explicit project list; otherwise accepted SKIPPED with not-requested-no-scorecard-projects",
   "permissions": ["read-run-inputs", "write-run-data", "network:api.scorecard.dev"],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "input_max_bytes": {
+      "value": 262144,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Largest Scorecard input.",
+      "scale": ""
+    },
+    "response_max_bytes": {
+      "value": 4194304,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Largest Scorecard response.",
+      "scale": ""
+    },
+    "request_timeout_seconds": {
+      "value": 20,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Scorecard request timeout.",
+      "scale": ""
+    },
+    "stdout_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout.",
+      "scale": ""
+    },
+    "stderr_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr.",
+      "scale": ""
+    }
+  }
 }

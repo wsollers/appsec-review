@@ -7,6 +7,7 @@ rejected, response sizes are bounded, and accepted artifacts retain raw bytes an
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 import json
 import os
@@ -35,13 +36,13 @@ JOB_ID = "02-ossf-scorecard"
 INPUT_NAME = "ossf-scorecard-projects.json"
 API_BASE = "https://api.scorecard.dev/projects"
 NETWORK_PERMISSION = "network:api.scorecard.dev"
-MAX_INPUT_BYTES = 256 * 1024
+MAX_INPUT_BYTES = tunables.value("02-ossf-scorecard", "input_max_bytes")
 MAX_PROJECTS = 100
-MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+MAX_RESPONSE_BYTES = tunables.value("02-ossf-scorecard", "response_max_bytes")
 TIMEOUT_SECONDS = 600
-REQUEST_TIMEOUT_SECONDS = 20
-STDOUT_LIMIT_BYTES = 1024 * 1024
-STDERR_LIMIT_BYTES = 1024 * 1024
+REQUEST_TIMEOUT_SECONDS = tunables.value("02-ossf-scorecard", "request_timeout_seconds")
+STDOUT_LIMIT_BYTES = tunables.value("02-ossf-scorecard", "stdout_limit_bytes")
+STDERR_LIMIT_BYTES = tunables.value("02-ossf-scorecard", "stderr_limit_bytes")
 CONSUMER_JOB_ID = "02-evidence-assembly"
 REPOSITORY_RE = re.compile(
     r"^(?P<host>github\.com|gitlab\.com)/(?P<owner>[A-Za-z0-9_.-]{1,100})/"

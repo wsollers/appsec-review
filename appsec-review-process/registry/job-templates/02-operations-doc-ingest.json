@@ -1,1 +1,25 @@
-{"schema":"appsec-review/job-template/0.1","job_template_id":"02-operations-doc-ingest","display_name":"Operations Document Ingest","process":"02-evidence-pregather","budget_default":"standard","implemented":false,"permissions":["read-source","read-run-data","write-run-data"],"composition":{"persona_id":"functional-design-doc-consumer","role_id":"doc-intelligence-extractor","domain_id":"functional-design-docs","tooling_profile_id":"static-doc-parser","output_contract_id":"operations-doc-intelligence"},"inputs":{"required":["exact accepted intake source inventory"],"optional":[]},"outputs":{"directory":"data/jobs/02-operations-doc-ingest/attempts/<attempt_id>","files":["operations-doc-intelligence.json","status.json","permission.json","lineage.json"]},"prompt_sections":["governing_rules","source_lineage","redaction","task","output_contract"]}
+{"schema":"appsec-review/job-template/0.1","job_template_id":"02-operations-doc-ingest","display_name":"Operations Document Ingest","process":"02-evidence-pregather","budget_default":"standard","implemented":false,"permissions":["read-source","read-run-data","write-run-data"],"composition":{"persona_id":"functional-design-doc-consumer","role_id":"doc-intelligence-extractor","domain_id":"functional-design-docs","tooling_profile_id":"static-doc-parser","output_contract_id":"operations-doc-intelligence"},"inputs":{"required":["exact accepted intake source inventory"],"optional":[]},"outputs":{"directory":"data/jobs/02-operations-doc-ingest/attempts/<attempt_id>","files":["operations-doc-intelligence.json","status.json","permission.json","lineage.json"]},"prompt_sections":["governing_rules","source_lineage","redaction","task","output_contract"],
+  "tunables": {
+    "files_logged": {
+      "value": 200,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on applicable input files; now logged.",
+      "scale": ""
+    },
+    "records_logged": {
+      "value": 1000,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on extracted records; now logged.",
+      "scale": "freeciv21 doc ingest: 1,220."
+    },
+    "file_max_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "window",
+      "description": "Bytes read per input file.",
+      "scale": ""
+    }
+  }
+}

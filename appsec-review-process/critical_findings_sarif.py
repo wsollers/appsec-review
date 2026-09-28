@@ -14,6 +14,7 @@ child obeys ``appsec-review/deterministic-child/1.0``. This worker is still the 
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 import json
 import os
@@ -39,10 +40,10 @@ INPUT_NAME = "critical-findings.md"
 OUTPUT_NAME = "critical-findings.sarif"
 OUTPUT_CONTRACT = "critical-findings-sarif"
 WORKER_KIND = "deterministic_python"
-MAX_INPUT_BYTES = 4 * 1024 * 1024
+MAX_INPUT_BYTES = tunables.value("10-critical-findings-sarif", "input_max_bytes")
 TIMEOUT_SECONDS = 120
-STDOUT_LIMIT_BYTES = 1024 * 1024
-STDERR_LIMIT_BYTES = 1024 * 1024
+STDOUT_LIMIT_BYTES = tunables.value("10-critical-findings-sarif", "stdout_limit_bytes")
+STDERR_LIMIT_BYTES = tunables.value("10-critical-findings-sarif", "stderr_limit_bytes")
 REQUIRED_FIELDS = {"id", "title", "severity", "status", "location", "confidence"}
 SEVERITIES = {"Critical", "High", "Medium", "Low", "Info"}
 SEVERITY_TO_LEVEL = {

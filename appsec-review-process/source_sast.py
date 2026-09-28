@@ -11,6 +11,7 @@ live Dagster qualification remain integration work; until then its readiness is
 """
 from __future__ import annotations
 
+import tunables
 from datetime import datetime, timezone
 import json
 import os
@@ -181,9 +182,7 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any]) -> dict[str, 
         "scratch_path": "scratch", "log_path": "logs/container",
         "network": {"mode": "none", "destinations": []},
         "permission": _permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
-        "limits": {"timeout_seconds": 900, "memory_bytes": 2 * 1024 * 1024 * 1024,
-                   "cpu_millis": 2000, "pids": 256, "tmpfs_bytes": 256 * 1024 * 1024,
-                   "stdout_limit_bytes": 1024 * 1024, "stderr_limit_bytes": 1024 * 1024},
+        "limits": tunables.container_limits(JOB),
     }
 
 
@@ -200,8 +199,7 @@ def _language_request(run_id: str, adapter_id: str, inputs: dict[str, Any], plan
         "target_mounts": mounts,
         "scratch_path":"scratch", "log_path":"logs/container", "network":{"mode":"none","destinations":[]},
         "permission":_permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
-        "limits":{"timeout_seconds":900,"memory_bytes":2*1024*1024*1024,"cpu_millis":2000,"pids":256,
-            "tmpfs_bytes":256*1024*1024,"stdout_limit_bytes":8*1024*1024,"stderr_limit_bytes":8*1024*1024}}
+        "limits":tunables.container_limits(JOB, "language")}
 
 
 def _relative_source(raw_path: Any, target: Path) -> tuple[str, Path]:

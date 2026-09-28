@@ -34,6 +34,7 @@ See ``docs/pools/pool-specification.md``.
 """
 from __future__ import annotations
 
+import tunables
 from dataclasses import dataclass, fields as dataclass_fields
 import json
 import os
@@ -92,17 +93,17 @@ POPULATED = "POPULATED"
 EMPTY_POOL_REASONS = ("no_applicable_work", "scope_excluded", "upstream_produced_no_work")
 BUDGET_CLASSES = tuple(rp.PERSONA_BUDGET_CELLS)
 
-MAX_GROUPS = 32
-MAX_GROUP_COUNT = 32
-MAX_INSTANCES = 64
-MAX_TOTAL_TIMEOUT_SECONDS = 7 * 86_400
+MAX_GROUPS = tunables.shared("pool_groups_max")
+MAX_GROUP_COUNT = tunables.shared("pool_group_count_max")
+MAX_INSTANCES = tunables.shared("pool_instances_max")
+MAX_TOTAL_TIMEOUT_SECONDS = tunables.shared("pool_total_timeout_max_seconds")
 POOL_BUDGET_BOUNDS: Mapping[str, tuple[int, int]] = {
     "max_instances": (0, MAX_INSTANCES),
     "max_persona_input_units": (0, MAX_INSTANCES * pi.BUDGET_BOUNDS["input_unit_limit"][1]),
     "max_persona_output_units": (0, MAX_INSTANCES * pi.BUDGET_BOUNDS["output_unit_limit"][1]),
     "max_total_timeout_seconds": (0, MAX_TOTAL_TIMEOUT_SECONDS),
 }
-MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
+MAX_DOCUMENT_BYTES = tunables.shared("pool_document_max_bytes")
 
 # Hex digits of the instance-id digest. 32 digits are 128 bits. A collision is still checked for,
 # and fails closed; the tests shrink this to force one.

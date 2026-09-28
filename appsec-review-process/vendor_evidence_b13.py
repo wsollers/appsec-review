@@ -6,6 +6,7 @@ result is re-verified using the caller-retained result digest before any scanner
 """
 from __future__ import annotations
 
+import tunables
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -265,8 +266,7 @@ def request(tool_id: str, *, run_id: str, job_id: str, attempt_id: str, source_r
             "target_mounts": [{"host_path": str(source_root.resolve()), "container_path": "/workspace"}],
             "scratch_path": scratch_name, "log_path": "logs/container", "network": {"mode": "none", "destinations": []},
             "permission": {"requirement": requirement, "grants": [], "decision": decision},
-            "limits": {"timeout_seconds": 900, "memory_bytes": 2 * 1024**3, "cpu_millis": 2000, "pids": 256,
-                       "tmpfs_bytes": 256 * 1024**2, "stdout_limit_bytes": 1024**2, "stderr_limit_bytes": 1024**2}}
+            "limits": tunables.container_limits(job_id)}
 
 
 def execute(tool_id: str, *, runtime: ce.ContainerRuntime, run_id: str, job_id: str, attempt_id: str,

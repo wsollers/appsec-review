@@ -728,7 +728,7 @@ class PolicyAndBoundaryTests(RedactionTestCase):
                 imported |= {alias.name.split(".")[0] for alias in node.names}
             elif isinstance(node, ast.ImportFrom):
                 imported.add((node.module or "").split(".")[0])
-        self.assertEqual(imported - set(sys.stdlib_module_names), {"execution_state", "schema_validate"})
+        self.assertEqual(imported - set(sys.stdlib_module_names), {"execution_state", "schema_validate", "tunables"})
         self.assertEqual(imported & {"logging", "publish_job_output", "validate_job_output", "worker_result", "worker_adapters", "subprocess"}, set())
         prints = [node for node in ast.walk(module) if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "print"]
         main = next(node for node in module.body if isinstance(node, ast.FunctionDef) and node.name == "main")

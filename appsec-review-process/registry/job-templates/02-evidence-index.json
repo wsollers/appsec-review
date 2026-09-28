@@ -57,5 +57,84 @@
   "permissions": [
     "read-source"
   ],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "index_max_files": {
+      "value": 20000,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Most files the evidence index takes; more stops the job.",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md A: ~100K text files; to become logged/sharded."
+    },
+    "index_max_file_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Largest single file indexed.",
+      "scale": ""
+    },
+    "index_max_total_bytes": {
+      "value": 536870912,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Total bytes indexed; more stops the job.",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md A."
+    },
+    "index_max_text_bytes": {
+      "value": 2097152,
+      "unit": "bytes",
+      "kind": "window",
+      "description": "Text indexed per file.",
+      "scale": ""
+    },
+    "index_chunk_lines": {
+      "value": 60,
+      "unit": "lines",
+      "kind": "window",
+      "description": "Lines per FTS chunk.",
+      "scale": ""
+    },
+    "index_max_line_chars": {
+      "value": 16384,
+      "unit": "chars",
+      "kind": "window",
+      "description": "Longest line indexed.",
+      "scale": ""
+    },
+    "derived_producers_logged": {
+      "value": 32,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on derived producers; now logged.",
+      "scale": ""
+    },
+    "derived_records_logged": {
+      "value": 20000,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on derived records; now logged.",
+      "scale": "CPG alone: 593K on freeciv21."
+    },
+    "derived_links_logged": {
+      "value": 20000,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on partition/component links; now logged.",
+      "scale": ""
+    },
+    "derived_search_text_max": {
+      "value": 1000,
+      "unit": "chars",
+      "kind": "window",
+      "description": "Search text stored per derived record.",
+      "scale": ""
+    },
+    "derived_query_results_max": {
+      "value": 50,
+      "unit": "count",
+      "kind": "window",
+      "description": "Most results per derived query.",
+      "scale": ""
+    }
+  }
 }

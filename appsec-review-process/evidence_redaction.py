@@ -18,6 +18,7 @@ entropy/shape), not its code.
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 from bisect import bisect_right
 from dataclasses import asdict, dataclass, fields, replace
@@ -257,12 +258,12 @@ class Limits:
 
 
 DEFAULT_LIMITS = Limits(
-    max_file_bytes=16 * 1024 * 1024,
-    max_line_length=128 * 1024,
-    max_files=2000,
-    max_total_bytes=128 * 1024 * 1024,
-    max_json_depth=64,
-    max_path_length=512,
+    max_file_bytes=tunables.shared("redaction_max_file_bytes"),
+    max_line_length=tunables.shared("redaction_max_line_length"),
+    max_files=tunables.shared("redaction_max_files"),
+    max_total_bytes=tunables.shared("redaction_max_total_bytes"),
+    max_json_depth=tunables.shared("redaction_max_json_depth"),
+    max_path_length=tunables.shared("redaction_max_path_length"),
 )
 
 

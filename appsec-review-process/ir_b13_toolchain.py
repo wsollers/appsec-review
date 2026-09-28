@@ -1,6 +1,7 @@
 """Pinned offline B13 toolchain for the E04/E05 LLVM evidence workers."""
 from __future__ import annotations
 
+import tunables
 from datetime import datetime, timezone
 import json
 from pathlib import Path, PurePosixPath
@@ -108,10 +109,7 @@ class B13IrToolchain:
             "target_mounts": mounts, "scratch_path":"scratch", "log_path":"logs/container",
             "network":{"mode":"none","destinations":[]},
             "permission":_permission(self.run_id,self.job,self.inputs["source_snapshot_sha256"],_utc()),
-            "limits":{"timeout_seconds":{"02-ir-capture":900,"02-ir-link":300,"02-ir-facts":300}[self.job],
-                "memory_bytes":4*1024*1024*1024,"cpu_millis":4000,
-                "pids":512,"tmpfs_bytes":512*1024*1024,"stdout_limit_bytes":8*1024*1024,
-                "stderr_limit_bytes":8*1024*1024}}
+            "limits":tunables.container_limits(self.job)}
 
     def _run(self, operation: str, argv: list[str], mounts: list[dict[str, str]], output: str | None) -> tuple[int, Path]:
         ordinal = len(self.receipts) + 1
@@ -158,8 +156,8 @@ class B13IrToolchain:
         code, raw = self._run("compile", rendered,
             [{"host_path":str(self.target),"container_path":"/workspace"}], "module.bc")
         if code == 0:
-            if raw.stat().st_size > MAX_IR_BYTES:
-                raise RuntimeError("compiled bitcode exceeds the 64 MiB bound")
+            if raw.stat().st_size > tunables.value(self.job, "ir_max_bytes"):
+                raise RuntimeError("compiled bitcode exceeds the ir_max_bytes tunable")
             data=raw.read_bytes()
             if data[:4] != b"BC\xc0\xde": raise RuntimeError("pinned compiler emitted malformed bitcode")
             atomic_bytes(destination,data)
@@ -189,7 +187,7 @@ class B13IrToolchain:
         code,raw=self._run("disassemble",["/opt/llvm/bin/llvm-dis","/inputs/link/"+relative,"-o","/scratch/module.ll"],
             [{"host_path":str(link_attempt),"container_path":"/inputs/link"}],"module.ll")
         if code: raise RuntimeError("pinned llvm-dis failed")
-        if raw.stat().st_size > MAX_IR_BYTES: raise RuntimeError("disassembled IR exceeds the 64 MiB bound")
+        if raw.stat().st_size > tunables.value(self.job, "ir_max_bytes"): raise RuntimeError("disassembled IR exceeds the ir_max_bytes tunable")
         return raw.read_text(encoding="utf-8")
 
     def publish_receipts(self) -> None:

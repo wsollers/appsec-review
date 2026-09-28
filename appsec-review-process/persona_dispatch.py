@@ -42,6 +42,8 @@ reasonable follow-up once more than one unpooled job template exists, not assume
 """
 from __future__ import annotations
 
+import tunables
+
 import json
 import sys
 from pathlib import Path
@@ -70,16 +72,10 @@ UPSTREAM_ROOT_ID = "upstream-artifacts"
 # job template's own budget_default -> persona_invocation's request budget object. See this
 # module's docstring for why this table is D01's own and not shared elsewhere yet.
 PERSONA_BUDGETS: dict[str, dict[str, int]] = {
-    "probe": {"input_byte_limit": 8 * 1024 * 1024, "input_unit_limit": 200_000,
-              "output_byte_limit": 2 * 1024 * 1024, "output_unit_limit": 100_000,
-              "output_file_limit": 8, "tool_call_limit": 0, "timeout_seconds": 900},
-    "standard": {"input_byte_limit": 32 * 1024 * 1024, "input_unit_limit": 800_000,
-                 "output_byte_limit": 4 * 1024 * 1024, "output_unit_limit": 200_000,
-                 "output_file_limit": 8, "tool_call_limit": 0, "timeout_seconds": 1800},
-    "full": {"input_byte_limit": 64 * 1024 * 1024, "input_unit_limit": 1_600_000,
-             "output_byte_limit": 8 * 1024 * 1024, "output_unit_limit": 400_000,
-             "output_file_limit": 8, "tool_call_limit": 0, "timeout_seconds": 3600},
-}
+    tier: {field: tunables.shared(f"persona_budget_{tier}_{field}") for field in (
+        "input_byte_limit", "input_unit_limit", "output_byte_limit", "output_unit_limit",
+        "output_file_limit", "tool_call_limit", "timeout_seconds")}
+    for tier in ("probe", "standard", "full")}
 
 
 class RequestBuildError(ValueError):

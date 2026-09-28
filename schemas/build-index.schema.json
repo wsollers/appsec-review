@@ -106,15 +106,9 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "max_excerpt_bytes": {
-          "const": 4096
-        },
-        "max_signals": {
-          "const": 400
-        },
-        "max_index_bytes": {
-          "const": 524288
-        }
+        "max_excerpt_bytes": {"type": "integer", "minimum": 1},
+        "max_signals": {"type": "integer", "minimum": 1},
+        "max_index_bytes": {"type": "integer", "minimum": 1}
       }
     },
     "truncated": {

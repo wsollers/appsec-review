@@ -6,6 +6,7 @@ snapshot before use in a claim.
 """
 from __future__ import annotations
 
+import tunables
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -20,12 +21,12 @@ SCHEMA = "appsec-review/code-property-graph/1.0"
 KINDS = frozenset(("call", "symbol", "type", "identifier", "memory-operation"))
 QUERY_KINDS = frozenset(("calls", "symbols", "types", "flows", "memory-operations"))
 LIMITS = {
-    "max_input_bytes": 64 * 1024 * 1024,
-    "max_records": 20000,
-    "max_field_chars": 4096,
-    "max_search_chars": 1000,
-    "max_query_results": 100,
-    "max_citation_lines": 40,
+    "max_input_bytes": tunables.value("02-code-property-graph", "cpg_input_bytes_logged"),   # logged
+    "max_records": tunables.value("02-code-property-graph", "cpg_records_logged"),   # logged
+    "max_field_chars": tunables.value("02-code-property-graph", "field_chars_max"),
+    "max_search_chars": tunables.value("02-code-property-graph", "search_chars_max"),
+    "max_query_results": tunables.value("02-code-property-graph", "query_results_max"),
+    "max_citation_lines": tunables.value("02-code-property-graph", "citation_lines_max"),
 }
 
 

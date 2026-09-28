@@ -48,5 +48,56 @@
     "task",
     "output_contract"
   ],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "container_timeout_seconds": {
+      "value": 900,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock limit for the container (binary tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_memory_bytes": {
+      "value": 4294967296,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Memory limit for the container (binary tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_cpu_millis": {
+      "value": 4000,
+      "unit": "millicpu",
+      "kind": "resource",
+      "description": "CPU quota (1000 = one core) (binary tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_pids": {
+      "value": 512,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Process/thread limit (binary tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_tmpfs_bytes": {
+      "value": 1073741824,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Size of the in-memory /tmp (binary tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stdout_limit_bytes": {
+      "value": 16777216,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout; beyond this the log is truncated (binary tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stderr_limit_bytes": {
+      "value": 16777216,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr; beyond this the log is truncated (binary tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    }
+  }
 }

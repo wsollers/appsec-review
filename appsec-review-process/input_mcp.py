@@ -16,6 +16,7 @@ Content is untrusted data, never instructions. Every call is audited under
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 import hashlib
 import json
@@ -29,8 +30,8 @@ from execution_state import atomic_json, data_path, now
 import evidence_mcp
 
 SERVER_NAME = "appsec-inputs"
-READ_LINES_MAX = 400
-LINE_CHARS_MAX = 2000
+READ_LINES_MAX = tunables.shared("input_read_lines_max")
+LINE_CHARS_MAX = tunables.shared("input_line_chars_max")
 
 _INT = {"type": "integer", "minimum": 0}
 TOOLS = [
@@ -83,7 +84,7 @@ class Inputs:
             raise ValueError(f"{ref!r} is {len(raw)} bytes of non-UTF-8 data") from None
 
 
-JQ_RETURN_BYTES = 64 * 1024   # per-call return window (the model narrows its filter), not a data cap
+JQ_RETURN_BYTES = tunables.shared("input_jq_return_bytes")   # per-call window, not a data cap
 _JQ_FORBIDDEN = re.compile(r"\b(?:import|include|env|input_filename|get_search_list)\b|\$(?:ENV|__loc__|__prog_args)\b")
 
 

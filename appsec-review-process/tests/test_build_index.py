@@ -365,8 +365,9 @@ class Bounds(Checkout):
             index = self.index()
             self.assertLessEqual(len(bi.serialize(index)), 40000)
             self.assertTrue(index['truncated']['index_size_limited'])
-            # only the schema's pinned limit notices the patched bound; every other check passes
-            self.assertEqual(self.check(index), ['$.limits.max_index_bytes: expected const 524288, got 40000'])
+            # the bound is a tunable now (02-build-index index_max_bytes): the index records the
+            # bound it was built under, and every check passes
+            self.assertEqual(self.check(index), [])
             self.assertTrue(self.signal(index, kind='build-manifest', path='Dockerfile'))
 
 

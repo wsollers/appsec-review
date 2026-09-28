@@ -5,6 +5,7 @@ ssdeep is a retrieval hint, never proof of equivalence or vulnerability.
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 import csv
 import ctypes
@@ -24,9 +25,10 @@ from execution_state import (ROOT, Blocked, Lock, atomic_bytes, atomic_json, ben
 import phase1
 from schema_validate import validate_document
 
-LIMITS = {'max_files': 20000, 'max_file_bytes': 8 * 1024 * 1024,
-          'max_total_bytes': 512 * 1024 * 1024, 'max_text_bytes': 2 * 1024 * 1024,
-          'chunk_lines': 60, 'max_line_chars': 16384}
+LIMITS = {name: tunables.value('02-evidence-index', key) for name, key in (
+    ('max_files', 'index_max_files'), ('max_file_bytes', 'index_max_file_bytes'),
+    ('max_total_bytes', 'index_max_total_bytes'), ('max_text_bytes', 'index_max_text_bytes'),
+    ('chunk_lines', 'index_chunk_lines'), ('max_line_chars', 'index_max_line_chars'))}
 JOB = '02-evidence-index'
 LOADED_WORKER_SHA256 = file_hash(Path(__file__))
 
@@ -677,8 +679,9 @@ def query_derived(run_id, text='', partition_id='', component_id='', limit=10, f
 
 
 def _query(run_id, action, text='', path='', limit=10, start=1, fresh=True):
-    if not 1 <= limit <= 50 or len(text) > 1000 or start < 1:
-        raise ValueError('query bounds: limit 1..50, text <=1000 characters, start >=1')
+    if (not 1 <= limit <= tunables.shared('evidence_query_results_max') or
+            len(text) > tunables.shared('evidence_query_text_max') or start < 1):
+        raise ValueError('query bounds: see shared tunables evidence_query_results_max/evidence_query_text_max')
     pointer, attempt = validate(run_id, fresh=fresh)
     db = sqlite3.connect((attempt / 'index.sqlite').as_uri() + '?mode=ro&immutable=1', uri=True)
     db.row_factory = sqlite3.Row
@@ -708,7 +711,7 @@ def _query(run_id, action, text='', path='', limit=10, start=1, fresh=True):
             if start > len(lines):
                 raise ValueError('start line is beyond the file')
             excerpt = '\n'.join(lines[start-1:start-1+limit])
-            if len(excerpt) > 65536:
+            if len(excerpt) > tunables.shared('evidence_read_excerpt_max_bytes'):
                 raise ValueError('read exceeds 64 KiB; request fewer lines')
             rows = [{'path': path, 'sha256': row['sha256'], 'start_line': start,
                      'end_line': min(len(lines), start + limit - 1), 'excerpt': excerpt}]

@@ -7,6 +7,8 @@ job identities and output contracts.
 """
 from __future__ import annotations
 
+import tunables
+
 from datetime import datetime, timedelta, timezone
 import base64
 import json
@@ -297,10 +299,7 @@ def _request(run_id: str, job: str, adapter_id: str, record: dict[str, Any], loc
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
         "scratch_path": "scratch", "log_path": "logs/container",
         "network": {"mode": "none", "destinations": []}, "permission": permission,
-        "limits": {"timeout_seconds": control["timeout_seconds"],
-            "memory_bytes": 2 * 1024 * 1024 * 1024, "cpu_millis": 2000, "pids": 512,
-            "tmpfs_bytes": 256 * 1024 * 1024, "stdout_limit_bytes": 1024 * 1024,
-            "stderr_limit_bytes": 1024 * 1024}}
+        "limits": {**tunables.container_limits(job), "timeout_seconds": control["timeout_seconds"]}}
 
 
 def _compile_db(path: Path, allowed: list[str]) -> list[dict[str, Any]]:

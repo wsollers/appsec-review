@@ -51,5 +51,28 @@
     "read-run-inputs",
     "write-run-data"
   ],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "input_max_bytes": {
+      "value": 4194304,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Largest findings input converted to SARIF.",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md B."
+    },
+    "stdout_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout.",
+      "scale": ""
+    },
+    "stderr_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr.",
+      "scale": ""
+    }
+  }
 }

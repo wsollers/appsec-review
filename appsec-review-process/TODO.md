@@ -98,6 +98,9 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 we would exceed on an Unreal Engine-sized target, with priorities. Index-first is the rule: anything
 that grows with the target is stored as records, indexed, and queried. First items: lazy
 hash-verified input serving for model jobs, then the records-file pattern for every large producer.
+All tunables are in config (`docs/processes/tunables.md`, `tunables.py check`). Indexing coverage
+plan: the scale audit's "Indexing coverage" table (source/native SAST findings, vendor tools, SBOM/SCA,
+build index/plan, discovery, standards corpus, review-stage claims).
 
 ## Breakage log
 

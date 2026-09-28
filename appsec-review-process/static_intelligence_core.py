@@ -6,6 +6,7 @@ intake source inventory.
 """
 from __future__ import annotations
 
+import tunables
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -239,14 +240,14 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
     candidates = [path for path, meta in source_files.items() if meta.get("kind") == "file" and _candidate(job, path)]
     readmes = [path for path in source_files if PurePosixPath(path).name.lower().startswith("readme")]
     gaps: list[str] = []
-    size_log.observe(run_id, job, "applicable_inputs", len(candidates), MAX_FILES)
+    size_log.observe(run_id, job, "applicable_inputs", len(candidates), tunables.value(job, "files_logged"))
     sources, records, identities = [], [], set()
     for relative in sorted(candidates):
         meta = source_files[relative]
         path = target.joinpath(*PurePosixPath(relative).parts)
         if not path.is_file() or path.is_symlink() or file_hash(path) != meta["sha256"]:
             raise Blocked(f"{job}: accepted source changed: {relative}")
-        if path.stat().st_size > MAX_FILE_BYTES:
+        if path.stat().st_size > tunables.value(job, "file_max_bytes"):
             sources.append({"path": relative, "sha256": "sha256:" + meta["sha256"], "status": "OVERSIZED", "redactions": 0})
             gaps.append(f"oversized-input:{relative}"); continue
         text, disposition, count = _redacted(relative, path.read_bytes())
@@ -266,7 +267,7 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
             records.append({"record_id": record_id, "kind": item["kind"], "path": relative,
                 "source_sha256": "sha256:" + meta["sha256"], "locator": item["locator"],
                 "summary": item["text"], "semantics": "DOCUMENTED_STATIC_INTENT"})
-    size_log.observe(run_id, job, "extracted_records", len(records), MAX_RECORDS)
+    size_log.observe(run_id, job, "extracted_records", len(records), tunables.value(job, "records_logged"))
     records.sort(key=lambda x: (x["path"], x["locator"], x["record_id"]))
     sources.sort(key=lambda x: x["path"])
     if not candidates:

@@ -7,5 +7,56 @@
   "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"], "implemented": true,
   "timeout_seconds": 3600, "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": false},
   "applicability": "each OK native unit in the accepted build lock after configure",
-  "permissions": ["read-source", "target-execution:native-build-v1@.", "write-run-data"], "coordinator": "intake-coordinator"
+  "permissions": ["read-source", "target-execution:native-build-v1@.", "write-run-data"], "coordinator": "intake-coordinator",
+  "tunables": {
+    "container_timeout_seconds": {
+      "value": 1800,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock limit for the container (native build replay).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_memory_bytes": {
+      "value": 2147483648,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Memory limit for the container (native build replay).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_cpu_millis": {
+      "value": 2000,
+      "unit": "millicpu",
+      "kind": "resource",
+      "description": "CPU quota (1000 = one core) (native build replay).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_pids": {
+      "value": 512,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Process/thread limit (native build replay).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_tmpfs_bytes": {
+      "value": 268435456,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Size of the in-memory /tmp (native build replay).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stdout_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout; beyond this the log is truncated (native build replay).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stderr_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr; beyond this the log is truncated (native build replay).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    }
+  }
 }

@@ -2,6 +2,7 @@
 """Render an immutable, run-owned handoff from fully resolved registry records."""
 from __future__ import annotations
 
+import tunables
 import argparse
 import json
 from pathlib import Path, PurePosixPath
@@ -14,8 +15,8 @@ from job_graph import KINDS, REGISTRY, composition
 
 SCHEMA = "appsec-review/job-handoff/1.0"
 MAX_INPUTS = 64
-MAX_INPUT_BYTES = 16 * 1024 * 1024
-MAX_TOTAL_INPUT_BYTES = 64 * 1024 * 1024
+MAX_INPUT_BYTES = tunables.shared("handoff_input_max_bytes")
+MAX_TOTAL_INPUT_BYTES = tunables.shared("handoff_total_input_max_bytes")
 
 
 def _relative(value: str) -> PurePosixPath:

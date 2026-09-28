@@ -7,6 +7,7 @@ tool output or minting the small receipt consumed by :mod:`dependency_workers`.
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -107,7 +108,7 @@ def request(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
         "environment": environment, "target_mounts": mounts, "scratch_path": "scratch", "log_path": "logs/container",
         "network": {"mode": "none", "destinations": []},
         "permission": _permission(run_id, spec["job"], source_snapshot_sha256, at or _clock()),
-        "limits": dict(LIMITS)}
+        "limits": tunables.container_limits(spec["job"])}
 
 
 def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_sha256: str,

@@ -43,6 +43,7 @@ what turns a rejection into the run's terminal record. This invoker never invent
 """
 from __future__ import annotations
 
+import tunables
 import json
 import sys
 import size_log
@@ -63,7 +64,7 @@ from schema_validate import SchemaStore, validate_document
 ROOT = Path(__file__).resolve().parent
 SCHEMAS_ROOT = ROOT.parent / "schemas"
 
-DEFAULT_TIMEOUT_SECONDS = 1800
+DEFAULT_TIMEOUT_SECONDS = tunables.shared("invoker_timeout_seconds")
 
 ENVELOPE_INSTRUCTIONS = """
 ## Response format -- read carefully, this is enforced mechanically
@@ -231,7 +232,7 @@ def _stage_inputs_for_mcp(package: Any, scratch: Path, output_root: Path | None 
     return config
 
 
-INVENTORY_ROWS_MAX = 300   # above this, the prompt summarises by directory; input_list has every row
+INVENTORY_ROWS_MAX = tunables.shared("invoker_inventory_rows_max")   # above this, summarise by folder
 
 
 def _inventory_section(items: list, root_label: str) -> list[str]:

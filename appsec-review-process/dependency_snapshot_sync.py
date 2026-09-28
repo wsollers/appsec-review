@@ -8,6 +8,7 @@ immutable dependency snapshot registry.
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 import hashlib
 import json
@@ -28,9 +29,9 @@ import dependency_snapshot_registry as snapshots
 import permission_capabilities as pc
 
 JOB = "dependency-database-snapshot-sync"
-HARD_MAX_ARCHIVE_BYTES = 4 * 1024 * 1024 * 1024
-HARD_MAX_EXTRACTED_BYTES = 16 * 1024 * 1024 * 1024
-HARD_MAX_FILES = 2_000_000
+HARD_MAX_ARCHIVE_BYTES = tunables.shared("snapshot_archive_max_bytes")
+HARD_MAX_EXTRACTED_BYTES = tunables.shared("snapshot_extracted_max_bytes")
+HARD_MAX_FILES = tunables.shared("snapshot_files_max")
 
 
 class SyncBlocked(RuntimeError): pass

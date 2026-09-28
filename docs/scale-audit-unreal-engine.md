@@ -93,6 +93,38 @@ bytes, CPG schema maxima. All now call `size_log.observe`. The per-call return w
 (`input_read` 400 lines, `input_jq` 64 KB, inline 150 KB, inventory 300 rows) scale because the
 model narrows its query; they are not data caps.
 
+## Tunables (done 2026-09-28)
+
+Every value in the tables above now lives in config, not code: per-job values in a `tunables` block
+in `appsec-review-process/registry/job-templates/<job>.json`, shared ones in
+`appsec-review-process/registry/tunables.json`. Each has a unit, a kind (resource, window, safety,
+logged), a description and a scale note. The generated reference is
+[`processes/tunables.md`](processes/tunables.md); `python3 -B appsec-review-process/tunables.py check`
+fails when code asks for a tunable config lacks, or the doc is stale. The whole checkout is
+fingerprinted once, at intake; nothing else re-hashes it.
+
+## Indexing coverage (William: "ensure everything is indexed, FTS where it makes sense")
+
+Today 16 producers feed the evidence index (`evidence_index_enrichment.PROFILES`); target files go
+into the FTS `chunks` table and producer records into the FTS `derived_chunks` table. Not yet
+indexed:
+
+| Producer | Records | FTS text | Structured columns |
+|---|---|---|---|
+| 02-source-sast | findings | message, rule, snippet | rule id, severity, path, line |
+| 02-native-sast | findings (only `units` today) | message, checker | checker, severity, path, line |
+| 02-secrets-inventory, 02-iac-config-scan, 02-container-image-inventory, 02-binary-hardening, 02-mobile-sast | tool records | message, rule | tool, rule, path, severity |
+| 02-sbom-inventory, 02-license-scan, 02-dependency-lifecycle | components, licenses | name, purl | ecosystem, version, license |
+| 02-sca-vulnerability-match | matches | advisory summary | CVE/GHSA id, purl, severity |
+| 02-build-index, 02-build-classify, 02-build-plan | signals, units | excerpt | unit, build system |
+| 02-dev/devops-project-discovery, 02-sre-operations-topology | inventory entries | description | kind, path |
+| 02-standards-source-ingest | standards corpus (~1,200 files) | requirement text | standard, id, level |
+| 03-15 review jobs | claims, findings, verdicts | claim text | claim class, component, verdict |
+
+Rule: text people or models search goes into FTS; identifiers, paths, severities and ids are plain
+indexed columns for filtering and joins. Producers write records files (the CPG pattern) so
+enrichment streams them. Model lookup gets `evidence_derived` filters for these columns.
+
 ## Priorities
 
 1. **Lazy, hash-verified input serving** (A: readable inputs, staging). Without it every model job

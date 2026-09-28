@@ -6,6 +6,7 @@ short redacted search text; it never republishes a producer record or grants it 
 """
 from __future__ import annotations
 
+import tunables
 import json
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -23,8 +24,11 @@ RESULT = "evidence-index-enrichment.json"
 SCHEMA = "appsec-review/evidence-index-enrichment/1.0"
 PERMISSION_SCHEMA = "appsec-review/producer-permission-receipt/1.0"
 LINEAGE_SCHEMA = "appsec-review/producer-lineage-receipt/1.0"
-LIMITS = {"max_producers": 32, "max_records": 20000, "max_links": 20000,
-          "max_search_text": 1000, "max_query_results": 50}
+LIMITS = {"max_producers": tunables.value("02-evidence-index", "derived_producers_logged"),
+          "max_records": tunables.value("02-evidence-index", "derived_records_logged"),
+          "max_links": tunables.value("02-evidence-index", "derived_links_logged"),
+          "max_search_text": tunables.value("02-evidence-index", "derived_search_text_max"),
+          "max_query_results": tunables.value("02-evidence-index", "derived_query_results_max")}
 
 # job: (contract, result artifact, result schema, indexed top-level arrays, authority)
 PROFILES = {

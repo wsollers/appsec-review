@@ -47,5 +47,35 @@
     "read-source",
     "write-run-data"
   ],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "excerpt_max_bytes": {
+      "value": 4096,
+      "unit": "bytes",
+      "kind": "window",
+      "description": "Largest excerpt stored per build signal.",
+      "scale": ""
+    },
+    "index_max_bytes": {
+      "value": 524288,
+      "unit": "bytes",
+      "kind": "safety",
+      "description": "Largest serialized build index; over it validation fails.",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md B: thousands of *.Build.cs/*.Target.cs."
+    },
+    "scan_max_bytes": {
+      "value": 2097152,
+      "unit": "bytes",
+      "kind": "window",
+      "description": "Bytes scanned per build file; the rest is not scanned.",
+      "scale": ""
+    },
+    "signals_max": {
+      "value": 400,
+      "unit": "count",
+      "kind": "window",
+      "description": "Most build signals kept in the index; beyond this the index is marked truncated.",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md B."
+    }
+  }
 }

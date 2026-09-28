@@ -1,6 +1,7 @@
 """Accepted offline Joern CPG producer using the pinned B13 container boundary."""
 from __future__ import annotations
 
+import tunables
 import json
 
 from datetime import datetime, timezone
@@ -115,9 +116,7 @@ def _request(run_id: str, attempt_id: str, inputs: dict[str, Any]) -> dict[str, 
         "scratch_path": "scratch", "log_path": "logs/container",
         "network": {"mode": "none", "destinations": []},
         "permission": _permission(run_id, inputs["source_snapshot_sha256"], _utc()),
-        "limits": {"timeout_seconds": 3600, "memory_bytes": 8 * 1024 * 1024 * 1024,
-                   "cpu_millis": 4000, "pids": 1024, "tmpfs_bytes": 1024 * 1024 * 1024,
-                   "stdout_limit_bytes": 8 * 1024 * 1024, "stderr_limit_bytes": 8 * 1024 * 1024}}
+        "limits": tunables.container_limits(JOB)}
 
 
 def _receipts(run_id: str, inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

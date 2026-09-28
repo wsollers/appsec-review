@@ -7,6 +7,7 @@ bounds the retained log bytes, and tears down the complete child tree on every e
 """
 from __future__ import annotations
 
+import tunables
 from dataclasses import dataclass
 import contextlib
 import os
@@ -21,7 +22,7 @@ from execution_state import (ProcessTree, atomic_json, beneath, emergency, event
                              redact_argv)
 
 CONTRACT = "appsec-review/deterministic-child/1.0"
-MAX_CONFIGURED_LOG_BYTES = 16 * 1024 * 1024
+MAX_CONFIGURED_LOG_BYTES = tunables.shared("container_bound_log_bytes")
 SHELL_EXECUTABLES = {
     "bash", "bash.exe", "cmd", "cmd.exe", "command.com", "dash", "fish", "ksh", "pwsh",
     "pwsh.exe", "powershell", "powershell.exe", "sh", "sh.exe", "zsh",

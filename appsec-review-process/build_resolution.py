@@ -8,6 +8,7 @@ with Bear and accepted only when the resulting compile database is non-empty and
 """
 from __future__ import annotations
 
+import tunables
 from datetime import datetime, timedelta, timezone
 import base64
 import json
@@ -349,10 +350,8 @@ def _request(run_id: str, attempt_id: str, unit_attempt: Path, record: dict[str,
         "target_mounts": [{"host_path": inputs["target_path"], "container_path": "/workspace"}],
         "scratch_path": "scratch", "log_path": "logs/container",
         "network": {"mode": "none", "destinations": []}, "permission": permission,
-        "limits": {"timeout_seconds": control["build_command_timeout_seconds"],
-                   "memory_bytes": 2 * 1024 * 1024 * 1024, "cpu_millis": 2000, "pids": 512,
-                   "tmpfs_bytes": 256 * 1024 * 1024, "stdout_limit_bytes": 1024 * 1024,
-                   "stderr_limit_bytes": 1024 * 1024}}
+        "limits": {**tunables.container_limits(JOB),
+                   "timeout_seconds": control["build_command_timeout_seconds"]}}
 
 
 def _host(runtime: ce.ContainerRuntime) -> dict[str, Any]:

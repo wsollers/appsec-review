@@ -25,6 +25,7 @@ into an error message. See ``docs/adapters/pinned-container-adapter.md``.
 """
 from __future__ import annotations
 
+import tunables
 from dataclasses import dataclass
 import hashlib
 import json
@@ -107,22 +108,22 @@ CLIENT_ENVIRONMENT_NAMES = ("PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "WINDIR
                             "LOCALAPPDATA", "APPDATA")
 
 LIMIT_BOUNDS: Mapping[str, tuple[int, int]] = MappingProxyType({
-    "timeout_seconds": (1, 86_400),
-    "memory_bytes": (16 * 1024 * 1024, 64 * 1024 * 1024 * 1024),
-    "cpu_millis": (100, 64_000),
-    "pids": (1, 8_192),
-    "tmpfs_bytes": (1024 * 1024, 4 * 1024 * 1024 * 1024),
+    "timeout_seconds": (1, tunables.shared("container_bound_timeout_seconds")),
+    "memory_bytes": (16 * 1024 * 1024, tunables.shared("container_bound_memory_bytes")),
+    "cpu_millis": (100, tunables.shared("container_bound_cpu_millis")),
+    "pids": (1, tunables.shared("container_bound_pids")),
+    "tmpfs_bytes": (1024 * 1024, tunables.shared("container_bound_tmpfs_bytes")),
     "stdout_limit_bytes": (1, deterministic_child.MAX_CONFIGURED_LOG_BYTES),
     "stderr_limit_bytes": (1, deterministic_child.MAX_CONFIGURED_LOG_BYTES),
 })
-MAX_ARGV_MEMBERS = 256
-MAX_ARGV_MEMBER_CHARS = 4_096
-MAX_ARGV_TOTAL_CHARS = 65_536
-MAX_MOUNTS = 16
-MAX_DESTINATIONS = 16
-MAX_PATH_CHARS = 1_024
-MAX_RESULT_BYTES = 1024 * 1024
-DOCKER_CONTROL_TIMEOUT_SECONDS = 60
+MAX_ARGV_MEMBERS = tunables.shared("container_argv_members_max")
+MAX_ARGV_MEMBER_CHARS = tunables.shared("container_argv_member_chars_max")
+MAX_ARGV_TOTAL_CHARS = tunables.shared("container_argv_total_chars_max")
+MAX_MOUNTS = tunables.shared("container_mounts_max")
+MAX_DESTINATIONS = tunables.shared("container_destinations_max")
+MAX_PATH_CHARS = tunables.shared("container_path_chars_max")
+MAX_RESULT_BYTES = tunables.shared("container_result_max_bytes")
+DOCKER_CONTROL_TIMEOUT_SECONDS = tunables.shared("container_docker_control_timeout_seconds")
 
 BLOCKED_CAUSES = ("PERMISSION_DENIED", "NETWORK_NOT_GRANTED", "NETWORK_ENFORCEMENT_UNAVAILABLE",
                   "DOCKER_UNAVAILABLE", "IMAGE_NOT_PROVISIONED")

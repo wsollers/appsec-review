@@ -2,6 +2,7 @@
 """Validate a common worker envelope and its run-owned attempt artifacts without publishing."""
 from __future__ import annotations
 
+import tunables
 import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -26,7 +27,7 @@ from worker_result import validate_immutable_reuse, validate_worker_result
 REGISTRY = ROOT / "registry"
 GRAPH = ROOT / "job-graph.json"
 SCHEMAS = ROOT.parent / "schemas"
-MAX_RESULT_BYTES = 8 * 1024 * 1024
+MAX_RESULT_BYTES = tunables.shared("result_artifact_max_bytes")
 MAX_CITATIONS = 4096
 MAX_REPOSITORY_PATH = 1024
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -350,6 +351,16 @@ def _binary_hardening_input_root(attempt_root: Path, run_id: str,
         # Compatibility for pre-routing retained attempts and validator fixtures. New lifecycle
         # attempts always have the projection and therefore take the stronger branch above.
         return _source_root(attempt_root, run_id)
+    if len(candidates) > 1:
+        # A re-run native build leaves one projection per generation under the same snapshot
+        # (hello-autotools). Use the one made from the currently accepted native build.
+        try:
+            accepted = read_json(owner / "data" / "jobs" / "02-native-build" / "accepted.json").get("attempt_id")
+        except (OSError, ValueError, json.JSONDecodeError):
+            accepted = None
+        current = [root for root in candidates
+                   if read_json(root.parent / "binary-input.json").get("native_build", {}).get("attempt_id") == accepted]
+        candidates = current or sorted(candidates, key=lambda root: root.parent.stat().st_mtime)[-1:]
     if len(candidates) != 1:
         return None, [f"expected one immutable binary input projection, found {len(candidates)}"]
     return candidates[0], []

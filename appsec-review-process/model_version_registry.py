@@ -42,6 +42,7 @@ short of the formal job-graph registration.
 """
 from __future__ import annotations
 
+import tunables
 import json
 import sys
 from datetime import datetime, timezone
@@ -57,7 +58,7 @@ import review_cli as rc  # noqa: E402
 
 SCHEMA_ID = "appsec-review/run-model-versions/1.0"
 RECORD_FILENAME = "model-versions.json"
-DEFAULT_TIMEOUT_SECONDS = 120
+DEFAULT_TIMEOUT_SECONDS = tunables.shared("model_version_resolve_timeout_seconds")
 PROBE_PROMPT = "Reply with exactly the single word: OK"
 PROBE_EFFORT = "low"
 

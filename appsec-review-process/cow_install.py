@@ -18,6 +18,7 @@ The packages come from three places, and the lock records which:
 """
 from __future__ import annotations
 
+import tunables
 import json
 import os
 import re
@@ -30,7 +31,7 @@ from pathlib import Path
 LABEL_DISPOSABLE = "appsec.review.disposable"
 LABEL_RUN = "appsec.review.run_id"
 LABEL_ROLE = "appsec.review.role"
-RESOLVER_MAX_AGE_SECONDS = 14 * 86400        # same ceiling as the Grype/OSV snapshots
+RESOLVER_MAX_AGE_SECONDS = tunables.shared("cow_resolver_max_age_days") * 86400
 APT_SOURCES = ("rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* && "
                "printf 'Types: deb\\nURIs: http://archive.ubuntu.com/ubuntu\\nSuites: noble noble-updates\\n"
                "Components: main universe\\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\\n' "

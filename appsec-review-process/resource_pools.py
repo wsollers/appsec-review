@@ -23,6 +23,7 @@ The module imports Dagster lazily so the pure parts run on a host without it.
 """
 from __future__ import annotations
 
+import tunables
 import argparse
 from dataclasses import dataclass
 import hashlib
@@ -67,10 +68,12 @@ class Pool:
 
 # Outer limits that already exist in dagster.yaml / dagster_workflow.py. B15 does not change
 # them; they are recorded here so that verification can prove pools only ever add constraints.
-OUTER_LIMITS = {"max_concurrent_runs": 2, "per_engagement_limit": 1, "nvd_feed_limit": 1}
+OUTER_LIMITS = {"max_concurrent_runs": tunables.shared("runs_concurrent_max"),
+                "per_engagement_limit": tunables.shared("runs_per_engagement_max"),
+                "nvd_feed_limit": tunables.shared("nvd_feed_concurrency")}
 ENGAGEMENT_TAG = "engagement_run_id"
 NVD_TAG = "nvd_feed_id"
-EXECUTOR_STEP_CEILING = 3  # the largest multiprocess `max_concurrent` of any job
+EXECUTOR_STEP_CEILING = tunables.shared("executor_step_ceiling")  # largest multiprocess max_concurrent
 AGGREGATE_STEP_CEILING = OUTER_LIMITS["max_concurrent_runs"] * EXECUTOR_STEP_CEILING
 
 POOLS = (

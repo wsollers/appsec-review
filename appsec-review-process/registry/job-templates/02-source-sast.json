@@ -20,5 +20,105 @@
   "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
   "applicability": "all staged source checkouts; first slice covers repository-owned C/C++ Semgrep rules and reports other languages as gaps",
   "permissions": ["read-source", "write-run-data"],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "container_timeout_seconds": {
+      "value": 900,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock limit for the container (Semgrep).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_memory_bytes": {
+      "value": 2147483648,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Memory limit for the container (Semgrep).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_cpu_millis": {
+      "value": 2000,
+      "unit": "millicpu",
+      "kind": "resource",
+      "description": "CPU quota (1000 = one core) (Semgrep).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_pids": {
+      "value": 256,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Process/thread limit (Semgrep).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_tmpfs_bytes": {
+      "value": 268435456,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Size of the in-memory /tmp (Semgrep).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stdout_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout; beyond this the log is truncated (Semgrep).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stderr_limit_bytes": {
+      "value": 1048576,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr; beyond this the log is truncated (Semgrep).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "language_timeout_seconds": {
+      "value": 900,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock limit for the container (language tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "language_memory_bytes": {
+      "value": 2147483648,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Memory limit for the container (language tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "language_cpu_millis": {
+      "value": 2000,
+      "unit": "millicpu",
+      "kind": "resource",
+      "description": "CPU quota (1000 = one core) (language tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "language_pids": {
+      "value": 256,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Process/thread limit (language tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "language_tmpfs_bytes": {
+      "value": 268435456,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Size of the in-memory /tmp (language tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "language_stdout_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout; beyond this the log is truncated (language tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "language_stderr_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr; beyond this the log is truncated (language tools).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    }
+  }
 }

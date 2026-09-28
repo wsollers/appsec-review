@@ -1,5 +1,6 @@
 """Deterministic, read-only whole-repository intake. Never executes target build files."""
 from __future__ import annotations
+import tunables
 import fnmatch
 import json
 import os
@@ -63,8 +64,8 @@ def source_identity(target):
             elif p.is_file() and rel != '.git':
                 before = p.stat()
                 total_bytes += before.st_size
-                if total_bytes > 4 * 1024 ** 3:
-                    raise Blocked('bounded source fingerprint limit exceeded (4 GiB)')
+                if total_bytes > tunables.value('00-intake', 'source_fingerprint_max_bytes'):
+                    raise Blocked('source fingerprint limit exceeded (00-intake tunable source_fingerprint_max_bytes)')
                 sha = hashlib.sha256()
                 blob = hashlib.sha1(f'blob {before.st_size}\0'.encode())
                 preview = bytearray()

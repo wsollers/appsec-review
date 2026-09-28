@@ -6,6 +6,7 @@ reuse/recovery hardening and qualification intentionally remain integration work
 """
 from __future__ import annotations
 
+import tunables
 from datetime import datetime, timezone
 import os
 from pathlib import Path, PurePosixPath
@@ -281,9 +282,8 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any], unit: dict[st
         "network": {"mode": "none", "destinations": []},
         "permission": _permission(run_id, inputs["source_snapshot_sha256"], _utc_now()),
         "limits": {"timeout_seconds": config["container_timeout_seconds"],
-            "memory_bytes": 4 * 1024 * 1024 * 1024, "cpu_millis": 2000, "pids": 512,
-            "tmpfs_bytes": 256 * 1024 * 1024, "stdout_limit_bytes": 1024 * 1024,
-            "stderr_limit_bytes": 1024 * 1024}}
+            **{k: tunables.value(JOB, "container_" + k) for k in ("memory_bytes", "cpu_millis", "pids",
+                "tmpfs_bytes", "stdout_limit_bytes", "stderr_limit_bytes")}}}
 
 
 def _raw(path: Path, attempt: Path) -> dict[str, Any]:

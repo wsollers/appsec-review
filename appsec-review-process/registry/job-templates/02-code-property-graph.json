@@ -14,5 +14,98 @@
   "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": true},
   "applicability": "source partitions supported by the pinned Joern frontend",
   "permissions": ["read-source", "write-run-data"],
-  "coordinator": "intake-coordinator"
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "container_timeout_seconds": {
+      "value": 3600,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock limit for the container (Joern CPG export).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_memory_bytes": {
+      "value": 8589934592,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Memory limit for the container (Joern CPG export).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_cpu_millis": {
+      "value": 4000,
+      "unit": "millicpu",
+      "kind": "resource",
+      "description": "CPU quota (1000 = one core) (Joern CPG export).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_pids": {
+      "value": 1024,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Process/thread limit (Joern CPG export).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_tmpfs_bytes": {
+      "value": 1073741824,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Size of the in-memory /tmp (Joern CPG export).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stdout_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stdout; beyond this the log is truncated (Joern CPG export).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "container_stderr_limit_bytes": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "resource",
+      "description": "Captured stderr; beyond this the log is truncated (Joern CPG export).",
+      "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
+    },
+    "cpg_input_bytes_logged": {
+      "value": 67108864,
+      "unit": "bytes",
+      "kind": "logged",
+      "description": "Former cap on Joern raw JSONL size; now logged.",
+      "scale": "freeciv21 169 MB, doom3-bfg 271 MB."
+    },
+    "cpg_records_logged": {
+      "value": 20000,
+      "unit": "count",
+      "kind": "logged",
+      "description": "Former cap on CPG records; now logged.",
+      "scale": "freeciv21 593K, doom3-bfg 1.02M; engine ~10M+."
+    },
+    "field_chars_max": {
+      "value": 4096,
+      "unit": "chars",
+      "kind": "safety",
+      "description": "Longest field kept per CPG record.",
+      "scale": ""
+    },
+    "search_chars_max": {
+      "value": 1000,
+      "unit": "chars",
+      "kind": "window",
+      "description": "Longest search text per CPG record and query.",
+      "scale": ""
+    },
+    "query_results_max": {
+      "value": 100,
+      "unit": "count",
+      "kind": "window",
+      "description": "Most results per structural query.",
+      "scale": ""
+    },
+    "citation_lines_max": {
+      "value": 40,
+      "unit": "lines",
+      "kind": "window",
+      "description": "Most context lines when dereferencing a CPG locator.",
+      "scale": ""
+    }
+  }
 }

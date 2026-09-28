@@ -22,6 +22,7 @@ See ``docs/adapters/persona-invocation-adapter.md``.
 """
 from __future__ import annotations
 
+import tunables
 from dataclasses import dataclass
 import hashlib
 import json
@@ -90,12 +91,12 @@ BUDGET_BOUNDS: Mapping[str, tuple[int, int]] = MappingProxyType({
     "timeout_seconds": (1, 86_400),
 })
 STOP_GRACE_BOUNDS = (0, 60)
-MAX_INPUTS = 256
-MAX_PRODUCERS = 64
-MAX_TOOLS = 64
-MAX_MANIFEST_BYTES = 1024 * 1024
-MAX_RESULT_BYTES = 4 * 1024 * 1024
-MAX_ATTEMPT_ENTRIES = 100_000
+MAX_INPUTS = tunables.shared("persona_readable_inputs_logged")   # logged, not enforced
+MAX_PRODUCERS = tunables.shared("persona_producers_max")
+MAX_TOOLS = tunables.shared("persona_tools_max")
+MAX_MANIFEST_BYTES = tunables.shared("persona_manifest_max_bytes")
+MAX_RESULT_BYTES = tunables.shared("persona_result_max_bytes")
+MAX_ATTEMPT_ENTRIES = tunables.shared("persona_attempt_entries_max")
 OUTPUT_SUFFIXES = (".json", ".md", ".txt")
 MODEL_ALIAS_WORDS = ("latest", "default", "current", "stable", "auto", "preview", "newest", "any")
 
