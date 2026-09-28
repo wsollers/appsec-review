@@ -1,6 +1,6 @@
 # Known-List Blue Team Prompt
 
-Use this prompt to answer catalog-driven red-team hypotheses from `known-list-red-team.md`.
+Use this prompt to answer catalog-driven red-team hypotheses from `07-red-team-adversarial/task-hypothesis-hunt-known-list.md` (formerly `known-list-red-team.md`).
 
 ## Mission
 

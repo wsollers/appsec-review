@@ -71,7 +71,8 @@ def root(run_id: str) -> Path:
 def _code_hashes() -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
     for name in ("claim-ledger-citation.schema.json", "claim-ledger-entry.schema.json",
-                 "claim-decision-ledger.schema.json", "claim-ledger-work-routing.schema.json"):
+                 "claim-decision-ledger.schema.json", "claim-ledger-work-routing.schema.json",
+                 HUNTER_SCHEMA):
         values[f"schemas/{name}"] = file_hash(ROOT.parent / "schemas" / name)
     return values
 
@@ -324,16 +325,8 @@ OBLIGATIONS = {
 }
 
 
-def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
-                    components: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
-    """Admit every accepted tool lead as a candidate claim (no model; deterministic text and ids).
-
-    Leads at the same (path, start_line) are merged across tools into one claim listing every tool
-    and rule. A location whose best tier is P3 (code quality) is grouped per file into one claim so
-    reviewers get a manageable menu; nothing is ever dropped.
-    """
-    sources = [sources] if isinstance(sources, dict) else list(sources)
-    components = components or []
+def _lead_menu(sources: list[dict[str, Any]]) -> dict[tuple, list[tuple[dict[str, Any], dict[str, Any]]]]:
+    """(tier, where, line) -> members: leads merged per location, P3-only locations grouped per file."""
     groups: dict[tuple[str, int | None], list[tuple[dict[str, Any], dict[str, Any]]]] = {}
     for source in sorted(sources, key=lambda row: LEAD_ORDER.get(row["producer_job_id"], len(LEAD_ORDER))):
         for lead in source["leads"]:
@@ -343,8 +336,31 @@ def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
         tier = min((lead_tier(lead) for _source, lead in members), key=TIERS.index)
         key = ("P3", where, None) if tier == "P3" else (tier, where, line)
         menu.setdefault(key, []).extend(members)
+    return menu
+
+
+def lead_locations(sources: dict[str, Any] | Iterable[dict[str, Any]]) -> dict[tuple[str, int], str]:
+    """(path, line) -> tier of every P1/P2 tool-lead claim location (the hunter attach targets)."""
+    sources = [sources] if isinstance(sources, dict) else list(sources)
+    return {(where, line): tier for (tier, where, line) in _lead_menu(sources) if tier != "P3" and line}
+
+
+def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
+                    components: list[dict[str, Any]] | None = None,
+                    corroboration: dict[tuple[str, int], list[dict[str, Any]]] | None = None) -> list[dict[str, Any]]:
+    """Admit every accepted tool lead as a candidate claim (no model; deterministic text and ids).
+
+    Leads at the same (path, start_line) are merged across tools into one claim listing every tool
+    and rule. A location whose best tier is P3 (code quality) is grouped per file into one claim so
+    reviewers get a manageable menu; nothing is ever dropped. ``corroboration`` maps a P1/P2 lead
+    location to code-reading hunter hypotheses at that line (see :func:`hunter_candidates`): their
+    citations are attached to the lead claim instead of admitting a duplicate claim.
+    """
+    sources = [sources] if isinstance(sources, dict) else list(sources)
+    components = components or []
+    corroboration = corroboration or {}
     candidates = []
-    for (tier, where, line), members in menu.items():
+    for (tier, where, line), members in _lead_menu(sources).items():
         primary = members[0][0]
         lines = sorted({lead["start_line"] for _source, lead in members if lead["start_line"]})
         location = (f"{where}:{line}" if line else
@@ -359,23 +375,138 @@ def lead_candidates(sources: dict[str, Any] | Iterable[dict[str, Any]],
             f"analysis lead(s) from {len(tools)} tool(s) at {location} [{'; '.join(shown)}]. Candidate: the "
             "flagged code or configuration is reachable from an attacker-influenced input or trust boundary "
             "and weakens a security property; unreviewed until adversarial review and independent verification.")
+        hunted = corroboration.get((where, line), []) if tier != "P3" and line else []
+        if hunted:
+            classes = sorted({item["label"] for item in hunted})
+            hypothesis += (f" Corroborated by {len(hunted)} code-reading hypothesis(es) "
+                           f"[{'; '.join(classes[:6])}].")
         citations, seen = [], set()
         for source, lead in members:
             citation = _lead_citation(source, lead)
             if citation["citation_id"] not in seen:
                 seen.add(citation["citation_id"]); citations.append(citation)
+        for item in hunted:
+            if item["citation"]["citation_id"] not in seen:
+                seen.add(item["citation"]["citation_id"]); citations.append(item["citation"])
         statements = [text.format(where=location) for kind in kinds for text in OBLIGATIONS[kind]]
         obligations = [{"obligation_id": "obligation-" + digest({"route": route_id, "text": text})[:24],
                         "statement": text} for text in statements]
         paths = {lead["path"] for _source, lead in members}
         component_ids = sorted({cid for path in paths for cid in _components_for(path, components)})
         candidates.append({"route_id": route_id, "hypothesis": hypothesis,
-            "confidence": "medium" if len(tools) > 1 else "low", "component_ids": component_ids,
+            "confidence": "medium" if len(tools) > 1 or hunted else "low", "component_ids": component_ids,
             "citations": citations, "proof_obligations": obligations, "dissent_ids": [],
             "causal_route_ids": [], "source": primary,
             "order": (1, TIERS.index(tier), where, line or 0)})
     _reject_promotions([{key: value for key, value in item.items() if key != "source"} for item in candidates])
     return sorted(candidates, key=lambda item: item["order"])
+
+
+# --- Code-reading hunter hypotheses: the fourth candidate source (07-hypothesis-discovery) ----------
+HUNTER_JOB = "07-hypothesis-discovery"
+HUNTER_CONTRACT = "hypothesis-discovery"
+HUNTER_ARTIFACT = "hypothesis-discovery.json"
+HUNTER_SCHEMA = "hypothesis-discovery.schema.json"
+HUNTER_ROUTE_PREFIX = "hunter:"
+HUNTER_HYPOTHESIS_PREFIX = "Code-reading hypothesis ("
+HUNTER_OBLIGATIONS = (
+    "Show the construct at {where} is present in the reviewed source revision and behaves as described.",
+    "Show an attacker meeting the stated preconditions can reach {where}.",
+    "Show the behavior at {where} violates a security property ({label}) in its calling context.")
+
+
+def _hunter_label(row: dict[str, Any]) -> str:
+    return _clean((row["cwe"] + " " if row["cwe"] else "") + row["vulnerability_class"], 120)
+
+
+def _hunter_citation(source: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
+    locator = {"hypothesis_id": row["hypothesis_id"], "path": row["path"], "start_line": row["start_line"],
+               "end_line": row["end_line"], "file_sha256": row["file_sha256"], "tier": row["tier"],
+               "hunters": sorted({hunter["persona_id"] for hunter in row["hunters"]})}
+    where = f"{row['path']}:{row['start_line']}" + (f"-{row['end_line']}" if row["end_line"] != row["start_line"] else "")
+    fact = (f"code-reading hunter(s) {', '.join(locator['hunters'])} proposed {_hunter_label(row)} at {where} "
+            f"({row['confidence']} confidence)")
+    if any(pattern.search(fact) for pattern in PROHIBITED_TEXT):   # model words stay in the artifact
+        fact = f"code-reading hunter(s) {', '.join(locator['hunters'])} proposed a hypothesis at {where}"
+    identity = {"job": source["producer_job_id"], "attempt": source["producer_attempt_id"], "hypothesis": locator}
+    # Attempt-relative artifact path, like tool-lead citations: report assembly re-verifies the bytes
+    # under data/jobs/<producer>/attempts/<attempt>/<artifact_path>.
+    return _citation(source, {"artifact_path": HUNTER_ARTIFACT, "artifact_sha256": source["artifact_sha256"],
+        "locator": locator, "observed_fact": fact}, "citation-" + digest(identity)[:24])
+
+
+def hunter_candidates(source: dict[str, Any], locations: dict[tuple[str, int], str] | None = None,
+                      components: list[dict[str, Any]] | None = None
+                      ) -> tuple[list[dict[str, Any]], dict[tuple[str, int], list[dict[str, Any]]]]:
+    """Hunter hypotheses as (standalone candidates, corroboration of P1/P2 tool-lead locations).
+
+    A hypothesis whose line range covers a P1/P2 tool-lead location (same path) is attached to that
+    lead claim as corroboration (its citation and class), not admitted twice. Everything else is a
+    ``hunter:`` candidate ordered with the tool leads by tier. Text is deterministic; the only
+    model words are the class and a clipped mechanism, and those are dropped from the text (never
+    the claim) if they would trip the ledger's promotion guard.
+    """
+    value = source["artifact"]
+    if validate_document(value, HUNTER_SCHEMA):
+        raise Blocked(f"{JOB}: invalid hunter source")
+    locations = locations or {}
+    candidates, corroboration = [], {}
+    for row in value["hypotheses"]:
+        citation = _hunter_citation(source, row)
+        label = _hunter_label(row)
+        if any(pattern.search(label) for pattern in PROHIBITED_TEXT):
+            label = "code-reading"
+        hits = sorted((path, line) for (path, line) in locations
+                      if path == row["path"] and row["start_line"] <= line <= row["end_line"])
+        if hits:
+            for key in hits:
+                corroboration.setdefault(key, []).append({"citation": citation, "label": label,
+                                                          "hypothesis_id": row["hypothesis_id"]})
+            continue
+        where = f"{row['path']}:{row['start_line']}" + (f"-{row['end_line']}" if row["end_line"] != row["start_line"] else "")
+        modes = sorted({hunter["mode"] for hunter in row["hunters"]})
+        route_id = HUNTER_ROUTE_PREFIX + row["tier"] + ":" + digest({"hypothesis": row["hypothesis_id"]})[:20]
+        head = (f"{HUNTER_HYPOTHESIS_PREFIX}{row['tier']}, {label}): proposed by {len(row['hunters'])} "
+                f"code-reading hunter(s) [{', '.join(modes)}] at {where}.")
+        tail = (" Candidate: attacker-influenced input reaches the construct and weakens a security property; "
+                "unreviewed until adversarial review and independent verification.")
+        body = f" Mechanism: {_clean(row['mechanism'], 400)} Preconditions: {_clean('; '.join(row['attacker_preconditions']), 300)}."
+        hypothesis = head + body + tail
+        if any(pattern.search(hypothesis) for pattern in PROHIBITED_TEXT):
+            hypothesis = head + tail   # the model's mechanism stays in the hunter artifact
+        obligations = [{"obligation_id": "obligation-" + digest({"route": route_id, "text": text})[:24],
+                        "statement": text} for text in (template.format(where=where, label=label)
+                                                          for template in HUNTER_OBLIGATIONS)]
+        component_ids = row["component_ids"] or _components_for(row["path"], components or [])
+        candidates.append({"route_id": route_id, "hypothesis": hypothesis, "confidence": row["confidence"],
+            "component_ids": component_ids, "citations": [citation], "proof_obligations": obligations,
+            "dissent_ids": [], "causal_route_ids": [], "source": source,
+            "order": (1, TIERS.index(row["tier"]), row["path"], row["start_line"])})
+    return candidates, corroboration
+
+
+def hunter_source(run_id: str, source_generation: str,
+                  component_generation: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """The accepted 07-hypothesis-discovery result, or None with its coverage row (absent/skipped)."""
+    pointer_path = _lead_pointer(run_id, HUNTER_JOB)
+    if pointer_path is None:
+        return None, {"job_id": HUNTER_JOB, "status": "ABSENT", "leads": 0}
+    status = read_json(pointer_path).get("status")
+    if status not in {"OK", "OK_WITH_GAPS"}:
+        return None, {"job_id": HUNTER_JOB, "status": str(status), "leads": 0}
+    document, binding = bounded_analysis_workers.load_accepted(pointer_path, run_id=run_id, job_id=HUNTER_JOB,
+        contract=HUNTER_CONTRACT, artifact=HUNTER_ARTIFACT, schema=HUNTER_SCHEMA)
+    if (document.get("run_id") != run_id or document.get("source_snapshot_sha256") != source_generation or
+            document.get("component_generation") != component_generation):
+        raise Blocked(f"{JOB}: {HUNTER_JOB} result is stale for this run's source or component generation")
+    owner = pointer_path.parent.relative_to(data_path(run_id)).as_posix()
+    source = {"contract_id": HUNTER_CONTRACT, "producer_job_id": HUNTER_JOB,
+        "producer_attempt_id": binding["attempt_id"],
+        "artifact_path": f"{owner}/attempts/{binding['attempt_id']}/{HUNTER_ARTIFACT}",
+        "artifact_sha256": binding["artifact_sha256"], "accepted_pointer_sha256": binding["accepted_pointer_sha256"],
+        "source_generation": source_generation, "component_generation": component_generation,
+        "artifact": document}
+    return source, {"job_id": HUNTER_JOB, "status": str(status), "leads": len(document["hypotheses"])}
 
 
 def _lead_pointer(run_id: str, job_id: str) -> Path | None:
@@ -740,6 +871,9 @@ def route_kind(route_id: str, contract_id: str) -> tuple[str, str | None]:
     if route_id.startswith(LEAD_ROUTE_PREFIX):
         tier = route_id[len(LEAD_ROUTE_PREFIX):].split(":", 1)[0]
         return "tool-lead", tier if tier in TIERS else None
+    if route_id.startswith(HUNTER_ROUTE_PREFIX):
+        tier = route_id[len(HUNTER_ROUTE_PREFIX):].split(":", 1)[0]
+        return "hunter", tier if tier in TIERS else None
     return ("owasp-route" if contract_id == "owasp-join-report" else "threat-model"), None
 
 
@@ -756,7 +890,7 @@ def work_routing(ledger: dict[str, Any]) -> dict[str, Any]:
             "stages": ["07-red-team-adversarial", "08-blue-team-refutation", "09-independent-verification"],
             "current_stage": "07-red-team-adversarial", "authorization": "not_authorized",
             "execution": "not_executed", "source_kind": kind, "review_priority": priority})
-    rank = {"threat-model": 0, "owasp-route": 0, "tool-lead": 1}
+    rank = {"threat-model": 0, "owasp-route": 0, "tool-lead": 1, "hunter": 1}
     routes.sort(key=lambda row: (rank[row["source_kind"]], TIERS.index(row["review_priority"])
                                  if row["review_priority"] in TIERS else -1))
     value = {"schema": "appsec-review/claim-ledger-work-routing/1.0", "run_id": ledger["run_id"],
@@ -802,6 +936,16 @@ def current_inputs(run_id: str) -> dict[str, Any]:
         if component_binding["attempt_id"] == artifact["component_map_attempt_id"]:
             components = lead_components(component_map)
     sources.extend(leads)
+    hunter, hunter_row = hunter_source(run_id, artifact["source_snapshot"], artifact["component_map_attempt_id"])
+    coverage.append(hunter_row)
+    if hunter is not None:
+        sources.append(hunter)
+        if not components and component_pointer.is_file():
+            component_map, component_binding = bounded_analysis_workers.load_accepted(component_pointer,
+                run_id=run_id, job_id="01-component-characterization", contract="component-map",
+                artifact="component-purpose-map.json", schema="component-purpose-map.schema.json")
+            if component_binding["attempt_id"] == artifact["component_map_attempt_id"]:
+                components = lead_components(component_map)
     return {"run_id": run_id, "sources": sources, "lead_components": components,
             "lead_coverage": coverage, "code": _code_hashes()}
 
@@ -829,13 +973,20 @@ def _validate_attempt(attempt: Path, inputs: dict[str, Any]) -> None:
 
 
 def _candidates(inputs: dict[str, Any]) -> list[dict[str, Any]]:
-    values, leads = [], []
+    values, leads, hunters = [], [], []
     for source in inputs["sources"]:
         if source["contract_id"] == "threat-model-core": values.extend(threat_candidates(source))
         elif source["contract_id"] == "owasp-join-report": values.extend(owasp_candidates(source))
         elif source["contract_id"] in LEAD_CONTRACTS: leads.append(source)
+        elif source["contract_id"] == HUNTER_CONTRACT: hunters.append(source)
         else: raise Blocked(f"{JOB}: unsupported candidate-route contract {source['contract_id']}")
-    if leads: values.extend(lead_candidates(leads, inputs.get("lead_components", [])))
+    corroboration: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for source in hunters:
+        standalone, attached = hunter_candidates(source, lead_locations(leads), inputs.get("lead_components", []))
+        values.extend(standalone)
+        for key, rows in attached.items():
+            corroboration.setdefault(key, []).extend(rows)
+    if leads: values.extend(lead_candidates(leads, inputs.get("lead_components", []), corroboration))
     return values
 
 
@@ -851,7 +1002,8 @@ def _summary(ledger: dict[str, Any], inputs: dict[str, Any]) -> str:
              "| Source | Claims |", "|---|---:|"] + [f"| {key} | {kinds[key]} |" for key in sorted(kinds)]
     coverage = inputs.get("lead_coverage", [])
     if coverage:
-        lines += ["", "## Tool-lead coverage", "", "| Producer | Accepted status | Leads |", "|---|---|---:|"]
+        lines += ["", "## Tool-lead and hunter coverage", "", "| Producer | Accepted status | Leads / hypotheses |",
+                  "|---|---|---:|"]
         lines += [f"| {row['job_id']} | {row['status']} | {row['leads']} |" for row in coverage]
     lines += ["", "Every tool lead is a candidate for review (P3 code-quality leads are grouped per file and "
               "ordered last, never dropped); reviewers remain free to look beyond this menu.", "",
@@ -873,6 +1025,8 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         status = {"process": JOB, "status": "OK", "claims": len(ledger["claim_states"]),
             "tool_lead_claims": sum(entry["route_id"].startswith(LEAD_ROUTE_PREFIX) for entry in ledger["entries"]
                                     if entry["event_type"] == "candidate_admitted"),
+            "hunter_claims": sum(entry["route_id"].startswith(HUNTER_ROUTE_PREFIX) for entry in ledger["entries"]
+                                 if entry["event_type"] == "candidate_admitted"),
             "ledger_head_hash": ledger["head_hash"], "claim_limit": "candidate-only"}
         return record_terminal_current(base, attempt, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,
             worker_kind="deterministic_python", output_contract=CONTRACT, input_fingerprint=fingerprint,

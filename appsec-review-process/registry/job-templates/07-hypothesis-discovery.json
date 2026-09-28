@@ -1,0 +1,126 @@
+{
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "07-hypothesis-discovery",
+  "display_name": "Code-reading Vulnerability Hypothesis Discovery",
+  "process": "07-red-team-adversarial",
+  "budget_default": "standard",
+  "model": {
+    "model": "deterministic-python",
+    "effort": "none"
+  },
+  "composition": {
+    "persona_id": "general-red-team-hunter",
+    "role_id": "hypothesis-hunt-coordinator",
+    "domain_id": "vulnerability-hypothesis-discovery",
+    "tooling_profile_id": "hypothesis-hunt-static",
+    "output_contract_id": "hypothesis-discovery"
+  },
+  "inputs": {
+    "required": [
+      "accepted component map",
+      "target checkout matching its source snapshot"
+    ],
+    "optional": [
+      "accepted tool-lead producers (source/native SAST, secrets, IaC, mobile)",
+      "supporting-evidence menu"
+    ]
+  },
+  "outputs": {
+    "directory": "outputs/07-hypothesis-discovery",
+    "files": [
+      "hypothesis-discovery.json",
+      "hypothesis-discovery.md",
+      "hunt-pool-merge.json",
+      "permission.json",
+      "lineage.json",
+      "pool-receipt.json",
+      "status.json"
+    ]
+  },
+  "permissions": [
+    "read-run-data",
+    "write-run-data"
+  ],
+  "prompt_sections": [
+    "governing_rules",
+    "persona",
+    "role",
+    "domain",
+    "tooling_profile",
+    "output_contract"
+  ],
+  "implemented": true,
+  "applicability": "every full review with a readable source checkout; zero instances (SKIPPED_NA) otherwise",
+  "timeout_seconds": 7200,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": true
+  },
+  "coordinator": "intake-coordinator",
+  "tunables": {
+    "shard_groups": {
+      "value": 3,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Hunter shard groups: component shards are packed into this many groups by size, P1/P2-lead-heavy components first.",
+      "scale": "Pool size = shard_groups x modes_per_group; each instance is one claude -p call capped at budget_max_usd_per_call[standard] (2.0 USD today)."
+    },
+    "modes_per_group": {
+      "value": 1,
+      "unit": "count",
+      "kind": "resource",
+      "description": "1: groups alternate general / known-list hunters; 2: every group gets both hunters (doubles instances and cost).",
+      "scale": ""
+    },
+    "max_hypotheses_per_instance": {
+      "value": 20,
+      "unit": "count",
+      "kind": "safety",
+      "description": "Most hypotheses one hunter instance may propose; excess items are recorded as dropped gaps.",
+      "scale": ""
+    },
+    "max_line_span": {
+      "value": 80,
+      "unit": "lines",
+      "kind": "safety",
+      "description": "Widest line range one hypothesis may name; wider ranges are dropped as gaps.",
+      "scale": ""
+    },
+    "target_pin_bytes_max": {
+      "value": 8388608,
+      "unit": "bytes",
+      "kind": "window",
+      "description": "Target bytes pinned per instance (also capped at half the cell's persona input byte budget); files beyond it stay reachable through evidence_search / evidence_read.",
+      "scale": "Grows with component size; large repositories need more shard_groups rather than a larger window."
+    },
+    "file_bytes_max": {
+      "value": 524288,
+      "unit": "bytes",
+      "kind": "window",
+      "description": "Largest single target file pinned for code reading; larger or binary files are listed as unpinned.",
+      "scale": ""
+    },
+    "lead_menu_max": {
+      "value": 200,
+      "unit": "count",
+      "kind": "window",
+      "description": "Most P1/P2 tool leads listed in one hunter brief (the total is always stated).",
+      "scale": ""
+    },
+    "max_parallel": {
+      "value": 2,
+      "unit": "count",
+      "kind": "resource",
+      "description": "Hunter instances dispatched concurrently (the persona_llm resource pool bounds it too).",
+      "scale": ""
+    },
+    "rendezvous_timeout_seconds": {
+      "value": 5400,
+      "unit": "seconds",
+      "kind": "resource",
+      "description": "Wall-clock wait for every hunter instance of the pool.",
+      "scale": ""
+    }
+  }
+}

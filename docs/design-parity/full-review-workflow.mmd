@@ -20,6 +20,7 @@ flowchart TD
   j_06_cve_reachability["06-cve-reachability<br/>implemented_not_qualified"]
   j_13_fuzz_target_triage["13-fuzz-target-triage<br/>implemented_not_qualified"]
   j_15_deployment_hardening["15-deployment-hardening<br/>implemented_not_qualified"]
+  j_07_hypothesis_discovery["07-hypothesis-discovery<br/>implemented_not_qualified"]
   j_claim_ledger_routing["claim-ledger-routing<br/>implemented_not_qualified"]
   j_07_red_team_adversarial["07-red-team-adversarial<br/>implemented_not_qualified"]
   j_08_blue_team_refutation["08-blue-team-refutation<br/>implemented_not_qualified"]
@@ -127,8 +128,13 @@ flowchart TD
   j_01_component_characterization --> j_15_deployment_hardening
   j_02_iac_config_scan --> j_15_deployment_hardening
   j_15_stig_srg_validation_worklist --> j_15_deployment_hardening
+  j_01_component_characterization --> j_07_hypothesis_discovery
+  j_02_evidence_assembly --> j_07_hypothesis_discovery
+  j_02_source_sast --> j_07_hypothesis_discovery
+  j_02_native_sast --> j_07_hypothesis_discovery
   j_03_threat_model_reconciliation --> j_claim_ledger_routing
   j_04_asvs_masvs --> j_claim_ledger_routing
+  j_07_hypothesis_discovery --> j_claim_ledger_routing
   j_claim_ledger_routing --> j_07_red_team_adversarial
   j_01_component_characterization --> j_07_red_team_adversarial
   j_03_threat_model_dfd_stride --> j_07_red_team_adversarial

@@ -1,0 +1,401 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hypothesis-discovery.schema.json",
+  "title": "07-hypothesis-discovery result: code-reading vulnerability hypotheses (candidate-only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "source_snapshot_sha256",
+    "component_generation",
+    "pool",
+    "shards",
+    "hypotheses",
+    "gaps",
+    "claim_limits"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/hypothesis-discovery/1.0"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "job_id": {
+      "const": "07-hypothesis-discovery"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "component_generation": {
+      "type": "string"
+    },
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instances",
+        "expected_worker_ids",
+        "missing_worker_ids",
+        "conflict_candidate_ids",
+        "merge_sha256"
+      ],
+      "properties": {
+        "instances": {
+          "type": "integer"
+        },
+        "expected_worker_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_worker_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conflict_candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "merge_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "shard_id",
+          "mode",
+          "persona_id",
+          "component_ids",
+          "pinned_files",
+          "unpinned_files",
+          "lead_menu"
+        ],
+        "properties": {
+          "shard_id": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "general",
+              "known-list"
+            ]
+          },
+          "persona_id": {
+            "type": "string"
+          },
+          "component_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pinned_files": {
+            "type": "integer"
+          },
+          "unpinned_files": {
+            "type": "integer"
+          },
+          "lead_menu": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "hypothesis_id",
+          "tier",
+          "path",
+          "start_line",
+          "end_line",
+          "file_sha256",
+          "vulnerability_class",
+          "cwe",
+          "mechanism",
+          "attacker_preconditions",
+          "confidence",
+          "component_ids",
+          "evidence",
+          "hunters",
+          "lead_overlap"
+        ],
+        "properties": {
+          "hypothesis_id": {
+            "type": "string",
+            "pattern": "^hyp-[0-9a-f]{24}$"
+          },
+          "tier": {
+            "enum": [
+              "P1",
+              "P2"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "start_line": {
+            "type": "integer"
+          },
+          "end_line": {
+            "type": "integer"
+          },
+          "file_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "vulnerability_class": {
+            "type": "string"
+          },
+          "cwe": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mechanism": {
+            "type": "string"
+          },
+          "attacker_preconditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "component_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ref",
+                "kind",
+                "root",
+                "path",
+                "start_line",
+                "end_line"
+              ],
+              "properties": {
+                "ref": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "target-range",
+                    "target-deferred",
+                    "pinned-input",
+                    "unresolved"
+                  ]
+                },
+                "root": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "start_line": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "end_line": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "hunters": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "persona_id",
+                "shard_id",
+                "worker_ids",
+                "candidate_id"
+              ],
+              "properties": {
+                "mode": {
+                  "type": "string"
+                },
+                "persona_id": {
+                  "type": "string"
+                },
+                "shard_id": {
+                  "type": "string"
+                },
+                "worker_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "candidate_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "lead_overlap": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "producer_job_id",
+                "lead_ref",
+                "tool_id",
+                "rule_id",
+                "start_line",
+                "tier"
+              ],
+              "properties": {
+                "producer_job_id": {
+                  "type": "string"
+                },
+                "lead_ref": {
+                  "type": "string"
+                },
+                "tool_id": {
+                  "type": "string"
+                },
+                "rule_id": {
+                  "type": "string"
+                },
+                "start_line": {
+                  "type": "integer"
+                },
+                "tier": {
+                  "enum": [
+                    "P1",
+                    "P2",
+                    "P3"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "path",
+          "start_line",
+          "reason",
+          "shard_id"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "dropped-by-derive",
+              "not-in-checkout",
+              "line-out-of-range",
+              "file-changed",
+              "malformed-record",
+              "worker-missing",
+              "merge-conflict"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start_line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "shard_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "claim_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_only",
+        "finding_created",
+        "severity_assigned",
+        "runtime_claimed"
+      ],
+      "properties": {
+        "candidate_only": {
+          "const": true
+        },
+        "finding_created": {
+          "const": false
+        },
+        "severity_assigned": {
+          "const": false
+        },
+        "runtime_claimed": {
+          "const": false
+        }
+      }
+    }
+  }
+}

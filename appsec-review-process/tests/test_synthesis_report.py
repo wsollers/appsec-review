@@ -143,8 +143,15 @@ class SynthesisReportTests(unittest.TestCase):
             "lead(s) from 2 tool(s) at src/main.c:7 [cppcheck bufferAccessOutOfBounds]. Candidate: unreviewed.")
         report_md, appendix = synthesis.render_markdown(report)
         self.assertIn("1 of them are static-tool leads not independently verified (P1 1, P2 0, P3 0)", report_md)
-        self.assertIn("## Tool leads not independently verified", appendix)
-        self.assertIn("| P1 | `" + report["unresolved_candidates"][0]["claim_id"] + "` |", appendix)
+        self.assertIn("## Tool leads and code-reading hypotheses not independently verified", appendix)
+        self.assertIn("| P1 | tool-lead | `" + report["unresolved_candidates"][0]["claim_id"] + "` |", appendix)
+        hunted = deepcopy(report)
+        hunted["unresolved_candidates"][0]["hypothesis"] = (
+            "Code-reading hypothesis (P1, CWE-121 stack buffer overflow): proposed by 1 code-reading hunter(s) "
+            "[general] at src/main.c:9. Candidate: unreviewed.")
+        hunted_md, hunted_appendix = synthesis.render_markdown(hunted)
+        self.assertIn("static-tool leads or code-reading hypotheses (1 from hunters) not independently verified", hunted_md)
+        self.assertIn("| P1 | hunter | `" + hunted["unresolved_candidates"][0]["claim_id"] + "` |", hunted_appendix)
         with tempfile.TemporaryDirectory() as directory:
             jobs = Path(directory) / "data" / "jobs" / "02-secrets-inventory" / "whole" / "attempts" / "a1"
             jobs.mkdir(parents=True); (jobs / "x.json").write_text("{}")

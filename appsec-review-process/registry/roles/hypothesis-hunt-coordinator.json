@@ -1,0 +1,28 @@
+{
+  "schema": "appsec-review/role/0.1",
+  "role_id": "hypothesis-hunt-coordinator",
+  "display_name": "Hypothesis Hunt Pool Coordinator",
+  "category": "discovery",
+  "summary": "Shard the target, dispatch the hunter pool, resolve every hypothesis against the checkout and publish candidate-only hypotheses.",
+  "allowed_outputs": [
+    "candidate_hypothesis",
+    "coverage_gap"
+  ],
+  "forbidden_outputs": [
+    "finding",
+    "verified_security_finding",
+    "severity",
+    "runtime_state",
+    "compliance_verdict"
+  ],
+  "required_behavior": [
+    "bind the component map, tool leads and checkout snapshot",
+    "drop unresolvable locations as gaps",
+    "deduplicate across hunters and record tool-lead overlap"
+  ],
+  "must_not": [
+    "invent or repair a hypothesis location",
+    "hide a dropped hypothesis",
+    "assign severity"
+  ]
+}

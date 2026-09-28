@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hypothesis-hunt-persona.schema.json",
+  "title": "Hypothesis hunter reply (persona-facing)",
+  "description": "What a code-reading hunter writes: its judgment only. The orchestrator derives ids, hashes, hunter identity, shard, ordering and citation objects; do not write them. Bounds enforced in code: at most brief.limits.max_hypotheses items, end_line - start_line <= brief.limits.max_line_span, mechanism <= 2000 chars.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "hypotheses"
+  ],
+  "properties": {
+    "hypotheses": {
+      "type": "array",
+      "description": "Zero or more vulnerability hypotheses. An empty list is a valid answer.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "start_line",
+          "vulnerability_class",
+          "mechanism",
+          "attacker_preconditions",
+          "evidence",
+          "confidence"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Repository-relative path of the target file, exactly as listed under the target-repository root (no root prefix, no absolute path)."
+          },
+          "start_line": {
+            "type": "integer",
+            "description": "First line (1-based) of the vulnerable construct."
+          },
+          "end_line": {
+            "type": "integer",
+            "description": "Last line (>= start_line). Omit for a single line."
+          },
+          "vulnerability_class": {
+            "type": "string",
+            "description": "Short weakness name, e.g. 'stack buffer overflow via unbounded copy'."
+          },
+          "cwe": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^CWE-[0-9]+$",
+            "description": "CWE id such as CWE-121 when you can name one; null otherwise."
+          },
+          "mechanism": {
+            "type": "string",
+            "description": "How attacker-influenced data reaches the construct and what breaks. Candidate wording only."
+          },
+          "attacker_preconditions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            },
+            "description": "What the attacker must control or be positioned to do."
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What you read: 'path:line' or 'path:start-end' in the target, or a readable input ref 'root:path' (e.g. a supporting-evidence menu file). The hypothesis location itself is added for you."
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "component_id": {
+            "type": "string",
+            "description": "Optional component id from the brief."
+          }
+        }
+      }
+    },
+    "coverage_notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional: what you looked at and ruled out, or could not read."
+    }
+  }
+}

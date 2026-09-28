@@ -217,6 +217,10 @@ CLAIM_CLASS_POLICIES = {
                                "unresolved-input", "reconciliation-conflict",
                                "regeneration-action", "coverage-gap"},
     },
+    "hypothesis-discovery": {
+        "claim_class_id": "candidate_hypothesis",
+        "allowed_assertions": {"candidate-hypothesis", "coverage-gap"},
+    },
     "claim-ledger-core": {
         "claim_class_id": "candidate_claim_ledger",
         "allowed_assertions": {"candidate-hypothesis", "candidate-status", "proof-obligation",

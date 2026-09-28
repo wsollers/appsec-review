@@ -50,6 +50,7 @@ import operations_doc_ingest as operations_doc_worker
 import standards_source_ingest as standards_source_worker
 import standards_lifecycle
 import claim_ledger
+import hypothesis_discovery
 import persona_tool_pool_lifecycle
 import control_feature_lifecycle
 import test_coverage_ingest as test_coverage_worker
@@ -753,6 +754,25 @@ def claim_ledger_lifecycle_op():
 
 
 claim_ledger_lifecycle_work = claim_ledger_lifecycle_op()
+
+
+def hypothesis_discovery_lifecycle_op():
+    @op(name='job_07_hypothesis_discovery',
+        ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
+    def hypothesis_discovery_stage(context, configured, upstream):
+        result = hypothesis_discovery.run(
+            configured['engagement_run_id'], context.run_id,
+            configured.get('force', False))
+        attempt = hypothesis_discovery.root(configured['engagement_run_id']) / 'attempts' / result['attempt_id']
+        context.add_output_metadata({
+            'output': MetadataValue.path(str(attempt / hypothesis_discovery.RESULT)),
+            'envelope': MetadataValue.path(str(attempt / 'result.json')),
+            'attempt_id': result['attempt_id']})
+        return result
+    return hypothesis_discovery_stage
+
+
+hypothesis_discovery_lifecycle_work = hypothesis_discovery_lifecycle_op()
 
 
 @op(name='job_persona_tool_pool_dispatch_lifecycle',
@@ -1625,6 +1645,7 @@ LIFECYCLE_OPS['13-fuzz-target-triage']=fuzz_triage_lifecycle_work
 LIFECYCLE_OPS['04-owasp-validation-worklist']=owasp_worklist_lifecycle_work
 LIFECYCLE_OPS['15-stig-srg-validation-worklist']=stig_worklist_lifecycle_work
 LIFECYCLE_OPS['15-deployment-hardening']=deployment_lifecycle_work
+LIFECYCLE_OPS['07-hypothesis-discovery']=hypothesis_discovery_lifecycle_work
 LIFECYCLE_OPS['claim-ledger-routing']=claim_ledger_lifecycle_work
 LIFECYCLE_OPS['persona-tool-pool-dispatch']=persona_tool_pool_lifecycle_work
 LIFECYCLE_OPS['deterministic-pool-merge']=deterministic_pool_merge_lifecycle_work
