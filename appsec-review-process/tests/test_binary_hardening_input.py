@@ -66,6 +66,14 @@ class BinaryHardeningInputTests(unittest.TestCase):
         manifest = subject.validate(self.run_id, root)
         self.assertEqual(manifest["native_build"]["attempt_id"], "native-1")
 
+    def test_zero_built_units_stage_an_empty_root(self):
+        result = json.loads((self.attempt / "native-build.json").read_text(encoding="utf-8"))
+        result["units"] = []; result["status"] = "OK_WITH_GAPS"
+        (self.attempt / "native-build.json").write_text(json.dumps(result), encoding="utf-8")
+        root = subject.stage(self.run_id)
+        self.assertEqual(list(root.iterdir()), [])
+        self.assertEqual(subject.validate(self.run_id, root)["binaries"], [])
+
     def test_tampered_staged_or_native_binary_fails_closed(self):
         root = subject.stage(self.run_id)
         projected = root / ("unit-" + subject.digest("unit-a")[:12]) / "bin/hello"

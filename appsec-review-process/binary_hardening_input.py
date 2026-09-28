@@ -75,8 +75,8 @@ def _expected(run_id: str) -> tuple[Path, dict[str, Any], dict[str, Any]]:
             target_rel = Path("binaries") / ("unit-" + digest(unit_id)[:12]) / published_rel
             binaries.append({"path": target_rel.as_posix(), "source_artifact_path": source_rel.as_posix(),
                 "sha256": expected_sha, "bytes": source.stat().st_size})
-    if not binaries:
-        raise Blocked(f"{JOB}: accepted native build publishes no binaries")
+    # ADR-0014: no binaries is not a failure; the worker's probe finds no candidates and the job is
+    # SKIPPED with not-applicable-no-matching-inputs (freeciv21, doom3-bfg: zero built units).
     manifest = {"schema": SCHEMA, "run_id": run_id, "source_snapshot_sha256": _snapshot(run_id),
         "native_build": {"attempt_id": attempt.name,
             "pointer_sha256": "sha256:" + file_hash(pointer_path),
@@ -100,6 +100,7 @@ def stage(run_id: str) -> Path:
     base.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".binary-input-", dir=base))
     try:
+        (staging / "binaries").mkdir()  # present even when the native build published none
         for record in manifest["binaries"]:
             source = attempt / record["source_artifact_path"]
             target = staging / record["path"]
