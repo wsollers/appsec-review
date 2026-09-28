@@ -428,11 +428,15 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
                   else "appsec-review/native-build/1", "run_id": run_id,
                   "source_revision": inputs["source_revision"], "upstream": inputs["upstream"],
                   "status": "OK", "units": units, "coverage_gaps": []}
+        if not units:
+            # ADR-0013: nothing was resolved to build (upstream gaps say why); publish that as a gap.
+            result["status"] = "OK_WITH_GAPS"
+            result["coverage_gaps"] = ["no-resolved-build-units: 02-build-resolution locked no unit"]
         atomic_json(attempt / cfg["result"], result); atomic_json(attempt / RECEIPTS, receipts)
         (attempt / cfg["summary"]).write_text(f"# {job}\n\n" + "\n".join(
             f"- `{unit['unit_id']}`: {len(unit['commands'])} locked command(s) succeeded"
             for unit in units) + "\n", encoding="utf-8")
-        status = {"process": job, "status": "OK", "run_id": run_id,
+        status = {"process": job, "status": result["status"], "run_id": run_id,
             "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
             "source_revision": inputs["source_revision"], "units": len(units),
             "permissions": [f"target-execution:{cfg['profile']}@."], "network": "none",
@@ -446,9 +450,9 @@ def run(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict[str
                 artifacts.extend(item["artifact_path"] for item in unit["binaries"])
         return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
             dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=cfg["contract"],
-            input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status="OK",
+            input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status=result["status"],
             summary=f"Replayed the accepted lock for {len(units)} unit(s).",
-            status_record=status, artifact_paths=artifacts,
+            status_record=status, artifact_paths=artifacts, gaps=result["coverage_gaps"] or None,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, job, path, inputs))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=job, dagster_run_id=dagster_id,

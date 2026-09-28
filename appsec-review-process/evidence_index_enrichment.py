@@ -238,6 +238,13 @@ def _logical_id(record: dict[str, Any]) -> str:
     return "content:" + digest(record)
 
 
+def _jsonl(path: Path):
+    with path.open("r", encoding="utf-8") as stream:
+        for line in stream:
+            if line.strip():
+                yield json.loads(line)
+
+
 def build(run_id: str, selection: dict[str, Any], source_snapshot_sha256: str | None = None) -> dict[str, Any]:
     producers = selection["producers"]
     size_log.observe(run_id, "02-evidence-index", "producers", len(producers), LIMITS["max_producers"])
@@ -255,8 +262,12 @@ def build(run_id: str, selection: dict[str, Any], source_snapshot_sha256: str | 
         payload = read_json(_producer_root(run_id, producer["job_id"]) / "attempts" /
                             producer["attempt_id"] / producer["artifact_path"])
         for array_name in producer["arrays"]:
-            values = payload.get(array_name, [])
-            for index, record in enumerate(values):
+            values = payload.get(array_name)
+            records_file = payload.get("records_file") if isinstance(payload, dict) else None
+            if values is None and array_name == "records" and isinstance(records_file, dict):
+                values = _jsonl(_producer_root(run_id, producer["job_id"]) / "attempts" /
+                                producer["attempt_id"] / records_file["path"])
+            for index, record in enumerate(values or []):
                 if not isinstance(record, dict):
                     raise Blocked("02-evidence-index: selected derived record is not an object")
                 logical = (producer["job_id"], array_name, _logical_id(record))

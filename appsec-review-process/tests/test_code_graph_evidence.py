@@ -70,8 +70,11 @@ class CodeGraphEvidenceTests(unittest.TestCase):
     def test_malformed_and_traversal_fail_closed(self):
         self.raw.write_text("{bad\n", encoding="utf-8")
         with self.assertRaisesRegex(Blocked, "malformed"): self.normalize()
+        # A path outside the checkout is never read: the record is skipped and counted as a gap.
         self.write(self.row(file="../outside.c"))
-        with self.assertRaisesRegex(Blocked, "normalized"): self.normalize()
+        document = self.normalize()
+        self.assertEqual(document["records"], [])
+        self.assertIn({"reason": "source-unavailable", "count": 1}, document["coverage_gaps"])
 
     def test_record_count_is_logged_not_blocked(self):
         seen = []

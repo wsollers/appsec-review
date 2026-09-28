@@ -1,6 +1,8 @@
 """Accepted offline Joern CPG producer using the pinned B13 container boundary."""
 from __future__ import annotations
 
+import json
+
 from datetime import datetime, timezone
 from pathlib import Path
 import threading
@@ -17,6 +19,7 @@ from schema_validate import validate_document
 JOB = "02-code-property-graph"
 CONTRACT = "code-property-graph"
 RESULT = "code-property-graph.json"
+RECORDS = "code-property-graph.records.jsonl"   # one record per line; RESULT carries count and hash
 RECEIPT = "b13-receipt.json"
 SUMMARY = "code-property-graph-summary.md"
 IMAGE_ID = "audit-native"
@@ -127,6 +130,26 @@ def _receipts(run_id: str, inputs: dict[str, Any]) -> tuple[dict[str, Any], dict
     return permission, lineage
 
 
+def _split(result: dict[str, Any], destination: Path | None) -> dict[str, Any]:
+    """Move records out of the result into JSONL (freeciv21: 593K records, 580 MB as one JSON
+    document; doom3-bfg over 1M). Returns the summary; writes the file when destination is set."""
+    import hashlib
+    records = result.pop("records")
+    digest_ = hashlib.sha256()
+    stream = destination.open("wb") if destination is not None else None
+    try:
+        for record in records:
+            line = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8") + b"\n"
+            digest_.update(line)
+            if stream is not None:
+                stream.write(line)
+    finally:
+        if stream is not None:
+            stream.close()
+    result["records_file"] = {"path": RECORDS, "sha256": "sha256:" + digest_.hexdigest(), "count": len(records)}
+    return result
+
+
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs or current_inputs(run_id) != inputs:
         raise Blocked(f"{JOB}: inputs or source generation changed")
@@ -157,8 +180,10 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
         source_snapshot_sha256=inputs["source_snapshot_sha256"], source_revision=inputs["source_revision"],
         image_id=IMAGE_ID, image_digest=inputs["image"]["digest"],
         exporter_sha256=inputs["exporter_sha256"], build_identity_sha256=inputs["build_identity_sha256"])
-    if result != expected:
+    if result != _split(expected, None):
         raise Blocked(f"{JOB}: normalized CPG differs from its immutable Joern output")
+    if "sha256:" + file_hash(attempt / RECORDS) != result["records_file"]["sha256"]:
+        raise Blocked(f"{JOB}: published CPG records file changed")
 
 
 def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
@@ -182,6 +207,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             source_snapshot_sha256=inputs["source_snapshot_sha256"], source_revision=inputs["source_revision"],
             image_id=IMAGE_ID, image_digest=inputs["image"]["digest"],
             exporter_sha256=inputs["exporter_sha256"], build_identity_sha256=inputs["build_identity_sha256"])
+        result = _split(result, attempt / RECORDS)
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPT, {"adapter_attempt_id": adapter_id, "trial_path": "tool",
             "expected_result_sha256": expected_sha, "raw_sha256": "sha256:" + file_hash(raw)})
@@ -200,7 +226,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=CONTRACT,
             input_fingerprint=fingerprint, started_at=allocation["started_at"],
             execution_status=result["status"], summary=f"Joern published {result['record_count']} locator records.",
-            status_record=status, artifact_paths=[RESULT, RECEIPT, SUMMARY, "status.json", "permission.json", "lineage.json"],
+            status_record=status, artifact_paths=[RESULT, RECORDS, RECEIPT, SUMMARY, "status.json", "permission.json", "lineage.json"],
             gaps=[gap["reason"] for gap in result["coverage_gaps"]],
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs))
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB, dagster_run_id=dagster_id,

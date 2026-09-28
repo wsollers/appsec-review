@@ -191,7 +191,7 @@ def _intel_manifest_errors(manifest: Any, *, run_id: str, source_snapshot_sha256
     return errors, readable
 
 
-_STANDARDS_CORPUS = re.compile(r"evidence/02-standards-source-ingest/[^/]+/standards/")
+_STANDARDS_CORPUS = re.compile(r"evidence/02-standards-source-ingest/[^/]+/standards/|.*\.records\.jsonl$")
 
 
 def _accepted_evidence(run_id: str, source_snapshot_sha256: str) -> tuple[Path, dict[str, Any]]:
