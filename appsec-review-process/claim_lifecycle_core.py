@@ -14,6 +14,8 @@ from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from worker_result import validate_worker_result
 import control_process_worker
+import cvss4
+import cwe_catalog
 
 LEDGER_SCHEMA = "claim-ledger-input.schema.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
@@ -267,9 +269,71 @@ def _decision_index(decisions: dict[str, Any], expected: set[str]) -> dict[str, 
     return indexed
 
 
-def _closed(record: dict[str, Any], keys: set[str], stage: str) -> None:
-    if not isinstance(record, dict) or set(record) != keys:
+def _closed(record: dict[str, Any], keys: set[str], stage: str, optional: set[str] = frozenset()) -> None:
+    if not isinstance(record, dict) or not keys <= set(record) or not set(record) <= keys | set(optional):
         raise Blocked(f"{stage}: decision shape is not closed")
+
+
+# ---- reviewer judgment fields (ADR-0020): CWE at 07/09/12, CVSS v4.0 + remediation at 12 ---------
+_CATALOG: list[cwe_catalog.Catalog] = []
+PRIORITY_FOR_SEVERITY = {"CRITICAL": "P0", "HIGH": "P1", "MEDIUM": "P2", "LOW": "P3"}
+
+
+def _cwe_catalog() -> cwe_catalog.Catalog:
+    if not _CATALOG:
+        _CATALOG.append(cwe_catalog.Catalog())
+    return _CATALOG[0]
+
+
+def _cwe_judgment(stage: str, decision: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate a reviewer's CWE judgment against the pinned catalog (Python owns the name)."""
+    value = decision.get("cwe")
+    if value is None:
+        return None
+    if (not isinstance(value, dict) or set(value) != {"cwe_id", "rationale"} or
+            not isinstance(value.get("rationale"), str) or not value["rationale"].strip()):
+        raise Blocked(f"{stage}: a cwe judgment needs exactly cwe_id and a non-empty rationale")
+    try:
+        cwe_id = _cwe_catalog().validate(value["cwe_id"])
+    except cwe_catalog.CWEError as exc:
+        raise Blocked(f"{stage}: {exc}") from None
+    return {"stage": stage, "cwe_id": cwe_id, "cwe_name": _cwe_catalog().name(cwe_id),
+            "rationale": value["rationale"].strip()[:600]}
+
+
+def _judged(record: dict[str, Any], upstream: dict[str, Any], judgment: dict[str, Any] | None) -> dict[str, Any]:
+    """Carry earlier stages' CWE judgments forward and append this stage's (absent stays absent)."""
+    judgments = list(upstream.get("cwe_judgments") or [])
+    if judgment is not None:
+        judgments.append(judgment)
+    if judgments:
+        record["cwe_judgments"] = judgments
+    return record
+
+
+def _cvss_assessment(decision: dict[str, Any]) -> dict[str, Any] | None:
+    value = decision.get("cvss_v4")
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"metrics", "rationale"}:
+        raise Blocked("scoring: cvss_v4 needs exactly metrics and rationale (one per base metric)")
+    try:
+        return cvss4.assess(value["metrics"], value["rationale"])
+    except cvss4.CVSSError as exc:
+        raise Blocked(f"scoring: cvss_v4 {exc}") from None
+
+
+def _remediation_proposal(decision: dict[str, Any]) -> dict[str, Any] | None:
+    value = decision.get("remediation")
+    if value is None:
+        return None
+    if (not isinstance(value, dict) or not {"objective"} <= set(value) <= {"objective", "patch_proposal"} or
+            not isinstance(value["objective"], str) or not value["objective"].strip() or
+            not isinstance(value.get("patch_proposal"), (str, type(None)))):
+        raise Blocked("scoring: remediation needs an objective and an optional patch_proposal text")
+    return {"status": "PATCH_PROPOSED_UNVALIDATED", "source": "12-scoring-prioritization reviewer proposal",
+            "objective": value["objective"].strip()[:1200],
+            "patch_proposal": (value.get("patch_proposal") or "").strip()[:4000] or None}
 
 
 def _validate_ledger(ledger: dict[str, Any]) -> None:
@@ -377,7 +441,8 @@ def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[st
     hypotheses = []
     for claim_id in sorted(candidates):
         candidate, decision = candidates[claim_id], rows[claim_id]
-        _closed(decision, {"claim_id", "reviewer", "attacker_case", "citations", "dissent_ids"}, "red team")
+        _closed(decision, {"claim_id", "reviewer", "attacker_case", "citations", "dissent_ids"}, "red team", {"cwe"})
+        judgment = _cwe_judgment("07-red-team-adversarial", decision)
         if candidate["claim_class"] != "candidate_only" or candidate["status"] != "candidate":
             raise Blocked("red team: ledger record is not a candidate")
         reviewer = decision["reviewer"]
@@ -387,13 +452,14 @@ def red_team(ledger: dict[str, Any], binding: dict[str, Any], decisions: dict[st
             raise Blocked("red team: attacker case and citations are required")
         if not _citation_ids(decision["citations"]) <= _citation_ids(candidate["citations"]):
             raise Blocked("red team: cited evidence does not resolve in the accepted candidate")
-        hypotheses.append({**_preserved(candidate), "status": "HYPOTHESIS",
+        hypotheses.append(_judged({**_preserved(candidate), "status": "HYPOTHESIS",
             "proof_obligations": [{**item, "status": "OPEN", "citations": []}
                                   for item in candidate["proof_obligations"]],
             "hypothesis_id": "hyp_" + digest((claim_id, decision))[:20],
             "attacker_case": decision["attacker_case"],
             "reviewer": reviewer, "review_citations": decision["citations"],
-            "dissent_ids": _merge_ids(candidate["dissent_ids"], decision.get("dissent_ids", []))})
+            "dissent_ids": _merge_ids(candidate["dissent_ids"], decision.get("dissent_ids", []))},
+            candidate, judgment))
     result = {**_base(ledger, binding, "appsec-review/red-team-adversarial/1.0",
                       "07-red-team-adversarial"), "hypotheses": hypotheses}
     return _validate(result, "07-red-team-adversarial.schema.json")
@@ -426,12 +492,13 @@ def blue_team(red: dict[str, Any], binding: dict[str, Any], decisions: dict[str,
             raise Blocked("blue team: surviving requires all current proof obligations satisfied")
         if disposition == "UNRESOLVED" and "UNRESOLVED" not in statuses:
             raise Blocked("blue team: unresolved must retain an unresolved proof obligation")
-        reviews.append({**_preserved(hypothesis), "hypothesis_id": hypothesis["hypothesis_id"],
+        reviews.append(_judged({**_preserved(hypothesis), "hypothesis_id": hypothesis["hypothesis_id"],
             "status": disposition, "attacker_case": hypothesis["attacker_case"],
             "red_reviewer": hypothesis["reviewer"], "blue_reviewer": decision["reviewer"],
             "refutation_rationale": decision["rationale"], "proof_obligations": obligations,
             "refutation_citations": decision["citations"],
-            "dissent_ids": _merge_ids(hypothesis["dissent_ids"], decision.get("dissent_ids", []))})
+            "dissent_ids": _merge_ids(hypothesis["dissent_ids"], decision.get("dissent_ids", []))},
+            hypothesis, None))
     result = {**_base(red, binding, "appsec-review/blue-team-refutation/1.0",
                       "08-blue-team-refutation"), "reviews": reviews}
     return _validate(result, "08-blue-team-refutation.schema.json")
@@ -444,7 +511,8 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
     for claim_id in sorted(reviews):
         review, decision = reviews[claim_id], rows[claim_id]
         _closed(decision, {"claim_id", "verifier", "disposition", "method", "proof_obligations",
-                           "citations", "dissent_ids"}, "verification")
+                           "citations", "dissent_ids"}, "verification", {"cwe"})
+        judgment = _cwe_judgment("09-independent-verification", decision)
         forbidden = {(review["red_reviewer"]["job_id"], review["red_reviewer"]["attempt_id"]),
                      (review["blue_reviewer"]["job_id"], review["blue_reviewer"]["attempt_id"])}
         _independent(decision["verifier"], forbidden)
@@ -471,12 +539,13 @@ def verify(blue: dict[str, Any], binding: dict[str, Any], decisions: dict[str, A
                 (decision["verifier"]["job_id"], decision["verifier"]["attempt_id"])
                 for item in decision["citations"]):
             raise Blocked("verification: independent evidence identity does not match the verifier")
-        results.append({**_preserved(review), "hypothesis_id": review["hypothesis_id"],
+        results.append(_judged({**_preserved(review), "hypothesis_id": review["hypothesis_id"],
             "status": disposition, "red_reviewer": review["red_reviewer"],
             "blue_reviewer": review["blue_reviewer"], "verifier": decision["verifier"],
             "verification_method": decision["method"], "proof_obligations": obligations,
             "verification_citations": decision["citations"],
-            "dissent_ids": _merge_ids(review["dissent_ids"], decision.get("dissent_ids", []))})
+            "dissent_ids": _merge_ids(review["dissent_ids"], decision.get("dissent_ids", []))},
+            review, judgment))
     result = {**_base(blue, binding, "appsec-review/independent-verification/1.0",
                       "09-independent-verification"), "verifications": results}
     return _validate(result, "09-independent-verification.schema.json")
@@ -488,9 +557,12 @@ def score(verification: dict[str, Any], binding: dict[str, Any], decisions: dict
     priorities = []
     for claim_id in sorted(verified):
         record, decision = verified[claim_id], rows[claim_id]
-        _closed(decision, {"claim_id", "factors", "rationale"}, "scoring")
+        _closed(decision, {"claim_id", "factors", "rationale"}, "scoring", {"cwe", "cvss_v4", "remediation"})
+        judgment = _cwe_judgment("12-scoring-prioritization", decision)
+        cvss, remediation = None, None
         if record["status"] != "VERIFIED":
-            if decision.get("factors") is not None:
+            if (decision.get("factors") is not None or decision.get("cvss_v4") is not None or
+                    decision.get("remediation") is not None):
                 raise Blocked("scoring: unresolved or refuted claims cannot receive score factors")
             score_value = None
             priority = "UNRESOLVED" if record["status"] in {"UNRESOLVED", "BLOCKED"} else "NOT_SCORED"
@@ -504,11 +576,21 @@ def score(verification: dict[str, Any], binding: dict[str, Any], decisions: dict
             elif score_value >= 12: priority, severity = "P1", "HIGH"
             elif score_value >= 8: priority, severity = "P2", "MEDIUM"
             else: priority, severity = "P3", "LOW"
+            cvss = _cvss_assessment(decision)
+            if cvss is not None:  # the pinned CVSS v4.0 score, not the factor bucket, sets severity
+                severity = cvss["severity"] if cvss["severity"] != "NONE" else "LOW"
+                priority = PRIORITY_FOR_SEVERITY[severity]
+            remediation = _remediation_proposal(decision)
             rationale = decision["rationale"]
-        priorities.append({**_preserved(record), "verification_status": record["status"],
+        row = _judged({**_preserved(record), "verification_status": record["status"],
             "verifier": record["verifier"], "verification_citations": record["verification_citations"],
             "score": score_value, "severity": severity, "priority": priority,
-            "factors": decision.get("factors"), "scoring_rationale": rationale})
+            "factors": decision.get("factors"), "scoring_rationale": rationale}, record, judgment)
+        if cvss is not None:
+            row["cvss_v4"] = cvss
+        if remediation is not None:
+            row["remediation_proposal"] = remediation
+        priorities.append(row)
     priorities.sort(key=lambda x: (x["score"] is None, -(x["score"] or 0), x["claim_id"]))
     result = {**_base(verification, binding, "appsec-review/scoring-prioritization/1.0",
                       "12-scoring-prioritization"), "priorities": priorities}

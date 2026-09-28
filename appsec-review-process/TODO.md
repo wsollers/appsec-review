@@ -92,6 +92,18 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 
 - [ ] `tests.test_persona_invocation.RegistryTests.test_tracked_registry_passes_as_is_and_the_default_denied_set_is_pinned` fails on `main` (registry validation reports a problem with `job-templates/02-native-sast`); also `test_vendor_prepass_graph` (16 failures). Pre-existing, not blocking runs.
 
+## Report findings: CWE, CVSS, reachability, EPSS/KEV (ADR-0020, branch ws-report)
+
+| Item | Status |
+|---|---|
+| Pinned rule->CWE map + CWE catalog; reviewer `cwe` at 07/09/12 validated and carried to the report | DONE (curated 96-entry catalog; import full MITRE export with `cwe_catalog.py intake`) |
+| `cvss4.py` pinned CVSS v4.0; 12 `cvss_v4` base metrics + rationale -> vector/score/severity | DONE (diff the table once against FIRST `cvss_lookup.js`) |
+| `reachability.py` CPG call-graph arbiter with witness; Critical requires REACHABLE | DONE for code findings; entry points beyond `main` need a source (exports/handlers) |
+| 06 CVE reachability from vulnerable function -> app call path (`reachability.py cve-evidence`) | DONE as an offline command; needs a reviewed advisory->function map per run, not yet wired into full_review |
+| EPSS/KEV dated snapshot (`epss_kev_snapshot.py intake`), "as of" in report, "not assessed" gap | DONE; no snapshot imported yet |
+| Hash-verified redacted snippets; 11 objectives + 12 PATCH_PROPOSED_UNVALIDATED remediation | DONE |
+| Persona prompt text for 07/09/12 mentions the new judgment fields | OPEN (runtime block lists them; prompt fragments unchanged) |
+
 ## Native lane granularity
 
 [ADR-0014](../docs/decisions/ADR-0014-native-lane-granularity.md): native analysis is per clang
@@ -189,6 +201,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
 | 2026-09-28 | appsec-multi-vuln | be3585 | (new) 07-hypothesis-discovery | Nothing read target code to propose vulnerabilities: the ledger held STRIDE templates, OWASP routes and tool leads only, so e.g. `eval(argv[2])` at `projects/javascript/case-010/index.js:2` (no tool lead) could never be reviewed; the red-team prompts were never loaded | Branch `ws-hunt` (ADR-0018): hunter persona pool (general + known-list red team, prompts renamed to `task-hypothesis-hunt-*.md`) over component shards with the P1/P2 lead menu; persona schema + `hypothesis_hunt_derive`; checkout-resolved `hypothesis-discovery.json`; ledger fourth source (`hunter:` claims; hypotheses on a P1/P2 lead line corroborate that claim). be3585 Python replay: strcpy + PHP include corroborate leads, eval = 1 hunter claim, hallucinated file = gap, 151 claims. OPEN: first live run (cost <= 3 x 2 USD default); specialist hunter personas not in the registry yet; different-class hypothesis on a lead line still attaches to the lead |
+| 2026-09-28 | appsec-multi-vuln | be3585 (replay) | 10-synthesis-report | Report findings carried hard-coded CWE "Not asserted", no CVSS, reachability "unknown", no EPSS/KEV, no snippets, no remediation; severity was a factor bucket | Branch ws-report (ADR-0020): finding-enrichment.json from pinned CWE map/catalog, pinned CVSS v4.0, CPG reachability witness (Critical requires REACHABLE), offline EPSS/KEV snapshot, verified snippets, 11/12 remediation. Replay: case-001 main.cpp:7 -> CWE-121, CWE-120, CWE-676; CVSS:4.0/AV:L/.../SA:N 8.6 High; REACHABLE via main() main.cpp:4 |
 | 2026-09-28 | freeciv21 | 3e7553f8 | 02-ir-facts | "IR facts attempted a prohibited verdict promotion": the guard substring-matched words like finding/severity anywhere in the serialized result, i.e. in freeciv function names and paths | Guard checks verdict-shaped keys only (ADR-0013 item 7); on review-batch |
 | 2026-09-28 | appsec-multi-vuln | be3585 | claim-ledger-routing | Tool leads never became claims (ledger sources: threat model + OWASP routes only): 41 source-SAST + 119 native-SAST + 2 secrets + 15 IaC leads were unreviewed and 07/08/09 saw only 60 generic STRIDE hypotheses, so the report would be empty | Branch `claim-ledger-leads`: accepted source/native SAST, secrets, SCA, IaC and mobile leads are a third candidate source (merged per path:line, tiered P1/P2/P3, P3 grouped per file and ordered last, none dropped; absent/SKIPPED producers are coverage rows); routing marks source_kind/review_priority; the draft lists unverified tool leads. be3585 replay: 90 lead claims (P1 27, P2 48, P3 15) + 60 threat = 150. OPEN: 07/08/09/12 review every ledger claim in one reviewer instance (no count cap; report assembly requires every claim verified) - watch persona budget/cost on large targets |
 | 2026-09-28 | doom3-bfg | a8d9629d | 15-deployment-hardening | IaC scan pointer is SKIPPED (no IaC inputs); standards_lifecycle loaded it as a normal accepted result and refused it | A skipped IaC scan yields no deployment targets and a gap naming the skip reason |

@@ -222,6 +222,7 @@ pre.tex{background:var(--panel);padding:14px;overflow:auto;max-height:520px;font
         <span class="eyebrow">Component</span><span>{{ f.component }} <span class="muted">{{ f.cwe }}</span></span>
         <span class="eyebrow">CVSS 4.0</span><span>{% if f.cvss %}<span class="mono">{{ f.cvss }}</span> <b>{{ '%.1f'|format(f.cvss_score) }}</b> {{ f.cvss_band }}{% else %}not scored{% endif %}</span>
         <span class="eyebrow">Evidence / status</span><span>{{ f.evidence_strength }} · {{ f.verification }} · {{ f.reachability }}</span>
+        {% if f.exploit_signal is defined %}<span class="eyebrow">EPSS / KEV</span><span>{{ f.exploit_signal }}</span>{% endif %}
       </div>
       <div class="math">\[ {{ f.priority_tex }} \]</div>
       <p>{{ f.summary }}</p>

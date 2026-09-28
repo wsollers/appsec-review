@@ -111,6 +111,14 @@ def _runtime_instructions(package: Any) -> str:
                         f"{derive.PERSONA_SCHEMA}; one decision per upstream claim_id"),
         "decision_required_fields": sorted(required), "decision_optional_fields": sorted(optional),
         "decision_rule": rule,
+        "judgment_fields": {key: value for key, value in {
+            "cwe": ("optional: {cwe_id: 'CWE-<n>', rationale} naming the weakness the claim instantiates; "
+                    "it must be in the pinned CWE catalog; omit when unsure"),
+            "cvss_v4": ("VERIFIED claims only: {metrics: the eleven CVSS v4.0 base metrics AV AC AT PR UI VC VI "
+                        "VA SC SI SA, rationale: one justification per metric}; Python computes vector, score and "
+                        "severity (reachability may cap it later)"),
+            "remediation": ("VERIFIED claims only, optional: {objective, patch_proposal}; published as "
+                            "PATCH_PROPOSED_UNVALIDATED")}.items() if key in optional},
         "citation_rule": (("cite by citation_id only, using ids from " + citable[stage] +
                            "; never copy or invent citation objects") if stage in citable else
                           "no citations for this stage"),

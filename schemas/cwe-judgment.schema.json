@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cwe-judgment.schema.json",
+  "description": "One reviewer CWE judgment (ADR-0020). The reviewer supplies cwe_id + rationale; claim_lifecycle_core validates cwe_id against the pinned data/reference/cwe catalog and supplies cwe_name and stage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stage",
+    "cwe_id",
+    "cwe_name",
+    "rationale"
+  ],
+  "properties": {
+    "stage": {
+      "enum": [
+        "07-red-team-adversarial",
+        "09-independent-verification",
+        "12-scoring-prioritization"
+      ]
+    },
+    "cwe_id": {
+      "type": "string",
+      "pattern": "^CWE-[1-9][0-9]{0,4}$"
+    },
+    "cwe_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600
+    }
+  }
+}

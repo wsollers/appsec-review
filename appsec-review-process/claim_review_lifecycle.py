@@ -39,6 +39,10 @@ DECISION_KEYS = {
                                     "proof_obligations", "citations", "dissent_ids"},
     "12-scoring-prioritization": {"claim_id", "factors", "rationale"},
 }
+# Optional reviewer judgment (ADR-0020): CWE at 07/09/12; CVSS v4.0 base metrics + remediation at 12.
+OPTIONAL_DECISION_KEYS = {"07-red-team-adversarial": {"cwe"}, "08-blue-team-refutation": set(),
+                          "09-independent-verification": {"cwe"},
+                          "12-scoring-prioritization": {"cwe", "cvss_v4", "remediation"}}
 
 
 def root(run_id: str, stage: str) -> Path:
@@ -154,7 +158,7 @@ def decisions_from_pool(stage: str, upstream: dict[str, Any], pool: dict[str, An
             raise Blocked("claim review lifecycle: pool assertion is not a JSON decision") from exc
         if not isinstance(decision, dict):
             raise Blocked("claim review lifecycle: pool decision is not an object")
-        if set(decision) != DECISION_KEYS[stage]:
+        if not DECISION_KEYS[stage] <= set(decision) <= DECISION_KEYS[stage] | OPTIONAL_DECISION_KEYS[stage]:
             raise Blocked("claim review lifecycle: pool decision fields do not match the stage contract")
         errors = validate_document({"stage": stage, "decision": decision},
                                    "claim-review-decision.schema.json")

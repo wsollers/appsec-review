@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cvss-v4-assessment.schema.json",
+  "description": "CVSS v4.0 base assessment (ADR-0020). The reviewer proposes the eleven base metric values with one justification each at 12-scoring-prioritization; cvss4.py validates them and computes vector, score and severity with the pinned FIRST algorithm.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "vector",
+    "score",
+    "severity",
+    "macrovector",
+    "metric_rationale",
+    "calculator"
+  ],
+  "properties": {
+    "version": {
+      "const": "4.0"
+    },
+    "vector": {
+      "type": "string",
+      "pattern": "^CVSS:4\\.0/AV:[NALP]/AC:[LH]/AT:[NP]/PR:[NLH]/UI:[NPA]/VC:[HLN]/VI:[HLN]/VA:[HLN]/SC:[HLN]/SI:[HLN]/SA:[HLN]$"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "severity": {
+      "enum": [
+        "CRITICAL",
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "NONE"
+      ]
+    },
+    "macrovector": {
+      "type": "string",
+      "pattern": "^[0-2]{6}$"
+    },
+    "metric_rationale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "AV",
+        "AC",
+        "AT",
+        "PR",
+        "UI",
+        "VC",
+        "VI",
+        "VA",
+        "SC",
+        "SI",
+        "SA"
+      ],
+      "properties": {
+        "AV": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "AC": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "AT": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "PR": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "UI": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "VC": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "VI": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "VA": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "SC": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "SI": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "SA": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        }
+      }
+    },
+    "calculator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "implementation",
+        "lookup_sha256"
+      ],
+      "properties": {
+        "implementation": {
+          "type": "string"
+        },
+        "lookup_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}
