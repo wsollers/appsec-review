@@ -646,6 +646,12 @@ def lane_tools(lane: str) -> list[str]:
     return list(lt.get(lane) or lt.get("default") or ["Read", "Grep", "Glob", "Write"])
 
 
+def _progress(message: str) -> None:
+    """One timestamped line on stderr (Dagster's step log) so a long model call is visibly alive."""
+    stamp = datetime.now(timezone.utc).strftime("%H:%M:%SZ")
+    print(f"[progress {stamp}] {message}", file=sys.stderr, flush=True)
+
+
 def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcript_path: Path) -> dict[str, Any]:
     """Run `claude -p --output-format stream-json` and capture the full
     turn-by-turn exchange (every SDK event: system/init, assistant messages,
@@ -664,6 +670,10 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
         argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace", bufsize=1,
     )
+    started_at = time.time()
+    model_flag = argv[argv.index("--model") + 1] if "--model" in argv and argv.index("--model") + 1 < len(argv) else "?"
+    _progress(f"claude dispatch started pid={proc.pid} model={model_flag} prompt_chars={len(prompt_text)} "
+              f"timeout={timeout}s transcript={transcript_path}")
 
     events: list[dict[str, Any]] = []
     state: dict[str, Any] = {"final_result": None}
@@ -704,12 +714,21 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
     writer.start()
 
     timed_out = False
-    try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        proc.kill()
-        proc.wait()
+    heartbeat = max(5, int(os.environ.get("APPSEC_HEARTBEAT_SECONDS", "30") or 30))
+    deadline = started_at + timeout
+    while True:
+        try:
+            proc.wait(timeout=max(0.1, min(heartbeat, deadline - time.time())))
+            break
+        except subprocess.TimeoutExpired:
+            if time.time() >= deadline:
+                timed_out = True
+                proc.kill()
+                proc.wait()
+                break
+            last = events[-1] if events else {}
+            _progress(f"claude dispatch pid={proc.pid} running {int(time.time() - started_at)}s/{timeout}s "
+                      f"events={len(events)} last={last.get('type', '-') if isinstance(last, dict) else '-'}")
 
     writer.join(timeout=10)
     reader.join(timeout=10)
@@ -721,6 +740,11 @@ def _dispatch_streaming(argv: list[str], prompt_text: str, timeout: int, transcr
     except Exception:
         pass
 
+    final = state["final_result"]
+    cost = final.get("total_cost_usd") if isinstance(final, dict) else None
+    _progress(f"claude dispatch pid={proc.pid} finished after {int(time.time() - started_at)}s "
+              f"returncode={proc.returncode} timed_out={timed_out} events={len(events)} "
+              f"has_result={final is not None} cost_usd={cost}")
     return {
         "final_result": state["final_result"],
         "events": events,
