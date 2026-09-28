@@ -605,8 +605,10 @@ def verify_outputs_on_disk(tool_results: dict, attempt_root) -> list[str]:
             # Publication may redact a raw tool output after it was listed (freeciv21: gitleaks). The
             # listing, receipt and citations keep the raw hash; the redaction receipt maps it to the
             # published bytes, which is what must be on disk.
+            # The redactor records no source hash for redacted files (it would confirm a secret), so
+            # match on path, disposition and the published bytes.
             redacted = any("outputs/" + str(entry.get("path")) == relative
-                           and "sha256:" + str(entry.get("source_sha256")) == output["sha256"]
+                           and entry.get("disposition") == "redacted"
                            and "sha256:" + str(entry.get("published_sha256")) == actual
                            and entry.get("published_bytes") == size
                            for entry in _redaction_files(root))

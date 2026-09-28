@@ -87,6 +87,13 @@ def _lead(tool:str,rule:Any,path:Any,line:Any,target:Path)->dict[str,Any]:
  base={"tool_id":tool,"rule_id":rule[:256],"path":relative,"start_line":line,"end_line":line,"source_sha256":"sha256:"+hashlib.sha256(data).hexdigest(),"category":"language-security-static-analysis"}
  return {"lead_id":"lead_"+hashlib.sha256(json.dumps(base,sort_keys=True).encode()).hexdigest()[:16],**base}
 
+def _line(value)->int:
+ """Tools report a line as 12, "12" or a range "38-42" (gosec); the first line is the lead."""
+ text=str(value if value is not None else "0").strip()
+ head=text.split("-",1)[0].strip() if text[:1]!="-" else text
+ return int(head or "0")
+
+
 def normalize(tool_id:str, content:bytes, target:Path)->list[dict[str,Any]]:
  if tool_id not in TOOL_IMAGES: raise ValueError("unknown language SAST tool")
  try:
@@ -94,20 +101,20 @@ def normalize(tool_id:str, content:bytes, target:Path)->list[dict[str,Any]]:
    root=ET.fromstring(content); rows=[]
    for bug in root.findall(".//BugInstance"):
     loc=bug.find("SourceLine")
-    if loc is not None: rows.append(_lead(tool_id,bug.attrib.get("type"),loc.attrib.get("sourcepath"),int(loc.attrib.get("start","0")),target))
+    if loc is not None: rows.append(_lead(tool_id,bug.attrib.get("type"),loc.attrib.get("sourcepath"),_line(loc.attrib.get("start","0")),target))
    return sorted(rows,key=lambda x:(x["path"],x["start_line"],x["rule_id"]))
   raw=json.loads(content)
  except (json.JSONDecodeError,ET.ParseError,ValueError,TypeError) as exc: raise ValueError("language SAST output is malformed") from exc
  rows=[]
  if tool_id=="gosec":
-  for item in raw.get("Issues",[]): rows.append(_lead(tool_id,str(item.get("rule_id")),item.get("file"),int(item.get("line","0")),target))
+  for item in raw.get("Issues",[]): rows.append(_lead(tool_id,str(item.get("rule_id")),item.get("file"),_line(item.get("line","0")),target))
  elif tool_id=="phpstan":
   for path,data in raw.get("files",{}).items():
-   for item in data.get("messages",[]): rows.append(_lead(tool_id,str(item.get("identifier") or "phpstan"),path,int(item.get("line",0)),target))
+   for item in data.get("messages",[]): rows.append(_lead(tool_id,str(item.get("identifier") or "phpstan"),path,_line(item.get("line",0)),target))
  elif tool_id=="psalm":
   if not isinstance(raw,list): raise ValueError("Psalm output must be an array")
-  for item in raw: rows.append(_lead(tool_id,str(item.get("type") or item.get("shortcode")),item.get("file_path") or item.get("file_name"),int(item.get("line_from",0)),target))
+  for item in raw: rows.append(_lead(tool_id,str(item.get("type") or item.get("shortcode")),item.get("file_path") or item.get("file_name"),_line(item.get("line_from",0)),target))
  elif tool_id=="phpcs":
   for path,data in raw.get("files",{}).items():
-   for item in data.get("messages",[]): rows.append(_lead(tool_id,str(item.get("source")),path,int(item.get("line",0)),target))
+   for item in data.get("messages",[]): rows.append(_lead(tool_id,str(item.get("source")),path,_line(item.get("line",0)),target))
  return sorted(rows,key=lambda x:(x["path"],x["start_line"],x["tool_id"],x["rule_id"]))

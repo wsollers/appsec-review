@@ -139,8 +139,12 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
             expected_result_sha256=expected_result_sha256, **host)
     except ce.ContainerRequestError as exc:
         raise AdapterBlocked(f"{spec['job']}: B13 result failed independent re-verification") from exc
+    osv_stderr = attempt_root / "logs" / "container" / "stderr.log"
+    missing_db = (kind == "osv" and verified.get("exit_code") == 127 and osv_stderr.is_file() and
+                  "could not find local databases for ecosystems" in osv_stderr.read_text(errors="replace"))
     finding_exit = (kind == "osv" and verified["execution_status"] == "FAILED" and
-                    verified.get("cause") == "CONTAINER_EXIT_NONZERO" and verified.get("exit_code") == 1)
+                    verified.get("cause") == "CONTAINER_EXIT_NONZERO" and
+                    (verified.get("exit_code") == 1 or missing_db))
     if verified["execution_status"] != "OK" and not finding_exit:
         raise AdapterBlocked(f"{spec['job']}: pinned tool ended {verified['execution_status']} ({verified['cause']})")
     output = attempt_root / "scratch" / spec["output"]

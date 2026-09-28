@@ -108,6 +108,11 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | hello-autotools | 20260927T192621Z-helloautotoo | 01-component-characterization | Now reaching the model: `component-purpose-map.json` and `.md` slugged to one envelope key, so the model was told one key is both an object and markdown | Markdown key gets `_markdown` when stems collide (also build-index, synthesis report) |
+| 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-build-plan | Model sent the plan JSON and the summary as two fenced blocks, no envelope; the plan was lost | Invoker salvages the result JSON (has `schema`) and the markdown from fenced blocks/prose |
+| 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-secrets-inventory, 02-iac-config-scan | Redacted tool outputs: the redactor records no source hash for redacted files, so the raw-to-published mapping never matched | Match on path, `redacted` disposition and published bytes |
+| 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-source-sast | gosec reports `line` as a range (`38-42`) | Language adapters take the first line of a range |
+| 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-sca-vulnerability-match | OSV-Scanner exits 127 when some ecosystems (Maven, GitHub Actions) have no offline database; only npm is registered | Exit 127 with that message is accepted; results stand. Follow-up: surface the missing ecosystems as an SCA gap, and register more OSV snapshots |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-build-resolution | The CoW trial copied the checkout with its symlinks into the attempt tree; publication refuses linked paths | Trial copies follow links (dangling ones skipped) in build resolution and build replay |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-secrets-inventory | Rewriting the tool listing after redaction broke the receipt and citation hashes | Listing keeps the raw hash; the on-disk check accepts published bytes when the redaction receipt maps raw to published |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-sbom-inventory | CPE schema rejected CPE 2.3 backslash escapes (`softprops\/action-gh-release`) | Pattern allows escaped characters |
