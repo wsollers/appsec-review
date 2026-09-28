@@ -262,6 +262,9 @@ def _inventory_section(items: list, root_label: str) -> list[str]:
     return lines
 
 
+TASK_INPUT_BYTES = 4096
+
+
 def _render_input_inventory(inputs: tuple) -> str:
     target = [item for item in inputs if item.root != pd.UPSTREAM_ROOT_ID]
     upstream = [item for item in inputs if item.root == pd.UPSTREAM_ROOT_ID]
@@ -283,6 +286,14 @@ def _render_input_inventory(inputs: tuple) -> str:
              "prefix the same paths with `source/`; drop that too).\n",
              "### Target Repository Files\n"]
     parts += _inventory_section(target, target[0].root if target else "target")
+    small = [i for i in upstream if len(i.data) <= TASK_INPUT_BYTES]
+    if small and sum(len(i.data) for i in small) <= 4 * TASK_INPUT_BYTES:
+        # Small orchestrator-written task files (build-plan: plan-unit.json names the one unit to
+        # plan) are inlined: in lookup mode haiku anchored on the first unit it read instead
+        # (appsec-multi-vuln: 9 of 38 units planned the wrong unit on the first try).
+        parts += ["", "### Task Inputs (inlined; these define what this call is about)\n"]
+        for item in small:
+            parts += [f"`{item.root}:{item.path}`:", "```", item.data.decode("utf-8", errors="replace"), "```", ""]
     if upstream:
         parts += ["", "### Upstream Accepted Artifacts\n",
                   "Accepted outputs of earlier jobs in this run. They define scope and carry tool "
