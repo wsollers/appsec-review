@@ -30,6 +30,16 @@ PERMISSIONS = {"02-ir-capture": ["read-source", "write-run-data"],
                "02-ir-facts": ["read-run-data", "write-run-data"]}
 PROHIBITED = {"finding", "findings", "severity", "vulnerability", "verdict", "runtime_state"}
 SKIP_REASON = "not-applicable-no-native-binaries"
+
+
+def _prohibited_keys(value) -> bool:
+    """A verdict promotion is a verdict-shaped FIELD, not a word inside data: freeciv21's IR carries
+    function names and paths containing 'finding'/'severity' (ADR-0013 item 7: no phrase scanning)."""
+    if isinstance(value, dict):
+        return any(str(k).lower() in PROHIBITED or _prohibited_keys(v) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_prohibited_keys(v) for v in value)
+    return False
 UPSTREAM_KEY = {"02-ir-capture": "native_build", "02-ir-link": "capture", "02-ir-facts": "link"}
 CONSUMER = {"02-ir-capture": "02-ir-link", "02-ir-link": "02-ir-facts", "02-ir-facts": "02-evidence-assembly"}
 LINK_GAP = "not-linked-one-link-target-per-run"
@@ -461,7 +471,7 @@ def facts(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
         "sources": linked["sources"], "status": "OK_WITH_GAPS" if gaps else "OK",
         "debug_locations": debug_locations, "facts": records,
         "coverage_gaps": gaps}
-    if any(key in json.dumps(result).lower() for key in PROHIBITED):
+    if _prohibited_keys(result):
         raise RuntimeError("IR facts attempted a prohibited verdict promotion")
     if validate_document(result, "ir-facts.schema.json"):
         raise RuntimeError("derived IR facts result is invalid")
@@ -568,7 +578,7 @@ def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = N
             _verify_artifact(attempt, item, b"BC\xc0\xde")
     elif job == "02-ir-link":
         _verify_artifact(attempt, result["linked_module"], b"BC\xc0\xde")
-    elif any(key in json.dumps(result).lower() for key in PROHIBITED):
+    elif _prohibited_keys(result):
         raise Blocked(f"{job}: result contains prohibited verdict language")
     if inputs is not None:
         if read_json(attempt / "inputs.json") != inputs:
