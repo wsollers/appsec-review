@@ -403,6 +403,18 @@ def _stage_unit_upstreams(base, record, cpath, ipath, classification, unit_id):
     })
 
 
+def _fill_known(classification):
+    """Orchestrator-known fields (finalize overwrites them anyway) filled before schema checks, so a
+    null source_revision never costs a repair round (freeciv21: both units)."""
+    def fill(envelope, field):
+        value = envelope.get(field)
+        if isinstance(value, dict):
+            for key in ('source_revision', 'target'):
+                if not isinstance(value.get(key), str) and isinstance(classification.get(key), str):
+                    value[key] = classification[key]
+    return fill
+
+
 def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification):
     """One live persona invocation for one unit. Returns (value, summary_text, pinned, persona_attempt_id).
     Raises RuntimeError when the invocation did not complete OK: nothing is published from it."""
@@ -427,7 +439,8 @@ def dispatch_unit(run_id, base, record, attempt_id, n, unit_id, cpath, ipath, cl
                                upstream_root=upstream_dir)
     model_identity = request['model']
     runtime = pi.PersonaRuntime(
-        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd),
+        invoker=ClaudeCliInvoker(effort=resolved_model['effort'], budget_usd=budget_usd,
+                                 fill_result=_fill_known(classification)),
         registry_dir=pd.REGISTRY_DIR, prompt_root=ppa.PROMPT_ROOT,
         readable_roots={pd.DEFAULT_READABLE_ROOT: target_root, pd.UPSTREAM_ROOT_ID: upstream_dir},
         allowed_models=(model_identity,), source_snapshot_sha256=snapshot,
