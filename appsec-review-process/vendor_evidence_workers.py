@@ -478,6 +478,38 @@ def execute_and_build(job_id: str, source_root: Path, *, run_id: str, attempt_id
                            source_snapshot_sha256=source_snapshot_sha256,vendor_results=results)
 
 
+def _reconcile_redacted_outputs(attempt: Path) -> None:
+    """Redaction can rewrite a raw tool output after tool-results.json listed its size and hash
+    (freeciv21: gitleaks matched text our redactor also masks). Re-list those outputs as they are
+    on disk, since the redacted bytes are what is published."""
+    listing_path = attempt / "outputs" / "tool-results.json"
+    if not listing_path.is_file():
+        return
+    listing = json.loads(listing_path.read_text(encoding="utf-8"))
+    changed = False
+    for instance in listing.get("tool_instances", []):
+        for output in instance.get("outputs", []):
+            path = attempt / output.get("path", "")
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if "bytes" in output and output["bytes"] != len(data):
+                output["bytes"] = len(data); changed = True
+            if "sha256" in output and output["sha256"] != HASH(data):
+                output["sha256"] = HASH(data); changed = True
+    if changed:
+        data = _dump(listing)
+        listing_path.write_bytes(data)
+        receipt_path = attempt / "outputs" / "redaction-receipt.json"
+        if receipt_path.is_file():
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            for entry in receipt.get("files", []):
+                if entry.get("path") == "tool-results.json":
+                    digest_hex = hashlib.sha256(data).hexdigest()
+                    entry.update(published_bytes=len(data), published_sha256=digest_hex, source_sha256=digest_hex)
+            receipt_path.write_bytes(_dump(receipt))
+
+
 def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run_id: str,
                         started_at: str | None = None, finished_at: str | None = None) -> None:
     """Publish a closed immutable-attempt layout through V06. Existing paths are never reused."""
@@ -510,6 +542,7 @@ def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run
     attempt.mkdir(parents=True)
     evidence_redaction.redact_tree(staging, attempt / "outputs", on_unhandled="refuse",
                                    limits=evidence_redaction.DEFAULT_LIMITS)
+    _reconcile_redacted_outputs(attempt)
     (attempt / "permission.json").write_bytes(_dump(permission))
     (attempt / "lineage.json").write_bytes(_dump(lineage))
     status = {"status": documents["status"], "attempt_id": header["attempt_id"],

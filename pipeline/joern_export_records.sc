@@ -4,6 +4,7 @@
  */
 
 import java.io.PrintWriter
+import scala.util.Try
 import io.shiftleft.semanticcpg.language.locationCreator
 
 def json(value: String): String = {
@@ -43,20 +44,23 @@ def maybe(value: Option[?]): String = value.map(_.toString).getOrElse("null")
         "file" -> json(t.filename), "line" -> maybe(t.lineNumber), "column" -> maybe(t.columnNumber),
         "code" -> json(t.code)))
     }
-    cpg.call.l.sortBy(c => (c.location.filename, c.lineNumber.getOrElse(0), c.code)).foreach { c =>
+    // Some nodes (freeciv21) have no enclosing method/graph; their location/method accessors throw.
+    // Skip those nodes rather than lose the whole export.
+    def safe(value: => String): String = Try(value).getOrElse("")
+    cpg.call.l.filter(c => Try(c.method.fullName).isSuccess).sortBy(c => (safe(c.location.filename), c.lineNumber.getOrElse(0), c.code)).foreach { c =>
       val caller = c.method.fullName
       val lowered = (c.name + " " + c.methodFullName + " " + c.code).toLowerCase
       val memory = Seq("memcpy", "memmove", "strcpy", "strncpy", "malloc", "calloc", "realloc", "free",
         "<operator>.assignment", "<operator>.indirect", "<operator>.index").exists(lowered.contains)
       emit(Seq("kind" -> json(if (memory) "memory-operation" else "call"), "label" -> json("CALL"),
         "name" -> json(c.name), "full_name" -> json(c.methodFullName), "caller" -> json(caller),
-        "type_name" -> json(c.typeFullName), "file" -> json(c.location.filename),
+        "type_name" -> json(c.typeFullName), "file" -> json(safe(c.location.filename)),
         "line" -> maybe(c.lineNumber), "column" -> maybe(c.columnNumber), "code" -> json(c.code)))
     }
-    cpg.identifier.l.sortBy(i => (i.location.filename, i.lineNumber.getOrElse(0), i.name)).foreach { i =>
+    cpg.identifier.l.filter(i => Try(i.location.filename).isSuccess).sortBy(i => (safe(i.location.filename), i.lineNumber.getOrElse(0), i.name)).foreach { i =>
       emit(Seq("kind" -> json("identifier"), "label" -> json("IDENTIFIER"), "name" -> json(i.name),
         "full_name" -> json(""), "caller" -> json(""), "type_name" -> json(i.typeFullName),
-        "file" -> json(i.location.filename), "line" -> maybe(i.lineNumber), "column" -> maybe(i.columnNumber),
+        "file" -> json(safe(i.location.filename)), "line" -> maybe(i.lineNumber), "column" -> maybe(i.columnNumber),
         "code" -> json(i.code)))
     }
   } finally {

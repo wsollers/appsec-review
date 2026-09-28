@@ -444,11 +444,17 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         attempt = allocation["attempt"]; control = inputs["control"]["value"]
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
-        units=[]; locks=[]; receipts=[]
+        units=[]; locks=[]; receipts=[]; gaps=[]
         plans = inputs["plan"]["value"]["plans"]
         if not plans:
-            raise Blocked(f"{JOB}: empty build set is not a stage-13 qualification target")
+            gaps.append("no-build-units-planned")
         for number, plan in enumerate(plans, 1):
+            # ADR-0013: a unit that cannot be built here is a coverage gap, not a failed run.
+            feasibility = plan.get("feasibility") or {}
+            if feasibility.get("tier") == "C" or not plan.get("commands"):
+                reason = (feasibility.get("reasons") or ["no build commands planned"])[0]
+                gaps.append(f"{plan['unit_id']}: not buildable in this environment (tier {feasibility.get('tier')}): {reason}")
+                continue
             unit_key = digest(plan["unit_id"])[:12]
             unit_attempt = attempt / "units" / unit_key / "resolution-attempts" / f"{number:03d}"
             unit_attempt.mkdir(parents=True)
@@ -470,12 +476,20 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                                     request=request, images_dir=registry,
                                     expected_result_sha256=expected, **_host(runtime))
             if terminal["execution_status"] != "OK":
-                raise RuntimeError(f"{JOB}: trial for {plan['unit_id']} ended {terminal['execution_status']}")
+                gaps.append(f"{plan['unit_id']}: build trial ended {terminal['execution_status']}")
+                continue
             trial_result = read_json(trial / "scratch" / "trial-result.json")
             commands = trial_result.get("commands", [])
-            if not commands or any(c.get("exit_code") != 0 for c in commands):
-                raise RuntimeError(f"{JOB}: trial command sequence did not succeed")
+            failed = next((c for c in commands if c.get("exit_code") != 0), None)
+            if not commands or failed is not None:
+                gaps.append(f"{plan['unit_id']}: build trial command failed: "
+                            f"{' '.join(map(str, (failed or {}).get('argv') or [])) or 'no commands ran'} "
+                            f"(exit {(failed or {}).get('exit_code')}); see {trial.relative_to(attempt).as_posix()}")
+                continue
             db_source = trial / "scratch" / "src" / "compile_commands.json"
+            if not db_source.is_file():
+                gaps.append(f"{plan['unit_id']}: build succeeded but produced no compile_commands.json")
+                continue
             entries = _compile_db(db_source, inputs["plan"]["value"]["toolchain"]["compile_database_compilers"])
             db_target = attempt / "outputs" / unit_key / "compile_commands.json"
             db_target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(db_source, db_target)
@@ -506,13 +520,13 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                     "locks": locks}
         result = {"schema": "appsec-review/build-resolution/1", "run_id": run_id,
                   "source_revision": inputs["source_revision"], "plan": lock_set["plan"],
-                  "status": "OK", "units": units, "coverage_gaps": []}
+                  "status": "OK_WITH_GAPS" if gaps else "OK", "units": units, "coverage_gaps": gaps}
         atomic_json(attempt / LOCK_FILE, lock_set); atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, receipts)
         (attempt / SUMMARY).write_text("# Build resolution\n\n" + "\n".join(
             f"- `{u['unit_id']}`: {u['compile_commands']} clang compile commands; `{u['image_id']}`"
-            for u in units) + "\n", encoding="utf-8")
-        status = {"process": JOB, "status": "OK", "run_id": run_id,
+            for u in units) + "\n" + "".join(f"- gap: {g}\n" for g in gaps), encoding="utf-8")
+        status = {"process": JOB, "status": result["status"], "run_id": run_id,
                   "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"],
                   "source_revision": inputs["source_revision"], "units": len(units),
                   "permissions": ["package-restore:apt@archive.ubuntu.com:80",
@@ -523,9 +537,9 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             r["compile_commands_path"] for r in receipts]
         pointer = record_terminal_current(base, attempt, run_id=run_id, job_id=JOB,
             dagster_run_id=dagster_id, worker_kind="pinned_container", output_contract=CONTRACT,
-            input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status="OK",
-            summary=f"Resolved {len(units)} build unit(s) through the pinned-container boundary.",
-            status_record=status, artifact_paths=artifacts,
+            input_fingerprint=fingerprint, started_at=allocation["started_at"], execution_status=result["status"],
+            summary=f"Resolved {len(units)} build unit(s) through the pinned-container boundary; {len(gaps)} gap(s).",
+            status_record=status, artifact_paths=artifacts, gaps=gaps or None,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs))
         return pointer
 

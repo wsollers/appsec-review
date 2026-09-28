@@ -121,13 +121,15 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
             relative, source = _location(target, item["file"])
             cached = source_cache.get(source)
             if cached is None:
-                with source.open("rb") as source_stream:
-                    total_lines = sum(1 for _ in source_stream)
+                raw_source = source.read_bytes()
+                total_lines = max(raw_source.count(b"\n"), len(raw_source.replace(b"\r\n", b"\n").replace(b"\r", b"\n").splitlines()))
                 cached = (_sha(source), total_lines)
                 source_cache[source] = cached
             source_sha256, total_lines = cached
             if line_number > max(total_lines, 1):
-                raise Blocked("Joern record line is beyond the current source file")
+                # Joern counts lone CR as a line break; our count may be lower (doom3-bfg). Skip and count.
+                skipped["line_beyond_file"] = skipped.get("line_beyond_file", 0) + 1
+                continue
             fields = {name: _field(item[name], name) for name in
                       ("label", "name", "full_name", "caller", "type_name", "code")}
             search, disposition = _redact(" | ".join(str(fields[name]) for name in

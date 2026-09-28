@@ -633,10 +633,26 @@ def verify_vendor_execution_receipts(tool_results: dict, attempt_root) -> list[s
                    for error in validate_document(receipt,VENDOR_EXECUTION_RECEIPT_SCHEMA,store)]
         expected={"tool_id":tool,"attempt_id":instance["attempt_id"],"argv":instance["argv"],
                   "tool_version":instance["identity"]["tool_version"],"tool_name":instance["identity"]["tool_name"],
-                  "image_digest":instance["identity"]["image_digest"],
-                  "output_sha256":instance["outputs"][0]["sha256"]}
+                  "image_digest":instance["identity"]["image_digest"]}
+        # The receipt hashes the raw tool output; publication may redact it afterwards. Accept the
+        # published hash, or the pre-redaction hash the redaction receipt maps to it.
+        listed=instance["outputs"][0]
+        accepted_output={listed["sha256"]}
+        for entry in _redaction_files(root):
+            if ("outputs/"+entry.get("path","")==listed["path"] and
+                    "sha256:"+str(entry.get("published_sha256"))==listed["sha256"]):
+                accepted_output.add("sha256:"+str(entry.get("source_sha256")))
+        if receipt.get("output_sha256") not in accepted_output:
+            errors.append(f"execution-receipt-mismatch: tool {tool!r} output hash is not the listed output")
         if any(receipt.get(k)!=v for k,v in expected.items()) or any(receipt.get(k)!=ref[k] for k in
                 ("request_sha256","result_sha256","output_sha256","permission_sha256","permission_fingerprint_sha256",
                  "image_id","image_digest")):
             errors.append(f"execution-receipt-mismatch: tool {tool!r} identity is not the verified B13 identity")
     return errors
+
+
+def _redaction_files(root):
+    try:
+        return json.loads((Path(root)/"outputs"/"redaction-receipt.json").read_text(encoding="utf-8")).get("files", [])
+    except Exception:
+        return []
