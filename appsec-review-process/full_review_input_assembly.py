@@ -185,7 +185,8 @@ def _load_dependency_source(pointer: Path, *, run_id: str, spec: dict[str, Any]
     accepted = read_json(pointer)
     required = {"schema", "run_id", "job", "attempt_id", "status", "fingerprint",
                 "envelope_path", "envelope_sha256"}
-    if (not isinstance(accepted, dict) or set(accepted) != required or
+    # The dependency workers now publish the common pointer (adds hashes, accepted_at); accept both.
+    if (not isinstance(accepted, dict) or set(accepted) not in (required, required | {"hashes", "accepted_at"}) or
             accepted.get("schema") != ACCEPTED_SCHEMA or accepted.get("run_id") != run_id or
             accepted.get("job") != spec["job_id"] or accepted.get("status") not in {"OK", "OK_WITH_GAPS"} or
             accepted.get("envelope_path") != "result.json"):

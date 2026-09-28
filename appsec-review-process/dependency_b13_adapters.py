@@ -55,6 +55,24 @@ class AdapterBlocked(RuntimeError):
 
 
 
+def exit_accepted(kind: str, verified: dict, attempt_root: Path) -> bool:
+    """Non-zero exits that still produced the tool's full output. Shared by the adapter and the
+    worker's re-verification."""
+    if kind == "osv":
+        return osv_exit_accepted(verified, attempt_root)
+    if kind == "scancode":
+        # scancode exits 1 when some files fail to scan (freeciv21: three .blend files) after
+        # writing results for everything else; those files are a license coverage gap.
+        if verified.get("execution_status") != "FAILED" or verified.get("cause") != "CONTAINER_EXIT_NONZERO" \
+                or verified.get("exit_code") != 1:
+            return False
+        stderr = Path(attempt_root) / "logs" / "container" / "stderr.log"
+        output = Path(attempt_root) / "scratch" / SPECS["scancode"]["output"]
+        return (stderr.is_file() and output.is_file() and
+                "Some files failed to scan properly" in stderr.read_text(errors="replace"))
+    return False
+
+
 def osv_exit_accepted(verified: dict, attempt_root: Path) -> bool:
     """OSV exit 1 means findings; exit 127 with missing local ecosystem databases is a coverage
     gap (the scanned ecosystems still produced output), not a failed tool. Shared with the
@@ -158,7 +176,7 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
             expected_result_sha256=expected_result_sha256, **host)
     except ce.ContainerRequestError as exc:
         raise AdapterBlocked(f"{spec['job']}: B13 result failed independent re-verification") from exc
-    finding_exit = kind == "osv" and osv_exit_accepted(verified, attempt_root)
+    finding_exit = exit_accepted(kind, verified, attempt_root)
     if verified["execution_status"] != "OK" and not finding_exit:
         raise AdapterBlocked(f"{spec['job']}: pinned tool ended {verified['execution_status']} ({verified['cause']})")
     output = attempt_root / "scratch" / spec["output"]

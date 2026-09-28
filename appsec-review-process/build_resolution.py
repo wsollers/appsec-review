@@ -384,6 +384,15 @@ def _compile_db(path: Path, allowed: list[str]) -> list[dict[str, Any]]:
     except Exception as exc: raise RuntimeError(f"{JOB}: compile_commands.json is missing or invalid") from exc
     if not isinstance(value, list) or not value:
         raise RuntimeError(f"{JOB}: compile_commands.json is empty")
+    # bear also records clang's internal frontend re-exec (`clang-21 -cc1 ...`, multi-vuln); it
+    # duplicates the driver entry and is not a compile command. Drop it and keep the file in step.
+    kept = [e for e in value if isinstance(e, dict) and
+            (e.get("arguments") or shlex.split(e.get("command", "")))[1:2] != ["-cc1"]]
+    if len(kept) != len(value):
+        value = kept
+        atomic_json(path, value)
+        if not value:
+            raise RuntimeError(f"{JOB}: compile_commands.json is empty")
     allowed_set = set(allowed)
     for index, entry in enumerate(value):
         words = entry.get("arguments") or shlex.split(entry.get("command", ""))
@@ -664,7 +673,11 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             installs_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_json(installs_path, installs)
             install_files.append(installs_path.relative_to(attempt).as_posix())
-            entries = _compile_db(db_source, inputs["plan"]["value"]["toolchain"]["compile_database_compilers"])
+            try:
+                entries = _compile_db(db_source, inputs["plan"]["value"]["toolchain"]["compile_database_compilers"])
+            except RuntimeError as exc:   # ADR-0013: one unit's unusable compile DB is that unit's gap
+                gaps.append(f"{plan['unit_id']}: built, but its compile database is unusable: {exc}")
+                continue
             db_target = attempt / "outputs" / unit_key / "compile_commands.json"
             db_target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(db_source, db_target)
             _prune_trial_source(trial)

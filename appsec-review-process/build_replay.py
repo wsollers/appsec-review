@@ -309,6 +309,15 @@ def _compile_db(path: Path, allowed: list[str]) -> list[dict[str, Any]]:
         raise RuntimeError("02-native-build: compile_commands.json is missing or invalid") from exc
     if not isinstance(value, list) or not value:
         raise RuntimeError("02-native-build: compile_commands.json is empty")
+    # bear also records clang's internal frontend re-exec (`clang-21 -cc1 ...`, multi-vuln); it
+    # duplicates the driver entry and is not a compile command. Drop it and keep the file in step.
+    kept = [e for e in value if isinstance(e, dict) and
+            (e.get("arguments") or shlex.split(e.get("command", "")))[1:2] != ["-cc1"]]
+    if len(kept) != len(value):
+        value = kept
+        atomic_json(path, value)
+        if not value:
+            raise RuntimeError("02-native-build: compile_commands.json is empty")
     for index, entry in enumerate(value):
         words = entry.get("arguments") or shlex.split(entry.get("command", ""))
         if not words or words[0] not in set(allowed):
