@@ -437,6 +437,15 @@ def _cow_record(image_id: str, image: str, dockerfile: str, fingerprint: str, un
     return record
 
 
+def _prune_trial_source(trial: Path) -> None:
+    """Drop the trial's copy of the source tree and build outputs (freeciv21: ~720 MB per trial,
+    11 GB per job). The container result binds only the logs; the compile database is copied to
+    outputs/ first. Without this every re-validation hashes gigabytes of throwaway build trees."""
+    src = trial / "scratch" / "src"
+    if src.is_dir() and not src.is_symlink():
+        shutil.rmtree(src, ignore_errors=True)
+
+
 def _trial_text(trial: Path) -> str:
     parts = []
     for path in sorted((trial / "logs").rglob("*.log")) if (trial / "logs").is_dir() else []:
@@ -522,6 +531,7 @@ def _resolve_unit_cow(run_id, attempt, plan, number, unit_key, inputs, control, 
             last_failure = "build succeeded but produced no compile_commands.json"
             break
         trial_text = _trial_text(trial)
+        _prune_trial_source(trial)
         conflicts = cow.version_conflicts(trial_text)
         if conflicts:
             installs["version_conflicts"] = conflicts
@@ -654,6 +664,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             entries = _compile_db(db_source, inputs["plan"]["value"]["toolchain"]["compile_database_compilers"])
             db_target = attempt / "outputs" / unit_key / "compile_commands.json"
             db_target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(db_source, db_target)
+            _prune_trial_source(trial)
             lock = {"unit_id": plan["unit_id"],
                 "image": {"image_id": image_id, "digest": record["digest"], "digest_kind": "image-id"},
                 "dockerfile_sha256": record["dockerfile_sha256"],
