@@ -439,5 +439,20 @@ class UnresolvedRelationshipTest(unittest.TestCase):
                          ["component_relationships:a--writes-to--tmp-log"])
 
 
+class RepairAgainstTargetTest(unittest.TestCase):
+    def test_orders_tags_drops_foreign_locations_and_gaps_unscoped_files(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "src").mkdir(); (root / "src/a.c").write_text("x"); (root / "flake.nix").write_text("x")
+            value = {"tag_cloud": [{"tag": "t", "component_ids": ["b", "a", "a"]}],
+                     "functional_components": [{"component_id": "a", "representative_locations": ["src/a.c:3", "docs/index.md"]}],
+                     "code_scope_classification": [{"scope_id": "s", "path_patterns": ["src/**"]}],
+                     "classification_gaps": []}
+            cc._repair_against_target(value, root)
+        self.assertEqual(value["tag_cloud"][0]["component_ids"], ["a", "b"])
+        self.assertEqual(value["functional_components"][0]["representative_locations"], ["src/a.c:3"])
+        self.assertEqual([g["subject"] for g in value["classification_gaps"]], ["scope:flake.nix"])
+
+
 if __name__ == "__main__":
     unittest.main()

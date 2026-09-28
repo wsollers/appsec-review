@@ -410,8 +410,11 @@ def derive_plan(component_pointer: Path, run_root: Path, plan_path: Path, *, run
                         "reason": "requires accepted SCA and staged reachability evidence"})
     skipped.append({"job_id": "02-binary-hardening", "status": "SKIPPED_NA",
                     "reason": "requires an accepted built-binary projection"})
+    # The plan schema takes whole-second UTC ('...Z'); Dagster passes isoformat with micros and +00:00.
+    from datetime import datetime, timezone
+    stamp = datetime.fromisoformat(generated_at.replace("Z", "+00:00")).astimezone(timezone.utc)
     plan = {"schema": PLAN_SCHEMA, "run_id": run_id, "source_generation": generation,
-            "generated_at": generated_at, "accepted_sources": source_specs,
+            "generated_at": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"), "accepted_sources": source_specs,
             "launches": sorted(launches, key=lambda row: row["job_id"]),
             "skipped": sorted(skipped, key=lambda row: row["job_id"])}
     errors = validate_document(plan, "full-review-input-plan.schema.json")

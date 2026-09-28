@@ -479,6 +479,8 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
     unassigned = sorted(path for path, owners in assignments.items() if not owners)
     if overlapping:
         errors.append("target files have overlapping scope classifications: " + ", ".join(overlapping))
+    gapped_subjects = {item.get("subject") for item in value["classification_gaps"]}
+    unassigned = [path for path in unassigned if f"scope:{path}" not in gapped_subjects]
     if unassigned:
         errors.append("target files are not assigned to a physical scope: " + ", ".join(unassigned))
     for item in value["analysis_exclusions"]:
@@ -660,6 +662,41 @@ def _drop_unresolved_relationships(value: dict[str, Any]) -> None:
     value["component_relationships"] = kept
 
 
+def _repair_against_target(value: dict[str, Any], target_root: Path) -> None:
+    """ADR-0013 repairs that need the file list (freeciv21 a63ffa38): order tag ids, drop
+    representative locations that are not target files, and record files no scope claims as gaps."""
+    target_files = _target_files(target_root)
+    for item in value.get("tag_cloud") or []:
+        item["component_ids"] = sorted(set(item.get("component_ids") or []))
+    for item in value.get("functional_components") or []:
+        item["representative_locations"] = [
+            loc for loc in item.get("representative_locations") or []
+            if not _pattern_ok(_location_path(loc)) or _location_path(loc) in target_files]
+    claimed: set[str] = set()
+    for item in value.get("code_scope_classification") or []:
+        for pattern in item.get("path_patterns") or []:
+            if _pattern_ok(pattern):
+                claimed |= {path for path in target_files if _matches(path, pattern)}
+    gaps = value.setdefault("classification_gaps", [])
+    have = {g.get("subject") for g in gaps}
+    ids = {g.get("gap_id") for g in gaps}
+    for path in sorted(set(target_files) - claimed):
+        if f"scope:{path}" in have:
+            continue
+        gap_id = base = "gap-unscoped-" + _slug(path)[:80]
+        n = 1
+        while gap_id in ids:
+            n += 1; gap_id = f"{base}-{n}"
+        ids.add(gap_id)
+        gaps.append({
+            "gap_id": gap_id,
+            "subject": f"scope:{path}",
+            "reason": "No physical scope pattern in the model's map claims this target file.",
+            "routing_impact": "Scope-driven routing will not reach this file; lane routing still applies.",
+            "resolution_action": "Re-run characterization or add the file to a scope in a later pass.",
+        })
+
+
 def _record_untagged_gaps(value: dict[str, Any]) -> None:
     """ADR-0013: a component the model left out of the tag cloud is a routing gap, not a failed map."""
     tagged = {c for item in value.get("tag_cloud") or [] for c in item.get("component_ids") or []}
@@ -706,6 +743,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
         _normalize_component_ids(value)
         _drop_unresolved_relationships(value)
+        _repair_against_target(value, Path(inputs["target_root"]))
         _record_untagged_gaps(value)
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
