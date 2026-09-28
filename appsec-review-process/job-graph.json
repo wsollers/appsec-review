@@ -275,7 +275,8 @@
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
             "not-applicable-non-native",
-            "not-applicable-no-native-binaries"
+            "not-applicable-no-native-binaries",
+            "not-applicable-no-test-plan"
           ]
         },
         {
@@ -285,7 +286,8 @@
           "allowed_skip_reasons": [
             "not-applicable-after-partition-review",
             "not-applicable-non-native",
-            "not-applicable-no-native-binaries"
+            "not-applicable-no-native-binaries",
+            "not-applicable-no-test-plan"
           ]
         },
         {
@@ -567,7 +569,10 @@
           "job": "02-ir-facts",
           "kind": "required",
           "contract": "ir-facts",
-          "allowed_skip_reasons": []
+          "allowed_skip_reasons": [
+            "not-applicable-non-native",
+            "not-applicable-no-native-binaries"
+          ]
         }
       ],
       "planned_scope": "Deterministic static reachability classification over the exact accepted SCA matches and explicit hash-bound run-owned evidence. Version matches alone never establish reachability and outputs remain evidence leads.",
@@ -1371,7 +1376,8 @@
           "contract": "test-execution",
           "allowed_skip_reasons": [
             "not-applicable-non-native",
-            "not-applicable-no-native-binaries"
+            "not-applicable-no-native-binaries",
+            "not-applicable-no-test-plan"
           ]
         }
       ],
@@ -1396,7 +1402,8 @@
           "contract": "test-execution",
           "allowed_skip_reasons": [
             "not-applicable-non-native",
-            "not-applicable-no-native-binaries"
+            "not-applicable-no-native-binaries",
+            "not-applicable-no-test-plan"
           ]
         }
       ],

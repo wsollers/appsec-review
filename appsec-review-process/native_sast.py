@@ -124,7 +124,7 @@ def _strict_pointer(pointer: dict[str, Any], run_id: str) -> None:
     expected = {"schema", "status", "run_id", "job", "attempt_id", "fingerprint",
                 "envelope_path", "envelope_sha256", "hashes", "accepted_at"}
     if (set(pointer) != expected or pointer.get("schema") != ACCEPTED_SCHEMA or
-            pointer.get("status") != "OK" or pointer.get("run_id") != run_id or
+            pointer.get("status") not in ("OK", "OK_WITH_GAPS") or pointer.get("run_id") != run_id or
             pointer.get("job") != UPSTREAM_JOB or pointer.get("envelope_path") != "result.json"):
         raise Blocked(f"{JOB}: native-build pointer is not the exact accepted common shape")
 
@@ -408,7 +408,8 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
     expected_gaps = sorted(gap for unit in expected_units for gap in unit["coverage_gaps"])
     expected = {"schema": SCHEMA, "run_id": run_id, "job_id": JOB,
         "attempt_id": attempt.name, "source_snapshot_sha256": inputs["source_snapshot_sha256"],
-        "native_build": inputs["native_build"], "status": "OK_WITH_GAPS" if expected_gaps else "OK",
+        "native_build": inputs["native_build"],
+        "status": ("SKIPPED" if not inputs["units"] else "OK_WITH_GAPS" if expected_gaps else "OK"),
         "units": expected_units, "coverage_gaps": expected_gaps}
     if result != expected:
         raise Blocked(f"{JOB}: normalized result differs from its immutable raw analyzer evidence")
@@ -463,7 +464,9 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             "attempt_id": allocation["attempt_id"],
             "source_snapshot_sha256": inputs["source_snapshot_sha256"],
             "native_build": inputs["native_build"],
-            "status": "OK_WITH_GAPS" if gaps else "OK", "units": normalized,
+            # ADR-0014: zero built units is a skip, not a failure
+            "status": ("SKIPPED" if not inputs["units"] else "OK_WITH_GAPS" if gaps else "OK"),
+            "units": normalized,
             "coverage_gaps": gaps}
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, receipts)
@@ -498,6 +501,7 @@ def run(run_id: str, dagster_id: str, *, native_build_root: Path,
             execution_status=result["status"],
             summary=f"Three pinned native analyzers produced {status['leads']} evidence lead(s).",
             status_record=status, artifact_paths=artifacts, gaps=gaps or None,
+            skip_reason="not-applicable-no-native-binaries" if result["status"] == "SKIPPED" else None,
             pre_envelope_validate=lambda path, _status: _validate_attempt(run_id, path, inputs))
 
     return coordinate_worker_lifecycle(base, run_id=run_id, job_id=JOB,

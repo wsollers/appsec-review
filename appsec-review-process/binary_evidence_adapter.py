@@ -29,9 +29,6 @@ RAW_SCHEMA = "appsec-review/binary-static-evidence-input/1"
 RECEIPT_SCHEMA = "appsec-review/binary-b13-receipts/1.0"
 SUPPORTED = {"02-debug-symbol-index", "02-binary-triage", "02-binary-cfg"}
 MAX_RAW_BYTES = tunables.shared("binary_raw_output_max_bytes")
-LIMITS = {"timeout_seconds": 900, "memory_bytes": 4 * 1024 * 1024 * 1024,
-          "cpu_millis": 4000, "pids": 512, "tmpfs_bytes": 1024 * 1024 * 1024,
-          "stdout_limit_bytes": 16 * 1024 * 1024, "stderr_limit_bytes": 16 * 1024 * 1024}
 
 
 def _utc() -> str:

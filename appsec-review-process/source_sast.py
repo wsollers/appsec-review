@@ -350,10 +350,14 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             ce.load_verified_result(language_trial, run_id=run_id, job_id=JOB, attempt_id=language_id,
                 request=language_request, images_dir=runtime.images_dir,
                 expected_result_sha256=language_sha, **_host(runtime))
+            # ADR-0013: one language tool that fails (spotbugs on source-only Java: "No files to
+            # analyze") is a coverage gap for that tool; execution_gaps names every tool without an
+            # accepted receipt, and the validator re-derives the same gaps from the receipts.
             if not language_adapters.accepted_terminal(plan, language_terminal):
-                raise RuntimeError(f"{JOB}: {plan['tool_id']} ended {language_terminal['execution_status']}")
+                continue
             raw = language_trial.joinpath(*plan["output"].split("/"))
-            if not raw.is_file() or raw.is_symlink(): raise RuntimeError(f"{JOB}: {plan['tool_id']} produced no bounded output")
+            if not raw.is_file() or raw.is_symlink():
+                continue
             leads = language_adapters.normalize(plan["tool_id"], raw.read_bytes(), Path(inputs["target_path"]))
             language_leads.extend(leads); executed.add(plan["tool_id"])
             language_tools.append({"tool_id":plan["tool_id"],"tool":plan["tool_id"],"version":plan["version"],

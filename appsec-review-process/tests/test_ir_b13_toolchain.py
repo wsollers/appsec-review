@@ -27,7 +27,7 @@ class IrB13ToolchainTests(unittest.TestCase):
         from ir_b13_toolchain import _image
 
         record = {"digest": "sha256:" + "4" * 64}
-        inputs = {"upstream_result": {"units": [{"image_id": "fixture",
+        inputs = {"upstream_result": {"units": [{"unit_id": "root", "image_id": "fixture",
                                                    "image_digest": record["digest"]}]},
                   "toolchain_bindings": [["root", "sha256:" + "a" * 64]],
                   "toolchain_records": [["fixture", {"sha256": "sha256:" + "a" * 64,

@@ -63,10 +63,10 @@
   "coordinator": "intake-coordinator",
   "tunables": {
     "container_timeout_seconds": {
-      "value": 900,
+      "value": 3600,
       "unit": "seconds",
       "kind": "resource",
-      "description": "Wall-clock limit for the container (Syft/Grype/OSV/ScanCode).",
+      "description": "Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode is single-process here and scales with file count.",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_memory_bytes": {

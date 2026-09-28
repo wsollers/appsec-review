@@ -20,6 +20,9 @@ from execution_state import tree_hashes
 import intake
 
 PROHIBITED_KEYS = {"finding", "findings", "severity", "vulnerability", "vulnerabilities", "clean_claim"}
+NO_BINARIES = "not-applicable-no-native-binaries"
+NO_TEST_PLAN = "not-applicable-no-test-plan"
+SKIP_SCHEMA = "evidence-skip.schema.json"
 EXECUTION_JOB="02-test-execution"; RESULT_JOB="02-test-result-ingest"; COVERAGE_JOB="02-test-coverage-ingest"
 CONTROL="test-execution-control.json"
 PERMISSIONS={EXECUTION_JOB:["target-execution","write-run-data"],
@@ -199,7 +202,7 @@ def accepted(run_id:str,job:str,artifact:str,schema:str,contract:str)->tuple[Pat
     required={"schema","status","run_id","job","attempt_id","fingerprint","envelope_path","envelope_sha256","hashes","accepted_at"}
     latest=read_json(base/"latest.json") if (base/"latest.json").is_file() else {}
     if (set(pointer)!=required or pointer.get("schema")!="appsec-review/accepted-worker-result/1.0" or pointer.get("run_id")!=run_id or
-        pointer.get("job")!=job or pointer.get("status") not in {"OK","OK_WITH_GAPS"} or
+        pointer.get("job")!=job or pointer.get("status") not in {"OK","OK_WITH_GAPS","SKIPPED"} or
         pointer.get("envelope_path")!="result.json" or latest.get("attempt_id")!=pointer.get("attempt_id") or
         not attempt.is_dir() or attempt.is_symlink() or tree_hashes(attempt)!=pointer.get("hashes") or
         not envelope.is_file() or file_hash(envelope)!=pointer.get("envelope_sha256")): raise Blocked(f"{job}: stale accepted pointer")
@@ -216,7 +219,8 @@ def accepted(run_id:str,job:str,artifact:str,schema:str,contract:str)->tuple[Pat
     rp=_relative(attempt,artifact)
     if published.get(artifact)!=file_hash(rp): raise Blocked(f"{job}: result is not published")
     value=read_json(rp)
-    if validate_document(value,schema): raise Blocked(f"{job}: result schema invalid")
+    if validate_document(value,SKIP_SCHEMA if pointer["status"]=="SKIPPED" else schema):
+        raise Blocked(f"{job}: result schema invalid")
     lineage={"job_id":job,"attempt_id":pointer["attempt_id"],"accepted_pointer_sha256":sha(pp),
              "envelope_sha256":sha(envelope),"result_sha256":sha(rp),"input_fingerprint":pointer["fingerprint"]}
     return attempt,value,lineage
@@ -228,11 +232,28 @@ def target(run_id:str)->tuple[Path,str,str,str]:
     path=path.resolve(); identity=intake.source_identity(str(path)); tree=source_tree_sha256(path)
     return path,sha(manifest),tree,identity["revision"]
 
+def _skip_inputs(run_id:str,job:str,upstream:dict,reason:str,why:str)->dict:
+    _target_path,source,checkout,revision=target(run_id)
+    return {"run_id":run_id,"job":job,"source_snapshot_sha256":source,"source_tree_sha256":checkout,
+            "checkout_identity_sha256":checkout,"source_revision":revision,"upstream":upstream,
+            "skip":{"reason":reason,"why":why},
+            "build_lineage_sha256":"sha256:"+digest({"job":job,"source_snapshot_sha256":source,"upstream":upstream})}
+
+def skip_document(inputs:dict)->dict:
+    return {"schema":"appsec-review/evidence-skip/1","run_id":inputs["run_id"],"job_id":inputs["job"],
+            "status":"SKIPPED","reason":inputs["skip"]["reason"],"why":inputs["skip"]["why"],
+            "upstream":inputs["upstream"]}
+
 def execution_inputs(run_id:str)->dict:
     native_attempt,native,lineage=accepted(run_id,"02-native-build","native-build.json","native-build.schema.json","native-build")
     control_path=data_path(run_id,"controls",CONTROL)
+    # ADR-0014: zero built units is a skip; so is having no test plan for the units that built
+    # (plan-driven tests replace the operator control in a later slice).
+    if not native.get("units"):
+        return _skip_inputs(run_id,EXECUTION_JOB,lineage,NO_BINARIES,"The accepted native build has no built units.")
     if not control_path.is_file() or validate_document(read_json(control_path),"test-execution-control.schema.json"):
-        raise Blocked("explicit trusted test execution control is required")
+        return _skip_inputs(run_id,EXECUTION_JOB,lineage,NO_TEST_PLAN,
+            f"No test execution control is staged for the {len(native['units'])} built unit(s).")
     control=read_json(control_path); target_path,source,checkout,revision=target(run_id); inputs=read_json(native_attempt/"inputs.json")
     if ((control["result_format"]=="junit-xml" and not isinstance(control["result_path"],str)) or
             (control["coverage_format"]=="lcov" and not isinstance(control["coverage_path"],str))):
@@ -323,6 +344,8 @@ def code_hashes(job:str)->dict[str,str]:
 
 def ingest_inputs(run_id:str,job:str)->dict:
     attempt,execution,lineage=accepted(run_id,EXECUTION_JOB,"test-execution.json","test-execution.schema.json","test-execution")
+    if execution.get("status")=="SKIPPED":
+        return _skip_inputs(run_id,job,lineage,execution["reason"],"02-test-execution was skipped: "+execution["why"])
     target_path,source,checkout,revision=target(run_id)
     if execution["source_snapshot_sha256"]!=source: raise Blocked("test execution source generation is stale")
     if execution["source_tree_sha256"]!=checkout:
@@ -379,6 +402,13 @@ def derive_ingest(inputs:dict,job:str)->dict:
 def validate_attempt(run_id:str,job:str,attempt:Path,inputs:dict)->None:
     if read_json(attempt/"inputs.json")!=inputs: raise Blocked(f"{job}: immutable inputs changed")
     if current_inputs(run_id,job)!=inputs: raise Blocked(f"{job}: accepted upstream, source, control, or implementation changed")
+    if inputs.get("skip"):
+        result=read_json(attempt/SPECS[job][0])
+        if validate_document(result,SKIP_SCHEMA) or result!=skip_document(inputs):
+            raise Blocked(f"{job}: SKIPPED result is not the derived skip")
+        if (read_json(attempt/"permission.json"),read_json(attempt/"lineage.json"))!=producer_receipts(run_id,job,inputs):
+            raise Blocked(f"{job}: F02 permission/lineage receipts changed")
+        return
     result=read_json(attempt/SPECS[job][0])
     if validate_document(result,SPECS[job][1]): raise Blocked(f"{job}: result schema invalid")
     def prohibited(value:Any)->bool:
@@ -419,6 +449,23 @@ def run_job(run_id:str,dagster_id:str,job:str,force:bool=False)->dict:
     def execute(allocation,inputs,fingerprint):
         attempt=allocation["attempt"]
         if current_inputs(run_id,job)!=inputs: raise Blocked(f"{job}: inputs changed before execution")
+        if inputs.get("skip"):
+            result=skip_document(inputs)
+            atomic_json(attempt/result_name,result)
+            permission_receipt,lineage_receipt=producer_receipts(run_id,job,inputs)
+            atomic_json(attempt/"permission.json",permission_receipt); atomic_json(attempt/"lineage.json",lineage_receipt)
+            status={"process":job,"status":"SKIPPED","reason":inputs["skip"]["reason"],"run_id":run_id,
+                    "dagster_run_id":dagster_id,"attempt_id":allocation["attempt_id"],"ended_at":state_now()}
+            atomic_json(attempt/"status.json",status)
+            (attempt/f"{contract}-summary.md").write_text(
+                f"# {job}\n\n- SKIPPED ({inputs['skip']['reason']}): {inputs['skip']['why']}\n",encoding="utf-8")
+            return record_terminal_current(base,attempt,run_id=run_id,job_id=job,dagster_run_id=dagster_id,
+              worker_kind="pinned_container" if job==EXECUTION_JOB else "deterministic_python",output_contract=contract,
+              input_fingerprint=fingerprint,started_at=allocation["started_at"],execution_status="SKIPPED",
+              summary=f"{job} skipped: {inputs['skip']['why']}"[:1000],status_record=status,
+              artifact_paths=[result_name,"status.json",f"{contract}-summary.md","permission.json","lineage.json"],
+              skip_reason=inputs["skip"]["reason"],
+              pre_envelope_validate=lambda path,_status:validate_attempt(run_id,job,path,inputs))
         if job==EXECUTION_JOB:
             adapter="test-"+allocation["attempt_id"][:12]; trial=attempt/"tools"/"declared-test"; trial.mkdir(parents=True)
             registry=attempt/"image-registry"; registry.mkdir()

@@ -4,16 +4,58 @@
   "title": "Hash-bound native static-analysis evidence leads",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "run_id", "job_id", "attempt_id", "source_snapshot_sha256", "native_build", "status", "units", "coverage_gaps"],
+  "required": [
+    "schema",
+    "run_id",
+    "job_id",
+    "attempt_id",
+    "source_snapshot_sha256",
+    "native_build",
+    "status",
+    "units",
+    "coverage_gaps"
+  ],
   "properties": {
-    "schema": {"const": "appsec-review/native-sast/1"},
-    "run_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$"},
-    "job_id": {"const": "02-native-sast"},
-    "attempt_id": {"type": "string", "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$"},
-    "source_snapshot_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "native_build": {"$ref": "native-sast-upstream.schema.json"},
-    "status": {"enum": ["OK", "OK_WITH_GAPS"]},
-    "units": {"type": "array", "minItems": 1, "items": {"$ref": "native-sast-unit.schema.json"}},
-    "coverage_gaps": {"type": "array", "items": {"type": "string", "minLength": 1}}
+    "schema": {
+      "const": "appsec-review/native-sast/1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$"
+    },
+    "job_id": {
+      "const": "02-native-sast"
+    },
+    "attempt_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z._-]{0,95}$"
+    },
+    "source_snapshot_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "native_build": {
+      "$ref": "native-sast-upstream.schema.json"
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "OK_WITH_GAPS",
+        "SKIPPED"
+      ]
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "$ref": "native-sast-unit.schema.json"
+      }
+    },
+    "coverage_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
   }
 }

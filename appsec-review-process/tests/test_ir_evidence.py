@@ -140,15 +140,18 @@ class IrEvidenceTests(unittest.TestCase):
             ir._accepted(self.run_id, "02-native-build", "native-build.json",
                          "native-build.schema.json", "native-build")
 
+        # ADR-0014 slice 1: several variants link the largest one and gap the rest; one variant
+        # built with two toolchains still fails closed.
         capture = {"modules":[{"variant_sha256":"sha256:"+"1"*64,"toolchain_sha256":self.toolchain.toolchain_sha256},
-                              {"variant_sha256":"sha256:"+"2"*64,"toolchain_sha256":self.toolchain.toolchain_sha256}],
-                   "variants":[{"image_id":self.toolchain.image_id,"image_digest":self.toolchain.image_digest}],
+                              {"variant_sha256":"sha256:"+"1"*64,"toolchain_sha256":"sha256:"+"8"*64}],
+                   "variants":[{"unit_id":"u1","variant_sha256":"sha256:"+"1"*64,
+                                "image_id":self.toolchain.image_id,"image_digest":self.toolchain.image_digest}],
                    "source_snapshot_sha256":self.snapshot,
                    "source_tree_sha256":ir._source_tree_identity(self.target),
                    "checkout_identity_sha256":ir._source_tree_identity(self.target),
                    "source_revision":intake.source_identity(str(self.target))["revision"]}
         with mock.patch.object(ir,"_accepted",return_value=(self.owner,capture,{})):
-            with self.assertRaisesRegex(state.Blocked,"mixed variants"):
+            with self.assertRaisesRegex(state.Blocked,"mixed toolchains"):
                 ir.link(self.run_id,self.owner/"mixed",toolchain=self.toolchain)
 
         inputs={"run_id":self.run_id,"source_snapshot_sha256":self.snapshot,
@@ -258,3 +261,23 @@ class IrEvidenceTests(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class LinkSelectionTests(unittest.TestCase):
+    def test_largest_variant_is_linked_and_others_are_named_gaps(self):
+        a, b = "sha256:" + "1" * 64, "sha256:" + "2" * 64
+        captured = {"modules": [{"variant_sha256": a, "module_id": "m1"},
+                                {"variant_sha256": b, "module_id": "m2"},
+                                {"variant_sha256": b, "module_id": "m3"}],
+                    "variants": [{"unit_id": "dir:a", "variant_sha256": a},
+                                 {"unit_id": "dir:b", "variant_sha256": b}]}
+        primary, selected, gaps = ir.link_selection(captured)
+        self.assertEqual(primary, b)
+        self.assertEqual([m["module_id"] for m in selected], ["m2", "m3"])
+        self.assertEqual(gaps, [{"unit_id": "dir:a", "reason": ir.LINK_GAP, "modules": 1}])
+
+    def test_zero_is_a_skip(self):
+        self.assertTrue(ir.should_skip("02-ir-capture", {"upstream_result": {"units": []}}))
+        self.assertTrue(ir.should_skip("02-ir-link", {"upstream_result": {"status": "OK_WITH_GAPS", "modules": []}}))
+        self.assertTrue(ir.should_skip("02-ir-facts", {"upstream_result": {"status": "SKIPPED"}}))
+        self.assertFalse(ir.should_skip("02-ir-link", {"upstream_result": {"status": "OK", "modules": [{}]}}))

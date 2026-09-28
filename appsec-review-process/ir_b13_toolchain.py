@@ -55,22 +55,34 @@ def _record_path(image_id: str) -> Path:
     return present[0]
 
 
-def _image(inputs: dict[str, Any], job: str) -> tuple[str, str, str, dict[str, Any]]:
+def capture_images(inputs: dict[str, Any]) -> list[str]:
+    """ADR-0014: IR capture serves every build image its units used (e.g. noble and the resolute
+    fallback), one toolchain per image, each bound to its accepted native-build record."""
+    return sorted({unit["image_id"] for unit in inputs["upstream_result"]["units"]})
+
+
+def _image(inputs: dict[str, Any], job: str, image_id: str | None = None) -> tuple[str, str, str, dict[str, Any]]:
     if job == "02-ir-capture":
         units = inputs["upstream_result"]["units"]
-        identities = {(unit["image_id"], unit["image_digest"]) for unit in units}
-        bindings = {sha for _unit, sha in inputs["toolchain_bindings"] if isinstance(sha, str)}
-        accepted_records = {image_id: binding for image_id, binding in inputs["toolchain_records"]}
-        if len(identities) != 1 or len(bindings) != 1 or len(accepted_records) != 1:
-            raise Blocked("IR capture requires one exact native-build image generation")
-        image_id, image_digest = next(iter(identities)); toolchain_sha = next(iter(bindings))
+        image_id = image_id if image_id is not None else capture_images(inputs)[0]
+        mine = [unit for unit in units if unit["image_id"] == image_id]
+        bindings_by_unit = dict(inputs["toolchain_bindings"])
+        identities = {(unit["image_id"], unit["image_digest"]) for unit in mine}
+        bindings = {bindings_by_unit.get(unit["unit_id"]) for unit in mine}
+        accepted_records = {iid: binding for iid, binding in inputs["toolchain_records"]}
+        if len(identities) != 1 or len(bindings) != 1 or not isinstance(next(iter(bindings)), str):
+            raise Blocked(f"IR capture: image {image_id} is not one exact native-build image generation")
+        image_digest = next(iter(identities))[1]; toolchain_sha = next(iter(bindings))
     elif job == "02-ir-link":
+        from ir_evidence import link_selection
         accepted_records = None
         upstream = inputs["upstream_result"]
-        identities = {(item["image_id"], item["image_digest"]) for item in upstream["variants"]}
-        bindings = {item["toolchain_sha256"] for item in upstream["modules"]}
+        primary, selected, _gaps = link_selection(upstream)
+        identities = {(item["image_id"], item["image_digest"]) for item in upstream["variants"]
+                      if item["variant_sha256"] == primary}
+        bindings = {item["toolchain_sha256"] for item in selected}
         if len(identities) != 1 or len(bindings) != 1:
-            raise Blocked("IR link requires one exact capture image generation")
+            raise Blocked("IR link requires one exact capture image generation per link target")
         image_id, image_digest = next(iter(identities)); toolchain_sha = next(iter(bindings))
     else:
         accepted_records = None
@@ -96,10 +108,18 @@ class B13IrToolchain:
     def __init__(self, job: str, inputs: dict[str, Any], attempt: Path):
         self.job, self.inputs, self.attempt = job, inputs, attempt
         self.run_id = inputs["run_id"]
+        self.images = ({image: _image(inputs, job, image) for image in capture_images(inputs)}
+                       if job == "02-ir-capture" else None)
         self.image_id, self.image_digest, self.toolchain_sha256, self.image_record = _image(inputs, job)
         self.runtime = _runtime(inputs["source_snapshot_sha256"])
         self.receipts: list[dict[str, Any]] = []
         self.target = Path(inputs["target_path"]) if job == "02-ir-capture" else None
+
+    def select(self, image_id: str) -> None:
+        """Capture only: compile the next unit's entries with that unit's build image."""
+        if not self.images or image_id not in self.images:
+            raise Blocked(f"IR capture image {image_id} is not an accepted native-build image")
+        self.image_id, self.image_digest, self.toolchain_sha256, self.image_record = self.images[image_id]
 
     def _request(self, attempt_id: str, argv: list[str], mounts: list[dict[str, str]]) -> dict[str, Any]:
         return {"schema": ce.REQUEST_ID, "run_id": self.run_id, "job_id": self.job,
@@ -191,10 +211,17 @@ class B13IrToolchain:
         return raw.read_text(encoding="utf-8")
 
     def publish_receipts(self) -> None:
-        atomic_json(self.attempt / RECEIPT,{"schema":"appsec-review/ir-b13-receipts/1.0",
+        document = {"schema":"appsec-review/ir-b13-receipts/1.0",
             "run_id":self.run_id,"job_id":self.job,"image_id":self.image_id,
             "image_digest":self.image_digest,"toolchain_sha256":self.toolchain_sha256,
-            "operations":self.receipts})
+            "operations":self.receipts}
+        if self.images:
+            first = sorted(self.images)[0]
+            document.update(image_id=first, image_digest=self.images[first][1],
+                            toolchain_sha256=self.images[first][2],
+                            images=[{"image_id":i,"image_digest":v[1],"toolchain_sha256":v[2]}
+                                    for i, v in sorted(self.images.items())])
+        atomic_json(self.attempt / RECEIPT, document)
 
 
 def factory(job: str, inputs: dict[str, Any], attempt: Path) -> B13IrToolchain:
@@ -204,7 +231,16 @@ def factory(job: str, inputs: dict[str, Any], attempt: Path) -> B13IrToolchain:
 def validate_receipts(job: str, inputs: dict[str, Any], attempt: Path) -> None:
     document=read_json(attempt/RECEIPT)
     image_id,image_digest,toolchain_sha,_record=_image(inputs,job)
-    if (set(document)!={"schema","run_id","job_id","image_id","image_digest","toolchain_sha256","operations"} or
+    keys={"schema","run_id","job_id","image_id","image_digest","toolchain_sha256","operations"}
+    allowed_images={image_id}
+    if job=="02-ir-capture":
+        keys.add("images")
+        images={i:_image(inputs,job,i) for i in capture_images(inputs)}
+        allowed_images=set(images)
+        if document.get("images")!=[{"image_id":i,"image_digest":v[1],"toolchain_sha256":v[2]}
+                                    for i,v in sorted(images.items())]:
+            raise Blocked(f"{job}: B13 receipt image set differs from the accepted native build")
+    if (set(document)!=keys or
         document.get("schema")!="appsec-review/ir-b13-receipts/1.0" or document.get("run_id")!=inputs["run_id"] or
         document.get("job_id")!=job or document.get("image_id")!=image_id or
         document.get("image_digest")!=image_digest or document.get("toolchain_sha256")!=toolchain_sha or
@@ -234,6 +270,8 @@ def validate_receipts(job: str, inputs: dict[str, Any], attempt: Path) -> None:
                 record["output_path"] != expected_output):
             raise Blocked(f"{job}: B13 trial path is unsafe")
         trial=attempt.joinpath(*pure.parts); request=read_json(trial/"logs/container"/ce.REQUEST_FILE)
+        if (request.get("image") or {}).get("image_id") not in allowed_images:
+            raise Blocked(f"{job}: B13 operation ran on an image outside the accepted build images")
         errors=ce.verify_container_result(trial,run_id=inputs["run_id"],job_id=job,
             attempt_id=record["adapter_attempt_id"],request=request,images_dir=runtime.images_dir,
             expected_result_sha256=record["expected_result_sha256"],**_host(runtime))

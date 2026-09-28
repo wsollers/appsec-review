@@ -9,6 +9,7 @@ an immutable attempt and a common worker envelope.  Results are evidence leads, 
 from __future__ import annotations
 
 import argparse
+import tunables
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -168,7 +169,7 @@ def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tup
     attempt_id = expected_request.get("attempt_id")
     static = {"schema": ce.REQUEST_ID, "run_id": request["run_id"], "job_id": job,
               "argv": spec["argv"], "scratch_path": "scratch", "log_path": "logs/container",
-              "network": {"mode": "none", "destinations": []}, "limits": dependency_adapters.LIMITS}
+              "network": {"mode": "none", "destinations": []}, "limits": tunables.container_limits(spec["job"])}
     if any(expected_request.get(key) != value for key, value in static.items()):
         raise WorkerBlocked(f"{job}: B13 request differs from the fixed dependency adapter")
     if not isinstance(attempt_id, str) or not IDENT.fullmatch(attempt_id):

@@ -39,9 +39,6 @@ SPECS = {
                  "output": "scancode.json", "argv": ["/scancode-toolkit/scancode", "-clip",
                      "--json-pp", "/scratch/scancode.json", "/workspace"]},
 }
-LIMITS = {"timeout_seconds": 900, "memory_bytes": 4 * 1024 * 1024 * 1024,
-          "cpu_millis": 2000, "pids": 256, "tmpfs_bytes": 1024 * 1024 * 1024,
-          "stdout_limit_bytes": 1024 * 1024, "stderr_limit_bytes": 1024 * 1024}
 
 
 class AdapterBlocked(RuntimeError):

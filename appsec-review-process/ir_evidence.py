@@ -29,6 +29,54 @@ PERMISSIONS = {"02-ir-capture": ["read-source", "write-run-data"],
                "02-ir-link": ["read-run-data", "write-run-data"],
                "02-ir-facts": ["read-run-data", "write-run-data"]}
 PROHIBITED = {"finding", "findings", "severity", "vulnerability", "verdict", "runtime_state"}
+SKIP_REASON = "not-applicable-no-native-binaries"
+UPSTREAM_KEY = {"02-ir-capture": "native_build", "02-ir-link": "capture", "02-ir-facts": "link"}
+LINK_GAP = "not-linked-one-link-target-per-run"
+
+
+def should_skip(job: str, inputs: dict[str, Any]) -> bool:
+    """ADR-0014: zero is a skip. No built unit, no captured module, or a skipped upstream."""
+    upstream = inputs["upstream_result"]
+    if job == "02-ir-capture":
+        return not upstream["units"]
+    if job == "02-ir-link":
+        return upstream["status"] == "SKIPPED" or not upstream["modules"]
+    return upstream["status"] == "SKIPPED"
+
+
+def skip_result(job: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    upstream = inputs["upstream_result"]
+    result = {"schema": f"appsec-review/{JOBS[job][2]}/1", "run_id": inputs["run_id"],
+        "source_revision": upstream["source_revision"],
+        "source_snapshot_sha256": inputs["source_snapshot_sha256"],
+        "source_tree_sha256": inputs["source_tree_sha256"],
+        "checkout_identity_sha256": inputs["checkout_identity_sha256"],
+        UPSTREAM_KEY[job]: inputs["upstream"], "status": "SKIPPED", "coverage_gaps": []}
+    if job == "02-ir-capture":
+        result.update({"variants": [], "modules": []})
+    elif job == "02-ir-link":
+        result.update({"variant_sha256": None, "toolchain_sha256": None, "image_id": None,
+                       "image_digest": None, "module_set_sha256": None, "linked_module": None,
+                       "sources": [], "coverage_gaps": list(upstream["coverage_gaps"])})
+    else:
+        result.update({"linked_module_sha256": None, "variant_sha256": None, "toolchain_sha256": None,
+                       "image_id": None, "image_digest": None, "sources": [], "debug_locations": [],
+                       "facts": [], "coverage_gaps": list(upstream["coverage_gaps"])})
+    return result
+
+
+def link_selection(captured: dict[str, Any]) -> tuple[str, list[dict], list[dict]]:
+    """First slice of ADR-0014 item 4: without link commands, link one target per run, the build
+    variant (unit) with the most captured modules; every other unit is a named gap."""
+    by_variant: dict[str, list[dict]] = {}
+    for module in captured["modules"]:
+        by_variant.setdefault(module["variant_sha256"], []).append(module)
+    unit_of = {item["variant_sha256"]: item["unit_id"] for item in captured["variants"]}
+    order = sorted(by_variant, key=lambda v: (-len(by_variant[v]), str(unit_of.get(v))))
+    primary = order[0]
+    gaps = [{"unit_id": unit_of.get(v), "reason": LINK_GAP, "modules": len(by_variant[v])}
+            for v in sorted(order[1:], key=lambda v: str(unit_of.get(v)))]
+    return primary, by_variant[primary], gaps
 def _toolchain_factory(job: str, inputs: dict[str, Any], attempt: Path):
     from ir_b13_toolchain import factory
     return factory(job, inputs, attempt)
@@ -71,7 +119,7 @@ def _accepted(run_id: str, job: str, artifact: str, schema: str,
     if (set(pointer) != expected_pointer or
             pointer.get("schema") != "appsec-review/accepted-worker-result/1.0" or
             pointer.get("run_id") != run_id or pointer.get("job") != job or
-            pointer.get("status") not in {"OK", "OK_WITH_GAPS"} or
+            pointer.get("status") not in {"OK", "OK_WITH_GAPS", "SKIPPED"} or
             latest.get("attempt_id") != pointer.get("attempt_id")):
         raise Blocked(f"{job}: pointer is not a current accepted result")
     attempt = base / "attempts" / str(pointer.get("attempt_id", ""))
@@ -196,6 +244,8 @@ def capture(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
     if revision is not None and native["source_revision"] != revision:
         raise Blocked("native build revision differs from the checkout")
     for unit in sorted(native["units"], key=lambda item: item["unit_id"]):
+        if hasattr(toolchain, "select"):
+            toolchain.select(unit["image_id"])  # ADR-0014: one toolchain per build image
         image_record=native_inputs.get("image_records",{}).get(unit["image_id"])
         if (not isinstance(image_record,dict) or
                 image_record.get("value",{}).get("digest")!=unit["image_digest"] or
@@ -261,16 +311,18 @@ def link(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
     _require_current_source(run_id, captured)
     if not captured["modules"]:
         raise Blocked("IR link refuses zero captured modules")
-    variants = {item["variant_sha256"] for item in captured["modules"]}
-    toolchains = {item["toolchain_sha256"] for item in captured["modules"]}
-    images = {(item["image_id"], item["image_digest"]) for item in captured["variants"]}
-    if len(variants) != 1 or len(toolchains) != 1 or len(images) != 1:
-        raise Blocked("IR link refuses mixed variants, toolchains, or native images")
+    primary, selected, selection_gaps = link_selection(captured)
+    variants = {primary}
+    toolchains = {item["toolchain_sha256"] for item in selected}
+    images = {(item["image_id"], item["image_digest"]) for item in captured["variants"]
+              if item["variant_sha256"] == primary}
+    if len(toolchains) != 1 or len(images) != 1:
+        raise Blocked("IR link refuses mixed toolchains or native images within one variant")
     image_id, image_digest = next(iter(images))
     if ((toolchain.image_id, toolchain.image_digest) != (image_id, image_digest) or
             toolchain.toolchain_sha256 != next(iter(toolchains))):
         raise Blocked("IR link toolchain differs from capture")
-    paths = [_verify_artifact(capture_attempt, item, b"BC\xc0\xde") for item in captured["modules"]]
+    paths = [_verify_artifact(capture_attempt, item, b"BC\xc0\xde") for item in selected]
     linked = output / "linked" / "application.bc"; linked.parent.mkdir(parents=True, exist_ok=True)
     if toolchain.link(paths, linked) or not linked.is_file() or linked.read_bytes()[:4] != b"BC\xc0\xde":
         raise RuntimeError("LLVM module link failed or produced malformed bitcode")
@@ -281,14 +333,14 @@ def link(run_id: str, output: Path, *, toolchain: IrToolchain) -> dict:
         "checkout_identity_sha256": captured["checkout_identity_sha256"], "capture": lineage,
         "variant_sha256": next(iter(variants)), "toolchain_sha256": next(iter(toolchains)),
         "image_id": image_id, "image_digest": image_digest,
-        "module_set_sha256": "sha256:" + digest([(x["module_id"], x["sha256"]) for x in captured["modules"]]),
-        "status": "OK_WITH_GAPS" if captured["coverage_gaps"] else "OK",
+        "module_set_sha256": "sha256:" + digest([(x["module_id"], x["sha256"]) for x in selected]),
+        "status": "OK_WITH_GAPS" if captured["coverage_gaps"] or selection_gaps else "OK",
         "linked_module": {"path": linked.relative_to(output).as_posix(), "sha256": _sha(linked),
                           "size_bytes": linked.stat().st_size,
-                          "input_module_ids": [x["module_id"] for x in captured["modules"]]},
+                          "input_module_ids": [x["module_id"] for x in selected]},
         "sources": [{"module_id": x["module_id"], "path": x["source_path"],
-                     "sha256": x["source_sha256"]} for x in captured["modules"]],
-        "coverage_gaps": captured["coverage_gaps"]}
+                     "sha256": x["source_sha256"]} for x in selected],
+        "coverage_gaps": captured["coverage_gaps"] + selection_gaps}
     if validate_document(result, "ir-link.schema.json"):
         raise RuntimeError("derived IR link result is invalid")
     return result
@@ -441,7 +493,7 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
                   "source_tree_sha256": result["source_tree_sha256"],
                   "checkout_identity_sha256": result["checkout_identity_sha256"],
                   "source_revision": result["source_revision"],
-                  "linked_module_sha256": result["linked_module"]["sha256"]}
+                  "linked_module_sha256": (result["linked_module"] or {}).get("sha256")}
     else:
         raise ValueError(job)
     detail["build_lineage_sha256"] = "sha256:" + digest({
@@ -468,6 +520,18 @@ def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = N
     result = read_json(attempt / result_name)
     if validate_document(result, schema):
         raise Blocked(f"{job}: result schema validation failed")
+    if result["status"] == "SKIPPED":
+        if inputs is not None:
+            if read_json(attempt / "inputs.json") != inputs:
+                raise Blocked(f"{job}: immutable attempt inputs changed")
+            if current_inputs(inputs["run_id"], job) != inputs:
+                raise Blocked(f"{job}: accepted upstream or source attestation changed")
+            if (read_json(attempt / "permission.json"), read_json(attempt / "lineage.json")) != \
+                    _producer_receipts(inputs["run_id"], job, inputs):
+                raise Blocked(f"{job}: F02 permission/lineage receipts changed")
+            if not should_skip(job, inputs) or result != skip_result(job, inputs):
+                raise Blocked(f"{job}: SKIPPED result is not the derived zero-input skip")
+        return
     if job == "02-ir-capture":
         for item in result["modules"]:
             _verify_artifact(attempt, item, b"BC\xc0\xde")
@@ -551,20 +615,21 @@ def _validate_attempt(job: str, attempt: Path, inputs: dict[str, Any] | None = N
                 raise Blocked(f"{job}: capture status differs from module/gap evidence")
         elif job == "02-ir-link":
             captured=inputs["upstream_result"]
-            if (len({item["variant_sha256"] for item in captured["modules"]})!=1 or
-                    len({item["toolchain_sha256"] for item in captured["modules"]})!=1 or
-                    len({(item["image_id"],item["image_digest"]) for item in captured["variants"]})!=1):
-                raise Blocked(f"{job}: immutable capture inputs mix variants, toolchains, or images")
-            expected_fields={"capture":inputs["upstream"],"variant_sha256":captured["modules"][0]["variant_sha256"],
-                "toolchain_sha256":captured["modules"][0]["toolchain_sha256"],
-                "image_id":captured["variants"][0]["image_id"],"image_digest":captured["variants"][0]["image_digest"],
-                "module_set_sha256":"sha256:"+digest([(x["module_id"],x["sha256"]) for x in captured["modules"]]),
-                "sources":[{"module_id":x["module_id"],"path":x["source_path"],"sha256":x["source_sha256"]} for x in captured["modules"]],
-                "coverage_gaps":captured["coverage_gaps"],"status":"OK_WITH_GAPS" if captured["coverage_gaps"] else "OK"}
+            primary,selected,selection_gaps=link_selection(captured)
+            primary_images=[item for item in captured["variants"] if item["variant_sha256"]==primary]
+            if (len({item["toolchain_sha256"] for item in selected})!=1 or len(primary_images)!=1):
+                raise Blocked(f"{job}: immutable capture inputs mix toolchains or images within one variant")
+            gaps=captured["coverage_gaps"]+selection_gaps
+            expected_fields={"capture":inputs["upstream"],"variant_sha256":primary,
+                "toolchain_sha256":selected[0]["toolchain_sha256"],
+                "image_id":primary_images[0]["image_id"],"image_digest":primary_images[0]["image_digest"],
+                "module_set_sha256":"sha256:"+digest([(x["module_id"],x["sha256"]) for x in selected]),
+                "sources":[{"module_id":x["module_id"],"path":x["source_path"],"sha256":x["source_sha256"]} for x in selected],
+                "coverage_gaps":gaps,"status":"OK_WITH_GAPS" if gaps else "OK"}
             if any(result.get(key)!=value for key,value in expected_fields.items()):
                 raise Blocked(f"{job}: linked result lineage differs from immutable capture inputs")
             if (result["linked_module"]["path"]!="linked/application.bc" or
-                    result["linked_module"]["input_module_ids"]!=[x["module_id"] for x in captured["modules"]]):
+                    result["linked_module"]["input_module_ids"]!=[x["module_id"] for x in selected]):
                 raise Blocked(f"{job}: linked module membership differs from immutable capture inputs")
         else:
             linked=inputs["upstream_result"]
@@ -596,6 +661,8 @@ def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict
         if current_inputs(run_id, job) != inputs:
             raise Blocked(f"{job}: upstream or implementation changed before execution")
         attempt = allocation["attempt"]
+        if should_skip(job, inputs):
+            return _publish_skip(run_id, dagster_id, job, base, allocation, inputs, fingerprint)
         if TOOLCHAIN_FACTORY is None:
             raise Blocked(f"{job}: pinned B13 IR toolchain adapter is not integrated")
         toolchain = TOOLCHAIN_FACTORY(job, inputs, attempt)
@@ -643,6 +710,28 @@ def run_job(run_id: str, dagster_id: str, job: str, force: bool = False) -> dict
         force=force, post_validate=lambda attempt, _envelope, record: _validate_attempt(
             job, attempt, record, require_b13=True),
         blocked_summary=f"{job} preflight did not complete.", failed_summary=f"{job} did not publish.")
+
+
+def _publish_skip(run_id, dagster_id, job, base, allocation, inputs, fingerprint):
+    result_name, _schema, contract = JOBS[job]; attempt = allocation["attempt"]
+    result = skip_result(job, inputs)
+    atomic_json(attempt / result_name, result)
+    permission_receipt, lineage_receipt = _producer_receipts(run_id, job, inputs)
+    atomic_json(attempt / "permission.json", permission_receipt)
+    atomic_json(attempt / "lineage.json", lineage_receipt)
+    (attempt / f"{contract}-summary.md").write_text(
+        f"# {job}\n\n- status: SKIPPED ({SKIP_REASON}): no built native units upstream\n", encoding="utf-8")
+    status = {"process": job, "status": "SKIPPED", "reason": SKIP_REASON, "run_id": run_id,
+              "dagster_run_id": dagster_id, "attempt_id": allocation["attempt_id"], "ended_at": now()}
+    atomic_json(attempt / "status.json", status)
+    return record_terminal_current(base, attempt, run_id=run_id, job_id=job,
+        dagster_run_id=dagster_id, worker_kind="deterministic_python", output_contract=contract,
+        input_fingerprint=fingerprint, started_at=allocation["started_at"],
+        execution_status="SKIPPED", summary=f"{job} skipped: no built native units upstream.",
+        status_record=status, artifact_paths=[result_name, f"{contract}-summary.md", "status.json",
+                                              "permission.json", "lineage.json"],
+        skip_reason=SKIP_REASON,
+        pre_envelope_validate=lambda path, _status: _validate_attempt(job, path, inputs, require_b13=True))
 
 
 def validate(run_id: str, job: str, pointer: dict[str, Any] | None = None) -> Path:

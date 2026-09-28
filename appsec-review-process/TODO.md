@@ -101,6 +101,26 @@ per link target; configure/build/tests per build unit. Zero invocations = SKIPPE
 link-command capture + link-target level, plan-driven tests, unit `depends_on`, parallel shards,
 content-addressed reuse cache.
 
+Slice 1 (branch `adr14-slice1`):
+
+- [x] IR capture/link/facts, native SAST, test execution: zero built units publish SKIPPED
+  `not-applicable-no-native-binaries` (IR/native SAST: result documents with empty lists and null
+  link identities; test execution and its ingests: an `evidence-skip` document). Ingests propagate.
+- [x] IR capture already iterates per compile-DB entry with per-entry gaps; it now serves every build
+  image its units used (one pinned toolchain per image; receipts list the image set and each trial's
+  image is checked against it).
+- [x] IR link: without link commands, one link target per run (the unit with most modules); every
+  other unit is a named `not-linked-one-link-target-per-run` gap.
+- [x] Native SAST accepts an OK_WITH_GAPS native build.
+- [x] Test execution with built units but no staged control: SKIPPED `not-applicable-no-test-plan`
+  (new reason, edges to both ingests and evidence assembly).
+- [x] 06-cve-reachability accepts a native-less ir-facts skip.
+- [ ] Native SAST: one unit's analyzer failure is a gap for that unit, not the job (receipt count is
+  2 per unit today).
+- [ ] Binary hardening with no binaries: skip `not-applicable-no-matching-inputs` (goes through the
+  vendor-evidence path; the manifest schema needs `minItems` 0).
+- [ ] Records JSONL + index for per-invocation IR/SAST outputs (ADR-0014 item 5).
+
 ## Scale: engine-sized targets
 
 [`docs/scale-audit-unreal-engine.md`](../docs/scale-audit-unreal-engine.md) lists every static limit
@@ -118,6 +138,9 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
 | 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-build-plan | 9 of the first 38 per-unit calls planned the wrong unit (haiku, lookup mode; retry fixed them) | Invoker (shared runtime) inlines small upstream task files (<= 4 KB each, 16 KB total) such as plan-unit.json |
+| 2026-09-28 | doom3-bfg | 20260928T013300Z-0c0b82 | 02-license-scan | scancode TIMEOUT at 900 s | Timeout tunable 3600 s; dependency workers' re-verification reads the same tunables (the static `LIMITS` dicts in `dependency_b13_adapters`/`binary_evidence_adapter` were dead or stale; the scale audit missed them) |
+| 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-source-sast | spotbugs "No files to analyze" (source-only Java) failed the job | A language tool that fails is a per-tool coverage gap (`execution_gaps` names tools without receipts) |
+| 2026-09-28 | freeciv21, doom3-bfg | both | 02-ir-capture, -link, -facts, 02-native-sast, 02-test-execution | Zero built units (see OPEN row below) | ADR-0014 slice 1: SKIPPED `not-applicable-no-native-binaries` across the lane; N images/units supported (branch `adr14-slice1`) |
 | 2026-09-28 | hello-autotools | 20260927T192621Z-helloautotoo | 01-component-characterization | Model output now parses; independent validation rejected it: (a) path patterns matched from the right (`PurePosixPath.match`), so `LICENSE` also claimed `vendor/cJSON-1.7.18/LICENSE` (false overlap); (b) representative locations with `:23-61` suffixes, and call sites in `src/main.cpp`, counted as outside the component; (c) negative evidence `generated-code` not taken for `generated`; (d) one component missing from the tag cloud | Root-anchored glob matching; line suffixes stripped and one own location required; `<category>-*` counts; an untagged component becomes a `tag_cloud:<id>` classification gap (ADR-0013); contract rules name the exact tokens |
 | 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-secrets-inventory, 02-iac-config-scan | Reuse re-validation: redacted tool output 'is 598 bytes, listed as 519' although the redaction receipt maps it. `tool_instance_shapes` never imported `json`; `_redaction_files` swallowed the NameError and returned no receipt | `import json`; only a missing or unparsable receipt is treated as absent |
 | 2026-09-28 | appsec-multi-vuln | 20260928T034921Z-be3585 | 02-sca-vulnerability-match | OSV exit 127 (missing local ecosystem DBs) accepted by the adapter but rejected by the worker's independent re-verification | One shared predicate `dependency_b13_adapters.osv_exit_accepted` |
