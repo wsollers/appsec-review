@@ -76,7 +76,7 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                 mock.patch.object(reviewer_pool, "_upstream_location",
                 return_value=(Path("C:/accepted/attempt"), "claim-decision-ledger.json")), \
                 mock.patch.object(reviewer_pool, "read_json",
-                return_value={"accepted_at": "2026-09-27T12:00:00Z"}), \
+                return_value={"accepted_at": "2026-09-27T12:00:00.123456+00:00"}), \
                 mock.patch.object(reviewer_pool, "_request_template",
                 return_value=(request, permission)):
             value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")
@@ -100,7 +100,7 @@ class ClaimReviewerPoolTests(unittest.TestCase):
                     mock.patch.object(reviewer_pool, "_upstream_location",
                     return_value=(accepted, artifact.name)), \
                     mock.patch.object(reviewer_pool, "read_json",
-                    return_value={"accepted_at": "2026-09-27T12:00:00Z"}), \
+                    return_value={"accepted_at": "2026-09-27T12:00:00.123456+00:00"}), \
                     mock.patch.object(reviewer_pool.model_versions, "model_identity_for",
                     return_value=model):
                 value = reviewer_pool.prepare(RUN_ID, "dagster", "07-red-team-adversarial")

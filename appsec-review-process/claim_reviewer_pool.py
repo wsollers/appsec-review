@@ -182,7 +182,10 @@ def prepare(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -
     upstream, binding, source = lifecycle._load_upstream(run_id, stage)
     attempt_root, artifact = _upstream_location(run_id, stage)
     pointer = read_json(lifecycle._upstream_pointer(run_id, stage))
-    evaluated_at = pointer["accepted_at"]
+    # Pointers carry isoformat (micros, +00:00); the permission model takes whole-second Z.
+    from datetime import datetime, timezone
+    evaluated_at = datetime.fromisoformat(pointer["accepted_at"].replace("Z", "+00:00")).astimezone(
+        timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     request, permission = _request_template(run_id, stage, attempt_root / artifact,
                                              source, evaluated_at)
     count = len(upstream[lifecycle.ARRAYS[stage]])
