@@ -47,6 +47,42 @@ RULE_CATEGORIES = {
     "appsec.c.system": "command-execution",
 }
 SEMGREP_RULE_PREFIX = "inputs.source-sast-rules."
+# Vendored opengrep C rules (William, 2026-09-27): verbatim files from opengrep/opengrep-rules at a
+# pinned commit, hash-locked by opengrep-rules.lock.json, run as a second --config in the same
+# Semgrep container. Their leads carry their own tool id so provenance stays per ruleset.
+VENDORED_RULES_DIR = RULES.parent / "opengrep-rules"
+VENDORED_RULES_LOCK = RULES.parent / "opengrep-rules.lock.json"
+VENDORED_TOOL_ID = "semgrep-opengrep-rules-f1d2b562"
+VENDORED_RULE_PREFIX = SEMGREP_RULE_PREFIX + "opengrep-rules."
+RULES_GAP = ("C/C++ Semgrep rules cover 20 pattern families (4 repository-owned C/C++ rules and 16 vendored "
+             "opengrep C rules); the vendored rules match C sources only, and pattern rules do not cover "
+             "taint or interprocedural data flow.")
+
+
+def _vendored_lock() -> dict[str, Any]:
+    """The pinned vendored ruleset: every listed file must exist with its locked hash and no other
+    rule file may be present (Python bookkeeping; a mismatch blocks the job)."""
+    try:
+        lock = json.loads(VENDORED_RULES_LOCK.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Blocked(f"{JOB}: vendored opengrep rules lock is unreadable") from exc
+    rules = lock.get("rules") if isinstance(lock, dict) else None
+    if lock.get("schema") != "appsec-review/vendored-rules-lock/1" or not isinstance(rules, list) or not rules:
+        raise Blocked(f"{JOB}: vendored opengrep rules lock is invalid")
+    present = sorted(path.relative_to(VENDORED_RULES_DIR).as_posix()
+                     for path in VENDORED_RULES_DIR.rglob("*") if path.suffix in (".yaml", ".yml", ".json"))
+    if present != sorted(row.get("path") for row in rules):
+        raise Blocked(f"{JOB}: vendored opengrep rule files differ from the lock")
+    for row in rules + [lock["license"], lock["notice"]]:
+        relative = row["path"] if row in rules else Path(row["path"]).relative_to("opengrep-rules").as_posix()
+        path = VENDORED_RULES_DIR / relative
+        if path.is_symlink() or not path.is_file() or "sha256:" + file_hash(path) != row.get("sha256"):
+            raise Blocked(f"{JOB}: vendored opengrep file {relative} differs from its locked hash")
+    return lock
+
+
+def vendored_rules() -> dict[str, dict[str, Any]]:
+    return {row["rule_id"]: {"category": row["category"], "cwe": list(row["cwe"])} for row in _vendored_lock()["rules"]}
 CODE_FILES = (
     "source_sast.py", "container_execution.py", "permission_capabilities.py",
     "publish_job_output.py", "validate_job_output.py", "source_sast_language_adapters.py",
@@ -100,6 +136,7 @@ def _target(run_id: str) -> Path:
 def _code_hashes() -> dict[str, str]:
     values = {name: file_hash(ROOT / name) for name in CODE_FILES}
     values["data/source-sast/rules-v1.yml"] = file_hash(RULES)
+    values["data/source-sast/opengrep-rules.lock.json"] = file_hash(VENDORED_RULES_LOCK)
     values["data/source-sast/psalm.xml"] = file_hash(PSALM_CONFIG)
     values["schemas/source-sast.schema.json"] = file_hash(ROOT.parent / "schemas" / "source-sast.schema.json")
     return values
@@ -123,6 +160,7 @@ def current_inputs(run_id: str) -> dict[str, Any]:
     target = _target(run_id)
     if not RULES.is_file():
         raise Blocked(f"{JOB}: repository-owned ruleset is missing")
+    lock = _vendored_lock()
     registry = ce.load_image_registry(ce.IMAGES_DIR)
     if IMAGE_ID not in registry:
         raise Blocked(f"{JOB}: {IMAGE_ID} has no current B16 record")
@@ -137,7 +175,9 @@ def current_inputs(run_id: str) -> dict[str, Any]:
         "target_path": str(target),
         "image": record,
         "rules": {"path": str(RULES), "sha256": "sha256:" + file_hash(RULES),
-                  "ids": sorted(RULE_CATEGORIES)},
+                  "ids": sorted(RULE_CATEGORIES),
+                  "vendored": {"lock_sha256": "sha256:" + file_hash(VENDORED_RULES_LOCK),
+                               "commit": lock["commit"], "ids": sorted(row["rule_id"] for row in lock["rules"])}},
         "permission_fingerprint_sha256": pc.input_fingerprint_component(
             _permission(run_id, source, _utc_now())["decision"]),
         "boundary_sha256": ce.boundary_sha256(),
@@ -170,7 +210,8 @@ def _request(run_id: str, adapter_id: str, inputs: dict[str, Any]) -> dict[str, 
         "image": {"image_id": image["image_id"], "digest": image["digest"]},
         "argv": [
             "/opt/tool/bin/semgrep", "scan", "--metrics=off", "--disable-version-check",
-            "--oss-only", "--config", "/inputs/source-sast-rules/rules-v1.yml", "--json",
+            "--oss-only", "--config", "/inputs/source-sast-rules/rules-v1.yml",
+            "--config", "/inputs/source-sast-rules/opengrep-rules", "--json",
             "--output", "/scratch/semgrep.json", "/workspace",
         ],
         "environment": [{"name": "LANG", "value": "C"}, {"name": "LC_ALL", "value": "C"},
@@ -227,14 +268,23 @@ def normalize_semgrep(raw: dict[str, Any], *, target: Path, run_id: str, attempt
                       language_tool_plan: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     if not isinstance(raw, dict) or not isinstance(raw.get("results"), list):
         raise RuntimeError(f"{JOB}: Semgrep JSON has no results array")
+    vendored = vendored_rules()
     findings = []
     for item in raw["results"]:
         raw_rule_id = item.get("check_id") if isinstance(item, dict) else None
-        rule_id = (raw_rule_id[len(SEMGREP_RULE_PREFIX):]
-                   if isinstance(raw_rule_id, str) and raw_rule_id.startswith(SEMGREP_RULE_PREFIX)
-                   else raw_rule_id)
-        if rule_id not in RULE_CATEGORIES:
-            raise RuntimeError(f"{JOB}: Semgrep returned an undeclared rule id")
+        tool_id, cwe = TOOL_ID, None
+        if isinstance(raw_rule_id, str) and raw_rule_id.startswith(VENDORED_RULE_PREFIX):
+            rule_id = raw_rule_id[len(VENDORED_RULE_PREFIX):]
+            if rule_id not in vendored:
+                raise RuntimeError(f"{JOB}: Semgrep returned an undeclared vendored rule id")
+            tool_id, category, cwe = VENDORED_TOOL_ID, vendored[rule_id]["category"], vendored[rule_id]["cwe"]
+        else:
+            rule_id = (raw_rule_id[len(SEMGREP_RULE_PREFIX):]
+                       if isinstance(raw_rule_id, str) and raw_rule_id.startswith(SEMGREP_RULE_PREFIX)
+                       else raw_rule_id)
+            if rule_id not in RULE_CATEGORIES:
+                raise RuntimeError(f"{JOB}: Semgrep returned an undeclared rule id")
+            category = RULE_CATEGORIES[rule_id]
         path, source = _relative_source(item.get("path"), target)
         start = item.get("start", {}).get("line") if isinstance(item.get("start"), dict) else None
         end = item.get("end", {}).get("line") if isinstance(item.get("end"), dict) else None
@@ -246,20 +296,25 @@ def normalize_semgrep(raw: dict[str, Any], *, target: Path, run_id: str, attempt
         lines = data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
         if start > lines or end > lines:
             raise RuntimeError(f"{JOB}: Semgrep result line is beyond the current source file")
-        key = {"tool_id": TOOL_ID, "rule_id": rule_id, "path": path,
+        key = {"tool_id": tool_id, "rule_id": rule_id, "path": path,
                "start_line": start, "end_line": end, "source_sha256": "sha256:" + file_hash(source)}
-        findings.append({"lead_id": "lead_" + digest(key)[:16], **key,
-                         "category": RULE_CATEGORIES[rule_id]})
-    findings.sort(key=lambda value: (value["path"], value["start_line"], value["rule_id"]))
+        lead = {"lead_id": "lead_" + digest(key)[:16], **key, "category": category}
+        if cwe:
+            lead["cwe"] = list(cwe)
+        findings.append(lead)
+    findings.sort(key=lambda value: (value["path"], value["start_line"], value["tool_id"], value["rule_id"]))
+    own = sum(1 for row in findings if row["tool_id"] == TOOL_ID)
     return {
         "schema": SCHEMA, "run_id": run_id, "job_id": JOB, "attempt_id": attempt_id,
         "source_snapshot_sha256": source_snapshot_sha256, "status": "OK_WITH_GAPS",
         "tools": [{"tool_id": TOOL_ID, "tool": "semgrep", "version": "1.178.0",
                    "image_id": image["image_id"], "image_digest": image["digest"],
-                   "ruleset_sha256": "sha256:" + file_hash(RULES), "records": len(findings)}],
+                   "ruleset_sha256": "sha256:" + file_hash(RULES), "records": own},
+                  {"tool_id": VENDORED_TOOL_ID, "tool": "semgrep", "version": "1.178.0",
+                   "image_id": image["image_id"], "image_digest": image["digest"],
+                   "ruleset_sha256": "sha256:" + file_hash(VENDORED_RULES_LOCK), "records": len(findings) - own}],
         "leads": findings,
-        "coverage_gaps": (["Repository-owned C/C++ Semgrep rules do not cover every source-analysis family."] +
-                          language_adapters.execution_gaps(language_tool_plan or [])),
+        "coverage_gaps": ([RULES_GAP] + language_adapters.execution_gaps(language_tool_plan or [])),
     }
 
 
@@ -304,7 +359,7 @@ def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> Non
             "image_id":plan["image_id"],"image_digest":plan["image_digest"],"ruleset_sha256":plan["image_digest"],"records":len(leads)})
     expected["leads"].sort(key=lambda row:(row["path"],row["start_line"],row["tool_id"],row["rule_id"]))
     expected["tools"].sort(key=lambda row:row["tool_id"])
-    expected["coverage_gaps"] = ["Repository-owned C/C++ Semgrep rules do not cover every source-analysis family."] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
+    expected["coverage_gaps"] = [RULES_GAP] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
     if result != expected:
         raise Blocked(f"{JOB}: normalized result no longer matches immutable Semgrep evidence")
     permission, lineage = _producer_receipts(inputs)
@@ -375,7 +430,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         result["leads"].extend(language_leads)
         result["leads"].sort(key=lambda row:(row["path"],row["start_line"],row["tool_id"],row["rule_id"]))
         result["tools"].extend(language_tools); result["tools"].sort(key=lambda row:row["tool_id"])
-        result["coverage_gaps"] = ["Repository-owned C/C++ Semgrep rules do not cover every source-analysis family."] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
+        result["coverage_gaps"] = [RULES_GAP] + language_adapters.execution_gaps(inputs.get("language_tool_plan", []), executed)
         atomic_json(attempt / RESULT, result)
         atomic_json(attempt / RECEIPTS, {"tools":receipts})
         (attempt / SUMMARY).write_text(

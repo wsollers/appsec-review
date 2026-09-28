@@ -44,7 +44,8 @@
           "start_line": {"type": "integer"},
           "end_line": {"type": "integer"},
           "source_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}\\Z"},
-          "category": {"type": "string", "enum": ["unsafe-copy", "format-string", "memory-copy", "command-execution", "language-security-static-analysis"]}
+          "category": {"type": "string", "enum": ["unsafe-copy", "format-string", "memory-copy", "command-execution", "language-security-static-analysis", "unsafe-input", "unchecked-conversion", "sensitive-memory-clear", "unsafe-api", "memory-lifetime", "resource-exhaustion", "control-flow-defect", "string-comparison"]},
+          "cwe": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^CWE-[1-9][0-9]{0,5}\\Z"}}
         }
       }
     },

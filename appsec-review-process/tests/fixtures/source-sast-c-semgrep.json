@@ -1,0 +1,257 @@
+{
+ "results": [
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.strcpy",
+   "end": {
+    "col": 21,
+    "line": 11,
+    "offset": 272
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 11,
+    "offset": 256
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-string-copy-fn",
+   "end": {
+    "col": 21,
+    "line": 11,
+    "offset": 272
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 11,
+    "offset": 256
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-strcat-fn",
+   "end": {
+    "col": 21,
+    "line": 12,
+    "offset": 294
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 12,
+    "offset": 278
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.memcpy",
+   "end": {
+    "col": 24,
+    "line": 17,
+    "offset": 392
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 17,
+    "offset": 373
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-printf-fn",
+   "end": {
+    "col": 29,
+    "line": 21,
+    "offset": 480
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 21,
+    "offset": 456
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.printf-nonliteral",
+   "end": {
+    "col": 20,
+    "line": 22,
+    "offset": 501
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 22,
+    "offset": 486
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-printf-fn",
+   "end": {
+    "col": 20,
+    "line": 22,
+    "offset": 501
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 22,
+    "offset": 486
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.info-leak-on-non-formated-string",
+   "end": {
+    "col": 21,
+    "line": 22,
+    "offset": 502
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 22,
+    "offset": 486
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.printf-nonliteral",
+   "end": {
+    "col": 16,
+    "line": 26,
+    "offset": 563
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 26,
+    "offset": 552
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.appsec.c.system",
+   "end": {
+    "col": 23,
+    "line": 30,
+    "offset": 625
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 12,
+    "line": 30,
+    "offset": 614
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-gets-fn",
+   "end": {
+    "col": 15,
+    "line": 34,
+    "offset": 673
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 34,
+    "offset": 663
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-scanf-fn",
+   "end": {
+    "col": 22,
+    "line": 35,
+    "offset": 696
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 35,
+    "offset": 679
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-strtok-fn",
+   "end": {
+    "col": 44,
+    "line": 39,
+    "offset": 774
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 19,
+    "line": 39,
+    "offset": 749
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.correctness.incorrect-use-ato-fn",
+   "end": {
+    "col": 23,
+    "line": 40,
+    "offset": 798
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 12,
+    "line": 40,
+    "offset": 787
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.use-after-free",
+   "end": {
+    "col": 16,
+    "line": 46,
+    "offset": 902
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 46,
+    "offset": 891
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.double-free",
+   "end": {
+    "col": 9,
+    "line": 47,
+    "offset": 916
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 47,
+    "offset": 912
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.insecure-use-memset",
+   "end": {
+    "col": 25,
+    "line": 51,
+    "offset": 995
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 51,
+    "offset": 975
+   }
+  },
+  {
+   "check_id": "inputs.source-sast-rules.opengrep-rules.c.lang.security.random-fd-exhaustion",
+   "end": {
+    "col": 22,
+    "line": 56,
+    "offset": 1107
+   },
+   "path": "/workspace/vuln.c",
+   "start": {
+    "col": 5,
+    "line": 55,
+    "offset": 1045
+   }
+  }
+ ],
+ "version": "1.178.0"
+}

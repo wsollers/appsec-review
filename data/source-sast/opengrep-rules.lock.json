@@ -1,0 +1,156 @@
+{
+  "commit": "f1d2b562b414783763fd02a6ed2736eaed622efa",
+  "languages": [
+    "c"
+  ],
+  "license": {
+    "condition": "Commons-Clause-1.0",
+    "path": "opengrep-rules/LICENSE",
+    "sha256": "sha256:9600f388f17cb800a7a0ba8b55bc15c5b0ed047de8517f2d5e533becee9d0a18",
+    "spdx": "LGPL-2.1-only"
+  },
+  "notice": {
+    "path": "opengrep-rules/NOTICE",
+    "sha256": "sha256:40a9b511b82e51e15c63701b4b8e0e3c51dbd16c674cf70b90ed34fd4d702117"
+  },
+  "rules": [
+    {
+      "category": "string-comparison",
+      "cwe": [],
+      "path": "c/lang/correctness/c-string-equality.yaml",
+      "rule_id": "c.lang.correctness.c-string-equality",
+      "sha256": "sha256:dcd88eb4c5b49292c5878c7b98cd2eed78df24fa78570643a3504422e6347e97"
+    },
+    {
+      "category": "control-flow-defect",
+      "cwe": [],
+      "path": "c/lang/correctness/goto-fail.yaml",
+      "rule_id": "c.lang.correctness.double_goto",
+      "sha256": "sha256:ef3e40d3d9555af094e99e7136539b6dff9d076517c3e34a20365c82cfb5e9ae"
+    },
+    {
+      "category": "unchecked-conversion",
+      "cwe": [],
+      "path": "c/lang/correctness/incorrect-use-ato-fn.yaml",
+      "rule_id": "c.lang.correctness.incorrect-use-ato-fn",
+      "sha256": "sha256:003ee2c972761027603f19861b5ce6dd62040dc0817c9c770d67228768331f61"
+    },
+    {
+      "category": "unchecked-conversion",
+      "cwe": [],
+      "path": "c/lang/correctness/incorrect-use-sscanf-fn.yaml",
+      "rule_id": "c.lang.correctness.incorrect-use-sscanf-fn",
+      "sha256": "sha256:467c4fb29b474252736c8c9911e57f1d51e812a7d742f737b68973a74c65948f"
+    },
+    {
+      "category": "memory-lifetime",
+      "cwe": [
+        "CWE-415"
+      ],
+      "path": "c/lang/security/double-free.yaml",
+      "rule_id": "c.lang.security.double-free",
+      "sha256": "sha256:2d539dcee686c7ecb6eaac1d3312e5f92ff57941d0773977dbc5a57d571c7ff5"
+    },
+    {
+      "category": "memory-lifetime",
+      "cwe": [
+        "CWE-416"
+      ],
+      "path": "c/lang/security/function-use-after-free.yaml",
+      "rule_id": "c.lang.security.function-use-after-free",
+      "sha256": "sha256:8c3eb080e6da6d97294ddc96cda60319b3d15b95434129dd996ec80c0f888d7d"
+    },
+    {
+      "category": "format-string",
+      "cwe": [
+        "CWE-532"
+      ],
+      "path": "c/lang/security/info-leak-on-non-formatted-string.yaml",
+      "rule_id": "c.lang.security.info-leak-on-non-formated-string",
+      "sha256": "sha256:3eef0ff97c42a2c7c7a66cc98e67d405cb1e87504848585a65db1f91c3d13184"
+    },
+    {
+      "category": "unsafe-input",
+      "cwe": [
+        "CWE-676"
+      ],
+      "path": "c/lang/security/insecure-use-gets-fn.yaml",
+      "rule_id": "c.lang.security.insecure-use-gets-fn",
+      "sha256": "sha256:4d58e0318b5783d4e4d8935dbbc8457bf63b7e34a8df19086f8e8b33f6df1979"
+    },
+    {
+      "category": "sensitive-memory-clear",
+      "cwe": [
+        "CWE-14"
+      ],
+      "path": "c/lang/security/insecure-use-memset.yaml",
+      "rule_id": "c.lang.security.insecure-use-memset",
+      "sha256": "sha256:ebaddaf6fa8a805e4025e490b176c05a32938059258cf08ea60397037ebbc897"
+    },
+    {
+      "category": "format-string",
+      "cwe": [
+        "CWE-134"
+      ],
+      "path": "c/lang/security/insecure-use-printf-fn.yaml",
+      "rule_id": "c.lang.security.insecure-use-printf-fn",
+      "sha256": "sha256:38a42785d6249dd84f1e8f774e8dbb5bc1dc96dff370c6f9e739d7ba96b20c72"
+    },
+    {
+      "category": "unsafe-input",
+      "cwe": [
+        "CWE-676"
+      ],
+      "path": "c/lang/security/insecure-use-scanf-fn.yaml",
+      "rule_id": "c.lang.security.insecure-use-scanf-fn",
+      "sha256": "sha256:d799e9c15714ebf429038b9d7525a64807fbccb9978331cc67268d50f7cd9d71"
+    },
+    {
+      "category": "unsafe-copy",
+      "cwe": [
+        "CWE-676"
+      ],
+      "path": "c/lang/security/insecure-use-strcat-fn.yaml",
+      "rule_id": "c.lang.security.insecure-use-strcat-fn",
+      "sha256": "sha256:6cfbbdabedfa459656965582aed15ee8efd952a064aa957b3aa696b9c17fe3fa"
+    },
+    {
+      "category": "unsafe-copy",
+      "cwe": [
+        "CWE-676"
+      ],
+      "path": "c/lang/security/insecure-use-string-copy-fn.yaml",
+      "rule_id": "c.lang.security.insecure-use-string-copy-fn",
+      "sha256": "sha256:a81c657d2db8ac8abd51b4ef775e8c2019add23efdc7cda5ba2502debc06978e"
+    },
+    {
+      "category": "unsafe-api",
+      "cwe": [
+        "CWE-676"
+      ],
+      "path": "c/lang/security/insecure-use-strtok-fn.yaml",
+      "rule_id": "c.lang.security.insecure-use-strtok-fn",
+      "sha256": "sha256:1e3fd6382993500178e1002e289b9548d31a24b8688bc6c03a2bcc9eefc8c9df"
+    },
+    {
+      "category": "resource-exhaustion",
+      "cwe": [
+        "CWE-774"
+      ],
+      "path": "c/lang/security/random-fd-exhaustion.yaml",
+      "rule_id": "c.lang.security.random-fd-exhaustion",
+      "sha256": "sha256:4cfdb77fb2933dee899e0d6bb087ca54b9ecfe9940da6ff6b5c9922e9e8d5deb"
+    },
+    {
+      "category": "memory-lifetime",
+      "cwe": [
+        "CWE-416"
+      ],
+      "path": "c/lang/security/use-after-free.yaml",
+      "rule_id": "c.lang.security.use-after-free",
+      "sha256": "sha256:ad0d5b85b1e15c9cbe2b52a730f1c23b8a1a5841c07a74ccdb561531c2abe7f6"
+    }
+  ],
+  "schema": "appsec-review/vendored-rules-lock/1",
+  "source": "https://github.com/opengrep/opengrep-rules"
+}
