@@ -15,6 +15,7 @@ import yaml
 
 import evidence_redaction as redaction
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, now, read_json
+import size_log
 import phase1
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
 from schema_validate import validate_document
@@ -238,8 +239,7 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
     candidates = [path for path, meta in source_files.items() if meta.get("kind") == "file" and _candidate(job, path)]
     readmes = [path for path in source_files if PurePosixPath(path).name.lower().startswith("readme")]
     gaps: list[str] = []
-    if len(candidates) > MAX_FILES:
-        raise Blocked(f"{job}: applicable input count exceeds bounded limit {MAX_FILES}")
+    size_log.observe(run_id, job, "applicable_inputs", len(candidates), MAX_FILES)
     sources, records, identities = [], [], set()
     for relative in sorted(candidates):
         meta = source_files[relative]
@@ -266,8 +266,7 @@ def extract(job: str, *, run_id: str, attempt_id: str, target: Path,
             records.append({"record_id": record_id, "kind": item["kind"], "path": relative,
                 "source_sha256": "sha256:" + meta["sha256"], "locator": item["locator"],
                 "summary": item["text"], "semantics": "DOCUMENTED_STATIC_INTENT"})
-            if len(records) > MAX_RECORDS:
-                raise Blocked(f"{job}: extracted record count exceeds bounded limit {MAX_RECORDS}")
+    size_log.observe(run_id, job, "extracted_records", len(records), MAX_RECORDS)
     records.sort(key=lambda x: (x["path"], x["locator"], x["record_id"]))
     sources.sort(key=lambda x: x["path"])
     if not candidates:

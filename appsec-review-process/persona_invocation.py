@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from execution_state import atomic_bytes, beneath  # noqa: E402
+import size_log
 import permission_capabilities as pc  # noqa: E402
 from schema_validate import SchemaStore, validate_document  # noqa: E402
 from tool_instance_shapes import output_path_errors  # noqa: E402
@@ -591,8 +592,8 @@ def request_errors(request: Any, *, run_id: str, job_id: str, attempt_id: str,
     if not _segments_ok(request["outer_prompt"]["path"]):
         errors.append("outer_prompt.path is not one normalized relative path")
     inputs = request["readable_inputs"]
-    if len(inputs) > MAX_INPUTS:
-        errors.append(f"more than {MAX_INPUTS} readable inputs")
+    size_log.observe(request.get("run_id"), request.get("job_id"), "readable_inputs", len(inputs),
+                     MAX_INPUTS, bytes=sum(max(entry.get("bytes", 0), 0) for entry in inputs))
     seen: set[tuple[str, str]] = set()
     total = request["outer_prompt"]["bytes"]
     if total < 1:

@@ -73,14 +73,15 @@ class CodeGraphEvidenceTests(unittest.TestCase):
         self.write(self.row(file="../outside.c"))
         with self.assertRaisesRegex(Blocked, "normalized"): self.normalize()
 
-    def test_oversized_and_record_limit_fail_closed(self):
-        self.raw.write_bytes(b"x" * (cpg.LIMITS["max_input_bytes"] + 1))
-        with self.assertRaisesRegex(Blocked, "byte limit"): self.normalize()
-        original = cpg.LIMITS["max_records"]
+    def test_record_count_is_logged_not_blocked(self):
+        seen = []
+        original = cpg.size_log.observe
+        cpg.size_log.observe = lambda *a, **k: seen.append(a)
         try:
-            cpg.LIMITS["max_records"] = 1; self.write(self.row(), self.row(name="memcpy", code="memcpy(d,s,1)"))
-            with self.assertRaisesRegex(Blocked, "record count"): self.normalize()
-        finally: cpg.LIMITS["max_records"] = original
+            self.write(self.row(), self.row(name="memcpy", code="memcpy(d,s,1)"))
+            self.assertEqual(len(self.normalize()["records"]), 2)
+        finally: cpg.size_log.observe = original
+        self.assertIn("joern_records", [item[2] for item in seen])
 
     def test_stale_source_locator_rejected(self):
         self.write(self.row()); document = self.normalize(); locator = document["records"][0]["locator"]

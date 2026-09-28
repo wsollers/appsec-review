@@ -15,8 +15,8 @@
     "image_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "exporter_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "status": {"enum": ["OK", "OK_WITH_GAPS"]},
-    "record_count": {"type": "integer", "minimum": 0, "maximum": 20000},
-    "records": {"type": "array", "maxItems": 20000, "items": {"$ref": "code-property-graph-record.schema.json"}},
+    "record_count": {"type": "integer", "minimum": 0},
+    "records": {"type": "array", "items": {"$ref": "code-property-graph-record.schema.json"}},
     "coverage_gaps": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["reason", "count"], "properties": {"reason": {"enum": ["duplicate", "no-source-location"]}, "count": {"type": "integer", "minimum": 1}}}},
     "limits": {"type": "object", "additionalProperties": false, "required": ["max_input_bytes", "max_records", "max_field_chars", "max_search_chars", "max_query_results", "max_citation_lines"], "properties": {"max_input_bytes": {"const": 67108864}, "max_records": {"const": 20000}, "max_field_chars": {"const": 4096}, "max_search_chars": {"const": 1000}, "max_query_results": {"const": 100}, "max_citation_lines": {"const": 40}}},
     "claim_boundary": {"const": "STRUCTURAL_RETRIEVAL_NOT_FINDING_OR_RUNTIME_PROOF"}

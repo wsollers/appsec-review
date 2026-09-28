@@ -12,6 +12,7 @@ from typing import Any
 
 import evidence_redaction as redaction
 from execution_state import Blocked, ROOT, data_path, digest, file_hash, read_json, tree_hashes
+import size_log
 from publish_job_output import ACCEPTED_SCHEMA
 from schema_validate import validate_document
 from validate_job_output import NO_ORCHESTRATION_FACTS, validate_job_output
@@ -239,8 +240,7 @@ def _logical_id(record: dict[str, Any]) -> str:
 
 def build(run_id: str, selection: dict[str, Any], source_snapshot_sha256: str | None = None) -> dict[str, Any]:
     producers = selection["producers"]
-    if len(producers) > LIMITS["max_producers"]:
-        raise Blocked("02-evidence-index: producer count exceeds the bounded limit")
+    size_log.observe(run_id, "02-evidence-index", "producers", len(producers), LIMITS["max_producers"])
     sources = {item["source_snapshot_sha256"] for item in producers}
     if source_snapshot_sha256 is not None:
         sources.add(source_snapshot_sha256)
@@ -287,10 +287,9 @@ def build(run_id: str, selection: dict[str, Any], source_snapshot_sha256: str | 
                 records.append(item)
                 partitions.extend({"partition_id": value, "record_id": record_id} for value in partition_ids)
                 components.extend({"component_id": value, "record_id": record_id} for value in component_ids)
-                if len(records) > LIMITS["max_records"]:
-                    raise Blocked("02-evidence-index: derived record count exceeds the bounded limit")
-                if len(partitions) + len(components) > LIMITS["max_links"]:
-                    raise Blocked("02-evidence-index: partition/component links exceed the bounded limit")
+    size_log.observe(run_id, "02-evidence-index", "derived_records", len(records), LIMITS["max_records"])
+    size_log.observe(run_id, "02-evidence-index", "partition_component_links",
+                     len(partitions) + len(components), LIMITS["max_links"])
     records.sort(key=lambda item: (item["producer_job_id"], item["type_label"], item["record_path"], item["record_id"]))
     partitions.sort(key=lambda item: (item["partition_id"], item["record_id"]))
     components.sort(key=lambda item: (item["component_id"], item["record_id"]))

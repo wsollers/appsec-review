@@ -13,6 +13,7 @@ from typing import Any, Iterable
 
 import evidence_redaction as redaction
 from execution_state import Blocked, digest, file_hash
+import size_log
 from schema_validate import validate_document
 
 SCHEMA = "appsec-review/code-property-graph/1.0"
@@ -86,16 +87,17 @@ def _redact(value: str) -> tuple[str, str]:
 def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha256: str,
                     source_revision: str, image_id: str, image_digest: str,
                     exporter_sha256: str, build_identity_sha256: str) -> dict[str, Any]:
-    if raw.is_symlink() or not raw.is_file() or raw.stat().st_size > LIMITS["max_input_bytes"]:
-        raise Blocked("Joern JSONL is missing, linked, or exceeds the byte limit")
+    if raw.is_symlink() or not raw.is_file():
+        raise Blocked("Joern JSONL is missing or linked")
+    size_log.observe(run_id, "02-code-property-graph", "joern_jsonl_bytes", raw.stat().st_size,
+                     LIMITS["max_input_bytes"])
+    ordinal = 0
     records: list[dict[str, Any]] = []
     skipped = {"no_source_location": 0, "duplicate": 0}
     seen: set[str] = set()
     source_cache: dict[Path, tuple[str, int]] = {}
     with raw.open("r", encoding="utf-8") as stream:
         for ordinal, line in enumerate(stream, 1):
-            if ordinal > LIMITS["max_records"]:
-                raise Blocked("Joern CPG record count exceeds the bounded limit")
             try:
                 item = json.loads(line)
             except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -143,6 +145,8 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
                     "artifact": "code-property-graph.json", "record_id": identity,
                     "source_path": relative, "source_sha256": source_sha256, "line": line_number,
                 }})
+    size_log.observe(run_id, "02-code-property-graph", "joern_records", ordinal, LIMITS["max_records"],
+                     kept=len(records))
     records.sort(key=lambda row: (row["source_path"], row["start_line"], row["kind"], row["record_id"]))
     result = {"schema": SCHEMA, "run_id": run_id, "source_revision": source_revision,
         "source_snapshot_sha256": source_snapshot_sha256, "source_tree_sha256": source_tree_sha256(target),
