@@ -463,6 +463,42 @@ def _parse_envelope(result_text: str) -> dict[str, Any]:
     return envelope
 
 
+def _salvage_envelope(result_text: str, fields: list[tuple[str, str, str]]) -> dict[str, Any]:
+    """Best-effort envelope from a reply that did not send one: the model put the result JSON in
+    one fenced block and the summary in another (appsec-multi-vuln build plan). The JSON field gets
+    the largest fenced (or bare) JSON object that carries a "schema" key; a markdown field gets the
+    first non-JSON fenced block, else the prose outside the fences. Validation still runs after."""
+    blocks = re.findall(r"```([A-Za-z]*)\s*\n(.*?)\n```", result_text, re.DOTALL)
+    objects, texts = [], []
+    for lang, body in blocks:
+        try:
+            value = json.loads(body)
+        except ValueError:
+            texts.append(body.strip())
+            continue
+        if isinstance(value, dict):
+            objects.append(value)
+    if not blocks:
+        try:
+            value = json.loads(result_text.strip())
+            if isinstance(value, dict):
+                objects.append(value)
+        except ValueError:
+            pass
+    prose = re.sub(r"```.*?```", "", result_text, flags=re.DOTALL).strip()
+    envelope: dict[str, Any] = {}
+    json_keys = [key for _f, key, kind in fields if kind == "json"]
+    candidates = [o for o in objects if isinstance(o.get("schema"), str)] or objects
+    if json_keys and candidates:
+        envelope[json_keys[0]] = max(candidates, key=lambda o: len(json.dumps(o)))
+    for _f, key, kind in fields:
+        if kind == "md":
+            text = texts[0] if texts else prose
+            if text:
+                envelope[key] = text
+    return envelope
+
+
 def _validate_envelope(envelope: dict[str, Any], fields: list[tuple[str, str, str]],
                        output_contract: dict[str, Any], store: SchemaStore) -> None:
     expected_keys = {key for _filename, key, _kind in fields}
@@ -1064,9 +1100,17 @@ class ClaudeCliInvoker:
             try:
                 envelope = _parse_envelope(result_text)
             except InvokerOutputError:
-                if self._fill_result is None:
+                envelope = _salvage_envelope(result_text, fields)
+                if not envelope and self._fill_result is None:
                     raise
-                envelope = {}
+            if set(envelope) != {key for _f, key, _k in fields}:
+                # A parsed object that is the bare result (not the envelope), or an envelope missing a
+                # file: recover from the reply's fenced blocks and prose.
+                salvaged = _salvage_envelope(result_text, fields)
+                if result_field not in envelope and isinstance(envelope.get("schema"), str):
+                    envelope = {result_field: envelope}
+                envelope = {**salvaged, **{k: v for k, v in envelope.items() if k in salvaged or k in
+                                          {key for _f, key, _k in fields}}}
             if self._fill_result is not None:
                 for _filename, key, kind in fields:
                     if kind == "md" and not (isinstance(envelope.get(key), str) and envelope[key].strip()):
