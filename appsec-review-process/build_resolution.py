@@ -341,12 +341,23 @@ def _runtime(source: str, images_dir: Path) -> ce.ContainerRuntime:
         registry_ceiling=None, clock=_utc_now, cancel=threading.Event())
 
 
+def _repo_commands(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """Plan commands carry cwd relative to the unit root (build_plan.check joins root + cwd); the
+    trial and replay runners run from the repository root. Re-anchor once here, so the lock is
+    repository-relative (appsec-multi-vuln: every projects/cpp/case-* unit ran cmake at the repo
+    root and failed with "does not appear to contain CMakeLists.txt")."""
+    import posixpath
+    root = plan.get("root") or "."
+    return [{**c, "cwd": posixpath.normpath(posixpath.join(root, c.get("cwd") or "."))}
+            for c in plan["commands"]]
+
+
 def _request(run_id: str, attempt_id: str, unit_attempt: Path, record: dict[str, Any],
              plan: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
     control = inputs["control"]["value"]
     permission = _permission(control, run_id, inputs["source_snapshot_sha256"], _utc_now())
     cfg = {"runner": RUNNER_VERSION, "mode": control["mode"],
-           "compile_database": plan["compile_database"]["method"], "commands": plan["commands"]}
+           "compile_database": plan["compile_database"]["method"], "commands": _repo_commands(plan)}
     encoded_runner = base64.b64encode(RUNNER.encode("utf-8")).decode("ascii")
     trusted_runner = "import base64;exec(base64.b64decode('" + encoded_runner + "'))"
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": JOB, "attempt_id": attempt_id,
@@ -647,8 +658,8 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
                 "image": {"image_id": image_id, "digest": record["digest"], "digest_kind": "image-id"},
                 "dockerfile_sha256": record["dockerfile_sha256"],
                 "plan_sha256": "sha256:" + inputs["plan"]["sha256"],
-                "configure": [c for c in plan["commands"] if c["phase"] == "configure"],
-                "build": [c for c in plan["commands"] if c["phase"] == "build"],
+                "configure": [c for c in _repo_commands(plan) if c["phase"] == "configure"],
+                "build": [c for c in _repo_commands(plan) if c["phase"] == "build"],
                 "compile_database": {"method": "bear", "path": "compile_commands.json",
                     "entries": len(entries), "compiler_allowlist": inputs["plan"]["value"]["toolchain"]["compile_database_compilers"]},
                 "successful_attempt": {"resolution_attempt": unit_attempt.relative_to(attempt).as_posix(),

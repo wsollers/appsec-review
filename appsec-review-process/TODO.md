@@ -137,6 +137,7 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | appsec-multi-vuln | 17b564af | 02-build-resolution | All 34 C/C++ units failed configure: "/scratch/src does not appear to contain CMakeLists.txt". Plan cwd is relative to the unit root (build_plan.check joins root + cwd); the trial and replay runners ran it from the repository root. Native build then had zero units, so the whole native lane skipped | Build resolution re-anchors commands to repository-relative cwd for the trial and the lock (replay reads the lock) |
 | 2026-09-28 | appsec-multi-vuln | 17b564af | 06-cve-reachability | IR facts SKIPPED (nothing linked); re-validating the SKIPPED pointer without a consumer edge failed, and a skipped facts result would have been read as facts | IR/test/native-SAST validate() and lifecycles name their consumer edge; cve reachability treats SKIPPED facts as absent |
 | 2026-09-28 | freeciv21 | abae7f4b | 02-license-scan | scancode TIMEOUT at 3600 s (single process) | scancode -n 4 merged (795a99f9); OPEN: timeout as a license gap |
 | 2026-09-28 | doom3-bfg | 22d32a79 | 02-license-scan | scancode TIMEOUT again at 3600 s (single process) | `scancode -n` from tunable `scancode_processes` = 4, CPU 4000 millicpu. OPEN: a tool timeout should publish a license gap, not block |
