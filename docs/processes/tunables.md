@@ -156,12 +156,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
-| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_memory_bytes` | 2 GiB | resource | Memory limit for the container (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_pids` | 512 count | resource | Process/thread limit (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_cpu_millis` | 8000 millicpu | resource | CPU quota (build). freeciv21 timed out at 405/578 objects after 1800 s on 2 CPUs. | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 2048 count | resource | Process/thread limit (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_timeout_seconds` | 1800 s (30 min) | resource | Wall-clock limit for the container (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (configure replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 
 ### `02-build-index`
@@ -178,12 +178,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
 | `base_fallback_audit_buildenv_cpp` | audit-buildenv-cpp-resolute id | resource | When a C/C++ unit's copy-on-write rounds end in a version conflict (a dependency newer than the base's Ubuntu release provides), retry the unit once on this newer sealed base (Ubuntu 26.04: Qt 6.10, KF6). | One extra build attempt per conflicting unit. |
-| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_memory_bytes` | 2 GiB | resource | Memory limit for the container (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_pids` | 512 count | resource | Process/thread limit (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_cpu_millis` | 8000 millicpu | resource | CPU quota (build). freeciv21 timed out at 405/578 objects after 1800 s on 2 CPUs. | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 2048 count | resource | Process/thread limit (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_timeout_seconds` | 1800 s (30 min) | resource | Wall-clock limit for the container (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (build trial). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 
 ### `02-code-property-graph`
@@ -332,12 +332,12 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
-| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_memory_bytes` | 2 GiB | resource | Memory limit for the container (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_pids` | 512 count | resource | Process/thread limit (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_cpu_millis` | 8000 millicpu | resource | CPU quota (build). freeciv21 timed out at 405/578 objects after 1800 s on 2 CPUs. | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_memory_bytes` | 8 GiB | resource | Memory limit for the container (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_pids` | 2048 count | resource | Process/thread limit (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
-| `container_timeout_seconds` | 1800 s (30 min) | resource | Wall-clock limit for the container (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 256 MiB | resource | Size of the in-memory /tmp (native build replay). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 
 ### `02-native-sast`

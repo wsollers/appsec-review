@@ -11,39 +11,70 @@
     "tooling_profile_id": "pinned-build-resolver",
     "output_contract_id": "build-resolution"
   },
-  "inputs": {"required": ["accepted build-plan.json", "staged target checkout", "B16 base-image record", "explicit permission grants"], "optional": []},
-  "outputs": {"directory": "data/jobs/02-build-resolution/attempts/<attempt_id>", "files": ["build-resolution.json", "build-lock.json", "b13-receipts.json", "build-resolution-summary.md", "status.json"]},
-  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"],
+  "inputs": {
+    "required": [
+      "accepted build-plan.json",
+      "staged target checkout",
+      "B16 base-image record",
+      "explicit permission grants"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-build-resolution/attempts/<attempt_id>",
+    "files": [
+      "build-resolution.json",
+      "build-lock.json",
+      "b13-receipts.json",
+      "build-resolution-summary.md",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
   "implemented": true,
   "timeout_seconds": 7200,
-  "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": false},
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": false
+  },
   "applicability": "each accepted build-set unit; stage-13 fixture must resolve",
-  "permissions": ["read-source", "package-restore:apt@archive.ubuntu.com:80", "target-execution:build-resolution-v1@.", "write-run-data"],
+  "permissions": [
+    "read-source",
+    "package-restore:apt@archive.ubuntu.com:80",
+    "target-execution:build-resolution-v1@.",
+    "write-run-data"
+  ],
   "coordinator": "intake-coordinator",
   "tunables": {
     "container_timeout_seconds": {
-      "value": 1800,
+      "value": 3600,
       "unit": "seconds",
       "kind": "resource",
       "description": "Wall-clock limit for the container (build trial).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_memory_bytes": {
-      "value": 2147483648,
+      "value": 8589934592,
       "unit": "bytes",
       "kind": "resource",
       "description": "Memory limit for the container (build trial).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_cpu_millis": {
-      "value": 2000,
+      "value": 8000,
       "unit": "millicpu",
       "kind": "resource",
-      "description": "CPU quota (1000 = one core) (build trial).",
+      "description": "CPU quota (build). freeciv21 timed out at 405/578 objects after 1800 s on 2 CPUs.",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_pids": {
-      "value": 512,
+      "value": 2048,
       "unit": "count",
       "kind": "resource",
       "description": "Process/thread limit (build trial).",

@@ -127,7 +127,7 @@ def stage_control(run_id: str, *, authority: str = "Task-authorized engagement o
             "capabilities": [capability],
         })
     value = {"schema": CONTROL_SCHEMA, "mode": "success", "requirements": requirements,
-             "grants": grants, "timeout_seconds": 1800}
+             "grants": grants, "timeout_seconds": tunables.value(job, "container_timeout_seconds")}
     errors = validate_document(value, "build-replay-input.schema.json")
     if errors:
         raise ValueError("invalid build-replay control: " + "; ".join(errors))

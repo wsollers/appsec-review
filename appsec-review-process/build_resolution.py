@@ -108,7 +108,7 @@ def stage_control(run_id: str, mode: str = "success", reuse: str = "auto",
     }
     value = {
         "schema": CONTROL_SCHEMA, "mode": mode, "build_resolution_attempts": 6,
-        "build_image_reuse": reuse, "build_command_timeout_seconds": 1800,
+        "build_image_reuse": reuse, "build_command_timeout_seconds": tunables.value(JOB, "container_timeout_seconds"),
         "image_build_timeout_seconds": 1800, "apt_mirror": APT_MIRROR,
         "permission": {"requirement": {
             "schema": "appsec-review/permission-requirement/1.0", "job_id": JOB,

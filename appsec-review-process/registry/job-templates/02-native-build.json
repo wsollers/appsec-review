@@ -1,37 +1,79 @@
 {
-  "schema": "appsec-review/job-template/0.1", "job_template_id": "02-native-build",
-  "display_name": "Native Build", "process": "02-evidence-pregather", "budget_default": "probe",
-  "composition": {"persona_id": "evidence-custodian", "role_id": "build-resolver", "domain_id": "repo-project-discovery", "tooling_profile_id": "pinned-build-resolver", "output_contract_id": "native-build"},
-  "inputs": {"required": ["accepted build lock", "accepted configured build", "catalogued build image", "staged target checkout", "target-execution grant"], "optional": []},
-  "outputs": {"directory": "data/jobs/02-native-build/attempts/<attempt_id>", "files": ["native-build.json", "b13-receipts.json", "native-build-summary.md", "status.json"]},
-  "prompt_sections": ["governing_rules", "scope", "validation", "output_contract"], "implemented": true,
-  "timeout_seconds": 3600, "retry": {"max_attempts": 1, "transient_reasons": [], "side_effect_free": false},
+  "schema": "appsec-review/job-template/0.1",
+  "job_template_id": "02-native-build",
+  "display_name": "Native Build",
+  "process": "02-evidence-pregather",
+  "budget_default": "probe",
+  "composition": {
+    "persona_id": "evidence-custodian",
+    "role_id": "build-resolver",
+    "domain_id": "repo-project-discovery",
+    "tooling_profile_id": "pinned-build-resolver",
+    "output_contract_id": "native-build"
+  },
+  "inputs": {
+    "required": [
+      "accepted build lock",
+      "accepted configured build",
+      "catalogued build image",
+      "staged target checkout",
+      "target-execution grant"
+    ],
+    "optional": []
+  },
+  "outputs": {
+    "directory": "data/jobs/02-native-build/attempts/<attempt_id>",
+    "files": [
+      "native-build.json",
+      "b13-receipts.json",
+      "native-build-summary.md",
+      "status.json"
+    ]
+  },
+  "prompt_sections": [
+    "governing_rules",
+    "scope",
+    "validation",
+    "output_contract"
+  ],
+  "implemented": true,
+  "timeout_seconds": 3600,
+  "retry": {
+    "max_attempts": 1,
+    "transient_reasons": [],
+    "side_effect_free": false
+  },
   "applicability": "each OK native unit in the accepted build lock after configure",
-  "permissions": ["read-source", "target-execution:native-build-v1@.", "write-run-data"], "coordinator": "intake-coordinator",
+  "permissions": [
+    "read-source",
+    "target-execution:native-build-v1@.",
+    "write-run-data"
+  ],
+  "coordinator": "intake-coordinator",
   "tunables": {
     "container_timeout_seconds": {
-      "value": 1800,
+      "value": 3600,
       "unit": "seconds",
       "kind": "resource",
       "description": "Wall-clock limit for the container (native build replay).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_memory_bytes": {
-      "value": 2147483648,
+      "value": 8589934592,
       "unit": "bytes",
       "kind": "resource",
       "description": "Memory limit for the container (native build replay).",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_cpu_millis": {
-      "value": 2000,
+      "value": 8000,
       "unit": "millicpu",
       "kind": "resource",
-      "description": "CPU quota (1000 = one core) (native build replay).",
+      "description": "CPU quota (build). freeciv21 timed out at 405/578 objects after 1800 s on 2 CPUs.",
       "scale": "Grows with target size; see docs/scale-audit-unreal-engine.md section C."
     },
     "container_pids": {
-      "value": 512,
+      "value": 2048,
       "unit": "count",
       "kind": "resource",
       "description": "Process/thread limit (native build replay).",
