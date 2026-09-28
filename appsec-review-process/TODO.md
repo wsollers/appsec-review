@@ -92,6 +92,15 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 
 - [ ] `tests.test_persona_invocation.RegistryTests.test_tracked_registry_passes_as_is_and_the_default_denied_set_is_pinned` fails on `main` (registry validation reports a problem with `job-templates/02-native-sast`); also `test_vendor_prepass_graph` (16 failures). Pre-existing, not blocking runs.
 
+## Native lane granularity
+
+[ADR-0014](../docs/decisions/ADR-0014-native-lane-granularity.md): native analysis is per clang
+invocation (compile-DB entry, keyed by source hash + normalised argv + toolchain); link-level jobs
+per link target; configure/build/tests per build unit. Zero invocations = SKIPPED
+`not-applicable-no-native-binaries`; one failure = one gap. Order: per-invocation loops + zero skips,
+link-command capture + link-target level, plan-driven tests, unit `depends_on`, parallel shards,
+content-addressed reuse cache.
+
 ## Scale: engine-sized targets
 
 [`docs/scale-audit-unreal-engine.md`](../docs/scale-audit-unreal-engine.md) lists every static limit
