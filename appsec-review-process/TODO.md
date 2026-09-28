@@ -73,7 +73,8 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
 
 ## Follow-ups (after hello-autotools reaches a report)
 
-- [ ] **Source SAST Semgrep rules.** `data/source-sast/rules-v1.yml` has only 4 C/C++ rules
+- [x] **Source SAST Semgrep rules.** Done on branch ws-sast (see breakage log).
+      Original note: `data/source-sast/rules-v1.yml` has only 4 C/C++ rules
       (strcpy, non-literal printf, memcpy, system), so `02-source-sast` always reports the gap
       "Repository-owned C/C++ Semgrep rules do not cover every source-analysis family". Decided
       (William, 2026-09-27): vendor the 16 C rules from `opengrep/opengrep-rules` at
@@ -91,6 +92,17 @@ stage-control "$RUN_ID"` once the native build is accepted (see the operator gui
       partition discovery and `01-component-characterization` as an upstream.
 
 - [ ] `tests.test_persona_invocation.RegistryTests.test_tracked_registry_passes_as_is_and_the_default_denied_set_is_pinned` fails on `main` (registry validation reports a problem with `job-templates/02-native-sast`); also `test_vendor_prepass_graph` (16 failures). Pre-existing, not blocking runs.
+
+- [ ] **Claim ledger: CodeQL leads.** On merge with `review-batch`, add
+      `("02-codeql-sast", "codeql-sast", "codeql-sast.json", "codeql-sast.schema.json")` to
+      `claim_ledger.LEAD_PRODUCERS` and treat it like `02-source-sast` in `normalize_leads`
+      (`if job_id in ("02-source-sast", "02-codeql-sast")`; its leads have the same keys plus
+      `language`, `rule_name`, `cwe`). For tiering, add category `codeql-security-query` and the new
+      source-SAST categories `unsafe-input`, `memory-lifetime`, `sensitive-memory-clear`,
+      `resource-exhaustion` to `P1_CATEGORIES`.
+- [ ] **audit-codeql image.** Rebuild (`image_build.py`, picks up `scripts/codeql-sast-lane.sh`),
+      register the B16 record, add a .NET SDK for C# build-mode none. Optional later: a traced C/C++
+      tool id replaying the locked build (ADR-0017 decision 4).
 
 ## Native lane granularity
 
@@ -172,6 +184,9 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | (all) | - | 02-codeql-sast (new) | CodeQL never ran in the graph (ADR-0006 image only); freeciv21/doom3-bfg had no native SAST at all | Branch ws-sast: new job `02-codeql-sast` (codeql_sast.py, ADR-0017, always run, no license gate): one B13 container per detected language, `--build-mode none`, bundled `<lang>-security-extended`, SARIF -> leads (rule id, pinned rule name, CWE, path, lines, source hash; messages withheld); timeout/OOM/exit -> per-language gap; required edge into 02-evidence-assembly. OPEN: rebuild `audit-codeql` (lane script) and register its B16 record, else every language is an UNAVAILABLE gap; C# needs a .NET SDK in the image; claim ledger needs the `02-codeql-sast` producer row (below). Live qualification with audit-codeql:local: vuln.c fixture 7 cpp leads in 34 s; multi-vuln cpp 19, javascript 8, java 0, csharp failed (no dotnet) |
+| 2026-09-28 | (all) | - | 02-source-sast | Only 4 repository C/C++ rules, so the lane always reported the generic rules gap | Branch ws-sast: 16 opengrep C rules vendored verbatim at f1d2b562 under `data/source-sast/opengrep-rules/` (LICENSE, NOTICE, hash lock `opengrep-rules.lock.json`; drift blocks), second `--config`, own tool id `semgrep-opengrep-rules-f1d2b562`, 8 new closed categories, optional `cwe` on leads, narrowed gap text. Live tool-semgrep 1.178.0: fixture 12 of 16 rules hit; multi-vuln +44 vendored leads |
+| 2026-09-28 | freeciv21, doom3-bfg | abae7f4b, 22d32a79 | 02-license-scan | (the OPEN rows below) scancode TIMEOUT blocked the job | Branch ws-sast: `dependency_b13_adapters.tool_gap` (shared by adapter and worker): scancode TIMEOUT / OOM_KILLED / non-accepted non-zero exit publishes OK_WITH_GAPS with `LICENSE_SCAN_TOOL_GAP: ...`, zero records and `outputs/pinned-tool-gap.json` derived from the re-verified B13 attempt; no output hash is trusted; canceled/blocked containers and tampered attempts still block |
 | 2026-09-28 | doom3-bfg | a8d9629d | 15-deployment-hardening | IaC scan pointer is SKIPPED (no IaC inputs); standards_lifecycle loaded it as a normal accepted result and refused it | A skipped IaC scan yields no deployment targets and a gap naming the skip reason |
 | 2026-09-28 | appsec-multi-vuln | 5f5589f5 | 07-red-team-adversarial | Reached claim review (61 steps OK). All 60 pool decisions omit 4 of 10 reviewer identity fields (artifact_path ...) and give citations as bare ids: model-written bookkeeping | OPEN: Python builds reviewer identity and resolves citations (model-bookkeeping audit item 1, tmp/model-bookkeeping-audit.md) |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac (Dagster 7c6d6a0e) | 02-debug-symbol-index | `worker result validation failed: declared result artifact exceeds 33554432 bytes`: debug-symbol-index.json was 77 MB (12 binaries, ~54 MB of symbols) | Branch freeciv-native (b7b3dc35): scale-audit B records file. The result is a summary with `records_file` (path, sha256, count); symbols go to debug-symbol-index.records.jsonl, re-derived and re-hashed on validation. 02-binary-cfg hydrates the records in memory from the accepted attempt after hash/count checks. Nothing dropped |

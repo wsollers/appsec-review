@@ -55,6 +55,7 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "codeql_sast",
       "component_characterization",
       "full_review_input_assembly",
       "threat_model_dfd_stride",
@@ -216,6 +217,13 @@
           "02-source-sast"
         ],
         "relationship": "standalone and lifecycle-wired offline multi-language source SAST through B13; unavailable tools remain explicit gaps"
+      },
+      {
+        "job": "codeql_sast",
+        "lifecycle_jobs": [
+          "02-codeql-sast"
+        ],
+        "relationship": "standalone and lifecycle-wired offline CodeQL security suites per language through B13 (ADR-0017); tool failures remain explicit per-language gaps"
       },
       {
         "job": "component_characterization",
@@ -553,6 +561,7 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "codeql_sast",
       "component_characterization",
       "full_review_input_assembly",
       "threat_model_dfd_stride",
@@ -607,6 +616,7 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "codeql_sast",
       "component_characterization",
       "full_review_input_assembly",
       "threat_model_dfd_stride",
@@ -662,6 +672,7 @@
       "build_configure",
       "native_build",
       "source_sast",
+      "codeql_sast",
       "component_characterization",
       "full_review_input_assembly",
       "threat_model_dfd_stride",
@@ -1412,6 +1423,7 @@
           "02-standards-source-ingest",
           "02-test-intelligence-ingest",
           "02-source-sast",
+          "02-codeql-sast",
           "02-code-property-graph",
           "02-native-sast",
           "02-ir-facts",
@@ -3271,6 +3283,75 @@
       },
       "gaps": [
         "fault_recovery_not_qualified"
+      ],
+      "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
+    },
+    {
+      "id": "02-codeql-sast",
+      "design_refs": [
+        "docs/decisions/ADR-0017-codeql-sast-job.md",
+        "docs/decisions/ADR-0006-codeql-pre-engagement.md"
+      ],
+      "graph": {
+        "node": "02-codeql-sast",
+        "implemented": true,
+        "dependencies": [
+          "00-intake"
+        ]
+      },
+      "registry": {
+        "template": "02-codeql-sast",
+        "persona": "evidence-custodian",
+        "role": "source-sast-curator",
+        "domain": "repo-project-discovery",
+        "tooling_profile": "pinned-source-sast",
+        "output_contract": "codeql-sast"
+      },
+      "execution": {
+        "mode": "pinned_container",
+        "worker": "appsec-review-process/codeql_sast.py:run",
+        "validator": "appsec-review-process/codeql_sast.py:validate"
+      },
+      "output": {
+        "contract": "codeql-sast",
+        "contract_file": "appsec-review-process/registry/output-contracts/codeql-sast.json",
+        "schema_file": "schemas/codeql-sast.schema.json",
+        "claim_class": "source_static_evidence"
+      },
+      "permissions": [
+        "read-source",
+        "write-run-data"
+      ],
+      "dagster": {
+        "standalone_jobs": [
+          "codeql_sast"
+        ],
+        "lifecycle_binding": {
+          "kind": "actual_worker",
+          "entrypoint": "appsec-review-process/dagster_workflow.py:full_review"
+        },
+        "launcher_jobs": [
+          "full_review",
+          "codeql_sast"
+        ],
+        "sensor_jobs": [
+          "full_review",
+          "codeql_sast"
+        ]
+      },
+      "resource_pool": "docker",
+      "readiness": "implemented_not_qualified",
+      "qualification": {
+        "levels": [
+          "unit",
+          "host_integration"
+        ],
+        "references": [
+          "appsec-review-process/tests/test_codeql_sast.py"
+        ]
+      },
+      "gaps": [
+        "live_dagster_qualification_missing"
       ],
       "next_prerequisite": "Close the retained qualification and coverage gaps listed for this job."
     },

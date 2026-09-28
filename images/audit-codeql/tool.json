@@ -1,0 +1,46 @@
+{
+  "schema": "appsec-review/tool-image/1",
+  "image_id": "audit-codeql",
+  "tool": "codeql",
+  "version": "2.27.0",
+  "purpose": "CodeQL CLI bundle with the codeql/<lang>-queries packs, run offline by 02-codeql-sast (one container per language, --build-mode none).",
+  "feeds": [
+    "02-codeql-sast"
+  ],
+  "executable": "/opt/codeql/codeql",
+  "version_argv": [
+    "/opt/codeql/codeql",
+    "version",
+    "--format=terse"
+  ],
+  "version_expect": "{version}",
+  "bundle": {
+    "name": "codeql-bundle-v2.27.0",
+    "url": "https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.0/codeql-bundle-linux64.tar.zst",
+    "sha256": "5e0f04bcb92c0c0973b6f5597e55316269051fa98bda3f725d8af9a85016721a",
+    "bytes": 553280102
+  },
+  "lane_script": {
+    "path": "/opt/scripts/codeql-sast-lane.sh",
+    "source": "scripts/codeql-sast-lane.sh"
+  },
+  "query_suites": {
+    "cpp": "codeql/cpp-queries:codeql-suites/cpp-security-extended.qls",
+    "csharp": "codeql/csharp-queries:codeql-suites/csharp-security-extended.qls",
+    "java": "codeql/java-queries:codeql-suites/java-security-extended.qls",
+    "javascript": "codeql/javascript-queries:codeql-suites/javascript-security-extended.qls",
+    "python": "codeql/python-queries:codeql-suites/python-security-extended.qls",
+    "ruby": "codeql/ruby-queries:codeql-suites/ruby-security-extended.qls"
+  },
+  "notes": "Not a tool-* image: images/tool_pins.py does not manage it. Authenticity: the bundle sha256 here must equal image.json prebuild and the Dockerfile sha256sum line (codeql_sast.tool_metadata checks all three); the lane script is COPYed from scripts/ and hashed into the job's inputs.",
+  "smoke": [
+    {
+      "name": "version",
+      "argv": [
+        "/opt/codeql/codeql",
+        "version",
+        "--format=terse"
+      ]
+    }
+  ]
+}

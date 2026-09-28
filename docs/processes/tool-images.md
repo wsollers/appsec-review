@@ -129,9 +129,16 @@ id, Dockerfile hash, build fingerprint and attempt id at startup.
 
 ## Findings from the first build (2026-09-26, cloud workspace, Docker 29.4.3)
 
-- **Semgrep rules are not in any image.** The engine runs offline with a mounted rule set; which rules
-  (the Semgrep Rules License question in `images/audit-static-opengrep/Dockerfile`) is open for the
-  `02-source-sast` design.
+- **Semgrep rules are not in any image.** The engine runs offline with mounted rule sets:
+  `data/source-sast/rules-v1.yml` (4 repository rules) and, since 2026-09-28, the 16 C rules vendored
+  verbatim from `opengrep/opengrep-rules` at `f1d2b562` under `data/source-sast/opengrep-rules/`
+  (LGPL-2.1 + Commons Clause; LICENSE and NOTICE alongside, every file hash-locked by
+  `data/source-sast/opengrep-rules.lock.json`; decision William 2026-09-27).
+- **CodeQL (`audit-codeql`) feeds `02-codeql-sast`** (ADR-0017): one container per language runs
+  `/opt/scripts/codeql-sast-lane.sh` with `--build-mode none` and the bundled security-extended suite.
+  `images/audit-codeql/tool.json` is the authenticated metadata (bundle sha256 must match image.json and
+  the Dockerfile). The image needs a rebuild (lane script) and a B16 record before the job executes;
+  C# additionally needs a .NET SDK in the image.
 - **grype has no database** until the V16 mirror publisher exists; the smoke run only proves it refuses
   to run without one.
 - **syft finds no component in hello-autotools**: the vendored cJSON has no manifest. Phase 7 expects one

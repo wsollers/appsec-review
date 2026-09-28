@@ -3,6 +3,14 @@
 CodeQL CLI + bundled query packs, run offline, for **pre-engagement evidence gathering**
 (ADR-0006). Not the native memory-safety substrate (that is `audit-native`, ADR-0001).
 
+## Pipeline job (ADR-0017)
+
+`02-codeql-sast` (`appsec-review-process/codeql_sast.py`) runs this image through B13, one container
+per detected language, with `/opt/scripts/codeql-sast-lane.sh LANG none SUITE THREADS RAM_MB`: database
+create with `--build-mode none`, analyze with `codeql/<lang>-queries:codeql-suites/<lang>-security-extended.qls`
+to `/scratch/codeql.sarif`, database removed. `tool.json` is the metadata the job authenticates. The job
+has no license gate (William, 2026-09-28); `run-codeql.sh` below is the manual path.
+
 ## License basis
 
 `ghas` — GitHub Advanced Security via Microsoft (ZeniMax). Set as the image default and
