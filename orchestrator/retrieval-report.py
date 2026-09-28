@@ -86,7 +86,7 @@ def main() -> int:
             if outcome.get("_kind") != "result":
                 continue
             refs = {norm(r) for r in outcome.get("refs", []) if r}
-            if request["tool"] in ("input_read", "evidence_read"):
+            if request["tool"] in ("input_read", "evidence_read", "input_jq"):
                 read |= refs or {norm(request["arguments"].get("ref") or request["arguments"].get("path", ""))}
             else:
                 surfaced |= refs

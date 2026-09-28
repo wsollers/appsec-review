@@ -43,6 +43,11 @@ TOOLS = [
     {"name": "input_grep", "description": "Search pinned inputs for a regular expression (Python syntax, case-insensitive). Returns ref, line number and line text.",
      "inputSchema": {"type": "object", "properties": {"pattern": {"type": "string", "maxLength": 500}, "prefix": {"type": "string"},
                      "limit": {"type": "integer", "minimum": 1, "maximum": 200}}, "required": ["pattern"], "additionalProperties": False}},
+    {"name": "input_jq", "description": "Run a jq filter over one pinned JSON input (ref exactly as listed) and return the result. "
+     "Use it instead of paging large JSON by lines: e.g. 'keys', '.units | length', '.units[] | select(.unit_id==\"dir:.\")', "
+     "'[.partitions[] | {partition_id, include_paths}]', 'paths(scalars) | join(\".\")' . Returns up to 64 KB; narrow the filter if truncated.",
+     "inputSchema": {"type": "object", "properties": {"ref": {"type": "string"}, "filter": {"type": "string", "maxLength": 2000},
+                     "compact": {"type": "integer", "minimum": 0, "maximum": 1}}, "required": ["ref", "filter"], "additionalProperties": False}},
     *evidence_mcp.TOOLS,
     {"name": "evidence_derived", "description": "Search the evidence index's derived records from upstream tools (SAST, code property graph, IR, SBOM, secrets, ...). Optional partition/component filter. Results are locators to producer records.",
      "inputSchema": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 1000}, "partition_id": {"type": "string"},
@@ -73,6 +78,31 @@ class Inputs:
             return raw.decode("utf-8")
         except UnicodeDecodeError:
             raise ValueError(f"{ref!r} is {len(raw)} bytes of non-UTF-8 data") from None
+
+
+JQ_RETURN_BYTES = 64 * 1024   # per-call return window (the model narrows its filter), not a data cap
+_JQ_FORBIDDEN = re.compile(r"\b(?:import|include|env|input_filename|get_search_list)\b|\$(?:ENV|__loc__|__prog_args)\b")
+
+
+def _jq(inputs: "Inputs", ref: str, program: str, *, compact: bool) -> dict:
+    """jq over the pinned bytes on stdin only: empty environment, no module search path, empty
+    working directory, no file arguments, and filters that could reach files or the environment
+    (import/include/env/$ENV/input_filename) refused."""
+    import shutil, subprocess, tempfile
+    binary = shutil.which("jq")
+    if binary is None:
+        raise ValueError("jq is not installed on this host")
+    if _JQ_FORBIDDEN.search(program):
+        raise ValueError("filter uses a jq feature that reaches outside the input (import/include/env/$ENV/input_filename)")
+    data = inputs.data(ref)
+    with tempfile.TemporaryDirectory() as empty:
+        done = subprocess.run([binary, "-c" if compact else "-M", "-L", empty, program], input=data,
+                              capture_output=True, cwd=empty, env={}, timeout=30)
+    if done.returncode != 0:
+        raise ValueError("jq: " + done.stderr.decode("utf-8", "replace").strip()[:500])
+    out = done.stdout.decode("utf-8", "replace")
+    return {"ref": ref, "sha256": inputs.by_ref[ref]["sha256"], "bytes": len(out),
+            "truncated": len(out) > JQ_RETURN_BYTES, "result": out[:JQ_RETURN_BYTES]}
 
 
 def _check(schema: dict, args: dict) -> None:
@@ -114,6 +144,8 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
                     if len(hits) >= limit:
                         return {"hits": hits, "truncated": True}
         return {"hits": hits, "truncated": False}
+    if name == "input_jq":
+        return _jq(inputs, args["ref"], args["filter"], compact=args.get("compact", 1) == 1)
     if name == "evidence_derived":
         from evidence_store import query_derived
         return query_derived(run_id, fresh=False, **args)
@@ -130,6 +162,9 @@ def _summary(name: str, result: object) -> dict:
     """What a lookup returned, for the retrieval audit: hit count and the refs/paths it surfaced."""
     if not isinstance(result, dict):
         return {"hits": 0, "refs": []}
+    if name == "input_jq":
+        return {"hits": 1 if result.get("result", "").strip() not in ("", "null") else 0, "refs": [result.get("ref")],
+                "result_bytes": result.get("bytes"), "truncated": result.get("truncated")}
     if name == "input_read":
         return {"hits": 1 if result.get("text") else 0, "refs": [result.get("ref")],
                 "lines": [result.get("start"), result.get("total_lines")]}
