@@ -85,6 +85,14 @@ def _composition() -> tuple[dict[str, Any], dict[str, tuple[str, ...]], dict[str
     return composition, pi.claim_ceiling(records["role"], records["tooling_profile"]), template
 
 
+def _fill_binding(envelope: dict[str, Any], result_field: str) -> None:
+    """Every producer-binding value is orchestrator-known; the invoker fills the hashes and job id
+    from the pinned inputs, so a malformed model reply cannot fail the instance (ADR-0013)."""
+    value = envelope.get(result_field)
+    envelope[result_field] = value if isinstance(value, dict) else {}
+    envelope[result_field]["schema"] = "appsec-review/evidence-producer-binding/1.0"
+
+
 def _permission(run_id: str, snapshot: str, now: str) -> dict[str, Any]:
     requirement = {"schema": "appsec-review/permission-requirement/1.0",
                    "job_id": evidence_assembly.JOB, "capabilities": []}
@@ -204,7 +212,7 @@ def prepare(run_id: str, dagster_run_id: str, force: bool = False, *, invoker: A
         outcome = verified.manifest["outcome"]
     else:
         runtime = pool_rendezvous.RendezvousRuntime(rendezvous_parent=rendezvous_parent,
-            invoker=invoker or ClaudeCliInvoker(effort=effort, budget_usd=usd), clock=clock or _now,
+            invoker=invoker or ClaudeCliInvoker(effort=effort, budget_usd=usd, fill_result=_fill_binding), clock=clock or _now,
             stop_grace_seconds=5, cancel=pool_rendezvous.PoolCancel(),
             max_parallel=pool_rendezvous.MAX_PARALLEL,
             wait_limit_seconds=spec["rendezvous_timeout_seconds"], drain_seconds=60)
