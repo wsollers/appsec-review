@@ -455,5 +455,20 @@ class RepairAgainstTargetTest(unittest.TestCase):
         self.assertEqual([g["subject"] for g in value["classification_gaps"]], ["scope:flake.nix"])
 
 
+class NormalizeTagCloudTest(unittest.TestCase):
+    def test_repeated_and_unordered_tags_are_merged_and_sorted(self) -> None:
+        cite = {"path": "a.c", "line_range": "1-2"}
+        value = {"tag_cloud": [
+            {"tag": "parser", "weight": 10, "component_ids": ["b"], "confidence": "high", "evidence_citations": [cite]},
+            {"tag": "io", "weight": 5, "component_ids": ["a"], "confidence": "medium", "evidence_citations": [cite]},
+            {"tag": "parser", "weight": 30, "component_ids": ["a", "b"], "confidence": "low", "evidence_citations": [cite]}]}
+        cc._normalize_tag_cloud(value)
+        tags = [item["tag"] for item in value["tag_cloud"]]
+        self.assertEqual(tags, ["io", "parser"])
+        parser = value["tag_cloud"][1]
+        self.assertEqual((parser["component_ids"], parser["weight"], parser["confidence"]), (["a", "b"], 30, "low"))
+        self.assertEqual(parser["evidence_citations"], [cite])
+
+
 if __name__ == "__main__":
     unittest.main()

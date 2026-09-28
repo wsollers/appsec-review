@@ -639,6 +639,35 @@ def _normalize_component_ids(value: dict[str, Any]) -> None:
             item["affected_component_ids"] = [fix(c) for c in item.get("affected_component_ids") or []]
 
 
+_CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def _normalize_tag_cloud(value: dict[str, Any]) -> None:
+    """The tag cloud must be unique by tag and in lexical order; the model sometimes repeats a tag or
+    lists them out of order. Merge repeats (union of components, largest weight, weakest confidence,
+    concatenated citations without duplicates) and sort, so ordering is Python's job, not the model's."""
+    merged: dict[str, dict[str, Any]] = {}
+    for item in value.get("tag_cloud") or []:
+        tag = item.get("tag")
+        if not isinstance(tag, str):
+            continue
+        have = merged.get(tag)
+        if have is None:
+            merged[tag] = {**item, "component_ids": sorted(set(item.get("component_ids") or [])),
+                           "evidence_citations": list(item.get("evidence_citations") or [])}
+            continue
+        have["component_ids"] = sorted(set(have["component_ids"]) | set(item.get("component_ids") or []))
+        if isinstance(item.get("weight"), int):
+            have["weight"] = max(have.get("weight", 0), item["weight"])
+        if _CONFIDENCE_RANK.get(item.get("confidence"), 2) < _CONFIDENCE_RANK.get(have.get("confidence"), 2):
+            have["confidence"] = item["confidence"]
+        for citation in item.get("evidence_citations") or []:
+            if citation not in have["evidence_citations"]:
+                have["evidence_citations"].append(citation)
+    if "tag_cloud" in value:
+        value["tag_cloud"] = [merged[tag] for tag in sorted(merged)]
+
+
 def _drop_unresolved_relationships(value: dict[str, Any]) -> None:
     """ADR-0013: a relationship whose endpoint is not a characterised component (hello-autotools:
     'writes-to' a /tmp log file) is a classification gap, not a failed map. Drop the edge, keep the map."""
@@ -747,6 +776,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             raise Blocked(f"{JOB}: implementation changed before execution")
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
         _normalize_component_ids(value)
+        _normalize_tag_cloud(value)
         _drop_unresolved_relationships(value)
         _repair_against_target(value, Path(inputs["target_root"]))
         _record_untagged_gaps(value)
