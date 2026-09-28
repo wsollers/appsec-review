@@ -507,7 +507,7 @@ def _reconcile_redacted_outputs(attempt: Path) -> None:
                 if entry.get("path") == "tool-results.json":
                     digest_hex = hashlib.sha256(data).hexdigest()
                     entry.update(published_bytes=len(data), published_sha256=digest_hex, source_sha256=digest_hex)
-            receipt_path.write_bytes(_dump(receipt))
+            receipt_path.write_bytes(_dump(evidence_redaction._seal(receipt)))
 
 
 def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run_id: str,

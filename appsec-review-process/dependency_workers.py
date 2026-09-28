@@ -464,7 +464,7 @@ def build_sbom(request: dict[str, Any], attempt_id: str) -> tuple[dict[str, byte
               "components": components}
     errors = validate_document(result, "sbom-inventory.schema.json")
     errors += build_index_enrichment_errors(result, enrichment_bytes)
-    if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors)")
+    if errors: raise WorkerBlocked(f"{job}: normalized result violates schema ({len(errors)} errors; first: {'; '.join(str(e)[:200] for e in errors[:3])})")
     gaps = enrichment_gaps or ([] if components else ["no-dependency-components-detected"])
     return {"outputs/sbom.cdx.json": cdx_bytes, "outputs/sbom-manifest.json": _canonical(result),
             _BUILD_INDEX_ENRICHMENT: enrichment_bytes,

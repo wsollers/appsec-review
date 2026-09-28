@@ -461,8 +461,17 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
             base_info = inputs["base_images"][plan["image"]["base"]]
             image_id, spec_fingerprint = _spec(plan, base_info, control["apt_mirror"])
             dockerfile = _render(plan, base_info["build_reference"], control["apt_mirror"])
-            record, reused = _build_image(unit_attempt, image_id, spec_fingerprint, dockerfile,
-                                          control, force or control["build_image_reuse"] == "rebuild")
+            try:
+                record, reused = _build_image(unit_attempt, image_id, spec_fingerprint, dockerfile,
+                                              control, force or control["build_image_reuse"] == "rebuild")
+            except RuntimeError as exc:
+                logs = unit_attempt / "image-build-logs" / "stderr.log"
+                missing = sorted(set(re.findall(r"Unable to locate package (\S+)",
+                                                logs.read_text(errors="replace") if logs.is_file() else "")))
+                gaps.append(f"{plan['unit_id']}: build image failed ({exc})"
+                            + (f"; apt packages not found: {', '.join(missing)}" if missing else "")
+                            + f"; see {logs.relative_to(attempt).as_posix()}")
+                continue
             registry = unit_attempt / "image-registry"; registry.mkdir()
             atomic_json(registry / f"{image_id}.json", record)
             trial = unit_attempt / "trial"; trial.mkdir()

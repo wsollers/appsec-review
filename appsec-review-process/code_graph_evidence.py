@@ -118,7 +118,13 @@ def normalize_jsonl(raw: Path, *, target: Path, run_id: str, source_snapshot_sha
             if (not isinstance(line_number, int) or isinstance(line_number, bool) or line_number < 1 or
                     (column is not None and (not isinstance(column, int) or isinstance(column, bool) or column < 1))):
                 raise Blocked("Joern record has an invalid source coordinate")
-            relative, source = _location(target, item["file"])
+            try:
+                relative, source = _location(target, item["file"])
+            except (Blocked, OSError):
+                # Joern names files it inferred (e.g. unresolved #include headers) that are not in
+                # the checkout, or reached through a link (freeciv21). Skip and count.
+                skipped["source_unavailable"] = skipped.get("source_unavailable", 0) + 1
+                continue
             cached = source_cache.get(source)
             if cached is None:
                 raw_source = source.read_bytes()
