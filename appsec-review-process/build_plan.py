@@ -418,6 +418,11 @@ def _fill_known(classification):
             for plan in value.get('plans') or []:
                 if not isinstance(plan, dict):
                     continue
+                image = plan.get('image')
+                if isinstance(image, dict) and isinstance(image.get('base'), str):
+                    # base images are registry ids; the model sometimes adds the local tag
+                    # (appsec-multi-vuln: audit-buildenv-cpp:local)
+                    image['base'] = image['base'].split('@', 1)[0].split(':', 1)[0]
                 feasibility = plan.get('feasibility') or {}
                 uid = plan.get('unit_id')
                 if feasibility.get('tier') == 'C' and isinstance(uid, str) and isinstance(gaps, list) \
