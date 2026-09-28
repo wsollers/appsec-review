@@ -611,8 +611,9 @@ def request_errors(request: Any, *, run_id: str, job_id: str, attempt_id: str,
         if (entry["role"] in PRODUCER_ROLES) != (entry["producer_request_sha256"] is not None):
             errors.append(f"readable_inputs[{index}].producer_request_sha256 is required exactly for "
                           "producer output and producer results")
-    if total > budget["input_byte_limit"]:
-        errors.append("unbounded context: the prompt and readable inputs exceed budget.input_byte_limit")
+    # Inputs over the inline budget are served through input_mcp.py, not inlined (ADR-0013: no cap).
+    size_log.observe(request.get("run_id"), request.get("job_id"), "prompt_and_input_bytes", total,
+                     budget["input_byte_limit"])
     errors.extend(independence_errors(request))
     decision = request["permission"]["decision"]
     try:

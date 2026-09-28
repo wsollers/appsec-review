@@ -112,7 +112,12 @@ def accepted(run_id, job=JOB, scope='whole', fresh=True):
         if fresh:
             template = read_json(ROOT / 'registry/job-templates/00-intake.json')
             live = current_inputs(run_id, template, config_for(run_id))
-            if digest(live) != pointer['fingerprint']:
+            # ADR-0013 item 8: intake is stale only when what it read changed (the target snapshot,
+            # its config, its dependencies, its tools). definition_hash also covers shared runtime,
+            # every schema and every job template, so any unrelated edit would re-run the whole run.
+            if (live['source'] != source or live['config'] != inputs['config'] or
+                    live['dependencies'] != inputs.get('dependencies', live['dependencies']) or
+                    live['tool'] != inputs.get('tool', live['tool'])):
                 raise Blocked('accepted intake is stale; rerun intake')
     return pointer
 
