@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import claude_cli_invoker as cli
+import claim_review_derive as derive
 import claim_review_lifecycle as lifecycle
 import container_execution
 import deterministic_pool_merge
@@ -67,41 +68,61 @@ cli._CLAIM_BUILDERS.setdefault("claim-review-pool-candidates.schema.json", _pool
 
 
 def _runtime_instructions(package: Any) -> str:
-    request = package.request
-    stage = request["job_id"]
-    claim_class = CLASS[stage]
-    identity = {"job_id": stage, "attempt_id": request["attempt_id"],
-        "role_id": ROLE.get(stage), "artifact_path": f"requests/{request['attempt_id']}.json",
-        "artifact_sha256": package.request_sha256,
-        "permission_receipt_path": f"requests/{request['attempt_id']}.json",
-        "permission_receipt_sha256": package.request_sha256,
-        "reason": "Bounded stage reviewer selected by the accepted reviewer-pool specification."}
+    """Trusted per-stage block appended to the prompt. It no longer carries the actor identity,
+    hashes or candidate wrapper for the model to copy: claim_review_derive builds those."""
+    stage = package.request["job_id"]
+    required, optional = derive.PERSONA_FIELDS[stage]
     if stage == "07-red-team-adversarial":
-        fields = ["claim_id", "reviewer", "attacker_case", "citations", "dissent_ids"]
-        rule = "reviewer is the identity below plus each claim's source_generation and component_generation"
+        rule = ("attacker_case is your adversarial hypothesis for the claim; citation_ids name the "
+                "claim's own upstream citations that support it")
     elif stage == "08-blue-team-refutation":
-        fields = ["claim_id", "reviewer", "disposition", "rationale", "proof_obligations",
-                  "citations", "dissent_ids"]
-        rule = "reviewer is the identity below plus each claim's source_generation and component_generation"
+        rule = ("answer every upstream proof obligation of the claim by obligation_id with a status "
+                "and the citation_ids it rests on; REFUTED needs a FAILED obligation, SURVIVING needs "
+                "every obligation SATISFIED, UNRESOLVED keeps an UNRESOLVED obligation")
     elif stage == "09-independent-verification":
-        fields = ["claim_id", "verifier", "disposition", "method", "proof_obligations",
-                  "citations", "dissent_ids"]
-        rule = ("verifier is the identity below plus each claim's source_generation and component_generation; "
-                "this invocation has no new independent target evidence, so never emit VERIFIED")
+        rule = ("answer every upstream proof obligation by obligation_id; this invocation has no new "
+                "independent target evidence, so never emit VERIFIED; UNRESOLVED or BLOCKED keeps an "
+                "UNRESOLVED obligation")
     else:
-        fields = ["claim_id", "factors", "rationale"]
         rule = "factors are null unless the accepted upstream status is VERIFIED; otherwise each factor is 0..4"
-    upstream_sha = package.inputs[0].sha256
+    citable = {"07-red-team-adversarial": "the claim's citations",
+               "08-blue-team-refutation": "the claim's citations or review_citations",
+               "09-independent-verification": "the claim's citations or refutation_citations"}
     return "\n\n## Trusted stage runtime (not target data)\n\n" + json.dumps({
-        "stage": stage, "required_claim_class": claim_class,
-        "upstream_artifact_sha256": upstream_sha, "decision_exact_fields": fields,
-        "actor_identity": identity, "decision_rule": rule,
-        "candidate_rule": "one candidate for every and only upstream claim_id"
+        "stage": stage, "reviewer_role": ROLE.get(stage),
+        "reply_shape": ("the candidates envelope value is {\"decisions\": [...]} and validates "
+                        f"{derive.PERSONA_SCHEMA}; one decision per upstream claim_id"),
+        "decision_required_fields": sorted(required), "decision_optional_fields": sorted(optional),
+        "decision_rule": rule,
+        "citation_rule": (("cite by citation_id only, using ids from " + citable[stage] +
+                           "; never copy or invent citation objects") if stage in citable else
+                          "no citations for this stage"),
+        "orchestrator_supplies": ("candidate_id, subject_id, claim_class, evidence_sha256, the "
+                                  "reviewer/verifier identity, canonical citation objects, proof "
+                                  "obligation statements and the assertion string; do not write them"),
+        "candidate_rule": "exactly one decision for every and only upstream claim_id"
     }, indent=2, sort_keys=True)
 
 
+def _derive_fill(package: Any):
+    """fill_result hook: replace the model's reply with the derived candidates document."""
+    stage = package.request["job_id"]
+    first = package.inputs[0]
+    upstream = derive.upstream_from_bytes(stage, first.data)
+
+    def fill(envelope: dict[str, Any], result_field: str) -> list[str]:
+        value, limitations = derive.derive(stage, upstream, envelope.get(result_field),
+            request=package.request, request_sha256=package.request_sha256,
+            evidence_sha256=first.sha256)
+        envelope[result_field] = value
+        return limitations
+
+    return fill
+
+
 class ClaimReviewerInvoker:
-    """Lane adapter over the real strict Claude CLI invoker, adding trusted instance identity."""
+    """Lane adapter over the real strict Claude CLI invoker: renders the persona-facing reply
+    schema and derives the strict candidates document from the reviewer's judgment."""
     invoker_id = "claude-cli"
 
     def __init__(self, *, effort: str, budget_usd: float | None = None,
@@ -116,12 +137,14 @@ class ClaimReviewerInvoker:
             return self.dispatch_fn(argv, prompt + instructions, timeout, transcript)
 
         cli.ClaudeCliInvoker(effort=self.effort, budget_usd=self.budget_usd,
-            timeout_seconds=self.timeout_seconds, dispatch_fn=dispatch).invoke(
+            timeout_seconds=self.timeout_seconds, dispatch_fn=dispatch,
+            fill_result=_derive_fill(package), persona_schema=derive.PERSONA_SCHEMA).invoke(
                 package, output_root=output_root, cancel=cancel)
 
 
 def _code_hashes() -> dict[str, str]:
-    paths = ["claim_reviewer_pool.py", "claim_review_lifecycle.py", "claim_lifecycle_core.py",
+    paths = ["claim_reviewer_pool.py", "claim_review_derive.py", "claim_review_lifecycle.py",
+             "claim_lifecycle_core.py",
              "claude_cli_invoker.py", "persona_invocation.py", "deterministic_pool_merge.py",
              "pool_launcher.py", "pool_rendezvous.py", "pool_specification.py",
              "registry/job-templates/claim-review-pool-cell.json",
@@ -137,6 +160,7 @@ def _code_hashes() -> dict[str, str]:
         ROOT.parent / "schemas" / "claim-review-pool-receipt.schema.json")
     result["schemas/claim-review-decision.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-decision.schema.json")
+    result["schemas/" + derive.PERSONA_SCHEMA] = file_hash(ROOT.parent / "schemas" / derive.PERSONA_SCHEMA)
     return result
 
 
