@@ -168,7 +168,7 @@ def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tup
         raise WorkerBlocked(f"{job}: canonical B13 request is required")
     attempt_id = expected_request.get("attempt_id")
     static = {"schema": ce.REQUEST_ID, "run_id": request["run_id"], "job_id": job,
-              "argv": spec["argv"], "scratch_path": "scratch", "log_path": "logs/container",
+              "argv": dependency_adapters.argv_for(kind), "scratch_path": "scratch", "log_path": "logs/container",
               "network": {"mode": "none", "destinations": []}, "limits": tunables.container_limits(spec["job"])}
     if any(expected_request.get(key) != value for key, value in static.items()):
         raise WorkerBlocked(f"{job}: B13 request differs from the fixed dependency adapter")

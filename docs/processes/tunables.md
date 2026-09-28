@@ -305,13 +305,14 @@ Kinds: **resource** = what a job's container gets; **window** = how much one cal
 
 | Tunable | Value | Kind | What it does | Scale |
 |---|---|---|---|---|
-| `container_cpu_millis` | 2000 millicpu | resource | CPU quota (1000 = one core) (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `container_cpu_millis` | 4000 millicpu | resource | CPU quota (1000 = one core) (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_memory_bytes` | 4 GiB | resource | Memory limit for the container (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_pids` | 256 count | resource | Process/thread limit (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stderr_limit_bytes` | 1 MiB | resource | Captured stderr; beyond this the log is truncated (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_stdout_limit_bytes` | 1 MiB | resource | Captured stdout; beyond this the log is truncated (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_timeout_seconds` | 3600 s (60 min) | resource | Wall-clock limit for the container (scancode). doom3-bfg timed out at 900 s; scancode is single-process here and scales with file count. | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
 | `container_tmpfs_bytes` | 1 GiB | resource | Size of the in-memory /tmp (Syft/Grype/OSV/ScanCode). | Grows with target size; see docs/scale-audit-unreal-engine.md section C. |
+| `scancode_processes` | 4 count | resource | scancode -n: parallel scan processes. Keep container_cpu_millis at 1000 per process. | Scan time falls roughly with processes; doom3-bfg did not finish in 3600 s with one. |
 
 ### `02-mobile-sast`
 

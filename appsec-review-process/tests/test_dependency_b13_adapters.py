@@ -78,7 +78,7 @@ class AdapterTests(unittest.TestCase):
                 source_snapshot_sha256=self.source, image=image, at=support.NOW, **kwargs)
             self.assertEqual(req["network"], {"mode": "none", "destinations": []})
             self.assertEqual(req["image"]["image_id"], spec["image"])
-            self.assertEqual(req["argv"], spec["argv"])
+            self.assertEqual(req["argv"], adapters.argv_for(kind))
             self.assertTrue(all(mount["container_path"] == "/workspace" or mount["container_path"].startswith("/inputs/")
                                 for mount in req["target_mounts"]))
             self.assertEqual(ce.request_errors(req, run_id="run", job_id=spec["job"], attempt_id="attempt"), [])

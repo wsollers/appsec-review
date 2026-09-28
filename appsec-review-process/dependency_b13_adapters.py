@@ -41,6 +41,15 @@ SPECS = {
 }
 
 
+def argv_for(kind: str) -> list[str]:
+    """The pinned argv; scancode's worker processes come from the license-scan tunable
+    (doom3-bfg: one process did not finish in 3600 s)."""
+    argv = list(SPECS[kind]["argv"])
+    if kind == "scancode":
+        argv[2:2] = ["-n", str(tunables.value("02-license-scan", "scancode_processes"))]
+    return argv
+
+
 class AdapterBlocked(RuntimeError):
     pass
 
@@ -114,7 +123,7 @@ def request(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
     if kind == "grype": environment.append({"name": "XDG_CACHE_HOME", "value": "/inputs/grype-db"})
     if kind == "osv": environment.append({"name": "XDG_CACHE_HOME", "value": "/inputs/osv-db"})
     return {"schema": ce.REQUEST_ID, "run_id": run_id, "job_id": spec["job"], "attempt_id": adapter_attempt_id,
-        "image": {"image_id": image["image_id"], "digest": image["digest"]}, "argv": list(spec["argv"]),
+        "image": {"image_id": image["image_id"], "digest": image["digest"]}, "argv": argv_for(kind),
         "environment": environment, "target_mounts": mounts, "scratch_path": "scratch", "log_path": "logs/container",
         "network": {"mode": "none", "destinations": []},
         "permission": _permission(run_id, spec["job"], source_snapshot_sha256, at or _clock()),
