@@ -413,5 +413,18 @@ class ComponentCharacterizationLifecycleTests(unittest.TestCase):
             cc._validate_attempt(self.run_id, attempt, self.inputs)
 
 
+class PatternAnchoring(unittest.TestCase):
+    def test_patterns_are_anchored_at_the_root(self):
+        from component_characterization import _matches, _location_path
+        self.assertTrue(_matches("LICENSE", "LICENSE"))
+        self.assertFalse(_matches("vendor/cJSON-1.7.18/LICENSE", "LICENSE"))
+        self.assertTrue(_matches("vendor/cJSON-1.7.18/LICENSE", "**/LICENSE"))
+        self.assertTrue(_matches("src/a/b.cpp", "src/**"))
+        self.assertFalse(_matches("src/a/b.cpp", "src/*"))
+        self.assertTrue(_matches("docs/x.md", "docs/*.md"))
+        self.assertEqual(_location_path("src/main.cpp:23-61"), "src/main.cpp")
+        self.assertEqual(_location_path("src/main.cpp:7"), "src/main.cpp")
+
+
 if __name__ == "__main__":
     unittest.main()

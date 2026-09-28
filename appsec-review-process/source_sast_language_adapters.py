@@ -14,7 +14,7 @@ LANGUAGES = {"gosec":"go","spotbugs":"java","phpstan":"php","psalm":"php","phpcs
 OUTPUTS = {"gosec":"scratch/gosec.json","spotbugs":"scratch/spotbugs.xml","phpstan":"logs/container/stdout.log",
            "psalm":"scratch/psalm.json","phpcs":"scratch/phpcs.json"}
 PSALM_CONFIG_CONTAINER = "/inputs/source-sast-php/psalm.xml"
-HIT_EXIT_CODES = {"gosec":[],"spotbugs":[],"phpstan":[1],"psalm":[2],"phpcs":[1,2]}
+HIT_EXIT_CODES = {"gosec":[],"spotbugs":[],"phpstan":[1],"psalm":[2],"phpcs":[1,2,3]}  # phpcs 3.x: 1 issues, 2 fixable, 3 both
 SUFFIXES={".go":"go",".java":"java",".php":"php"}
 
 def _metadata(tool_id:str)->tuple[dict[str,Any],str]:

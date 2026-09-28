@@ -21,6 +21,7 @@ loading the schemas; adoption by workers and by `validate_job_output.py` belongs
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 from typing import Any, Iterable
@@ -653,7 +654,10 @@ def verify_vendor_execution_receipts(tool_results: dict, attempt_root) -> list[s
 
 
 def _redaction_files(root):
+    path = Path(root) / "outputs" / "redaction-receipt.json"
+    if not path.is_file():
+        return []
     try:
-        return json.loads((Path(root)/"outputs"/"redaction-receipt.json").read_text(encoding="utf-8")).get("files", [])
-    except Exception:
+        return json.loads(path.read_text(encoding="utf-8")).get("files", [])
+    except (OSError, ValueError):
         return []

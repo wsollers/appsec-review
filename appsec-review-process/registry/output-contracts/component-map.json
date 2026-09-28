@@ -2,17 +2,51 @@
   "schema": "appsec-review/output-contract/0.1",
   "contract_id": "component-map",
   "display_name": "Component Purpose And Review Routing Map",
-  "required_files": ["component-purpose-map.json", "component-purpose-map.md", "status.json"],
-  "required_status_fields": ["process", "status", "budget", "persona_id", "role_id", "domain_id", "tooling_profile_id", "artifacts_read", "classification_gaps"],
-  "result_schema": {"artifact": "component-purpose-map.json", "schema_file": "component-purpose-map.schema.json"},
+  "required_files": [
+    "component-purpose-map.json",
+    "component-purpose-map.md",
+    "status.json"
+  ],
+  "required_status_fields": [
+    "process",
+    "status",
+    "budget",
+    "persona_id",
+    "role_id",
+    "domain_id",
+    "tooling_profile_id",
+    "artifacts_read",
+    "classification_gaps"
+  ],
+  "result_schema": {
+    "artifact": "component-purpose-map.json",
+    "schema_file": "component-purpose-map.schema.json"
+  },
   "claim_class": {
     "claim_class_id": "component_characterization",
-    "allowed_assertions": ["static-scope-classification", "statically-inferred-component-purpose", "evidence-backed-ownership", "component-relationship", "component-tag", "review-routing", "unknown", "coverage-gap", "rescope-trigger"],
-    "forbidden_promotions": ["finding", "severity", "runtime-state"]
+    "allowed_assertions": [
+      "static-scope-classification",
+      "statically-inferred-component-purpose",
+      "evidence-backed-ownership",
+      "component-relationship",
+      "component-tag",
+      "review-routing",
+      "unknown",
+      "coverage-gap",
+      "rescope-trigger"
+    ],
+    "forbidden_promotions": [
+      "finding",
+      "severity",
+      "runtime-state"
+    ]
   },
   "validation_rules": [
-    "every expected source category is represented by a scope classification or explicit negative evidence",
+    "every expected source category (exactly these tokens: first-party, vendored, generated, test-sample, documentation, build-tooling) is either a code_scope_classification classification or a negative_evidence category with that exact token",
     "every regular target file has exactly one physical scope; overlap and unassigned paths fail closed",
+    "path_patterns are globs anchored at the repository root: 'LICENSE' matches only the top-level LICENSE; use '**/LICENSE' for any depth",
+    "each representative_location is a repository-relative target file, optionally suffixed ':<line>' or ':<start>-<end>', and at least one is matched by that component's path_patterns",
+    "every functional component id appears in at least one tag_cloud entry",
     "scope, component, review-group, exclusion and rescope identifiers are unique and all references resolve",
     "component and relationship identifiers and tag ordering are deterministic",
     "the exact COMPLETE F02 intel-manifest producer attempt, generation, source snapshot and hashes are bound in evidence_manifest_lineage",

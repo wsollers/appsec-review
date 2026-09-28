@@ -269,11 +269,15 @@ class Worker(Base):
         self.plan['coverage_gaps'] = ['dir:.: needs a proprietary SDK']
         self.assertEqual(self.run_plan()['status'], 'OK_WITH_GAPS')
 
-    def test_invalid_response_is_not_published(self):
+    def test_invalid_response_is_retried_then_a_named_gap(self):
         self.plan['plans'][0]['commands'][2]['argv'] = ['make', 'check']
-        with self.assertRaisesRegex(ValueError, 'failed independent validation'):
-            self.run_plan()
-        self.assertNotEqual(read_json(bp.root(self.run_id) / 'accepted.json').get('status'), 'OK')
+        pointer = self.run_plan()
+        self.assertEqual(pointer['status'], 'OK_WITH_GAPS')
+        self.assertEqual(len(self.plan_calls), 2)  # one retry
+        value = read_json(bp.validate(self.run_id) / bp.RESULT)
+        self.assertEqual(value['plans'], [])
+        self.assertTrue(any(g.startswith('dir:.' + bp.NO_PLAN) and 'failed independent validation' in g
+                            for g in value['coverage_gaps']))
 
     def test_tampered_attempt_fails_validation(self):
         pointer = self.run_plan()

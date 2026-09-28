@@ -209,8 +209,8 @@ def _tool(request: dict[str, Any], job: str, kind: str, prefix: str = "") -> tup
             container_user=binding["container_user"], expected_result_sha256=binding["expected_result_sha256"])
     except (ce.ContainerRequestError, TypeError, ValueError):
         raise WorkerBlocked(f"{job}: immutable B13 attempt failed independent re-verification") from None
-    finding_exit = (kind == "osv" and verified["execution_status"] == "FAILED" and
-                    verified.get("cause") == "CONTAINER_EXIT_NONZERO" and verified.get("exit_code") == 1)
+    from dependency_b13_adapters import osv_exit_accepted
+    finding_exit = kind == "osv" and osv_exit_accepted(verified, attempt_root)
     if verified["execution_status"] != "OK" and not finding_exit:
         raise WorkerBlocked(f"{job}: immutable B13 attempt did not complete successfully")
     output = attempt_root / "scratch" / spec["output"]

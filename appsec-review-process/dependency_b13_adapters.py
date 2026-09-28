@@ -48,6 +48,19 @@ class AdapterBlocked(RuntimeError):
     pass
 
 
+
+def osv_exit_accepted(verified: dict, attempt_root: Path) -> bool:
+    """OSV exit 1 means findings; exit 127 with missing local ecosystem databases is a coverage
+    gap (the scanned ecosystems still produced output), not a failed tool. Shared with the
+    worker's independent re-verification so both sides agree."""
+    if verified.get("execution_status") != "FAILED" or verified.get("cause") != "CONTAINER_EXIT_NONZERO":
+        return False
+    if verified.get("exit_code") == 1:
+        return True
+    stderr = Path(attempt_root) / "logs" / "container" / "stderr.log"
+    return (verified.get("exit_code") == 127 and stderr.is_file() and
+            "could not find local databases for ecosystems" in stderr.read_text(errors="replace"))
+
 def _clock() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -139,12 +152,7 @@ def execute(kind: str, *, run_id: str, adapter_attempt_id: str, source_snapshot_
             expected_result_sha256=expected_result_sha256, **host)
     except ce.ContainerRequestError as exc:
         raise AdapterBlocked(f"{spec['job']}: B13 result failed independent re-verification") from exc
-    osv_stderr = attempt_root / "logs" / "container" / "stderr.log"
-    missing_db = (kind == "osv" and verified.get("exit_code") == 127 and osv_stderr.is_file() and
-                  "could not find local databases for ecosystems" in osv_stderr.read_text(errors="replace"))
-    finding_exit = (kind == "osv" and verified["execution_status"] == "FAILED" and
-                    verified.get("cause") == "CONTAINER_EXIT_NONZERO" and
-                    (verified.get("exit_code") == 1 or missing_db))
+    finding_exit = kind == "osv" and osv_exit_accepted(verified, attempt_root)
     if verified["execution_status"] != "OK" and not finding_exit:
         raise AdapterBlocked(f"{spec['job']}: pinned tool ended {verified['execution_status']} ({verified['cause']})")
     output = attempt_root / "scratch" / spec["output"]

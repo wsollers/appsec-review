@@ -257,6 +257,9 @@ def check(value, classification, index, catalog, *, index_ref, classification_re
     if sorted(set(planned)) != wanted:
         missing = sorted(set(wanted) - set(planned))
         extra = sorted(set(planned) - set(wanted))
+        # a unit named as a no-plan gap was attempted and failed; that is a gap, not an omission
+        missing = [u for u in missing
+                   if not any(str(g).startswith(u + NO_PLAN) for g in value.get('coverage_gaps', []))]
         if missing:
             errors.append('build-set units without a plan: ' + ', '.join(missing))
         if extra:
@@ -277,12 +280,18 @@ def finalize(value, *, classification, index_ref, classification_ref, source_rev
     return value
 
 
-def merge(unit_values, *, classification, index_ref, classification_ref, source_revision):
-    """One published document from the per-unit responses (already finalized and checked)."""
+NO_PLAN = ': no build plan: '
+
+
+def merge(unit_values, *, classification, index_ref, classification_ref, source_revision, unplanned=()):
+    """One published document from the per-unit responses (already finalized and checked).
+    ``unplanned`` holds (unit_id, reason) for units whose plan failed twice; each becomes a gap."""
     plans, gaps = [], []
     for value in unit_values:
         plans += value['plans']
         gaps += [g for g in value['coverage_gaps'] if g not in gaps]
+    for unit_id, reason in unplanned:
+        gaps.append(f'{unit_id}{NO_PLAN}{" ".join(str(reason).split())[:600]}')
     target = classification.get('target') or (unit_values[0]['target'] if unit_values else '')
     return {'schema': 'appsec-review/build-plan/1', 'target': target, 'source_revision': source_revision,
             'index': dict(index_ref), 'classification': dict(classification_ref),
@@ -508,7 +517,9 @@ def run(run_id, dagster_id, force=False, dispatch=None):
                   'fingerprint': fingerprint}
         build_set = list(classification.get('build_set') or [])
         unit_values, unit_summaries, pinned_all, persona = [], [], {}, []
-        for n, unit_id in enumerate(sorted(build_set)):
+        unplanned = []
+
+        def plan_unit(n, unit_id):
             value, summary, pinned, persona_attempt_id, model_identity, result_sha = dispatch(
                 run_id, base, record, attempt_id, n, unit_id, cpath, ipath, classification)
             if not isinstance(value, dict):
@@ -524,13 +535,33 @@ def run(run_id, dagster_id, force=False, dispatch=None):
             if errors:
                 raise ValueError(f'{JOB}: the plan for {unit_id} failed independent validation: '
                                  + '; '.join(errors[:20]))
+            return value, summary, pinned, persona_attempt_id, model_identity, result_sha
+
+        for n, unit_id in enumerate(sorted(build_set)):
+            # ADR-0013: one unit's bad plan is a gap for that unit, not the end of the job
+            # (appsec-multi-vuln: haiku planned case-001 when asked for dotnet/case-050, after 18
+            # good units). One retry with a fresh persona attempt, then a named gap.
+            outcome = None
+            for tag in (n, f'{n}r'):
+                try:
+                    outcome = plan_unit(tag, unit_id)
+                    break
+                except Blocked:
+                    raise
+                except (RuntimeError, ValueError) as exc:
+                    reason = str(exc)
+            if outcome is None:
+                unplanned.append((unit_id, reason))
+                continue
+            value, summary, pinned, persona_attempt_id, model_identity, result_sha = outcome
             unit_values.append(value)
             unit_summaries.append((unit_id, summary))
             pinned_all.update(pinned)
             persona.append({'unit_id': unit_id, 'persona_attempt_id': persona_attempt_id,
                             'persona_result_sha256': result_sha, 'model': dict(model_identity)})
         value = merge(unit_values, classification=classification, index_ref=index_ref,
-                      classification_ref=classification_ref, source_revision=record['source_revision'])
+                      classification_ref=classification_ref, source_revision=record['source_revision'],
+                      unplanned=unplanned)
         errors = check(value, classification, index, catalog, index_ref=index_ref,
                        classification_ref=classification_ref, source_revision=record['source_revision'])
         if errors:

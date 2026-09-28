@@ -396,8 +396,33 @@ def _target_files(target_root: Path) -> set[str]:
             if path.is_file() and not path.is_symlink() and ".git" not in path.relative_to(target_root).parts}
 
 
+def _glob_regex(pattern: str) -> re.Pattern[str]:
+    out, i = [], 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:[^/]+/)*"); i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*"); i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*"); i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]"); i += 1
+        else:
+            out.append(re.escape(pattern[i])); i += 1
+    return re.compile("".join(out) + r"\Z")
+
+
 def _matches(relative: str, pattern: str) -> bool:
-    return PurePosixPath(relative).match(pattern)
+    # Anchored at the repository root. PurePosixPath.match matches from the right,
+    # so 'LICENSE' also claimed vendor/x/LICENSE and produced false scope overlaps.
+    return _glob_regex(pattern).match(relative) is not None
+
+
+_LOCATION_LINES = re.compile(r":\d+(?:-\d+)?\Z")
+
+
+def _location_path(location: str) -> str:
+    return _LOCATION_LINES.sub("", location)
 
 
 def validate_payload(value: dict[str, Any], *, target_root: Path,
@@ -429,7 +454,10 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
     unique(value["unknowns"], "unknown_id", "unknown")
     unique(value["classification_gaps"], "gap_id", "classification gap")
     covered = {item["classification"] for item in value["code_scope_classification"]}
-    covered |= {item["category"] for item in value["negative_evidence"]}
+    for item in value["negative_evidence"]:
+        # 'generated-code' records negative evidence for 'generated'.
+        covered |= {c for c in EXPECTED_SCOPE_CATEGORIES
+                    if item["category"] == c or item["category"].startswith(c + "-")}
     missing = EXPECTED_SCOPE_CATEGORIES - covered
     if missing:
         errors.append("expected categories are neither classified nor recorded as negative evidence: " +
@@ -471,11 +499,18 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
             component_paths |= {path for path in target_files if _matches(path, pattern)}
         if not component_paths:
             errors.append(f"component {item['component_id']} has no resolved target paths")
+        inside = 0
         for location in item["representative_locations"]:
+            location = _location_path(location)
             if not _pattern_ok(location):
                 errors.append(f"component {item['component_id']} has a non-relative location")
-            elif location not in component_paths:
-                errors.append(f"component {item['component_id']} representative location is outside its paths")
+            elif location in component_paths:
+                inside += 1
+            elif location not in target_files:
+                errors.append(f"component {item['component_id']} representative location is not a target file")
+        # A call site elsewhere (src/main.cpp:45) may be representative; one location must be the component's own.
+        if item["representative_locations"] and not inside:
+            errors.append(f"component {item['component_id']} has no representative location inside its paths")
         ownership = item["ownership"]
         if ownership["kind"] == "unknown" and ownership["responsible_party"] is not None:
             errors.append(f"component {item['component_id']} unknown ownership names a responsible party")
@@ -514,8 +549,10 @@ def validate_payload(value: dict[str, Any], *, target_root: Path,
         if unresolved:
             errors.append(f"tag {item['tag']} has unresolved component ids")
         tagged_components.update(item["component_ids"])
-    if components - tagged_components:
-        errors.append("every component must appear in the tag cloud")
+    gapped = {item["subject"] for item in value["classification_gaps"]}
+    untagged = sorted(c for c in components - tagged_components if f"tag_cloud:{c}" not in gapped)
+    if untagged:
+        errors.append("every component must appear in the tag cloud: " + ", ".join(untagged))
     for citation in _citations(value):
         if not isinstance(citation, dict):
             continue
@@ -576,6 +613,24 @@ def _dispatch_persona(run_id: str, allocation: dict[str, Any], record: dict[str,
     return value, summary, facts
 
 
+def _record_untagged_gaps(value: dict[str, Any]) -> None:
+    """ADR-0013: a component the model left out of the tag cloud is a routing gap, not a failed map."""
+    tagged = {c for item in value.get("tag_cloud") or [] for c in item.get("component_ids") or []}
+    gaps = value.setdefault("classification_gaps", [])
+    have = {g.get("gap_id") for g in gaps}
+    for item in value.get("functional_components") or []:
+        cid = item.get("component_id")
+        if cid in tagged or f"gap-untagged-{cid}" in have:
+            continue
+        gaps.append({
+            "gap_id": f"gap-untagged-{cid}",
+            "subject": f"tag_cloud:{cid}",
+            "reason": "The model characterised this component but gave it no tag-cloud entry.",
+            "routing_impact": "Tag-driven routing will not reach this component; path and lane routing still apply.",
+            "resolution_action": "Re-run characterization or tag the component in a later pass.",
+        })
+
+
 def _validate_attempt(run_id: str, attempt: Path, inputs: dict[str, Any]) -> None:
     if read_json(attempt / "inputs.json") != inputs:
         raise Blocked(f"{JOB}: immutable attempt inputs changed")
@@ -602,6 +657,7 @@ def run(run_id: str, dagster_id: str, force: bool = False) -> dict[str, Any]:
         if inputs["code"] != _code_hashes():
             raise Blocked(f"{JOB}: implementation changed before execution")
         value, summary, facts = _dispatch_persona(run_id, allocation, inputs)
+        _record_untagged_gaps(value)
         errors = validate_payload(value, target_root=Path(inputs["target_root"]),
                                   evidence_root=Path(inputs["evidence_root"]))
         if errors:
