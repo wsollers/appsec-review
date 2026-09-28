@@ -36,6 +36,7 @@ import ossf_scorecard as ossf_scorecard_worker
 import owasp_component_routing as owasp_component_routing_worker
 import owasp_dispatch
 import owasp_join_publisher as owasp_join_publisher_worker
+import owasp_workbench_lifecycle
 import ir_evidence as ir_evidence_worker
 import joern_cpg as joern_cpg_worker
 import api_collection_intelligence_ingest as api_collection_intelligence_worker
@@ -969,6 +970,36 @@ def owasp_component_routing():
     owasp_component_routing_work(build_execution_config())
 
 
+def run_owasp_validator_handoffs(context, configured):
+    """T03 -> routing -> T04 -> T05 -> T06 from accepted run evidence (deterministic, no model)."""
+    result = owasp_workbench_lifecycle.prepare_handoffs(
+        configured['engagement_run_id'], context.run_id, configured.get('force', False))
+    context.add_output_metadata({name: pointer.get('attempt_id') or '' for name, pointer in result.items()})
+    return result['handoffs']
+
+
+def run_owasp_validator_dispatch(context, configured):
+    """T10: dispatch every static validator cell under the join's own facts, wait for all, and
+    publish the accepted accounting (an EMPTY one when T06 produced no handoff)."""
+    result = owasp_workbench_lifecycle.run_dispatch(
+        configured['engagement_run_id'], context.run_id, configured.get('force', False))
+    context.add_output_metadata({
+        'accounting': MetadataValue.path(str(owasp_dispatch._base(configured['engagement_run_id'])
+                                             / 'attempts' / result['attempt_id'] / owasp_dispatch.ACCOUNTING_ARTIFACT)),
+        'attempt_id': result['attempt_id'], 'reused': bool(result.get('reused'))})
+    return result
+
+
+@op(name='job_04_owasp_validator_handoffs', ins={'configured': In(dict), 'upstream': In(list)}, pool=CPU_POOL)
+def owasp_validator_handoffs_work(context, configured, upstream):
+    return run_owasp_validator_handoffs(context, configured)
+
+
+@op(name='job_04_owasp_validator_dispatch', ins={'configured': In(dict), 'upstream': In(list)}, pool=PERSONA_POOL)
+def owasp_validator_dispatch_work(context, configured, upstream):
+    return run_owasp_validator_dispatch(context, configured)
+
+
 OWASP_JOIN_CONFIG = {'facts_path': str}
 
 
@@ -1629,6 +1660,10 @@ def full_review():
             if all(dep in outputs for dep in deps):
                 upstream=[outputs[dep] for dep in deps]
                 if name=='02-repository-partition-discovery': upstream.append(discovered)
+                if name=='04-asvs-masvs':
+                    # The join reads the accepted T10 accounting; produce T03-T06 and dispatch first.
+                    handoffs=owasp_validator_handoffs_work(configured,list(upstream))
+                    upstream.append(owasp_validator_dispatch_work(configured,[handoffs]))
                 outputs[name]=pending.pop(name)(configured,upstream)
 
 

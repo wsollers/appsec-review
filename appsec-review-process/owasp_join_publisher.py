@@ -50,22 +50,39 @@ def _page(matrix: dict[str,Any], page_index: int, first: int, rows: list[dict[st
         "first_row_index":first,"last_row_index":first+len(rows)-1,"row_count":len(rows),"rows":rows}
 
 
+def _row_size(row: dict[str,Any]) -> int:
+    """Bytes one row occupies inside a page's ``rows`` array (indented two levels)."""
+    text=json.dumps(row,indent=2,sort_keys=True)
+    return len(text.encode())+4*(text.count("\n")+1)
+
+
+def _page_size(matrix: dict[str,Any], page_index: int, first: int, count: int, row_bytes: int) -> int:
+    head=_page(matrix,page_index,first,[])
+    head["last_row_index"]=first+count-1; head["row_count"]=count
+    base=len(_json_bytes(head))
+    return base if count==0 else base-2+2+row_bytes+2*(count-1)+4
+
+
 def _partition_matrix(matrix: dict[str,Any]) -> dict[str,Any]:
     errors=validate_document(matrix,"owasp-control-status-matrix.schema.json")
     if errors: raise Blocked(f"{JOB}: logical matrix fails its closed schema ({errors[0]})")
     rows=matrix["rows"]
     if not rows: raise Blocked(f"{JOB}: logical matrix has no rows")
-    pages=[]; current=[]; first=0
-    for row in rows:
-        candidate=[*current,row]
-        value=_page(matrix,len(pages),first,candidate)
-        if len(_json_bytes(value))>PAGE_BYTE_LIMIT and current:
-            pages.append(_page(matrix,len(pages),first,current)); first+=len(current); current=[row]
-            value=_page(matrix,len(pages),first,current)
-        else: current=candidate
-        if len(_json_bytes(value))>PAGE_BYTE_LIMIT:
+    # Page sizes are computed incrementally from each row's own serialized size (exactly the bytes
+    # _json_bytes writes); re-serializing the growing page per row was quadratic and stalled the
+    # join on a full ASVS L2 matrix (ADR-0013 breakage).
+    sizes=[_row_size(row) for row in rows]
+    pages=[]; current=[]; current_bytes=0; first=0
+    for row,size in zip(rows,sizes):
+        if current and _page_size(matrix,len(pages),first,len(current)+1,current_bytes+size)>PAGE_BYTE_LIMIT:
+            pages.append(_page(matrix,len(pages),first,current)); first+=len(current); current=[]; current_bytes=0
+        current.append(row); current_bytes+=size
+        if _page_size(matrix,len(pages),first,len(current),current_bytes)>PAGE_BYTE_LIMIT:
             raise Blocked(f"{JOB}: one matrix row cannot fit in a bounded page")
     pages.append(_page(matrix,len(pages),first,current))
+    for value in pages:
+        if len(_json_bytes(value))>PAGE_BYTE_LIMIT:
+            raise Blocked(f"{JOB}: a matrix page exceeds its byte bound")
     outputs={}; records=[]
     for value in pages:
         path=f"{PAGE_DIRECTORY}/page-{value['page_index']:04d}.json"; data=_json_bytes(value)

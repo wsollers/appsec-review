@@ -422,7 +422,9 @@ def _build_outputs(request: dict[str, Any], model: dict[str, Any], config: dict[
         assignments.append(base)
 
     unused = {rule["route_id"] for rule in rules} - matched
-    if unused:
+    # ADR-0013: when T04 assigned no row at all there is nothing any rule could match; an empty
+    # batch set is then the honest result, not a routing misconfiguration.
+    if unused and fragments_by_key:
         raise ValueError("batch routing rules match no selected proof obligation: " + ", ".join(sorted(unused)))
 
     limits = config["limits"]
