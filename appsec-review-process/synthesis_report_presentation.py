@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Create bounded renderer input from an evidence-backed synthesis draft.
 
-This adapter is deliberately presentation-only.  It copies verified findings and their
-authoritative lifecycle scores; it never derives a CVSS vector, process assurance, final status,
-or remediation state.
+This adapter is deliberately presentation-only.  It copies verified findings, their authoritative
+lifecycle scores and the deterministic ``finding-enrichment.json`` (CWE, pinned CVSS v4.0 score,
+reachability verdict and witness, reachability-capped severity, EPSS/KEV as of the pinned snapshot,
+verified snippets, remediation objectives/proposals; ADR-0020).  It never computes a CVSS score,
+process assurance, final status, or remediation state itself.
 """
 from __future__ import annotations
 
@@ -109,10 +111,34 @@ def _evidence(trace: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, st
     return ordered, mapping
 
 
-def _findings(report: dict[str, Any], evidence_ids: dict[str, str]) -> list[dict[str, Any]]:
+def _reachability_text(reach: dict[str, Any], cap: str | None) -> str:
+    state = reach["state"]
+    if state == "REACHABLE":
+        steps = [f"{step['function']}() {step['file']}:{step['line']}" if step["function"] != "(finding location)"
+                 else f"{step['file']}:{step['line']}" for step in reach.get("witness", [])]
+        return "REACHABLE via " + " -> ".join(steps)
+    label = "UNREACHABLE (no call path from any analysed entry point)" if state == "UNREACHABLE" else "UNKNOWN"
+    return f"{label}: {reach.get('reason', 'not analysed')}" + (f"; {cap}" if cap else "")
+
+
+def _exploit_text(value: dict[str, Any] | None, identity: dict[str, Any]) -> str:
+    if value is None:
+        return "EPSS/KEV not applicable (not a dependency finding)"
+    if not value["assessed"]:
+        return "EPSS/KEV not assessed (no pinned snapshot imported)"
+    epss = (f"EPSS {value['epss']:.4f} (percentile {value['epss_percentile']:.2f}, {value['epss_cve']})"
+            if value["epss"] is not None else "EPSS: no score for " + (", ".join(value["cves"]) or "this advisory"))
+    return f"EPSS/KEV as of {identity.get('as_of')}: {epss}; KEV {'listed' if value['kev'] else 'not listed'}"
+
+
+def _findings(report: dict[str, Any], evidence_ids: dict[str, str],
+              enrichment: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     result = []
+    enriched = {row["claim_id"]: row for row in (enrichment or {}).get("findings", [])}
+    exploit_identity = (enrichment or {}).get("epss_kev", {})
     for finding in report["verified_findings"]:
-        severity = SEVERITIES.get(finding.get("severity"))
+        extra = enriched.get(finding["claim_id"])
+        severity = SEVERITIES.get(extra["severity"]["final"] if extra else finding.get("severity"))
         citations = finding.get("verification_citations") or finding.get("citations") or []
         if severity is None or not citations:
             raise Blocked("10-synthesis-report: verified presentation finding is incomplete")
@@ -126,7 +152,7 @@ def _findings(report: dict[str, Any], evidence_ids: dict[str, str]) -> list[dict
         first = citations[0]
         locator = first.get("locator_json") or ""
         location = first["artifact_path"] + (f"#{locator}" if locator else "")
-        result.append({"id": finding["claim_id"], "title": finding["title"],
+        row = {"id": finding["claim_id"], "title": finding["title"],
             "cwe": "Not asserted by retained draft", "location": location,
             "component": ", ".join(finding["component_ids"]) or "Not asserted",
             "cvss": None, "authoritative_score": finding["score"],
@@ -136,11 +162,36 @@ def _findings(report: dict[str, Any], evidence_ids: dict[str, str]) -> list[dict
             "trail": [["synthesis", "retained independently verified claim"],
                       ["publication", "DRAFT_EVIDENCE_BACKED; human decision required"]],
             "evidence": linked, "summary": first["observed_fact"],
-            "remediation": "No remediation assertion is present in the retained draft."})
+            "remediation": "No remediation assertion is present in the retained draft."}
+        if extra:
+            cvss, reach, cap = extra["cvss_v4"], extra["reachability"], extra["severity"]["reachability_cap"]
+            exploit = extra["epss_kev"]
+            code_locations = [item for item in extra["locations"] if "path" in item]
+            row.update(cwe=extra["cwe"]["display"],
+                cvss=cvss["vector"] if cvss else None, cvss_score=cvss["score"] if cvss else None,
+                reachability=_reachability_text(reach, cap),
+                epss=exploit["epss"] if exploit and exploit["assessed"] else None,
+                kev=bool(exploit and exploit["assessed"] and exploit["kev"]),
+                exploit_signal=_exploit_text(exploit, exploit_identity),
+                snippets=[{key: item[key] for key in ("path", "flaw", "note", "start", "source")}
+                          for item in extra["snippets"] if item["status"] == "VERIFIED"],
+                remediation=extra["remediation"]["display"])
+            if code_locations:
+                row["location"] = f"{code_locations[0]['path']}:{code_locations[0]['line']}"
+            trail = [["tool/lead", "; ".join(sorted({source for item in extra["cwe"]["ids"]
+                                                      for source in item["sources"] if source.startswith("tool")}))
+                      or "no mapped tool rule"]]
+            trail += [[item["stage"][:2], f"CWE judgment {item['cwe_id']}"] for item in finding.get("cwe_judgments", [])]
+            if cvss:
+                trail.append(["12", f"CVSS {cvss['score']} {cvss['severity']} (pinned cvss4.py)"])
+            trail.append(["reachability", reach["state"] + (f" ({cap})" if cap else "")])
+            row["trail"] = trail + row["trail"]
+        result.append(row)
     return result
 
 
-def build_review(report: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+def build_review(report: dict[str, Any], trace: dict[str, Any],
+                 enrichment: dict[str, Any] | None = None) -> dict[str, Any]:
     if (report.get("schema") != "appsec-review/synthesis-report/1.0" or
             report.get("status") != "DRAFT_EVIDENCE_BACKED" or
             report.get("claim_limits", {}).get("final") is not False or
@@ -154,6 +205,10 @@ def build_review(report: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any
         processes.append({"id": upstream["job_id"], "family": "retained",
             "kind": "retained accepted output", "status": "OK",
             "tools": upstream["contract_id"], "evidence": []})
+    if enrichment is not None and (enrichment.get("gaps") or []):
+        report = {**report, "limitations": sorted(set(report["limitations"]) | set(enrichment["gaps"]))}
+    if enrichment is not None and enrichment["run_id"] != report["run_id"]:
+        raise Blocked("10-synthesis-report: finding enrichment belongs to another run")
     if report["limitations"]:
         processes.append({"id": "reported-limitations", "family": "limitations",
             "kind": "preserved synthesis limitations", "status": "OK_WITH_GAPS", "coverage": 0.0,
@@ -174,7 +229,7 @@ def build_review(report: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any
         "authors": ["appsec-review pipeline"], "sample": False, "source_root": None},
         "finding_scoring": "authoritative_retained_publication", "process_assurance": "not_asserted",
         "families": families, "processes": processes,
-        "findings": _findings(report, evidence_ids), "evidence": evidence,
+        "findings": _findings(report, evidence_ids, enrichment), "evidence": evidence,
         "target_context": {"source_snapshot_sha256": report["scope"].get("source_snapshot_sha256", "not asserted"),
             "components": report["scope"]["components"],
             "relationships": report.get("component_relationships", []),
@@ -201,9 +256,9 @@ def build_review(report: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any
 
 
 def render(report: dict[str, Any], trace: dict[str, Any], output_root: Path,
-           generator_sha256: str) -> dict[str, Any]:
+           generator_sha256: str, enrichment: dict[str, Any] | None = None) -> dict[str, Any]:
     output_root = Path(output_root)
-    review = build_review(report, trace)
+    review = build_review(report, trace, enrichment)
     atomic_json(output_root / RENDER_INPUT, review)
     render_root = output_root / "presentation"
     _renderer().render(output_root / RENDER_INPUT, render_root)

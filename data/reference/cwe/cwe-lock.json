@@ -1,0 +1,5 @@
+{
+ "schema": "appsec-review/cwe-lock/1.0",
+ "cwe-catalog.json": "sha256:22d5fd5dbc2f29e397afaec8a442b9665f23dd4b62e21764600bd602dbb199a4",
+ "rule-cwe-map.json": "sha256:3c58abaf7700cb430b4a3438d7706aa70483e44aa06152264d576207af427c24"
+}

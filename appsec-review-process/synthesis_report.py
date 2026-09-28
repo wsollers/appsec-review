@@ -27,6 +27,8 @@ APPENDIX = "coverage-unresolved-appendix.md"
 TRACE = "evidence-trace-index.json"
 PUBLICATION = "publication-manifest.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
+# Reviewer judgment carried from 07/09/12 into verified findings (ADR-0020); absent stays absent.
+JUDGMENT_FIELDS = ("cwe_judgments", "cvss_v4", "remediation_proposal")
 INPUT_NAMES = ("component", "threat", "owasp", "ledger", "verification", "scoring")
 EXPECTED = {
     "component":("01-component-characterization","component-map","component-purpose-map.json"),
@@ -48,7 +50,8 @@ CODE_FILES = ("synthesis_report.py","10-synthesis-report/task-synthesis-report-c
 SCHEMA_FILES = ("synthesis-artifact-ref.schema.json","synthesis-owasp-ref.schema.json",
     "synthesis-input.schema.json","synthesis-citation.schema.json","synthesis-proof-obligation.schema.json",
     "synthesis-upstream-binding.schema.json","synthesis-l08-record.schema.json","synthesis-l08-adapter.schema.json",
-    "synthesis-report.schema.json","evidence-trace-index.schema.json","report-publication-manifest.schema.json")
+    "synthesis-report.schema.json","evidence-trace-index.schema.json","report-publication-manifest.schema.json",
+    "cwe-judgment.schema.json","cvss-v4-assessment.schema.json","remediation-proposal-candidate.schema.json")
 
 
 def _sha(value: Any) -> str:
@@ -263,7 +266,8 @@ def l08_adapter(run_id: str, verification: dict[str, Any], scoring: dict[str, An
         records.append({"claim_id":claim_id, **{field:verified[field] for field in fields},
             "verification_status":verified["status"],
             "verification_citations":verified["verification_citations"],
-            "severity":scored["severity"],"priority":scored["priority"],"score":scored["score"]})
+            "severity":scored["severity"],"priority":scored["priority"],"score":scored["score"],
+            **{key: scored[key] for key in JUDGMENT_FIELDS if key in scored}})
     value = {"schema":"appsec-review/synthesis-l08-adapter/0.1","run_id":run_id,
         "ledger_head_id":verification["ledger_head_id"],
         "ledger_head_sha256":verification["ledger_head_sha256"],"records":records}
@@ -326,7 +330,8 @@ def build_report(inputs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]
                 "component_ids": entry["component_ids"], "confidence": entry["confidence"],
                 "severity": l08_row["severity"], "priority": l08_row["priority"], "score": l08_row["score"],
                 "dissent_ids": entry["dissent_ids"], "citations": entry["citations"],
-                "verification_citations": l08_row["verification_citations"]})
+                "verification_citations": l08_row["verification_citations"],
+                **{key: l08_row[key] for key in JUDGMENT_FIELDS if key in l08_row}})
         else:
             unresolved.append({"claim_id": claim_id, "status": entry["status"],
                 "hypothesis": entry["hypothesis"], "component_ids": entry["component_ids"],

@@ -4,7 +4,7 @@
   "display_name": "Accepted Evidence-backed Draft Report and Presentation",
   "required_files": [
     "synthesis-input.json", "report.json", "report.md", "coverage-unresolved-appendix.md",
-    "evidence-trace-index.json", "publication-manifest.json", "report.review.json",
+    "evidence-trace-index.json", "publication-manifest.json", "finding-enrichment.json", "report.review.json",
     "render-publication-manifest.json", "presentation/report.tex", "presentation/report.pdf", "presentation/report.html",
     "presentation/report.fragment.html", "presentation/workbench.html",
     "presentation/workbench.fragment.html", "permission.json", "lineage.json", "status.json"
@@ -15,6 +15,7 @@
     "consume exact current accepted pointers for every required synthesis input",
     "preserve unresolved candidates limitations dissent and separate OWASP denominators",
     "render HTML, LaTeX and PDF from one hash-bound presentation input using the exact pinned audit-report image",
+    "enrich verified findings deterministically (pinned CWE map/catalog, pinned CVSS v4.0, CPG reachability with witness, reachability-capped severity, pinned EPSS/KEV snapshot, hash-verified redacted snippets, 11/12 remediation) per ADR-0020",
     "publish only DRAFT_EVIDENCE_BACKED with final and human_signoff false"
   ]
 }

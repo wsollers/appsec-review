@@ -66,8 +66,11 @@ def score(data):
     ev = s["evidence_weight"]; vw = s["verification_weight"]; rw = s["reachability_weight"]
     for fd in data["findings"]:
         if authoritative:
-            if fd.get("cvss") is not None:
-                raise ValueError("authoritative retained finding must not synthesize a CVSS vector")
+            # A retained publication may carry a CVSS v4.0 vector only with the score the pipeline's
+            # pinned calculator (appsec-review-process/cvss4.py) computed; the renderer never scores.
+            if fd.get("cvss") is not None and (isinstance(fd.get("cvss_score"), bool) or
+                                               not isinstance(fd.get("cvss_score"), (int, float))):
+                raise ValueError("authoritative retained finding must not synthesize a CVSS score")
             declared = fd.get("severity_override")
             value = fd.get("authoritative_score")
             label = fd.get("priority_label")
@@ -75,7 +78,8 @@ def score(data):
                 raise ValueError("authoritative retained finding score is invalid")
             if not isinstance(label, str) or not re.fullmatch(r"[A-Za-z0-9:-]+", label):
                 raise ValueError("authoritative retained finding priority is invalid")
-            fd.update(cvss_score=None, cvss_band=None, factors=None, priority=float(value),
+            cvss_score = float(fd["cvss_score"]) if fd.get("cvss") is not None else None
+            fd.update(cvss_score=cvss_score, cvss_band=band(cvss_score), factors=None, priority=float(value),
                       severity=declared, priority_tex=(r"S_{lifecycle} = %.1f,\quad priority = \text{%s}"
                                                        % (value, label)))
             continue

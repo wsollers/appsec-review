@@ -8623,6 +8623,7 @@
     "coverage-unresolved-appendix.md",
     "evidence-trace-index.json",
     "publication-manifest.json",
+    "finding-enrichment.json",
     "report.review.json",
     "render-publication-manifest.json",
     "presentation/report.tex",

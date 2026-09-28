@@ -233,6 +233,25 @@ class BlueVerifyScoreDeriveTests(unittest.TestCase):
         for value in decisions_of(document).values():
             self.assertEqual(set(value), lifecycle.DECISION_KEYS[SCORE])
 
+    def test_judgment_fields_pass_through_and_bad_values_go_back_for_repair(self):
+        records = upstream(SCORE)["verifications"]
+        metrics = dict(AV="L", AC="L", AT="N", PR="N", UI="N", VC="H", VI="H", VA="H", SC="N", SI="N", SA="N")
+        cvss = {"metrics": metrics, "rationale": {key: "argv reaches strcpy" for key in metrics}}
+        def reply(cwe):
+            return {"decisions": [{"claim_id": r["claim_id"], "rationale": "not verified", "factors": None}
+                                  for r in records if r["status"] != "VERIFIED"] +
+                    [{"claim_id": r["claim_id"], "rationale": "verified", "cwe": cwe, "cvss_v4": cvss,
+                      "remediation": {"objective": "Bound the copy", "patch_proposal": "use snprintf"},
+                      "factors": {"impact": 3, "exploitability": 2, "exposure": 2, "confidence": 3}}
+                     for r in records if r["status"] == "VERIFIED"]}
+        document, _ = run(SCORE, reply({"cwe_id": "CWE-121", "rationale": "stack buffer"}))
+        verified = [value for value in decisions_of(document).values() if value.get("factors")]
+        self.assertEqual(verified[0]["cvss_v4"], cvss)
+        self.assertEqual(verified[0]["cwe"]["cwe_id"], "CWE-121")
+        with self.assertRaises(InvokerOutputError) as caught:
+            run(SCORE, reply({"cwe_id": "CWE-99999", "rationale": "made up"}))
+        self.assertIn("pinned CWE catalog", " ".join(caught.exception.details))
+
 
 class InvokerIntegrationTests(unittest.TestCase):
     """ClaimReviewerInvoker end to end over the real ClaudeCliInvoker with a fake model."""

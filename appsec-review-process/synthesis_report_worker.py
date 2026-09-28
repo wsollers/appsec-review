@@ -11,6 +11,7 @@ from typing import Any
 
 from execution_state import Blocked, ROOT, atomic_json, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current, validate_published
+import finding_enrichment as enrichment_core
 import report_input_assembly as assembly
 from schema_validate import validate_document
 import synthesis_report as synthesis
@@ -22,11 +23,13 @@ STANDALONE_REGISTRY = ROOT / "registry"
 STANDALONE_GRAPH = ROOT / "job-graph.json"
 PERMISSIONS = ["read-run-data", "write-run-data"]
 ARTIFACTS = [assembly.RESULT, synthesis.REPORT_JSON, synthesis.REPORT_MD, synthesis.APPENDIX,
-    synthesis.TRACE, synthesis.PUBLICATION, presentation.RENDER_INPUT, presentation.RENDER_MANIFEST,
+    synthesis.TRACE, synthesis.PUBLICATION, enrichment_core.RESULT, presentation.RENDER_INPUT,
+    presentation.RENDER_MANIFEST,
     *(f"presentation/{name}" for name in presentation.RENDERED),
     "permission.json", "lineage.json", "status.json"]
 CODE_FILES = ("synthesis_report_worker.py", "synthesis_report_presentation.py", "synthesis_report.py",
-    "report_input_assembly.py", "publish_job_output.py",
+    "report_input_assembly.py", "publish_job_output.py", "finding_enrichment.py", "reachability.py",
+    "cvss4.py", "cwe_catalog.py", "code_snippets.py", "epss_kev_snapshot.py",
     "registry/output-contracts/synthesis-report-publication.json",
     "registry/job-templates/10-synthesis-report.json", "job-graph.json")
 RENDER_FILES = ("pipeline/report/render.py", "pipeline/report/templates/report.tex.j2",
@@ -57,7 +60,8 @@ def current_inputs(run_id: str, jobs_root: Path) -> dict[str, Any]:
     for name, pointer in sorted(pointers(jobs_root).items()):
         loaded = assembly.load_accepted(pointer, run_id=run_id, name=name)
         accepted[name] = loaded["reference"]
-    return {"run_id": run_id, "accepted": accepted, "implementation": _code_hashes()}
+    return {"run_id": run_id, "accepted": accepted, "implementation": _code_hashes(),
+            "enrichment": enrichment_core.input_bindings(Path(jobs_root).parents[1])}
 
 
 def _generator_sha256() -> str:
@@ -91,7 +95,10 @@ def _validate_attempt(attempt: Path, inputs: dict[str, Any], jobs_root: Path) ->
     report, trace = synthesis.build_report(loaded)
     if read_json(attempt / synthesis.REPORT_JSON) != report or read_json(attempt / synthesis.TRACE) != trace:
         raise Blocked(f"{JOB}: retained report differs from deterministic synthesis")
-    expected_review = presentation.build_review(report, trace)
+    expected_enrichment = enrichment_core.build(report, Path(jobs_root).parents[1])
+    if read_json(attempt / enrichment_core.RESULT) != expected_enrichment:
+        raise Blocked(f"{JOB}: retained finding enrichment differs from deterministic enrichment")
+    expected_review = presentation.build_review(report, trace, expected_enrichment)
     if read_json(attempt / presentation.RENDER_INPUT) != expected_review:
         raise Blocked(f"{JOB}: retained renderer input differs from deterministic projection")
     render_manifest = read_json(attempt / presentation.RENDER_MANIFEST)
@@ -134,7 +141,9 @@ def run(run_root: Path, run_id: str, dagster_run_id: str, force: bool = False,
         assembly.run(run_id, pointers(jobs_root), jobs_root, attempt / assembly.RESULT)
         synthesis.run(run_root, attempt / assembly.RESULT, attempt)
         report, trace = read_json(attempt / synthesis.REPORT_JSON), read_json(attempt / synthesis.TRACE)
-        presentation.render(report, trace, attempt, _generator_sha256())
+        enrichment = enrichment_core.build(report, run_root)
+        atomic_json(attempt / enrichment_core.RESULT, enrichment)
+        presentation.render(report, trace, attempt, _generator_sha256(), enrichment)
         permission, lineage = _receipts(inputs, attempt)
         atomic_json(attempt / "permission.json", permission); atomic_json(attempt / "lineage.json", lineage)
         gaps = report["limitations"]

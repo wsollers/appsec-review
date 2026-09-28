@@ -55,12 +55,12 @@ CITABLE = {"07-red-team-adversarial": ("citations",),
            "09-independent-verification": ("citations", "refutation_citations")}
 # Model-facing decision fields per stage: (required, optional).
 PERSONA_FIELDS = {
-    "07-red-team-adversarial": ({"claim_id", "attacker_case", "citation_ids"}, {"dissent_ids"}),
+    "07-red-team-adversarial": ({"claim_id", "attacker_case", "citation_ids"}, {"dissent_ids", "cwe"}),
     "08-blue-team-refutation": ({"claim_id", "disposition", "rationale", "proof_obligations",
                                  "citation_ids"}, {"dissent_ids"}),
     "09-independent-verification": ({"claim_id", "disposition", "method", "proof_obligations",
-                                     "citation_ids"}, {"dissent_ids"}),
-    "12-scoring-prioritization": ({"claim_id", "factors", "rationale"}, set()),
+                                     "citation_ids"}, {"dissent_ids", "cwe"}),
+    "12-scoring-prioritization": ({"claim_id", "factors", "rationale"}, {"cwe", "cvss_v4", "remediation"}),
 }
 ACTOR_REASON = "Bounded stage reviewer selected by the accepted reviewer-pool specification."
 # Orchestrator-owned keys a model may still echo out of habit; they are ignored, never trusted.
@@ -220,6 +220,9 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
         decision: dict[str, Any] = {"claim_id": claim_id}
         if stage == "12-scoring-prioritization":
             decision.update(factors=row["factors"], rationale=row["rationale"])
+            for key in ("cwe", "cvss_v4", "remediation"):  # judgment only; Python validates/computes
+                if row.get(key) is not None:
+                    decision[key] = row[key]
             decisions[claim_id] = decision
             continue
         citable: dict[str, dict[str, Any]] = {}
@@ -272,7 +275,7 @@ def derive(stage: str, upstream: dict[str, Any], reply: Any, *, request: dict[st
                           f"of this claim (allowed: {order})")
             continue
         decision[ACTOR_FIELD[stage]] = actor(stage, request, request_sha256, record)
-        for key in ("attacker_case", "disposition", "rationale", "method"):
+        for key in ("attacker_case", "disposition", "rationale", "method", "cwe"):
             if key in row:
                 decision[key] = row[key]
         if obligations is not None:

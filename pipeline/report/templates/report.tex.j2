@@ -191,7 +191,8 @@ verification (lane 09). Refuted hypotheses are kept for the record with priority
 \eyebrow{Component} & \VAR{f.component|tex} \quad \textcolor{muted}{\VAR{f.cwe|tex}}\\
 \eyebrow{CVSS 4.0} & \BLOCK{if f.cvss}\mono{\VAR{f.cvss|texpath}} \quad \textbf{\VAR{'%.1f'|format(f.cvss_score)}} \VAR{f.cvss_band}\BLOCK{else}not scored\BLOCK{endif}\\
 \eyebrow{Evidence / status} & \VAR{f.evidence_strength|tex} \textperiodcentered{} \VAR{f.verification|tex} \textperiodcentered{} \VAR{f.reachability|tex}\\
-\end{tabularx}}
+\BLOCK{if f.exploit_signal is defined}\eyebrow{EPSS / KEV} & \VAR{f.exploit_signal|tex}\\
+\BLOCK{endif}\end{tabularx}}
 
 \[ \VAR{f.priority_tex} \]
 

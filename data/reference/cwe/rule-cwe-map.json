@@ -1,0 +1,307 @@
+{
+ "schema": "appsec-review/rule-cwe-map/1.0",
+ "note": "Pinned (tool_id, rule_id) -> CWE map reviewed 2026-09-28 from each tool's rule documentation; primary weakness first. A rule absent here contributes no CWE (a gap, never a guess). Edit, review, then `python3 appsec-review-process/cwe_catalog.py relock`.",
+ "rules": [
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "alpha.security.ArrayBoundV2",
+   "cwe_ids": [
+    "CWE-787",
+    "CWE-125"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "core.DivideZero",
+   "cwe_ids": [
+    "CWE-369"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "core.NullDereference",
+   "cwe_ids": [
+    "CWE-476"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "core.StackAddressEscape",
+   "cwe_ids": [
+    "CWE-825"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "core.uninitialized.Assign",
+   "cwe_ids": [
+    "CWE-457"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "cplusplus.NewDelete",
+   "cwe_ids": [
+    "CWE-415",
+    "CWE-416"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "security.insecureAPI.DeprecatedOrUnsafeBufferHandling",
+   "cwe_ids": [
+    "CWE-120",
+    "CWE-676"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "security.insecureAPI.gets",
+   "cwe_ids": [
+    "CWE-242"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "security.insecureAPI.rand",
+   "cwe_ids": [
+    "CWE-338"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "security.insecureAPI.strcpy",
+   "cwe_ids": [
+    "CWE-120",
+    "CWE-676"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "unix.Malloc",
+   "cwe_ids": [
+    "CWE-401",
+    "CWE-415",
+    "CWE-416"
+   ]
+  },
+  {
+   "tool_id": "clang-static-analyzer",
+   "rule_id": "unix.MismatchedDeallocator",
+   "cwe_ids": [
+    "CWE-762"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "arrayIndexOutOfBounds",
+   "cwe_ids": [
+    "CWE-787"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "bufferAccessOutOfBounds",
+   "cwe_ids": [
+    "CWE-787"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "deallocuse",
+   "cwe_ids": [
+    "CWE-416"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "doubleFree",
+   "cwe_ids": [
+    "CWE-415"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "invalidPrintfArgType_s",
+   "cwe_ids": [
+    "CWE-686"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "memleak",
+   "cwe_ids": [
+    "CWE-401"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "nullPointer",
+   "cwe_ids": [
+    "CWE-476"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "nullPointerOutOfMemory",
+   "cwe_ids": [
+    "CWE-476"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "uninitvar",
+   "cwe_ids": [
+    "CWE-457"
+   ]
+  },
+  {
+   "tool_id": "cppcheck",
+   "rule_id": "zerodiv",
+   "cwe_ids": [
+    "CWE-369"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G101",
+   "cwe_ids": [
+    "CWE-798"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G103",
+   "cwe_ids": [
+    "CWE-242"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G107",
+   "cwe_ids": [
+    "CWE-88"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G110",
+   "cwe_ids": [
+    "CWE-409"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G112",
+   "cwe_ids": [
+    "CWE-400"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G114",
+   "cwe_ids": [
+    "CWE-676"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G201",
+   "cwe_ids": [
+    "CWE-89"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G202",
+   "cwe_ids": [
+    "CWE-89"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G204",
+   "cwe_ids": [
+    "CWE-78"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G301",
+   "cwe_ids": [
+    "CWE-276"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G302",
+   "cwe_ids": [
+    "CWE-276"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G304",
+   "cwe_ids": [
+    "CWE-22"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G305",
+   "cwe_ids": [
+    "CWE-22"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G401",
+   "cwe_ids": [
+    "CWE-328"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G402",
+   "cwe_ids": [
+    "CWE-295"
+   ]
+  },
+  {
+   "tool_id": "gosec",
+   "rule_id": "G404",
+   "cwe_ids": [
+    "CWE-338"
+   ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.memcpy",
+   "cwe_ids": [
+    "CWE-120"
+   ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.printf-nonliteral",
+   "cwe_ids": [
+    "CWE-134"
+   ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.strcpy",
+   "cwe_ids": [
+    "CWE-120",
+    "CWE-676"
+   ]
+  },
+  {
+   "tool_id": "semgrep-repository-rules-v1",
+   "rule_id": "appsec.c.system",
+   "cwe_ids": [
+    "CWE-78"
+   ]
+  }
+ ]
+}
