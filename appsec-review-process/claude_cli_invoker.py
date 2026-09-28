@@ -140,6 +140,11 @@ def _envelope_fields(output_contract: dict[str, Any]) -> list[tuple[str, str, st
                 f"output contract {output_contract['contract_id']!r} requires {filename!r}, whose "
                 f"extension this invoker's response envelope does not yet support (only .json and "
                 f".md are handled today -- see this module's docstring)")
+    # a.json and a.md slug to the same key (component-map: component-purpose-map.json + .md); the
+    # markdown one gets a distinct key so the model is not told one key is both an object and text.
+    keys = [key for _f, key, _k in fields]
+    fields = [(f, key + "_markdown" if kind == "md" and keys.count(key) > 1 else key, kind)
+              for f, key, kind in fields]
     if not fields:
         raise InvokerOutputError(
             f"output contract {output_contract['contract_id']!r} requires no file besides "
