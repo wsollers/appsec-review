@@ -409,3 +409,11 @@ ADR-0008 T05 names `cells/<wave>/<instance_id>/`; with `pool_parent = cells/<wav
 - The parity manifest records this batch under `persona-tool-pool-dispatch` (qualification level
   `unit`; still `missing_prerequisites`: no launcher, and no lifecycle job consumes a pool
   specification). The next prerequisite is C02.
+- The claim-review pools (07/08/09/12, `claim_reviewer_pool.py`) declare three readable roots:
+  `stage-upstream` (the stage's accepted upstream attempt; its artifact stays `readable_inputs[0]`),
+  `evidence-menu` (the attempt's `evidence-menu/` directory holding
+  `supporting-evidence-menu.json`) and `supporting-evidence` (the run's `data/jobs`, present only
+  when the menu pins something). `supporting_evidence_menu.py` builds the menu deterministically
+  from accepted pointers in `prepare()`. Every pinned file is a `readable_inputs` entry with role
+  `evidence`, and `_context` writes the menu bytes whose sha256 the request pins before launch.
+  See [ADR-0015](../decisions/ADR-0015-tool-leads-are-ledger-candidates.md).

@@ -242,7 +242,10 @@ flowchart LR
    tailoring, deployment hardening, native-memory analysis, CVE reachability, and fuzz-target
    triage produce candidates, worklists, and proof obligations. They do not directly create
    verified findings.
-8. **Candidate lifecycle.** Admission gives a candidate a stable claim identity. Red-team analysis
+8. **Candidate lifecycle.** Admission gives a candidate a stable claim identity. The ledger admits
+   threat-model hypotheses, OWASP routes and every accepted static-tool lead (merged per path and
+   line, tiered P1/P2/P3; see ADR-0015). Reviewers get a supporting-evidence menu of the run's
+   accepted IR, CPG, debug-symbol, build, SBOM and test evidence, pinned as readable inputs. Red-team analysis
    proposes an adversarial mechanism; blue-team analysis refutes or narrows it; independent
    verification records the decision; scoring applies only to verified claims. Remediation and
    same-environment retest append rather than erase history.
@@ -347,7 +350,9 @@ Red-team, blue-team, and verifier authority is deliberately asymmetric:
 - the independent verifier decides whether the cited mechanism is reproduced or established;
 - scoring reads verified claims only;
 - the ledger retains admissions, dissent, decisions, and later retest events as separate,
-  hash-linked history.
+  hash-linked history;
+- a static-tool lead is a candidate like any other: it reaches the report's findings only through
+  independent verification, and unverified tool leads are listed by tier in the draft's appendix.
 
 The executable pool launcher, deterministic merge, and quorum cores are graph-enabled and unit
 tested. Their full-review input assembly, shared lifecycle binding, and retained live

@@ -20,6 +20,7 @@ import pool_rendezvous
 import pool_specification
 import resource_pools
 import review_cli
+import supporting_evidence_menu as evidence_menu
 from execution_state import Blocked, ROOT, atomic_json, data_path, digest, file_hash, read_json
 from publish_job_output import coordinate_worker_lifecycle, record_terminal_current
 from schema_validate import SchemaStore, validate_document
@@ -129,6 +130,7 @@ def _code_hashes() -> dict[str, str]:
              "registry/domains/claim-review-lifecycle.json",
              "registry/tooling-profiles/claim-review-static.json", "claim-review-pool-task.md"]
     result = {path: file_hash(ROOT / path) for path in paths}
+    result["supporting_evidence_menu.py"] = file_hash(ROOT / "supporting_evidence_menu.py")
     result["schemas/claim-review-pool-candidates.schema.json"] = file_hash(
         ROOT.parent / "schemas" / "claim-review-pool-candidates.schema.json")
     result["schemas/claim-review-pool-receipt.schema.json"] = file_hash(
@@ -150,7 +152,7 @@ def _upstream_location(run_id: str, stage: str) -> tuple[Path, str]:
 
 
 def _request_template(run_id: str, stage: str, upstream_path: Path,
-                      source: str, evaluated_at: str) -> tuple[dict, dict]:
+                      source: str, evaluated_at: str, menu: dict | None = None) -> tuple[dict, dict]:
     store = SchemaStore()
     template = persona_prompt_assembly.load_job_template(TEMPLATE, store)
     outer = persona_prompt_assembly.assemble_outer_prompt(TEMPLATE, store=store)
@@ -165,6 +167,9 @@ def _request_template(run_id: str, stage: str, upstream_path: Path,
     readable = [{"root": ROOT_ID, "path": upstream_path.name,
                  "sha256": persona_invocation._bytes_sha(data), "bytes": len(data),
                  "role": "evidence", "producer_request_sha256": None}]
+    # The stage upstream stays readable_inputs[0]; the supporting-evidence menu and every file it
+    # pins follow, so the reviewer may read exactly what the menu points at.
+    readable += evidence_menu.readable_inputs(menu) if menu else []
     request = {"invocation_role": "produce", "invoker_id": "claude-cli",
         "outer_prompt": outer, "persona": composition, "model": model, "tools": [],
         "budget": dict(persona_dispatch.PERSONA_BUDGETS[template["budget_default"]]),
@@ -186,8 +191,9 @@ def prepare(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -
     from datetime import datetime, timezone
     evaluated_at = datetime.fromisoformat(pointer["accepted_at"].replace("Z", "+00:00")).astimezone(
         timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    menu = evidence_menu.build(run_id, stage, upstream[lifecycle.ARRAYS[stage]])
     request, permission = _request_template(run_id, stage, attempt_root / artifact,
-                                             source, evaluated_at)
+                                             source, evaluated_at, menu)
     count = len(upstream[lifecycle.ARRAYS[stage]])
     group = {"group_id": "reviewers", "worker_kind": pool_specification.PERSONA,
         "count": 1 if count else 0, "memory_heavy": False, "permission": permission,
@@ -207,7 +213,7 @@ def prepare(run_id: str, dagster_run_id: str, stage: str, force: bool = False) -
         "upstream_attempt": str(attempt_root), "upstream_artifact": artifact,
         "accepted_at": evaluated_at, "spec": spec,
         "applicability": "APPLICABLE" if count else "SKIPPED_NA_NO_CANDIDATES",
-        "code": _code_hashes()}
+        "evidence_menu": menu, "code": _code_hashes()}
 
 
 def _context(inputs: dict[str, Any], attempt: Path) -> pool_specification.PoolContext:
@@ -215,9 +221,13 @@ def _context(inputs: dict[str, Any], attempt: Path) -> pool_specification.PoolCo
     pool_parent.mkdir(); rendezvous.mkdir()
     upstream = Path(inputs["upstream_attempt"])
     model = inputs["spec"]["worker_groups"][0]["persona_request"]["model"]
+    roots = {ROOT_ID: upstream}
+    if inputs.get("evidence_menu"):
+        menu_root = evidence_menu.write(attempt / "evidence-menu", inputs["evidence_menu"])
+        roots.update(evidence_menu.readable_roots(inputs["run_id"], inputs["evidence_menu"], menu_root))
     return pool_specification.PoolContext(pool_parent=pool_parent,
         registry_dir=persona_invocation.REGISTRY_DIR, prompt_root=ROOT,
-        readable_roots={ROOT_ID: upstream}, allowed_models=(model,), invoker_id="claude-cli",
+        readable_roots=roots, allowed_models=(model,), invoker_id="claude-cli",
         images_dir=container_execution.IMAGES_DIR,
         host_flavor="windows" if __import__("os").name == "nt" else "posix",
         docker_host=None, docker_executable=None, container_user=None, mount_roots={},

@@ -9696,7 +9696,8 @@
     "lineage.json",
     "binary-static-raw.json",
     "binary-b13-receipts.json",
-    "applicability-receipt.json"
+    "applicability-receipt.json",
+    "debug-symbol-index.records.jsonl"
    ],
    "outputs_source": "registry/output-contracts/debug-symbol-index.json",
    "claim_class": "debug_symbol_static_evidence",

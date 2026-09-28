@@ -1,5 +1,11 @@
 # Retrieval Guide For Red-Team Lanes
 
+> Current pool reviewers (07/08/09/12 via `claim_reviewer_pool.py`) do not use the `rg`/scratch
+> workflow below. They read the supporting-evidence menu and query pinned inputs with the
+> `appsec-inputs` tools described in `appsec-review-process/claim-review-pool-task.md`
+> ([ADR-0015](../../docs/decisions/ADR-0015-tool-leads-are-ledger-candidates.md)). The rest of this
+> page is the earlier manual workflow.
+
 Use deterministic artifacts first, then source. Prefer `rg` for text/code search and keep searches
 scoped to the target repo or cited evidence directories.
 
