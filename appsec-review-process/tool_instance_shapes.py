@@ -601,10 +601,18 @@ def verify_outputs_on_disk(tool_results: dict, attempt_root) -> list[str]:
                 continue
             owners[identity] = (tool_id, relative)
             size = status.st_size
-            if size != output["bytes"]:
-                errors.append(f"outputs-on-disk: {tool_id}: {relative!r} is {size} bytes, listed as {output['bytes']}")
             actual = "sha256:" + file_hash(path)
-            if actual != output["sha256"]:
+            # Publication may redact a raw tool output after it was listed (freeciv21: gitleaks). The
+            # listing, receipt and citations keep the raw hash; the redaction receipt maps it to the
+            # published bytes, which is what must be on disk.
+            redacted = any("outputs/" + str(entry.get("path")) == relative
+                           and "sha256:" + str(entry.get("source_sha256")) == output["sha256"]
+                           and "sha256:" + str(entry.get("published_sha256")) == actual
+                           and entry.get("published_bytes") == size
+                           for entry in _redaction_files(root))
+            if size != output["bytes"] and not redacted:
+                errors.append(f"outputs-on-disk: {tool_id}: {relative!r} is {size} bytes, listed as {output['bytes']}")
+            if actual != output["sha256"] and not redacted:
                 errors.append(f"outputs-on-disk: {tool_id}: {relative!r} does not have the listed sha256")
     return errors
 
@@ -633,17 +641,8 @@ def verify_vendor_execution_receipts(tool_results: dict, attempt_root) -> list[s
                    for error in validate_document(receipt,VENDOR_EXECUTION_RECEIPT_SCHEMA,store)]
         expected={"tool_id":tool,"attempt_id":instance["attempt_id"],"argv":instance["argv"],
                   "tool_version":instance["identity"]["tool_version"],"tool_name":instance["identity"]["tool_name"],
-                  "image_digest":instance["identity"]["image_digest"]}
-        # The receipt hashes the raw tool output; publication may redact it afterwards. Accept the
-        # published hash, or the pre-redaction hash the redaction receipt maps to it.
-        listed=instance["outputs"][0]
-        accepted_output={listed["sha256"]}
-        for entry in _redaction_files(root):
-            if ("outputs/"+entry.get("path","")==listed["path"] and
-                    "sha256:"+str(entry.get("published_sha256"))==listed["sha256"]):
-                accepted_output.add("sha256:"+str(entry.get("source_sha256")))
-        if receipt.get("output_sha256") not in accepted_output:
-            errors.append(f"execution-receipt-mismatch: tool {tool!r} output hash is not the listed output")
+                  "image_digest":instance["identity"]["image_digest"],
+                  "output_sha256":instance["outputs"][0]["sha256"]}
         if any(receipt.get(k)!=v for k,v in expected.items()) or any(receipt.get(k)!=ref[k] for k in
                 ("request_sha256","result_sha256","output_sha256","permission_sha256","permission_fingerprint_sha256",
                  "image_id","image_digest")):

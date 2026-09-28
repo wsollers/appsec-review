@@ -310,7 +310,7 @@ def _build_image(unit_attempt: Path, image_id: str, fingerprint: str, dockerfile
 
 RUNNER = r'''import json,os,pathlib,shutil,subprocess,sys
 cfg=json.loads(sys.argv[1]); src=pathlib.Path('/scratch/src')
-shutil.copytree('/workspace',src,symlinks=True)
+shutil.copytree('/workspace',src,symlinks=False,ignore_dangling_symlinks=True)
 records=[]
 for item in cfg['commands']:
     argv=list(item['argv']); cwd=src/item['cwd']

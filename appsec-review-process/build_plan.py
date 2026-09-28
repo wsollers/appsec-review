@@ -412,6 +412,18 @@ def _fill_known(classification):
             for key in ('source_revision', 'target'):
                 if not isinstance(value.get(key), str) and isinstance(classification.get(key), str):
                     value[key] = classification[key]
+            # A tier C unit must be named in coverage_gaps; the orchestrator can say so itself
+            # (doom3-bfg: the model left doomclassic out once and failed validation).
+            gaps = value.setdefault('coverage_gaps', [])
+            for plan in value.get('plans') or []:
+                if not isinstance(plan, dict):
+                    continue
+                feasibility = plan.get('feasibility') or {}
+                uid = plan.get('unit_id')
+                if feasibility.get('tier') == 'C' and isinstance(uid, str) and isinstance(gaps, list) \
+                        and not any(uid in str(g) for g in gaps):
+                    reason = (feasibility.get('reasons') or ['not buildable in this environment'])[0]
+                    gaps.append(f'{uid}: not buildable in this environment (tier C): {reason}')
     return fill
 
 

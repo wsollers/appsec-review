@@ -241,7 +241,7 @@ def current_inputs(run_id: str, job: str) -> dict[str, Any]:
 
 RUNNER = r'''import hashlib,json,os,pathlib,shutil,stat,subprocess,sys
 cfg=json.loads(sys.argv[1]); src=pathlib.Path('/scratch/src')
-shutil.copytree('/workspace',src,symlinks=True)
+shutil.copytree('/workspace',src,symlinks=False,ignore_dangling_symlinks=True)
 def executables():
  out={}
  for p in src.rglob('*'):

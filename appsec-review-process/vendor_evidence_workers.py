@@ -542,7 +542,6 @@ def materialize_attempt(documents: dict[str, Any], attempt: Path, *, dagster_run
     attempt.mkdir(parents=True)
     evidence_redaction.redact_tree(staging, attempt / "outputs", on_unhandled="refuse",
                                    limits=evidence_redaction.DEFAULT_LIMITS)
-    _reconcile_redacted_outputs(attempt)
     (attempt / "permission.json").write_bytes(_dump(permission))
     (attempt / "lineage.json").write_bytes(_dump(lineage))
     status = {"status": documents["status"], "attempt_id": header["attempt_id"],

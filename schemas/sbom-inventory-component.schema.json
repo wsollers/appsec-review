@@ -61,7 +61,7 @@
         "string",
         "null"
       ],
-      "pattern": "^cpe:2\\.3:[aho](:[A-Za-z0-9._~%*-]{1,128}){10}\\Z"
+      "pattern": "^cpe:2\\.3:[aho](:(?:[A-Za-z0-9._~%*-]|\\\\.){1,128}){10}\\Z"
     },
     "ecosystem": {
       "type": "string",

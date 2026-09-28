@@ -108,6 +108,10 @@ Newest first. One line per breakage: date, target, run id, job, what broke, fix 
 
 | Date | Target | Run | Job | Breakage | Fix |
 |---|---|---|---|---|---|
+| 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-build-resolution | The CoW trial copied the checkout with its symlinks into the attempt tree; publication refuses linked paths | Trial copies follow links (dangling ones skipped) in build resolution and build replay |
+| 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-secrets-inventory | Rewriting the tool listing after redaction broke the receipt and citation hashes | Listing keeps the raw hash; the on-disk check accepts published bytes when the redaction receipt maps raw to published |
+| 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-sbom-inventory | CPE schema rejected CPE 2.3 backslash escapes (`softprops\/action-gh-release`) | Pattern allows escaped characters |
+| 2026-09-28 | doom3-bfg | 20260928T013300Z-0c0b82 | 02-build-plan | Model marked doomclassic tier C but left it out of coverage_gaps | Build plan fills tier C units into coverage_gaps before validation |
 | 2026-09-28 | hello-autotools | 20260927T192621Z-helloautotoo | 01-component-characterization | Real cause of every failure of this job: the claude CLI invoker had no claim builder for `component-purpose-map.schema.json` and raised before dispatch (the 9.3 MB prompt was a second problem, not the first) | Generic fallback claim builder: one claim per result object whose `evidence_citations` resolve to a pinned input |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-build-resolution | Model planned CMake/Qt6 (tier A) but named apt packages that do not exist on noble (`libqt6core6-dev`, `libkf6archive-dev`); image build exited 100 | Image-build failure is a coverage gap naming the missing packages. Follow-up: give build-plan an offline apt package lookup, or feed the apt error back for one repair round |
 | 2026-09-28 | freeciv21 | 20260928T005228Z-5b0fac | 02-code-property-graph | Joern records name files not in the checkout (`client/luascript/tolua.h`) | Skipped and counted as `source-unavailable` |
