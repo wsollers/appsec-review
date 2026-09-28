@@ -121,6 +121,20 @@ Slice 1 (branch `adr14-slice1`):
   candidates and skips `not-applicable-no-matching-inputs` (branch `slice2`).
 - [ ] Records JSONL + index for per-invocation IR/SAST outputs (ADR-0014 item 5).
 
+## Retrieval and IO (measured 2026-09-28, ~2,760 audited model tool calls)
+
+- Index tools are almost unused: evidence_search 6, evidence_derived 2 of ~2,760 calls. Models use
+  input_read (1,575), input_jq (926), input_grep (169, 106 ms avg vs 643 ms for evidence_search).
+  Fine at current target sizes; at doom3/Unreal scale route input_grep over the FTS index.
+- 742 of 1,575 input_read calls re-read a range already returned in the same invocation. input_read now
+  answers a repeat with a pointer (`again=true` forces the text), per conversation.
+- Build plan: 871 input_jq calls over 138 unit invocations, mostly the same three shared JSONs
+  (build-classification, build-index, buildenv-catalog). [ ] Pre-slice the unit's classification row,
+  index signals and catalog bases into plan-unit.json (costs one re-plan; do with the next plan change).
+- Build resolution kept a ~720 MB source copy per trial (freeciv21: 11 GB per job), tree-hashed on every
+  re-validation. [x] Trial source copies are pruned after their logs are read (branch io-prune).
+- [ ] Same audit for native-build/replay and code-property-graph (freeciv21 2.8 GB, doom3-bfg 4.0 GB).
+
 ## Relaunch tax
 
 Measured 2026-09-28: pure reuse is cheap (hello-autotools relaunch: 46 steps in 2.4 min). The tax is

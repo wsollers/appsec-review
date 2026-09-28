@@ -41,7 +41,9 @@ TOOLS = [
     {"name": "input_read", "description": "Read numbered lines of one specific pinned input by its ref (root:path exactly as listed), up to 400 per call. "
      "Use it to read a file you already located with evidence_search/input_jq/input_list, not to page through large files.",
      "inputSchema": {"type": "object", "properties": {"ref": {"type": "string"}, "start": {"type": "integer", "minimum": 1},
-                     "lines": {"type": "integer", "minimum": 1, "maximum": READ_LINES_MAX}}, "required": ["ref"], "additionalProperties": False}},
+                     "lines": {"type": "integer", "minimum": 1, "maximum": READ_LINES_MAX},
+                     "again": {"type": "boolean", "description": "Return the text even if this exact range was already returned in this conversation."}},
+                     "required": ["ref"], "additionalProperties": False}},
     {"name": "input_grep", "description": "Regex scan of pinned inputs (Python syntax, case-insensitive): reads every matching file on each call, so "
      "always pass a narrow `prefix`. For repository-wide text search use evidence_search (indexed); for upstream tool findings use "
      "evidence_derived; for JSON use input_jq. Returns ref, line number and line text.",
@@ -130,6 +132,14 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
         ref, start, count = args["ref"], args.get("start", 1), args.get("lines", 200)
         lines = inputs.text(ref).splitlines()
         chunk = lines[start - 1:start - 1 + count]
+        # One server process serves one conversation. Across runs, ~47% of input_read calls
+        # re-read a range already returned in the same invocation; answer those with a pointer.
+        key = (ref, start, start - 1 + len(chunk))
+        if key in _RETURNED and not args.get("again"):
+            return {"ref": ref, "sha256": inputs.by_ref[ref]["sha256"], "total_lines": len(lines), "start": start,
+                    "text": "", "already_returned": f"lines {key[1]}-{key[2]} of this ref were returned earlier in this "
+                    "conversation and are unchanged (same sha256); use that result, or pass again=true."}
+        _RETURNED.add(key)
         return {"ref": ref, "sha256": inputs.by_ref[ref]["sha256"], "total_lines": len(lines), "start": start,
                 "text": "\n".join(f"{start + i}: {line[:LINE_CHARS_MAX]}" for i, line in enumerate(chunk))}
     if name == "input_grep":
@@ -160,6 +170,7 @@ def call(run_id: str, inputs: Inputs | None, name: str, args: dict) -> object:
 
 
 CONTEXT: dict = {}   # job_id, attempt_id, output_root of the invocation this server serves
+_RETURNED: set = set()   # (ref, first, last) ranges input_read has returned in this conversation
 
 
 def _summary(name: str, result: object) -> dict:
@@ -170,8 +181,9 @@ def _summary(name: str, result: object) -> dict:
         return {"hits": 1 if result.get("result", "").strip() not in ("", "null") else 0, "refs": [result.get("ref")],
                 "result_bytes": result.get("bytes"), "truncated": result.get("truncated")}
     if name == "input_read":
-        return {"hits": 1 if result.get("text") else 0, "refs": [result.get("ref")],
-                "lines": [result.get("start"), result.get("total_lines")]}
+        return {"hits": 1 if result.get("text") or result.get("already_returned") else 0, "refs": [result.get("ref")],
+                "lines": [result.get("start"), result.get("total_lines")],
+                "deduplicated": bool(result.get("already_returned"))}
     rows = result.get("hits") or result.get("results") or result.get("inputs") or []
     refs = []
     for row in rows if isinstance(rows, list) else []:
